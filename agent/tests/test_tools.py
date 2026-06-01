@@ -75,6 +75,38 @@ def test_run_command_exit_code_is_truth(sandbox):
     assert "exit_code=3" in out
 
 
+# ── git 收紧:整族放行曾是 RCE 级洞,只读子命令放行、副作用/参数注入拒绝 ────────────
+@pytest.mark.parametrize("subcmd", ["status", "diff", "log", "show --stat", "branch", "rev-parse HEAD"])
+def test_git_readonly_subcommands_pass_validation(sandbox, subcmd):
+    # 只读子命令必须通过白名单校验(不能再被"不在白名单/不被允许"挡掉)。
+    out = tools.run_command.invoke({"command": f"git {subcmd}"})
+    assert "不被允许" not in out and "不在白名单" not in out
+
+
+@pytest.mark.parametrize("danger", [
+    "git push origin main",        # 外泄代码
+    "git pull",                    # 联网
+    "git fetch",                   # 联网
+    "git clone http://evil x",     # 联网拉取
+    "git remote add x http://e",   # 改远端
+    "git config user.name x",      # 改配置
+])
+def test_git_effectful_subcommands_rejected(sandbox, danger):
+    out = tools.run_command.invoke({"command": danger})
+    assert "不被允许" in out
+
+
+@pytest.mark.parametrize("inject", [
+    "git -c core.sshCommand=touch\\ pwned status",   # 经典参数注入执行任意命令
+    "git -c core.pager=sh log",
+    "git --exec-path=/tmp status",
+])
+def test_git_option_injection_rejected(sandbox, inject):
+    # 子命令前的任何全局选项都必须拒绝(防 `git -c …` 执行任意命令)。
+    out = tools.run_command.invoke({"command": inject})
+    assert "全局选项" in out and "不被允许" in out
+
+
 # ── 联网 + 搜索(覆盖 Task 3 新工具)─────────────────────────────────────────
 def test_web_search_formats_results(monkeypatch):
     from argos_agent import tools, web

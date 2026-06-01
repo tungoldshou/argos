@@ -137,11 +137,38 @@ def edit_file(path: str, old: str, new: str) -> str:
 
 
 # shell 白名单:只允许验证类/只读类。绝不允许 rm/curl/wget/sudo/mv 等有副作用或外联的。
+# ⚠️ 诚实声明:run_command 不是安全沙箱 —— 它是裸 subprocess 跑在宿主机上,
+# 白名单里的解释器(python/node/npm)天生能执行任意代码(`python -c`、`npm run <脚本>`)。
+# 这是"让 agent 跑用户真实测试"的固有代价,真正的隔离要靠 OS 级沙箱(见重设计路线图)。
+# 此处白名单只挡住"无谓"的危险面(联网/删改/git 副作用),不假装是牢不可破的边界。
 ALLOWED_CMDS = {
     "node", "npm", "pnpm", "npx", "tsc", "eslint", "prettier",
     "python", "python3", "pytest", "ruff", "mypy",
     "cargo", "rustc", "go", "git", "ls", "cat", "grep", "rg", "echo", "pwd",
 }
+
+# git 单独收紧:整族放行 = RCE 级洞 —— `git push` 外泄代码、`git -c core.sshCommand=… <cmd>`
+# 参数注入执行任意命令。verify/调研只需要只读子命令,联网与副作用一律拒绝。
+GIT_READONLY_SUBCMDS = {
+    "status", "diff", "log", "show", "branch", "ls-files", "rev-parse",
+    "describe", "blame", "shortlog", "tag", "rev-list", "cat-file", "show-ref",
+}
+
+
+def _validate_git(parts: list[str]) -> str | None:
+    """git 专用校验:第一个非选项 token 必须是只读子命令;子命令前出现任何全局选项
+    (-c / -C / --exec-path 等,可改 git 行为或执行任意命令)一律拒绝。返回错误串或 None。"""
+    for tok in parts[1:]:
+        if tok.startswith("-"):
+            return f"错误:git 全局选项 {tok!r} 不被允许(防 `git -c …` 参数注入执行任意命令)。"
+        if tok not in GIT_READONLY_SUBCMDS:
+            return (
+                f"错误:git 子命令 {tok!r} 不被允许。只放行只读子命令:"
+                f"{', '.join(sorted(GIT_READONLY_SUBCMDS))}"
+                "(push/pull/fetch/clone/remote/config/submodule 等联网或有副作用的被禁)。"
+            )
+        return None  # 命中只读子命令,放行
+    return "错误:git 需要一个子命令。"
 
 
 @tool
@@ -158,6 +185,10 @@ def run_command(command: str) -> str:
     bin_name = Path(parts[0]).name
     if bin_name not in ALLOWED_CMDS:
         return f"错误:命令 {bin_name!r} 不在白名单。允许:{', '.join(sorted(ALLOWED_CMDS))}"
+    if bin_name == "git":
+        git_err = _validate_git(parts)
+        if git_err:
+            return git_err
     ws = _ws()
     ws.mkdir(parents=True, exist_ok=True)
     try:
