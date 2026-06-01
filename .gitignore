@@ -34,5 +34,7 @@ __pycache__/
 agent/build/
 agent/dist/
 agent/dist-arm64/
+# PyInstaller 派生 spec(命令行动态生成,源码用 CLI 参数拼)
+agent/*.spec
 .venv/
 agent/.venv/
