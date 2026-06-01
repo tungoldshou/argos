@@ -71,6 +71,10 @@ export class MindGraph {
   anchorX = 0.5;
   anchorXT = 0.5;
   anchorY = 0.5;
+  // dock 状态记忆:resize 时据此重算锚点/缩放(否则改窗口大小脑图会漂)。
+  private _docked = false;
+  private _dockNarrow = false;
+  private _dockFrac: number | undefined = undefined;
   interactive = true;
   mouse = { x: 0, y: 0, down: false, moved: false };
   hoverId: number | null = null;
@@ -239,6 +243,20 @@ export class MindGraph {
     this.canvas.height = this.H * this.dpr;
     this.canvas.style.width = this.W + 'px';
     this.canvas.style.height = this.H + 'px';
+    // 尺寸变了 → 重算视图:docked 则按当前面板比例重锚+重缩放,否则 fit 居中。
+    // 不重算的话锚点用旧 W/H 算出的比例,改窗口大小脑图就漂(截图里的偏移根因)。
+    if (this._docked) {
+      this.anchorXT = this._dockNarrow ? 0.5 : (this._dockFrac ?? 0.21);
+      this.cam.tScale = this._dockNarrow ? this._fitScale() * 0.7 : this._fitScale((this._dockFrac ?? 0.21) * 2) * 0.88;
+      // 重锚后必须重新 flyTo 质心,否则相机世界坐标停在旧视口算出的位置,换尺寸后脑图偏移。
+      if (this.nodes && this.nodes.length) {
+        const ct = this._centroid();
+        this.flyTo(ct.x, ct.y);
+      }
+    } else if (this.nodes && this.nodes.length) {
+      this.anchorXT = 0.5;
+      this.cam.tScale = this._fitScale();
+    }
   };
 
   // world <-> screen
@@ -266,6 +284,9 @@ export class MindGraph {
   // anchorFrac = 大脑要锚到的横向比例(0..1)。不传时用 0.21 兜底,但调用方应传
   // 「左侧可见区中心 / 视口宽」= (面板左边界/2)/视口宽,这样无论面板多宽都真居中。
   dock(on: boolean, narrow?: boolean, anchorFrac?: number): void {
+    this._docked = on;
+    this._dockNarrow = !!narrow;
+    this._dockFrac = anchorFrac;
     const ct = this._centroid();
     this.flyTo(ct.x, ct.y);
     if (on) {
