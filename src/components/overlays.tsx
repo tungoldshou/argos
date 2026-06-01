@@ -4,9 +4,9 @@ import { useEffect, useState, type ReactNode, type ReactElement } from 'react';
 import { useNarrow } from '../lib/responsive';
 import { Icon, PlatformGlyph, type IconName } from '../lib/icons';
 import { pColor } from '../lib/platforms';
-import { tr } from '../lib/i18n';
+import { tr, useLang } from '../lib/i18n';
 import type { Skill, Automation } from '../data/types';
-import { isTauri, getSettings, setMinimaxKey, restartAgent, type AppSettings } from '../lib/agent';
+import { isTauri, getSettings, setLlmConfig, restartAgent, type AppSettings } from '../lib/agent';
 import {
   AGENT, SKILLS, PLATFORMS, PLATFORMS_MORE, AUTOMATIONS, SANDBOXES, MODELS,
   MCP_SERVERS, TOOLSETS, TOOLS_TOTAL, VOICE, PERSONALITY,
@@ -163,36 +163,54 @@ function SettingsOverlay({ onClose }: { onClose: () => void }) {
     ['Default sandbox', 'Docker (hardened)'], ['Gateway', 'systemd · auto-restart'],
     ['Telemetry', 'Local only — nothing leaves your server'], ['License', 'MIT · open source'],
   ];
-  // MiniMax key 配置:打包 .app 双击不继承 shell env,必须让用户在这里填 key,
+  // 通用 provider 配置:打包 .app 双击不继承 shell env,必须让用户在这里填 key,
   // 持久化到用户配置目录,Rust 启动 sidecar 时读出注入。这是"下载即用"的关键。
-  const [keyInput, setKeyInput] = useState('');
+  const { lang, toggle: toggleLang } = useLang();
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [provider, setProvider] = useState('anthropic');
+  const [base, setBase] = useState('');
+  const [model, setModel] = useState('');
+  const [keyInput, setKeyInput] = useState('');
   const [status, setStatus] = useState<'' | 'saving' | 'restarting' | 'done'>('');
   const inTauri = isTauri();
+  const PROVIDER_DEFAULTS: Record<string, string> = {
+    anthropic: 'https://api.minimaxi.com/anthropic',
+    openai: 'https://api.openai.com/v1',
+  };
 
   useEffect(() => {
-    getSettings().then(setSettings);
+    getSettings().then((s) => {
+      setSettings(s);
+      if (s) { setProvider(s.provider || 'anthropic'); setBase(s.base || PROVIDER_DEFAULTS[s.provider || 'anthropic']); setModel(s.model || ''); }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 保存 key → 立即重启 sidecar(读新 key)→ 重探设置状态。一键生效,无需退出 app。
-  const saveKey = async () => {
-    if (!keyInput.trim()) return;
+  const save = async () => {
     setStatus('saving');
-    const ok = await setMinimaxKey(keyInput.trim());
+    const ok = await setLlmConfig({ provider, base: base.trim(), model: model.trim(), key: keyInput.trim() });
     if (!ok) { setStatus(''); return; }
     setKeyInput('');
     setStatus('restarting');
     await restartAgent();
-    // 给 sidecar 一点启动时间(PyInstaller 单文件解压稍慢),再刷新状态。
     await new Promise((r) => setTimeout(r, 1500));
     getSettings().then(setSettings);
     setStatus('done');
   };
+  const pickProvider = (p: string) => { setProvider(p); setBase(PROVIDER_DEFAULTS[p]); setStatus(''); };
 
   return (
     <Overlay title="Settings" sub={`Argos ${AGENT.version} · MIT · ` + tr('runs entirely on your infra')} icon="settings" onClose={onClose}>
-      {/* MiniMax key —— 打包 app 的命门:没配 key 只能跑演示 */}
-      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 10 }}>{tr('MiniMax API key')}</div>
+      {/* 语言:从顶栏移来 */}
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 10 }}>{tr('Language')}</div>
+      <div style={{ display: 'flex', gap: 1, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8, padding: 2, marginBottom: 16, width: 'fit-content' }}>
+        {([['en', 'EN'], ['zh', '中']] as const).map(([code, lbl]) => (
+          <button key={code} onClick={() => { if (lang !== code) toggleLang(); }} style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 6, cursor: 'pointer', border: 'none', background: lang === code ? 'var(--accent)' : 'transparent', color: lang === code ? '#1a1305' : 'var(--text-3)' }}>{lbl}</button>
+        ))}
+      </div>
+
+      {/* 模型厂商:任意 OpenAI/Anthropic 兼容端点 */}
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 10 }}>{tr('Provider')}</div>
       <div style={{ padding: 14, borderRadius: 11, background: 'var(--surface-2)', border: '1px solid var(--border)', marginBottom: 16 }}>
         {!inTauri ? (
           <div style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.6 }}>{tr('key is set via .env.local in browser dev')}</div>
@@ -204,31 +222,26 @@ function SettingsOverlay({ onClose }: { onClose: () => void }) {
                 {settings?.key_configured ? tr('key configured') + ` · ••••${settings.key_tail}` : tr('no key — agent runs in demo mode')}
               </span>
             </div>
+            <div style={{ display: 'flex', gap: 1, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 2, marginBottom: 9, width: 'fit-content' }}>
+              {([['anthropic', tr('Anthropic-compatible')], ['openai', tr('OpenAI-compatible')]] as const).map(([p, lbl]) => (
+                <button key={p} onClick={() => pickProvider(p)} style={{ fontSize: 11.5, fontWeight: 600, padding: '5px 12px', borderRadius: 6, cursor: 'pointer', border: 'none', background: provider === p ? 'var(--accent)' : 'transparent', color: provider === p ? '#1a1305' : 'var(--text-3)' }}>{lbl}</button>
+              ))}
+            </div>
+            <input value={base} onChange={(e) => setBase(e.target.value)} placeholder={tr('Base URL')}
+              style={{ width: '100%', boxSizing: 'border-box', height: 34, padding: '0 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)', fontSize: 12, fontFamily: 'var(--mono)', marginBottom: 8 }} />
+            <input value={model} onChange={(e) => setModel(e.target.value)} placeholder={tr('Model name')}
+              style={{ width: '100%', boxSizing: 'border-box', height: 34, padding: '0 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)', fontSize: 12, fontFamily: 'var(--mono)', marginBottom: 8 }} />
             <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                type="password"
-                value={keyInput}
-                onChange={(e) => { setKeyInput(e.target.value); setStatus(''); }}
-                onKeyDown={(e) => e.key === 'Enter' && saveKey()}
-                placeholder={tr('paste your MiniMax key (sk-…)')}
+              <input type="password" value={keyInput} onChange={(e) => { setKeyInput(e.target.value); setStatus(''); }} onKeyDown={(e) => e.key === 'Enter' && save()}
+                placeholder={settings?.key_configured ? tr('API key') + ' (留空保留现有)' : tr('paste your API key')}
                 disabled={status === 'saving' || status === 'restarting'}
-                style={{ flex: 1, height: 36, padding: '0 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)', fontSize: 12.5, fontFamily: 'var(--mono)' }}
-              />
-              <button onClick={saveKey} disabled={!keyInput.trim() || status === 'saving' || status === 'restarting'}
-                style={{ height: 36, padding: '0 15px', borderRadius: 8, border: 'none', background: keyInput.trim() ? 'var(--accent)' : 'var(--surface)', color: keyInput.trim() ? '#1a1205' : 'var(--text-3)', fontWeight: 700, fontSize: 12.5, cursor: keyInput.trim() ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
+                style={{ flex: 1, height: 36, padding: '0 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)', fontSize: 12.5, fontFamily: 'var(--mono)' }} />
+              <button onClick={save} disabled={status === 'saving' || status === 'restarting' || (!keyInput.trim() && !settings?.key_configured)}
+                style={{ height: 36, padding: '0 15px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#1a1205', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 {status === 'saving' ? tr('Saving…') : status === 'restarting' ? tr('Restarting…') : tr('Save & apply')}
               </button>
             </div>
-            {status === 'done' && (
-              <div style={{ marginTop: 9, fontSize: 11.5, color: 'var(--accent)' }}>{tr('applied — agent restarted with your key')}</div>
-            )}
-            {/* 已配 key 时也给一个单独的重启入口(比如手动改了配置/想重连) */}
-            {settings?.key_configured && status === '' && (
-              <button onClick={async () => { setStatus('restarting'); await restartAgent(); await new Promise((r) => setTimeout(r, 1500)); getSettings().then(setSettings); setStatus('done'); }}
-                style={{ marginTop: 10, height: 30, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', fontSize: 11.5, cursor: 'pointer' }}>
-                ↻ {tr('Restart agent')}
-              </button>
-            )}
+            {status === 'done' && <div style={{ marginTop: 9, fontSize: 11.5, color: 'var(--accent)' }}>{tr('applied — agent restarted')}</div>}
           </>
         )}
       </div>

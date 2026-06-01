@@ -43,11 +43,6 @@ export async function setLlmConfig(cfg: { provider: string; base: string; model:
   }
 }
 
-/** @deprecated 用 setLlmConfig。保留以免 overlays 改完前 tsc 断。 */
-export async function setMinimaxKey(key: string, model?: string): Promise<boolean> {
-  return setLlmConfig({ provider: 'anthropic', base: 'https://api.minimaxi.com/anthropic', model: model || 'MiniMax-M2', key });
-}
-
 /** 重启 agent sidecar(杀旧+重拉,读最新 key)。填 key 后调它即可生效,无需退出整个 app。 */
 export async function restartAgent(): Promise<boolean> {
   if (!isTauri()) return false;

@@ -145,6 +145,11 @@ const TR: Record<string, string> = {
   'paste your MiniMax key (sk-…)': '粘贴你的 MiniMax 密钥(sk-…)',
   'Save & apply': '保存并应用', 'Saving…': '保存中…', 'Restarting…': '重启中…',
   'applied — agent restarted with your key': '已应用 —— agent 已带新密钥重启', 'Restart agent': '重启 agent',
+  // 设置:通用 provider 表单 + 语言
+  Language: '语言', Provider: '模型厂商', 'Anthropic-compatible': 'Anthropic 兼容', 'OpenAI-compatible': 'OpenAI 兼容',
+  'Base URL': '端点地址', 'Model name': '模型名', 'API key': 'API 密钥',
+  'applied — agent restarted': '已应用 —— agent 已带新配置重启',
+  'paste your API key': '粘贴你的 API key',
   // 首页示例任务(贴合 Argos:结构化、可验证的工程任务)
   'List the fields a REST pagination response should contain': '列出 REST 分页响应该包含的字段名',
   'Design a TODO data model — fields and types': '设计一个 TODO 数据模型 —— 字段与类型',
