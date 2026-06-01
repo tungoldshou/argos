@@ -8,6 +8,11 @@ export default defineConfig(({ mode }) => {
   const target = env.VITE_MINIMAX_URL || 'https://api.minimaxi.com/anthropic'
   return {
     plugins: [react()],
+    test: {
+      environment: 'jsdom',
+      globals: true,
+      setupFiles: ['./src/test/setup.ts'],
+    },
     server: {
       proxy: {
         '/minimax': {
