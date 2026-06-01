@@ -19,10 +19,41 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **`package-app` project skill** (`.claude/skills/package-app/`) — the build
   runbook for rebuilding the arm64 PyInstaller sidecar and repackaging the
   `.app`/`.dmg`, including the x86_64-venv trap and spec-parity rules.
+- **Agent chat skeleton (Phase 1 of the chat-experience epic)** — two-column
+  shell (left chat column max-width 760px centered, right side exposes the
+  background memory brain), `react-markdown` + `remark-gfm` + `rehype-highlight`
+  with custom code blocks (language label + copy button), `chatReducer` that
+  merges SSE events into ordered `Block[]` per turn, `HonestyCard` for
+  verify/escalation/tampering signals, collapsible `ActivityTrail` for tool
+  steps, multi-line auto-grow `Composer` with `Enter` send / `Shift+Enter`
+  newline and `onSlash`/`leftSlot`/`rightSlot` extension hooks for Phases 2/5/6,
+  collapsible `TaskSetup` for verify/project/guard settings. `AgentPanel` is
+  lazy-loaded so the main bundle stays at 278 KB / 95 KB gzip; the markdown
+  stack (~348 KB) only loads when the user opens chat. See
+  `docs/superpowers/specs/2026-06-02-agent-chat-redesign-design.md` and
+  `docs/superpowers/plans/2026-06-02-agent-chat-skeleton.md`.
+- **Real token streaming** — `agent.astream(..., stream_mode=["values","messages"])`
+  emits a new `token` SSE event for each `AIMessageChunk` text delta; the
+  `message` event is preserved as the authoritative finalization (frontend
+  reducer uses it to overwrite any accumulated tokens and prevent drift).
+  Reasoning-model `thinking` content is filtered out (`text_delta` helper).
+  Verified end-to-end with a real LLM: 6 incremental `token` frames → 1
+  `message` finalization → `done`.
+- **Component test infrastructure** — `vitest` with `jsdom` + `@testing-library/react`
+  + `@testing-library/jest-dom`; 28 new component tests + 11 reducer tests
+  for the chat skeleton.
+- **CSS tokens** — `--warn` / `--danger` / `--danger-strong` so the honesty
+  cards, error blocks, and Composer stop button share one source of color truth.
+- **`Highlight.js` dark theme** — 13-line handcrafted stylesheet matching the
+  argos palette, paired with `rehype-highlight`.
 
 ### Changed
 - `.gitignore` now tracks `.claude/skills/` (shared project skills) while still
   ignoring local `.claude` state; root `/build/` ignored.
+- `AgentEvent['type']` gained `'token'` for the streaming event; reducer and
+  downstream rendering path handle the new event as a first-class stream.
+- Project-guide `CLAUDE.md` now mandates Chinese as the user-facing reply
+  language.
 
 ## [0.1.0] — 2026-06-01
 
