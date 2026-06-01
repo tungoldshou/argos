@@ -427,9 +427,8 @@ export function App() {
         </div>
       )}
 
-      {/* Agent — 独立通用智能体:目标 → Python agent 服务(LangGraph)→ 事件流。
-          直接渲染:AgentPanel 内部的 Overlay 已自带 docked 定位,不要再套外层定位容器
-          (否则双重 absolute 嵌套 → 内层比外层宽 → 溢出被裁。这是"面板切一半"的根因)。 */}
+      {/* Agent — 独立通用智能体。AgentPanel 自带两栏 shell(左聊天列 + 右侧露出背景脑图),
+          不要再套外层定位容器。 */}
       {panel === 'agent' && (
         <AgentPanel key={runKey} onClose={closePanel} initialGoal={agentGoal || undefined} onComplete={() => refreshMemoryRef.current?.()} />
       )}
