@@ -1,6 +1,6 @@
 // App.tsx — cinematic shell: memory brain at center, work + features dock in from
 // the right, ⌘K command palette, voice in the command bar, EN/中, responsive.
-import { useState, useEffect, useRef, type CSSProperties } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense, type CSSProperties } from 'react';
 import { MindGraph, META, type GraphNode } from './engine/MindGraph';
 import { CATS, buildEmptyMind } from './data/mind';
 import { memoryToMind } from './data/memoryToMind';
@@ -10,7 +10,9 @@ import { useLang } from './lib/i18n';
 import { RunView } from './components/RunView';
 import { OVERLAYS, type OverlayKey } from './components/overlays';
 import { SwarmPanel } from './components/SwarmPanel';
-import { AgentPanel } from './components/AgentPanel';
+// AgentPanel pulls in react-markdown + remark-gfm + rehype-highlight + highlight.js (~340KB).
+// Lazy-load so the cinematic shell stays light and the markdown cost only hits when the user opens chat.
+const AgentPanel = lazy(() => import('./components/AgentPanel').then((m) => ({ default: m.AgentPanel })));
 import { agentHealth, agentMemory } from './lib/agent';
 import { Dot, Meta } from './components/atoms';
 import { useTweaks, TweaksPanel, TweakSection, TweakToggle, TweakButton } from './components/Tweaks';
@@ -428,9 +430,11 @@ export function App() {
       )}
 
       {/* Agent — 独立通用智能体。AgentPanel 自带两栏 shell(左聊天列 + 右侧露出背景脑图),
-          不要再套外层定位容器。 */}
+          不要再套外层定位容器。Suspense 包裹住 lazy 加载期的 fallback(主屏继续展示脑图)。 */}
       {panel === 'agent' && (
-        <AgentPanel key={runKey} onClose={closePanel} initialGoal={agentGoal || undefined} onComplete={() => refreshMemoryRef.current?.()} />
+        <Suspense fallback={null}>
+          <AgentPanel key={runKey} onClose={closePanel} initialGoal={agentGoal || undefined} onComplete={() => refreshMemoryRef.current?.()} />
+        </Suspense>
       )}
 
       {/* feature panels (docked side panel, same as Runs) */}
