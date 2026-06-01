@@ -17,7 +17,7 @@ interface ComposerProps {
 export function Composer({ value, onChange, onSend, running, onStop, placeholder, onSlash, leftSlot, rightSlot }: ComposerProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  // auto-grow:内容变化时按 scrollHeight 调高(上限 ~6 行)。
+  // auto-grow:内容变化时按 scrollHeight 调高(上限 168px ≈ 8 行 @ fontSize 13 / line-height 1.5)。
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -52,7 +52,7 @@ export function Composer({ value, onChange, onSend, running, onStop, placeholder
       />
       {rightSlot}
       <button
-        onClick={running ? onStop : onSend}
+        onClick={running ? () => onStop?.() : onSend}
         disabled={!running && !value.trim()}
         style={{ height: 38, padding: '0 16px', borderRadius: 10, border: 'none', background: running ? '#ff7a4d' : 'var(--accent)', color: '#1a1205', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
       >
