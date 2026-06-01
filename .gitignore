@@ -17,10 +17,15 @@ src-tauri/gen
 # codegraph index + tsc build cache
 .codegraph
 *.tsbuildinfo
-.claude/
+# ignore local .claude state (settings, locks) but DO track shared project skills
+.claude/*
+!.claude/skills/
 
 # QA verification screenshots (throwaway)
 screenshots/
+
+# stray root build dir (sidecar copies land here from some build steps)
+/build/
 
 # python (agent sidecar)
 __pycache__/
