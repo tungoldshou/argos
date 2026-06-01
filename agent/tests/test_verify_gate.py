@@ -140,3 +140,24 @@ def test_clean_pass_still_passes(project):
     out = gate.wrap_model_call(object(), handler)
     assert gate.unverifiable is False
     assert out.result[-1].content == "完成"
+
+
+# ── _verdict_of:门禁状态到三态裁决(server.py 复用) ──────────────────────────
+class _FakeGate:
+    def __init__(self, escalated=False, unverifiable=False):
+        self.escalated = escalated
+        self.unverifiable = unverifiable
+
+
+def test_verdict_of_precedence():
+    from argos_agent.server import _verdict_of
+    # 无 verify_cmd → 无裁决
+    assert _verdict_of(_FakeGate(), None) is None
+    # 干净通过
+    assert _verdict_of(_FakeGate(), "pytest") == "passed"
+    # 升级 = failed
+    assert _verdict_of(_FakeGate(escalated=True), "pytest") == "failed"
+    # 篡改 unverifiable 优先于 escalated
+    assert _verdict_of(_FakeGate(escalated=True, unverifiable=True), "pytest") == "unverifiable"
+    # gate 为 None 但有 verify_cmd(理论边界)→ passed,不报错
+    assert _verdict_of(None, "pytest") == "passed"

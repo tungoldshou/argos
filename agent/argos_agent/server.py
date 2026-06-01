@@ -99,6 +99,17 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+def _verdict_of(gate, verify_cmd: str | None) -> str | None:
+    """把门禁状态映射成三态裁决。unverifiable(篡改/不可信)优先于 failed(升级)。"""
+    if not verify_cmd:
+        return None
+    if gate is not None and getattr(gate, "unverifiable", False):
+        return "unverifiable"
+    if gate is not None and getattr(gate, "escalated", False):
+        return "failed"
+    return "passed"
+
+
 async def _run_stream(
     goal: str,
     session_id: str | None = None,
@@ -185,12 +196,16 @@ async def _run_stream(
             if tampered:
                 yield _sse("tampering", {"files": tampered})
             escalated = bool(gate and gate.escalated)
-            verdict = ("failed" if escalated else "passed") if st.verify_cmd else None
+            unverifiable = bool(gate and getattr(gate, "unverifiable", False))
+            verdict = _verdict_of(gate, st.verify_cmd)
             try:
                 memory.record_task(goal=goal, verdict=verdict, model=config.LLM_MODEL)
             except Exception:
                 pass
-            if escalated:
+            if unverifiable:
+                yield _sse("unverifiable", {"files": gate.tampered, "detail": gate.last_failure})
+                yield _sse("done", {"resolved": False, "unverifiable": True, "tampered": gate.tampered})
+            elif escalated:
                 yield _sse("done", {"resolved": False, "escalated": True, "attempts": gate.attempts, "tampered": tampered})
             else:
                 yield _sse("done", {"resolved": True, "tampered": tampered})
