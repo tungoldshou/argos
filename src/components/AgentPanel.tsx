@@ -1,6 +1,6 @@
 // AgentPanel.tsx — Argos agent 交互面板(编排层)。
 // 目标 → Python agent 服务(FastAPI+LangGraph)→ 流式事件 → reduceEvent 归并成 blocks → 渲染。
-// 两栏:左/中聊天主列(限宽居中) + 右侧露出背景脑图 canvas 当"活记忆"栏。
+// 从右侧 dock 的聊天面板(与 RunView / SwarmPanel 一致),脑图在左侧按窗口宽度缩放。
 // 智能在 Python 侧;本面板只负责发起、归并、可视化。
 import { useEffect, useRef, useState } from 'react';
 import { useNarrow } from '../lib/responsive';
@@ -83,7 +83,7 @@ export function AgentPanel({ onClose, initialGoal, onComplete }: { onClose: () =
 
   const stop = () => { abortRef.current?.(); setRunning(false); abortRef.current = null; };
 
-  // 两栏:窄屏铺满;宽屏左聊天列(弹性,右留出 ~320px 露出背景脑图)。
+  // 从右 dock:窄屏铺满,宽屏 right:16 + width 56vw(脑图在左/中按窗口缩放,跟 RunView/SwarmPanel 同模式)。
   const shellStyle: React.CSSProperties = narrow
     ? { position: 'absolute', top: 8, left: 8, right: 8, bottom: 62, zIndex: 11, display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'slidein .35s cubic-bezier(0.16,1,0.3,1) both' }
     : { position: 'absolute', top: 16, right: 16, bottom: 16, width: 'min(560px, 56vw)', zIndex: 11, display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'slidein .35s cubic-bezier(0.16,1,0.3,1) both' };
