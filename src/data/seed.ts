@@ -1,6 +1,6 @@
 // seed.ts — realistic seed data for the Hermes desktop app.
 import type {
-  Agent, Platform, Skill, Automation, Sandbox, McpServer, Toolset, Models, Voice, Personality,
+  Agent, Platform, Skill, Automation, Sandbox, McpServer, Models, Voice, Personality,
 } from './types';
 
 export const AGENT: Agent = {
@@ -72,18 +72,6 @@ export const MCP_SERVERS: McpServer[] = [
   { name: 'linear', tools: 9, status: 'available', via: 'sse', desc: 'tasks, projects, cycles' },
   { name: 'sentry', tools: 5, status: 'available', via: 'sse', desc: 'error monitoring & traces' },
 ];
-
-// ── Toolsets (60+ built-in tools, grouped) ──
-export const TOOLSETS: Toolset[] = [
-  { group: 'Shell & Code', n: 9, icon: 'terminal', tools: 'bash · execute_code · edit_file · read_file · grep …' },
-  { group: 'Web', n: 8, icon: 'globe', tools: 'web_search · fetch · browse · extract · vision …' },
-  { group: 'Memory', n: 6, icon: 'memory', tools: 'recall · remember · forget · summarize …' },
-  { group: 'Media', n: 7, icon: 'image', tools: 'image_gen · tts · transcribe · ocr …' },
-  { group: 'Delegation', n: 5, icon: 'branch', tools: 'spawn_subagent · schedule · message …' },
-  { group: 'Messaging', n: 12, icon: 'send', tools: 'send · react · poll · file · voice_note …' },
-  { group: 'MCP (dynamic)', n: 13, icon: 'plug', tools: 'tools exposed by connected MCP servers' },
-];
-export const TOOLS_TOTAL = 60;
 
 // ── Model providers & routing ──
 export const MODELS: Models = {

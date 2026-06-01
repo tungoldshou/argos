@@ -209,8 +209,9 @@ def web_extract(url: str) -> str:
         from .core import _llm
         llm = _llm()
         prompt = (
-            "下面是一个网页的正文。请抽取关键事实,并写一个 200 字以内的中文摘要,"
-            "丢弃导航/广告/无关噪声。只输出摘要正文,不要前言。\n\n正文:\n" + text[:20000]
+            "下面是一个网页的正文(若已截断会在末尾注明)。请抽取关键事实,并写一个"
+            " 200 字以内的中文摘要,丢弃导航/广告/无关噪声。只输出摘要正文,不要前言。\n\n"
+            f"正文(已截断,原始 {len(text)} 字符):\n" + text[:20000]
         )
         from .core import final_text
         msg = llm.invoke(prompt)
