@@ -27,8 +27,9 @@ function withBlocks(turns: Turn[], blocks: Block[]): Turn[] {
   return [...turns.slice(0, -1), { ...last, blocks }];
 }
 
-// 把当前正在流式的 text block 定稿(streaming=false)。
+// 把当前正在流式的 text block 定稿(streaming=false)。没有 streaming block 时直接返回原数组(无 alloc)。
 function sealStreaming(blocks: Block[]): Block[] {
+  if (!blocks.some((b) => b.kind === 'text' && b.streaming)) return blocks;
   return blocks.map((b) => (b.kind === 'text' && b.streaming ? { ...b, streaming: false } : b));
 }
 
@@ -77,11 +78,15 @@ export function reduceEvent(turns: Turn[], e: AgentEvent): Turn[] {
 
     case 'tool_result': {
       const content = String(e.data.content ?? '');
-      const idx = [...blocks].reverse().findIndex((b) => b.kind === 'activity' && b.result === undefined);
-      if (idx === -1) return turns;
-      const realIdx = blocks.length - 1 - idx;
-      const target = blocks[realIdx] as Extract<Block, { kind: 'activity' }>;
+      // 反向 for 找最近一个无 result 的 activity,避免 reverse+findIndex 的全数组克隆。
+      let realIdx = -1;
+      for (let i = blocks.length - 1; i >= 0; i--) {
+        const b = blocks[i];
+        if (b.kind === 'activity' && b.result === undefined) { realIdx = i; break; }
+      }
+      if (realIdx === -1) return turns;
       const next = [...blocks];
+      const target = next[realIdx] as Extract<Block, { kind: 'activity' }>;
       next[realIdx] = { ...target, result: content };
       return withBlocks(turns, next);
     }

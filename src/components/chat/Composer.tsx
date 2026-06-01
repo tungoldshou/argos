@@ -54,7 +54,7 @@ export function Composer({ value, onChange, onSend, running, onStop, placeholder
       <button
         onClick={running ? () => onStop?.() : onSend}
         disabled={!running && !value.trim()}
-        style={{ height: 38, padding: '0 16px', borderRadius: 10, border: 'none', background: running ? '#ff7a4d' : 'var(--accent)', color: '#1a1205', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+        style={{ height: 38, padding: '0 16px', borderRadius: 10, border: 'none', background: running ? 'var(--danger)' : 'var(--accent)', color: '#1a1205', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
       >
         {running ? '停止' : '发送'}
       </button>

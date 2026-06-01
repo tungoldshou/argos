@@ -1,6 +1,9 @@
 :root {
   --accent: #ffb152;
   --live: #5fe0b0;
+  --warn: #ffb152;       /* verify 拦截 — 橙黄 */
+  --danger: #ff7a4d;     /* escalation 求助 / 停止 — 橙红 */
+  --danger-strong: #ff5c5c; /* tampering 篡改 — 红色 */
   --bg: oklch(0.10 0.014 268);
   --surface: oklch(0.17 0.02 266 / 0.72);
   --surface-2: oklch(0.24 0.022 266 / 0.7);

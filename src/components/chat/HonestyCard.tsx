@@ -5,9 +5,9 @@ import { Icon, type IconName } from '../../lib/icons';
 type HonestyType = 'verify_failed' | 'escalation' | 'tampering';
 
 const SPEC: Record<HonestyType, { color: string; icon: IconName; title: string }> = {
-  verify_failed: { color: '#ffb152', icon: 'activity', title: 'Argos 拦下了一次假完成' },
-  escalation: { color: '#ff7a4d', icon: 'memory', title: 'Argos 卡住了，诚实求助' },
-  tampering: { color: '#ff5c5c', icon: 'activity', title: '⚠ 改动了被保护的测试文件' },
+  verify_failed: { color: 'var(--warn)', icon: 'activity', title: 'Argos 拦下了一次假完成' },
+  escalation: { color: 'var(--danger)', icon: 'memory', title: 'Argos 卡住了，诚实求助' },
+  tampering: { color: 'var(--danger-strong)', icon: 'memory', title: '⚠ 改动了被保护的测试文件' },
 };
 
 export function HonestyCard({ type, detail }: { type: HonestyType; detail: string }) {

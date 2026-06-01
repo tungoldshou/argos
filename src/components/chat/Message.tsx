@@ -44,7 +44,7 @@ export function Message({ turn }: { turn: Turn }) {
         if (s.kind === 'honesty') return <HonestyCard key={i} type={s.type} detail={s.detail} />;
         if (s.kind === 'error')
           return (
-            <div key={i} style={{ fontSize: 12.5, color: '#ff7a4d', padding: '8px 11px', borderRadius: 9, border: '1px solid color-mix(in oklab,#ff7a4d,transparent 70%)' }}>
+            <div key={i} style={{ fontSize: 12.5, color: 'var(--danger)', padding: '8px 11px', borderRadius: 9, border: '1px solid color-mix(in oklab, var(--danger), transparent 70%)' }}>
               {s.text}
             </div>
           );
