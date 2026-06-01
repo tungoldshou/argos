@@ -141,7 +141,7 @@ function AutomationsOverlay({ onClose }: { onClose: () => void }) {
 function SandboxesOverlay({ onClose }: { onClose: () => void }) {
   const c: Record<string, string> = { running: 'var(--live)', idle: 'var(--text-3)' };
   return (
-    <Overlay title="Sandboxes" sub="Every tool call runs hardened & isolated" icon="sandbox" onClose={onClose}>
+    <Overlay title="Sandboxes" sub="Tool calls run as a local subprocess on this machine — no OS-level isolation yet" icon="sandbox" onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
         {SANDBOXES.map((s, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: 13, borderRadius: 11, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
@@ -160,7 +160,7 @@ function SandboxesOverlay({ onClose }: { onClose: () => void }) {
 
 function SettingsOverlay({ onClose }: { onClose: () => void }) {
   const rows: [string, string][] = [
-    ['Default sandbox', 'Docker (hardened)'], ['Gateway', 'systemd · auto-restart'],
+    ['Default sandbox', 'Local process — no OS sandbox yet'], ['Gateway', 'systemd · auto-restart'],
     ['Telemetry', 'Local only — nothing leaves your server'], ['License', 'MIT · open source'],
   ];
   // 通用 provider 配置:打包 .app 双击不继承 shell env,必须让用户在这里填 key,

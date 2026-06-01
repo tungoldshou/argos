@@ -54,13 +54,11 @@ export const AUTOMATIONS: Automation[] = [
   { title: 'Monthly finance report', cron: '1st of month, 9:00 AM', nl: 'pull Stripe + bank, build the P&L sheet and PDF', dest: 'email', next: 'Jun 1, 9:00', on: false },
 ];
 
+// 诚实:工具调用实际是在本机以子进程运行的(裸 subprocess on host),目前没有任何
+// OS 级沙箱。曾经这里假装在跑 Docker/SSH/Daytona/Modal/Singularity —— 全是假的,
+// 后端 sidecar 不存在,违反"UI 数字必须匹配真实能力"。等真接了 OS 沙箱再加回来。
 export const SANDBOXES: Sandbox[] = [
-  { backend: 'local', label: 'Local process', status: 'idle', detail: 'host namespace · 0 active', icon: 'cpu' },
-  { backend: 'docker', label: 'Docker', status: 'running', detail: '2 containers · hardened', icon: 'sandbox', count: 2 },
-  { backend: 'ssh', label: 'SSH · atlas-box', status: 'running', detail: 'deploy + db tasks', icon: 'terminal', count: 1 },
-  { backend: 'daytona', label: 'Daytona', status: 'idle', detail: 'serverless · hibernates when idle', icon: 'bolt' },
-  { backend: 'modal', label: 'Modal', status: 'idle', detail: 'gpu burst · on-demand', icon: 'bolt' },
-  { backend: 'singularity', label: 'Singularity', status: 'idle', detail: 'hpc · not provisioned', icon: 'cpu' },
+  { backend: 'local', label: 'Local process', status: 'running', detail: 'runs on this machine · no OS sandbox yet', icon: 'cpu' },
 ];
 
 // ── MCP servers (Model Context Protocol) ──
