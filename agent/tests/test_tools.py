@@ -120,3 +120,22 @@ def test_search_files_files_mode(monkeypatch, tmp_path):
     (tmp_path / "y.txt").write_text("y\n", encoding="utf-8")
     out = tools.search_files.invoke({"pattern": "*.py", "target": "files"})
     assert "x.py" in out and "y.txt" not in out
+
+
+def test_edit_file_fuzzy_whitespace(monkeypatch, tmp_path):
+    from argos_agent import tools
+    monkeypatch.setattr(tools, "WORKSPACE", tmp_path)
+    # 文件用 4 空格缩进;agent 给的 old 用了不同空白 → 精确匹配不到,模糊应命中。
+    (tmp_path / "c.py").write_text("def f():\n    return  1\n", encoding="utf-8")
+    out = tools.edit_file.invoke({"path": "c.py", "old": "return 1", "new": "return 2"})
+    assert "已编辑" in out
+    # 模糊匹配后,原文件中"return  1"应被替换为"return 2"
+    assert "return 2" in (tmp_path / "c.py").read_text()
+
+
+def test_edit_file_fuzzy_ambiguous_rejected(monkeypatch, tmp_path):
+    from argos_agent import tools
+    monkeypatch.setattr(tools, "WORKSPACE", tmp_path)
+    (tmp_path / "d.py").write_text("x = 1\nx = 1\n", encoding="utf-8")
+    out = tools.edit_file.invoke({"path": "d.py", "old": "x = 1", "new": "x = 2"})
+    assert "多次" in out  # 多处匹配仍拒绝

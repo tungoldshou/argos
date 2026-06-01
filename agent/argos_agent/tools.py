@@ -89,9 +89,16 @@ def write_file(path: str, content: str) -> str:
     return f"已写入 {path}({len(content)} 字符)。"
 
 
+def _normalize_ws(s: str) -> str:
+    """把连续空白(含换行/缩进)折叠成单空格,用于模糊匹配。"""
+    import re
+    return re.sub(r"\s+", " ", s).strip()
+
+
 @tool
 def edit_file(path: str, old: str, new: str) -> str:
-    """在 workspace 内某文件里把 old 串替换成 new(必须唯一匹配一次)。"""
+    """在 workspace 内某文件里把 old 串替换成 new。先精确唯一匹配;精确找不到时
+    做空白归一化的模糊匹配兜底(仍要求唯一)。"""
     p = _safe_path(path)
     if p is None:
         return f"错误:路径 {path!r} 越出 workspace,拒绝编辑。"
@@ -99,12 +106,34 @@ def edit_file(path: str, old: str, new: str) -> str:
         return f"错误:文件 {path!r} 不存在。"
     text = p.read_text(encoding="utf-8")
     count = text.count(old)
-    if count == 0:
-        return f"错误:未找到要替换的内容。"
+    if count == 1:
+        p.write_text(text.replace(old, new), encoding="utf-8")
+        return f"已编辑 {path}。"
     if count > 1:
-        return f"错误:old 串匹配了 {count} 次(需唯一),请给更多上下文。"
-    p.write_text(text.replace(old, new), encoding="utf-8")
-    return f"已编辑 {path}。"
+        return f"错误:old 串多次匹配({count} 次,需唯一),请给更多上下文。"
+    # 精确 0 次 → 空白归一化模糊匹配:在按行扫描的窗口里找归一化后等于 old 的唯一片段。
+    target = _normalize_ws(old)
+    lines = text.splitlines(keepends=True)
+    matches = []  # (start_idx, end_idx) 行区间
+    for i in range(len(lines)):
+        acc = ""
+        for j in range(i, len(lines)):
+            acc += lines[j]
+            norm = _normalize_ws(acc)
+            if norm == target:
+                matches.append((i, j))
+                break
+            if len(norm) > len(target):
+                break
+    if len(matches) == 0:
+        return f"错误:未找到要替换的内容。"
+    if len(matches) > 1:
+        return f"错误:old 串模糊匹配了 {len(matches)} 次(需唯一),请给更多上下文。"
+    i, j = matches[0]
+    new_segment = new if new.endswith("\n") or j + 1 >= len(lines) else new + "\n"
+    new_lines = lines[:i] + [new_segment] + lines[j + 1:]
+    p.write_text("".join(new_lines), encoding="utf-8")
+    return f"已编辑 {path}(模糊匹配)。"
 
 
 # shell 白名单:只允许验证类/只读类。绝不允许 rm/curl/wget/sudo/mv 等有副作用或外联的。
