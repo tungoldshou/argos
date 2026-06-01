@@ -7,7 +7,7 @@ agent loop 级的端到端(bounce/escalate)已用命令行实测过(慢、调模
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from argos_agent import tools, verify_gate
+from argos_agent import runtime, tools, verify_gate
 from argos_agent.verify_gate import (
     VerifyGateMiddleware,
     _is_final_answer,
@@ -93,3 +93,50 @@ def test_gate_passthrough_without_verify_cmd():
     assert gate.wrap_model_call("req", handler) == "resp"
     assert called["n"] == 1  # 直接透传,只调一次
     assert gate.escalated is False
+
+
+# ── 篡改硬门:agent 改了受保护测试 → 验证结果不可信,判 unverifiable ───────────
+@pytest.fixture
+def project(tmp_path):
+    """切到 project 模式(verify_dir=workspace=tmp_path),用完切回沙盒避免污染全局。"""
+    runtime.use_project(str(tmp_path))
+    yield tmp_path
+    runtime.use_sandbox()
+
+
+class _Resp:
+    """最小化模拟 wrap_model_call 里 handler 返回的 response 对象(只需可变 .result)。"""
+    def __init__(self, msgs):
+        self.result = msgs
+
+
+def test_tampering_makes_verdict_unverifiable(project):
+    # 受保护测试存在并登记指纹
+    (project / "test_oracle.py").write_text("def test(): assert True\n")
+    runtime.guard_files(["test_oracle.py"])
+    # agent 偷偷把测试改成永远过 —— 经典作弊
+    (project / "test_oracle.py").write_text("def test(): pass  # 偷偷改成永远过\n")
+    # verify_cmd 退出码 0(=表面"通过"),但测试被动过 → 必须判 unverifiable
+    gate = VerifyGateMiddleware(verify_cmd="python3 --version")
+
+    def handler(req):
+        return _Resp([AIMessage(content="我完成了")])
+
+    out = gate.wrap_model_call(object(), handler)
+    assert VerifyGateMiddleware.UNVERIFIABLE_TAG in out.result[-1].content
+    assert gate.unverifiable is True
+    assert any("test_oracle.py" in f for f in gate.tampered)
+
+
+def test_clean_pass_still_passes(project):
+    # 不碰测试 + 退出码 0 → 原样放行,不误判 unverifiable
+    (project / "test_oracle.py").write_text("def test(): assert True\n")
+    runtime.guard_files(["test_oracle.py"])
+    gate = VerifyGateMiddleware(verify_cmd="python3 --version")
+
+    def handler(req):
+        return _Resp([AIMessage(content="完成")])
+
+    out = gate.wrap_model_call(object(), handler)
+    assert gate.unverifiable is False
+    assert out.result[-1].content == "完成"

@@ -18,6 +18,7 @@ from pathlib import Path
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage, HumanMessage
 
+from . import runtime
 from .tools import ALLOWED_CMDS, _vd, _ws
 
 
@@ -63,6 +64,7 @@ class VerifyGateMiddleware(AgentMiddleware):
 
     BOUNCE_TAG = "[Argos 验证门]"
     ESCALATION_TAG = "[Argos 升级·需人工]"
+    UNVERIFIABLE_TAG = "[Argos 验证门·无法验证]"
 
     def __init__(self, verify_cmd: str | None, max_rounds: int = 3):
         super().__init__()
@@ -75,6 +77,9 @@ class VerifyGateMiddleware(AgentMiddleware):
         # 实例级累计(跨整个 run 的所有 wrap_model_call,不是每次 call 重置)——
         # 之前的 bug 正是把它做成局部变量,每个 step 归零,导致永远到不了升级条件、死循环。
         self._fail_count = 0
+        # 篡改硬门:agent 改动了受保护测试 → 验证结果不可信,判 unverifiable(区别于 failed)。
+        self.unverifiable = False
+        self.tampered: list[str] = []
 
     def wrap_model_call(self, request, handler):  # type: ignore[override]
         if not self.verify_cmd:
@@ -90,6 +95,23 @@ class VerifyGateMiddleware(AgentMiddleware):
 
         # 是最终答案 → 核实"完成"是不是真的。
         ok, detail = _run_verify(self.verify_cmd)
+
+        # 防作弊硬门(优先于退出码):若 agent 在本 run 内改动了受保护的测试文件,
+        # 哪怕退出码为 0,这个"通过"也不可信 —— 判 unverifiable 并诚实升级,绝不蒙混。
+        # 沙盒模式 guarded 为空 → detect_tampering 返回 [],此处自然无操作。
+        tampered = runtime.detect_tampering()
+        if tampered:
+            self.unverifiable = True
+            self.tampered = tampered
+            self.attempts = self._fail_count
+            honest = AIMessage(content=(
+                f"{self.UNVERIFIABLE_TAG} 我检测到验证依赖的测试文件被改动了:"
+                f"{', '.join(tampered)}。所以这次的'通过'不可信 —— 我【无法确认】任务真的完成,"
+                f"也不会假装成功。请你检查/恢复这些文件后再让我重做。"
+            ))
+            response.result = result[:-1] + [honest]
+            return response
+
         if ok:
             return response  # 验证真过 → 这次完成是真的
 
