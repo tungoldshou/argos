@@ -71,3 +71,28 @@ def test_tamper_detection_catches_same_size_same_mtime(tmp_path):
     os.utime(f, (st0.st_atime, st0.st_mtime))  # 复原 mtime(骗过 mtime)
     flagged = runtime.detect_tampering()
     assert any("test_a.py" in x for x in flagged)  # 内容变了 → sha256 抓到
+
+
+def test_guard_directory_flags_added_file(tmp_path):
+    """守护整个测试目录:agent 偷偷新增 conftest.py(autouse fixture 中和断言)也算篡改。"""
+    runtime.use_project(str(tmp_path))
+    d = tmp_path / "tests"
+    d.mkdir()
+    (d / "test_a.py").write_text("def test(): assert True\n")
+    runtime.guard_files(["tests"])
+    assert runtime.detect_tampering() == []
+    # 新增一个文件 → 必须被标"新增"
+    (d / "conftest.py").write_text("import pytest\n")
+    flagged = runtime.detect_tampering()
+    assert any("conftest.py" in f and "新增" in f for f in flagged)
+
+
+def test_guard_directory_flags_modified_file(tmp_path):
+    runtime.use_project(str(tmp_path))
+    d = tmp_path / "tests"
+    d.mkdir()
+    (d / "test_a.py").write_text("def test(): assert True\n")
+    runtime.guard_files(["tests"])
+    (d / "test_a.py").write_text("def test(): pass\n")
+    flagged = runtime.detect_tampering()
+    assert any("test_a.py" in f and "被修改" in f for f in flagged)

@@ -38,6 +38,8 @@ class RunContext:
     project_mode: bool = False
     # 受保护文件指纹(project 模式下,验证相关文件的内容 sha256,用于检测篡改)。
     guarded: dict[str, str] = field(default_factory=dict)
+    # 受保护目录快照(dir 相对路径 -> {file 相对路径 -> sha256}),用于抓"新增/删除文件"。
+    guarded_dirs: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 # 进程内当前上下文(单 run 串行执行,够用;并发场景未来再隔离)。
@@ -64,24 +66,42 @@ def use_project(project_dir: str) -> RunContext:
 
 
 def guard_files(paths: list[str]) -> None:
-    """登记需保护的文件(通常是测试文件),记录内容 sha256。project 模式下 agent 技术上能改它们,
-    所以靠'篡改可见 + 硬门禁':run 内验证时对比指纹,改动了就判 unverifiable。"""
+    """登记需保护的文件/目录,记录内容 sha256。文件 → 单个指纹;目录 → 递归快照(含文件集合,
+    以便检测新增)。project 模式下靠'篡改可见 + 硬门禁':改/增/删都判 unverifiable。"""
     ctx = _current
     for rel in paths:
-        f = ctx.workspace / rel
-        if f.exists() and f.is_file():
-            ctx.guarded[rel] = _sha256(f)
+        p = ctx.workspace / rel
+        if p.is_dir():
+            ctx.guarded_dirs[rel] = {
+                str(f.relative_to(ctx.workspace)): _sha256(f)
+                for f in sorted(p.rglob("*")) if f.is_file()
+            }
+        elif p.is_file():
+            ctx.guarded[rel] = _sha256(p)
 
 
 def detect_tampering() -> list[str]:
-    """返回被改动过的受保护文件列表(内容 sha256 变了)。空 = 没动测试,诚实。"""
+    """返回被改动过的受保护文件列表(内容变了/被删/新增)。空 = 没动测试,诚实。"""
     ctx = _current
     changed: list[str] = []
     for rel, digest in ctx.guarded.items():
         f = ctx.workspace / rel
         if not f.exists():
             changed.append(rel + "(被删除)")
-            continue
-        if _sha256(f) != digest:
+        elif _sha256(f) != digest:
             changed.append(rel + "(被修改)")
+    for drel, snap in ctx.guarded_dirs.items():
+        d = ctx.workspace / drel
+        now = (
+            {str(f.relative_to(ctx.workspace)) for f in d.rglob("*") if f.is_file()}
+            if d.is_dir() else set()
+        )
+        for frel, digest in snap.items():
+            f = ctx.workspace / frel
+            if not f.exists():
+                changed.append(frel + "(被删除)")
+            elif _sha256(f) != digest:
+                changed.append(frel + "(被修改)")
+        for frel in sorted(now - set(snap)):
+            changed.append(frel + "(新增)")
     return changed
