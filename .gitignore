@@ -19,6 +19,9 @@ src-tauri/gen
 *.tsbuildinfo
 .claude/
 
+# QA verification screenshots (throwaway)
+screenshots/
+
 # python (agent sidecar)
 __pycache__/
 *.pyc
