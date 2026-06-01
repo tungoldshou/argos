@@ -6,7 +6,11 @@ Tauri 通过 sidecar 拉起这个服务(localhost),前端经 HTTP/SSE 调。
 from __future__ import annotations
 
 import json
+import threading
+import uuid
+from collections import OrderedDict
 from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,10 +20,6 @@ from pydantic import BaseModel
 from . import config, memory, runtime
 from .core import build_agent_with_gate, final_text
 from .verify_gate import VerifyGateMiddleware
-
-import uuid
-from collections import OrderedDict
-from dataclasses import dataclass, field
 
 MAX_SESSIONS = 50  # 进程内会话上限,LRU 淘汰最旧(防内存无限增长)
 
@@ -31,26 +31,28 @@ class SessionState:
     project_dir: str | None = None
     guard: list[str] | None = None
     messages: list = field(default_factory=list)  # LangChain 消息历史(user/ai/tool)
-    gate: object = None  # VerifyGateMiddleware,跨轮复用
+    gate: "VerifyGateMiddleware | None" = None  # 跨轮复用
 
 
 SESSIONS: "OrderedDict[str, SessionState]" = OrderedDict()
+_SESSIONS_LOCK = threading.Lock()  # 保护 SESSIONS 的并发读改(取用/插入/淘汰)
 
 
 def _get_or_create_session(
     session_id: str | None, verify_cmd: str | None, project_dir: str | None, guard: list[str] | None
 ) -> SessionState:
     """取已有会话(setup 首轮锁定,后续参数忽略)或建新会话。LRU 淘汰最旧。"""
-    if session_id and session_id in SESSIONS:
-        SESSIONS.move_to_end(session_id)  # 标记为最近使用
-        return SESSIONS[session_id]
-    sid = session_id or uuid.uuid4().hex[:16]
-    st = SessionState(session_id=sid, verify_cmd=verify_cmd, project_dir=project_dir, guard=guard)
-    SESSIONS[sid] = st
-    SESSIONS.move_to_end(sid)
-    while len(SESSIONS) > MAX_SESSIONS:
-        SESSIONS.popitem(last=False)  # 淘汰最旧
-    return st
+    with _SESSIONS_LOCK:
+        if session_id and session_id in SESSIONS:
+            SESSIONS.move_to_end(session_id)  # 标记为最近使用
+            return SESSIONS[session_id]
+        sid = session_id or uuid.uuid4().hex[:16]  # 16 hex = 64 bits,对 ≤50 个会话足够,碰撞可忽略
+        st = SessionState(session_id=sid, verify_cmd=verify_cmd, project_dir=project_dir, guard=guard)
+        SESSIONS[sid] = st
+        SESSIONS.move_to_end(sid)
+        while len(SESSIONS) > MAX_SESSIONS:
+            SESSIONS.popitem(last=False)  # 淘汰最旧
+        return st
 
 
 app = FastAPI(title="Argos Agent", version="0.1.0")
