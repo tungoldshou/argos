@@ -86,7 +86,7 @@ export function AgentPanel({ onClose, initialGoal, onComplete }: { onClose: () =
   // 两栏:窄屏铺满;宽屏左聊天列(弹性,右留出 ~320px 露出背景脑图)。
   const shellStyle: React.CSSProperties = narrow
     ? { position: 'absolute', top: 8, left: 8, right: 8, bottom: 62, zIndex: 11, display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'slidein .35s cubic-bezier(0.16,1,0.3,1) both' }
-    : { position: 'absolute', top: 16, left: 16, bottom: 16, width: 'min(62vw, 860px)', zIndex: 11, display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'slidein .35s cubic-bezier(0.16,1,0.3,1) both' };
+    : { position: 'absolute', top: 16, right: 16, bottom: 16, width: 'min(560px, 56vw)', zIndex: 11, display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'slidein .35s cubic-bezier(0.16,1,0.3,1) both' };
 
   return (
     <div className="mind-panel" style={shellStyle}>
