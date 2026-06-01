@@ -95,6 +95,15 @@ const TR: Record<string, string> = {
   'Shell & Code': 'Shell 与代码', Web: '网络', Media: '媒体', Delegation: '委派', Messaging: '消息', 'MCP (dynamic)': 'MCP(动态)',
   'bash · execute_code · edit_file · read_file · grep …': 'bash · execute_code · edit_file · read_file · grep …',
   'tools exposed by connected MCP servers': '由已连接的 MCP 服务器暴露的工具',
+  // tools overlay (real 7 built-in tools)
+  File: '文件', Execution: '执行', 'real built-in tools': '个真实内置工具',
+  'Read a file in the workspace': '读取 workspace 内文件',
+  'Write/overwrite a file in the workspace': '写入/覆盖 workspace 内文件',
+  'Edit a file (exact or whitespace-fuzzy match)': '编辑文件(精确或空白模糊匹配)',
+  'Search file contents or names (ripgrep)': '搜索文件正文/文件名(ripgrep)',
+  'Run a whitelisted command (tests/build/lint)': '运行白名单命令(测试/构建/lint)',
+  'Search the web (DuckDuckGo free, Tavily with key)': '联网搜索(DuckDuckGo 免费,有 key 用 Tavily)',
+  'Read a web page (cleaned + summarized)': '读取网页正文(去噪 + 摘要)',
   // mcp overlay
   'Model Context Protocol — plug in external tool servers': 'Model Context Protocol —— 接入外部工具服务器',
   connected: '已连接', available: '可用',

@@ -9,7 +9,7 @@ import type { Skill, Automation } from '../data/types';
 import { isTauri, getSettings, setLlmConfig, restartAgent, type AppSettings } from '../lib/agent';
 import {
   AGENT, SKILLS, PLATFORMS, PLATFORMS_MORE, AUTOMATIONS, SANDBOXES, MODELS,
-  MCP_SERVERS, TOOLSETS, TOOLS_TOTAL, VOICE, PERSONALITY,
+  MCP_SERVERS, VOICE, PERSONALITY,
 } from '../data/seed';
 
 interface OverlayProps {
@@ -276,19 +276,39 @@ function SettingsOverlay({ onClose }: { onClose: () => void }) {
 }
 
 function ToolsOverlay({ onClose }: { onClose: () => void }) {
+  const groups: { group: string; tools: { name: string; desc: string }[] }[] = [
+    { group: 'File', tools: [
+      { name: 'read_file', desc: 'Read a file in the workspace' },
+      { name: 'write_file', desc: 'Write/overwrite a file in the workspace' },
+      { name: 'edit_file', desc: 'Edit a file (exact or whitespace-fuzzy match)' },
+      { name: 'search_files', desc: 'Search file contents or names (ripgrep)' },
+    ] },
+    { group: 'Execution', tools: [
+      { name: 'run_command', desc: 'Run a whitelisted command (tests/build/lint)' },
+    ] },
+    { group: 'Web', tools: [
+      { name: 'web_search', desc: 'Search the web (DuckDuckGo free, Tavily with key)' },
+      { name: 'web_extract', desc: 'Read a web page (cleaned + summarized)' },
+    ] },
+  ];
+  const total = groups.reduce((n, g) => n + g.tools.length, 0);
   return (
-    <Overlay title="Tools" sub={`${TOOLS_TOTAL}+ ` + tr('built-in tools, grouped into toolsets')} icon="layers" onClose={onClose}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 11 }}>
-        {TOOLSETS.map((t, i) => (
-          <div key={i} style={{ padding: 14, borderRadius: 11, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'color-mix(in oklab,var(--accent),transparent 84%)', color: 'var(--accent)' }}><Icon name={t.icon as IconName} size={16} /></div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{tr(t.group)}</div>
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-3)' }}>{t.n} {tr('tools')}</div>
-              </div>
+    <Overlay title="Tools" sub={`${total} ` + tr('real built-in tools')} icon="layers" onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {groups.map((g) => (
+          <div key={g.group}>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 8 }}>{tr(g.group)}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {g.tools.map((t) => (
+                <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 11, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'color-mix(in oklab,var(--accent),transparent 84%)', color: 'var(--accent)', flexShrink: 0 }}><Icon name="layers" size={16} /></div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600 }}>{t.name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{tr(t.desc)}</div>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--text-2)', lineHeight: 1.5 }}>{tr(t.tools)}</div>
           </div>
         ))}
       </div>
