@@ -83,3 +83,16 @@ input::placeholder { color: var(--text-3); }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* highlight.js 暗色主题 — 与 argos 色板协调，配合 rehype-highlight */
+.hljs { color: var(--text-1); background: transparent; }
+.hljs-comment, .hljs-quote { color: var(--text-3); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-name, .hljs-tag { color: #c792ea; }
+.hljs-string, .hljs-attr, .hljs-template-tag, .hljs-addition { color: #c3e88d; }
+.hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable { color: #f78c6c; }
+.hljs-title, .hljs-section, .hljs-function .hljs-title { color: #82aaff; }
+.hljs-type, .hljs-class .hljs-title { color: #ffcb6b; }
+.hljs-symbol, .hljs-bullet, .hljs-link { color: #89ddff; }
+.hljs-deletion { color: #ff5370; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: bold; }
