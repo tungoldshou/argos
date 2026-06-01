@@ -163,7 +163,7 @@ function DetailPanel({ node, engine, locked, onClose, narrow }: {
 }
 
 export function App() {
-  const { lang, t, toggle: toggleLang } = useLang();
+  const { lang, t } = useLang();
   const [tw, setTweak] = useTweaks({ accent: 'amber', motion: true });
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<MindGraph | null>(null);
@@ -323,6 +323,15 @@ export function App() {
     setPanel(key);
     eng.dock(true, narrow, dockAnchorFrac());
   };
+  // 面板开着时改窗口大小 → 用新的视口宽重算 dock 锚点,让脑图重新居中到左侧空白区
+  // (MindGraph.resize 已能用存储的旧 frac 重锚,但 frac 是按旧视口宽算的;这里喂新 frac)。
+  useEffect(() => {
+    const eng = engineRef.current;
+    if (!eng || !panel || panel === 'memory') return;
+    eng.dock(true, narrow, dockAnchorFrac());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vw, narrow, panel]);
+
   // 首页大输入框/建议/run 按钮 → 直连真 Python agent(LangGraph+verify),不再走假演示。
   const enterWork = (g: string) => openPanel('agent', g);
   const runSearch = (val: string) => { setQ(val); engineRef.current?.search(val); };
@@ -347,8 +356,8 @@ export function App() {
           覆盖顶部一条,但避开右侧的搜索/功能区(它们 zIndex 更高可点)。 */}
       <div data-tauri-drag-region style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 52, zIndex: 1 }} />
 
-      {/* identity —— left 紧贴 macOS 红绿灯右侧(红绿灯约到 70px,留一点间隙) */}
-      <div style={{ position: 'absolute', top: 16, left: 78, display: 'flex', alignItems: 'center', gap: 13, zIndex: 6, maxWidth: narrow ? '52vw' : 'none' }}>
+      {/* identity —— 桌面端在红绿灯下方(top:44 清 36px 红绿灯区),移动端无红绿灯保持 top:16 */}
+      <div style={{ position: 'absolute', top: narrow ? 16 : 44, left: 18, display: 'flex', alignItems: 'center', gap: 13, zIndex: 6, maxWidth: narrow ? '64vw' : 'none' }}>
         <HermesMark size={32} />
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -366,11 +375,6 @@ export function App() {
               ? <div key={thought} className="thought-line" style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--accent)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t('recalling')} · {t(thought)}</div>
               : <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hasMemory ? <>{total} {t('memories')} · {panel === 'runs' ? t('lighting recalls ◂') : t('drag to explore')}</> : t('no memories yet — give it a goal, tasks settle here')}</div>}
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: 1, marginLeft: 4, background: 'color-mix(in oklab, var(--surface-2), transparent 20%)', border: '1px solid var(--border)', borderRadius: 8, padding: 2, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
-          {([['en', 'EN'], ['zh', '中']] as const).map(([code, lbl]) => (
-            <button key={code} onClick={() => { if (lang !== code) toggleLang(); }} style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', border: 'none', background: lang === code ? 'var(--accent)' : 'transparent', color: lang === code ? '#1a1305' : 'var(--text-3)', transition: 'all .15s' }}>{lbl}</button>
-          ))}
         </div>
       </div>
 
@@ -423,7 +427,7 @@ export function App() {
         </div>
       )}
 
-      {/* Agent — 独立通用智能体:目标 → Python agent 服务(LangGraph+MiniMax)→ 事件流。
+      {/* Agent — 独立通用智能体:目标 → Python agent 服务(LangGraph)→ 事件流。
           直接渲染:AgentPanel 内部的 Overlay 已自带 docked 定位,不要再套外层定位容器
           (否则双重 absolute 嵌套 → 内层比外层宽 → 溢出被裁。这是"面板切一半"的根因)。 */}
       {panel === 'agent' && (
