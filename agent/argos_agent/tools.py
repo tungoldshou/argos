@@ -15,6 +15,8 @@ from pathlib import Path
 
 from langchain_core.tools import tool
 
+from . import web
+
 # ── workspace 牢笼 ──────────────────────────────────────────────────────────
 # 默认 ~/.argos/workspace;可由环境变量覆盖(Tauri 注入)。agent 的文件工具只能动这里。
 # 注:实际生效的 workspace 由 runtime.current() 决定(支持按 run 切到用户项目目录);
@@ -143,5 +145,81 @@ def run_command(command: str) -> str:
     return f"[exit_code={r.returncode}]\n--- stdout ---\n{out}\n--- stderr ---\n{err}".strip()
 
 
+# web_extract 压缩阈值:正文超过这个长度才用 LLM 压缩,短的直接返回(省调用)。
+_EXTRACT_COMPRESS_THRESHOLD = 6000
+
+
+@tool
+def web_search(query: str, limit: int = 5) -> str:
+    """联网搜索,返回若干结果(标题+链接+摘要)。用于查实时信息(天气/新闻/资料)。
+    免费 DuckDuckGo 兜底;配了 TAVILY_API_KEY 则用质量更好的 Tavily。"""
+    res = web.search(query, limit)
+    if not res.get("success"):
+        return f"搜索失败:{res.get('error', '未知错误')}"
+    results = res.get("results") or []
+    if not results:
+        return "没有搜到结果。"
+    lines = []
+    for i, r in enumerate(results, 1):
+        lines.append(f"{i}. {r.get('title', '')}\n   {r.get('url', '')}\n   {r.get('snippet', '')}")
+    return "\n".join(lines)
+
+
+@tool
+def web_extract(url: str) -> str:
+    """取一个网页的正文内容(已去导航/广告噪声)。配合 web_search 拿到 url 后读详情。
+    正文较长时会自动压缩成摘要以省上下文。"""
+    res = web.extract(url)
+    if not res.get("success"):
+        return f"取页失败:{res.get('error', '未知错误')}"
+    text = res.get("text") or ""
+    if len(text) <= _EXTRACT_COMPRESS_THRESHOLD:
+        return text or "(页面无可提取正文)"
+    # 长正文 → 用当前 LLM 压缩成摘要。压缩失败兜底:返回截断的原正文。
+    try:
+        from .core import _llm
+        llm = _llm()
+        prompt = (
+            "下面是一个网页的正文。请抽取关键事实,并写一个 200 字以内的中文摘要,"
+            "丢弃导航/广告/无关噪声。只输出摘要正文,不要前言。\n\n正文:\n" + text[:20000]
+        )
+        from .core import final_text
+        msg = llm.invoke(prompt)
+        summary = final_text(msg) if hasattr(msg, "content") else str(msg)
+        if summary.strip():
+            return summary.strip()
+    except Exception:
+        pass
+    return text[:8000] + f"\n…(正文共 {len(text)} 字符,已截断;压缩不可用)"
+
+
+@tool
+def search_files(pattern: str, target: str = "content", file_glob: str = "", limit: int = 50) -> str:
+    """在 workspace 内搜索:target='content' 用正则搜文件正文(带行号);
+    target='files' 按 glob(如 '*.py')找文件名。比 shell 的 grep/find 更快更省。"""
+    ws = _ws()
+    ws.mkdir(parents=True, exist_ok=True)
+    if target == "files":
+        cmd = ["rg", "--files", "-g", pattern]
+    else:
+        cmd = ["rg", "--line-number", "--no-heading"]
+        if file_glob:
+            cmd += ["-g", file_glob]
+        cmd += [pattern]
+    try:
+        r = subprocess.run(cmd, cwd=ws, capture_output=True, text=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        return "错误:搜索超时(30s)。"
+    except Exception as e:  # noqa: BLE001
+        return f"错误:搜索失败 {e}"
+    out = (r.stdout or "").strip()
+    if not out:
+        return "没有匹配。"
+    lines = out.splitlines()
+    if len(lines) > limit:
+        return "\n".join(lines[:limit]) + f"\n…(共 {len(lines)} 行,已截断前 {limit})"
+    return out
+
+
 # 暴露给 agent 的工具清单。
-ALL_TOOLS = [read_file, write_file, edit_file, run_command]
+ALL_TOOLS = [read_file, write_file, edit_file, run_command, web_search, web_extract, search_files]

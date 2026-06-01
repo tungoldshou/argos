@@ -73,3 +73,50 @@ def test_run_command_exit_code_is_truth(sandbox):
     tools.write_file.invoke({"path": "fail.py", "content": "raise SystemExit(3)"})
     out = tools.run_command.invoke({"command": "python3 fail.py"})
     assert "exit_code=3" in out
+
+
+# ── 联网 + 搜索(覆盖 Task 3 新工具)─────────────────────────────────────────
+def test_web_search_formats_results(monkeypatch):
+    from argos_agent import tools, web
+    monkeypatch.setattr(web, "search", lambda q, limit=5: {"success": True, "results": [
+        {"title": "北京天气", "url": "http://w", "snippet": "晴 25°C"}]})
+    out = tools.web_search.invoke({"query": "北京天气"})
+    assert "北京天气" in out and "http://w" in out and "晴" in out
+
+
+def test_web_search_error_is_honest(monkeypatch):
+    from argos_agent import tools, web
+    monkeypatch.setattr(web, "search", lambda q, limit=5: {"success": False, "error": "限速"})
+    out = tools.web_search.invoke({"query": "x"})
+    assert "限速" in out
+
+
+def test_web_extract_short_text_no_compression(monkeypatch):
+    from argos_agent import tools, web
+    monkeypatch.setattr(web, "extract", lambda url: {"success": True, "text": "短正文"})
+    out = tools.web_extract.invoke({"url": "http://x"})
+    assert "短正文" in out
+
+
+def test_web_extract_failure(monkeypatch):
+    from argos_agent import tools, web
+    monkeypatch.setattr(web, "extract", lambda url: {"success": False, "error": "取页失败:404"})
+    out = tools.web_extract.invoke({"url": "http://x"})
+    assert "404" in out
+
+
+def test_search_files_content(monkeypatch, tmp_path):
+    from argos_agent import tools
+    monkeypatch.setattr(tools, "WORKSPACE", tmp_path)
+    (tmp_path / "a.py").write_text("def foo():\n    return 42\n", encoding="utf-8")
+    out = tools.search_files.invoke({"pattern": "foo", "target": "content"})
+    assert "a.py" in out and "foo" in out
+
+
+def test_search_files_files_mode(monkeypatch, tmp_path):
+    from argos_agent import tools
+    monkeypatch.setattr(tools, "WORKSPACE", tmp_path)
+    (tmp_path / "x.py").write_text("x=1\n", encoding="utf-8")
+    (tmp_path / "y.txt").write_text("y\n", encoding="utf-8")
+    out = tools.search_files.invoke({"pattern": "*.py", "target": "files"})
+    assert "x.py" in out and "y.txt" not in out
