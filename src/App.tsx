@@ -44,7 +44,7 @@ const DOCK: DockItem[] = [
   { key: 'swarm', icon: 'layers', label: 'Swarm', hint: '蜂群', group: 'Work' },
   { key: 'runs', icon: 'activity', label: 'Runs', hint: 'tasks', group: 'Work' },
   { key: 'skills', icon: 'skills', label: 'Skills', hint: '38', group: 'Capabilities' },
-  { key: 'tools', icon: 'layers', label: 'Tools', hint: '60+', group: 'Capabilities' },
+  { key: 'tools', icon: 'layers', label: 'Tools', hint: '7', group: 'Capabilities' },
   { key: 'mcp', icon: 'plug', label: 'MCP', hint: 'servers', group: 'Capabilities' },
   { key: 'voice', icon: 'voice', label: 'Voice', hint: 'mic', group: 'Reach' },
   { key: 'connections', icon: 'connections', label: 'Connections', hint: '20+', group: 'Reach' },
