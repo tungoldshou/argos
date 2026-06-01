@@ -81,6 +81,37 @@ describe('parseVerdict', () => {
     expect(v.conflictCount).toBe(0);
     expect(v.assemblable).toBe(true);
     expect(v.conflicts).not.toContain('无');
+    expect(v.parseTrusted).toBe(true);
+  });
+
+  // ── fail-closed:测谎仪绝不能在「没读到权威计数」时静默判无罪 ──────────────
+  // 旧 bug(假绿灯):抓不到「硬冲突数: N」行 + 没收集到冲突行 → count=0 → assemblable=true。
+  // 模型只要不按格式输出(被截断/跑题/客套),就被判「零冲突可组装」。
+  // 卖可靠性的产品,verify 自己撒谎是存亡级矛盾 → 一律 fail-closed。
+  it('无「硬冲突数」权威计数行 → 解析不可信,绝不判可组装(fail-closed)', () => {
+    // judge 跑题/被 maxTokens 截断,完全没给出计数行。
+    const v = parseVerdict('我觉得这几个 agent 的产出大体上应该是一致的,看起来没什么问题。');
+    expect(v.parseTrusted).toBe(false);
+    expect(v.assemblable).toBe(false); // 关键:不可信 ≠ 通过
+  });
+
+  it('无计数行但收集到了冲突行 → 仍不可信,不可组装', () => {
+    const v = parseVerdict('- title 上限 A=200 B=255\n- 命名 A=snake B=camel');
+    expect(v.parseTrusted).toBe(false);
+    expect(v.assemblable).toBe(false);
+    expect(v.conflicts.length).toBeGreaterThan(0); // 冲突照常收集,供 escalation 展示
+  });
+
+  it('计数=0 却收集到冲突行(自相矛盾)→ 不可信,不可组装', () => {
+    // judge 自打嘴巴:列了冲突却在末行写「硬冲突数: 0」。绝不能信 0。
+    const v = parseVerdict('- 完成标志 A=status B=is_done\n硬冲突数: 0');
+    expect(v.parseTrusted).toBe(false);
+    expect(v.assemblable).toBe(false);
+  });
+
+  it('有计数行且自洽 → 可信(回归:不误伤正常路径)', () => {
+    expect(parseVerdict('无\n硬冲突数: 0').parseTrusted).toBe(true);
+    expect(parseVerdict('- A=x B=y\n硬冲突数: 1').parseTrusted).toBe(true);
   });
 });
 

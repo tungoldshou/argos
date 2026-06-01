@@ -2,15 +2,16 @@
 // the right, ⌘K command palette, voice in the command bar, EN/中, responsive.
 import { useState, useEffect, useRef, type CSSProperties } from 'react';
 import { MindGraph, META, type GraphNode } from './engine/MindGraph';
-import { CATS, mergeMinds } from './data/mind';
-import { parseMemory } from './data/parseMemory';
+import { CATS, buildEmptyMind } from './data/mind';
+import { memoryToMind } from './data/memoryToMind';
 import type { LearnSpec, NodeType } from './data/types';
 import { Icon, HermesMark, type IconName } from './lib/icons';
 import { useLang } from './lib/i18n';
-import { hermes } from './lib/hermes';
 import { RunView } from './components/RunView';
 import { OVERLAYS, type OverlayKey } from './components/overlays';
 import { SwarmPanel } from './components/SwarmPanel';
+import { AgentPanel } from './components/AgentPanel';
+import { agentHealth, agentMemory } from './lib/agent';
 import { Dot, Meta } from './components/atoms';
 import { useTweaks, TweaksPanel, TweakSection, TweakToggle, TweakButton } from './components/Tweaks';
 import { useViewportWidth } from './lib/responsive';
@@ -19,8 +20,16 @@ const MIND_ACCENTS = [
   { id: 'amber', hex: '#ffb152' }, { id: 'ember', hex: '#ff7a4d' },
   { id: 'ice', hex: '#5fd0ff' }, { id: 'mint', hex: '#45e0a0' }, { id: 'iris', hex: '#b48cff' },
 ];
-const DEMO_GOAL = 'summarize this week’s merged PRs and post the highlights to #eng';
-const SUGGESTIONS = ['Summarize this week’s merged PRs', 'Scan today’s arXiv for my paper', 'Deploy atlas-core to staging', 'Give me the morning briefing'];
+const DEMO_GOAL = 'list the fields a REST pagination response should contain, one per line';
+// 示例任务:都贴合 Argos 的真实场景 —— 结构化、结果可验证的工程任务(可及性边界内)。
+// 体现卖点:能干活 + 可机检完成。不是 Hermes 时代的个人助理故事。
+// key 用英文(i18n 约定),中文译文在 i18n.ts。
+const SUGGESTIONS = [
+  'List the fields a REST pagination response should contain',
+  'Design a TODO data model — fields and types',
+  'Explain idempotency in one sentence, then reply only that',
+  'Write a palindrome check function with tests',
+];
 
 interface DockItem {
   key: string;
@@ -31,6 +40,7 @@ interface DockItem {
 }
 const DOCK: DockItem[] = [
   { key: 'memory', icon: 'memory', label: 'Memory', hint: 'home', group: 'Home' },
+  { key: 'agent', icon: 'sparkle', label: 'Agent', hint: 'LangGraph', group: 'Work' },
   { key: 'swarm', icon: 'layers', label: 'Swarm', hint: '蜂群', group: 'Work' },
   { key: 'runs', icon: 'activity', label: 'Runs', hint: 'tasks', group: 'Work' },
   { key: 'skills', icon: 'skills', label: 'Skills', hint: '38', group: 'Capabilities' },
@@ -166,9 +176,12 @@ export function App() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [panel, setPanel] = useState<string | null>(null); // null | 'runs' | feature key
   const [goal, setGoal] = useState('');
+  const [agentGoal, setAgentGoal] = useState('');
   const [runKey, setRunKey] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [hasMemory, setHasMemory] = useState(false);
+  const refreshMemoryRef = useRef<(() => void) | null>(null);
   const thoughtTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vw = useViewportWidth();
   const narrow = vw < 720;
@@ -194,11 +207,17 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // probe whether a live Hermes is reachable (tauri) — drives the LIVE/DEMO pill
+  // 连接指示灯:轮询真实 agent 服务 /health。LIVE = sidecar 已起且 key 已配。
+  // 不读构建时 env(那是打包时刻的 stale 快照,会撒谎)。灯反映的是此刻的真实状态。
   useEffect(() => {
     let alive = true;
-    hermes().health().then((ok) => { if (alive) setConnected(hermes().kind === 'tauri' && ok); }).catch(() => {});
-    return () => { alive = false; };
+    const probe = async () => {
+      const h = await agentHealth();
+      if (alive) setConnected(h.ok && h.keyConfigured !== false);
+    };
+    probe();
+    const id = setInterval(probe, 5000);
+    return () => { alive = false; clearInterval(id); };
   }, []);
 
   // ⌘K / Ctrl+K toggles the command palette
@@ -237,33 +256,30 @@ export function App() {
       e.setAccent((MIND_ACCENTS.find((a) => a.id === tw.accent) || MIND_ACCENTS[0]).hex);
     };
 
-    // When connected to a real Hermes, build the brain from the agent's own
-    // MEMORY.md / USER.md; otherwise use the seed graph. Either way the engine
-    // is created exactly once.
-    const init = async () => {
-      let graph;
-      const src = hermes();
-      if (src.kind === 'tauri') {
-        try {
-          // Context Lens: build ONE cross-agent brain by merging the Claude Code
-          // transcript graph with the Hermes memory graph. Shared files/tools/
-          // people become single nodes that bridge the two lobes — the "one mind
-          // across all your agents" effect. Falls back to whichever exists, then seed.
-          const [cg, mem] = await Promise.all([
-            src.getClaudeGraph ? src.getClaudeGraph() : Promise.resolve(null),
-            src.getMemory().then((m) => parseMemory(m.memory, m.user)).catch(() => null),
-          ]);
-          graph = mergeMinds([cg, mem]) ?? undefined;
-        } catch { /* fall back to seed */ }
-      }
+    // Argos 自有记忆大脑:真实、随任务生长。
+    // 起步用空图(诚实空态 —— 独立 agent 还没积累记忆,不编造 seed);
+    // 异步拉 /memory,有真实任务记忆就重建成记忆知识图谱。
+    const build = (graph: ReturnType<typeof buildEmptyMind>) => {
       if (disposed) return;
+      eng?.destroy();
       eng = new MindGraph(canvasRef.current!, graph);
       engineRef.current = eng;
       wire(eng);
     };
-    init();
+    build(buildEmptyMind());
 
-    return () => { disposed = true; eng?.destroy(); };
+    // 拉真实记忆 → 有则长出记忆图谱;无则保持诚实空态。
+    const refreshMemory = async () => {
+      const records = await agentMemory();
+      if (disposed) return;
+      const graph = memoryToMind(records);
+      setHasMemory(!!graph);
+      if (graph) build(graph);
+    };
+    refreshMemory();
+    refreshMemoryRef.current = refreshMemory;
+
+    return () => { disposed = true; refreshMemoryRef.current = null; eng?.destroy(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -277,6 +293,14 @@ export function App() {
     eng.setMotion(tw.motion);
   }, [tw]);
 
+  // dock 时大脑该锚到的横向比例 = 左侧可见区(0..面板左边界)的中心 / 视口宽。
+  // 面板 CSS 是 right:16 + width:min(600,56vw),据此复现面板左边界,无论视口多宽都真居中。
+  const dockAnchorFrac = (): number => {
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1440;
+    const panelW = Math.min(600, vw * 0.56);
+    const panelLeft = vw - 16 - panelW;
+    return (panelLeft / 2) / vw; // 左可见区中心 / 视口宽
+  };
   const closePanel = () => {
     setPanel(null);
     engineRef.current?.dock(false, narrow);
@@ -291,10 +315,16 @@ export function App() {
       setGoal(goalText || DEMO_GOAL);
       setRunKey((k) => k + 1);
     }
+    if (key === 'agent') {
+      // 带 goal(来自首页输入框)= 自动开跑;从 ⌘K 菜单点开(无 goal)= 空面板等输入。
+      setAgentGoal(goalText || '');
+      setRunKey((k) => k + 1);
+    }
     setPanel(key);
-    eng.dock(true, narrow);
+    eng.dock(true, narrow, dockAnchorFrac());
   };
-  const enterWork = (g: string) => openPanel('runs', g);
+  // 首页大输入框/建议/run 按钮 → 直连真 Python agent(LangGraph+verify),不再走假演示。
+  const enterWork = (g: string) => openPanel('agent', g);
   const runSearch = (val: string) => { setQ(val); engineRef.current?.search(val); };
 
   const home = !panel;
@@ -313,8 +343,12 @@ export function App() {
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden' }}>
       <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, display: 'block' }} />
 
-      {/* identity */}
-      <div style={{ position: 'absolute', top: 18, left: 20, display: 'flex', alignItems: 'center', gap: 13, zIndex: 6, maxWidth: narrow ? '52vw' : 'none' }}>
+      {/* 顶部可拖动条:无边框窗口靠它拖动整个窗口(macOS Overlay 标题栏)。
+          覆盖顶部一条,但避开右侧的搜索/功能区(它们 zIndex 更高可点)。 */}
+      <div data-tauri-drag-region style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 52, zIndex: 1 }} />
+
+      {/* identity —— left 紧贴 macOS 红绿灯右侧(红绿灯约到 70px,留一点间隙) */}
+      <div style={{ position: 'absolute', top: 16, left: 78, display: 'flex', alignItems: 'center', gap: 13, zIndex: 6, maxWidth: narrow ? '52vw' : 'none' }}>
         <HermesMark size={32} />
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -322,7 +356,7 @@ export function App() {
             {!narrow && <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-3)', letterSpacing: lang === 'zh' ? '0' : '0.12em', textTransform: 'uppercase', whiteSpace: 'nowrap', opacity: 0.8 }}>/ {t(panel === 'runs' ? 'working' : panelLabel || 'memory')}</span>}
             <span style={{ ...pillBase, color: 'var(--live)', border: '1px solid color-mix(in oklab,var(--live),transparent 65%)' }}><Dot color="var(--live)" size={5} glow /> {t(panel === 'runs' ? 'EXECUTING' : 'THINKING')}</span>
             {!narrow && (
-              <span title={connected ? 'Hermes API connected' : 'Demo data (no Hermes connection)'} style={{ ...pillBase, color: connected ? 'var(--accent)' : 'var(--text-3)', border: `1px solid ${connected ? 'color-mix(in oklab,var(--accent),transparent 65%)' : 'var(--border)'}` }}>
+              <span title={connected ? 'MiniMax 已配置' : '未配置模型(演示数据)'} style={{ ...pillBase, color: connected ? 'var(--accent)' : 'var(--text-3)', border: `1px solid ${connected ? 'color-mix(in oklab,var(--accent),transparent 65%)' : 'var(--border)'}` }}>
                 <Dot color={connected ? 'var(--accent)' : 'var(--text-3)'} size={5} glow={connected} /> {t(connected ? 'LIVE' : 'DEMO')}
               </span>
             )}
@@ -330,7 +364,7 @@ export function App() {
           <div style={{ height: 15, marginTop: 3, overflow: 'hidden' }}>
             {thought
               ? <div key={thought} className="thought-line" style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--accent)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t('recalling')} · {t(thought)}</div>
-              : <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{total} {t('memories')} · {panel === 'runs' ? t('lighting recalls ◂') : t('drag to explore')}</div>}
+              : <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hasMemory ? <>{total} {t('memories')} · {panel === 'runs' ? t('lighting recalls ◂') : t('drag to explore')}</> : t('no memories yet — give it a goal, tasks settle here')}</div>}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 1, marginLeft: 4, background: 'color-mix(in oklab, var(--surface-2), transparent 20%)', border: '1px solid var(--border)', borderRadius: 8, padding: 2, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
@@ -389,6 +423,13 @@ export function App() {
         </div>
       )}
 
+      {/* Agent — 独立通用智能体:目标 → Python agent 服务(LangGraph+MiniMax)→ 事件流。
+          直接渲染:AgentPanel 内部的 Overlay 已自带 docked 定位,不要再套外层定位容器
+          (否则双重 absolute 嵌套 → 内层比外层宽 → 溢出被裁。这是"面板切一半"的根因)。 */}
+      {panel === 'agent' && (
+        <AgentPanel key={runKey} onClose={closePanel} initialGoal={agentGoal || undefined} onComplete={() => refreshMemoryRef.current?.()} />
+      )}
+
       {/* feature panels (docked side panel, same as Runs) */}
       {OverlayComp && <OverlayComp onClose={closePanel} />}
 
@@ -426,7 +467,7 @@ export function App() {
       {home && (
         <div className="mind-panel" style={{ position: 'absolute', bottom: narrow ? 22 : 26, left: '50%', transform: 'translateX(-50%)', width: narrow ? 'calc(100vw - 20px)' : 'min(560px, 64vw)', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px 10px 14px', zIndex: 6 }}>
           <Icon name="sparkle" size={17} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-          <input value={cmd} onChange={(e) => setCmd(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && cmd.trim()) { enterWork(cmd.trim()); setCmd(''); } }} placeholder={narrow ? t('Give Hermes a goal…') : t('Give Hermes a goal — watch it work, beside its memory…')} style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 14 }} />
+          <input value={cmd} onChange={(e) => setCmd(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && cmd.trim()) { enterWork(cmd.trim()); setCmd(''); } }} placeholder={narrow ? t('Give Argos a goal…') : t('Give Argos a goal — watch it work, beside its memory…')} style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 14 }} />
           <button onClick={() => openPanel('voice')} title={t('Voice')} style={{ width: 34, height: 34, flexShrink: 0, display: 'grid', placeItems: 'center', borderRadius: 9, cursor: 'pointer', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', transition: 'all .15s' }}
             onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.borderColor = 'color-mix(in oklab,var(--accent),transparent 60%)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-2)'; e.currentTarget.style.borderColor = 'var(--border)'; }}>

@@ -29,8 +29,15 @@ export interface WorkerOutput {
 export interface Verdict {
   conflicts: string[];
   conflictCount: number;
-  /** 拼起来是否可直接组装(无硬冲突) */
+  /** 拼起来是否可直接组装(无硬冲突且解析可信) */
   assemblable: boolean;
+  /**
+   * 这次判决的【解析】是否可信。fail-closed 的核心:
+   * judge 没给出权威计数行(跑题/截断/客套)、或计数与收集到的冲突自相矛盾时为 false。
+   * 不可信 ≠ 通过 —— 卖可靠性的产品,测谎仪读不懂判决时绝不能默默判无罪,
+   * 应交给 escalation 让人类裁决,而不是亮假绿灯。
+   */
+  parseTrusted: boolean;
 }
 
 /** 一轮「judge 定点修复」的记录:判决 → 针对冲突点修复 → 修复后的产出。 */
@@ -188,13 +195,26 @@ export function parseVerdict(text: string): Verdict {
     if (/^[-=_*\s]+$/.test(c)) continue;                // -- 或 *** 分隔线
     if (/硬冲突数/.test(c)) continue;                    // 计数行
     if (/^(无|没有|none|n\/a)[。.\s]*$/i.test(c)) continue; // 「无」结论
-    if (/^(真冲突逐条|冲突列表|逐条|conflicts?)[:：]?\s*$/i.test(c)) continue; // 纯标题行
+    // 纯标题行:任何以冒号结尾、后面没有实质值的行都是标题/小节头(如「逐条检查:」「真冲突:」),
+    // 不是冲突。真冲突一定是「名:值」式、冒号后有具体值。这条比白名单标题词更稳,
+    // 避免漏网的标题行被当成幽灵冲突(否则计数=0+幽灵冲突会被 fail-closed 误判为自相矛盾)。
+    if (/[:：]\s*$/.test(c)) continue;
     conflicts.push(c);
   }
   const m = text.match(/硬冲突数[:：]\s*\**\s*(\d+)/);
-  // 计数优先信任「硬冲突数: N」;无该行时退回收集到的冲突条数。
-  const count = m ? parseInt(m[1], 10) : conflicts.length;
-  return { conflicts, conflictCount: count, assemblable: count === 0 };
+  // fail-closed:测谎仪读不懂判决时绝不判无罪。
+  // 1) 没有权威计数行 → 解析不可信。哪怕没收集到冲突行也【不能】当 0 通过
+  //    (judge 跑题/被 maxTokens 截断/只回客套都会走到这,旧 bug 正是这里静默判 assemblable=true)。
+  if (!m) {
+    return { conflicts, conflictCount: conflicts.length || -1, assemblable: false, parseTrusted: false };
+  }
+  const count = parseInt(m[1], 10);
+  // 2) 计数=0 却收集到了冲突行 → judge 自相矛盾,绝不信这个 0。
+  if (count === 0 && conflicts.length > 0) {
+    return { conflicts, conflictCount: conflicts.length, assemblable: false, parseTrusted: false };
+  }
+  // 3) 自洽:有权威计数且与冲突行不矛盾,可信。
+  return { conflicts, conflictCount: count, assemblable: count === 0, parseTrusted: true };
 }
 
 /** 数出契约里有几条目标专属扩展条目([X1]/[X2]…)。 */

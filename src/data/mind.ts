@@ -1,103 +1,96 @@
-// mind.ts — Hermes's knowledge graph (the agent's mind).
+// mind.ts — Argos's knowledge graph (the agent's mind).
+// 这张图讲 Argos 真实的能力,不是编的故事:护城河(verify 硬门禁 / 诚实防线)、
+// 智能内核(LangGraph + MiniMax)、工具系统、契约层、运行模式 —— 每个节点都对应
+// 代码库里真实存在的东西。脑图展示真有的东西,符合产品的诚实原则。
 import type { Cluster, CategoryStyle, GrowthSpec, NodeMeta, NodeType } from './types';
 
-// Categories — bioluminescent palette, evenly spaced hues, harmonized L/C
+// Categories — 记忆图谱语义(memoryToMind 用 self/topic/memory/source):
+//   self=Argos · topic=跑过的任务 · memory=任务沉淀(verdict/事实) · source=用到的模型。
+// skill/person 当前记忆图不产出,保留供未来扩展。
 export const CATS: Record<NodeType, CategoryStyle> = {
-  self: { color: '#ffcf8f', glow: '#ffb152', label: 'Hermes' },
-  topic: { color: '#ffb4a0', glow: '#ff7a5c', label: 'Domain' },
+  self: { color: '#ffcf8f', glow: '#ffb152', label: 'Argos' },
+  topic: { color: '#ffb4a0', glow: '#ff7a5c', label: 'Task' },
   memory: { color: '#6fe6da', glow: '#22c9b8', label: 'Memory' },
   skill: { color: '#c4a0ff', glow: '#9b6cff', label: 'Skill' },
   person: { color: '#8fe6a8', glow: '#3ed178', label: 'Person' },
-  source: { color: '#86bcff', glow: '#4f93ff', label: 'Source' },
+  source: { color: '#86bcff', glow: '#4f93ff', label: 'Model' },
 };
 
 // Cluster authoring — members deduped by label, so shared nodes wire across domains
 export const CLUSTERS: Cluster[] = [
-  { topic: 'atlas-core', members: [
-    ['repo: atlas-core', 'source'], ['CI · github actions', 'source'],
-    ['deploy → ssh atlas-box', 'memory'], ['fixed memory-eviction race', 'memory'],
-    ['prefer terse PR summaries', 'memory'],
-    ['summarize-pull-requests', 'skill'], ['generate-release-notes', 'skill'], ['deploy-staging', 'skill'],
-    ['streaming gateway', 'topic'], ['@you', 'person'], ['@lin · eng lead', 'person'],
+  { topic: 'verify gate', members: [
+    ['exit code is ground truth', 'memory'], ['fail-closed by default', 'memory'],
+    ['bounce fake completion', 'memory'], ['run_command', 'skill'],
+    ['verify isolation', 'source'], ['three-state verdict', 'source'],
+    ['contract layer', 'topic'], ['runtime modes', 'topic'],
   ] },
-  { topic: 'long-horizon agents', members: [
-    ['writing a paper on this', 'memory'], ['prefer terse PR summaries', 'memory'],
-    ['scrape-arxiv-cs-ai', 'skill'], ['summarize-paper', 'skill'],
-    ['arXiv · cs.AI', 'source'], ['Discord #research', 'source'],
-    ['memory architectures', 'topic'], ['tool use', 'topic'], ['streaming gateway', 'topic'], ['@you', 'person'],
+  { topic: 'honesty firewall', members: [
+    ['never flatter', 'memory'], ['say "I am stuck" honestly', 'memory'],
+    ['tampering is visible', 'memory'], ['no fake green light', 'memory'],
+    ['escalation path', 'source'], ['HONESTY system prompt', 'source'],
+    ['verify gate', 'topic'],
   ] },
-  { topic: 'deploy & ops', members: [
-    ['deploy-staging', 'skill'], ['backup-postgres', 'skill'],
-    ['on fail → rollback + ping #ops', 'memory'], ['vault creds · never log', 'memory'],
-    ['SSH · atlas-box', 'source'], ['Docker', 'source'], ['@ops', 'person'],
+  { topic: 'agent core', members: [
+    ['LangGraph loop', 'source'], ['MiniMax-M3', 'source'],
+    ['context compaction', 'skill'], ['streaming events', 'source'],
+    ['replaceable provider', 'memory'], ['tool use', 'topic'],
   ] },
-  { topic: 'comms & inbox', members: [
-    ['triage-inbox', 'skill'], ['transcribe-voice-note', 'skill'], ['morning-briefing', 'skill'],
-    ['Telegram', 'source'], ['Slack', 'source'], ['Email', 'source'], ['WhatsApp', 'source'],
-    ['standup 9:15 — brief before', 'memory'], ['@you', 'person'],
+  { topic: 'tools', members: [
+    ['read_file', 'skill'], ['write_file', 'skill'], ['edit_file', 'skill'], ['run_command', 'skill'],
+    ['workspace cage', 'memory'], ['command whitelist', 'memory'],
+    ['FastAPI service', 'source'], ['tool use', 'topic'],
   ] },
-  { topic: 'finance', members: [
-    ['finance-monthly-report', 'skill'], ['Stripe', 'source'], ['Bank API', 'source'],
-    ['P&L on the 1st', 'memory'],
+  { topic: 'contract layer', members: [
+    ['5 domain templates', 'skill'], ['missing-field detection', 'skill'],
+    ['rest-api contract', 'source'], ['db-schema contract', 'source'], ['state-machine contract', 'source'],
+    ['structured goals only', 'memory'],
   ] },
-  { topic: 'knowledge ingest', members: [
-    ['watch-rss-feeds', 'skill'], ['scrape-arxiv-cs-ai', 'skill'],
-    ['RSS feeds', 'source'], ['Web search', 'source'], ['daily digest', 'topic'], ['arXiv · cs.AI', 'source'],
-  ] },
-  { topic: 'tools & MCP', members: [
-    ['execute_code', 'skill'], ['browser automation', 'skill'], ['voice-mode', 'skill'],
-    ['MCP · github', 'source'], ['MCP · postgres', 'source'], ['MCP · puppeteer', 'source'],
-    ['Web search', 'source'], ['tool use', 'topic'], ['@you', 'person'],
-  ] },
-  { topic: 'who you are', members: [
-    ['SOUL.md · terse, dry wit', 'memory'], ['prefer terse PR summaries', 'memory'],
-    ['peer, not assistant', 'memory'], ['you ship on Fridays', 'memory'], ['@you', 'person'],
+  { topic: 'runtime modes', members: [
+    ['sandbox isolation', 'skill'], ['project mode', 'skill'],
+    ['guard files', 'memory'], ['work in your own repo', 'memory'],
+    ['verify isolation', 'source'],
   ] },
 ];
 
 // extra cross-links (by label) that give the brain connective tissue
 export const CROSS: [string, string][] = [
-  ['prefer terse PR summaries', 'summarize-pull-requests'],
-  ['morning-briefing', 'arXiv · cs.AI'], ['morning-briefing', 'RSS feeds'], ['morning-briefing', 'Telegram'],
-  ['deploy-staging', 'CI · github actions'], ['deploy-staging', 'Docker'], ['deploy-staging', 'SSH · atlas-box'],
-  ['summarize-pull-requests', 'repo: atlas-core'], ['generate-release-notes', 'streaming gateway'],
-  ['scrape-arxiv-cs-ai', 'Discord #research'], ['summarize-paper', 'memory architectures'],
-  ['triage-inbox', 'Email'], ['transcribe-voice-note', 'WhatsApp'], ['watch-rss-feeds', 'daily digest'],
-  ['backup-postgres', 'vault creds · never log'], ['finance-monthly-report', 'Stripe'],
-  ['@lin · eng lead', 'summarize-pull-requests'], ['tool use', 'memory architectures'],
-  ['execute_code', 'deploy-staging'], ['browser automation', 'scrape-arxiv-cs-ai'],
-  ['MCP · github', 'summarize-pull-requests'], ['MCP · postgres', 'backup-postgres'],
-  ['browser automation', 'Web search'], ['voice-mode', 'transcribe-voice-note'],
-  ['SOUL.md · terse, dry wit', 'prefer terse PR summaries'], ['MCP · puppeteer', 'browser automation'],
+  ['exit code is ground truth', 'three-state verdict'], ['fail-closed by default', 'no fake green light'],
+  ['bounce fake completion', 'escalation path'], ['say "I am stuck" honestly', 'escalation path'],
+  ['tampering is visible', 'guard files'], ['tampering is visible', 'project mode'],
+  ['verify isolation', 'workspace cage'], ['run_command', 'command whitelist'],
+  ['LangGraph loop', 'streaming events'], ['MiniMax-M3', 'replaceable provider'],
+  ['context compaction', 'LangGraph loop'], ['HONESTY system prompt', 'never flatter'],
+  ['5 domain templates', 'missing-field detection'], ['structured goals only', 'contract layer'],
+  ['workspace cage', 'sandbox isolation'], ['project mode', 'work in your own repo'],
+  ['FastAPI service', 'streaming events'], ['run_command', 'verify gate'],
 ];
 
 // metadata for the detail panel, keyed by label (sparse — engine fills defaults)
 export const META: Record<string, NodeMeta> = {
-  'execute_code': { detail: 'Programmatic Tool Calling — collapses multi-step pipelines into one inference call.', uses: 142, learned: 'core tool', src: 'built-in' },
-  'browser automation': { detail: 'Headless browser via the puppeteer MCP server — navigate, click, extract, screenshot.', uses: 96, learned: 'via MCP', src: 'mcp' },
-  'voice-mode': { detail: 'Real-time speech in/out: Whisper STT + Nous Portal TTS, across CLI, Telegram, and Discord VC.', uses: 63, learned: 'feature', src: 'built-in' },
-  'MCP · github': { detail: 'Model Context Protocol server exposing 14 GitHub tools — issues, PRs, repos, actions.', uses: 188, learned: 'connected via stdio', src: 'mcp' },
-  'MCP · postgres': { detail: 'Read-only query access to the prod replica through MCP.', uses: 31, learned: 'connected via stdio', src: 'mcp' },
-  'SOUL.md · terse, dry wit': { detail: 'Global personality file — terse, dry wit, no preamble, treats you as a peer.', uses: 1240, learned: 'from ~/.hermes/SOUL.md', src: 'personality' },
-  'summarize-pull-requests': { kind: 'skill', detail: 'Reads merged PRs, clusters by theme, posts a terse digest.', uses: 214, learned: 'from Slack · #eng, 38d ago', src: 'self-authored' },
-  'morning-briefing': { detail: 'Overnight messages + calendar + arXiv, delivered before standup.', uses: 41, learned: 'scheduled, 38d ago', src: 'self-authored' },
-  'scrape-arxiv-cs-ai': { detail: 'Pulls new cs.AI papers, ranks by relevance to your projects.', uses: 188, learned: 'self-initiated, 36d ago', src: 'self-authored' },
-  'deploy-staging': { detail: 'CI-gated deploy to atlas-box over SSH inside a hardened sandbox.', uses: 27, learned: 'from Discord · #ops, 29d ago', src: 'taught by @you' },
-  'prefer terse PR summaries': { detail: 'Bullet points, no preamble, always link the diff.', uses: 188, learned: 'inferred from feedback', src: 'preference' },
-  'on fail → rollback + ping #ops': { detail: 'When a deploy fails, roll back automatically and alert #ops.', uses: 27, learned: 'standing rule', src: 'rule' },
-  'vault creds · never log': { detail: 'Prod secrets live in vault://atlas/pg and must never be logged.', uses: 31, learned: 'standing rule', src: 'rule' },
-  'standup 9:15 — brief before': { detail: 'Daily standup is 9:15 AM PT; the briefing must land before it.', uses: 41, learned: 'preference', src: 'preference' },
-  'writing a paper on this': { detail: 'You are drafting a paper on long-horizon agents — flag relevant work.', uses: 140, learned: 'project context', src: 'project' },
-  '@you': { detail: 'Primary operator. Reachable on Telegram, Slack, WhatsApp, Email.', uses: 1240, learned: 'owner', src: 'person' },
+  'exit code is ground truth': { detail: 'verify 命令的退出码是唯一裁决标准 —— agent 说"完成"不算,命令退出 0 才算。', uses: 0, learned: 'core principle', src: 'moat' },
+  'fail-closed by default': { detail: '无法确认就判定未通过。宁可 bounce 回去重试,也不放过一次假完成。', uses: 0, learned: 'core principle', src: 'moat' },
+  'bounce fake completion': { detail: 'agent 称完成但 verify 不过 → 强制带着真实失败重试,而不是接受谎言。', uses: 0, learned: 'verify gate', src: 'moat' },
+  'three-state verdict': { detail: '通过 / 未通过 / 无法验证 —— 第三态杜绝"沉默假绿灯"。', uses: 0, learned: 'verify gate', src: 'component' },
+  'verify isolation': { detail: 'verify 文件放在 agent 写不到的目录,防止它"贿赂测谎仪"(改测试求通过)。', uses: 0, learned: 'anti-cheat', src: 'component' },
+  'never flatter': { detail: '不献媚、不吹嘘、不假装完成。HONESTY 系统提示在每次调用注入。', uses: 0, learned: 'honesty firewall', src: 'soul' },
+  'say "I am stuck" honestly': { detail: '反复修仍不过时,诚实升级求助人类,而非编一个能过的假答案。', uses: 0, learned: 'escalation', src: 'soul' },
+  'tampering is visible': { detail: '项目模式下 agent 技术上能改测试,但改了 run 结束会警告 —— 篡改可见,而非假装隔离。', uses: 0, learned: 'project mode', src: 'soul' },
+  'LangGraph loop': { detail: 'agent 主循环基于 LangGraph create_agent —— 工具调用、verify 中间件、压缩都挂在这。', uses: 0, learned: 'agent core', src: 'component' },
+  'MiniMax-M3': { detail: '当前模型,经 Anthropic 兼容端接入。可替换 —— 灵魂是"让便宜模型可靠",不绑某个模型。', uses: 0, learned: 'provider', src: 'component' },
+  'context compaction': { detail: '长任务上下文超阈值自动摘要压缩(LangChain SummarizationMiddleware)。', uses: 0, learned: 'agent core', src: 'tool' },
+  'run_command': { detail: '白名单内执行命令(node/python/pytest/cargo/git…),关在 workspace 牢笼里。', uses: 0, learned: 'tools', src: 'tool' },
+  'workspace cage': { detail: '文件工具的路径被锁在 workspace 内,越界即拒 —— agent 动不了你不让它动的地方。', uses: 0, learned: 'tools', src: 'principle' },
+  '5 domain templates': { detail: 'rest-api / db-schema / state-machine / config / generic 五种契约模板,给结构化目标补漏项。', uses: 0, learned: 'contract layer', src: 'tool' },
+  'project mode': { detail: '让 agent 在你自己的项目里干活、跑你自己的测试 —— 懂技术用户的真实场景。', uses: 0, learned: 'runtime', src: 'tool' },
 };
 
 // growth backlog — nodes that "bloom" into the graph over time
 export const GROWTH: GrowthSpec[] = [
-  { label: 'cache arXiv embeddings', type: 'skill', near: 'knowledge ingest' },
-  { label: 'detect flaky CI tests', type: 'skill', near: 'atlas-core' },
-  { label: 'you ship on Fridays', type: 'memory', near: 'atlas-core' },
-  { label: 'summarize-thread', type: 'skill', near: 'comms & inbox' },
-  { label: 'retrieval-augmented memory', type: 'topic', near: 'long-horizon agents' },
+  { label: 'auto verify-cmd for non-coders', type: 'skill', near: 'verify gate' },
+  { label: 'cost-aware routing', type: 'topic', near: 'agent core' },
+  { label: 'more domain contracts', type: 'skill', near: 'contract layer' },
+  { label: 'keychain key storage', type: 'memory', near: 'runtime modes' },
+  { label: 'multi-step verify chains', type: 'topic', near: 'verify gate' },
 ];
 
 export interface RawNode {
@@ -114,6 +107,13 @@ export interface BuiltMind {
   self: RawNode;
 }
 
+// 空记忆大脑:只有一个 Argos 自我节点。独立 agent 还没积累记忆时用这个 ——
+// 诚实地"空",等真跑出任务记忆再长出来,而不是 fallback 到编造的 seed。
+export function buildEmptyMind(): BuiltMind {
+  const self: RawNode = { id: 0, label: 'Argos', type: 'self', topic: null };
+  return { nodes: [self], edges: [], self };
+}
+
 // Build node + edge lists (dedupe members by label)
 export function buildMind(): BuiltMind {
   const nodes: RawNode[] = [];
@@ -127,7 +127,7 @@ export function buildMind(): BuiltMind {
     byLabel.set(label, n);
     return n;
   };
-  const self = add('Hermes', 'self');
+  const self = add('Argos', 'self');
   CLUSTERS.forEach((cl) => {
     const tn = add(cl.topic, 'topic');
     tn.topic = cl.topic;

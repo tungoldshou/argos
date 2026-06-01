@@ -18,3 +18,13 @@ src-tauri/gen
 .codegraph
 *.tsbuildinfo
 .claude/
+
+# python (agent sidecar)
+__pycache__/
+*.pyc
+*.egg-info/
+agent/build/
+agent/dist/
+agent/dist-arm64/
+.venv/
+agent/.venv/

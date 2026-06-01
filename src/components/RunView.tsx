@@ -7,7 +7,6 @@ import { pColor } from '../lib/platforms';
 import { tr } from '../lib/i18n';
 import { pickRun, SK_ICON, SK_COL, type RunStep } from '../data/runs';
 import type { LearnSpec } from '../data/types';
-import { hermes, type RunEvent, type RunHandle } from '../lib/hermes';
 
 type StepState = 'wait' | 'run' | 'done';
 
@@ -136,28 +135,6 @@ export function RunView({ goal, onExit, onRecall, onLearn }: RunViewProps) {
   const [learned, setLearned] = useState(false);
   const firedRef = useRef(false);
 
-  // Live run: when connected to a real Hermes (Tauri), kick off an actual run
-  // and stream its events alongside the cinematic scripted timeline.
-  const src = hermes();
-  const live = src.kind === 'tauri' && !!src.startRun;
-  const [liveEvents, setLiveEvents] = useState<RunEvent[]>([]);
-  const [liveDone, setLiveDone] = useState(false);
-  useEffect(() => {
-    if (!live || !src.startRun) return;
-    let handle: RunHandle | null = null;
-    let alive = true;
-    src
-      .startRun(
-        goal,
-        (e) => alive && setLiveEvents((prev) => (prev.length > 200 ? [...prev.slice(-180), e] : [...prev, e])),
-        () => alive && setLiveDone(true),
-      )
-      .then((h) => { if (alive) handle = h; else h.cancel(); })
-      .catch(() => alive && setLiveDone(true));
-    return () => { alive = false; handle?.cancel(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   useEffect(() => { setActive(0); }, []);
   useEffect(() => {
     if (active < 0 || active >= total) return;
@@ -225,22 +202,6 @@ export function RunView({ goal, onExit, onRecall, onLearn }: RunViewProps) {
             </div>
             <div style={{ flex: 1 }} />
             <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-3)' }}>{tr('← in your brain')}</span>
-          </div>
-        )}
-        {live && liveEvents.length > 0 && (
-          <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px dashed var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--live)', marginBottom: 9 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--live)', boxShadow: '0 0 8px var(--live)' }} />
-              {tr('live · Hermes')} {liveDone ? `· ${tr('completed')}` : ''}
-            </div>
-            <div style={{ background: 'rgba(0,0,0,0.32)', border: '1px solid var(--border)', borderRadius: 9, padding: '10px 12px', fontFamily: 'var(--mono)', fontSize: 11, lineHeight: 1.7, maxHeight: 240, overflow: 'auto' }}>
-              {liveEvents.map((e, i) => (
-                <div key={i} style={{ whiteSpace: 'pre-wrap', color: e.type.includes('tool') ? 'var(--accent)' : e.type.includes('error') ? '#ff8a7a' : '#8fd9c4', animation: 'thoughtin .2s both' }}>
-                  <span style={{ color: 'var(--text-3)' }}>{e.type}</span>{e.text ? '  ' + e.text : ''}
-                </div>
-              ))}
-              {!liveDone && <span style={{ animation: 'blink-caret 1s step-end infinite', color: 'var(--accent)' }}>▋</span>}
-            </div>
           </div>
         )}
       </div>

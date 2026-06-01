@@ -253,13 +253,19 @@ export class MindGraph {
     this.nodes.forEach((n) => { x += n.x; y += n.y; });
     return { x: x / this.nodes.length, y: y / this.nodes.length };
   }
-  private _fitScale(): number {
+  // widthFrac = 可用横向空间占视口宽的比例(dock 时只有左侧可见区可用,传 <1)。
+  // 缩放据此收缩,大脑就能"刚好填满"可用区,而非用写死的缩放值。
+  private _fitScale(widthFrac = 1): number {
     let a = 1e9, b = 1e9, c = -1e9, d = -1e9;
     this.nodes.forEach((n) => { a = Math.min(a, n.x); b = Math.min(b, n.y); c = Math.max(c, n.x); d = Math.max(d, n.y); });
-    return Math.min(this.W / (c - a + 160), this.H / (d - b + 160), 1.4);
+    const usableW = this.W * widthFrac;
+    return Math.min(usableW / (c - a + 160), this.H / (d - b + 160), 1.4);
   }
 
-  dock(on: boolean, narrow?: boolean): void {
+  // dock：把大脑收缩、靠左,给右侧面板让位。
+  // anchorFrac = 大脑要锚到的横向比例(0..1)。不传时用 0.21 兜底,但调用方应传
+  // 「左侧可见区中心 / 视口宽」= (面板左边界/2)/视口宽,这样无论面板多宽都真居中。
+  dock(on: boolean, narrow?: boolean, anchorFrac?: number): void {
     const ct = this._centroid();
     this.flyTo(ct.x, ct.y);
     if (on) {
@@ -267,8 +273,11 @@ export class MindGraph {
         this.anchorXT = 0.5;
         this.cam.tScale = this._fitScale() * 0.7;
       } else {
-        this.anchorXT = 0.21;
-        this.cam.tScale = 0.62;
+        const frac = anchorFrac ?? 0.21;
+        this.anchorXT = frac;
+        // 左侧可见区宽度占比 = anchorFrac*2(anchorFrac 是该区中心/视口宽)。
+        // 缩放据此自适应,大脑填满左侧区并居中;留 0.88 余量避免贴边。
+        this.cam.tScale = this._fitScale(frac * 2) * 0.88;
       }
       this.interactive = false;
       this.select(null);

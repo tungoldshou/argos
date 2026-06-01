@@ -5,8 +5,8 @@ import { useNarrow } from '../lib/responsive';
 import { Icon, PlatformGlyph, type IconName } from '../lib/icons';
 import { pColor } from '../lib/platforms';
 import { tr } from '../lib/i18n';
-import { hermes } from '../lib/hermes';
 import type { Skill, Automation } from '../data/types';
+import { isTauri, getSettings, setMinimaxKey, restartAgent, type AppSettings } from '../lib/agent';
 import {
   AGENT, SKILLS, PLATFORMS, PLATFORMS_MORE, AUTOMATIONS, SANDBOXES, MODELS,
   MCP_SERVERS, TOOLSETS, TOOLS_TOTAL, VOICE, PERSONALITY,
@@ -47,20 +47,11 @@ export function Overlay({ title, icon, sub, onClose, children }: OverlayProps) {
 }
 
 function SkillsOverlay({ onClose }: { onClose: () => void }) {
-  const [skills, setSkills] = useState<Skill[]>(SKILLS);
-  const [loading, setLoading] = useState(hermes().kind === 'tauri');
-  const live = hermes().kind === 'tauri';
-  useEffect(() => {
-    let alive = true;
-    if (live) {
-      hermes().getSkills().then((s) => { if (alive) { setSkills(s); setLoading(false); } }).catch(() => alive && setLoading(false));
-    }
-    return () => { alive = false; };
-  }, [live]);
-  const sub = live ? `${skills.length} ` + tr('installed skills') : `${AGENT.skills} ` + tr('self-authored procedures · 995 runs / 30d');
+  // Argos 自有技能(当前用 seed 展示)。P1 接入 Argos 自己的技能注册表后替换。
+  const skills: Skill[] = SKILLS;
+  const sub = `${AGENT.skills} ` + tr('self-authored procedures · 995 runs / 30d');
   return (
     <Overlay title="Skills" sub={sub} icon="skills" onClose={onClose}>
-      {loading && <div style={{ fontSize: 12.5, color: 'var(--text-3)', padding: '6px 2px 14px' }}>{tr('Loading from Hermes…')}</div>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {skills.map((s, i) => (
           <div key={s.name + i} style={{ display: 'grid', gridTemplateColumns: '20px 1fr auto', gap: 13, alignItems: 'center', padding: '11px 10px', borderRadius: 9, borderBottom: i < skills.length - 1 ? '1px solid color-mix(in oklab,var(--border),transparent 40%)' : 'none' }}>
@@ -125,22 +116,11 @@ function Toggle2({ on, onChange }: { on: boolean; onChange?: (v: boolean) => voi
 type LiveAutomation = Automation & { id?: string };
 
 function AutomationsOverlay({ onClose }: { onClose: () => void }) {
-  const live = hermes().kind === 'tauri';
-  const [jobs, setJobs] = useState<LiveAutomation[]>(AUTOMATIONS);
-  const [loading, setLoading] = useState(live);
-  useEffect(() => {
-    let alive = true;
-    if (live) {
-      hermes().getAutomations().then((j) => { if (alive) { setJobs(j as LiveAutomation[]); setLoading(false); } }).catch(() => alive && setLoading(false));
-    }
-    return () => { alive = false; };
-  }, [live]);
-  const toggle = (a: LiveAutomation, on: boolean) => {
-    if (live && a.id) hermes().toggleAutomation(a.id, on).catch(() => {});
-  };
+  // Argos 自有自动化(当前用 seed 展示)。P1 接入 Argos 自己的调度器后替换。
+  const jobs: LiveAutomation[] = AUTOMATIONS;
+  const toggle = (_a: LiveAutomation, _on: boolean) => { /* P1: Argos 自有调度器 */ };
   return (
     <Overlay title="Automations" sub="Plain-language schedules, run unattended through the gateway" icon="automations" onClose={onClose}>
-      {loading && <div style={{ fontSize: 12.5, color: 'var(--text-3)', padding: '6px 2px 14px' }}>{tr('Loading from Hermes…')}</div>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
         {jobs.map((a, i) => (
           <div key={a.id ?? i} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: 13, borderRadius: 11, background: 'var(--surface-2)', border: '1px solid var(--border)', opacity: a.on ? 1 : 0.55 }}>
@@ -183,8 +163,75 @@ function SettingsOverlay({ onClose }: { onClose: () => void }) {
     ['Default sandbox', 'Docker (hardened)'], ['Gateway', 'systemd · auto-restart'],
     ['Telemetry', 'Local only — nothing leaves your server'], ['License', 'MIT · open source'],
   ];
+  // MiniMax key 配置:打包 .app 双击不继承 shell env,必须让用户在这里填 key,
+  // 持久化到用户配置目录,Rust 启动 sidecar 时读出注入。这是"下载即用"的关键。
+  const [keyInput, setKeyInput] = useState('');
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [status, setStatus] = useState<'' | 'saving' | 'restarting' | 'done'>('');
+  const inTauri = isTauri();
+
+  useEffect(() => {
+    getSettings().then(setSettings);
+  }, []);
+
+  // 保存 key → 立即重启 sidecar(读新 key)→ 重探设置状态。一键生效,无需退出 app。
+  const saveKey = async () => {
+    if (!keyInput.trim()) return;
+    setStatus('saving');
+    const ok = await setMinimaxKey(keyInput.trim());
+    if (!ok) { setStatus(''); return; }
+    setKeyInput('');
+    setStatus('restarting');
+    await restartAgent();
+    // 给 sidecar 一点启动时间(PyInstaller 单文件解压稍慢),再刷新状态。
+    await new Promise((r) => setTimeout(r, 1500));
+    getSettings().then(setSettings);
+    setStatus('done');
+  };
+
   return (
-    <Overlay title="Settings" sub={`Hermes ${AGENT.version} · MIT · ` + tr('runs entirely on your infra')} icon="settings" onClose={onClose}>
+    <Overlay title="Settings" sub={`Argos ${AGENT.version} · MIT · ` + tr('runs entirely on your infra')} icon="settings" onClose={onClose}>
+      {/* MiniMax key —— 打包 app 的命门:没配 key 只能跑演示 */}
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 10 }}>{tr('MiniMax API key')}</div>
+      <div style={{ padding: 14, borderRadius: 11, background: 'var(--surface-2)', border: '1px solid var(--border)', marginBottom: 16 }}>
+        {!inTauri ? (
+          <div style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.6 }}>{tr('key is set via .env.local in browser dev')}</div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 11 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: settings?.key_configured ? 'var(--live, #45e0a0)' : 'var(--text-3)', flexShrink: 0 }} />
+              <span style={{ fontSize: 12.5, color: settings?.key_configured ? 'var(--live, #45e0a0)' : 'var(--text-3)' }}>
+                {settings?.key_configured ? tr('key configured') + ` · ••••${settings.key_tail}` : tr('no key — agent runs in demo mode')}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="password"
+                value={keyInput}
+                onChange={(e) => { setKeyInput(e.target.value); setStatus(''); }}
+                onKeyDown={(e) => e.key === 'Enter' && saveKey()}
+                placeholder={tr('paste your MiniMax key (sk-…)')}
+                disabled={status === 'saving' || status === 'restarting'}
+                style={{ flex: 1, height: 36, padding: '0 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)', fontSize: 12.5, fontFamily: 'var(--mono)' }}
+              />
+              <button onClick={saveKey} disabled={!keyInput.trim() || status === 'saving' || status === 'restarting'}
+                style={{ height: 36, padding: '0 15px', borderRadius: 8, border: 'none', background: keyInput.trim() ? 'var(--accent)' : 'var(--surface)', color: keyInput.trim() ? '#1a1205' : 'var(--text-3)', fontWeight: 700, fontSize: 12.5, cursor: keyInput.trim() ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
+                {status === 'saving' ? tr('Saving…') : status === 'restarting' ? tr('Restarting…') : tr('Save & apply')}
+              </button>
+            </div>
+            {status === 'done' && (
+              <div style={{ marginTop: 9, fontSize: 11.5, color: 'var(--accent)' }}>{tr('applied — agent restarted with your key')}</div>
+            )}
+            {/* 已配 key 时也给一个单独的重启入口(比如手动改了配置/想重连) */}
+            {settings?.key_configured && status === '' && (
+              <button onClick={async () => { setStatus('restarting'); await restartAgent(); await new Promise((r) => setTimeout(r, 1500)); getSettings().then(setSettings); setStatus('done'); }}
+                style={{ marginTop: 10, height: 30, padding: '0 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', fontSize: 11.5, cursor: 'pointer' }}>
+                ↻ {tr('Restart agent')}
+              </button>
+            )}
+          </>
+        )}
+      </div>
       <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 10 }}>{tr('Models & routing')}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
         {MODELS.routes.map((r, i) => (

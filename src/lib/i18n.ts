@@ -13,13 +13,14 @@ const TR: Record<string, string> = {
   working: '执行中', memory: '记忆', EXECUTING: '执行中', THINKING: '思考中',
   recalling: '回忆', memories: '条记忆', 'lighting recalls ◂': '点亮回忆 ◂', 'drag to explore': '拖拽探索',
   'Search the memory…': '搜索记忆…', 'Search…': '搜索…',
-  'Give Hermes a goal — watch it work, beside its memory…': '给 Hermes 一个目标 —— 看它在记忆旁工作…',
-  'Give Hermes a goal…': '给 Hermes 一个目标…', run: '执行',
+  'Give Argos a goal — watch it work, beside its memory…': '给 Argos 一个目标 —— 看它在记忆旁工作…',
+  'Give Argos a goal…': '给 Argos 一个目标…', run: '执行',
   // dock
   Memory: '记忆', Runs: '任务', Skills: '技能', Connections: '连接', Automations: '自动化', Sandboxes: '沙箱', Settings: '设置',
   // detail panel
   recalled: '已回忆', learned: '学习于', origin: '来源', links: '连接', Connected: '相连',
   Domain: '领域', Person: '人物', Source: '来源', Skill: '技能',
+  Task: '任务', Model: '模型',
   // tweaks
   'Core hue': '核心色', Behaviour: '行为', 'Living motion': '活体动效', 'Re-center memory': '重新居中',
   // suggestions
@@ -132,10 +133,26 @@ const TR: Record<string, string> = {
   'Global personality file — terse, dry wit, no preamble, treats you as a peer.': '全局人格文件 —— 简洁、冷幽默、无废话,把你当同伴。',
   'built-in': '内置', mcp: 'MCP', personality: '人格', feature: '功能', 'core tool': '核心工具',
   'via MCP': '经 MCP', 'connected via stdio': '经 stdio 连接', 'from ~/.hermes/SOUL.md': '来自 ~/.hermes/SOUL.md',
-  // live data (Hermes integration)
-  'installed skills': '个已安装技能', 'Loading from Hermes…': '正在从 Hermes 读取…',
-  'live · Hermes connected': '实时 · 已连接 Hermes', 'demo data': '演示数据', 'live · Hermes': '实时 · Hermes',
+  // live data
+  'installed skills': '个已安装技能', 'Loading from Hermes…': '正在读取…',
+  'live · Hermes connected': '实时 · 已配置模型', 'demo data': '演示数据', 'live · Hermes': '实时',
   LIVE: '实时', DEMO: '演示',
+  'no memories yet — give it a goal, tasks settle here': '还没有记忆 —— 给它一个目标,跑过的任务会沉淀在这里',
+  // 设置:MiniMax key(打包 app 命门)
+  'MiniMax API key': 'MiniMax API 密钥',
+  'key is set via .env.local in browser dev': '浏览器开发模式下通过 .env.local 配置密钥',
+  'key configured': '密钥已配置', 'no key — agent runs in demo mode': '未配置密钥 —— agent 只能跑演示模式',
+  'paste your MiniMax key (sk-…)': '粘贴你的 MiniMax 密钥(sk-…)',
+  'Save & apply': '保存并应用', 'Saving…': '保存中…', 'Restarting…': '重启中…',
+  'applied — agent restarted with your key': '已应用 —— agent 已带新密钥重启', 'Restart agent': '重启 agent',
+  // 首页示例任务(贴合 Argos:结构化、可验证的工程任务)
+  'List the fields a REST pagination response should contain': '列出 REST 分页响应该包含的字段名',
+  'Design a TODO data model — fields and types': '设计一个 TODO 数据模型 —— 字段与类型',
+  'Explain idempotency in one sentence, then reply only that': '用一句话解释幂等性,然后只回那一句',
+  'Write a palindrome check function with tests': '写一个判断回文的函数并配测试',
+  // 记忆大脑节点(真实任务记忆,随任务生长)
+  '✓ 通过验证': '✓ 通过验证', '✗ 未通过(已诚实记录)': '✗ 未通过(已诚实记录)',
+  '? 无法验证(未假装通过)': '? 无法验证(未假装通过)',
 };
 
 declare global {

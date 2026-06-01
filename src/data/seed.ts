@@ -4,12 +4,12 @@ import type {
 } from './types';
 
 export const AGENT: Agent = {
-  name: 'Hermes',
-  host: 'hermes@atlas-box',
-  version: 'v0.15.2',
+  name: 'Argos',
+  host: 'argos@local',
+  version: 'v0.1.0',
   uptimeDays: 41,
-  model: 'Hermes-4-70B',
-  fallback: 'Claude / GPT (multi-model)',
+  model: 'MiniMax-M3',
+  fallback: 'GLM / Kimi / DeepSeek (multi-model)',
   memories: 2847,
   skills: 38,
   tokensToday: '1.84M',
@@ -87,11 +87,10 @@ export const TOOLS_TOTAL = 60;
 
 // ── Model providers & routing ──
 export const MODELS: Models = {
-  primary: { name: 'Hermes-4-70B', via: 'Nous Portal', note: 'self-hostable weights' },
+  primary: { name: 'MiniMax-M3', via: 'Anthropic 兼容端', note: '便宜 · 逼近 Opus' },
   routes: [
-    { role: 'Reasoning / default', model: 'Hermes-4-70B', via: 'Nous Portal' },
-    { role: 'Vision', model: 'Qwen2-VL', via: 'OpenRouter' },
-    { role: 'Fallback', model: 'Claude / GPT-4o', via: 'on failure' },
+    { role: 'Reasoning / default', model: 'MiniMax-M3', via: 'MiniMax' },
+    { role: 'Fallback', model: 'GLM / Kimi / DeepSeek', via: 'multi-provider' },
   ],
   providers: ['Nous Portal', 'OpenRouter', 'OpenAI', 'Anthropic', 'any OpenAI-compatible endpoint'],
 };

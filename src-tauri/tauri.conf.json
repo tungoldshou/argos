@@ -13,11 +13,12 @@
     "windows": [
       {
         "label": "main",
-        "title": "Argos — Hermes",
+        "title": "Argos",
         "width": 1440,
         "height": 900,
         "minWidth": 720,
         "minHeight": 560,
+        "resizable": true,
         "titleBarStyle": "Overlay",
         "backgroundColor": "#0b0d14"
       }
@@ -31,6 +32,9 @@
     "targets": "all",
     "icon": [
       "icons/icon.png"
+    ],
+    "externalBin": [
+      "binaries/argos-agent"
     ]
   }
 }

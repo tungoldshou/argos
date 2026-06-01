@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- ATS 豁免:允许 WebView fetch 本地明文 HTTP(sidecar 在 http://127.0.0.1:8848)。
+       macOS WKWebView 默认禁止明文 HTTP,打包后前端连不上 sidecar(TypeError: Load failed)。
+       NSAllowsLocalNetworking 只放开本地网络,不放开任意外网 —— 比 ArbitraryLoads 更安全。
+       dev 不受影响(WebView 直接加载 http://localhost:5173,本就豁免)。 -->
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+    <key>NSExceptionDomains</key>
+    <dict>
+      <key>127.0.0.1</key>
+      <dict>
+        <key>NSExceptionAllowsInsecureHTTPLoads</key>
+        <true/>
+        <key>NSIncludesSubdomains</key>
+        <true/>
+      </dict>
+      <key>localhost</key>
+      <dict>
+        <key>NSExceptionAllowsInsecureHTTPLoads</key>
+        <true/>
+        <key>NSIncludesSubdomains</key>
+        <true/>
+      </dict>
+    </dict>
+  </dict>
+</dict>
+</plist>

@@ -160,11 +160,33 @@ export function SwarmPanel({ onClose, engine }: { onClose: () => void; engine?: 
         </Section>
       )}
 
-      {/* 阶段 4:冲突诊断 —— 真壁垒在这里 */}
+      {/* 阶段 4:冲突诊断 —— 真壁垒在这里。三态:可信通过 / 不可信(需人工) / 有冲突 */}
       {verdict && (
         <Section icon="memory" label="④ 交叉验证诊断"
-          hint={verdict.assemblable ? '✓ 可直接组装' : `${verdict.conflictCount} 处硬冲突`}>
-          {verdict.assemblable ? (
+          hint={
+            !verdict.parseTrusted ? '⚠ 无法验证 · 需人工确认'
+              : verdict.assemblable ? '✓ 可直接组装'
+              : `${verdict.conflictCount} 处硬冲突`
+          }>
+          {!verdict.parseTrusted ? (
+            // 测谎仪读不懂这次判决(judge 跑题/被截断/自相矛盾)。fail-closed:
+            // 绝不亮绿灯,也不谎称「确定有冲突」,而是诚实上报「无法验证」交人类裁决。
+            // 这是 escalation 的第一个挂点。
+            <div style={{ padding: '12px 14px', borderRadius: 9, background: 'color-mix(in oklab, #ffb152, transparent 88%)', border: '1px solid color-mix(in oklab, #ffb152, transparent 55%)', color: '#ffb152', fontSize: 13, lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠ 无法可靠验证这次产出</div>
+              <div style={{ color: 'var(--text-2)', fontSize: 12.5 }}>
+                交叉验证的判决无法解析(模型未给出可信的冲突计数,可能跑题或被截断)。
+                为避免谎报「已通过」,Argos 拒绝下结论,需要你人工确认。
+              </div>
+              {verdict.conflicts.length > 0 && (
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {verdict.conflicts.map((c, i) => (
+                    <div key={i} style={{ fontSize: 11.5, color: 'var(--text-3)', fontFamily: 'var(--mono)' }}>· {c}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : verdict.assemblable ? (
             <div style={{ padding: '12px 14px', borderRadius: 9, background: 'color-mix(in oklab, #45e0a0, transparent 88%)', border: '1px solid color-mix(in oklab, #45e0a0, transparent 60%)', color: '#45e0a0', fontSize: 13, fontWeight: 600 }}>
               零硬冲突 — 蜂群产出可直接拼装。契约层生效。
             </div>
