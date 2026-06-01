@@ -16,6 +16,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   end-to-end: asking weather now triggers a real `web_search` call.
 
 ### Added
+- **验证门防作弊**：受保护测试被改/增/删时判"无法验证"并诚实升级，不再被"偷改测试让它过"蒙混；指纹由 mtime/size 升级为内容 sha256。
 - **`package-app` project skill** (`.claude/skills/package-app/`) — the build
   runbook for rebuilding the arm64 PyInstaller sidecar and repackaging the
   `.app`/`.dmg`, including the x86_64-venv trap and spec-parity rules.
