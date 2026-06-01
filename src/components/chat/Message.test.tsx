@@ -43,4 +43,14 @@ describe('Message', () => {
     // caret 是 <span>▋</span>，查 caret 字符
     expect(screen.getByText('▋')).toBeInTheDocument();
   });
+
+  it('文本块里 LLM 回流的 5xx api_error 被重路由成 error 段(不渲染为 Markdown 正文)', () => {
+    const errText = "Error code: 500 - {'type': 'error', 'error': {'type': 'api_error', 'message': 'input new_sensitive (1026)'}, 'request_id': '06cfc4efdbd33d3fd2fa30ee8cd84ca'}";
+    const turn: Turn = { id: 't1', user: 'q', blocks: [{ kind: 'text', text: errText, streaming: false }] };
+    const { container } = render(<Message turn={turn} />);
+    // 危险色边框(70% 透明)说明走的是 error 分支,不是 Markdown
+    const errBox = container.querySelector('div[style*="--danger"]');
+    expect(errBox).not.toBeNull();
+    expect(errBox?.textContent).toBe(errText);
+  });
 });

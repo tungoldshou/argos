@@ -130,7 +130,12 @@ export function AgentPanel({ onClose, initialGoal, onComplete }: { onClose: () =
               {projectDir.trim() && <span style={{ fontSize: 10.5, fontFamily: 'var(--mono)', color: 'var(--text-3)', border: '1px solid var(--border)', borderRadius: 6, padding: '2px 8px' }}>📁 {projectDir.trim()}</span>}
             </div>
           )}
-          {turns.map((turn) => <Message key={turn.id} turn={turn} />)}
+          {turns.map((turn, i) => (
+            <div key={turn.id}>
+              {i > 0 && <div style={{ height: 1, background: 'var(--border)' }} />}
+              <Message turn={turn} />
+            </div>
+          ))}
           {running && turns.length > 0 && turns[turns.length - 1].blocks.length === 0 && (
             <div style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--text-3)' }}>
               <span style={{ animation: 'blink-caret 1s step-end infinite', color: 'var(--accent)' }}>▋</span> 运行中…

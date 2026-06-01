@@ -8,6 +8,18 @@ export interface Activity {
   result?: string;
 }
 
+// CJK/emoji 安全:按 code-point(不是 UTF-16 单元)切,避免把代理对切成半边。
+function truncateSafe(s: string, max: number): string {
+  const cps = Array.from(s);
+  return cps.length > max ? cps.slice(0, max).join('') + '…' : s;
+}
+
+// 工具结果里夹带 API 错误字符串时(被 LLM 当文本回流),给点危险色提示,
+// 避免和普通结果混在一起被忽略。
+function resultLooksLikeError(s: string): boolean {
+  return /^Error code:\s*\d{3}\b/.test(s) && /api_error/.test(s);
+}
+
 export function ActivityTrail({ activities }: { activities: Activity[] }) {
   const [open, setOpen] = useState(false);
   if (activities.length === 0) return null;
@@ -22,17 +34,23 @@ export function ActivityTrail({ activities }: { activities: Activity[] }) {
         <Icon name="chevron" size={11} style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
       </button>
       {open && (
-        <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 4, borderLeft: '1px solid var(--border)' }}>
-          {activities.map((a, i) => (
-            <div key={i} style={{ paddingLeft: 10 }}>
-              <div style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--accent)', wordBreak: 'break-all' }}>{a.call}</div>
-              {a.result !== undefined && (
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-3)', marginTop: 2, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                  {a.result.length > 600 ? a.result.slice(0, 600) + '…' : a.result}
-                </div>
-              )}
-            </div>
-          ))}
+        <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 8, paddingLeft: 4, borderLeft: '1px solid var(--border)' }}>
+          {activities.map((a, i) => {
+            const isErr = a.result !== undefined && resultLooksLikeError(a.result);
+            return (
+              <div key={i} style={{ paddingLeft: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--accent)', wordBreak: 'break-all' }}>{a.call}</div>
+                {a.result !== undefined && (
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: isErr ? 'var(--danger)' : 'var(--text-3)', flexShrink: 0, lineHeight: 1.5 }}>↳</span>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: isErr ? 'var(--danger)' : 'var(--text-3)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}>
+                      {truncateSafe(a.result, 600)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

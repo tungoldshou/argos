@@ -12,6 +12,13 @@ type Segment =
   | { kind: 'honesty'; type: 'verify_failed' | 'escalation' | 'tampering'; detail: string }
   | { kind: 'error'; text: string };
 
+// LLM 有时会把工具的 5xx 错误"抄"进文本流(不是走 error 事件);
+// 这里把明显是 MiniMax/Anthropic 风格 API 错误的文本段重路由到 error 渲染,
+// 否则它会以 Markdown 形式当正文出现,看起来像乱码。
+export function looksLikeApiErrorText(s: string): boolean {
+  return /^Error code:\s*\d{3}\b/.test(s) && /api_error/.test(s);
+}
+
 function segment(blocks: Block[]): Segment[] {
   const segs: Segment[] = [];
   for (const b of blocks) {
@@ -20,7 +27,11 @@ function segment(blocks: Block[]): Segment[] {
       if (last && last.kind === 'activities') last.items.push({ call: b.call, result: b.result });
       else segs.push({ kind: 'activities', items: [{ call: b.call, result: b.result }] });
     } else if (b.kind === 'text') {
-      segs.push({ kind: 'text', text: b.text, streaming: b.streaming });
+      if (looksLikeApiErrorText(b.text)) {
+        segs.push({ kind: 'error', text: b.text });
+      } else {
+        segs.push({ kind: 'text', text: b.text, streaming: b.streaming });
+      }
     } else if (b.kind === 'honesty') {
       segs.push({ kind: 'honesty', type: b.type, detail: b.detail });
     } else {
