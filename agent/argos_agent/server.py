@@ -195,17 +195,15 @@ async def _run_stream(
             tampered = runtime.detect_tampering() if st.project_dir else []
             if tampered:
                 yield _sse("tampering", {"files": tampered})
-            escalated = bool(gate and gate.escalated)
-            unverifiable = bool(gate and getattr(gate, "unverifiable", False))
             verdict = _verdict_of(gate, st.verify_cmd)
             try:
                 memory.record_task(goal=goal, verdict=verdict, model=config.LLM_MODEL)
             except Exception:
                 pass
-            if unverifiable:
+            if verdict == "unverifiable":
                 yield _sse("unverifiable", {"files": gate.tampered, "detail": gate.last_failure})
-                yield _sse("done", {"resolved": False, "unverifiable": True, "tampered": gate.tampered})
-            elif escalated:
+                yield _sse("done", {"resolved": False, "unverifiable": True, "attempts": gate.attempts, "tampered": gate.tampered})
+            elif verdict == "failed":
                 yield _sse("done", {"resolved": False, "escalated": True, "attempts": gate.attempts, "tampered": tampered})
             else:
                 yield _sse("done", {"resolved": True, "tampered": tampered})
