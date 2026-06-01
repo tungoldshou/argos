@@ -23,10 +23,15 @@ const AGENT_PORT: u16 = 8848;
 /// 解决"Finder 启动不继承 shell env、sidecar 读不到 key、只能跑 DEMO"的根本问题。
 #[derive(Default, Serialize, Deserialize)]
 struct Settings {
+    // key 用 serde alias 兼容旧 settings.json 的 minimax_key 字段(已配置用户零丢失)。
+    #[serde(default, alias = "minimax_key")]
+    llm_key: String,
+    #[serde(default, alias = "minimax_model")]
+    llm_model: String,
     #[serde(default)]
-    minimax_key: String,
+    llm_provider: String, // anthropic(默认) | openai
     #[serde(default)]
-    minimax_model: String,
+    llm_base: String,
 }
 
 /// 配置文件路径:~/Library/Application Support/com.argos.app/settings.json(macOS)。
@@ -66,28 +71,30 @@ fn save_settings(s: &Settings) -> Result<(), String> {
 #[tauri::command]
 fn get_settings() -> serde_json::Value {
     let s = load_settings();
-    let key_tail = if s.minimax_key.len() >= 4 {
-        s.minimax_key[s.minimax_key.len() - 4..].to_string()
+    let key_tail = if s.llm_key.len() >= 4 {
+        s.llm_key[s.llm_key.len() - 4..].to_string()
     } else {
         String::new()
     };
     serde_json::json!({
-        "key_configured": !s.minimax_key.is_empty(),
+        "key_configured": !s.llm_key.is_empty(),
         "key_tail": key_tail,
-        "model": s.minimax_model,
+        "provider": if s.llm_provider.is_empty() { "anthropic" } else { &s.llm_provider },
+        "base": s.llm_base,
+        "model": s.llm_model,
     })
 }
 
-/// 前端写 key(/可选 model)。保存后需重启 app 让新 sidecar 带上 key —— 返回提示由前端给。
+/// 前端写完整 LLM 配置(provider/base/model/key)。保存后 restart_agent 让新 sidecar 带上。
 #[tauri::command]
-fn set_minimax_key(key: String, model: Option<String>) -> Result<(), String> {
+fn set_llm_config(provider: String, base: String, model: String, key: String) -> Result<(), String> {
     let mut s = load_settings();
-    s.minimax_key = key.trim().to_string();
-    if let Some(m) = model {
-        let m = m.trim();
-        if !m.is_empty() {
-            s.minimax_model = m.to_string();
-        }
+    s.llm_provider = provider.trim().to_string();
+    s.llm_base = base.trim().to_string();
+    s.llm_model = model.trim().to_string();
+    let k = key.trim();
+    if !k.is_empty() {
+        s.llm_key = k.to_string(); // 空 key 不覆盖(允许只改 model/base 不重填 key)
     }
     save_settings(&s)
 }
@@ -107,30 +114,31 @@ fn agent_base_url() -> String {
 
 /// 注入给 sidecar 的环境。key 来源优先级:
 ///   1) 持久化配置文件(用户在设置界面填的)—— 打包 .app 双击的正道,GUI 不继承 shell env;
-///   2) 进程环境变量 VITE_MINIMAX_KEY —— dev 从 shell 起 app 时方便;
+///   2) 进程环境变量 VITE_LLM_KEY(回退旧 VITE_MINIMAX_KEY)—— dev 从 shell 起 app 时方便;
 ///   3) 都没有 → 不注入,sidecar 自己回退读仓库 .env.local(纯 dev)。
+/// 注入新 VITE_LLM_* 为主;同时注入旧 VITE_MINIMAX_*(兼容回退路径)。
 fn minimax_env() -> Vec<(String, String)> {
     let mut env = Vec::new();
     let cfg = load_settings();
 
-    let key = if !cfg.minimax_key.is_empty() {
-        Some(cfg.minimax_key)
+    let key = if !cfg.llm_key.is_empty() {
+        cfg.llm_key.clone()
     } else {
-        std::env::var("VITE_MINIMAX_KEY").ok()
+        std::env::var("VITE_LLM_KEY").or_else(|_| std::env::var("VITE_MINIMAX_KEY")).unwrap_or_default()
     };
-    if let Some(k) = key {
-        env.push(("VITE_MINIMAX_KEY".into(), k));
+    if !key.is_empty() {
+        env.push(("VITE_LLM_KEY".into(), key.clone()));
+        env.push(("VITE_MINIMAX_KEY".into(), key)); // 兼容
     }
-
-    let model = if !cfg.minimax_model.is_empty() {
-        Some(cfg.minimax_model)
-    } else {
-        std::env::var("VITE_MINIMAX_MODEL").ok()
-    };
-    if let Some(m) = model {
-        env.push(("VITE_MINIMAX_MODEL".into(), m));
+    let provider = if !cfg.llm_provider.is_empty() { cfg.llm_provider } else { "anthropic".into() };
+    env.push(("VITE_LLM_PROVIDER".into(), provider));
+    if !cfg.llm_base.is_empty() {
+        env.push(("VITE_LLM_BASE".into(), cfg.llm_base));
     }
-
+    if !cfg.llm_model.is_empty() {
+        env.push(("VITE_LLM_MODEL".into(), cfg.llm_model.clone()));
+        env.push(("VITE_MINIMAX_MODEL".into(), cfg.llm_model)); // 兼容
+    }
     env.push(("ARGOS_AGENT_PORT".into(), AGENT_PORT.to_string()));
     env
 }
@@ -223,7 +231,7 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![agent_base_url, get_settings, set_minimax_key, restart_agent])
+        .invoke_handler(tauri::generate_handler![agent_base_url, get_settings, set_llm_config, restart_agent])
         .run(tauri::generate_context!())
         .expect("error while running argos");
 }
@@ -241,16 +249,16 @@ mod tests {
 
         // 初始:无文件 → 默认空(诚实空态)
         let s0 = load_at(&p);
-        assert!(s0.minimax_key.is_empty());
+        assert!(s0.llm_key.is_empty());
 
         // 写 key + model
-        let s1 = Settings { minimax_key: "sk-test-1234".into(), minimax_model: "MiniMax-M3".into() };
+        let s1 = Settings { llm_key: "sk-test-1234".into(), llm_model: "MiniMax-M3".into(), ..Default::default() };
         save_at(&p, &s1).unwrap();
 
         // 读回:key/model 都在
         let s2 = load_at(&p);
-        assert_eq!(s2.minimax_key, "sk-test-1234");
-        assert_eq!(s2.minimax_model, "MiniMax-M3");
+        assert_eq!(s2.llm_key, "sk-test-1234");
+        assert_eq!(s2.llm_model, "MiniMax-M3");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -259,18 +267,31 @@ mod tests {
     fn empty_key_is_demo_mode() {
         // 空 key → get_settings 报 key_configured:false(诚实:只能跑演示)
         let s = Settings::default();
-        assert!(s.minimax_key.is_empty());
+        assert!(s.llm_key.is_empty());
         // key_tail 逻辑:不足 4 位不泄露
-        let tail = if s.minimax_key.len() >= 4 { &s.minimax_key[s.minimax_key.len()-4..] } else { "" };
+        let tail = if s.llm_key.len() >= 4 { &s.llm_key[s.llm_key.len()-4..] } else { "" };
         assert_eq!(tail, "");
     }
 
     #[test]
     fn key_tail_only_last_four() {
         // 已配 key → 只回后四位,不泄露完整 key
-        let s = Settings { minimax_key: "sk-secret-abcd".into(), minimax_model: String::new() };
-        let tail = &s.minimax_key[s.minimax_key.len()-4..];
+        let s = Settings { llm_key: "sk-secret-abcd".into(), llm_model: String::new(), ..Default::default() };
+        let tail = &s.llm_key[s.llm_key.len()-4..];
         assert_eq!(tail, "abcd");
-        assert_ne!(tail, s.minimax_key); // 确实只是尾巴,不是全部
+        assert_ne!(tail, s.llm_key); // 确实只是尾巴,不是全部
+    }
+
+    #[test]
+    fn old_minimax_config_still_loads() {
+        // 旧 settings.json 用 minimax_key/minimax_model 字段 → serde alias 映射到 llm_key/llm_model。
+        let dir = std::env::temp_dir().join(format!("argos-test-alias-{}", std::process::id()));
+        let p = dir.join("settings.json");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(&p, r#"{"minimax_key":"sk-old","minimax_model":"MiniMax-M3"}"#).unwrap();
+        let s = load_at(&p);
+        assert_eq!(s.llm_key, "sk-old");
+        assert_eq!(s.llm_model, "MiniMax-M3");
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
