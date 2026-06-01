@@ -73,6 +73,7 @@ export interface AgentEvent {
   type:
     | 'session'
     | 'start'
+    | 'token' // 增量文本流式事件:chatReducer 把它累成 streaming text block
     | 'tool_call'
     | 'tool_result'
     | 'message'
