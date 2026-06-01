@@ -44,3 +44,13 @@ def test_lru_recency_survival():
         server._get_or_create_session(None, None, None, None)
     assert first_id in server.SESSIONS
     assert never_touched not in server.SESSIONS
+
+
+def test_session_busy_flag():
+    server.SESSIONS.clear()
+    st = server._get_or_create_session(None, None, None, None)
+    # 新会话默认空闲(可接新一轮)
+    assert st.busy is False
+    # busy 是真实可置位的(并发轮拒绝据此判定)
+    st.busy = True
+    assert st.busy is True

@@ -31,7 +31,7 @@ class SessionState:
     project_dir: str | None = None
     guard: list[str] | None = None
     messages: list = field(default_factory=list)  # LangChain 消息历史(user/ai/tool)
-    gate: "VerifyGateMiddleware | None" = None  # 跨轮复用
+    busy: bool = False  # 本会话是否已有一轮在跑(拒绝并发轮,防历史竞争+全局 runtime 串台)
 
 
 SESSIONS: "OrderedDict[str, SessionState]" = OrderedDict()
@@ -90,7 +90,7 @@ class RunRequest(BaseModel):
 @app.get("/health")
 def health() -> dict:
     """健康检查:Tauri 拉起 sidecar 后轮询这个确认服务就绪。"""
-    return {"ok": True, "model": config.MINIMAX_MODEL, "key_configured": bool(config.MINIMAX_KEY)}
+    return {"ok": True, "model": config.LLM_MODEL, "key_configured": bool(config.LLM_KEY)}
 
 
 def _sse(event: str, data: dict) -> str:
@@ -107,66 +107,77 @@ async def _run_stream(
     """跑一轮:取/建会话 → 用历史+本轮消息跑 agent → 流式回事件 → 新消息落回会话。
     verify/project/guard 在会话首轮锁定,后续轮继承。"""
     st = _get_or_create_session(session_id, verify_cmd, project_dir, guard)
-    # 首帧回传 session_id,前端存下供后续轮。
+    with _SESSIONS_LOCK:
+        if st.busy:
+            # 同一会话已有一轮在跑:拒绝并发轮,避免历史竞争+全局 runtime 串台(诚实拒绝,不静默丢历史)。
+            yield _sse("session", {"session_id": st.session_id})
+            yield _sse("error", {"message": "该会话已有一轮在进行中,请等当前轮结束再继续。"})
+            return
+        st.busy = True
+    # 首帧回传 session_id,前端存下供后续轮。注意:紧跟其后可能立即来一个 error
+    # 事件(如缺 key 配置),客户端无论如何都应先存下这个 id。
     yield _sse("session", {"session_id": st.session_id})
 
-    # 切运行时上下文(用会话锁定的值,非本轮请求值)。
-    if st.project_dir:
-        runtime.use_project(st.project_dir)
-        if st.guard:
-            runtime.guard_files(st.guard)
-    else:
-        runtime.use_sandbox()
     try:
-        agent, gate = build_agent_with_gate(verify_cmd=st.verify_cmd, goal=goal)
-    except Exception as e:
-        yield _sse("error", {"message": str(e)})
-        runtime.use_sandbox()
-        return
-    st.gate = gate
-
-    yield _sse("start", {"goal": goal})
-    history = st.messages + [("user", goal)]
-    final_msgs = st.messages
-    try:
-        async for chunk in agent.astream({"messages": history}, stream_mode="values"):
-            msgs = chunk.get("messages", [])
-            if not msgs:
-                continue
-            final_msgs = msgs  # 记录最新完整消息列表(含本轮所有新增)
-            last = msgs[-1]
-            kind = last.__class__.__name__
-            calls = getattr(last, "tool_calls", None)
-            content = str(last.content)
-            if calls:
-                yield _sse("tool_call", {"calls": [{"name": c["name"], "args": c["args"]} for c in calls]})
-            elif kind == "ToolMessage":
-                yield _sse("tool_result", {"content": content[:2000]})
-            elif kind == "HumanMessage" and VerifyGateMiddleware.ESCALATION_TAG in content:
-                yield _sse("escalation", {"detail": content[:1500]})
-            elif kind == "HumanMessage" and VerifyGateMiddleware.BOUNCE_TAG in content:
-                yield _sse("verify_failed", {"detail": content[:1500]})
-            elif kind == "AIMessage":
-                txt = final_text(last)
-                if txt:
-                    yield _sse("message", {"text": txt})
-        # 本轮跑完:把完整消息历史落回会话,供下一轮延续上下文。
-        st.messages = list(final_msgs)
-        tampered = runtime.detect_tampering() if st.project_dir else []
-        if tampered:
-            yield _sse("tampering", {"files": tampered})
-        escalated = bool(gate and gate.escalated)
-        verdict = ("failed" if escalated else "passed") if st.verify_cmd else None
-        try:
-            memory.record_task(goal=goal, verdict=verdict, model=config.LLM_MODEL)
-        except Exception:
-            pass
-        if escalated:
-            yield _sse("done", {"resolved": False, "escalated": True, "attempts": gate.attempts, "tampered": tampered})
+        # 切运行时上下文(用会话锁定的值,非本轮请求值)。
+        if st.project_dir:
+            runtime.use_project(st.project_dir)
+            if st.guard:
+                runtime.guard_files(st.guard)
         else:
-            yield _sse("done", {"resolved": True, "tampered": tampered})
-    except Exception as e:
-        yield _sse("error", {"message": str(e)})
+            runtime.use_sandbox()
+        try:
+            agent, gate = build_agent_with_gate(verify_cmd=st.verify_cmd, goal=goal)
+        except Exception as e:
+            yield _sse("error", {"message": str(e)})
+            runtime.use_sandbox()
+            return
+
+        yield _sse("start", {"goal": goal})
+        history = st.messages + [("user", goal)]
+        final_msgs = st.messages
+        try:
+            async for chunk in agent.astream({"messages": history}, stream_mode="values"):
+                msgs = chunk.get("messages", [])
+                if not msgs:
+                    continue
+                final_msgs = msgs  # 记录最新完整消息列表(含本轮所有新增)
+                last = msgs[-1]
+                kind = last.__class__.__name__
+                calls = getattr(last, "tool_calls", None)
+                content = str(last.content)
+                if calls:
+                    yield _sse("tool_call", {"calls": [{"name": c["name"], "args": c["args"]} for c in calls]})
+                elif kind == "ToolMessage":
+                    yield _sse("tool_result", {"content": content[:2000]})
+                elif kind == "HumanMessage" and VerifyGateMiddleware.ESCALATION_TAG in content:
+                    yield _sse("escalation", {"detail": content[:1500]})
+                elif kind == "HumanMessage" and VerifyGateMiddleware.BOUNCE_TAG in content:
+                    yield _sse("verify_failed", {"detail": content[:1500]})
+                elif kind == "AIMessage":
+                    txt = final_text(last)
+                    if txt:
+                        yield _sse("message", {"text": txt})
+            # 本轮跑完:把完整消息历史落回会话,供下一轮延续上下文。
+            st.messages = list(final_msgs)
+            tampered = runtime.detect_tampering() if st.project_dir else []
+            if tampered:
+                yield _sse("tampering", {"files": tampered})
+            escalated = bool(gate and gate.escalated)
+            verdict = ("failed" if escalated else "passed") if st.verify_cmd else None
+            try:
+                memory.record_task(goal=goal, verdict=verdict, model=config.LLM_MODEL)
+            except Exception:
+                pass
+            if escalated:
+                yield _sse("done", {"resolved": False, "escalated": True, "attempts": gate.attempts, "tampered": tampered})
+            else:
+                yield _sse("done", {"resolved": True, "tampered": tampered})
+        except Exception as e:
+            yield _sse("error", {"message": str(e)})
+    finally:
+        # 本轮无论怎么结束(正常/异常/早退)都释放 busy,否则会话会被永久锁死。
+        st.busy = False
 
 
 @app.get("/memory")
