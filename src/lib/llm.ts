@@ -19,9 +19,15 @@ export type ChatFn = (prompt: string, opts?: ChatOpts) => Promise<string>;
 // ── MiniMax Anthropic 兼容端 ────────────────────────────────────────────────
 // 完整端点 = <base>/v1/messages。dev 下 base=/minimax(vite proxy 转发到
 // https://api.minimaxi.com/anthropic 并注入 CORS);Tauri/生产可改直连。
-const MINIMAX_BASE = (import.meta.env.VITE_MINIMAX_BASE as string | undefined) ?? '/minimax';
-const MINIMAX_KEY = import.meta.env.VITE_MINIMAX_KEY as string | undefined;
-const MINIMAX_MODEL = (import.meta.env.VITE_MINIMAX_MODEL as string | undefined) ?? 'MiniMax-M2';
+// Swarm LLM 层只说 Anthropic Messages 格式(/v1/messages)。优先读通用 VITE_LLM_*
+// (与 Python agent 共用一套配置),回退旧 VITE_MINIMAX_*。注意:OpenAI 格式的 provider
+// 目前蜂群层不支持(只 agent 面板支持);此处仅让 Anthropic 兼容端点的配置生效。
+const LLM_BASE = (import.meta.env.VITE_LLM_BASE as string | undefined)
+  ?? (import.meta.env.VITE_MINIMAX_BASE as string | undefined) ?? '/minimax';
+const LLM_KEY = (import.meta.env.VITE_LLM_KEY as string | undefined)
+  ?? (import.meta.env.VITE_MINIMAX_KEY as string | undefined);
+const LLM_MODEL = (import.meta.env.VITE_LLM_MODEL as string | undefined)
+  ?? (import.meta.env.VITE_MINIMAX_MODEL as string | undefined) ?? 'MiniMax-M2';
 const ANTHROPIC_VERSION = '2023-06-01';
 
 // Anthropic Messages API 的响应形状:content 是 block 数组,文本在 type:'text' 的 block 里。
@@ -46,21 +52,21 @@ function textOf(res: AnthropicResponse): string {
  * Anthropic Messages 格式:system 顶层单独传,messages 只放对话轮,max_tokens 必填。
  */
 async function minimaxChat(prompt: string, opts: ChatOpts = {}): Promise<string> {
-  if (!MINIMAX_KEY) {
+  if (!LLM_KEY) {
     // 不静默回退假数据:缺 key 就明确报错,逼出真实配置。
     throw new Error(
-      '未配置 MiniMax API key。请在 .env.local 写入 VITE_MINIMAX_KEY(从 MiniMax 控制台取)。',
+      '未配置 LLM API key。请在设置里填写,或在 .env.local 写入 VITE_LLM_KEY。',
     );
   }
-  const res = await fetch(`${MINIMAX_BASE}/v1/messages`, {
+  const res = await fetch(`${LLM_BASE}/v1/messages`, {
     method: 'POST',
     headers: {
-      'x-api-key': MINIMAX_KEY,
+      'x-api-key': LLM_KEY,
       'anthropic-version': ANTHROPIC_VERSION,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: MINIMAX_MODEL,
+      model: LLM_MODEL,
       ...(opts.system ? { system: opts.system } : {}),
       messages: [{ role: 'user', content: prompt }],
       max_tokens: opts.maxTokens ?? 900,

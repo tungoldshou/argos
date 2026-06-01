@@ -150,6 +150,7 @@ const TR: Record<string, string> = {
   'Base URL': '端点地址', 'Model name': '模型名', 'API key': 'API 密钥',
   'applied — agent restarted': '已应用 —— agent 已带新配置重启',
   'paste your API key': '粘贴你的 API key',
+  'keep existing key — leave blank': '留空保留现有',
   // 首页示例任务(贴合 Argos:结构化、可验证的工程任务)
   'List the fields a REST pagination response should contain': '列出 REST 分页响应该包含的字段名',
   'Design a TODO data model — fields and types': '设计一个 TODO 数据模型 —— 字段与类型',

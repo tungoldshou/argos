@@ -233,7 +233,7 @@ function SettingsOverlay({ onClose }: { onClose: () => void }) {
               style={{ width: '100%', boxSizing: 'border-box', height: 34, padding: '0 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)', fontSize: 12, fontFamily: 'var(--mono)', marginBottom: 8 }} />
             <div style={{ display: 'flex', gap: 8 }}>
               <input type="password" value={keyInput} onChange={(e) => { setKeyInput(e.target.value); setStatus(''); }} onKeyDown={(e) => e.key === 'Enter' && save()}
-                placeholder={settings?.key_configured ? tr('API key') + ' (留空保留现有)' : tr('paste your API key')}
+                placeholder={settings?.key_configured ? tr('API key') + ' — ' + tr('keep existing key — leave blank') : tr('paste your API key')}
                 disabled={status === 'saving' || status === 'restarting'}
                 style={{ flex: 1, height: 36, padding: '0 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)', fontSize: 12.5, fontFamily: 'var(--mono)' }} />
               <button onClick={save} disabled={status === 'saving' || status === 'restarting' || (!keyInput.trim() && !settings?.key_configured)}
