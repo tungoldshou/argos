@@ -54,3 +54,9 @@ def test_session_busy_flag():
     # busy 是真实可置位的(并发轮拒绝据此判定)
     st.busy = True
     assert st.busy is True
+
+
+def test_run_active_flag_default():
+    # 全局单飞标志默认 False(无 run 在跑)。
+    import argos_agent.server as srv
+    assert srv._RUN_ACTIVE is False

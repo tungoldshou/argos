@@ -1,4 +1,4 @@
-"""配置:从仓库根的 .env.local 读 MiniMax key/model(与前端共用一份)。"""
+"""配置:从仓库根的 .env.local 读 LLM provider 配置(key/model/base/provider,与前端共用一份)。"""
 from __future__ import annotations
 
 import os

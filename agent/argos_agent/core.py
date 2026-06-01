@@ -1,4 +1,4 @@
-"""Argos agent 核心:LangGraph agent loop,模型走 MiniMax(Anthropic 兼容端)。
+"""Argos agent 核心:LangGraph agent loop,模型经 provider 工厂(Anthropic/OpenAI 兼容端,见 config.LLM_PROVIDER)。
 
 这是「发动机」:gather context → 模型决策 → 调工具 → 回灌 → 重复。
 verify 硬门禁 / escalation / 契约层(护城河)将以 middleware 形式挂在这里 —— 那是
@@ -52,7 +52,7 @@ def _llm():
 
 
 def final_text(message: AIMessage) -> str:
-    """从最终 AIMessage 抽纯文本。MiniMax 是推理模型,content 可能是
+    """从最终 AIMessage 抽纯文本。推理模型(如 MiniMax)的 content 可能是
     [{type:'thinking',...}, {type:'text', text:'...'}] —— 只取 text,丢 thinking。"""
     c = message.content
     if isinstance(c, str):
@@ -107,14 +107,3 @@ def build_agent_with_gate(
         middleware=middleware,
     )
     return agent, gate
-
-
-def build_agent(
-    tools: list | None = None,
-    system_prompt: str | None = None,
-    verify_cmd: str | None = None,
-    max_rounds: int = 3,
-):
-    """同 build_agent_with_gate,但只返回 agent(向后兼容)。"""
-    agent, _ = build_agent_with_gate(tools, system_prompt, verify_cmd, max_rounds)
-    return agent

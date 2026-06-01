@@ -36,6 +36,8 @@ class SessionState:
 
 SESSIONS: "OrderedDict[str, SessionState]" = OrderedDict()
 _SESSIONS_LOCK = threading.Lock()  # 保护 SESSIONS 的并发读改(取用/插入/淘汰)
+_RUN_ACTIVE = False  # 全局单飞:同一时刻只允许一个 run 执行(runtime._current 是进程级全局,
+                     # 并发 run 会串台,破坏沙盒隔离/篡改可见保证)。第二个并发 run 诚实拒绝。
 
 
 def _get_or_create_session(
@@ -106,14 +108,18 @@ async def _run_stream(
 ) -> AsyncIterator[str]:
     """跑一轮:取/建会话 → 用历史+本轮消息跑 agent → 流式回事件 → 新消息落回会话。
     verify/project/guard 在会话首轮锁定,后续轮继承。"""
+    global _RUN_ACTIVE
     st = _get_or_create_session(session_id, verify_cmd, project_dir, guard)
     with _SESSIONS_LOCK:
-        if st.busy:
-            # 同一会话已有一轮在跑:拒绝并发轮,避免历史竞争+全局 runtime 串台(诚实拒绝,不静默丢历史)。
+        if st.busy or _RUN_ACTIVE:
+            # 已有一轮在跑(本会话 st.busy,或任意会话 _RUN_ACTIVE):拒绝并发轮。
+            # runtime._current 是进程级全局,并发 run 会串台 → 破坏沙盒隔离/篡改可见保证。
+            # 诚实拒绝,不静默丢历史。
             yield _sse("session", {"session_id": st.session_id})
-            yield _sse("error", {"message": "该会话已有一轮在进行中,请等当前轮结束再继续。"})
+            yield _sse("error", {"message": "当前已有一个任务在运行,请等它结束再继续。Argos 同一时刻只跑一个任务,以保证沙盒隔离。"})
             return
         st.busy = True
+        _RUN_ACTIVE = True
     # 首帧回传 session_id,前端存下供后续轮。注意:紧跟其后可能立即来一个 error
     # 事件(如缺 key 配置),客户端无论如何都应先存下这个 id。
     yield _sse("session", {"session_id": st.session_id})
@@ -176,8 +182,11 @@ async def _run_stream(
         except Exception as e:
             yield _sse("error", {"message": str(e)})
     finally:
-        # 本轮无论怎么结束(正常/异常/早退)都释放 busy,否则会话会被永久锁死。
-        st.busy = False
+        # 本轮无论怎么结束(正常/异常/早退)都释放 busy + 全局单飞标志,否则会话/全局会被永久锁死。
+        # 这个 finally 必须万无一失:泄漏 _RUN_ACTIVE=True 会死锁所有后续 run。
+        with _SESSIONS_LOCK:
+            st.busy = False
+            _RUN_ACTIVE = False
 
 
 @app.get("/memory")
