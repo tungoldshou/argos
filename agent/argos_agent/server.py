@@ -18,7 +18,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from . import config, memory, runtime
-from .core import build_agent_with_gate, final_text
+from .core import build_agent_with_gate, final_text, text_delta
 from .verify_gate import VerifyGateMiddleware
 
 MAX_SESSIONS = 50  # 进程内会话上限,LRU 淘汰最旧(防内存无限增长)
@@ -143,11 +143,25 @@ async def _run_stream(
         history = st.messages + [("user", goal)]
         final_msgs = st.messages
         try:
-            async for chunk in agent.astream({"messages": history}, stream_mode="values"):
+            async for mode, chunk in agent.astream(
+                {"messages": history}, stream_mode=["values", "messages"]
+            ):
+                if mode == "messages":
+                    # chunk = (message_chunk, metadata)。messages 模式实际只产 AIMessageChunk;
+                    # 但防御性卡 class:HumanMessage/ToolMessage 的 content 是字符串(text_delta 会原样返回),
+                    # 若漏进 messages 流会把用户输入/工具结果当 token 外发。
+                    msg_chunk, _meta = chunk
+                    if msg_chunk.__class__.__name__ != "AIMessageChunk":
+                        continue
+                    delta = text_delta(msg_chunk)
+                    if delta:
+                        yield _sse("token", {"text": delta})
+                    continue
+                # mode == "values":完整 state,驱动 tool/verify/escalation 检测 + message 定稿。
                 msgs = chunk.get("messages", [])
                 if not msgs:
                     continue
-                final_msgs = msgs  # 记录最新完整消息列表(含本轮所有新增)
+                final_msgs = msgs
                 last = msgs[-1]
                 kind = last.__class__.__name__
                 calls = getattr(last, "tool_calls", None)
@@ -163,6 +177,7 @@ async def _run_stream(
                 elif kind == "AIMessage":
                     txt = final_text(last)
                     if txt:
+                        # message 仍发:作为该段答复的权威定稿,前端用它覆盖累积的 token(防漂移)。
                         yield _sse("message", {"text": txt})
             # 本轮跑完:把完整消息历史落回会话,供下一轮延续上下文。
             st.messages = list(final_msgs)

@@ -68,6 +68,19 @@ def final_text(message: AIMessage) -> str:
     return str(c)
 
 
+def text_delta(chunk) -> str:
+    """从流式 message chunk 抽 text 增量(丢 thinking)。
+    推理模型的增量 content 可能是 [{type:'text', text:'...'}] 或 [{type:'thinking',...}];
+    只取 text,thinking 不外发(与 final_text 同源策略)。工具决策轮常只有 thinking
+    / 无 text → 返回空 → server 不发 token 事件,避免噪声。"""
+    c = getattr(chunk, "content", "")
+    if isinstance(c, str):
+        return c
+    if isinstance(c, list):
+        return "".join(b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text")
+    return ""
+
+
 # 长任务时,上下文逼近上限会让模型召回变差(context rot)甚至超限报错。
 # compaction:到阈值时把较早的对话摘要压缩、保留最近若干条,让 agent 能跑长任务不断。
 # 用便宜模型自己做摘要(够用且省钱)。阈值设高,只在真正长的任务才触发,短任务零开销。
