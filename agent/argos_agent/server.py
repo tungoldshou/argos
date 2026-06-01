@@ -99,35 +99,41 @@ def _sse(event: str, data: dict) -> str:
 
 async def _run_stream(
     goal: str,
+    session_id: str | None = None,
     verify_cmd: str | None = None,
     project_dir: str | None = None,
     guard: list[str] | None = None,
 ) -> AsyncIterator[str]:
-    """跑 agent,把每一步(模型决策/工具调用/工具结果/验证 bounce/升级求助/篡改警告/
-    最终答案)作为 SSE 事件流出。verify_cmd 非空时挂 verify 硬门禁;project_dir 非空时
-    在用户项目里干活并监控测试篡改。"""
-    # 切运行时上下文:有 project_dir → 项目模式(用户项目);否则沙盒。
-    if project_dir:
-        runtime.use_project(project_dir)
-        if guard:
-            runtime.guard_files(guard)
+    """跑一轮:取/建会话 → 用历史+本轮消息跑 agent → 流式回事件 → 新消息落回会话。
+    verify/project/guard 在会话首轮锁定,后续轮继承。"""
+    st = _get_or_create_session(session_id, verify_cmd, project_dir, guard)
+    # 首帧回传 session_id,前端存下供后续轮。
+    yield _sse("session", {"session_id": st.session_id})
+
+    # 切运行时上下文(用会话锁定的值,非本轮请求值)。
+    if st.project_dir:
+        runtime.use_project(st.project_dir)
+        if st.guard:
+            runtime.guard_files(st.guard)
     else:
         runtime.use_sandbox()
     try:
-        # 传 goal → 结构化任务自动注入契约层约束(8→0 资产);非结构化不注入。
-        agent, gate = build_agent_with_gate(verify_cmd=verify_cmd, goal=goal)
-    except Exception as e:  # 配置缺失等
+        agent, gate = build_agent_with_gate(verify_cmd=st.verify_cmd, goal=goal)
+    except Exception as e:
         yield _sse("error", {"message": str(e)})
         runtime.use_sandbox()
         return
+    st.gate = gate
 
     yield _sse("start", {"goal": goal})
+    history = st.messages + [("user", goal)]
+    final_msgs = st.messages
     try:
-        # astream 按 step 产出中间状态;每个 chunk 含新增的 messages。
-        async for chunk in agent.astream({"messages": [("user", goal)]}, stream_mode="values"):
+        async for chunk in agent.astream({"messages": history}, stream_mode="values"):
             msgs = chunk.get("messages", [])
             if not msgs:
                 continue
+            final_msgs = msgs  # 记录最新完整消息列表(含本轮所有新增)
             last = msgs[-1]
             kind = last.__class__.__name__
             calls = getattr(last, "tool_calls", None)
@@ -137,29 +143,24 @@ async def _run_stream(
             elif kind == "ToolMessage":
                 yield _sse("tool_result", {"content": content[:2000]})
             elif kind == "HumanMessage" and VerifyGateMiddleware.ESCALATION_TAG in content:
-                # 门禁判定卡住 → 诚实升级,需人工指路。
                 yield _sse("escalation", {"detail": content[:1500]})
             elif kind == "HumanMessage" and VerifyGateMiddleware.BOUNCE_TAG in content:
-                # 门禁拦截了一次"假完成",把真实验证失败 bounce 回去。
                 yield _sse("verify_failed", {"detail": content[:1500]})
             elif kind == "AIMessage":
                 txt = final_text(last)
                 if txt:
                     yield _sse("message", {"text": txt})
-        # 篡改可见:project 模式下若 agent 动了被保护的测试文件,显著警告(诚实)。
-        tampered = runtime.detect_tampering() if project_dir else []
+        # 本轮跑完:把完整消息历史落回会话,供下一轮延续上下文。
+        st.messages = list(final_msgs)
+        tampered = runtime.detect_tampering() if st.project_dir else []
         if tampered:
             yield _sse("tampering", {"files": tampered})
-        # 收尾:若门禁标记 escalated,done 里带上诚实结论(供 UI 区分"真完成"vs"卡住了")。
         escalated = bool(gate and gate.escalated)
-        # 沉淀任务记忆(真实、随任务生长)。verdict 诚实推断:
-        #   有 verify_cmd 且未升级 → passed(真过了门禁);升级 → failed(诚实记失败);
-        #   无 verify_cmd → none(不可验证,不假装通过)。
-        verdict = ("failed" if escalated else "passed") if verify_cmd else None
+        verdict = ("failed" if escalated else "passed") if st.verify_cmd else None
         try:
-            memory.record_task(goal=goal, verdict=verdict, model=config.MINIMAX_MODEL)
+            memory.record_task(goal=goal, verdict=verdict, model=config.LLM_MODEL)
         except Exception:
-            pass  # 记忆写入失败不该影响任务结果本身
+            pass
         if escalated:
             yield _sse("done", {"resolved": False, "escalated": True, "attempts": gate.attempts, "tampered": tampered})
         else:
@@ -178,6 +179,6 @@ def get_memory() -> dict:
 @app.post("/run")
 async def run(req: RunRequest) -> StreamingResponse:
     return StreamingResponse(
-        _run_stream(req.goal, req.verify_cmd, req.project_dir, req.guard_files),
+        _run_stream(req.goal, req.session_id, req.verify_cmd, req.project_dir, req.guard_files),
         media_type="text/event-stream",
     )
