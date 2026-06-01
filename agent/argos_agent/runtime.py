@@ -15,12 +15,18 @@
 """
 from __future__ import annotations
 
+import hashlib
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 _DEFAULT_WS = Path(os.environ.get("ARGOS_WORKSPACE", Path.home() / ".argos" / "workspace"))
 _DEFAULT_VERIFY = Path(os.environ.get("ARGOS_VERIFY_DIR", Path.home() / ".argos" / "verify"))
+
+
+def _sha256(path: Path) -> str:
+    """文件内容的 sha256 十六进制摘要 —— 防篡改指纹(替代可被 touch 绕过的 mtime/size)。"""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 @dataclass
@@ -30,8 +36,8 @@ class RunContext:
     verify_dir: Path
     # project 模式 = 在用户自己的项目里干活(测试在项目内,用篡改可见而非隔离)。
     project_mode: bool = False
-    # 受保护文件指纹(project 模式下,验证相关文件的 mtime/size,用于检测篡改)。
-    guarded: dict[str, tuple[float, int]] = field(default_factory=dict)
+    # 受保护文件指纹(project 模式下,验证相关文件的内容 sha256,用于检测篡改)。
+    guarded: dict[str, str] = field(default_factory=dict)
 
 
 # 进程内当前上下文(单 run 串行执行,够用;并发场景未来再隔离)。
@@ -58,26 +64,24 @@ def use_project(project_dir: str) -> RunContext:
 
 
 def guard_files(paths: list[str]) -> None:
-    """登记需保护的文件(通常是测试文件),记录指纹。project 模式下 agent 技术上能改它们,
-    所以改用'篡改可见':run 结束时对比指纹,改动了就警告。"""
+    """登记需保护的文件(通常是测试文件),记录内容 sha256。project 模式下 agent 技术上能改它们,
+    所以靠'篡改可见 + 硬门禁':run 内验证时对比指纹,改动了就判 unverifiable。"""
     ctx = _current
     for rel in paths:
-        f = (ctx.workspace / rel)
-        if f.exists():
-            st = f.stat()
-            ctx.guarded[rel] = (st.st_mtime, st.st_size)
+        f = ctx.workspace / rel
+        if f.exists() and f.is_file():
+            ctx.guarded[rel] = _sha256(f)
 
 
 def detect_tampering() -> list[str]:
-    """返回被改动过的受保护文件列表(指纹变了)。空 = 没动测试,诚实。"""
+    """返回被改动过的受保护文件列表(内容 sha256 变了)。空 = 没动测试,诚实。"""
     ctx = _current
-    changed = []
-    for rel, (mtime, size) in ctx.guarded.items():
+    changed: list[str] = []
+    for rel, digest in ctx.guarded.items():
         f = ctx.workspace / rel
         if not f.exists():
             changed.append(rel + "(被删除)")
             continue
-        st = f.stat()
-        if (st.st_mtime, st.st_size) != (mtime, size):
+        if _sha256(f) != digest:
             changed.append(rel + "(被修改)")
     return changed

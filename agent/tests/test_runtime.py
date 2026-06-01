@@ -57,3 +57,17 @@ def test_tamper_detection_flags_deleted_test(tmp_path):
     (tmp_path / "test_x.py").unlink()
     flagged = runtime.detect_tampering()
     assert any("test_x.py" in f and "删除" in f for f in flagged)
+
+
+def test_tamper_detection_catches_same_size_same_mtime(tmp_path):
+    """旧 (mtime,size) 指纹能被 touch -r + 等长改写骗过;sha256 必须仍抓到。"""
+    import os
+    runtime.use_project(str(tmp_path))
+    f = tmp_path / "test_a.py"
+    f.write_text("assert aaa\n")          # 11 字节
+    st0 = f.stat()
+    runtime.guard_files(["test_a.py"])
+    f.write_text("assert bbb\n")          # 同样 11 字节(骗过 size)
+    os.utime(f, (st0.st_atime, st0.st_mtime))  # 复原 mtime(骗过 mtime)
+    flagged = runtime.detect_tampering()
+    assert any("test_a.py" in x for x in flagged)  # 内容变了 → sha256 抓到
