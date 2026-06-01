@@ -24,11 +24,15 @@ export function AgentPanel({ onClose, initialGoal, onComplete }: { onClose: () =
   const [verifyCmd, setVerifyCmd] = useState('');
   const [projectDir, setProjectDir] = useState('');
   const [guardFiles, setGuardFiles] = useState('');
-  const [log, setLog] = useState<LogLine[]>([]);
+  // 聊天记录:每一项是一轮(用户输入 + 该轮 agent 事件流)。
+  const [turns, setTurns] = useState<{ user: string; lines: LogLine[] }[]>([]);
   const [running, setRunning] = useState(false);
   const [health, setHealth] = useState<{ ok: boolean; model?: string } | null>(null);
+  const [sessionId, setSessionId] = useState<string | undefined>(undefined);
+  const started = turns.length > 0 || running; // 会话已开始 → 锁定 setup、折叠示例
   const abortRef = useRef<(() => void) | null>(null);
   const runRef = useRef<() => void>(() => {});
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   // 面板打开时探一次 agent 服务健康,驱动「就绪 / 未连接」提示。
   useEffect(() => {
@@ -47,17 +51,25 @@ export function AgentPanel({ onClose, initialGoal, onComplete }: { onClose: () =
   }, [initialGoal]);
 
   const push = (kind: AgentEvent['type'], text: string) =>
-    setLog((l) => [...l, { kind, text }]);
+    setTurns((ts) => {
+      if (ts.length === 0) return ts;
+      const copy = ts.slice();
+      const last = copy[copy.length - 1];
+      copy[copy.length - 1] = { ...last, lines: [...last.lines, { kind, text }] };
+      return copy;
+    });
 
   const run = () => {
     const g = goal.trim();
     if (!g || running) return;
-    setLog([]);
+    setTurns((ts) => [...ts, { user: g, lines: [] }]);
+    setGoal('');
     setRunning(true);
     abortRef.current = runAgent(
       g,
       (e) => {
-        if (e.type === 'start') push('start', `目标:${e.data.goal}`);
+        if (e.type === 'session') { setSessionId(String(e.data.session_id || '')); return; }
+        if (e.type === 'start') return;
         else if (e.type === 'tool_call') {
           const calls = (e.data.calls as { name: string; args: unknown }[]) ?? [];
           calls.forEach((c) => push('tool_call', `调用工具 ${c.name}(${JSON.stringify(c.args)})`));
@@ -73,85 +85,56 @@ export function AgentPanel({ onClose, initialGoal, onComplete }: { onClose: () =
         if (err) push('error', err);
         setRunning(false);
         abortRef.current = null;
-        // 任务正常收尾(非报错)→ 通知上层刷新记忆,让脑图长出这次任务。
         if (!err) onComplete?.();
       },
       {
+        sessionId,
         verifyCmd: verifyCmd.trim() || undefined,
         projectDir: projectDir.trim() || undefined,
         guardFiles: guardFiles.trim() ? guardFiles.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
       },
     );
   };
-
   runRef.current = run;
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [turns, running]);
 
   const stop = () => { abortRef.current?.(); setRunning(false); abortRef.current = null; };
 
   return (
-    <Overlay title="Agent" icon="sparkle" sub="独立通用智能体 · LangGraph + MiniMax" onClose={onClose}>
+    <Overlay title="Agent" icon="sparkle" sub="独立通用智能体 · LangGraph" onClose={onClose}>
       {/* 服务状态条 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12, fontSize: 11.5, fontFamily: 'var(--mono)', color: health?.ok ? 'var(--live, #45e0a0)' : 'var(--text-3)' }}>
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: health?.ok ? 'var(--live, #45e0a0)' : 'var(--text-3)', boxShadow: health?.ok ? '0 0 7px var(--live, #45e0a0)' : 'none' }} />
         {health === null ? '检测 agent 服务…' : health.ok ? `agent 就绪 · ${health.model}` : 'agent 服务未连接(确认 Python 服务已启动)'}
       </div>
 
-      {/* 目标输入 */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <input
-          value={goal}
-          onChange={(e) => setGoal(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && run()}
-          placeholder="给 Argos 一个目标…"
-          disabled={running}
-          style={{ flex: 1, height: 38, padding: '0 12px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--surface-2, rgba(255,255,255,.03))', color: 'var(--text-1)', fontSize: 13 }}
-        />
-        <button onClick={running ? stop : run} disabled={!running && !goal.trim()}
-          style={{ height: 38, padding: '0 16px', borderRadius: 9, border: 'none', background: running ? '#ff7a4d' : 'var(--accent)', color: '#1a1205', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-          {running ? '停止' : '运行'}
-        </button>
-      </div>
+      {/* 任务设置:仅会话开始前可改;开始后折叠为只读摘要(首轮锁定可见) */}
+      {!started ? (
+        <div style={{ marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <input value={verifyCmd} onChange={(e) => setVerifyCmd(e.target.value)}
+            placeholder='验证命令(可选,如 python3 check.py)— 给了它,"完成"必须过验证'
+            style={{ width: '100%', boxSizing: 'border-box', height: 32, padding: '0 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2, rgba(255,255,255,.02))', color: 'var(--text-2)', fontSize: 12, fontFamily: 'var(--mono)' }} />
+          <input value={projectDir} onChange={(e) => setProjectDir(e.target.value)}
+            placeholder="项目目录(可选,如 /Users/you/myproject)— 在你自己的项目里干活"
+            style={{ width: '100%', boxSizing: 'border-box', height: 32, padding: '0 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2, rgba(255,255,255,.02))', color: 'var(--text-2)', fontSize: 12, fontFamily: 'var(--mono)' }} />
+          {projectDir.trim() && (
+            <input value={guardFiles} onChange={(e) => setGuardFiles(e.target.value)}
+              placeholder="监控的测试文件(逗号分隔)— agent 改了会警告"
+              style={{ width: '100%', boxSizing: 'border-box', height: 30, padding: '0 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2, rgba(255,255,255,.02))', color: 'var(--text-3)', fontSize: 11.5, fontFamily: 'var(--mono)' }} />
+          )}
+        </div>
+      ) : (verifyCmd.trim() || projectDir.trim()) ? (
+        <div style={{ marginBottom: 12, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {verifyCmd.trim() && <span style={{ fontSize: 10.5, fontFamily: 'var(--mono)', color: 'var(--accent)', border: '1px solid color-mix(in oklab,var(--accent),transparent 70%)', borderRadius: 6, padding: '2px 8px' }}>🛡 verify: {verifyCmd.trim()}</span>}
+          {projectDir.trim() && <span style={{ fontSize: 10.5, fontFamily: 'var(--mono)', color: 'var(--text-3)', border: '1px solid var(--border)', borderRadius: 6, padding: '2px 8px' }}>📁 {projectDir.trim()}</span>}
+        </div>
+      ) : null}
 
-      {/* verify 硬门禁:可选的验证命令。给了它,agent 称"完成"必须过这条命令(退出码0),
-          否则被拦回去重试,反复不过则诚实升级求助。这是 Argos 的核心护城河,在 UI 可见。 */}
-      <div style={{ marginBottom: 12 }}>
-        <input
-          value={verifyCmd}
-          onChange={(e) => setVerifyCmd(e.target.value)}
-          placeholder='验证命令(可选,如 python3 check.py)— 给了它,"完成"必须过验证'
-          disabled={running}
-          style={{ width: '100%', boxSizing: 'border-box', height: 32, padding: '0 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2, rgba(255,255,255,.02))', color: 'var(--text-2)', fontSize: 12, fontFamily: 'var(--mono)' }}
-        />
-        {verifyCmd.trim() && (
-          <div style={{ marginTop: 5, fontSize: 10.5, color: 'var(--accent)', fontFamily: 'var(--mono)' }}>
-            🛡 verify 硬门禁已启用 — 退出码裁决,agent 无法假装完成
-          </div>
-        )}
-      </div>
-
-      {/* 项目模式:让 agent 在你自己的项目里干活、跑你自己的测试(懂技术用户场景)。
-          留空 = 默认沙盒。填了项目路径 + 要监控的测试文件,agent 若改测试会被警告(篡改可见)。 */}
-      <div style={{ marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <input
-          value={projectDir}
-          onChange={(e) => setProjectDir(e.target.value)}
-          placeholder="项目目录(可选,如 /Users/you/myproject)— 在你自己的项目里干活"
-          disabled={running}
-          style={{ width: '100%', boxSizing: 'border-box', height: 32, padding: '0 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2, rgba(255,255,255,.02))', color: 'var(--text-2)', fontSize: 12, fontFamily: 'var(--mono)' }}
-        />
-        {projectDir.trim() && (
-          <input
-            value={guardFiles}
-            onChange={(e) => setGuardFiles(e.target.value)}
-            placeholder="监控的测试文件(逗号分隔,如 tests/test_x.py)— agent 改了会警告"
-            disabled={running}
-            style={{ width: '100%', boxSizing: 'border-box', height: 30, padding: '0 11px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2, rgba(255,255,255,.02))', color: 'var(--text-3)', fontSize: 11.5, fontFamily: 'var(--mono)' }}
-          />
-        )}
-      </div>
-
-      {/* 空态:示例 */}
-      {log.length === 0 && !running && (
+      {/* 空态示例:仅未开始时 */}
+      {!started && (
         <div style={{ marginTop: 4 }}>
           <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>试试:</div>
           {EXAMPLES.map((ex) => (
@@ -163,19 +146,31 @@ export function AgentPanel({ onClose, initialGoal, onComplete }: { onClose: () =
         </div>
       )}
 
-      {/* 事件流 */}
-      {log.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-          {log.map((l, i) => (
-            <LogRow key={i} line={l} />
-          ))}
-          {running && (
-            <div style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--text-3)' }}>
-              <span style={{ animation: 'blink-caret 1s step-end infinite', color: 'var(--accent)' }}>▋</span> 运行中…
-            </div>
-          )}
-        </div>
-      )}
+      {/* 聊天记录:逐轮渲染(用户气泡 + 该轮事件流) */}
+      <div ref={scrollRef} style={{ display: 'flex', flexDirection: 'column', gap: 14, maxHeight: '48vh', overflow: 'auto', marginBottom: 12 }}>
+        {turns.map((turn, ti) => (
+          <div key={ti} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            <div style={{ alignSelf: 'flex-end', maxWidth: '85%', padding: '8px 12px', borderRadius: 12, background: 'color-mix(in oklab,var(--accent),transparent 86%)', color: 'var(--text-1)', fontSize: 13, lineHeight: 1.5 }}>{turn.user}</div>
+            {turn.lines.map((l, i) => <LogRow key={i} line={l} />)}
+          </div>
+        ))}
+        {running && (
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--text-3)' }}>
+            <span style={{ animation: 'blink-caret 1s step-end infinite', color: 'var(--accent)' }}>▋</span> 运行中…
+          </div>
+        )}
+      </div>
+
+      {/* 常驻 composer:run 结束后保持可用,可继续追问(持续对话核心) */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input value={goal} onChange={(e) => setGoal(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && run()}
+          placeholder={started ? '继续追问…' : '给 Argos 一个目标…'} disabled={running}
+          style={{ flex: 1, height: 38, padding: '0 12px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--surface-2, rgba(255,255,255,.03))', color: 'var(--text-1)', fontSize: 13 }} />
+        <button onClick={running ? stop : run} disabled={!running && !goal.trim()}
+          style={{ height: 38, padding: '0 16px', borderRadius: 9, border: 'none', background: running ? '#ff7a4d' : 'var(--accent)', color: '#1a1205', fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          {running ? '停止' : started ? '发送' : '运行'}
+        </button>
+      </div>
     </Overlay>
   );
 }
