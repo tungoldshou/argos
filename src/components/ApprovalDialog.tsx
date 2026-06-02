@@ -58,6 +58,7 @@ export function ApprovalDialog({ sessionId }: Props) {
     <div
       role="dialog"
       aria-modal="true"
+      aria-labelledby="approval-dialog-title"
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,
         background: 'rgba(0,0,0,0.55)',
@@ -83,7 +84,7 @@ export function ApprovalDialog({ sessionId }: Props) {
             <Icon name="wrench" size={17} />
           </span>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
+            <div id="approval-dialog-title" style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
               Argos 想执行一个有副作用的操作
             </div>
             <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
