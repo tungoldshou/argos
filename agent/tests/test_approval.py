@@ -71,5 +71,69 @@ def test_requires_approval_decorator_marks_metadata():
     assert write_file._approval_required is True
     assert write_file._approval_description == "写入文件 {path}"
     assert write_file._approval_risk == "low"
-    # 装饰器不能破坏原函数可调用性
-    assert write_file("a.txt", "x") == "wrote a.txt"
+    # fail-closed:无 gate 上下文 → 默认拒绝(绝不偷偷放行),返回错误字符串而非抛异常
+    assert "默认拒绝" in write_file("a.txt", "x")
+
+
+def test_decorator_runs_original_when_gate_approves():
+    """装饰器不破坏原函数:装一个自动批准 gate,调用应跑到真实实现。"""
+    @approval.requires_approval(description="写入文件 {path}", risk="low")
+    def write_file(path: str, content: str) -> str:
+        """写入文件"""
+        return f"wrote {path}"
+
+    gate = approval.ApprovalGate()
+
+    async def _auto(payload, timeout=60.0):
+        return approval.Decision(approved=True, scope="once")
+
+    gate.request = _auto  # type: ignore[assignment]
+    token = approval.set_current_gate(gate)
+    try:
+        assert write_file("a.txt", "x") == "wrote a.txt"
+    finally:
+        approval.reset_current_gate(token)
+
+
+# ── 缺口补齐:幂等/取消/不可 JSON 值/async 工具/headless 路径 ─────────────────────
+def test_approve_unknown_call_id_is_noop():
+    gate = approval.ApprovalGate()
+    assert gate.approve("nonexistent") is False
+    assert gate.deny("nonexistent") is False
+
+
+@pytest.mark.asyncio
+async def test_cancel_all_denies_pending():
+    gate = approval.ApprovalGate()
+    t1 = asyncio.create_task(gate.request({"tool": "a"}, timeout=5.0))
+    t2 = asyncio.create_task(gate.request({"tool": "b"}, timeout=5.0))
+    await asyncio.sleep(0)
+    assert len(gate.pending()) == 2
+    n = gate.cancel_all()
+    assert n == 2
+    r1, r2 = await asyncio.gather(t1, t2)
+    assert r1.approved is False and "session" in r1.reason
+    assert r2.approved is False
+    assert gate.pending() == []
+
+
+def test_decorator_preserves_name_and_docstring():
+    @approval.requires_approval(description="x", risk="low")
+    def my_tool(a: str) -> str:
+        """我的工具说明"""
+        return a
+
+    assert my_tool.__name__ == "my_tool"
+    assert "我的工具说明" in (my_tool.__doc__ or "")
+
+
+def test_decorator_wraps_async_function():
+    @approval.requires_approval(description="async 工具", risk="low")
+    async def my_async_tool(x: int) -> str:
+        return f"ok-{x}"
+
+    import inspect
+    assert inspect.iscoroutinefunction(my_async_tool)
+    # 标记属性也应在 wrapper 上
+    assert getattr(my_async_tool, "_approval_required", False) is True
+    assert getattr(my_async_tool, "_approval_description", None) == "async 工具"

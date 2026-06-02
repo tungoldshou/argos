@@ -32,8 +32,8 @@ class Decision:
 @dataclass
 class _Pending:
     call_id: str
-    payload: dict
-    created_at: float
+    payload: dict[str, Any]
+    created_at: float  # 留作 UI 排序/超时提示用,目前未消费
     future: asyncio.Future[Decision]
 
 
@@ -44,7 +44,7 @@ class _SessionApproval:
     approved_at: float
 
 
-def _hash_payload(payload: dict) -> str:
+def _hash_payload(payload: dict[str, Any]) -> str:
     """稳定 hash —— 顺序无关,便于同 payload 命中缓存。"""
     return json.dumps(payload, sort_keys=True, ensure_ascii=False)
 
@@ -59,7 +59,7 @@ class ApprovalGate:
     def pending(self) -> list[_Pending]:
         return list(self._pending.values())
 
-    async def request(self, payload: dict, timeout: float = 60.0) -> Decision:
+    async def request(self, payload: dict[str, Any], timeout: float = 60.0) -> Decision:
         """阻塞等用户决定。session-scope 缓存命中 → 立即放行。"""
         key = _hash_payload(payload)
         cached = self._session_approvals.get(key)
@@ -86,8 +86,9 @@ class ApprovalGate:
         if p is None:
             return False
         if scope == "session":
-            self._session_approvals[_hash_payload(p.payload)] = _SessionApproval(
-                payload_hash=_hash_payload(p.payload), approved_at=time.time(),
+            key = _hash_payload(p.payload)
+            self._session_approvals[key] = _SessionApproval(
+                payload_hash=key, approved_at=time.time(),
             )
         if not p.future.done():
             p.future.set_result(Decision(approved=True, scope=scope))
@@ -117,30 +118,54 @@ def requires_approval(description: str, risk: RiskLevel = "medium") -> Callable:
     工具本体用字符串返回错误(同其他工具约定),让模型看到并换路,而不抛异常。"""
 
     def deco(fn: Callable) -> Callable:
-        fn._approval_required = True  # type: ignore[attr-defined]
-        fn._approval_description = description  # type: ignore[attr-defined]
-        fn._approval_risk = risk  # type: ignore[attr-defined]
         # 用 inspect 拿参数名,这样 _serialize_args 能闭包到 fn
         try:
-            param_names = list(inspect.signature(fn).parameters.keys())
+            sig = inspect.signature(fn)
+            param_names = list(sig.parameters.keys())
+            var_positional = {n for n, p in sig.parameters.items()
+                              if p.kind == inspect.Parameter.VAR_POSITIONAL}
+            var_keyword = {n for n, p in sig.parameters.items()
+                           if p.kind == inspect.Parameter.VAR_KEYWORD}
         except Exception:
             param_names = []
+            var_positional = set()
+            var_keyword = set()
 
-        def _serialize(args: tuple, kwargs: dict) -> dict:
-            out: dict = {}
+        def _serialize(args: tuple, kwargs: dict[str, Any]) -> dict[str, Any]:
+            out: dict[str, Any] = {}
+            extra_pos: list[Any] = []
             for i, a in enumerate(args):
-                key = param_names[i] if i < len(param_names) else f"arg{i}"
+                if i < len(param_names) and param_names[i] in var_positional:
+                    extra_pos.append(a)
+                    continue
+                if i < len(param_names) and param_names[i] not in var_keyword:
+                    key = param_names[i]
+                else:
+                    extra_pos.append(a)
+                    continue
                 try:
                     json.dumps(a)
                     out[key] = a
                 except (TypeError, ValueError):
                     out[key] = repr(a)
+            if extra_pos:
+                try:
+                    json.dumps(extra_pos)
+                    out["*args"] = extra_pos
+                except (TypeError, ValueError):
+                    out["*args"] = repr(extra_pos)
+            extra_kw: dict[str, Any] = {}
             for k, v in kwargs.items():
+                if k in var_keyword:
+                    extra_kw[k] = v
+                    continue
                 try:
                     json.dumps(v)
                     out[k] = v
                 except (TypeError, ValueError):
                     out[k] = repr(v)
+            if extra_kw:
+                out["**kwargs"] = extra_kw
             return out
 
         async def async_wrapper(*args: Any, **kwargs: Any) -> str:
@@ -163,16 +188,18 @@ def requires_approval(description: str, risk: RiskLevel = "medium") -> Callable:
             return await _call_original(fn, args, kwargs)
 
         def sync_wrapper(*args: Any, **kwargs: Any) -> str:
-            # 无 async 上下文(如纯同步测试)且无 gate → 退化执行(测试不该被审批阻塞)。
+            gate = _current_gate()
+            if gate is None:
+                return "错误:该工具需要用户审批但当前没有审批上下文,默认拒绝。"
+            if asyncio.iscoroutinefunction(fn):
+                return "错误:同步工具包装器收到了异步调用路径,这是内部错误。"
             try:
                 asyncio.get_running_loop()
                 in_loop = True
             except RuntimeError:
                 in_loop = False
-            gate = _current_gate()
-            if gate is None and not in_loop:
-                # headless 模式:无 gate、无 loop → 直接调原函数
-                return _call_original_sync(fn, args, kwargs)
+            if in_loop:
+                return "错误:同步工具不能在事件循环中等待审批,请改用异步版本。"
             return asyncio.run(async_wrapper(*args, **kwargs))
 
         wrapper = async_wrapper if asyncio.iscoroutinefunction(fn) else sync_wrapper
@@ -204,15 +231,9 @@ def _current_gate() -> "ApprovalGate | None":
     return _current_gate_var.get()
 
 
-async def _call_original(fn: Callable, args: tuple, kwargs: dict) -> Any:
+async def _call_original(fn: Callable, args: tuple, kwargs: dict[str, Any]) -> Any:
     """调用原工具(同步/异步都支持)。"""
     res = fn(*args, **kwargs)
     if asyncio.iscoroutine(res):
         return await res
-    return res
-
-
-def _call_original_sync(fn: Callable, args: tuple, kwargs: dict) -> Any:
-    """同步路径:直接调原函数(无审批,headless 用)。"""
-    res = fn(*args, **kwargs)
     return res
