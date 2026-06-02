@@ -65,3 +65,29 @@ def test_build_agent_accepts_checkpointer(monkeypatch):
     agent, gate = core.build_agent_with_gate(tools=[], verify_cmd=None, goal=None,
                                              compaction=False, checkpointer=None)
     assert agent is not None and gate is None
+
+
+def test_llm_tier_param_accepted(monkeypatch):
+    """_llm 接受 tier 参数(默认 'worker' 行为不变,planner 走 M3 强模型)。"""
+    from argos_agent import core, config
+    monkeypatch.setattr(config, "LLM_KEY", "test-key")
+    # 替 ChatAnthropic 为 stub(签名与 plan 一致)
+    captured = {}
+    def stub_chat(model, api_key, base_url, max_tokens, temperature):
+        captured["model"] = model
+        return object()
+    monkeypatch.setattr(core, "ChatAnthropic", stub_chat)
+    core._llm(tier="planner")
+    assert "model" in captured
+
+
+def test_llm_default_tier_is_worker(monkeypatch):
+    from argos_agent import core, config
+    monkeypatch.setattr(config, "LLM_KEY", "test-key")
+    captured = {}
+    def stub_chat(model, api_key, base_url, max_tokens, temperature):
+        captured["model"] = model
+        return object()
+    monkeypatch.setattr(core, "ChatAnthropic", stub_chat)
+    core._llm()
+    assert captured["model"] == config.LLM_MODEL  # 默认走 LLM_MODEL,行为与旧版一致

@@ -34,14 +34,15 @@ HONESTY_SYSTEM = (
 )
 
 
-def _llm():
-    """按 provider 造对应的 LangChain chat 模型。覆盖任意 OpenAI/Anthropic 兼容端点。"""
+def _llm(tier: str = "worker"):
+    """按 provider 造对应的 LangChain chat 模型。tier="planner" 走 M3 强模型(本项目本就是 M3,
+    planner tier 沿用同 LLM 但留接缝以便将来分级);tier="worker"(默认) 行为与旧版完全一致。"""
     if not config.LLM_KEY:
         raise RuntimeError("缺 LLM key(VITE_LLM_KEY / VITE_MINIMAX_KEY),请检查 .env.local 或环境变量")
     if config.LLM_PROVIDER == "openai":
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
-            model=config.LLM_MODEL,
+            model=config.LLM_MODEL,  # tier 仅作接缝,本项目模型都是 M3
             api_key=config.LLM_KEY,
             base_url=config.LLM_BASE,
             max_tokens=2048,
