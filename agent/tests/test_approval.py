@@ -137,3 +137,53 @@ def test_decorator_wraps_async_function():
     # 标记属性也应在 wrapper 上
     assert getattr(my_async_tool, "_approval_required", False) is True
     assert getattr(my_async_tool, "_approval_description", None) == "async 工具"
+
+
+# ── 集成铁证:@tool 套在 @requires_approval 外层时,签名/schema 必须保住 ───────────
+def test_decorator_composes_with_langchain_tool_schema():
+    """`@tool` 在外、`@requires_approval` 在内时,langchain 必须能从 __wrapped__
+    透传出原签名 → 工具 args schema 是具名参数,而非 (*args, **kwargs)。
+    这是审批闸能真正套到工具上的前提,缺了模型就拿不到参数 schema。"""
+    from langchain_core.tools import tool as lc_tool
+
+    @lc_tool
+    @approval.requires_approval(description="写入 {path}", risk="low")
+    def write_thing(path: str, content: str) -> str:
+        """写"""
+        return f"ok {path}"
+
+    assert set(write_thing.args.keys()) == {"path", "content"}
+    # 标记落在底层可调用上(StructuredTool 是 pydantic 模型,挂不住自定义属性)
+    underlying = write_thing.coroutine or write_thing.func
+    assert getattr(underlying, "_approval_required", False) is True
+
+
+@pytest.mark.asyncio
+async def test_decorator_tool_ainvoke_respects_gate():
+    """经 langchain `.ainvoke` 调用时:无 gate → fail-closed;有自动批准 gate → 真执行。
+    证明 gate 的 ContextVar 能穿过 langchain 的同步执行线程被工具看到。"""
+    from langchain_core.tools import tool as lc_tool
+
+    @lc_tool
+    @approval.requires_approval(description="写入 {path}", risk="low")
+    def write_thing(path: str, content: str) -> str:
+        """写入一个东西。"""
+        return f"ok {path}"
+
+    # 无 gate → 默认拒绝
+    denied = await write_thing.ainvoke({"path": "a", "content": "b"})
+    assert "默认拒绝" in denied
+
+    # 有自动批准 gate → 跑到真实实现
+    gate = approval.ApprovalGate()
+
+    async def _auto(payload, timeout=60.0):
+        return approval.Decision(approved=True, scope="once")
+
+    gate.request = _auto  # type: ignore[assignment]
+    token = approval.set_current_gate(gate)
+    try:
+        ran = await write_thing.ainvoke({"path": "a", "content": "b"})
+        assert ran == "ok a"
+    finally:
+        approval.reset_current_gate(token)

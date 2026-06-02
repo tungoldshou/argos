@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import functools
 import inspect
 import json
 import time
@@ -168,6 +169,7 @@ def requires_approval(description: str, risk: RiskLevel = "medium") -> Callable:
                 out["**kwargs"] = extra_kw
             return out
 
+        @functools.wraps(fn)
         async def async_wrapper(*args: Any, **kwargs: Any) -> str:
             gate = _current_gate()
             if gate is None:
@@ -187,6 +189,7 @@ def requires_approval(description: str, risk: RiskLevel = "medium") -> Callable:
                 )
             return await _call_original(fn, args, kwargs)
 
+        @functools.wraps(fn)
         def sync_wrapper(*args: Any, **kwargs: Any) -> str:
             gate = _current_gate()
             if gate is None:
@@ -202,9 +205,10 @@ def requires_approval(description: str, risk: RiskLevel = "medium") -> Callable:
                 return "错误:同步工具不能在事件循环中等待审批,请改用异步版本。"
             return asyncio.run(async_wrapper(*args, **kwargs))
 
+        # functools.wraps 已复制 __name__/__doc__/__wrapped__ —— __wrapped__ 让
+        # inspect.signature(wrapper) 透传原签名,langchain @tool 才能建出正确的 args schema
+        # (否则模型看到的是 (*args, **kwargs) 而非具名参数)。
         wrapper = async_wrapper if asyncio.iscoroutinefunction(fn) else sync_wrapper
-        wrapper.__name__ = getattr(fn, "__name__", "wrapped")
-        wrapper.__doc__ = getattr(fn, "__doc__", None)
         wrapper._approval_required = True  # type: ignore[attr-defined]
         wrapper._approval_description = description  # type: ignore[attr-defined]
         wrapper._approval_risk = risk  # type: ignore[attr-defined]
