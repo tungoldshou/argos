@@ -1,6 +1,6 @@
 // seed.ts — realistic seed data for the Hermes desktop app.
 import type {
-  Agent, Platform, Skill, Automation, Sandbox, Models, Voice, Personality,
+  Agent, Platform, Automation, Sandbox, Models, Voice, Personality,
 } from './types';
 
 export const AGENT: Agent = {
@@ -32,19 +32,6 @@ export const PLATFORMS: Platform[] = [
 
 // Hermes ships 20+ messaging connectors from one gateway
 export const PLATFORMS_MORE = ['Mattermost', 'DingTalk', 'WeCom', 'Weixin', 'QQ Bot', 'Yuanbao', 'BlueBubbles', 'Home Assistant', 'Google Chat'];
-
-export const SKILLS: Skill[] = [
-  { name: 'summarize-pull-requests', uses: 214, lastUsed: '2m ago', source: 'Slack · #eng', tags: ['git', 'github', 'report'], hot: true, age: '38d' },
-  { name: 'morning-briefing', uses: 41, lastUsed: '8h ago', source: 'scheduled', tags: ['digest', 'calendar', 'news'], hot: true, age: '38d' },
-  { name: 'backup-postgres', uses: 12, lastUsed: '2d ago', source: 'Telegram · @you', tags: ['db', 'cron', 'ssh'], age: '31d' },
-  { name: 'scrape-arxiv-cs-ai', uses: 188, lastUsed: '4h ago', source: 'self-initiated', tags: ['research', 'browser'], hot: true, age: '36d' },
-  { name: 'deploy-staging', uses: 27, lastUsed: '1d ago', source: 'Discord · #ops', tags: ['ci', 'docker', 'ssh'], age: '29d' },
-  { name: 'finance-monthly-report', uses: 5, lastUsed: '12d ago', source: 'Email', tags: ['sheets', 'pdf'], age: '24d' },
-  { name: 'triage-inbox', uses: 96, lastUsed: '24m ago', source: 'Email', tags: ['email', 'classify'], age: '22d' },
-  { name: 'transcribe-voice-note', uses: 63, lastUsed: '3h ago', source: 'WhatsApp', tags: ['audio', 'tts'], age: '18d' },
-  { name: 'watch-rss-feeds', uses: 140, lastUsed: '1h ago', source: 'self-initiated', tags: ['rss', 'browser'], age: '14d' },
-  { name: 'generate-release-notes', uses: 9, lastUsed: '5d ago', source: 'Slack · #eng', tags: ['git', 'writing'], age: '9d' },
-];
 
 export const AUTOMATIONS: Automation[] = [
   { title: 'Morning briefing', cron: 'Every weekday at 8:00 AM', nl: 'send me a digest of overnight messages, calendar, and arXiv', dest: 'telegram', next: 'Tomorrow 8:00', on: true },

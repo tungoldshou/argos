@@ -5,11 +5,12 @@ import { useNarrow } from '../lib/responsive';
 import { Icon, PlatformGlyph, type IconName } from '../lib/icons';
 import { pColor } from '../lib/platforms';
 import { tr, useLang } from '../lib/i18n';
-import type { Skill, Automation, McpServer } from '../data/types';
+import type { Automation, McpServer } from '../data/types';
 import { isTauri, getSettings, setLlmConfig, restartAgent, type AppSettings } from '../lib/agent';
 import { fetchMcpServers } from '../lib/mcp';
+import { SkillsView } from './SkillsView';
 import {
-  AGENT, SKILLS, PLATFORMS, PLATFORMS_MORE, AUTOMATIONS, SANDBOXES, MODELS,
+  AGENT, PLATFORMS, PLATFORMS_MORE, AUTOMATIONS, SANDBOXES, MODELS,
   VOICE, PERSONALITY,
 } from '../data/seed';
 
@@ -48,27 +49,11 @@ export function Overlay({ title, icon, sub, onClose, children }: OverlayProps) {
 }
 
 function SkillsOverlay({ onClose }: { onClose: () => void }) {
-  // Argos 自有技能(当前用 seed 展示)。P1 接入 Argos 自己的技能注册表后替换。
-  const skills: Skill[] = SKILLS;
-  const sub = `${AGENT.skills} ` + tr('self-authored procedures · 995 runs / 30d');
+  // Argos 自有技能仓库(后端 /skills 拉真数据,不再用 seed 假数据)。
+  const sub = tr('real skills from sidecar / builtin + imported');
   return (
     <Overlay title="Skills" sub={sub} icon="skills" onClose={onClose}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {skills.map((s, i) => (
-          <div key={s.name + i} style={{ display: 'grid', gridTemplateColumns: '20px 1fr auto', gap: 13, alignItems: 'center', padding: '11px 10px', borderRadius: 9, borderBottom: i < skills.length - 1 ? '1px solid color-mix(in oklab,var(--border),transparent 40%)' : 'none' }}>
-            <span style={{ color: s.hot ? 'var(--accent)' : 'var(--text-3)', display: 'flex' }}><Icon name={s.hot ? 'bolt' : 'skills'} size={15} /></span>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontFamily: 'var(--mono)', fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>{s.name}</div>
-              {s.lastUsed && <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.lastUsed}</div>}
-              {s.tags.length > 0 && <div style={{ display: 'flex', gap: 5, marginTop: 5 }}>{s.tags.map((t) => <span key={t} style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-3)', background: 'var(--surface-2)', border: '1px solid var(--border)', padding: '1px 6px', borderRadius: 5 }}>{t}</span>)}</div>}
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              {s.uses > 0 && <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{s.uses}</div>}
-              <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{s.source}</div>
-            </div>
-          </div>
-        ))}
-      </div>
+      <SkillsView />
     </Overlay>
   );
 }

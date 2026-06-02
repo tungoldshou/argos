@@ -31,14 +31,14 @@ export interface Platform {
   last: string;
 }
 
+export type SkillTrust = 'builtin' | 'imported' | 'user_created';
+
 export interface Skill {
   name: string;
-  uses: number;
-  lastUsed: string;
+  description: string;
+  trust: SkillTrust;
+  enabled: boolean;
   source: string;
-  tags: string[];
-  hot?: boolean;
-  age: string;
 }
 
 export interface Automation {
