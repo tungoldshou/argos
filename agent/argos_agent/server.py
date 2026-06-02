@@ -462,6 +462,37 @@ async def run(req: RunRequest) -> StreamingResponse:
     )
 
 
+class PlanRequest(BaseModel):
+    """plan 拆大活的入口请求。"""
+    goal: str
+    session_id: str | None = None
+    project_dir: str | None = None  # 可选:project 模式(plan 拆出来的每 task 在自己的 worktree 分支)
+
+
+@app.post("/plan")
+async def plan_run(body: PlanRequest) -> StreamingResponse:
+    """接收 goal,planner 拆活 → 派 worker → 报告。返 SSE 流,
+    事件形状与 orchestrator 一致:plan:start / plan:tasks / task:start / task:verdict / plan:report / plan:escalate。"""
+    from . import orchestrator as _orch
+
+    sid = body.session_id or uuid.uuid4().hex[:16]
+
+    async def _gen() -> AsyncIterator[str]:
+        started = False
+        try:
+            async for ev in _orch.run_plan(goal=body.goal, session_id=sid, project_dir=body.project_dir):
+                started = True
+                yield _sse(ev["type"], ev)
+        except Exception as e:
+            if not started:
+                # plan:start 都没发出 → 立即出 escalate + report
+                yield _sse("plan:start", {"goal": body.goal, "session_id": sid})
+            yield _sse("plan:escalate", {"reason": f"orchestrator: {e!r}"})
+            yield _sse("plan:report", {"split": 0, "succeeded": 0, "failed": 0, "status": "error"})
+
+    return StreamingResponse(_gen(), media_type="text/event-stream")
+
+
 # 续跑(从 registry 重建 RunContext + thread_id 续 checkpoint):
 #   · 在 _LIVE_RUNS=仍在跑(409);registry 无=404;终态=400;无 checkpointer=503。
 #   · 与 _run_stream 共享 _consume_agent_stream(stream_input=None, cfg=thread_id 续)。
