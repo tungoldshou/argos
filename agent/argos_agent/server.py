@@ -5,6 +5,7 @@ Tauri 通过 sidecar 拉起这个服务(localhost),前端经 HTTP/SSE 调。
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import threading
 import uuid
@@ -12,12 +13,13 @@ from collections import OrderedDict
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from . import config, memory, runtime
+from . import approval, config, memory, runtime
+from .approval import ApprovalGate
 from .core import build_agent_with_gate, final_text, text_delta
 from .verify_gate import VerifyGateMiddleware
 
@@ -32,6 +34,9 @@ class SessionState:
     guard: list[str] | None = None
     messages: list = field(default_factory=list)  # LangChain 消息历史(user/ai/tool)
     busy: bool = False  # 本会话是否已有一轮在跑(拒绝并发轮,防历史竞争+全局 runtime 串台)
+    # 审批闸:挂在会话上,session-scope 批准("本次会话总是允许")跨轮保留;每轮结束
+    # cancel_all 清空挂起项。有副作用工具执行前经它阻塞等用户决定。
+    approval_gate: ApprovalGate = field(default_factory=ApprovalGate)
 
 
 SESSIONS: "OrderedDict[str, SessionState]" = OrderedDict()
@@ -150,65 +155,119 @@ async def _run_stream(
             runtime.use_sandbox()
             return
 
-        yield _sse("start", {"goal": goal})
-        history = st.messages + [("user", goal)]
-        final_msgs = st.messages
-        try:
-            async for mode, chunk in agent.astream(
-                {"messages": history}, stream_mode=["values", "messages"]
-            ):
-                if mode == "messages":
-                    # chunk = (message_chunk, metadata)。messages 模式实际只产 AIMessageChunk;
-                    # 但防御性卡 class:HumanMessage/ToolMessage 的 content 是字符串(text_delta 会原样返回),
-                    # 若漏进 messages 流会把用户输入/工具结果当 token 外发。
-                    msg_chunk, _meta = chunk
-                    if msg_chunk.__class__.__name__ != "AIMessageChunk":
-                        continue
-                    delta = text_delta(msg_chunk)
-                    if delta:
-                        yield _sse("token", {"text": delta})
-                    continue
-                # mode == "values":完整 state,驱动 tool/verify/escalation 检测 + message 定稿。
-                msgs = chunk.get("messages", [])
-                if not msgs:
-                    continue
-                final_msgs = msgs
-                last = msgs[-1]
-                kind = last.__class__.__name__
-                calls = getattr(last, "tool_calls", None)
-                content = str(last.content)
-                if calls:
-                    yield _sse("tool_call", {"calls": [{"name": c["name"], "args": c["args"]} for c in calls]})
-                elif kind == "ToolMessage":
-                    yield _sse("tool_result", {"content": content[:2000]})
-                elif kind == "HumanMessage" and VerifyGateMiddleware.ESCALATION_TAG in content:
-                    yield _sse("escalation", {"detail": content[:1500]})
-                elif kind == "HumanMessage" and VerifyGateMiddleware.BOUNCE_TAG in content:
-                    yield _sse("verify_failed", {"detail": content[:1500]})
-                elif kind == "AIMessage":
-                    txt = final_text(last)
-                    if txt:
-                        # message 仍发:作为该段答复的权威定稿,前端用它覆盖累积的 token(防漂移)。
-                        yield _sse("message", {"text": txt})
-            # 本轮跑完:把完整消息历史落回会话,供下一轮延续上下文。
-            st.messages = list(final_msgs)
-            tampered = runtime.detect_tampering() if st.project_dir else []
-            if tampered:
-                yield _sse("tampering", {"files": tampered})
-            verdict = _verdict_of(gate, st.verify_cmd)
+        # 审批闸装进上下文:被 @requires_approval 标记的工具在本轮能找到本会话的 gate。
+        # 必须在 create_task(pump) 之前设好 —— ContextVar 在建任务那刻被复制进子任务。
+        approval_token = approval.set_current_gate(st.approval_gate)
+        # 工具阻塞等审批时,agent.astream 会整体挂起,消费侧卡在 async for 取不到帧。
+        # 用 queue 把「agent 事件流」和「审批挂起监视」两个并发源汇聚,生成器统一 drain。
+        events: "asyncio.Queue[str | None]" = asyncio.Queue()
+
+        async def _watch_approvals() -> None:
+            """并发监视审批挂起项,新出现的推 approval_request 给前端(否则工具阻塞期间
+            前端收不到弹窗请求)。轮询而非回调:回调会在工具的执行线程触发,跨 loop 操作
+            主 loop 的 queue 不安全;轮询读 pending() 字典是安全的。"""
+            seen: set[str] = set()
             try:
-                memory.record_task(goal=goal, verdict=verdict, model=config.LLM_MODEL)
-            except Exception:
+                while True:
+                    for p in st.approval_gate.pending():
+                        if p.call_id not in seen:
+                            seen.add(p.call_id)
+                            await events.put(_sse("approval_request", {
+                                "call_id": p.call_id,
+                                "tool": p.payload.get("tool"),
+                                "args": p.payload.get("args"),
+                                "description": p.payload.get("description"),
+                                "risk": p.payload.get("risk"),
+                            }))
+                    await asyncio.sleep(0.05)
+            except asyncio.CancelledError:
                 pass
-            if verdict == "unverifiable":
-                yield _sse("unverifiable", {"files": gate.tampered, "detail": gate.last_failure})
-                yield _sse("done", {"resolved": False, "unverifiable": True, "attempts": gate.attempts, "tampered": gate.tampered})
-            elif verdict == "failed":
-                yield _sse("done", {"resolved": False, "escalated": True, "attempts": gate.attempts, "tampered": tampered})
-            else:
-                yield _sse("done", {"resolved": True, "tampered": tampered})
-        except Exception as e:
-            yield _sse("error", {"message": str(e)})
+
+        async def _pump() -> None:
+            """跑 agent,把事件帧推进 queue;无论如何结束都以 None 哨兵收尾。"""
+            try:
+                await events.put(_sse("start", {"goal": goal}))
+                history = st.messages + [("user", goal)]
+                final_msgs = st.messages
+                async for mode, chunk in agent.astream(
+                    {"messages": history}, stream_mode=["values", "messages"]
+                ):
+                    if mode == "messages":
+                        # chunk = (message_chunk, metadata)。messages 模式实际只产 AIMessageChunk;
+                        # 但防御性卡 class:HumanMessage/ToolMessage 的 content 是字符串(text_delta 会原样返回),
+                        # 若漏进 messages 流会把用户输入/工具结果当 token 外发。
+                        msg_chunk, _meta = chunk
+                        if msg_chunk.__class__.__name__ != "AIMessageChunk":
+                            continue
+                        delta = text_delta(msg_chunk)
+                        if delta:
+                            await events.put(_sse("token", {"text": delta}))
+                        continue
+                    # mode == "values":完整 state,驱动 tool/verify/escalation 检测 + message 定稿。
+                    msgs = chunk.get("messages", [])
+                    if not msgs:
+                        continue
+                    final_msgs = msgs
+                    last = msgs[-1]
+                    kind = last.__class__.__name__
+                    calls = getattr(last, "tool_calls", None)
+                    content = str(last.content)
+                    if calls:
+                        await events.put(_sse("tool_call", {"calls": [{"name": c["name"], "args": c["args"]} for c in calls]}))
+                    elif kind == "ToolMessage":
+                        await events.put(_sse("tool_result", {"content": content[:2000]}))
+                    elif kind == "HumanMessage" and VerifyGateMiddleware.ESCALATION_TAG in content:
+                        await events.put(_sse("escalation", {"detail": content[:1500]}))
+                    elif kind == "HumanMessage" and VerifyGateMiddleware.BOUNCE_TAG in content:
+                        await events.put(_sse("verify_failed", {"detail": content[:1500]}))
+                    elif kind == "AIMessage":
+                        txt = final_text(last)
+                        if txt:
+                            # message 仍发:作为该段答复的权威定稿,前端用它覆盖累积的 token(防漂移)。
+                            await events.put(_sse("message", {"text": txt}))
+                # 本轮跑完:把完整消息历史落回会话,供下一轮延续上下文。
+                st.messages = list(final_msgs)
+                tampered = runtime.detect_tampering() if st.project_dir else []
+                if tampered:
+                    await events.put(_sse("tampering", {"files": tampered}))
+                verdict = _verdict_of(gate, st.verify_cmd)
+                try:
+                    memory.record_task(goal=goal, verdict=verdict, model=config.LLM_MODEL)
+                except Exception:
+                    pass
+                if verdict == "unverifiable":
+                    await events.put(_sse("unverifiable", {"files": gate.tampered, "detail": gate.last_failure}))
+                    await events.put(_sse("done", {"resolved": False, "unverifiable": True, "attempts": gate.attempts, "tampered": gate.tampered}))
+                elif verdict == "failed":
+                    await events.put(_sse("done", {"resolved": False, "escalated": True, "attempts": gate.attempts, "tampered": tampered}))
+                else:
+                    await events.put(_sse("done", {"resolved": True, "tampered": tampered}))
+            except Exception as e:
+                await events.put(_sse("error", {"message": str(e)}))
+            finally:
+                await events.put(None)
+
+        watch_task = asyncio.create_task(_watch_approvals())
+        pump_task = asyncio.create_task(_pump())
+        try:
+            while True:
+                frame = await events.get()
+                if frame is None:
+                    break
+                yield frame
+        finally:
+            # 收束顺序要紧:先 cancel_all 把任何挂起审批以 deny 解除(否则 pump 永远卡在
+            # 工具的 await gate.request),工具拿到 deny 字符串后 astream 才能自然收尾。
+            watch_task.cancel()
+            st.approval_gate.cancel_all()
+            approval.reset_current_gate(approval_token)
+            if not pump_task.done():
+                pump_task.cancel()
+            for t in (watch_task, pump_task):
+                try:
+                    await t
+                except (asyncio.CancelledError, Exception):
+                    pass
     finally:
         # 本轮无论怎么结束(正常/异常/早退)都释放 busy + 全局单飞标志,否则会话/全局会被永久锁死。
         # 这个 finally 必须万无一失:泄漏 _RUN_ACTIVE=True 会死锁所有后续 run。
@@ -230,3 +289,29 @@ async def run(req: RunRequest) -> StreamingResponse:
         _run_stream(req.goal, req.session_id, req.verify_cmd, req.project_dir, req.guard_files),
         media_type="text/event-stream",
     )
+
+
+class ApproveRequest(BaseModel):
+    """用户对某次工具调用的审批决定。"""
+    call_id: str
+    decision: str  # "approve" | "deny"
+    scope: str = "once"  # "once" | "session"(仅 approve 用)
+    reason: str = ""  # 仅 deny 用,会回传给模型让它换路
+
+
+@app.post("/run/{session_id}/approve")
+def approve_call(session_id: str, body: ApproveRequest) -> dict:
+    """用户拍板某次有副作用的工具调用。approve→放行(可选整会话默许);deny→拒绝。
+    返回 ok=False 表示该 call_id 已不在挂起(超时/被取消/重复点),前端可据此收起弹窗。"""
+    with _SESSIONS_LOCK:
+        st = SESSIONS.get(session_id)
+    if st is None:
+        raise HTTPException(status_code=404, detail="session 不存在")
+    if body.decision == "approve":
+        scope = body.scope if body.scope in ("once", "session") else "once"
+        ok = st.approval_gate.approve(body.call_id, scope=scope)  # type: ignore[arg-type]
+    elif body.decision == "deny":
+        ok = st.approval_gate.deny(body.call_id, reason=body.reason)
+    else:
+        raise HTTPException(status_code=400, detail="decision 必须是 approve 或 deny")
+    return {"ok": ok}
