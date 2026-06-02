@@ -13,14 +13,27 @@ from argos_agent import tools
 
 @pytest.fixture
 def sandbox(tmp_path, monkeypatch):
-    """把 workspace 与 verify 区指到临时目录,隔离测试、不碰真实 ~/.argos。"""
+    """把 workspace 与 verify 区指到临时目录,隔离测试、不碰真实 ~/.argos。
+    并装一个自动批准的审批 gate —— 这些测试验证的是工具逻辑/安全边界,不是审批流;
+    缺 gate 时有副作用工具会 fail-closed 默认拒绝,拿不到真实返回。"""
     ws = tmp_path / "ws"
     vd = tmp_path / "verify"
     ws.mkdir()
     vd.mkdir()
     monkeypatch.setattr(tools, "WORKSPACE", ws)
     monkeypatch.setattr(tools, "VERIFY_DIR", vd)
-    return ws, vd
+    from argos_agent import approval
+    gate = approval.ApprovalGate()
+
+    async def _auto_approve(payload, timeout=60.0):
+        return approval.Decision(approved=True, scope="once")
+
+    gate.request = _auto_approve  # type: ignore[assignment]
+    token = approval.set_current_gate(gate)
+    try:
+        yield ws, vd
+    finally:
+        approval.reset_current_gate(token)
 
 
 # ── 路径牢笼:agent 的文件工具不能越出 workspace ──────────────────────────────
@@ -154,20 +167,40 @@ def test_search_files_files_mode(monkeypatch, tmp_path):
     assert "x.py" in out and "y.txt" not in out
 
 
-def test_edit_file_fuzzy_whitespace(monkeypatch, tmp_path):
-    from argos_agent import tools
-    monkeypatch.setattr(tools, "WORKSPACE", tmp_path)
+def test_edit_file_fuzzy_whitespace(sandbox):
+    ws, _ = sandbox
     # 文件用 4 空格缩进;agent 给的 old 用了不同空白 → 精确匹配不到,模糊应命中。
-    (tmp_path / "c.py").write_text("def f():\n    return  1\n", encoding="utf-8")
+    (ws / "c.py").write_text("def f():\n    return  1\n", encoding="utf-8")
     out = tools.edit_file.invoke({"path": "c.py", "old": "return 1", "new": "return 2"})
     assert "已编辑" in out
     # 模糊匹配后,原文件中"return  1"应被替换为"return 2"
-    assert "return 2" in (tmp_path / "c.py").read_text()
+    assert "return 2" in (ws / "c.py").read_text()
 
 
-def test_edit_file_fuzzy_ambiguous_rejected(monkeypatch, tmp_path):
-    from argos_agent import tools
-    monkeypatch.setattr(tools, "WORKSPACE", tmp_path)
-    (tmp_path / "d.py").write_text("x = 1\nx = 1\n", encoding="utf-8")
+def test_edit_file_fuzzy_ambiguous_rejected(sandbox):
+    ws, _ = sandbox
+    (ws / "d.py").write_text("x = 1\nx = 1\n", encoding="utf-8")
     out = tools.edit_file.invoke({"path": "d.py", "old": "x = 1", "new": "x = 2"})
     assert "多次" in out  # 多处匹配仍拒绝
+
+
+def _underlying(fn):
+    """langchain StructuredTool 把真正的函数放在 .coroutine/.func 上;审批标记在那上面。"""
+    return getattr(fn, "coroutine", None) or getattr(fn, "func", None) or fn
+
+
+# ── 审批标记:有副作用工具必须自声明 requires_approval ─────────────────────────
+@pytest.mark.parametrize("tool_name", ["write_file", "edit_file", "run_command"])
+def test_effectful_tools_require_approval(sandbox, tool_name):
+    """有副作用的工具必须声明 _approval_required=True,否则审批闸无效。"""
+    fn = _underlying(getattr(tools, tool_name))
+    assert getattr(fn, "_approval_required", False) is True
+    assert hasattr(fn, "_approval_description")
+    assert hasattr(fn, "_approval_risk")
+
+
+@pytest.mark.parametrize("tool_name", ["read_file", "search_files", "web_search", "web_extract"])
+def test_readonly_tools_do_not_require_approval(sandbox, tool_name):
+    """只读工具不应阻塞审批(白名单:只读直接放行)。"""
+    fn = _underlying(getattr(tools, tool_name))
+    assert not getattr(fn, "_approval_required", False)

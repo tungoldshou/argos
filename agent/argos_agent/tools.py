@@ -16,6 +16,7 @@ from pathlib import Path
 from langchain_core.tools import tool
 
 from . import web
+from .approval import requires_approval
 
 # ── workspace 牢笼 ──────────────────────────────────────────────────────────
 # 默认 ~/.argos/workspace;可由环境变量覆盖(Tauri 注入)。agent 的文件工具只能动这里。
@@ -76,6 +77,7 @@ def read_file(path: str) -> str:
 
 
 @tool
+@requires_approval(description="写入文件 {path}", risk="low")
 def write_file(path: str, content: str) -> str:
     """把内容写入 workspace 内某个文件(覆盖)。path 是相对 workspace 的路径。"""
     p = _safe_path(path)
@@ -96,6 +98,7 @@ def _normalize_ws(s: str) -> str:
 
 
 @tool
+@requires_approval(description="编辑文件 {path}", risk="low")
 def edit_file(path: str, old: str, new: str) -> str:
     """在 workspace 内某文件里把 old 串替换成 new。先精确唯一匹配;精确找不到时
     做空白归一化的模糊匹配兜底(仍要求唯一)。"""
@@ -172,6 +175,7 @@ def _validate_git(parts: list[str]) -> str | None:
 
 
 @tool
+@requires_approval(description="执行命令 {command}", risk="medium")
 def run_command(command: str) -> str:
     """在 workspace 内运行一条白名单内的命令(验证/构建/测试类),返回退出码+输出。
     这是 Argos 的确定性 verify 落点:退出码是地面真值,模型无法对它撒谎。
