@@ -10,6 +10,8 @@ import { reduceEvent, startTurn, type Turn } from '../lib/chatReducer';
 import { Message } from './chat/Message';
 import { Composer } from './chat/Composer';
 import { TaskSetup } from './chat/TaskSetup';
+import { ApprovalDialog } from './ApprovalDialog';
+import { approvalStore } from '../lib/approval';
 
 const EXAMPLES = [
   '列出一个 REST 分页响应该包含的字段名,每行一个',
@@ -59,6 +61,16 @@ export function AgentPanel({ onClose, initialGoal, onComplete }: { onClose: () =
       g,
       (e) => {
         if (e.type === 'session') { setSessionId(String(e.data.session_id || '')); return; }
+        if (e.type === 'approval_request') {
+          approvalStore.addRequest({
+            call_id: String(e.data.call_id ?? ''),
+            tool: String(e.data.tool ?? ''),
+            args: (e.data.args as Record<string, unknown>) ?? {},
+            description: String(e.data.description ?? ''),
+            risk: (e.data.risk as 'low' | 'medium' | 'high') ?? 'medium',
+          });
+          return;
+        }
         setTurns((ts) => reduceEvent(ts, e));
       },
       (err) => {
@@ -90,6 +102,8 @@ export function AgentPanel({ onClose, initialGoal, onComplete }: { onClose: () =
 
   return (
     <div className="mind-panel" style={shellStyle}>
+      {/* 审批弹窗:浮在面板之上,有 pending 时才渲染 */}
+      <ApprovalDialog sessionId={sessionId} />
       {/* header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ width: 32, height: 32, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'color-mix(in oklab, var(--accent), transparent 84%)', color: 'var(--accent)' }}>

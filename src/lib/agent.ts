@@ -80,6 +80,8 @@ export interface AgentEvent {
     | 'verify_failed' // verify 硬门禁拦截了一次"假完成",把真实失败 bounce 回去
     | 'escalation' // 反复修仍不过 → agent 诚实升级求助人类
     | 'tampering' // project 模式:agent 改动了被保护的测试文件(篡改可见,诚实警告)
+    | 'approval_request'  // 工具需要用户审批(弹窗)
+    | 'approval_resolved' // 审批已决(可选,后端可选发)
     | 'done'
     | 'error';
   data: Record<string, unknown>;
