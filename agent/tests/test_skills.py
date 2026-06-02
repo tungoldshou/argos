@@ -54,3 +54,71 @@ def test_import_rejects_oversize(tmp_path, skills_dir):
     huge = "---\nname: big\ndescription: d\ntrust: imported\nenabled: true\n---\n" + ("x" * 4000)
     with pytest.raises(ValueError, match="3000"):
         skills.import_skill(content=huge, source="inline")
+
+
+# ── recall(): cosine top-k + sim_min + 嵌入失败降级 ─────────────────────────
+def test_recall_returns_top_k_enabled_by_cosine(monkeypatch, tmp_path):
+    # 自含 3 个 skill,embed_text 按 name 返确定向量
+    builtin = tmp_path / "b"
+    user = tmp_path / "u"
+    builtin.mkdir()
+    user.mkdir()
+    (builtin / "py-test-runner.md").write_text(
+        "---\nname: py-test-runner\ndescription: d\ntrust: builtin\nenabled: true\n---\n# p\n", encoding="utf-8",
+    )
+    (builtin / "web-search-recipe.md").write_text(
+        "---\nname: web-search-recipe\ndescription: d\ntrust: builtin\nenabled: true\n---\n# w\n", encoding="utf-8",
+    )
+    (builtin / "git-commit-hygiene.md").write_text(
+        "---\nname: git-commit-hygiene\ndescription: d\ntrust: builtin\nenabled: true\n---\n# g\n", encoding="utf-8",
+    )
+    monkeypatch.setattr(skills, "BUILTIN_DIR", builtin)
+    monkeypatch.setattr(skills, "USER_DIR", user)
+    monkeypatch.setattr(skills, "_emb_index_path", lambda: tmp_path / "idx.json")
+
+    table = {
+        "py-test-runner": [1.0, 0.0, 0.0],
+        "web-search-recipe": [0.0, 1.0, 0.0],
+        "git-commit-hygiene": [0.0, 0.0, 1.0],
+    }
+    def fake_emb(texts):
+        # goal(1 elem)→ [1,0,0](与 py-test-runner 强一致);skill(多 elem)按 name
+        if len(texts) == 1:
+            return [[1.0, 0.0, 0.0]]
+        return [table.get(t.split("\n", 1)[0], [0.0, 0.0, 0.0]) for t in texts]
+    monkeypatch.setattr(skills.llm_embed, "embed_text", fake_emb)
+
+    out = skills.recall("写个单测", k=2, sim_min=0.4)
+    assert [s.name for s in out] == ["py-test-runner"]
+
+
+def test_recall_filters_below_simmin(skills_dir, monkeypatch, tmp_path):
+    # 一个 skill enabled=true 但向量与 goal 正交 → 应被 sim_min 滤掉
+    def fake_emb(texts):
+        # goal 走 [1,0],各 skill 走 [0,1](正交,sim=0)
+        if len(texts) == 1:
+            return [[1.0, 0.0]]
+        return [[0.0, 1.0] for _ in texts]
+    monkeypatch.setattr(skills.llm_embed, "embed_text", fake_emb)
+    monkeypatch.setattr(skills, "_emb_index_path", lambda: tmp_path / "idx.json")
+    out = skills.recall("goal", k=3, sim_min=0.4)
+    assert out == []
+
+
+def test_recall_returns_empty_when_embed_fails(skills_dir, monkeypatch, tmp_path):
+    def boom(_texts):
+        raise skills.llm_embed.EmbedError("simulated")
+    monkeypatch.setattr(skills.llm_embed, "embed_text", boom)
+    monkeypatch.setattr(skills, "_emb_index_path", lambda: tmp_path / "idx.json")
+    out = skills.recall("anything", k=3, sim_min=0.4)
+    assert out == []
+
+
+def test_recall_excludes_disabled(skills_dir, monkeypatch, tmp_path):
+    def fake_emb(texts):
+        return [[1.0, 0.0] for _ in texts]  # 全相同 → 全 sim=1
+    monkeypatch.setattr(skills.llm_embed, "embed_text", fake_emb)
+    monkeypatch.setattr(skills, "_emb_index_path", lambda: tmp_path / "idx.json")
+    out = skills.recall("goal", k=3, sim_min=0.4)
+    # b.md 是 enabled=false;a,c 是 enabled=true → 应只返 a, c
+    assert {s.name for s in out} == {"a", "c"}
