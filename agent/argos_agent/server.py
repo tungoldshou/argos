@@ -136,11 +136,14 @@ async def _run_stream(
             return
         st.busy = True
         _RUN_ACTIVE = True
-    # 首帧回传 session_id,前端存下供后续轮。注意:紧跟其后可能立即来一个 error
-    # 事件(如缺 key 配置),客户端无论如何都应先存下这个 id。
-    yield _sse("session", {"session_id": st.session_id})
-
     try:
+        # 首帧回传 session_id,前端存下供后续轮。注意:紧跟其后可能立即来一个 error
+        # 事件(如缺 key 配置),客户端无论如何都应先存下这个 id。
+        # 这一步必须在 try 内:客户端若在 session→start 窗口断开,GeneratorExit 会从这个
+        # yield 抛出,只有被 try 覆盖 finally 才会跑、释放 _RUN_ACTIVE —— 否则永久泄漏、
+        # 死锁后续所有 run(并发单飞标志再也回不到 False)。
+        yield _sse("session", {"session_id": st.session_id})
+
         # 切运行时上下文(用会话锁定的值,非本轮请求值)。
         if st.project_dir:
             runtime.use_project(st.project_dir)

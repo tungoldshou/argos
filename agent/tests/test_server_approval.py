@@ -121,6 +121,20 @@ async def test_deny_refuses_and_skips_side_effect(monkeypatch, _reset_server_sta
     assert not (tmp_path / "a.txt").exists()
 
 
+@pytest.mark.asyncio
+async def test_disconnect_after_session_frame_releases_run_active(monkeypatch, _reset_server_state):
+    """客户端在 session→start 窗口断开:GeneratorExit 从首帧 yield 抛出,_RUN_ACTIVE 必须
+    被 finally 释放,否则全局单飞标志永久泄漏、死锁后续所有 run。"""
+    monkeypatch.setattr(server, "build_agent_with_gate", lambda **kw: (_FakeAgent(), None))
+    assert server._RUN_ACTIVE is False
+    gen = server._run_stream("写个文件")
+    first = await gen.__anext__()  # session 帧
+    assert "session" in first
+    assert server._RUN_ACTIVE is True  # 已进入一轮
+    await gen.aclose()  # 模拟客户端在收到 session 后立即断开
+    assert server._RUN_ACTIVE is False, "断开后 _RUN_ACTIVE 必须释放"
+
+
 def test_approve_unknown_session_returns_404():
     client = TestClient(server.app)
     r = client.post("/run/does-not-exist/approve",
