@@ -110,3 +110,40 @@ async def test_gate_mcp_tool_forwards_when_approved():
         assert "ran navigate" in out  # 批准 → 转发到原工具
     finally:
         approval.reset_current_gate(token)
+
+
+@pytest.mark.asyncio
+async def test_load_mcp_tools_gates_and_degrades(monkeypatch):
+    # 两个 server:一个连通(给两个工具:一只读一副作用),一个连接抛错 → 降级。
+    ro = _fake_tool(name="list_directory", metadata={"annotations": {"readOnlyHint": True}})
+    rw = _fake_tool(name="write_file", metadata={})
+
+    # 一个能记住 server 名的假 client:名为 "bad" 的连接抛错,模拟 spawn 失败。
+    class FakeClient:
+        def __init__(self, conns):
+            self._argos_name = next(iter(conns))
+        async def get_tools(self):
+            if self._argos_name == "bad":
+                raise RuntimeError("spawn failed")
+            return [ro, rw]
+
+    monkeypatch.setattr(mcp_client, "MultiServerMCPClient", FakeClient)
+
+    cfg = {"servers": {
+        "good": {"command": "x", "args": [], "transport": "stdio", "enabled": True, "trust": "builtin"},
+        "bad": {"command": "x", "args": [], "transport": "stdio", "enabled": True, "trust": "builtin"},
+        "off": {"command": "x", "args": [], "transport": "stdio", "enabled": False, "trust": "builtin"},
+    }}
+    tools, status = await mcp_client.load_mcp_tools(cfg)
+
+    # good:两个工具都在(只读原样 + 副作用套闸),bad 降级,off 标 disabled
+    assert len(tools) == 2
+    by = {s["name"]: s for s in status}
+    assert by["good"]["status"] == "connected" and by["good"]["tools"] == 2
+    assert by["bad"]["status"] == "disconnected" and "spawn failed" in by["bad"]["error"]
+    assert by["off"]["status"] == "disabled"
+    # 副作用工具被换成套闸版(无 gate 调用 → 拒绝串),只读工具原样转发
+    names = {t.name for t in tools}
+    assert names == {"list_directory", "write_file"}
+    wf = next(t for t in tools if t.name == "write_file")
+    assert "默认拒绝" in await wf.ainvoke({"arg": "y"})

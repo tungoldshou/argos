@@ -7,12 +7,14 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
 from typing import Any
 
 from langchain_core.tools import BaseTool, StructuredTool
+from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from . import approval
 from .approval import RiskLevel
@@ -104,3 +106,76 @@ def gate_mcp_tool(tool: BaseTool, risk: RiskLevel, server_name: str) -> BaseTool
         description=tool.description,
         args_schema=tool.args_schema,
     )
+
+
+_CONNECT_TIMEOUT = 25.0  # npx -y 首次拉包可能慢,给宽点;超时即降级
+
+
+def _client_conn(cfg: dict[str, Any]) -> dict[str, Any]:
+    """从 mcp.json 的 server 配置抽出 MultiServerMCPClient 需要的连接字段。"""
+    conn: dict[str, Any] = {
+        "command": cfg["command"],
+        "args": cfg.get("args", []),
+        "transport": cfg.get("transport", "stdio"),
+    }
+    if cfg.get("env"):
+        conn["env"] = cfg["env"]
+    return conn
+
+
+async def load_mcp_tools(config: dict[str, Any]) -> tuple[list, list[dict[str, Any]]]:
+    """逐 server 连接:成功 → 工具分类套闸并入合集;失败/超时 → 降级标 disconnected。
+    返回 (工具合集, 每个 server 的状态)。任一 server 出问题绝不影响其余。"""
+    tools_out: list = []
+    status_out: list[dict[str, Any]] = []
+    servers = (config or {}).get("servers", {})
+    for name, cfg in servers.items():
+        base = {
+            "name": name,
+            "transport": cfg.get("transport", "stdio"),
+            "trust": cfg.get("trust", "builtin"),
+            "desc": cfg.get("desc", ""),
+        }
+        if not cfg.get("enabled", False):
+            status_out.append({**base, "status": "disabled", "tools": 0})
+            continue
+        try:
+            client = MultiServerMCPClient({name: _client_conn(cfg)})
+            raw = await asyncio.wait_for(client.get_tools(), timeout=_CONNECT_TIMEOUT)
+            gated = []
+            for t in raw:
+                needs, risk = classify(t, cfg)
+                gated.append(gate_mcp_tool(t, risk, name) if needs else t)
+            tools_out.extend(gated)
+            status_out.append({**base, "status": "connected", "tools": len(gated)})
+        except Exception as e:  # noqa: BLE001 — 任何连接异常都降级,不许掀翻其余 server
+            status_out.append({**base, "status": "disconnected", "tools": 0, "error": str(e)[:200]})
+    return tools_out, status_out
+
+
+# ── 进程级缓存:启动连一次,后续读缓存(import 期不连)──────────────────────────
+_MCP_TOOLS: list = []
+_MCP_STATUS: list[dict[str, Any]] = []
+_loaded = False
+_load_lock = asyncio.Lock()
+
+
+async def ensure_loaded() -> None:
+    """幂等:首次调用连接并缓存;后续直接返回。server 启动钩子与端点都可安全调。"""
+    global _loaded, _MCP_TOOLS, _MCP_STATUS
+    if _loaded:
+        return
+    async with _load_lock:
+        if _loaded:
+            return
+        cfg = load_config()
+        _MCP_TOOLS, _MCP_STATUS = await load_mcp_tools(cfg)
+        _loaded = True
+
+
+def mcp_tools() -> list:
+    return list(_MCP_TOOLS)
+
+
+def server_status() -> list[dict[str, Any]]:
+    return list(_MCP_STATUS)
