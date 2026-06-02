@@ -288,3 +288,13 @@ def search_files(pattern: str, target: str = "content", file_glob: str = "", lim
 
 # 暴露给 agent 的工具清单。
 ALL_TOOLS = [read_file, write_file, edit_file, run_command, web_search, web_extract, search_files]
+
+# 电脑操控(第 7 步)—— Playwright Python SDK 包成 LangChain tool,接 ALL_TOOLS。
+# 注意:单 browser / 单 context,单 run 用;并发 run 同用会有冲突(spec §2 红线,
+# 在工具描述里明示,不真锁)。点击/填表 走审批闸(与 run_command 同款)。
+try:
+    from . import playwright_tools
+    ALL_TOOLS = list(ALL_TOOLS) + playwright_tools.all_tools()
+except Exception as _e:  # noqa: BLE001 — Playwright 不可用时降级为"无浏览器工具",不掀翻 sidecar
+    import logging
+    logging.getLogger(__name__).warning("playwright_tools unavailable, browser controls disabled: %r", _e)
