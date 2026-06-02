@@ -45,7 +45,6 @@ async def test_run_merges_mcp_tools_into_agent(monkeypatch):
     monkeypatch.setattr(mcp_client, "mcp_tools", lambda: [sentinel])
     monkeypatch.setattr(server, "build_agent_with_gate", fake_build)
     server.SESSIONS.clear()
-    server._RUN_ACTIVE = False
 
     gen = server._run_stream("做点事")
     async for _ in gen:

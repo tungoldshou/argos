@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import threading
 import uuid
 from collections import OrderedDict
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import httpx as _httpx
 from fastapi import FastAPI, HTTPException
@@ -20,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from . import approval, config, memory, mcp_client, runtime
+from . import approval, config, memory, mcp_client, runtime, isolation, run_registry
 from .approval import ApprovalGate
 from .core import build_agent_with_gate, final_text, text_delta
 from .tools import ALL_TOOLS
@@ -44,35 +46,62 @@ class SessionState:
 
 SESSIONS: "OrderedDict[str, SessionState]" = OrderedDict()
 _SESSIONS_LOCK = threading.Lock()  # 保护 SESSIONS 的并发读改(取用/插入/淘汰)
-_RUN_ACTIVE = False  # 全局单飞:同一时刻只允许一个 run 执行(runtime._current 是进程级全局,
-                     # 并发 run 会串台,破坏沙盒隔离/篡改可见保证)。第二个并发 run 诚实拒绝。
+
+# 并发:解除全局单飞。同会话仍串行(st.busy 护 st.messages);跨会话并发,各自 ContextVar 隔离。
+MAX_CONCURRENT_RUNS = int(os.environ.get("ARGOS_MAX_CONCURRENT", "4"))  # 个位数~十几路 + 排队
+_RUN_SEMAPHORE = asyncio.Semaphore(MAX_CONCURRENT_RUNS)
+_LIVE_RUNS: "set[str]" = set()          # 本进程当前活跃 run_id(resume 判定:活跃则拒绝续)
+_PROJECT_LOCKS: "set[str]" = set()      # 非 git 项目降级单飞:同项目同时只一个 run
+_CHECKPOINTER = None                     # AsyncSqliteSaver,lifespan 起;失败=None(降级不可 resume)
+CHECKPOINT_DB = Path(os.environ.get("ARGOS_CKPT_DB", Path.home() / ".argos" / "checkpoints.db"))
 
 
 def _get_or_create_session(
     session_id: str | None, verify_cmd: str | None, project_dir: str | None, guard: list[str] | None
 ) -> SessionState:
-    """取已有会话(setup 首轮锁定,后续参数忽略)或建新会话。LRU 淘汰最旧。"""
+    """取已有会话或建新会话。LRU 淘汰最旧并回收其隔离区(worktree/子目录)。"""
+    evicted: list[SessionState] = []
     with _SESSIONS_LOCK:
         if session_id and session_id in SESSIONS:
-            SESSIONS.move_to_end(session_id)  # 标记为最近使用
+            SESSIONS.move_to_end(session_id)
             return SESSIONS[session_id]
-        sid = session_id or uuid.uuid4().hex[:16]  # 16 hex = 64 bits,对 ≤50 个会话足够,碰撞可忽略
+        sid = session_id or uuid.uuid4().hex[:16]
         st = SessionState(session_id=sid, verify_cmd=verify_cmd, project_dir=project_dir, guard=guard)
         SESSIONS[sid] = st
         SESSIONS.move_to_end(sid)
         while len(SESSIONS) > MAX_SESSIONS:
-            SESSIONS.popitem(last=False)  # 淘汰最旧
-        return st
+            _old_sid, old = SESSIONS.popitem(last=False)
+            evicted.append(old)
+    for old in evicted:  # 锁外回收(git subprocess 不占锁)
+        try:
+            if old.project_dir and isolation.is_git_project(old.project_dir):
+                isolation.release_worktree(old.session_id, old.project_dir)
+            elif not old.project_dir:
+                isolation.release_sandbox(old.session_id)
+        except Exception:
+            pass
+    return st
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     # 启动连一次 MCP(失败不挡服务起来:ensure_loaded 内部逐 server 降级)。
+    global _CHECKPOINTER
     try:
         await mcp_client.ensure_loaded()
     except Exception:
         pass
-    yield
+    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+    async with AsyncExitStack() as stack:
+        try:
+            CHECKPOINT_DB.parent.mkdir(parents=True, exist_ok=True)
+            _CHECKPOINTER = await stack.enter_async_context(
+                AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB))
+            )
+        except Exception:
+            _CHECKPOINTER = None  # 降级:无 checkpointer,run 照跑、只是不可 resume
+        yield
+    _CHECKPOINTER = None
 
 
 app = FastAPI(title="Argos Agent", version="0.1.0", lifespan=_lifespan)
@@ -134,6 +163,104 @@ def _verdict_of(gate, verify_cmd: str | None) -> str | None:
     return "passed"
 
 
+async def _consume_agent_stream(agent, gate, st, goal, stream_input, cfg):
+    """驱动 agent.astream 并把事件帧转 SSE。fresh run(stream_input={"messages":...})与
+    resume(stream_input=None)共用。审批挂起监视 + queue 汇聚逻辑原样保留。"""
+    events: "asyncio.Queue[str | None]" = asyncio.Queue()
+
+    async def _watch_approvals() -> None:
+        seen: set[str] = set()
+        try:
+            while True:
+                for p in st.approval_gate.pending():
+                    if p.call_id not in seen:
+                        seen.add(p.call_id)
+                        await events.put(_sse("approval_request", {
+                            "call_id": p.call_id, "tool": p.payload.get("tool"),
+                            "args": p.payload.get("args"), "description": p.payload.get("description"),
+                            "risk": p.payload.get("risk"),
+                        }))
+                await asyncio.sleep(0.05)
+        except asyncio.CancelledError:
+            pass
+
+    async def _pump() -> None:
+        try:
+            await events.put(_sse("start", {"goal": goal}))
+            final_msgs = st.messages
+            astream_kwargs = {"stream_mode": ["values", "messages"]}
+            if cfg is not None:
+                astream_kwargs["config"] = cfg
+            async for mode, chunk in agent.astream(stream_input, **astream_kwargs):
+                if mode == "messages":
+                    msg_chunk, _meta = chunk
+                    if msg_chunk.__class__.__name__ != "AIMessageChunk":
+                        continue
+                    delta = text_delta(msg_chunk)
+                    if delta:
+                        await events.put(_sse("token", {"text": delta}))
+                    continue
+                msgs = chunk.get("messages", [])
+                if not msgs:
+                    continue
+                final_msgs = msgs
+                last = msgs[-1]
+                kind = last.__class__.__name__
+                calls = getattr(last, "tool_calls", None)
+                content = str(last.content)
+                if calls:
+                    await events.put(_sse("tool_call", {"calls": [{"name": c["name"], "args": c["args"]} for c in calls]}))
+                elif kind == "ToolMessage":
+                    await events.put(_sse("tool_result", {"content": content[:2000]}))
+                elif kind == "HumanMessage" and VerifyGateMiddleware.ESCALATION_TAG in content:
+                    await events.put(_sse("escalation", {"detail": content[:1500]}))
+                elif kind == "HumanMessage" and VerifyGateMiddleware.BOUNCE_TAG in content:
+                    await events.put(_sse("verify_failed", {"detail": content[:1500]}))
+                elif kind == "AIMessage":
+                    txt = final_text(last)
+                    if txt:
+                        await events.put(_sse("message", {"text": txt}))
+            st.messages = list(final_msgs)
+            tampered = runtime.detect_tampering() if st.project_dir else []
+            if tampered:
+                await events.put(_sse("tampering", {"files": tampered}))
+            verdict = _verdict_of(gate, st.verify_cmd)
+            try:
+                memory.record_task(goal=goal, verdict=verdict, model=config.LLM_MODEL)
+            except Exception:
+                pass
+            if verdict == "unverifiable":
+                await events.put(_sse("unverifiable", {"files": gate.tampered, "detail": gate.last_failure}))
+                await events.put(_sse("done", {"resolved": False, "unverifiable": True, "attempts": gate.attempts, "tampered": gate.tampered}))
+            elif verdict == "failed":
+                await events.put(_sse("done", {"resolved": False, "escalated": True, "attempts": gate.attempts, "tampered": tampered}))
+            else:
+                await events.put(_sse("done", {"resolved": True, "tampered": tampered}))
+        except Exception as e:
+            await events.put(_sse("error", {"message": str(e)}))
+        finally:
+            await events.put(None)
+
+    watch_task = asyncio.create_task(_watch_approvals())
+    pump_task = asyncio.create_task(_pump())
+    try:
+        while True:
+            frame = await events.get()
+            if frame is None:
+                break
+            yield frame
+    finally:
+        watch_task.cancel()
+        st.approval_gate.cancel_all()
+        if not pump_task.done():
+            pump_task.cancel()
+        for t in (watch_task, pump_task):
+            try:
+                await t
+            except (asyncio.CancelledError, Exception):
+                pass
+
+
 async def _run_stream(
     goal: str,
     session_id: str | None = None,
@@ -141,168 +268,96 @@ async def _run_stream(
     project_dir: str | None = None,
     guard: list[str] | None = None,
 ) -> AsyncIterator[str]:
-    """跑一轮:取/建会话 → 用历史+本轮消息跑 agent → 流式回事件 → 新消息落回会话。
-    verify/project/guard 在会话首轮锁定,后续轮继承。"""
-    global _RUN_ACTIVE
+    """跑一轮:取/建会话 → 隔离区 → per-run ContextVar → agent 流 → 落会话。
+    并发:同会话串行(st.busy);跨会话并发,各自 ContextVar/worktree 隔离。"""
     st = _get_or_create_session(session_id, verify_cmd, project_dir, guard)
     with _SESSIONS_LOCK:
-        if st.busy or _RUN_ACTIVE:
-            # 已有一轮在跑(本会话 st.busy,或任意会话 _RUN_ACTIVE):拒绝并发轮。
-            # runtime._current 是进程级全局,并发 run 会串台 → 破坏沙盒隔离/篡改可见保证。
-            # 诚实拒绝,不静默丢历史。
+        if st.busy:
             yield _sse("session", {"session_id": st.session_id})
-            yield _sse("error", {"message": "当前已有一个任务在运行,请等它结束再继续。Argos 同一时刻只跑一个任务,以保证沙盒隔离。"})
+            yield _sse("error", {"message": "本会话已有一轮在跑,请等它结束。同一对话同一时刻只跑一轮。"})
             return
         st.busy = True
-        _RUN_ACTIVE = True
-    try:
-        # 首帧回传 session_id,前端存下供后续轮。注意:紧跟其后可能立即来一个 error
-        # 事件(如缺 key 配置),客户端无论如何都应先存下这个 id。
-        # 这一步必须在 try 内:客户端若在 session→start 窗口断开,GeneratorExit 会从这个
-        # yield 抛出,只有被 try 覆盖 finally 才会跑、释放 _RUN_ACTIVE —— 否则永久泄漏、
-        # 死锁后续所有 run(并发单飞标志再也回不到 False)。
-        yield _sse("session", {"session_id": st.session_id})
 
-        # 切运行时上下文(用会话锁定的值,非本轮请求值)。
-        if st.project_dir:
-            runtime.use_project(st.project_dir)
-            if st.guard:
-                runtime.guard_files(st.guard)
-        else:
-            runtime.use_sandbox()
+    # 关键:session yield / semaphore acquire 全在 try 内。客户端若在这些 yield 间断开,
+    # GeneratorExit 从 yield 抛出 → 必须被 finally 覆盖,否则 busy/semaphore 永久泄漏、死锁后续
+    # (沿用原代码 line 159-164 的纪律)。sem_acquired 标志让 finally 只释放真获取过的信号量。
+    token = None
+    project_lock_key = None
+    sem_acquired = False
+    run_id = uuid.uuid4().hex[:16]
+    try:
+        yield _sse("session", {"session_id": st.session_id})
+        if _RUN_SEMAPHORE.locked():  # 已满 → 会排队,先告知前端
+            yield _sse("queued", {"message": "前面有任务在跑,排队中…"})
+        await _RUN_SEMAPHORE.acquire()
+        sem_acquired = True
+
+        # 隔离区:sandbox 子目录 / project worktree / 非 git 降级
         try:
-            # MCP 工具在 lifespan 启动时已连好并缓存;这里直接取缓存(未加载则为空,退化成
-            # 只有内置工具)。**不在此处 ensure_loaded**:lifespan 早于"接受请求"就跑完,生产
-            # 路径工具已就绪;而在 run 路径连 MCP 会让所有直接驱动 _run_stream 的测试触发真实
-            # npx 连接(慢/flaky)。run 路径只读缓存,绝不在这里发起连接。
+            if st.project_dir:
+                if isolation.is_git_project(st.project_dir):
+                    ws, vd = isolation.acquire_worktree(st.session_id, st.project_dir)
+                else:
+                    _candidate = str(Path(st.project_dir).expanduser().resolve())
+                    with _SESSIONS_LOCK:
+                        if _candidate in _PROJECT_LOCKS:
+                            yield _sse("error", {"message": "该项目已有任务在跑且非 git 仓库,无法隔离并发。请等待,或把项目 git init 后再并发。"})
+                            return
+                        _PROJECT_LOCKS.add(_candidate)
+                        project_lock_key = _candidate  # 只有真加进去才记,供 finally 清(避免误删别人的锁)
+                    ws = vd = Path(st.project_dir).expanduser().resolve()
+                ctx = runtime.RunContext(workspace=ws, verify_dir=vd, project_mode=True)
+            else:
+                ws, vd = isolation.acquire_sandbox(st.session_id)
+                # project_mode=True:让文件工具的 _ws() 读 ctx.workspace(per-session 子目录),
+                # 否则 sandbox 隔离失效、并发 run 串回同一全局 WORKSPACE。这是承重墙的本质要求。
+                # sandbox 仍是强隔离(verify_dir 在 workspace 之外,agent 够不到测试)。
+                ctx = runtime.RunContext(workspace=ws, verify_dir=vd, project_mode=True)
+        except isolation.IsolationError as e:
+            yield _sse("error", {"message": f"隔离区创建失败,未隔离不开跑:{e}"})
+            return
+
+        token = runtime.set_context(ctx)
+        if st.project_dir and st.guard:
+            runtime.guard_files(st.guard)
+
+        try:
             merged_tools = list(ALL_TOOLS) + mcp_client.mcp_tools()
             agent, gate = build_agent_with_gate(
-                tools=merged_tools, verify_cmd=st.verify_cmd, goal=goal,
+                tools=merged_tools, verify_cmd=st.verify_cmd, goal=goal, checkpointer=_CHECKPOINTER,
             )
         except Exception as e:
             yield _sse("error", {"message": str(e)})
-            runtime.use_sandbox()
             return
 
-        # 审批闸装进上下文:被 @requires_approval 标记的工具在本轮能找到本会话的 gate。
-        # 必须在 create_task(pump) 之前设好 —— ContextVar 在建任务那刻被复制进子任务。
+        cfg = {"configurable": {"thread_id": run_id}} if _CHECKPOINTER is not None else None
+        run_registry.open_run(
+            run_id=run_id, session_id=st.session_id, thread_id=run_id,
+            workspace=ws, verify_dir=vd, project_dir=st.project_dir,
+            project_mode=bool(st.project_dir), guard=st.guard, goal=goal, verify_cmd=st.verify_cmd,
+        )
+        _LIVE_RUNS.add(run_id)
+
         approval_token = approval.set_current_gate(st.approval_gate)
-        # 工具阻塞等审批时,agent.astream 会整体挂起,消费侧卡在 async for 取不到帧。
-        # 用 queue 把「agent 事件流」和「审批挂起监视」两个并发源汇聚,生成器统一 drain。
-        events: "asyncio.Queue[str | None]" = asyncio.Queue()
-
-        async def _watch_approvals() -> None:
-            """并发监视审批挂起项,新出现的推 approval_request 给前端(否则工具阻塞期间
-            前端收不到弹窗请求)。轮询而非回调:回调会在工具的执行线程触发,跨 loop 操作
-            主 loop 的 queue 不安全;轮询读 pending() 字典是安全的。"""
-            seen: set[str] = set()
-            try:
-                while True:
-                    for p in st.approval_gate.pending():
-                        if p.call_id not in seen:
-                            seen.add(p.call_id)
-                            await events.put(_sse("approval_request", {
-                                "call_id": p.call_id,
-                                "tool": p.payload.get("tool"),
-                                "args": p.payload.get("args"),
-                                "description": p.payload.get("description"),
-                                "risk": p.payload.get("risk"),
-                            }))
-                    await asyncio.sleep(0.05)
-            except asyncio.CancelledError:
-                pass
-
-        async def _pump() -> None:
-            """跑 agent,把事件帧推进 queue;无论如何结束都以 None 哨兵收尾。"""
-            try:
-                await events.put(_sse("start", {"goal": goal}))
-                history = st.messages + [("user", goal)]
-                final_msgs = st.messages
-                async for mode, chunk in agent.astream(
-                    {"messages": history}, stream_mode=["values", "messages"]
-                ):
-                    if mode == "messages":
-                        # chunk = (message_chunk, metadata)。messages 模式实际只产 AIMessageChunk;
-                        # 但防御性卡 class:HumanMessage/ToolMessage 的 content 是字符串(text_delta 会原样返回),
-                        # 若漏进 messages 流会把用户输入/工具结果当 token 外发。
-                        msg_chunk, _meta = chunk
-                        if msg_chunk.__class__.__name__ != "AIMessageChunk":
-                            continue
-                        delta = text_delta(msg_chunk)
-                        if delta:
-                            await events.put(_sse("token", {"text": delta}))
-                        continue
-                    # mode == "values":完整 state,驱动 tool/verify/escalation 检测 + message 定稿。
-                    msgs = chunk.get("messages", [])
-                    if not msgs:
-                        continue
-                    final_msgs = msgs
-                    last = msgs[-1]
-                    kind = last.__class__.__name__
-                    calls = getattr(last, "tool_calls", None)
-                    content = str(last.content)
-                    if calls:
-                        await events.put(_sse("tool_call", {"calls": [{"name": c["name"], "args": c["args"]} for c in calls]}))
-                    elif kind == "ToolMessage":
-                        await events.put(_sse("tool_result", {"content": content[:2000]}))
-                    elif kind == "HumanMessage" and VerifyGateMiddleware.ESCALATION_TAG in content:
-                        await events.put(_sse("escalation", {"detail": content[:1500]}))
-                    elif kind == "HumanMessage" and VerifyGateMiddleware.BOUNCE_TAG in content:
-                        await events.put(_sse("verify_failed", {"detail": content[:1500]}))
-                    elif kind == "AIMessage":
-                        txt = final_text(last)
-                        if txt:
-                            # message 仍发:作为该段答复的权威定稿,前端用它覆盖累积的 token(防漂移)。
-                            await events.put(_sse("message", {"text": txt}))
-                # 本轮跑完:把完整消息历史落回会话,供下一轮延续上下文。
-                st.messages = list(final_msgs)
-                tampered = runtime.detect_tampering() if st.project_dir else []
-                if tampered:
-                    await events.put(_sse("tampering", {"files": tampered}))
-                verdict = _verdict_of(gate, st.verify_cmd)
-                try:
-                    memory.record_task(goal=goal, verdict=verdict, model=config.LLM_MODEL)
-                except Exception:
-                    pass
-                if verdict == "unverifiable":
-                    await events.put(_sse("unverifiable", {"files": gate.tampered, "detail": gate.last_failure}))
-                    await events.put(_sse("done", {"resolved": False, "unverifiable": True, "attempts": gate.attempts, "tampered": gate.tampered}))
-                elif verdict == "failed":
-                    await events.put(_sse("done", {"resolved": False, "escalated": True, "attempts": gate.attempts, "tampered": tampered}))
-                else:
-                    await events.put(_sse("done", {"resolved": True, "tampered": tampered}))
-            except Exception as e:
-                await events.put(_sse("error", {"message": str(e)}))
-            finally:
-                await events.put(None)
-
-        watch_task = asyncio.create_task(_watch_approvals())
-        pump_task = asyncio.create_task(_pump())
         try:
-            while True:
-                frame = await events.get()
-                if frame is None:
-                    break
+            history = st.messages + [("user", goal)]
+            async for frame in _consume_agent_stream(agent, gate, st, goal, {"messages": history}, cfg):
                 yield frame
+            v = _verdict_of(gate, st.verify_cmd)
+            run_registry.mark(run_id, v if v in ("unverifiable", "failed") else "done")
         finally:
-            # 收束顺序要紧:先 cancel_all 把任何挂起审批以 deny 解除(否则 pump 永远卡在
-            # 工具的 await gate.request),工具拿到 deny 字符串后 astream 才能自然收尾。
-            watch_task.cancel()
-            st.approval_gate.cancel_all()
             approval.reset_current_gate(approval_token)
-            if not pump_task.done():
-                pump_task.cancel()
-            for t in (watch_task, pump_task):
-                try:
-                    await t
-                except (asyncio.CancelledError, Exception):
-                    pass
     finally:
-        # 本轮无论怎么结束(正常/异常/早退)都释放 busy + 全局单飞标志,否则会话/全局会被永久锁死。
-        # 这个 finally 必须万无一失:泄漏 _RUN_ACTIVE=True 会死锁所有后续 run。
+        _LIVE_RUNS.discard(run_id)
+        if token is not None:
+            runtime.reset(token)
+        if project_lock_key is not None:
+            with _SESSIONS_LOCK:
+                _PROJECT_LOCKS.discard(project_lock_key)
+        if sem_acquired:
+            _RUN_SEMAPHORE.release()
         with _SESSIONS_LOCK:
             st.busy = False
-            _RUN_ACTIVE = False
 
 
 @app.get("/mcp/servers")

@@ -56,7 +56,10 @@ def test_session_busy_flag():
     assert st.busy is True
 
 
-def test_run_active_flag_default():
-    # 全局单飞标志默认 False(无 run 在跑)。
+def test_concurrency_primitives_default():
+    # 并发新模型(取代旧 _RUN_ACTIVE 全局单飞):无 run 在跑时,semaphore 满值、
+    # 活跃 run 集与项目锁集均空。
     import argos_agent.server as srv
-    assert srv._RUN_ACTIVE is False
+    assert srv._RUN_SEMAPHORE._value == srv.MAX_CONCURRENT_RUNS
+    assert srv._LIVE_RUNS == set()
+    assert srv._PROJECT_LOCKS == set()

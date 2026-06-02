@@ -14,19 +14,20 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from argos_agent import runtime, server, tools
+from argos_agent import isolation, runtime, server, tools
 
 
 @pytest.fixture(autouse=True)
 def _reset_server_state(tmp_path, monkeypatch):
-    """每个用例:把 workspace 指到临时目录,清掉会话/全局单飞标志,回沙盒态。"""
-    monkeypatch.setattr(tools, "WORKSPACE", tmp_path)
+    """每个用例:把隔离区根指到临时目录,清掉会话。
+    并发新模型:不再有 _RUN_ACTIVE 全局单飞;sandbox 走 isolation.RUNS_ROOT 下的
+    per-session 子目录(project_mode=True 让文件工具读 ctx.workspace),故重定向 RUNS_ROOT
+    而非模块级 tools.WORKSPACE。"""
+    monkeypatch.setattr(isolation, "RUNS_ROOT", tmp_path / "runs")
     server.SESSIONS.clear()
-    server._RUN_ACTIVE = False
     runtime.use_sandbox()
     yield tmp_path
     server.SESSIONS.clear()
-    server._RUN_ACTIVE = False
 
 
 class _FakeAgent:
@@ -104,8 +105,9 @@ async def test_approve_unblocks_tool_and_completes(monkeypatch, _reset_server_st
     assert any("已写入" in c for c in tool_results), f"approve 后工具应真执行,实得 {tool_results}"
     done = next(d for e, d in frames if e == "done")
     assert done["resolved"] is True
-    # 文件真被写到临时 workspace
-    assert (tmp_path / "a.txt").read_text() == "hi"
+    # 文件真被写到该会话的隔离 workspace(per-session 子目录,非全局)。
+    sid = next(d["session_id"] for e, d in frames if e == "session")
+    assert (tmp_path / "runs" / sid / "workspace" / "a.txt").read_text() == "hi"
 
 
 @pytest.mark.asyncio
@@ -117,22 +119,30 @@ async def test_deny_refuses_and_skips_side_effect(monkeypatch, _reset_server_sta
     assert approve_resp == {"ok": True}  # deny 成功命中了挂起项
     tool_results = [d["content"] for e, d in frames if e == "tool_result"]
     assert any("用户拒绝" in c for c in tool_results), f"deny 后工具应返回拒绝串,实得 {tool_results}"
-    # 关键:被拒 → 没有副作用,文件不该存在
-    assert not (tmp_path / "a.txt").exists()
+    # 关键:被拒 → 没有副作用,隔离区里任何地方都不该出现 a.txt
+    assert not list((tmp_path / "runs").rglob("a.txt"))
 
 
 @pytest.mark.asyncio
-async def test_disconnect_after_session_frame_releases_run_active(monkeypatch, _reset_server_state):
-    """客户端在 session→start 窗口断开:GeneratorExit 从首帧 yield 抛出,_RUN_ACTIVE 必须
-    被 finally 释放,否则全局单飞标志永久泄漏、死锁后续所有 run。"""
+async def test_disconnect_after_session_frame_releases_run(monkeypatch, _reset_server_state):
+    """客户端在 session→start 窗口断开:GeneratorExit 从首帧 yield 抛出,finally 必须
+    万无一失释放所有并发资源(busy / semaphore / live_runs / project_locks),否则永久
+    泄漏、死锁后续所有 run。新并发模型用 semaphore + st.busy 取代旧 _RUN_ACTIVE 全局单飞。"""
     monkeypatch.setattr(server, "build_agent_with_gate", lambda **kw: (_FakeAgent(), None))
-    assert server._RUN_ACTIVE is False
+    sem_full = server.MAX_CONCURRENT_RUNS
+    assert server._RUN_SEMAPHORE._value == sem_full
+    assert len(server._LIVE_RUNS) == 0
     gen = server._run_stream("写个文件")
     first = await gen.__anext__()  # session 帧
     assert "session" in first
-    assert server._RUN_ACTIVE is True  # 已进入一轮
+    sid = next(iter(server.SESSIONS))
+    assert server.SESSIONS[sid].busy is True  # 已进入一轮(同会话串行护栏已置位)
     await gen.aclose()  # 模拟客户端在收到 session 后立即断开
-    assert server._RUN_ACTIVE is False, "断开后 _RUN_ACTIVE 必须释放"
+    # finally 必须把每一项都归位 —— 任何一项泄漏都会死锁后续 run。
+    assert server.SESSIONS[sid].busy is False, "断开后 st.busy 必须释放"
+    assert server._RUN_SEMAPHORE._value == sem_full, "断开后 semaphore 必须释放回满值"
+    assert len(server._LIVE_RUNS) == 0, "断开后 live_runs 必须清空"
+    assert len(server._PROJECT_LOCKS) == 0, "断开后项目锁必须清空"
 
 
 def test_approve_unknown_session_returns_404():
