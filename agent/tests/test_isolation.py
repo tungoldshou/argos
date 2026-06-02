@@ -59,3 +59,34 @@ def test_acquire_worktree_raises_on_non_git(reroot, tmp_path):
     plain.mkdir()
     with pytest.raises(isolation.IsolationError):
         isolation.acquire_worktree("s", str(plain))
+
+
+def test_acquire_worktree_reusable_after_release(reroot, tmp_path):
+    """release 后能重新 acquire(分支残留不再撞车) —— I1 回归。"""
+    proj = tmp_path / "proj2"
+    proj.mkdir()
+    _git("init", cwd=proj)
+    _git("-c", "user.email=a@b.c", "-c", "user.name=t", "commit", "--allow-empty", "-m", "init", cwd=proj)
+    ws1, _ = isolation.acquire_worktree("reacq", str(proj))
+    isolation.release_worktree("reacq", str(proj))
+    assert not ws1.exists()
+    # 关键:再 acquire 不报 "branch already exists"
+    ws2, _ = isolation.acquire_worktree("reacq", str(proj))
+    assert ws2.exists()
+    isolation.release_worktree("reacq", str(proj))
+
+
+def test_path_traversal_session_id_rejected(reroot):
+    """恶意 session_id 不能逃出隔离根 —— C1 回归。"""
+    with pytest.raises(isolation.IsolationError):
+        isolation.acquire_sandbox("../../etc/evil")
+    with pytest.raises(isolation.IsolationError):
+        isolation.acquire_worktree("../../x", str(reroot))
+
+
+def test_release_sandbox_removes_dir(reroot):
+    """release_sandbox 真的删目录 —— M3。"""
+    ws, _ = isolation.acquire_sandbox("delme")
+    assert ws.exists()
+    isolation.release_sandbox("delme")
+    assert not ws.exists()
