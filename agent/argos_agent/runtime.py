@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import os
 from dataclasses import dataclass, field
@@ -42,33 +43,46 @@ class RunContext:
     guarded_dirs: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
-# 进程内当前上下文(单 run 串行执行,够用;并发场景未来再隔离)。
-_current = RunContext(workspace=_DEFAULT_WS.resolve(), verify_dir=_DEFAULT_VERIFY.resolve())
+# 默认沙盒上下文(安全兜底)。生产路径每个 run 都会 set_context,这个 default 只在
+# 测试/headless 单跑工具时兜底(此时同一时刻只有一个上下文,共享 default 无并发风险)。
+# ⚠️ 不变量:default 是【共享可变单例】(RunContext.guarded/guarded_dirs 是 dict)。
+#   绝不可在【未 set_context】的情况下调 guard_files()——那会 mutate 这个共享 default,
+#   同进程下一次未 set_context 的 detect_tampering() 会读到过期指纹而误报篡改。
+#   guard_files/detect_tampering 只在 set_context 之后(server run 路径)调用,此约束才成立。
+_DEFAULT_CTX = RunContext(workspace=_DEFAULT_WS.resolve(), verify_dir=_DEFAULT_VERIFY.resolve())
+_current_var: contextvars.ContextVar[RunContext] = contextvars.ContextVar(
+    "argos_run_context", default=_DEFAULT_CTX,
+)
 
 
 def current() -> RunContext:
-    return _current
+    return _current_var.get()
 
 
-def use_sandbox() -> RunContext:
-    """切回默认沙盒(强隔离,验证物 agent 够不到)。"""
-    global _current
-    _current = RunContext(workspace=_DEFAULT_WS.resolve(), verify_dir=_DEFAULT_VERIFY.resolve())
-    return _current
+def set_context(ctx: RunContext) -> contextvars.Token:
+    """设本上下文(必须在 create_task(pump) 之前调,ContextVar 在建任务那刻被复制进子任务)。"""
+    return _current_var.set(ctx)
 
 
-def use_project(project_dir: str) -> RunContext:
-    """切到用户项目目录。验证就在项目里跑(verify_dir=项目根)。"""
+def reset(token: contextvars.Token) -> None:
+    _current_var.reset(token)
+
+
+def use_sandbox() -> contextvars.Token:
+    """切回默认沙盒(强隔离,验证物 agent 够不到)。返回 token,run 结束须 reset。"""
+    return set_context(RunContext(workspace=_DEFAULT_WS.resolve(), verify_dir=_DEFAULT_VERIFY.resolve()))
+
+
+def use_project(project_dir: str) -> contextvars.Token:
+    """切到用户项目目录(workspace=verify_dir=该目录)。返回 token,run 结束须 reset。"""
     p = Path(project_dir).expanduser().resolve()
-    global _current
-    _current = RunContext(workspace=p, verify_dir=p, project_mode=True)
-    return _current
+    return set_context(RunContext(workspace=p, verify_dir=p, project_mode=True))
 
 
 def guard_files(paths: list[str]) -> None:
     """登记需保护的文件/目录,记录内容 sha256。文件 → 单个指纹;目录 → 递归快照(含文件集合,
     以便检测新增)。project 模式下靠'篡改可见 + 硬门禁':改/增/删都判 unverifiable。"""
-    ctx = _current
+    ctx = current()
     for rel in paths:
         p = ctx.workspace / rel
         if p.is_dir():
@@ -82,7 +96,7 @@ def guard_files(paths: list[str]) -> None:
 
 def detect_tampering() -> list[str]:
     """返回被改动过的受保护文件列表(内容变了/被删/新增)。空 = 没动测试,诚实。"""
-    ctx = _current
+    ctx = current()
     changed: list[str] = []
     for rel, digest in ctx.guarded.items():
         f = ctx.workspace / rel
