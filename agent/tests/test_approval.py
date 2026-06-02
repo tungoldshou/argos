@@ -187,3 +187,34 @@ async def test_decorator_tool_ainvoke_respects_gate():
         assert ran == "ok a"
     finally:
         approval.reset_current_gate(token)
+
+
+@pytest.mark.asyncio
+async def test_gate_approve_unblocks_tool_across_executor_thread():
+    """铁证:被审批的同步工具经 langchain `.ainvoke` 会在执行线程(独立 event loop)
+    里跑;主 loop 的 approve() 必须能跨 loop 唤醒它,否则交互审批在生产里会永久挂起。
+    用真实 pending→approve 流(不打桩 gate.request)走通这条路。"""
+    from langchain_core.tools import tool as lc_tool
+
+    @lc_tool
+    @approval.requires_approval(description="写入 {path}", risk="low")
+    def write_thing(path: str, content: str) -> str:
+        """写。"""
+        return f"WROTE {path}"
+
+    gate = approval.ApprovalGate()
+    token = approval.set_current_gate(gate)
+    try:
+        task = asyncio.create_task(write_thing.ainvoke({"path": "a.py", "content": "x"}))
+        # 等工具进入 pending(它在执行线程里阻塞等审批)
+        for _ in range(200):
+            await asyncio.sleep(0.01)
+            if gate.pending():
+                break
+        assert gate.pending(), "工具应已挂起等待审批"
+        assert gate.approve(gate.pending()[0].call_id) is True
+        result = await asyncio.wait_for(task, timeout=2.0)
+        assert result == "WROTE a.py"
+        assert gate.pending() == []
+    finally:
+        approval.reset_current_gate(token)

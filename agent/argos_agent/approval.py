@@ -36,6 +36,16 @@ class _Pending:
     payload: dict[str, Any]
     created_at: float  # 留作 UI 排序/超时提示用,目前未消费
     future: asyncio.Future[Decision]
+    # future 绑定在「创建它的那个事件循环」上。被审批的工具可能跑在 langchain 的执行线程
+    # (有自己的 loop),而 approve/deny 来自主 loop —— 跨 loop 直接 set_result 不会唤醒
+    # 工具所在的 loop。记下该 loop,统一用 call_soon_threadsafe 调度,两种情况都对。
+    loop: asyncio.AbstractEventLoop
+
+
+def _resolve(fut: asyncio.Future, decision: "Decision") -> None:
+    """在 future 所属 loop 上安全收尾:可能已超时/取消,先查 done 再 set。"""
+    if not fut.done():
+        fut.set_result(decision)
 
 
 @dataclass
@@ -72,7 +82,7 @@ class ApprovalGate:
         fut: asyncio.Future[Decision] = loop.create_future()
         self._pending[call_id] = _Pending(
             call_id=call_id, payload=payload,
-            created_at=time.time(), future=fut,
+            created_at=time.time(), future=fut, loop=loop,
         )
         try:
             return await asyncio.wait_for(fut, timeout=timeout)
@@ -91,27 +101,33 @@ class ApprovalGate:
             self._session_approvals[key] = _SessionApproval(
                 payload_hash=key, approved_at=time.time(),
             )
-        if not p.future.done():
-            p.future.set_result(Decision(approved=True, scope=scope))
+        self._settle(p, Decision(approved=True, scope=scope))
         return True
 
     def deny(self, call_id: str, reason: str = "") -> bool:
         p = self._pending.pop(call_id, None)
         if p is None:
             return False
-        if not p.future.done():
-            p.future.set_result(Decision(approved=False, reason=reason))
+        self._settle(p, Decision(approved=False, reason=reason))
         return True
 
     def cancel_all(self) -> int:
         """session 终止时调用,把所有挂着的请求以 deny 收尾(避免挂死)。"""
         n = 0
         for p in list(self._pending.values()):
-            if not p.future.done():
-                p.future.set_result(Decision(approved=False, reason="session 终止"))
+            self._settle(p, Decision(approved=False, reason="session 终止"))
             n += 1
         self._pending.clear()
         return n
+
+    @staticmethod
+    def _settle(p: _Pending, decision: "Decision") -> None:
+        """把 decision 投递到 future 所属 loop。跨 loop 用 call_soon_threadsafe 唤醒;
+        loop 已关闭(run 早退后才来的迟到决定)则安全忽略。"""
+        try:
+            p.loop.call_soon_threadsafe(_resolve, p.future, decision)
+        except RuntimeError:
+            pass  # event loop is closed
 
 
 def requires_approval(description: str, risk: RiskLevel = "medium") -> Callable:
