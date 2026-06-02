@@ -11,6 +11,7 @@ import threading
 import uuid
 from collections import OrderedDict
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
 from fastapi import FastAPI, HTTPException
@@ -18,9 +19,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from . import approval, config, memory, runtime
+from . import approval, config, memory, mcp_client, runtime
 from .approval import ApprovalGate
 from .core import build_agent_with_gate, final_text, text_delta
+from .tools import ALL_TOOLS
 from .verify_gate import VerifyGateMiddleware
 
 MAX_SESSIONS = 50  # 进程内会话上限,LRU 淘汰最旧(防内存无限增长)
@@ -62,7 +64,17 @@ def _get_or_create_session(
         return st
 
 
-app = FastAPI(title="Argos Agent", version="0.1.0")
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    # 启动连一次 MCP(失败不挡服务起来:ensure_loaded 内部逐 server 降级)。
+    try:
+        await mcp_client.ensure_loaded()
+    except Exception:
+        pass
+    yield
+
+
+app = FastAPI(title="Argos Agent", version="0.1.0", lifespan=_lifespan)
 
 # CORS:前端跨 origin 调本服务时需要。两种 origin 必须都放行:
 #   - dev: http://localhost:5173 (vite)
@@ -152,7 +164,14 @@ async def _run_stream(
         else:
             runtime.use_sandbox()
         try:
-            agent, gate = build_agent_with_gate(verify_cmd=st.verify_cmd, goal=goal)
+            # MCP 工具在 lifespan 启动时已连好并缓存;这里直接取缓存(未加载则为空,退化成
+            # 只有内置工具)。**不在此处 ensure_loaded**:lifespan 早于"接受请求"就跑完,生产
+            # 路径工具已就绪;而在 run 路径连 MCP 会让所有直接驱动 _run_stream 的测试触发真实
+            # npx 连接(慢/flaky)。run 路径只读缓存,绝不在这里发起连接。
+            merged_tools = list(ALL_TOOLS) + mcp_client.mcp_tools()
+            agent, gate = build_agent_with_gate(
+                tools=merged_tools, verify_cmd=st.verify_cmd, goal=goal,
+            )
         except Exception as e:
             yield _sse("error", {"message": str(e)})
             runtime.use_sandbox()
@@ -277,6 +296,13 @@ async def _run_stream(
         with _SESSIONS_LOCK:
             st.busy = False
             _RUN_ACTIVE = False
+
+
+@app.get("/mcp/servers")
+async def mcp_servers() -> dict:
+    """前端据此渲染真实 MCP 连接态(连不上显 disconnected,不再假 connected)。"""
+    await mcp_client.ensure_loaded()
+    return {"servers": mcp_client.server_status()}
 
 
 @app.get("/memory")
