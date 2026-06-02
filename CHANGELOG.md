@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **电脑操控 / Playwright Python SDK（第 7 步·最难关）** — 新加 4 个 LangChain 工具（`navigate` / `snapshot` / `click` / `type_text`）包装 Playwright Python SDK，让 Argos 能像人一样操控浏览器——**先结构后图形**：能读结构就读结构（准、省），读不到才退回"看截图+移鼠标"（本步不装、留接缝）。**探针换路径**：spec 探针已证 chrome-devtools MCP 时序不稳（`/tmp/control_probe3.py`：3 次重试都"Successfully navigated"但 `list_pages` 仍 about:blank——重试救不了，是 chrome-devtools server 自身状态同步 bug），转 b 路线用 Playwright Python SDK（`/tmp/pw_probe.py`：`page.goto` 真返 `status=200`、`page.url` 立即更新、`wait_for_selector("h1")` 同步等、`page.title()` 直接拿）。**审批闸守住写操作**：`navigate`（改地址+cookies=副作用）/`click`（risk=low）/`type_text`（risk=medium）走 `requires_approval`（与 `run_command` 同款 `@tool @requires_approval` 双装饰、coroutine 是审批 wrapper、invoke 真拦 gate）；`snapshot` 只读直接放行。**spec §2 红线兑现**：附真 venv 降级探针 `tests/computer_control_probe.py`（CI skip），跑 3 真实多步任务（navigate+snapshot / navigate+click+snapshot / navigate+type_text+snapshot），**任一写操作任务失败 → 改 `ENABLED_WRITE_TOOLS=False`、只留 `navigate`+`snapshot`**。诚实标注：单 browser / 单 context，**并发 run 同用会冲突**（工具描述里明示，不真锁）。前端零改。铁证：4 工具 invoke 行为 / 审批门真拦 invoke（3 测试） / Lazy init 失败兜底 / 降级 toggle / ALL_TOOLS 合集形状均独立单测覆盖。
 - **拆大活 / 动态工作流（第 6 步）** — `POST /plan` 端点接收一个工程任务，planner 调 M3 强模型拆 2-5 摊成 `PlanSpec`（pydantic 硬契约，**M3 推理模型自动剥 `<think>` 块 + lenient JSON 提取**，探针确认 100% 跑出结构化 task），再 fan-out 给 N 个并发 worker（**自定义 `asyncio.gather` + `asyncio.Task(coro, context=copy_context())`——探针铁证 LangGraph Send 默认不复制 ContextVar，spec §4.3 红线兑现必须手包**）。每 worker 跑在自己隔离区（sandbox per-task 子目录 / project 模式 per-task worktree 分支 `argos/<session>-<task_id>`），复用第 5 步 `build_agent_with_gate` + checkpointer + 审批闸 + 验证门。**reducer 纯函数**看 N 个 verdict：全 pass → 出报告;部分 fail → "补"动作（最多 2 轮，planner 带失败 task 反馈再拆）→ 不死循环;planner 不可用（M3 缺 key）→ 显式 `plan:escalate` 事件，**不降级到 M2**（spec §4.3 红线）。SSE 事件：`plan:start` / `plan:tasks` / `task:start` / `task:verdict` / `plan:report` / `plan:escalate`;前端零改动。铁证：硬契约 / 强模型剥 thinking / fan-out 承重墙 / "补"回路 / planner escalate / 端到端编排 / 端点流形状均独立单测覆盖。
 - **分身并行 / per-worker 隔离（第 5 步·承重墙）** — sidecar 从进程级单飞改成多分身同进程并发：`runtime` 当前上下文从裸全局改 `ContextVar[RunContext]`（探针确认 sync 工具经 LangChain executor 读到 per-task 值、并发零串台），每个 run 各写各的隔离区——sandbox 走 `~/.argos/runs/<session>/` 子目录，**project 模式走 git worktree（分支 `argos/<session>`，用户工作树不被动，review 分支再 merge）**，非 git 项目诚实降级"原地 + 该项目单飞"。并发由 `asyncio.Semaphore`（默认 4，`ARGOS_MAX_CONCURRENT` 可调）控，超额排队发 `queued` 事件，不吹"数百并发"。**中途被杀能恢复**：`AsyncSqliteSaver` checkpointer（`~/.argos/checkpoints.db`）+ per-run `thread_id` + 持久 run 档案（`~/.argos/runs.db`），`POST /run/{id}/resume` 从 checkpoint 续跑（探针证跨 saver 实例=跨重启可续）。事件流形状不变、前端零改动。铁证：ContextVar 并发隔离、两 run 各写各目录、worktree 生命周期、kill-resume、semaphore 排队均独立单测覆盖。
 - **Skills 技能包 + 记忆回灌（第 4 步）** — 标准流程沉淀为带 frontmatter 的 markdown（`~/.argos/skills/`
@@ -129,6 +130,14 @@ earlier Hermes-swarm prototype.
 2. 故意构造一个失败 task（如 goal="改完跑一个不存在的命令"），观察"补"回路：planner 第二轮被调、`plan:tasks` 再次出现、终态 `replan_rounds ≥ 1`。
 3. 删 `VITE_MINIMAX_KEY` env 重启 → 第一个 `plan:start` 后立即出 `plan:escalate`（不降级 M2）。
 4. 用隔离目录排查工具：plan 跑完后 `ls ~/.argos/runs/<session>/tasks/<task_id>/workspace/` 看到各 task 独立落点。
+-->
+
+<!-- dev 验收清单（依赖真网络/真浏览器，不进 CI）：
+
+1. 启 dev sidecar，跑 `tests/computer_control_probe.py`（去 skip）→ 3 任务全绿保留 click/type；任一 click/type 任务失败 → 改 `ENABLED_WRITE_TOOLS=False`、CHANGELOG 加降级条目。
+2. 在聊天里问"用浏览器查 Argos 自己的 GitHub" → 收到 `navigate` 的审批弹窗 → 确认 → 看到 `snapshot` 自动跟进。
+3. 问"打开一个表单页填个搜索词" → 收 `navigate` + `type_text` 两个审批 → 全确认 → 报告结果。
+4. 检查侧车日志：browser launch 失败时 `ALL_TOOLS` 装配失败，警告但不掀翻 sidecar。
 -->
 
 [Unreleased]: https://github.com/tungoldshou/argos/compare/v0.1.0...HEAD
