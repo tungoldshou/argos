@@ -78,8 +78,12 @@ def _get_or_create_session(
                 isolation.release_worktree(old.session_id, old.project_dir)
             elif not old.project_dir:
                 isolation.release_sandbox(old.session_id)
-        except Exception:
-            pass
+        except Exception as e:
+            # 承重墙:回收失败要可见(否则 worktree 残留会成为幽灵分支)
+            import logging
+            logging.getLogger(__name__).warning(
+                "session LRU eviction cleanup failed: sid=%s err=%r", old.session_id, e,
+            )
     return st
 
 
