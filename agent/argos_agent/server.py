@@ -14,6 +14,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
+import httpx as _httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -89,6 +90,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Skills 模块自己的审批闸单例 —— 跟会话的 approval_gate 分离(skills 端点是后台管理类操作,
+# 不挂会话,也不需要 session-scope 跨轮缓存,任何写盘/状态变更都让用户在 UI 弹窗里点头)。
+# 测试用 monkeypatch 替换 server._SKILL_GATE 即可注入自动批准/拒绝的版本。
+_SKILL_GATE = approval.ApprovalGate()
 
 
 class RunRequest(BaseModel):
@@ -310,6 +317,82 @@ def get_memory() -> dict:
     """Argos 自己跑过的任务记忆(真实、随任务生长)。前端据此构建记忆大脑图。
     没有记忆 → 空列表,前端显示诚实空态,而非编造假记忆。"""
     return {"records": memory.load_memories()}
+
+
+# ── skills 管理端点 ─────────────────────────────────────────────────────────
+# 读 /skills 公开;写 /skills/import 与 /skills/{name}/toggle 走 _SKILL_GATE —— 写盘与改状态
+# 都是有副作用,必须让用户在弹窗里点头。gate 上下文通过 ContextVar 设定,跟 MCP/run 流同套路。
+from . import skills as _skills  # 本地别名,避免覆盖 server 模块其它可能的 skills 名字
+
+
+@app.get("/skills")
+def get_skills() -> dict:
+    """列所有 skill(name/desc/trust/enabled/source),不触发 embedding。"""
+    out = [s.to_dict() for s in _skills.load_all()]
+    return {"skills": out}
+
+
+@app.post("/skills/import")
+async def import_skill(body: dict) -> dict:
+    """导入一个新 skill。body: {url?: str, content?: str, trust?: str, source?: str}。
+    url 与 content 二选一;url 走 httpx 拉回,content 直接接正文。
+    整个动作写盘=有副作用,必走 _SKILL_GATE;通过后落地并刷 recall 缓存。"""
+    token = approval.set_current_gate(_SKILL_GATE)
+    try:
+        if body.get("url") and not body.get("content"):
+            try:
+                r = _httpx.get(str(body["url"]), timeout=15.0, follow_redirects=True)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"fetch failed: {e!r}")
+            if r.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"http {r.status_code}")
+            content = r.text
+            source = str(body["url"])
+        elif body.get("content"):
+            content = body["content"]
+            source = body.get("source", "inline")
+        else:
+            raise HTTPException(status_code=400, detail="need url or content")
+
+        payload = {
+            "tool": "skills.import",
+            "args": {"source": source, "len": len(content)},
+            "description": f"导入 skill: {source}",
+            "risk": "medium",
+            "source": "skill:import",
+        }
+        decision = await _SKILL_GATE.request(payload)
+        if not decision.approved:
+            return {"ok": False, "reason": decision.reason or "denied"}
+        try:
+            s = _skills.import_skill(content=content, source=source)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        return {"ok": True, "skill": s.to_dict()}
+    finally:
+        approval.reset_current_gate(token)
+
+
+@app.post("/skills/{name}/toggle")
+async def toggle_skill(name: str, body: dict) -> dict:
+    """切换 skill.enabled。改状态=有副作用,必走 _SKILL_GATE。"""
+    token = approval.set_current_gate(_SKILL_GATE)
+    try:
+        enabled = bool(body.get("enabled", True))
+        payload = {
+            "tool": "skills.toggle",
+            "args": {"name": name, "enabled": enabled},
+            "description": f"{'启用' if enabled else '禁用'} skill: {name}",
+            "risk": "low",
+            "source": f"skill:{name}",
+        }
+        decision = await _SKILL_GATE.request(payload)
+        if not decision.approved:
+            return {"ok": False, "reason": decision.reason or "denied"}
+        ok = _skills.toggle(name, enabled=enabled)
+        return {"ok": ok}
+    finally:
+        approval.reset_current_gate(token)
 
 
 @app.post("/run")
