@@ -5,11 +5,12 @@ import { useNarrow } from '../lib/responsive';
 import { Icon, PlatformGlyph, type IconName } from '../lib/icons';
 import { pColor } from '../lib/platforms';
 import { tr, useLang } from '../lib/i18n';
-import type { Skill, Automation } from '../data/types';
+import type { Skill, Automation, McpServer } from '../data/types';
 import { isTauri, getSettings, setLlmConfig, restartAgent, type AppSettings } from '../lib/agent';
+import { fetchMcpServers } from '../lib/mcp';
 import {
   AGENT, SKILLS, PLATFORMS, PLATFORMS_MORE, AUTOMATIONS, SANDBOXES, MODELS,
-  MCP_SERVERS, VOICE, PERSONALITY,
+  VOICE, PERSONALITY,
 } from '../data/seed';
 
 interface OverlayProps {
@@ -317,11 +318,27 @@ function ToolsOverlay({ onClose }: { onClose: () => void }) {
 }
 
 function McpOverlay({ onClose }: { onClose: () => void }) {
-  const st: Record<string, string> = { connected: 'var(--live)', available: 'var(--text-3)' };
+  const st: Record<string, string> = { connected: 'var(--live)', disconnected: 'var(--accent)', disabled: 'var(--text-3)', available: 'var(--text-3)' };
+  const [mcpServers, setMcpServers] = useState<McpServer[]>([]);
+  useEffect(() => {
+    let alive = true;
+    fetchMcpServers().then((rows) => {
+      if (!alive) return;
+      setMcpServers(rows.map((r) => ({
+        name: r.name,
+        status: r.status as McpServer['status'],
+        tools: r.tools,
+        via: r.transport,
+        desc: r.desc,
+        error: r.error,
+      })));
+    });
+    return () => { alive = false; };
+  }, []);
   return (
     <Overlay title="MCP" sub={tr('Model Context Protocol — plug in external tool servers')} icon="plug" onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-        {MCP_SERVERS.map((m, i) => (
+        {mcpServers.map((m, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 13, borderRadius: 11, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
             <div style={{ width: 36, height: 36, borderRadius: 10, display: 'grid', placeItems: 'center', background: m.status === 'connected' ? 'color-mix(in oklab,var(--live),transparent 82%)' : 'rgba(255,255,255,0.05)', color: m.status === 'connected' ? 'var(--live)' : 'var(--text-2)', flexShrink: 0 }}><Icon name="plug" size={18} /></div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -330,6 +347,7 @@ function McpOverlay({ onClose }: { onClose: () => void }) {
                 <span style={{ fontFamily: 'var(--mono)', fontSize: 9.5, color: 'var(--text-3)', border: '1px solid var(--border)', borderRadius: 4, padding: '0 5px' }}>{m.via}</span>
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 3 }}>{tr(m.desc)}</div>
+              {m.error && <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 3, fontFamily: 'var(--mono)' }}>{m.error}</div>}
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{m.tools}</div>
@@ -337,6 +355,9 @@ function McpOverlay({ onClose }: { onClose: () => void }) {
             </div>
           </div>
         ))}
+        {mcpServers.length === 0 && (
+          <div style={{ fontSize: 12, color: 'var(--text-3)', padding: '8px 4px' }}>{tr('No MCP servers connected — check sidecar logs.')}</div>
+        )}
       </div>
     </Overlay>
   );

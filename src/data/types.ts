@@ -61,10 +61,11 @@ export interface Sandbox {
 
 export interface McpServer {
   name: string;
+  status: 'connected' | 'disconnected' | 'disabled' | 'available';
   tools: number;
-  status: 'connected' | 'available';
-  via: string;
+  via: string;        // transport
   desc: string;
+  error?: string;
 }
 
 export interface Toolset {

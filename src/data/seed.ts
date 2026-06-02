@@ -1,6 +1,6 @@
 // seed.ts — realistic seed data for the Hermes desktop app.
 import type {
-  Agent, Platform, Skill, Automation, Sandbox, McpServer, Models, Voice, Personality,
+  Agent, Platform, Skill, Automation, Sandbox, Models, Voice, Personality,
 } from './types';
 
 export const AGENT: Agent = {
@@ -59,16 +59,6 @@ export const AUTOMATIONS: Automation[] = [
 // 后端 sidecar 不存在,违反"UI 数字必须匹配真实能力"。等真接了 OS 沙箱再加回来。
 export const SANDBOXES: Sandbox[] = [
   { backend: 'local', label: 'Local process', status: 'running', detail: 'runs on this machine · no OS sandbox yet', icon: 'cpu' },
-];
-
-// ── MCP servers (Model Context Protocol) ──
-export const MCP_SERVERS: McpServer[] = [
-  { name: 'filesystem', tools: 8, status: 'connected', via: 'stdio', desc: 'read/write project files in the sandbox' },
-  { name: 'github', tools: 14, status: 'connected', via: 'stdio', desc: 'issues, pull requests, repos, actions' },
-  { name: 'postgres', tools: 6, status: 'connected', via: 'stdio', desc: 'query the prod replica (read-only)' },
-  { name: 'puppeteer', tools: 7, status: 'connected', via: 'stdio', desc: 'headless browser control & scraping' },
-  { name: 'linear', tools: 9, status: 'available', via: 'sse', desc: 'tasks, projects, cycles' },
-  { name: 'sentry', tools: 5, status: 'available', via: 'sse', desc: 'error monitoring & traces' },
 ];
 
 // ── Model providers & routing ──
