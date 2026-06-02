@@ -462,6 +462,79 @@ async def run(req: RunRequest) -> StreamingResponse:
     )
 
 
+# 续跑(从 registry 重建 RunContext + thread_id 续 checkpoint):
+#   · 在 _LIVE_RUNS=仍在跑(409);registry 无=404;终态=400;无 checkpointer=503。
+#   · 与 _run_stream 共享 _consume_agent_stream(stream_input=None, cfg=thread_id 续)。
+#   · 注意两套 project_mode 语义(关键防串台):
+#       - run_registry 存的 rec["project_mode"] = 是否走 project 模式(用于决定是否 guard)。
+#       - RunContext.project_mode = "工具 _ws() 读 ctx vs 回退模块默认 WORKSPACE"。
+#     resume 重建 RunContext 时必须 project_mode=True:sandbox run rec 存 False,resume
+#     若照搬,tools._ws() 会回退到模块默认 WORKSPACE,破隔离。rec["project_mode"] 仍作
+#     "要不要 guard" 的判据。
+@app.post("/run/{run_id}/resume")
+async def resume_run(run_id: str) -> StreamingResponse:
+    """续跑一个被中断的 run:从 registry 重建 RunContext + thread_id,续 checkpoint。
+    判定:在 _LIVE_RUNS=仍在跑(409);registry 无=404;终态=400;否则 astream(None) 续。"""
+    if run_id in _LIVE_RUNS:
+        raise HTTPException(status_code=409, detail="该任务仍在运行,无需恢复")
+    rec = run_registry.get(run_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="未知 run_id")
+    if rec["status"] in ("done", "failed", "unverifiable"):
+        raise HTTPException(status_code=400, detail=f"该任务已结束({rec['status']}),无可恢复")
+    if _CHECKPOINTER is None:
+        raise HTTPException(status_code=503, detail="checkpointer 未就绪,无法恢复")
+
+    async def _gen() -> AsyncIterator[str]:
+        # 重建会话外壳(重启后 SESSIONS 可能没了 → 造个临时承载 st.messages/approval_gate)
+        st = _get_or_create_session(rec["session_id"], rec["verify_cmd"], rec["project_dir"] or None, rec["guard"])
+        with _SESSIONS_LOCK:
+            if st.busy:
+                yield _sse("error", {"message": "会话忙,稍后再试"})
+                return
+            st.busy = True
+        token = None
+        sem_acquired = False
+        try:
+            await _RUN_SEMAPHORE.acquire()  # 在 try 内:acquire 被取消也不漏 busy
+            sem_acquired = True
+            # 强制 project_mode=True:让 tools._ws() 读 ctx(per-run 隔离区),不回退模块默认 WORKSPACE
+            # (sandbox run rec 存的是 False,若照搬会破隔离,见端点 docstring)
+            ctx = runtime.RunContext(
+                workspace=Path(rec["workspace"]), verify_dir=Path(rec["verify_dir"]),
+                project_mode=True,
+            )
+            token = runtime.set_context(ctx)
+            if rec["project_mode"] and rec["guard"]:
+                runtime.guard_files(rec["guard"])
+            merged_tools = list(ALL_TOOLS) + mcp_client.mcp_tools()
+            agent, gate = build_agent_with_gate(
+                tools=merged_tools, verify_cmd=rec["verify_cmd"], goal=rec["goal"], checkpointer=_CHECKPOINTER,
+            )
+            cfg = {"configurable": {"thread_id": rec["thread_id"]}}
+            _LIVE_RUNS.add(run_id)
+            approval_token = approval.set_current_gate(st.approval_gate)
+            try:
+                yield _sse("session", {"session_id": st.session_id})
+                yield _sse("resumed", {"run_id": run_id})
+                async for frame in _consume_agent_stream(agent, gate, st, rec["goal"], None, cfg):
+                    yield frame
+                v = _verdict_of(gate, rec["verify_cmd"])
+                run_registry.mark(run_id, v if v in ("unverifiable", "failed") else "done")
+            finally:
+                approval.reset_current_gate(approval_token)
+        finally:
+            _LIVE_RUNS.discard(run_id)
+            if token is not None:
+                runtime.reset(token)
+            if sem_acquired:
+                _RUN_SEMAPHORE.release()
+            with _SESSIONS_LOCK:
+                st.busy = False
+
+    return StreamingResponse(_gen(), media_type="text/event-stream")
+
+
 class ApproveRequest(BaseModel):
     """用户对某次工具调用的审批决定。"""
     call_id: str
