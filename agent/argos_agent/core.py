@@ -168,12 +168,15 @@ def build_agent_with_gate(
     max_rounds: int = 3,
     goal: str | None = None,
     compaction: bool = True,
+    checkpointer=None,
 ) -> tuple[object, VerifyGateMiddleware | None]:
     """构造 agent,同时返回 verify 门禁实例(供 server 读 escalation 状态)。
     verify_cmd 非空时挂 verify 硬门禁:agent 称"完成"必过命令(退出码0),否则 bounce
     重试;达 max_rounds 仍不过 → 门禁标记 escalated,诚实升级求助人类。
     goal 非空且被判为结构化工程任务时,注入契约层约束(8→0 实测资产);非结构化不注入。
-    compaction=True 时挂上下文压缩(长任务到阈值摘要旧消息,防 context rot/超限)。"""
+    compaction=True 时挂上下文压缩(长任务到阈值摘要旧消息,防 context rot/超限)。
+    checkpointer 非 None 时透传给 create_agent,挂持久 checkpointer 支持中途杀掉续跑;
+    server 按 run 配 thread_id 实现分身隔离。传 None 行为与旧版完全一致。"""
     sys = system_prompt or HONESTY_SYSTEM
     # 契约层:仅结构化工程任务注入(写作/分析不注入,实测有害)。
     if goal:
@@ -196,5 +199,6 @@ def build_agent_with_gate(
         tools=ALL_TOOLS if tools is None else tools,
         system_prompt=sys,
         middleware=middleware,
+        checkpointer=checkpointer,
     )
     return agent, gate

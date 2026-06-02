@@ -55,3 +55,13 @@ def test_guard_and_detect_read_contextvar(tmp_path):
         assert any("test_x.py" in c for c in runtime.detect_tampering())
     finally:
         runtime.reset(token)
+
+
+def test_build_agent_accepts_checkpointer(monkeypatch):
+    """build_agent_with_gate 接受 checkpointer 并透传(传 None 时行为不变)。"""
+    from argos_agent import core, config
+    # config.LLM_KEY 是 import 时常量,必须直接 patch 它(setenv 改不动已算好的常量)
+    monkeypatch.setattr(config, "LLM_KEY", "test-key")
+    agent, gate = core.build_agent_with_gate(tools=[], verify_cmd=None, goal=None,
+                                             compaction=False, checkpointer=None)
+    assert agent is not None and gate is None
