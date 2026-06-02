@@ -190,6 +190,49 @@ async def test_decorator_tool_ainvoke_respects_gate():
 
 
 @pytest.mark.asyncio
+async def test_guarded_call_fail_closed_without_gate():
+    ran = {"v": False}
+    async def run():
+        ran["v"] = True
+        return "ok"
+    out = await approval.guarded_call({"tool": "x"}, run)
+    assert "默认拒绝" in out
+    assert ran["v"] is False  # 无 gate 绝不执行
+
+
+@pytest.mark.asyncio
+async def test_guarded_call_runs_when_approved():
+    gate = approval.ApprovalGate()
+    async def _auto(payload, timeout=60.0):
+        return approval.Decision(approved=True, scope="once")
+    gate.request = _auto  # type: ignore[assignment]
+    token = approval.set_current_gate(gate)
+    try:
+        out = await approval.guarded_call({"tool": "x"}, lambda: _say_hi())
+        assert out == "hi"
+    finally:
+        approval.reset_current_gate(token)
+
+
+async def _say_hi():
+    return "hi"
+
+
+@pytest.mark.asyncio
+async def test_guarded_call_returns_refusal_when_denied():
+    gate = approval.ApprovalGate()
+    async def _deny(payload, timeout=60.0):
+        return approval.Decision(approved=False, reason="太危险")
+    gate.request = _deny  # type: ignore[assignment]
+    token = approval.set_current_gate(gate)
+    try:
+        out = await approval.guarded_call({"tool": "x"}, lambda: _say_hi())
+        assert "用户拒绝" in out and "太危险" in out
+    finally:
+        approval.reset_current_gate(token)
+
+
+@pytest.mark.asyncio
 async def test_gate_approve_unblocks_tool_across_executor_thread():
     """铁证:被审批的同步工具经 langchain `.ainvoke` 会在执行线程(独立 event loop)
     里跑;主 loop 的 approve() 必须能跨 loop 唤醒它,否则交互审批在生产里会永久挂起。

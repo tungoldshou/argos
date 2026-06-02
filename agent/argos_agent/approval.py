@@ -251,6 +251,23 @@ def _current_gate() -> "ApprovalGate | None":
     return _current_gate_var.get()
 
 
+async def guarded_call(payload: dict[str, Any], run: Callable[[], Any]) -> Any:
+    """审批守卫(装饰器与 MCP 工具包装共用):
+    · 无 gate 上下文 → fail-closed 返回拒绝串;
+    · gate 拒绝 → 返回拒绝串(模型看到换路,不抛异常);
+    · 批准 → await run()(run 是个返回 awaitable 的零参可调用)。"""
+    gate = _current_gate()
+    if gate is None:
+        return "错误:该工具需要用户审批但当前没有审批上下文,默认拒绝。"
+    decision = await gate.request(payload)
+    if not decision.approved:
+        return (
+            f"用户拒绝执行该操作({decision.reason or '未提供原因'})。"
+            f"请尝试其他做法或向用户解释为什么需要它。"
+        )
+    return await run()
+
+
 async def _call_original(fn: Callable, args: tuple, kwargs: dict[str, Any]) -> Any:
     """调用原工具(同步/异步都支持)。"""
     res = fn(*args, **kwargs)

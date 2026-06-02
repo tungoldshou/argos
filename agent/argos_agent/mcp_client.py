@@ -12,6 +12,11 @@ import os
 from pathlib import Path
 from typing import Any
 
+from langchain_core.tools import BaseTool, StructuredTool
+
+from . import approval
+from .approval import RiskLevel
+
 CONFIG_PATH = Path(os.environ.get("ARGOS_MCP_CONFIG", Path.home() / ".argos" / "mcp.json"))
 
 # 默认安全集(dev:靠本机 node/npx)。chrome-devtools + filesystem 默认开;
@@ -55,3 +60,47 @@ def load_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, ValueError, OSError):
         return _default_config()
+
+
+def _annotations(tool: BaseTool) -> dict[str, Any]:
+    """挖出 MCP 工具的注解(readOnlyHint/destructiveHint)。
+    实测(Task 1 探针,langchain-mcp-adapters 0.2.2 + 官方 filesystem server)注解**平铺在
+    tool.metadata 顶层**,如 {"readOnlyHint": true, "destructiveHint": null, ...}。
+    个别版本可能嵌在 metadata["annotations"] 下,故两处都看;读不到 → 空 → 走 fail-closed。"""
+    md = getattr(tool, "metadata", None) or {}
+    flat = {k: md[k] for k in ("readOnlyHint", "destructiveHint") if k in md}
+    if flat:
+        return flat
+    nested = md.get("annotations")
+    return nested if isinstance(nested, dict) else {}
+
+
+def classify(tool: BaseTool, server_cfg: dict[str, Any]) -> tuple[bool, RiskLevel]:
+    """返回 (是否需审批, 风险)。只读放行;有副作用/未知 fail-closed 套审批。"""
+    ann = _annotations(tool)
+    if ann.get("readOnlyHint") is True:
+        return (False, "low")
+    if tool.name in (server_cfg.get("read_only_tools") or []):
+        return (False, "low")
+    risk: RiskLevel = "high" if ann.get("destructiveHint") is True else "medium"
+    return (True, risk)
+
+
+def gate_mcp_tool(tool: BaseTool, risk: RiskLevel, server_name: str) -> BaseTool:
+    """把一个 MCP 工具包成"先审批再执行"的等价工具,保名/保描述/保 args schema。"""
+    async def _gated(**kwargs: Any) -> Any:
+        payload = {
+            "tool": tool.name,
+            "args": kwargs,
+            "description": f"经 MCP {server_name} 执行 {tool.name}",
+            "risk": risk,
+            "source": f"mcp:{server_name}",
+        }
+        return await approval.guarded_call(payload, lambda: tool.ainvoke(kwargs))
+
+    return StructuredTool.from_function(
+        coroutine=_gated,
+        name=tool.name,
+        description=tool.description,
+        args_schema=tool.args_schema,
+    )
