@@ -17,6 +17,7 @@ dependencies = [
     "mlx-embeddings>=0.1.0",
     "numpy>=2.4.6",
     "playwright>=1.60.0",
+    "smolagents>=1.26.0",
     "sqlite-vec>=0.1.9",
     "textual>=8.2.7",
     "trafilatura>=2.0.0",
