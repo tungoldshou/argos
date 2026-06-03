@@ -58,11 +58,24 @@ def _tavily_search(query: str, limit: int) -> dict:
         return {"success": False, "error": f"Tavily 搜索失败:{e}"}
 
 
+# 各 provider 的出口 host(broker 的 EgressPolicy 据此 fail-closed 校验 web_search 出网)。
+TAVILY_HOST = "api.tavily.com"
+DDGS_HOST = "duckduckgo.com"
+
+
 def search(query: str, limit: int = 5) -> dict:
     """联网搜索。有 TAVILY_API_KEY → Tavily;否则 → 免费 DDGS。"""
     if os.environ.get("TAVILY_API_KEY", "").strip():
         return _tavily_search(query, limit)
     return _ddgs_search(query, limit)
+
+
+def active_search_host() -> str:
+    """当前生效 search provider 的出口 host —— broker 用它 fail-closed 校验 egress。
+    有 TAVILY_API_KEY → Tavily(api.tavily.com);否则 → 免费 DDGS(duckduckgo.com)。"""
+    if os.environ.get("TAVILY_API_KEY", "").strip():
+        return TAVILY_HOST
+    return DDGS_HOST
 
 
 def _http_get(url: str) -> str:

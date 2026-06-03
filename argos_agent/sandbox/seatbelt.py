@@ -62,6 +62,22 @@ def wrap_command(profile_path: str, argv: list[str]) -> list[str]:
     return ["/usr/bin/sandbox-exec", "-f", profile_path, *argv]
 
 
+def confined_argv(*, workspace: Path, argv: list[str]) -> list[str]:
+    """把任意 argv 用本模块的 Seatbelt profile(网络 OFF、写牢笼 workspace+temp、读放宽)
+    包成 sandbox-exec argv。profile 写到 workspace 内的 .argos_run.sb(workspace 可写,
+    符合 profile 自身约束)。run_command(C1)用它把 host 子进程关进同一沙箱:
+    网络外泄不可能(deny network*),越界写被挡(write 仅 workspace+temp),
+    但 pytest/python/本地构建仍能跑(无需网络、读放宽能 import venv)。
+
+    macOS only —— 调用方须先确认 sys.platform == 'darwin'(非 darwin 无 sandbox-exec)。
+    """
+    workspace.mkdir(parents=True, exist_ok=True)
+    prof = build_profile(workspace=workspace)
+    prof_file = workspace / ".argos_run.sb"
+    prof_file.write_text(prof, encoding="utf-8")
+    return wrap_command(str(prof_file), argv)
+
+
 def spawn_child(*, workspace: Path, child_argv: list[str],
                 env: dict[str, str] | None = None) -> subprocess.Popen:
     """用 Seatbelt profile 包着拉起沙箱子进程,返回 Popen(stdin/stdout 管道)。

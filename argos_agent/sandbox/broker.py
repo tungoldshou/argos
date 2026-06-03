@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from argos_agent.approval import ApprovalGate
+from argos_agent.approval import ApprovalGate, ApprovalLevel
 from argos_agent.tools import shell as _shell
 from argos_agent.tools import web as _web
 from argos_agent.tools.receipts import Receipt, ReceiptSigner
@@ -22,14 +22,17 @@ from .egress import EgressPolicy
 # 网络类动作:request 前要查 egress。
 _NETWORK_ACTIONS: set[str] = {"web_search", "web_extract"}
 # 各 action 的风险与人类描述模板(审批弹窗用)。
+# C1:run_command 提到 high —— 任意 shell 执行,即便已关进 Seatbelt 也绝不静默放手。
 _RISK: dict[str, str] = {
-    "run_command": "medium",
+    "run_command": "high",
     "web_search": "low",
     "web_extract": "low",
     "navigate": "low",
     "click": "low",
     "type_text": "medium",
 }
+# C1:这些 action 即便在 AUTO(YOLO)档也强制逐个确认 —— 永不静默执行 shell。
+_FORCE_CONFIRM_ACTIONS: set[str] = {"run_command"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,21 +50,28 @@ class CapabilityBroker:
         self.last_receipt: Receipt | None = None   # loop 读它投 ToolReceipt 事件
 
     async def request(self, action: str, args: dict[str, Any]) -> Any:
-        """返回灌回沙箱的值(成功=工具串;拒绝=拒绝串)。副作用:签 Receipt 存 last_receipt。"""
+        """返回灌回沙箱的值(成功=工具串;拒绝=拒绝串)。副作用:签 Receipt 存 last_receipt。
+
+        唯一 gating 入口:egress → approval → host 执行 → 签 Receipt。沙箱侧只能经
+        executor 的 broker RPC 走到这里。_execute() 是内部裸执行,绝不可绕开本方法直接调
+        (那会跳过 egress/approval/receipt;见 _execute docstring)。"""
         if action not in _RISK:
             return f"错误:未知/不支持的特权动作 {action!r},拒绝。"
-        # ① egress 检查(网络类)
+        # ① egress 检查(网络类,fail-closed)
         if action in _NETWORK_ACTIONS:
             host = _web.host_for(action, args)
-            # web_search 出口由 provider 决定,只要 search_hosts 非空即视为允许 provider;
-            # web_extract 必须显式校验目标 url 的 host。
-            if action == "web_extract" and not self._egress.allowed(host):
+            # web_extract:校验目标 url 的 host;web_search:校验活跃 provider 的出口 host(I3)。
+            # 两者都 fail-closed —— host 不在白名单即拒,绝不静默放行。
+            if not self._egress.allowed(host):
                 return f"错误:egress 拒绝 —— {host!r} 不在允许出网名单。可让用户批准该域名后重试。"
         # ② 审批拨盘
-        decision = await self._gate.request(
-            action, args, description=self._describe(action, args),
-            risk=_RISK.get(action, "medium"),
+        # C1:run_command 即便在 AUTO 档也强制逐个确认 —— 永不静默执行任意 shell。
+        level_override = (
+            ApprovalLevel.CONFIRM
+            if (action in _FORCE_CONFIRM_ACTIONS and self._gate.level is ApprovalLevel.AUTO)
+            else None
         )
+        decision = await self._request_decision(action, args, level_override)
         if not decision.approved:
             return (
                 f"用户拒绝执行该操作({decision.reason or '未提供原因'})。"
@@ -76,7 +86,36 @@ class CapabilityBroker:
         # ⑤ 灌回沙箱
         return value
 
+    async def _request_decision(self, action: str, args: dict[str, Any],
+                                level_override: "ApprovalLevel | None"):
+        """走审批拨盘。level_override 非 None 时临时降级(如 run_command 在 AUTO 档强制 CONFIRM),
+        裁决后恢复原档(避免污染整个 session)。"""
+        if level_override is None:
+            return await self._gate.request(
+                action, args, description=self._describe(action, args),
+                risk=_RISK.get(action, "medium"),
+            )
+        saved = self._gate.level
+        self._gate.set_level(level_override)
+        try:
+            return await self._gate.request(
+                action, args, description=self._describe(action, args),
+                risk=_RISK.get(action, "medium"),
+            )
+        finally:
+            self._gate.set_level(saved)
+
+    def take_receipt(self) -> Receipt | None:
+        """I2:返回并清空 last_receipt —— loop 每步调它,确保只在【本步新签了 Receipt】时
+        才投 ToolReceipt 事件;无新回执返回 None(防陈旧回执被反复重投/张冠李戴)。"""
+        rec = self.last_receipt
+        self.last_receipt = None
+        return rec
+
     def _execute(self, action: str, args: dict[str, Any]) -> tuple[Any, int | None]:
+        """⚠️ 内部裸执行 —— 仅供 request() 调用。绝不可从外部/测试直接调:
+        它跳过 egress 校验、审批裁决与 Receipt 签发,直接产生真副作用。
+        所有 broker-gated 动作必须经 request() 入口(它做完整 gating)。"""
         if action == "run_command":
             return _shell.run_command(args.get("command", ""))
         if action == "web_search":

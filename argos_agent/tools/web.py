@@ -36,7 +36,10 @@ def web_extract(url: str) -> str:
 
 
 def host_for(action: str, args: dict) -> str:
-    """从 web 动作的 args 抽要校验 egress 的 host(broker 用)。"""
+    """从 web 动作抽要校验 egress 的 host(broker 用)。
+    web_extract → 目标 url 的 host;web_search → 当前生效 provider 的出口 host。"""
     if action == "web_extract":
         return args.get("url", "")
-    return ""   # web_search 的出口由 provider host 决定,broker 用 search_hosts 白名单覆盖
+    if action == "web_search":
+        return web.active_search_host()   # I3:解析活跃 provider host,broker fail-closed 校验
+    return ""

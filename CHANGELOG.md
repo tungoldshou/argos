@@ -7,6 +7,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Security
+- **Phase 3 对抗式安全审查修复（沙箱/broker/engine）。**
+  - **C1（Critical）`run_command` 主机外泄洞封死**：曾在 host 侧无约束跑 subprocess（全网络 + 可读写 workspace 外），可被 `python3 -c "...urlopen(...read('~/.ssh/id_rsa'))"` 利用读密钥并外发。现三层防御：① **macOS Seatbelt 关进 executor 同款 profile —— 网络系统级 OFF、写仅 workspace+temp、读放宽**（OS 级真边界,非 arg-inspection）;② `run_command` 风险升 `high` 且在 AUTO（YOLO）档也强制逐个确认,永不静默执行 shell;③ 纵深 arg-inspection 拒 `python/node` 内联求值（`-c/-e/--eval/-` stdin）与 `npx` 任意包执行。遗留 LangChain `run_command` 工具改为委托同一受限实现（消除并存的第二个外泄洞）。**铁证**：`tests/test_run_command_confined.py` 证经 `run_command` 的外联得 `URLError: Operation not permitted`、越界写得 `PermissionError`、in-workspace 命令仍正常。**权衡（MVP 可接受）**：network OFF 下合法联网命令（`pip install` / `git fetch|push` / `npm install`）会被拒——这是安全默认值;"显式批准联网的命令"路径留作后续。
+  - **I3 `web_search` 出口现 fail-closed 校验**：曾在 `_NETWORK_ACTIONS` 列出却从不校验;现解析活跃 provider 出口 host（Tavily=`api.tavily.com` / DDGS=`duckduckgo.com`），不在 `EgressPolicy.search_hosts` 即拒。
+- **回执/重放正确性**：
+  - **I2 per-step 回执**：`CapabilityBroker.take_receipt()`（返回并清空 `last_receipt`），loop 只在【本步新签了回执】时投 `ToolReceipt`，杜绝陈旧回执被每个 code-action 反复重投/张冠李戴。
+  - **I4 broker-gating 铁证**：新增经 `broker.request(...)` 端到端 deny 路径测试（OBSERVE 档网络动作被拒、无 receipt，证 egress→approval→receipt 真把动作 gate 住）;`_execute` 加 docstring 红线,标明仅可经 `request()` 调用。
+  - **M7 嵌套事件解码**：`deserialize_event` 把持久化的 `ToolReceipt.receipt` / `VerifyVerdict.verdict` dict 还原回 `Receipt`/`Verdict` dataclass（replay §5.8 拿真对象而非 dict）。
+  - **M5/M6/M8**：升级措辞用真实尝试次数;`_validate_git` 意图显式化（子命令前全局选项=RCE 向量拒,子命令后局部旗标如 `git show --stat` 放行）;loop spawn 固定空命名空间 + assert 红线,防 model-controlled 数据进 `__authorized_imports__`（smolagents 把 `"*"` 当 allow-all）。
+
 ### Added
 - 引擎核心:自建 CodeAct `AgentLoop`（`argos_agent/core/loop.py`，替换 LangChain create_agent），四阶段 plan→act→verify→report 不可跳，抽 Python 代码块→沙箱执行→回灌，投 12 类型化事件并持久化（一份事件三用）。**端到端铁证**：`tests/test_e2e_loop_sandbox.py` 真 AgentLoop 驱动真 Seatbelt sandbox-exec 子进程，`write_file` 代码在 OS 沙箱内执行，文件真落盘 workspace（非 mock）。
 - 诚实栈:`HONESTY_SYSTEM` 搬到 `argos_agent/core/honesty.py`，`format_untrusted` + `compose_system` 保证安全段永远在 untrusted 段之前（注入顺序锁死，spec §12.1）。

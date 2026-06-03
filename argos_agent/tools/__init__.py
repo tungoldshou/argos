@@ -151,9 +151,7 @@ def build_child_namespace(broker: Any) -> dict[str, Any]:
 
 try:
     import os as _os
-    import shlex as _shlex
-    import subprocess as _subprocess
-    from pathlib import Path as _Path
+    import subprocess as _subprocess  # search_files 仍直接用(rg 子进程)
 
     from langchain_core.tools import tool as _lc_tool
 
@@ -263,34 +261,16 @@ try:
         return out
 
     @_lc_tool
-    @_req_approval(description="执行命令 {command}", risk="medium")
+    @_req_approval(description="执行命令 {command}", risk="high")
     def run_command(command: str) -> str:  # type: ignore[misc]
-        """在 workspace 内运行一条白名单内的命令(验证/构建/测试类),返回退出码+输出。"""
-        from .shell import ALLOWED_CMDS as _AC, GIT_READONLY_SUBCMDS as _GRC, _validate_git
-        try:
-            parts = _shlex.split(command)
-        except ValueError as e:
-            return f"错误:命令解析失败 {e}"
-        if not parts:
-            return "错误:空命令。"
-        bin_name = _Path(parts[0]).name
-        if bin_name not in _AC:
-            return f"错误:命令 {bin_name!r} 不在白名单。允许:{', '.join(sorted(_AC))}"
-        if bin_name == "git":
-            git_err = _validate_git(parts)
-            if git_err:
-                return git_err
-        ws = _ws()
-        ws.mkdir(parents=True, exist_ok=True)
-        try:
-            r = _subprocess.run(parts, cwd=ws, capture_output=True, text=True, timeout=60)
-        except _subprocess.TimeoutExpired:
-            return "错误:命令超时(60s)。"
-        except Exception as e:  # noqa: BLE001
-            return f"错误:执行失败 {e}"
-        out = (r.stdout or "")[-3000:]
-        err = (r.stderr or "")[-2000:]
-        return f"[exit_code={r.returncode}]\n--- stdout ---\n{out}\n--- stderr ---\n{err}".strip()
+        """在 workspace 内运行一条白名单内的命令(验证/构建/测试类),返回退出码+输出。
+
+        C1:委托给 shell.run_command —— 单一真源,享同款防御(白名单 + git 只读校验 +
+        解释器 arg-inspection + macOS Seatbelt 网络 OFF / 写牢笼 workspace)。
+        不再在此重写一份无约束的 host subprocess(那是与 broker 路径并存的第二个外泄洞)。"""
+        from .shell import run_command as _run
+        out, _exit = _run(command, workspace=_ws())   # 遗留路径用自己的 _ws() 解析(尊重 WORKSPACE monkeypatch)
+        return out
 
     @_lc_tool
     def web_search(query: str, limit: int = 5) -> str:  # type: ignore[misc]

@@ -46,6 +46,12 @@ except Exception:  # noqa: BLE001
 
 _CODE_BLOCK = re.compile(r"```(?:python)?\s*\n(.*?)```", re.DOTALL)
 
+# M8 安全不变量:沙箱 spawn 用【固定空命名空间】—— 绝不把模型输出/外部数据塞进
+# namespace["__authorized_imports__"]。smolagents 在 AST 层把 "*" 当 allow-all,
+# 若模型能控制 authorized_imports 就能放开任意 import,绕过 AST 限制层(OS 沙箱仍在,
+# 但纵深的一层被废)。spawn 一律传这个空 dict 的副本,不接受调用方注入。
+_FIXED_SPAWN_NAMESPACE: dict[str, Any] = {}
+
 
 def extract_code_block(text: str) -> str | None:
     """从模型输出抽第一个 Python 代码块;无则 None。"""
@@ -110,7 +116,14 @@ class AgentLoop:
         顶层兜底:捕获 _drive 内任何未处理异常,挖异常链投 Error(spec §3.3 L5)。
         """
         self._started = time.time()
-        self._sandbox.spawn(workspace=self._workspace, namespace={})
+        # M8:固定空命名空间的副本 —— 模型输出永不经此进入 __authorized_imports__。
+        # assert 是给未来改这里的人的红线:别把任何 model-controlled 数据 thread 进 namespace。
+        spawn_namespace = dict(_FIXED_SPAWN_NAMESPACE)
+        assert "__authorized_imports__" not in spawn_namespace, (
+            "M8 安全不变量:loop spawn 的 namespace 绝不可携带 __authorized_imports__"
+            "(smolagents 把 '*' 当 allow-all,模型可控会绕过 AST 限制层)。"
+        )
+        self._sandbox.spawn(workspace=self._workspace, namespace=spawn_namespace)
         try:
             async for ev in self._drive(goal, session_id):
                 self._store.append_event(session_id, ev)
@@ -156,9 +169,12 @@ class AgentLoop:
                     step=step, stdout=result.stdout,
                     value_repr=result.value_repr, exc=result.exc, ok=result.ok,
                 )
-                # W2 注记:accept_receipt gating 延迟到 Phase 4;本阶段直接读 last_receipt。
-                if self._broker is not None and getattr(self._broker, "last_receipt", None) is not None:
-                    yield ToolReceipt(receipt=self._broker.last_receipt)
+                # I2:只在【本步新签了 Receipt】时投 ToolReceipt —— take_receipt() 返回并清空,
+                # 没有新回执返回 None(否则陈旧回执会被每个 code-action 反复重投/张冠李戴)。
+                if self._broker is not None:
+                    new_receipt = self._broker.take_receipt()
+                    if new_receipt is not None:
+                        yield ToolReceipt(receipt=new_receipt)
                 # 回灌执行结果给模型,继续下一步。
                 messages.append({"role": "user", "content": self._feedback(result)})
                 step += 1
@@ -183,10 +199,12 @@ class AgentLoop:
             # failed → bounce / escalate
             self._fail_count += 1
             if self._fail_count > self._cfg.max_rounds:
+                # M5:实际失败尝试数 = self._fail_count(max_rounds+1 次后才升级),
+                # 措辞与 attempts 用真实值,不再谎报"已尝试 {max_rounds} 轮"。
                 yield Escalation(
                     reason=(
-                        f"已尝试 {self._cfg.max_rounds} 轮仍无法通过验证 "
-                        f"`{self._cfg.verify_cmd}`,需人工介入。"
+                        f"已尝试 {self._fail_count} 次仍无法通过验证 "
+                        f"`{self._cfg.verify_cmd}`(bounce 上限 {self._cfg.max_rounds} 轮),需人工介入。"
                     ),
                     attempts=self._fail_count,
                     last_failure=verdict.detail,

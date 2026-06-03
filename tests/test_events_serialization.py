@@ -71,3 +71,41 @@ def test_error_default_chain_is_empty_list():
     assert e.chain == []
     # frozen:默认工厂不共享同一引用
     assert E.Error(message="x").chain is not e.chain
+
+
+# ── M7:嵌套 dataclass(Receipt/Verdict)round-trip 回真对象,不是 dict ──────────────
+def test_tool_receipt_roundtrip_keeps_receipt_dataclass():
+    from argos_agent.tools.receipts import Receipt, ReceiptSigner
+    signer = ReceiptSigner(key=b"m7-test")
+    rec = signer.sign(action="run_command", args={"command": "echo hi"},
+                      result="hi", exit_code=0)
+    ev = E.ToolReceipt(receipt=rec)
+    back = E.deserialize_event(E.serialize_event(ev))
+    assert isinstance(back, E.ToolReceipt)
+    assert isinstance(back.receipt, Receipt), "receipt 必须还原成 Receipt dataclass,不是 dict"
+    assert back.receipt.action == "run_command"
+    assert back.receipt.exit_code == 0
+    assert back.receipt.sig == rec.sig
+    # 还原后签名仍可验(同 key)
+    assert signer.verify(back.receipt) is True
+
+
+def test_verify_verdict_roundtrip_keeps_verdict_dataclass():
+    from argos_agent.core.verify_gate import Verdict
+    v = Verdict.failed(detail="[exit_code=1]\nboom", verify_cmd="pytest -q", attempts=2)
+    ev = E.VerifyVerdict(verdict=v)
+    back = E.deserialize_event(E.serialize_event(ev))
+    assert isinstance(back, E.VerifyVerdict)
+    assert isinstance(back.verdict, Verdict), "verdict 必须还原成 Verdict dataclass,不是 dict"
+    assert back.verdict.status == "failed"
+    assert back.verdict.verify_cmd == "pytest -q"
+    assert back.verdict.attempts == 2
+
+
+def test_verify_verdict_unverifiable_roundtrip_with_tampered():
+    from argos_agent.core.verify_gate import Verdict
+    v = Verdict.unverifiable(detail="受保护文件被改", tampered=["a.py", "b.py"], attempts=1)
+    back = E.deserialize_event(E.serialize_event(E.VerifyVerdict(verdict=v)))
+    assert isinstance(back.verdict, Verdict)
+    assert back.verdict.status == "unverifiable"
+    assert back.verdict.tampered == ["a.py", "b.py"]

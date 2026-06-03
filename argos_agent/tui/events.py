@@ -165,11 +165,33 @@ def serialize_event(ev: Event) -> str:
     return json.dumps({"kind": event_kind(ev), "data": payload}, ensure_ascii=False)
 
 
+def _decode_receipt(data: dict[str, Any]) -> "Receipt":
+    """M7:把持久化的 receipt dict 还原成 Receipt dataclass(replay §5.8 要真对象,非 dict)。"""
+    from argos_agent.tools.receipts import Receipt as _Receipt
+    return _Receipt(**data)
+
+
+def _decode_verdict(data: dict[str, Any]) -> "Verdict":
+    """M7:把持久化的 verdict dict 还原成 Verdict dataclass(replay §5.8 要真对象,非 dict)。"""
+    from argos_agent.core.verify_gate import Verdict as _Verdict
+    return _Verdict(**data)
+
+
 def deserialize_event(blob: str) -> Event:
-    """JSON 串 → 事件。未知 kind → ValueError(fail-loud,坏数据不静默吞)。"""
+    """JSON 串 → 事件。未知 kind → ValueError(fail-loud,坏数据不静默吞)。
+
+    M7:ToolReceipt.receipt / VerifyVerdict.verdict 是嵌套 dataclass —— serialize 时 asdict
+    把它们摊成 dict,deserialize 必须显式还原成 Receipt/Verdict,否则 replay 会拿到 dict
+    而非 dataclass(下游 .action/.status 等属性访问会炸)。已是 dataclass(直接构造)则原样保留。
+    """
     obj = json.loads(blob)
     kind = obj.get("kind")
     cls = _KIND_TO_CLASS.get(kind)
     if cls is None:
         raise ValueError(f"unknown event kind: {kind!r}")
-    return cls(**obj["data"])
+    data = dict(obj["data"])
+    if kind == "tool_receipt" and isinstance(data.get("receipt"), dict):
+        data["receipt"] = _decode_receipt(data["receipt"])
+    elif kind == "verify_verdict" and isinstance(data.get("verdict"), dict):
+        data["verdict"] = _decode_verdict(data["verdict"])
+    return cls(**data)
