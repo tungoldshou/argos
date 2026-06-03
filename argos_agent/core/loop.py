@@ -209,15 +209,15 @@ class AgentLoop:
 
     async def _drive(self, goal: str, session_id: str) -> AsyncIterator["Event"]:
         """四阶段驱动(不可跳):plan → act(CodeAct 循环) → verify(门禁) → report。"""
-        # ── plan ──
-        async for ev in self._enter_phase("plan"):
-            yield ev
-        # 确保 session 行存在(replay/resume 据 session_id 重建;幂等,resume 时已存在则 no-op)。
-        # hasattr 守卫:最小 store 替身(无 session 概念)跳过,真 ArgosStore 据此落 session 行。
+        # 确保 session 行先于任何 event/message 落库(replay/resume 据 session_id 重建;幂等,
+        # resume 时已存在则 no-op)。hasattr 守卫:最小 store 替身(无 session 概念)跳过。
         if hasattr(self._store, "ensure_session"):
             self._store.ensure_session(  # type: ignore[attr-defined]
                 session_id, title=goal[:80], model=self._cfg.model_tier, system_snapshot="",
             )
+        # ── plan ──
+        async for ev in self._enter_phase("plan"):
+            yield ev
         messages: list[dict] = [{"role": "user", "content": goal}]
         self._store.append_message(session_id, role="user", content=goal)
         # W3:系统提示在 run 起始算一次(召回的 untrusted 段在安全段之后)。
