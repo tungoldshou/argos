@@ -70,7 +70,8 @@ def _run_selftest() -> int:
     with tempfile.TemporaryDirectory() as td:
         proj = Path(td) / "proj"
         proj.mkdir()
-        (proj / "test_st.py").write_text("def test_st():\n    from st import f\n    assert f() == 1\n")
+        # selftest 用系统 python3 自包含验证 —— 不依赖 pytest 在 PATH(裸 binary 运行时
+        # shell PATH 常无 pytest;真实用户在自己项目里 pytest 在其 venv,不受影响)。
         os.environ["ARGOS_WORKSPACE"] = str(proj)
         tok = runtime.use_project(str(proj))
         store = None
@@ -95,7 +96,7 @@ def _run_selftest() -> int:
             loop = AgentLoop(
                 store=store, bus=EventBus(), sandbox=sandbox, broker=broker, model=model,
                 verifier=Verifier(max_rounds=3),
-                config=LoopConfig(verify_cmd="pytest -q test_st.py",
+                config=LoopConfig(verify_cmd='python3 -c "import st; assert st.f() == 1"',
                                   approval_level=ApprovalLevel.AUTO, compaction=False),
                 workspace=proj, verify_dir=proj,
             )
