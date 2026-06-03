@@ -52,10 +52,13 @@ def in_project(tmp_path, monkeypatch):
     runtime.reset(tok)
 
 
-def test_verify_none_cmd_returns_passed(in_project):
-    # 没 verify_cmd → 无可机检判据 → passed(诚实:没有断言可跑就不拦,但 harness 会在 report 标注)。
+def test_verify_none_cmd_returns_unverifiable(in_project):
+    # HONESTY CORRECTION:没 verify_cmd → 没有机检命令真的跑过 → 诚实标 "unverifiable",
+    # 绝不当 passed(否则违反 HONESTY_SYSTEM 规则 1:未实际运行验证命令不得声称成功)。
+    # 无测任务能否完成由 Harness.run_verify_gate 据 "verify_cmd is None" 判定 —— 不 bounce,
+    # 但报告诚实标 "未机检验证 (no test command)"。
     v = Verifier(max_rounds=3).verify(None)
-    assert v.status == "passed"
+    assert v.status == "unverifiable"
     assert v.verify_cmd is None
 
 

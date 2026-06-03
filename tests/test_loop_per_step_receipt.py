@@ -67,6 +67,11 @@ class StepBroker:
         self.last_receipt = None
         self._signed_once = False
 
+    @property
+    def signer(self):
+        # W2(§6.5):loop 在投 ToolReceipt 前经 Harness.accept_receipt 核验回执 —— 需 host signer。
+        return self._signer
+
     def sign_step_one(self):
         self.last_receipt = self._signer.sign(
             action="run_command", args={"command": "echo hi"}, result="hi", exit_code=0,

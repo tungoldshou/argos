@@ -7,13 +7,20 @@
   · report:全绿或诚实标注"未完整验证";失败 bounce 重生成,超 max_rounds → Escalation。
 一份事件三用:每个 Event 既 yield 给调用方,又 store.append_event 持久化。
 
-契约 §9 锁定:
-  锁#1: _verify_step 调 self._verifier.verify(verify_cmd, attempts=...) -> Verdict,
-         无自建 _Verdict,无 detect_tampering(由 Verifier 内部处理)。
+契约 §9 锁定 + §10 接线(Phase 4 落实):
+  锁#1: verify(verify_cmd, attempts=...) -> Verdict,无自建 _Verdict,无 detect_tampering。
   锁#6: LoopConfig.model_tier: ModelTierName, approval_level: ApprovalLevel。
-  W1:   PhaseChange("verify") 在 VerifyVerdict 之前发出。
-  W2:   Harness(enter_phase/run_verify_gate/accept_receipt) 延迟到 Phase 4;本阶段内联处理。
-  W3:   compose_system + recall 注入链延迟到 Phase 4;本阶段 system = HONESTY_SYSTEM。
+  W1:   PhaseChange("verify") 在 VerifyVerdict 之前发出(enter_phase("verify") 先于 run_verify_gate)。
+  W2:   loop 真正调用 Harness —— enter_phase 取代内联 _phase、run_verify_gate 取代内联
+         verifier 调用+escalation、accept_receipt 在投 ToolReceipt 前核验回执(§6.5)。
+         loop 内不再保留并行的 phase/verify/receipt 逻辑(无死代码/重复)。
+  W3:   系统提示走 compose_system(HONESTY_SYSTEM, untrusted=format_untrusted(skills, recall))
+         (store 带 recall 时);流式 delta 过 StreamingContextScrubber 再投 TokenDelta。
+         无可召回 store → 诚实降级为 HONESTY_SYSTEM only(不假装召回发生过)。
+
+HONESTY CORRECTION(spec HONESTY 规则 1):没配 verify_cmd → Verifier 返 unverifiable(绝不当
+passed);Harness 据 "verify_cmd is None" 把它当诚实非阻塞完成(无测任务能收尾,不 bounce),
+report 诚实标 NO_TEST_LABEL。配了 verify_cmd 却 unverifiable(篡改/超时)或 failed → bounce/escalate。
 目标 <800 行。
 """
 from __future__ import annotations
@@ -24,18 +31,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
-from argos_agent.core.honesty import HONESTY_SYSTEM
+from argos_agent.core.harness import Harness
+from argos_agent.core.honesty import (
+    HONESTY_SYSTEM, StreamingContextScrubber, compose_system, format_untrusted,
+)
 from argos_agent.core.types import ModelTierName
 from argos_agent.tui.events import (
-    CodeAction, CodeResult, Error, Escalation, Event, PhaseChange,
-    TokenDelta, ToolReceipt, VerifyVerdict,
+    CodeAction, CodeResult, Error, Event, EventBus, PhaseChange,
+    TokenDelta, ToolReceipt,
 )
 
 if TYPE_CHECKING:
     from argos_agent.memory.store import ArgosStore
     from argos_agent.sandbox.backend import SandboxBackend
     from argos_agent.sandbox.broker import CapabilityBroker
-    from argos_agent.tui.events import EventBus
 
 # 延迟 import ApprovalLevel 避免循环;用 TYPE_CHECKING 拿类型,运行时懒 import。
 try:
@@ -61,6 +70,24 @@ def extract_code_block(text: str) -> str | None:
     return m.group(1).strip()
 
 
+class _CollectingBus(EventBus):
+    """loop 内部用的录制总线 —— Harness 把 PhaseChange/VerifyVerdict/Escalation emit 到这里,
+    loop 调完 Harness 方法后 drain() 取出这些事件,统一走 yield + store.append_event 这条
+    "一份事件三用"主路径(故 Harness 不是死代码,且其事件与 loop 直投事件同一条流)。"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._collected: list[Event] = []
+
+    async def emit(self, ev: Event) -> None:  # type: ignore[override]
+        self._collected.append(ev)
+
+    def drain(self) -> list[Event]:
+        out = self._collected
+        self._collected = []
+        return out
+
+
 @dataclass(frozen=True, slots=True)
 class LoopConfig:
     """契约 §9 锁#6 — model_tier: ModelTierName, approval_level: ApprovalLevel。"""
@@ -69,20 +96,13 @@ class LoopConfig:
     max_rounds: int = 3              # verify bounce 上限
     max_steps: int = 40              # CodeAct 步数硬上限(death-spiral 兜底)
     compaction: bool = True
+    recall: bool = True              # W3:store 支持 recall 时是否注入召回的 untrusted 段
     # approval_level 默认 ApprovalLevel.CONFIRM(契约 §9 锁#6)。
-    # TYPE_CHECKING import 避循环;运行时懒 import 拿真枚举值。
     approval_level: Any = field(default_factory=lambda: _DEFAULT_APPROVAL_LEVEL)
 
 
 class AgentLoop:
-    """CodeAct 主循环。
-
-    W2 注记(Phase 4 延迟):Harness(enter_phase/run_verify_gate/accept_receipt)不存在。
-    本阶段把 phase 门/verify/receipt 内联处理,Phase 4 引入 Harness 时重构这里。
-
-    W3 注记(Phase 4 延迟):system 固定为 HONESTY_SYSTEM(无 recall/scrubber 注入)。
-    Phase 4 引入 compose_system + recall + StreamingContextScrubber 时补完。
-    """
+    """CodeAct 主循环。W2 调 Harness 做阶段门/verify 门/回执核验;W3 注入诚实召回链。"""
 
     def __init__(
         self,
@@ -109,6 +129,16 @@ class AgentLoop:
         self._actions = 0
         self._fail_count = 0
         self._started = 0.0
+        # W2:loop 内部录制总线 + Harness。Harness 的 signer 取 broker 的 host signer
+        # (同进程,沙箱拿不到),无 broker 时用 verifier 也无回执可验 → 给个一次性 key 占位
+        # (无 broker 时 accept_receipt 不会被调用,故 key 不重要)。
+        self._hbus = _CollectingBus()
+        self._harness = Harness(
+            verifier=verifier,
+            signer=self._broker.signer if self._broker is not None else _ReceiptSigner(key=b"_no_broker_"),
+            bus=self._hbus,
+            max_rounds=config.max_rounds,   # bounce 上限以 LoopConfig 为准(loop 拥有 bounce 策略)。
+        )
 
     async def run(self, goal: str, session_id: str) -> AsyncIterator["Event"]:
         """驱动一次 run。plan→act→verify→report,投并持久化每个 Event(一份事件三用)。
@@ -117,7 +147,6 @@ class AgentLoop:
         """
         self._started = time.time()
         # M8:固定空命名空间的副本 —— 模型输出永不经此进入 __authorized_imports__。
-        # assert 是给未来改这里的人的红线:别把任何 model-controlled 数据 thread 进 namespace。
         spawn_namespace = dict(_FIXED_SPAWN_NAMESPACE)
         assert "__authorized_imports__" not in spawn_namespace, (
             "M8 安全不变量:loop spawn 的 namespace 绝不可携带 __authorized_imports__"
@@ -140,24 +169,54 @@ class AgentLoop:
         finally:
             self._sandbox.close()
 
+    async def _enter_phase(self, phase: str) -> AsyncIterator["Event"]:
+        """W2:经 Harness.enter_phase 推进阶段门(强制不可跳),drain 出 PhaseChange 走主路径。"""
+        await self._harness.enter_phase(phase, actions=self._actions)  # type: ignore[arg-type]
+        for ev in self._hbus.drain():
+            yield ev
+
+    def _build_system(self, goal: str) -> str:
+        """W3:store 带 recall → compose_system(HONESTY_SYSTEM, untrusted=召回);否则诚实降级
+        为 HONESTY_SYSTEM only(不假装召回发生过)。召回失败也降级,不让 run 崩。"""
+        if not self._cfg.recall or not hasattr(self._store, "recall"):
+            return HONESTY_SYSTEM
+        try:
+            hits = self._store.recall(goal)  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            return HONESTY_SYSTEM
+        memory_lines = [
+            f"- {rec.goal} → {rec.verdict or '?'}（{reason}）" for rec, reason in hits
+        ]
+        untrusted = format_untrusted(skill_bodies=[], memory_lines=memory_lines)
+        return compose_system(HONESTY_SYSTEM, untrusted=untrusted)
+
     async def _drive(self, goal: str, session_id: str) -> AsyncIterator["Event"]:
         """四阶段驱动(不可跳):plan → act(CodeAct 循环) → verify(门禁) → report。"""
         # ── plan ──
-        async for ev in self._phase("plan"):
+        async for ev in self._enter_phase("plan"):
             yield ev
         messages: list[dict] = [{"role": "user", "content": goal}]
         self._store.append_message(session_id, role="user", content=goal)
+        # W3:系统提示在 run 起始算一次(召回的 untrusted 段在安全段之后)。
+        system = self._build_system(goal)
 
         # ── act(CodeAct 循环)──
-        async for ev in self._phase("act"):
+        async for ev in self._enter_phase("act"):
             yield ev
         step = 0
+        report_note = ""   # 收尾时报告里诚实标注(如无测任务"未机检验证")。
         while step < self._cfg.max_steps:
-            # W3 注记:system 固定 HONESTY_SYSTEM;Phase 4 改 compose_system + recall。
+            # W3:流式 delta 过 StreamingContextScrubber,防模型把 untrusted 围栏吐回 UI 泄露。
+            scrubber = StreamingContextScrubber()
             text = ""
-            async for delta in self._model.stream(messages, system=HONESTY_SYSTEM):
+            async for delta in self._model.stream(messages, system=system):
                 text += delta
-                yield TokenDelta(text=delta)
+                clean = scrubber.feed(delta)
+                if clean:
+                    yield TokenDelta(text=clean)
+            tail = scrubber.flush()
+            if tail:
+                yield TokenDelta(text=tail)
             messages.append({"role": "assistant", "content": text})
 
             code = extract_code_block(text)
@@ -169,61 +228,56 @@ class AgentLoop:
                     step=step, stdout=result.stdout,
                     value_repr=result.value_repr, exc=result.exc, ok=result.ok,
                 )
-                # I2:只在【本步新签了 Receipt】时投 ToolReceipt —— take_receipt() 返回并清空,
-                # 没有新回执返回 None(否则陈旧回执会被每个 code-action 反复重投/张冠李戴)。
+                # I2 + W2(§6.5):只在【本步新签了 Receipt】且【HMAC 核验通过】时投 ToolReceipt。
+                # accept_receipt 在投事件前核验回执 —— 伪造/篡改的回执拒投(防谎报工具执行)。
                 if self._broker is not None:
                     new_receipt = self._broker.take_receipt()
-                    if new_receipt is not None:
+                    if new_receipt is not None and self._harness.accept_receipt(new_receipt):
                         yield ToolReceipt(receipt=new_receipt)
-                # 回灌执行结果给模型,继续下一步。
                 messages.append({"role": "user", "content": self._feedback(result)})
                 step += 1
                 continue
 
             # 无代码块 → 模型宣布"完成" → 进 verify。
-            # W1:先发 PhaseChange("verify"),再跑 verifier,再发 VerifyVerdict。
-            async for ev in self._phase("verify"):
+            # W1:先 enter_phase("verify")(投 PhaseChange),再 run_verify_gate(投 VerifyVerdict)。
+            async for ev in self._enter_phase("verify"):
                 yield ev
 
-            # 契约 §9 锁#1:调 verify(verify_cmd, attempts=...) -> Verdict(无_Verdict/无tampered)。
-            verdict = self._verifier.verify(
-                self._cfg.verify_cmd, attempts=self._fail_count + 1
+            # W2:run_verify_gate 跑 verifier 出三态 Verdict,投 VerifyVerdict;真问题超
+            # max_rounds 时它自己投 Escalation。loop 据返回的 verdict 决定 break / bounce。
+            verdict = await self._harness.run_verify_gate(
+                self._cfg.verify_cmd, attempt=self._fail_count + 1
             )
-            verdict_ev = VerifyVerdict(verdict=verdict)
-            yield verdict_ev
+            for ev in self._hbus.drain():
+                yield ev
 
             if verdict.status == "passed":
                 break                        # 通过 → 收尾
-            if verdict.status == "unverifiable":
-                break                        # 诚实标注,不假装成功,收尾
-            # failed → bounce / escalate
+            if self._harness.is_honest_completion(verdict, verify_cmd=self._cfg.verify_cmd):
+                # HONESTY CORRECTION:无测任务的诚实非阻塞完成 —— 收尾,report 标"未机检验证"。
+                report_note = "未机检验证 (no test command)"
+                break
+            # 到这里:failed,或配了 cmd 却 unverifiable(篡改/超时)→ 真问题 → bounce/escalate。
             self._fail_count += 1
             if self._fail_count > self._cfg.max_rounds:
-                # M5:实际失败尝试数 = self._fail_count(max_rounds+1 次后才升级),
-                # 措辞与 attempts 用真实值,不再谎报"已尝试 {max_rounds} 轮"。
-                yield Escalation(
-                    reason=(
-                        f"已尝试 {self._fail_count} 次仍无法通过验证 "
-                        f"`{self._cfg.verify_cmd}`(bounce 上限 {self._cfg.max_rounds} 轮),需人工介入。"
-                    ),
-                    attempts=self._fail_count,
-                    last_failure=verdict.detail,
-                )
-                break                        # 诚实升级,终止
+                # 此刻 run_verify_gate 这一轮(attempt = 本次 _fail_count,即 max_rounds+1)已
+                # 投出 Escalation —— 二者同一判据(attempt > max_rounds)同轮触发,诚实终止。
+                break
             bounce = (
-                f"[Argos 验证门] 你声称完成,但验证命令 `{self._cfg.verify_cmd}` 没通过:"
+                f"[Argos 验证门] 你声称完成,但验证 `{self._cfg.verify_cmd}` 未通过/不可信:"
                 f"\n{verdict.detail}\n请用工具定位并修复,改完再说完成。"
             )
             messages.append({"role": "user", "content": bounce})
             step += 1
 
         # ── report ──
-        async for ev in self._phase("report"):
+        if report_note:
+            # 诚实标注挂在 report 的 PhaseChange 之前先记一笔(走持久化主路径)。
+            self._store.append_message(
+                session_id, role="system", content=f"[report] {report_note}"
+            )
+        async for ev in self._enter_phase("report"):
             yield ev
-
-    async def _phase(self, phase: str) -> AsyncIterator["Event"]:
-        """投 PhaseChange,推进阶段门。"""
-        yield PhaseChange(phase=phase, actions=self._actions)  # type: ignore[arg-type]
 
     @staticmethod
     def _feedback(result: Any) -> str:
@@ -234,3 +288,7 @@ class AgentLoop:
         if result.value_repr:
             out += f"\n[返回值] {result.value_repr}"
         return f"[执行结果]\n{out}" if out.strip() else "[执行完成,无输出]"
+
+
+# 运行时懒 import(避免顶层与 broker/receipts 形成 import 环;仅无 broker 占位用)。
+from argos_agent.tools.receipts import ReceiptSigner as _ReceiptSigner  # noqa: E402

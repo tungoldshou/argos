@@ -18,6 +18,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - **M5/M6/M8**：升级措辞用真实尝试次数;`_validate_git` 意图显式化（子命令前全局选项=RCE 向量拒,子命令后局部旗标如 `git show --stat` 放行）;loop spawn 固定空命名空间 + assert 红线,防 model-controlled 数据进 `__authorized_imports__`（smolagents 把 `"*"` 当 allow-all）。
 
 ### Added
+- **Phase 4 5 层 harness 收口（Tasks 8–10）— 把 harness 智能真正接进引擎循环。**
+  - **可观测 L5**（`argos_agent/core/observability.py`）：`stream_diag` 包流式生成器测 TTFB / chunk 数 / 异常链拍平（复用 `recovery.flatten_exception_chain` 挖 4 层真因）；`cost_of(usage, model)` 按 `PRICING` 表算 per-step 成本，**未知模型不瞎编价**（成本 0、token 仍如实计）。
+  - **`Harness`**（`argos_agent/core/harness.py`）编排 L1–L5：`enter_phase`（阶段门 plan→act→verify→report 不可跳）、`run_verify_gate`（三态 Verdict + 超 `max_rounds` 投 `Escalation`）、`accept_receipt`（HMAC 核验回执，伪造则拒）。
+  - **W2 接线**：`AgentLoop` 真正调用 `Harness` —— `enter_phase` 取代内联 `_phase`、`run_verify_gate` 取代内联 verifier 调用 + escalation、**`accept_receipt` 在投 `ToolReceipt` 前核验回执 HMAC**（§6.5）。loop 内不再保留并行的 phase/verify/receipt 逻辑（无死代码）。
+  - **W3 接线**：loop 系统提示走 `compose_system(HONESTY_SYSTEM, untrusted=format_untrusted(skills, store.recall(goal)))`（store 带 recall 时）；流式 delta 过 `StreamingContextScrubber` 再投 `TokenDelta`（防模型把 untrusted 围栏吐回 UI 泄露）。**无可召回 store → 诚实降级 `HONESTY_SYSTEM` only**（不假装召回发生过）。
+  - **诚实修正**：`Verifier.verify(None)`（没配 verify_cmd）现返 `unverifiable` 而非 `passed` —— 没有验证命令真的跑过就绝不声称成功（落实 HONESTY_SYSTEM 规则 1）。但无测任务必须能收尾：`Harness` 据 `verify_cmd is None` 把这种 `unverifiable` 当**诚实非阻塞完成**（不 bounce/escalate，report 诚实标 "未机检验证 (no test command)"）；配了 verify_cmd 却 `unverifiable`（篡改/超时）或 `failed` 才走 bounce/escalate。
 - 引擎核心:自建 CodeAct `AgentLoop`（`argos_agent/core/loop.py`，替换 LangChain create_agent），四阶段 plan→act→verify→report 不可跳，抽 Python 代码块→沙箱执行→回灌，投 12 类型化事件并持久化（一份事件三用）。**端到端铁证**：`tests/test_e2e_loop_sandbox.py` 真 AgentLoop 驱动真 Seatbelt sandbox-exec 子进程，`write_file` 代码在 OS 沙箱内执行，文件真落盘 workspace（非 mock）。
 - 诚实栈:`HONESTY_SYSTEM` 搬到 `argos_agent/core/honesty.py`，`format_untrusted` + `compose_system` 保证安全段永远在 untrusted 段之前（注入顺序锁死，spec §12.1）。
 - Verifier 占位（契约 §9 锁#1 canonical 签名）:`argos_agent/core/verify_gate.py` — `Verifier.verify(verify_cmd, *, attempts=1) -> Verdict`，三态 fail-closed（passed/failed/unverifiable），内部处理篡改检测与 VERIFY_DIR 隔离，Phase 4 同名签名直接替换。

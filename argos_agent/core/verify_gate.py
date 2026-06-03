@@ -48,7 +48,9 @@ class Verifier:
 
         优先级：篡改检测 > 命令执行 > 无命令。
         · 篡改非空 → unverifiable(spec §12.5 — 绝不蒙混)。
-        · 无 verify_cmd → passed(诚实：无断言可跑就不拦，harness 在 report 标注"未机检")。
+        · 无 verify_cmd → unverifiable(HONESTY CORRECTION：没有机检命令真的跑过，就绝不
+          声称 passed —— 违反 HONESTY_SYSTEM 规则 1。无测任务能否完成由 Harness 据
+          "verify_cmd is None" 判定为诚实非阻塞完成，不在此处当 passed 蒙混)。
         · verify_cmd 在白名单 → 跑命令；通过 → passed，失败 → failed，超时 → unverifiable。
         · verify_cmd 不在白名单 → failed(明确拒绝，不静默跳过)。
         """
@@ -60,9 +62,12 @@ class Verifier:
                 tampered=tampered, attempts=attempts,
             )
 
-        # 无可机检命令 → 没有断言可跑(诚实：不拦，harness 在 report 会标注"未完整验证")。
+        # 无可机检命令 → 没有任何验证命令真的跑过 → 诚实判 unverifiable(绝不当 passed)。
+        # Harness.run_verify_gate 见 verify_cmd is None 时把它当"诚实非阻塞完成"放行(不 bounce)。
         if not verify_cmd:
-            return Verdict.passed(detail="(无 verify_cmd，未做机检验证)", verify_cmd=None, attempts=attempts)
+            return Verdict.unverifiable(
+                detail="(无 verify_cmd，未做机检验证)", tampered=[], attempts=attempts,
+            )
 
         ok, detail, timed_out = self._run_verify(verify_cmd)
         if timed_out:

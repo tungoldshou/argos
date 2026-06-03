@@ -105,6 +105,13 @@ class CapabilityBroker:
         finally:
             self._gate.set_level(saved)
 
+    @property
+    def signer(self) -> ReceiptSigner:
+        """host 侧暴露签名器 —— 供 Harness.accept_receipt 在投 ToolReceipt 前核验回执
+        (W2/§6.5)。broker 与 Harness/loop 同在 host 进程,沙箱拿到的只是 RPC stub,
+        故此暴露不泄露 key 给沙箱。"""
+        return self._signer
+
     def take_receipt(self) -> Receipt | None:
         """I2:返回并清空 last_receipt —— loop 每步调它,确保只在【本步新签了 Receipt】时
         才投 ToolReceipt 事件;无新回执返回 None(防陈旧回执被反复重投/张冠李戴)。"""
