@@ -28,12 +28,13 @@ datas = (
 )
 
 a = Analysis(
-    ["argos_agent/__main__.py"],
-    pathex=["."],
+    # PyInstaller 按 spec 文件所在目录(packaging/)解析相对路径,故用 ../ 指回仓库根。
+    ["../argos_agent/__main__.py"],
+    pathex=[".."],
     binaries=_vec_binaries,
     datas=datas,
     hiddenimports=hiddenimports,
-    hookspath=["argos_agent/_pyinstaller_hooks"],
+    hookspath=["../argos_agent/_pyinstaller_hooks"],
     excludes=["langchain", "langgraph", "fastapi", "uvicorn"],  # 旧栈不进新 binary(已非入口)
     cipher=block_cipher,
 )
