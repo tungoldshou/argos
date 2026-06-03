@@ -140,6 +140,23 @@ class AgentLoop:
             max_rounds=config.max_rounds,   # bounce 上限以 LoopConfig 为准(loop 拥有 bounce 策略)。
         )
 
+    # ── 只读访问(Phase 6 装配/e2e 核验用;构造参数即这些,属性化是最小暴露)──────────
+    @property
+    def bus(self) -> "EventBus":
+        return self._bus
+
+    @property
+    def store(self) -> "ArgosStore":
+        return self._store
+
+    @property
+    def sandbox(self) -> "SandboxBackend":
+        return self._sandbox
+
+    @property
+    def broker(self) -> "CapabilityBroker | None":
+        return self._broker
+
     async def run(self, goal: str, session_id: str) -> AsyncIterator["Event"]:
         """驱动一次 run。plan→act→verify→report,投并持久化每个 Event(一份事件三用)。
 
