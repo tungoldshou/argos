@@ -46,6 +46,11 @@ _BASE_SUBTITLE = "诚实可靠的终端编码智能体"
 class ArgosApp(App):
     TITLE = "Argos"
 
+    # 启动/换屏后由 Textual 自动把焦点放到输入框(声明式,框架在正确时机执行)——
+    # 否则默认聚焦第一个可聚焦 widget(TranscriptLog 可滚动会抢焦点),用户打不了字。
+    # 与 on_mount 的手动 focus 双保险。
+    AUTO_FOCUS = "#prompt"
+
     BINDINGS = [("ctrl+c", "quit", "退出")]
 
     def __init__(
