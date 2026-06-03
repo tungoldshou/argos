@@ -20,9 +20,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Added
 - TUI 主屏接线(spec §4):TranscriptLog 流式对话、CodeActionBlock(代码+折叠输出)、DiffView 红绿 diff、VerdictBadge 三态(passed/failed/无法验证)、always-on StatusBar(phase/actions/tokens/cost/elapsed)、侧栏 CostMeter。
 - 类型化事件桥 `tui/events.py` 的 `EventBus.close()` 哨兵 + Textual Worker 消费——一份事件三用(UI 渲染 = 持久化 = 重放)的 UI 出口。
-- 4 级审批拨盘 ApprovalModal(Observe/Propose/Confirm/Auto,键盘 1=deny 2=once 3=session 4=always);Auto 档头部亮红 ⏻ YOLO 徽标。
+- 4 级审批档位拨盘 `ApprovalLevel`(Observe/Propose/Confirm/Auto,`/yolo` 切 Auto);**另**审批弹窗 ApprovalModal 键盘速选 1=deny 2=once 3=session 4=always(DecisionKind,单次请求决定,与档位是两个维度)。Auto 档头部显示 ⏻ YOLO 标记(纯文本标识;终端着色为后续打磨项,当前不声称"亮红")。
 - slash 命令 `/yolo /undo /clear /retry /status /model /resume /cost`(`tui/commands.py`)。
-- `argos --demo-fail` 用 FailingFakeLoop 演示 escalation/error 诚实上报路径。
+- **接线演示态(诚实标注)**:本阶段 UI 出口已就位但**尚未接真 loop**——默认 `argos`(及 `--demo-fail`)均由 FakeLoop/FailingFakeLoop 投脚本化假数据驱动(**非真实执行/验证**),故头部常驻 `DEMO` 标识、每轮起手 banner 声明;真 `AgentLoop` 待 Phase 6 经 `loop_factory` 注入(届时传 `demo=False`,标识消失)。`--demo-fail` 专门演示 escalation/error 诚实上报路径。
+- 健壮性:`start_run` 的 `_produce` worker 捕获 loop 任何异常并降级为 `Error` 事件(诚实 ❌ 上报),绝不让未捕获异常击穿 TUI;单会话 busy 守卫防并发两轮 run 串台。
 - 5 层 harness（spec §3）：verify 分级延迟（lint+受影响单测内联，integration 超时降级，三态 `Verdict` fail-closed，保留诚实 escalation）。
 - 诚实栈：`HONESTY_SYSTEM` 迁入 `core/honesty.py` + untrusted 围栏注入顺序锁死 + 新 `StreamingContextScrubber`（跨 chunk 状态机防围栏标记泄露回 UI）。
 - 模型分档：`ModelTier`/`ModelClient`（Anthropic-Messages 兼容端直连，`max_tokens` 按模型可配，替换硬编码 2048）；cascade 升级只由外部判据裁决。

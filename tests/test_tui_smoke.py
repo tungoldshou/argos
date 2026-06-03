@@ -7,7 +7,7 @@ from argos_agent.tui.widgets.transcript import TranscriptLog
 
 
 @pytest.mark.asyncio
-async def test_app_boots_and_shows_welcome():
+async def test_app_boots_with_main_layout():
     app = ArgosApp()
     async with app.run_test() as pilot:
         await pilot.pause()
