@@ -68,3 +68,21 @@ def test_migrate_default_path_uses_env(store, tmp_path, monkeypatch):
     _write_jsonl(jl, [{"id": "z9", "goal": "g", "verdict": "passed", "model": "m", "fact": None, "ts": 1.0}])
     monkeypatch.setenv("ARGOS_MEMORY_FILE", str(jl))
     assert store.migrate_jsonl(None) == 1  # None → 读 ARGOS_MEMORY_FILE
+
+
+def test_migrate_bad_ts_does_not_abort_migration(store, tmp_path):
+    """I-1:合法 JSON 但 ts 非数值不得中断整个迁移(否则其后记录静默丢失)。"""
+    jl = tmp_path / "memory.jsonl"
+    jl.write_text(
+        '{"id":"x","goal":"坏ts","verdict":"passed","model":"m","fact":null,"ts":"bad"}\n'
+        '{"id":"y","goal":"好记录","verdict":"failed","model":"m","fact":null,"ts":2.0}\n',
+        encoding="utf-8",
+    )
+    n = store.migrate_jsonl(str(jl))
+    assert n == 2  # 坏 ts 行不中断,两条都迁入
+    rows = store._con.execute(
+        "SELECT id, ts FROM memory ORDER BY id"
+    ).fetchall()
+    by_id = {r["id"]: r["ts"] for r in rows}
+    assert by_id["x"] == 0.0  # 坏 ts → 0.0,不丢
+    assert by_id["y"] == 2.0  # 其后的合法记录仍迁入

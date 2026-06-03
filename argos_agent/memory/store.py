@@ -101,22 +101,30 @@ class ArgosStore:
         con.row_factory = sqlite3.Row
         con.execute("PRAGMA journal_mode=WAL")
         con.execute("PRAGMA synchronous=NORMAL")
-        con.execute("PRAGMA foreign_keys=ON")
+        # M-5:不设 PRAGMA foreign_keys=ON —— schema 未声明 FK 列,该 PRAGMA 是 no-op 且误导。
+        # 引用完整性 MVP 由应用层保证(loop 先建 session 再 append 其 messages/events)。
         con.execute("PRAGMA busy_timeout=3000")  # 叠加应用层重试,双保险(spec §5.2 Step 3)
         self._load_vec(con)
         return con
 
     def _load_vec(self, con: sqlite3.Connection) -> None:
-        """尝试加载 sqlite-vec(向量召回主路径)。缺扩展 → fail-soft,recall 退 FTS5。"""
+        """尝试加载 sqlite-vec(向量召回主路径)。缺扩展 → fail-soft,recall 退 FTS5。
+
+        M-3:try/finally 确保 load-extension 始终被重新关闭(即使 sqlite_vec.load 抛错)。
+        """
         try:
             import sqlite_vec
 
             con.enable_load_extension(True)
             sqlite_vec.load(con)
-            con.enable_load_extension(False)
             self.vec_enabled = True
         except Exception:
             self.vec_enabled = False
+        finally:
+            try:
+                con.enable_load_extension(False)
+            except Exception:
+                pass
 
     def _init_schema(self) -> None:
         self._con.executescript(_SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -142,6 +150,40 @@ class ArgosStore:
                     raise
                 last_exc = e
                 time.sleep(random.uniform(_RETRY_MIN_MS, _RETRY_MAX_MS) / 1000.0)
+        raise last_exc  # type: ignore[misc]
+
+    def _write_txn(self, statements: list[tuple[str, tuple]]) -> None:
+        """M-4:多条写在同一事务内一次性提交(全成或全不成),共享 _write 的锁退避重试。
+
+        任一语句失败 → rollback,整笔不落盘;locked/busy → 整笔退避重试。
+        提交后按写入语句数推进 _writes 与 checkpoint 计数(与单写一致计费)。
+        """
+        last_exc: Exception | None = None
+        for attempt in range(_RETRY_MAX):
+            try:
+                for sql, params in statements:
+                    self._con.execute(sql, params)
+                self._con.commit()
+                self._writes += len(statements)
+                if self._writes % _CHECKPOINT_EVERY < len(statements):
+                    # 本笔写跨过了 _CHECKPOINT_EVERY 的倍数 → 做一次 PASSIVE checkpoint
+                    self._con.execute("PRAGMA wal_checkpoint(PASSIVE)")
+                return
+            except sqlite3.OperationalError as e:
+                try:
+                    self._con.rollback()  # 清掉部分事务,下一轮重试从干净状态开始
+                except Exception:
+                    pass
+                if "locked" not in str(e).lower() and "busy" not in str(e).lower():
+                    raise
+                last_exc = e
+                time.sleep(random.uniform(_RETRY_MIN_MS, _RETRY_MAX_MS) / 1000.0)
+            except Exception:
+                try:
+                    self._con.rollback()  # 非锁错误也清事务,避免脏的半提交
+                except Exception:
+                    pass
+                raise
         raise last_exc  # type: ignore[misc]
 
     # ── sessions(契约 §2)────────────────────────────────────────────────
@@ -187,16 +229,18 @@ class ArgosStore:
                         tool_calls_json: str = "", token_count: int = 0) -> str:
         mid = uuid.uuid4().hex[:12]
         ts = time.time()
-        self._write(
-            "INSERT INTO messages(message_id, session_id, role, content, tool_calls_json, ts, token_count) "
-            "VALUES (?,?,?,?,?,?,?)",
-            (mid, session_id, role, content, tool_calls_json, ts, token_count),
-        )
-        # 同步进 FTS(字面/CJK 搜)
-        self._write(
-            "INSERT INTO messages_fts(content, message_id, session_id) VALUES (?,?,?)",
-            (content, mid, session_id),
-        )
+        # M-4:message 行 + FTS 行同事务一次提交(原子),崩溃不会留下无 FTS 索引的孤儿消息
+        self._write_txn([
+            (
+                "INSERT INTO messages(message_id, session_id, role, content, tool_calls_json, ts, token_count) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (mid, session_id, role, content, tool_calls_json, ts, token_count),
+            ),
+            (
+                "INSERT INTO messages_fts(content, message_id, session_id) VALUES (?,?,?)",
+                (content, mid, session_id),
+            ),
+        ])
         return mid
 
     # ── events(event sourcing,契约 §2 / spec §12.6)──────────────────────
@@ -214,7 +258,7 @@ class ArgosStore:
         if session is None:
             raise KeyError(f"session not found: {session_id}")
         msg_rows = self._con.execute(
-            "SELECT * FROM messages WHERE session_id=? ORDER BY ts", (session_id,)
+            "SELECT * FROM messages WHERE session_id=? ORDER BY ts, rowid", (session_id,)
         ).fetchall()
         messages = [
             MessageRow(
@@ -324,9 +368,11 @@ class ArgosStore:
             except Exception:
                 pass  # embedding 调用失败 → 落到下面 LIKE 降级
         # 降级路径:FTS5 不覆盖 memory 表 → 对 goal 做字面包含(LIKE),reason 诚实标降级
-        like = f"%{goal.strip()}%"
+        # M-1:转义 LIKE 通配符 %/_ 与转义符自身,防止它们被当通配符
+        g = goal.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like = f"%{g}%"
         rows = self._con.execute(
-            "SELECT * FROM memory WHERE goal LIKE ? ORDER BY ts DESC LIMIT ?", (like, k)
+            "SELECT * FROM memory WHERE goal LIKE ? ESCAPE '\\' ORDER BY ts DESC LIMIT ?", (like, k)
         ).fetchall()
         return [
             (
@@ -363,11 +409,15 @@ class ArgosStore:
             rid = rec.get("id")
             if not rid:
                 continue
+            try:
+                ts = float(rec.get("ts") or 0.0)
+            except (TypeError, ValueError):
+                ts = 0.0  # 坏 ts → 0,不中断迁移(I-1:否则其后记录静默丢失)
             cur = self._write(
                 "INSERT OR IGNORE INTO memory(id, goal, verdict, model, fact, ts) "
                 "VALUES (?,?,?,?,?,?)",
                 (rid, rec.get("goal") or "", rec.get("verdict"), rec.get("model"),
-                 rec.get("fact"), float(rec.get("ts") or 0.0)),
+                 rec.get("fact"), ts),
             )
             if cur.rowcount > 0:
                 migrated += 1

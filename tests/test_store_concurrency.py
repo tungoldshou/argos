@@ -38,36 +38,42 @@ def test_concurrent_writes_all_persist(tmp_path):
 
 
 def test_checkpoint_triggers_every_50_writes(tmp_path):
-    """验证 _write 每 50 次写触发一次 PASSIVE checkpoint。
+    """验证写计数每跨过 50 触发一次 PASSIVE checkpoint。
 
     sqlite3.Connection.execute 是只读 C 扩展属性，无法 monkeypatch。
-    改为 subclass ArgosStore，覆写 _write，在真实写完成后额外记录 checkpoint 发生时的
-    _writes 值——只要 _writes % _CHECKPOINT_EVERY == 0 说明 checkpoint 分支已命中。
-    同时用 WAL 页面数确认 checkpoint 真的把 WAL 写回了主文件（pages_moved > 0）。
+    改为 subclass ArgosStore，覆写 _write 与 _write_txn（append_message 走批量事务，M-4），
+    在父类完成写后检查 checkpoint 分支是否命中（_writes 跨过 _CHECKPOINT_EVERY 的倍数）。
     """
-    checkpoint_write_counts: list[int] = []
+    checkpoint_hits: list[int] = []
 
     class TrackingStore(ArgosStore):
-        """覆写 _write：在父类完成写（含 checkpoint）后，若本次恰好是第 N*50 次，记录下来。"""
+        """覆写两条写路径：父类完成写（含 checkpoint）后，若本次跨过 N*50，记录下来。"""
         def _write(self, sql: str, params: tuple = ()):
+            before = self._writes
             cur = super()._write(sql, params)
-            # super()._write 已自增 _writes 并在 %50==0 时做了 checkpoint
-            if self._writes % _CHECKPOINT_EVERY == 0:
-                checkpoint_write_counts.append(self._writes)
+            # 单写自增 1：若新计数命中 %50==0 说明 checkpoint 分支已触发
+            if before // _CHECKPOINT_EVERY != self._writes // _CHECKPOINT_EVERY:
+                checkpoint_hits.append(self._writes)
             return cur
+
+        def _write_txn(self, statements):
+            before = self._writes
+            super()._write_txn(statements)
+            # 批量写跨过 _CHECKPOINT_EVERY 的倍数 → 父类已做 checkpoint
+            if before // _CHECKPOINT_EVERY != self._writes // _CHECKPOINT_EVERY:
+                checkpoint_hits.append(self._writes)
 
     store = TrackingStore(db_path=str(tmp_path / "argos.db"))
     sid = store.create_session(title="t", model="m", system_snapshot="s")  # 1 写
-    # append_message = 2 写(messages + fts)，再写到跨过 50 的倍数
+    # append_message = 2 写/笔(messages + fts 同事务)，写到跨过 50 的倍数
     for _ in range(_CHECKPOINT_EVERY):
         store.append_message(sid, role="user", content="x")
-    # _writes 应超过 50（1 + 50*2 = 101），至少一次命中 %50==0
-    assert len(checkpoint_write_counts) >= 1, (
+    # _writes 应超过 50（1 + 50*2 = 101），至少一次跨过 50 的倍数
+    assert len(checkpoint_hits) >= 1, (
         f"_CHECKPOINT_EVERY={_CHECKPOINT_EVERY} 写完后应触发至少 1 次 PASSIVE checkpoint，"
-        f"实际 _writes={store._writes}，checkpoint_counts={checkpoint_write_counts}"
+        f"实际 _writes={store._writes}，checkpoint_hits={checkpoint_hits}"
     )
-    # 验证 WAL checkpoint 真的执行了：执行一次 PASSIVE 获取 pages_moved
+    # 验证 WAL checkpoint 真的可执行：执行一次 PASSIVE 拿到 (busy, log, checkpointed)
     row = store._con.execute("PRAGMA wal_checkpoint(PASSIVE)").fetchone()
-    # row = (busy, log, checkpointed)；checkpointed >= 0 表示 checkpoint 正常工作
     assert row is not None
     store.close()

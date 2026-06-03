@@ -1,4 +1,6 @@
 -- Argos 持久化七表(spec §5.2)。全部 IF NOT EXISTS,二次打开幂等。
+-- 引用完整性 MVP 由应用层保证(loop 先建 session 再 append 其 messages/events),
+-- 不声明 FK 约束列以免波及用伪造 session id 的测试(M-5)。
 
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER NOT NULL

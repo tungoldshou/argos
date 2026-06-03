@@ -81,7 +81,7 @@ def test_recall_degrades_when_embed_raises(tmp_path):
                    "('a','登录失败重试','passed','m',NULL,1.0)")
     s._con.commit()
     out = s.recall("登录失败", k=3)  # embed 抛 → 降级 FTS
-    assert len(out) == 1 and "字面" in out[0][1] or "降级" in out[0][1]
+    assert len(out) == 1 and ("字面" in out[0][1] or "降级" in out[0][1])
     s.close()
 
 
