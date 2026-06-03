@@ -134,20 +134,35 @@ _KIND_TO_CLASS: dict[str, type] = {
 }
 
 
+class _Sentinel:
+    """流结束哨兵(内部用,不入 Event 联合)。"""
+
+
+_END = _Sentinel()
+
+
 class EventBus:
-    """loop 与 TUI 的唯一交汇点(契约 §1)。Phase 3(loop)落地。"""
+    """loop 与 TUI 的唯一交汇点(契约 §1)。Phase 3(loop)落地。
+    close() 投哨兵令消费侧 async-for 自然结束(TUI start_run 收尾用)。"""
 
     def __init__(self) -> None:
-        self._q: asyncio.Queue[Event] = asyncio.Queue()
+        self._q: "asyncio.Queue[Event | _Sentinel]" = asyncio.Queue()
 
     async def emit(self, ev: Event) -> None:
         """loop 侧投递事件。"""
         await self._q.put(ev)
 
+    async def close(self) -> None:
+        """投哨兵,令 __aiter__ 自然结束(loop/start_run 收尾时调)。"""
+        await self._q.put(_END)
+
     async def __aiter__(self) -> AsyncIterator[Event]:
-        """TUI Worker 消费侧。"""
+        """TUI Worker 消费侧。遇哨兵自然结束。"""
         while True:
-            yield await self._q.get()
+            item = await self._q.get()
+            if isinstance(item, _Sentinel):
+                return
+            yield item
 
 
 def event_kind(ev: Event) -> str:
