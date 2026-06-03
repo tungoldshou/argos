@@ -4,14 +4,14 @@
 ② ArgosStore.events 持久化记录 ③ replay() 重建源。事件名 = dataclass 类名的
 snake_case,由 Event.kind 类属性常量携带,便于持久化与 replay。
 
-本阶段(Phase 2)只需事件「类定义 + 序列化」:store.append_event 把事件序列化进
-events 表,replay 反序列化重建。EventBus 的 async 投递在 Phase 3(loop)落地。
+Phase 3(loop)落地:EventBus 的 async 投递/消费。
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field, asdict
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, AsyncIterator, Literal
 
 from argos_agent.core.types import Phase, RiskLevel, DecisionKind
 
@@ -132,6 +132,22 @@ _KIND_TO_CLASS: dict[str, type] = {
         ApprovalResponse, Escalation, Error,
     )
 }
+
+
+class EventBus:
+    """loop 与 TUI 的唯一交汇点(契约 §1)。Phase 3(loop)落地。"""
+
+    def __init__(self) -> None:
+        self._q: asyncio.Queue[Event] = asyncio.Queue()
+
+    async def emit(self, ev: Event) -> None:
+        """loop 侧投递事件。"""
+        await self._q.put(ev)
+
+    async def __aiter__(self) -> AsyncIterator[Event]:
+        """TUI Worker 消费侧。"""
+        while True:
+            yield await self._q.get()
 
 
 def event_kind(ev: Event) -> str:
