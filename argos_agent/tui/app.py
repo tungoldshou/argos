@@ -93,6 +93,28 @@ class ArgosApp(App):
         (RichLog 可滚动故可聚焦)排在 Input 之前,会先抢焦点,按键全喂给它,用户在输入框
         打不了任何字(汉字/ASCII 都进不去)。"""
         self.query_one("#prompt", Input).focus()
+        self._keylog(f"[mount] focused={self.focused!r}")
+
+    def _keylog(self, line: str) -> None:
+        """诊断:ARGOS_KEYLOG 指向文件时,把焦点/按键事件追加进去(排查'打字不显示')。
+        生产态(无该 env)零开销、零副作用。"""
+        import os
+        path = os.environ.get("ARGOS_KEYLOG")
+        if not path:
+            return
+        try:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except Exception:  # noqa: BLE001 — 诊断绝不能影响主流程
+            pass
+
+    def on_key(self, event) -> None:  # type: ignore[no-untyped-def]
+        """诊断钩子:key 事件冒泡到 App(焦点 widget 先处理,再冒泡到此)。只记录,不 stop,
+        不改变行为 —— 看 key 是否到达 app、此刻焦点在谁、字符值。"""
+        self._keylog(
+            f"[key] key={getattr(event, 'key', None)!r} "
+            f"char={getattr(event, 'character', None)!r} focused={self.focused!r}"
+        )
 
     # ── 输入分发 ──────────────────────────────────────────────────────────
     def on_input_submitted(self, event: Input.Submitted) -> None:

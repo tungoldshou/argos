@@ -9,7 +9,12 @@ from textual.widgets import RichLog
 
 
 class TranscriptLog(RichLog):
-    """主对话区。append_token 累计当前流式段;append_line 落一行系统/状态文本。"""
+    """主对话区。append_token 累计当前流式段;append_line 落一行系统/状态文本。
+
+    can_focus=False:RichLog 默认可聚焦(键盘滚动),会在启动时抢走焦点 → 输入框收不到
+    键,用户打不了字。把它移出焦点链,保证唯一可聚焦的是输入框(滚动用鼠标/PageUp 仍可)。"""
+
+    can_focus = False
 
     def __init__(self, *args, **kwargs) -> None:
         kwargs.setdefault("wrap", True)
