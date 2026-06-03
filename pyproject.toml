@@ -46,3 +46,13 @@ dev = [
 # 让测试能 import argos_agent(脚本式项目,包未安装)。
 pythonpath = ["."]
 testpaths = ["tests"]
+# 80% 覆盖门(spec §9)。注:跑测试子集时总覆盖会低于门 → 以全量 `uv run pytest` 为准。
+addopts = "--cov=argos_agent --cov-report=term-missing --cov-fail-under=80"
+
+[tool.coverage.run]
+omit = [
+    # 诚实排除(非凑数,理由在侧):
+    "argos_agent/_pyinstaller_hooks/*",        # 打包 hook,逻辑由 build/smoke 验证,无单测
+    "argos_agent/sandbox/_sandbox_child.py",   # 跑在 Seatbelt 子进程,父进程 coverage 测不到(沙箱 e2e 真覆盖)
+    "argos_agent/server.py",                   # 旧 FastAPI sidecar,TUI 转向后已非入口(待收尾删除)
+]
