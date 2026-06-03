@@ -84,6 +84,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   downstream rendering path handle the new event as a first-class stream.
 - Project-guide `CLAUDE.md` now mandates Chinese as the user-facing reply
   language.
+- **重大转向：删除 Tauri/React 桌面壳，Argos 重做成单 Python 进程的 Textual TUI 编码超级智能体**（设计见 `docs/superpowers/specs/2026-06-03-tui-superagent-design.md`）。
+- Python 项目从 `agent/` 移到仓库根；新增 `argos` 命令入口与 Textual TUI 骨架。
+
+### Removed
+- `src/`（React UI）、`src-tauri/`（Tauri 壳）、前端构建工具链（vite/pnpm/tsconfig）、FastAPI sidecar 启动脚本 `run_server.py`。
 
 ## [0.1.0] — 2026-06-01
 
