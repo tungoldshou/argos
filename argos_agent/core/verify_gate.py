@@ -1,45 +1,29 @@
-"""Verifier 占位(契约 §6.1 + §9 锁#1) —— loop 称"完成"时调。
+"""verify 硬门禁 —— Argos 的核心护城河(契约 §6;spec §3.3 L2/§12.5)。
 
-【契约 §9 锁#1 canonical 签名】:
-  verify(self, verify_cmd: str | None, *, attempts: int = 1) -> Verdict
-篡改检测与 VERIFY_DIR 隔离由 Verifier 内部经 runtime 解决,不接受 workspace/verify_dir/tampered。
-Phase 4 扩分级延迟(lint+受影响单测内联<1s,integration 异步降级)落地;本阶段最小占位版:
-  跑 verify_cmd → passed/failed;先查 runtime.detect_tampering() 非空 → unverifiable。
-Phase 4 落地后:本占位被 Phase 4 的真版替换(同名 Verifier.verify 签名,同 Verdict 返回值)。
+三态 fail-closed(spec §12.5):
+  · passed       退出码 0 且未篡改 → 真完成
+  · failed       退出码非 0 → 没过,harness 据 attempts bounce 重试/升级
+  · unverifiable 篡改受保护测试 / 超时 / 命令不在白名单 → 无法确认,绝不当 passed
+
+分级延迟(spec §3.3 L2 决策 B1):inline_timeout(默认 60s 容忍真实 pytest 启动);
+调用方可调小做超时降级——超过 → unverifiable,诚实标注"未完整验证"。
+
+安全关键(沿用旧 _run_verify):验证在 VERIFY_DIR(agent 写不到)里跑——防 agent 篡改
+评判它的测试作弊。WORKSPACE 进 PYTHONPATH,使验证脚本能 import agent 写的解。
+篡改检测优先于退出码:detect_tampering() 非空 → 直接 unverifiable。
+
+Verdict canonical 归属:argos_agent.core.types(契约 §6.1)。
+此处重新导出保持旧 import 路径:from argos_agent.core.verify_gate import Verdict。
 """
 from __future__ import annotations
 
 import os
 import shlex
 import subprocess
-from dataclasses import dataclass, field
 from pathlib import Path
 
-from argos_agent.core.types import VerdictStatus
-
-
-@dataclass(frozen=True, slots=True)
-class Verdict:
-    """三态验证结果(契约 §6.1)。Phase 4 把这个搬进 types.py 并加静态工厂。
-    Phase 3 先在这里定义占位版本;形状与 Phase 4 的 canonical 一致,改 import 行即可。"""
-    status: VerdictStatus            # "passed" | "failed" | "unverifiable"
-    detail: str                      # verify 命令输出(含 [exit_code=N])
-    verify_cmd: str | None
-    attempts: int
-    tampered: list[str] = field(default_factory=list)
-
-    @staticmethod
-    def passed(detail: str, verify_cmd: str | None, attempts: int) -> "Verdict":
-        return Verdict(status="passed", detail=detail, verify_cmd=verify_cmd, attempts=attempts)
-
-    @staticmethod
-    def failed(detail: str, verify_cmd: str | None, attempts: int) -> "Verdict":
-        return Verdict(status="failed", detail=detail, verify_cmd=verify_cmd, attempts=attempts)
-
-    @staticmethod
-    def unverifiable(detail: str, tampered: list[str], attempts: int) -> "Verdict":
-        return Verdict(status="unverifiable", detail=detail, verify_cmd=None,
-                       attempts=attempts, tampered=tampered)
+# 唯一 Verdict 定义在 types.py(契约 §6.1)；re-export 保持旧 import 路径绿。
+from argos_agent.core.types import Verdict  # noqa: F401
 
 
 def _workspace() -> Path:
