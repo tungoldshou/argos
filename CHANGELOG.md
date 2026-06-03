@@ -18,6 +18,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - **M5/M6/M8**：升级措辞用真实尝试次数;`_validate_git` 意图显式化（子命令前全局选项=RCE 向量拒,子命令后局部旗标如 `git show --stat` 放行）;loop spawn 固定空命名空间 + assert 红线,防 model-controlled 数据进 `__authorized_imports__`（smolagents 把 `"*"` 当 allow-all）。
 
 ### Added
+- **整机集成(Phase 6):** 装配层 `app_factory.py` 把 SQLite store / Seatbelt 沙箱 / capability broker / 模型分档 / Verifier / 自建 CodeAct loop 组装成 TUI 注入的 `loop_factory`(`AgentLoop` 暴露 `bus/store/sandbox/broker` 只读属性);`argos` 入口默认注入真 loop,无 key 时诚实落 demo 态(不假装能跑)。新增 CLI `--selftest`(不连网整机自检,打印 `verdicts=['passed'] → OK`)/`--project`/`--premium`/`--resume`。
+- **五条可证伪铁证 e2e(spec §9,`tests/e2e/`):** ① 便宜模型错改被 verify bounce 拦住、修好才翻 `passed`;② kill 中途经 `ArgosStore.replay` 重建、`/resume`(replay+重跑)续上;③ 中文(CJK)经 `recall`/`search` 命中且 reason 可解释;④ 沙箱外泄防线(读 `~/.ssh` 允许但写不出 workspace + 非 allowlist egress fail-closed,macOS Seatbelt);⑤ verify-loop P50/P99 延迟基线 + 超时降级断言。+ 整机贯通 e2e:四阶段不可跳 + 一份事件三用(run==persist==replay 逐事件一致)。用确定性 `ScriptedModelClient`(不连真 LLM,CI 可离线复现);真 LLM 烟测 `probe_real_llm.py`(CI skip)。
+- PyInstaller arm64 单 binary 打包(`packaging/argos.spec` + `build_arm64.sh` + `smoke_packaged.py` + smolagents/textual hooks),捆 sqlite-vec dylib,MLX 权重懒下载不进 binary,`console=True`(TUI 需终端)。
+- 80% 覆盖门(`--cov-fail-under=80`,实测 84%);打包 hook / 沙箱子进程 / 旧 server 诚实排除(理由在 pyproject)。
 - TUI 主屏接线(spec §4):TranscriptLog 流式对话、CodeActionBlock(代码+折叠输出)、DiffView 红绿 diff、VerdictBadge 三态(passed/failed/无法验证)、always-on StatusBar(phase/actions/tokens/cost/elapsed)、侧栏 CostMeter。
 - 类型化事件桥 `tui/events.py` 的 `EventBus.close()` 哨兵 + Textual Worker 消费——一份事件三用(UI 渲染 = 持久化 = 重放)的 UI 出口。
 - 4 级审批档位拨盘 `ApprovalLevel`(Observe/Propose/Confirm/Auto,`/yolo` 切 Auto);**另**审批弹窗 ApprovalModal 键盘速选 1=deny 2=once 3=session 4=always(DecisionKind,单次请求决定,与档位是两个维度)。Auto 档头部显示 ⏻ YOLO 标记(纯文本标识;终端着色为后续打磨项,当前不声称"亮红")。
@@ -69,6 +73,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `approval_request` 在 MCP 工具阻塞时同样弹窗。
 
 ### Fixed
+- **verify 硬门禁字节码陈旧假失败(集成铁证逼出的真可靠性 bug):** `Verifier` 跑验证子进程未禁字节码 —— agent 改源后,若改动同尺寸且赶在同一秒(mtime 秒级分辨率,如 `a - b`→`a + b`),pytest 复用陈旧 `.pyc` 对【旧字节码】下判,模型修好了却仍 `failed` → 假 bounce / 假升级。修:验证子进程 `PYTHONDONTWRITEBYTECODE=1`,每次现导当前源码,verdict 永远反映当前代码。
+- **loop 持久化缺 session 行 → `replay` 失败:** loop 用调用方提供的 `session_id` 但 `create_session` 自生成 uuid、`append_*` 不 auto-create,replay 找不到 session。修:`ArgosStore.ensure_session(指定 id,幂等 INSERT OR IGNORE)`,loop 在 run 起始先落 session 行(resume 复用同一 session)。
 - **Agent claimed it had no internet** even though web tools were wired up. The
   system prompt (`HONESTY_SYSTEM`) only advertised file/command tools, so the
   model "honestly" refused web queries (e.g. weather) instead of calling
