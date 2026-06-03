@@ -18,6 +18,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - **M5/M6/M8**：升级措辞用真实尝试次数;`_validate_git` 意图显式化（子命令前全局选项=RCE 向量拒,子命令后局部旗标如 `git show --stat` 放行）;loop spawn 固定空命名空间 + assert 红线,防 model-controlled 数据进 `__authorized_imports__`（smolagents 把 `"*"` 当 allow-all）。
 
 ### Added
+- 5 层 harness（spec §3）：verify 分级延迟（lint+受影响单测内联，integration 超时降级，三态 `Verdict` fail-closed，保留诚实 escalation）。
+- 诚实栈：`HONESTY_SYSTEM` 迁入 `core/honesty.py` + untrusted 围栏注入顺序锁死 + 新 `StreamingContextScrubber`（跨 chunk 状态机防围栏标记泄露回 UI）。
+- 模型分档：`ModelTier`/`ModelClient`（Anthropic-Messages 兼容端直连，`max_tokens` 按模型可配，替换硬编码 2048）；cascade 升级只由外部判据裁决。
+- `CredentialPool`：least_used + exhausted-TTL 复活 + terminal-vs-transient 401 区分；`classify_error`（429/5xx/401/context-overflow → `ClassifiedError` 提示）+ jittered backoff。
+- Tool Receipts：HMAC 签名回执（host 侧签，沙箱碰不到 key，agent 伪造不了），harness 接受"我做了 X"前核验。
+- 可观测层：`stream_diag`（TTFB/chunks/异常链 4 层拍平）+ per-step cost（usage × pricing 表）。
 - **Phase 4 5 层 harness 收口（Tasks 8–10）— 把 harness 智能真正接进引擎循环。**
   - **可观测 L5**（`argos_agent/core/observability.py`）：`stream_diag` 包流式生成器测 TTFB / chunk 数 / 异常链拍平（复用 `recovery.flatten_exception_chain` 挖 4 层真因）；`cost_of(usage, model)` 按 `PRICING` 表算 per-step 成本，**未知模型不瞎编价**（成本 0、token 仍如实计）。
   - **`Harness`**（`argos_agent/core/harness.py`）编排 L1–L5：`enter_phase`（阶段门 plan→act→verify→report 不可跳）、`run_verify_gate`（三态 Verdict + 超 `max_rounds` 投 `Escalation`）、`accept_receipt`（HMAC 核验回执，伪造则拒）。
@@ -106,6 +112,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   argos palette, paired with `rehype-highlight`.
 
 ### Changed
+- config 加 `ARGOS_*` 键（最高优先级），回退旧 `VITE_LLM_*` → `VITE_MINIMAX_*`，零破坏已配用户；组装 `WORKER_TIER`/`PREMIUM_TIER`/`WORKER_KEYS`。
 - `.gitignore` now tracks `.claude/skills/` (shared project skills) while still
   ignoring local `.claude` state; root `/build/` ignored.
 - `AgentEvent['type']` gained `'token'` for the streaming event; reducer and
