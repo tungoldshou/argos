@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **Phase 3 安全沙箱地基（Tasks 0–6）** — 立起 `argos_agent/sandbox/` 子包：`SandboxBackend` 协议 + `ExecResult` 值对象（契约 §5）；macOS Seatbelt deny-all profile（FS 只读写 workspace+temp，**网络系统级 OFF**）；`SeatbeltExecutor` 把 smolagents `LocalPythonExecutor` 跑在 `sandbox-exec` 子进程内，命名空间跨 code-action 存活；沙箱子进程 JSONL 协议 + broker RPC stub。**铁证（最关键）**：Task 6 测试故意授权 `os`/`pathlib`/`socket` import 绕过 smolagents AST 限制，断言 OS Seatbelt 真实拦截——FS 越界写得 `PermissionError: [Errno 1] Operation not permitted`；TCP connect 1.1.1.1:53 / DNS gethostbyname 得 `PermissionError: [Errno 1] Operation not permitted`——OS 级别拒绝，非 AST 层面。17 个新测试全绿，baseline 275 → 292 passed，零回归。
 - 持久化地基：单文件 SQLite store（`argos_agent/memory/store.py`），七表（sessions/messages/events/messages_fts/memory/state_meta/schema_version），WAL + 写抖动重试 + 每 50 写 PASSIVE checkpoint。
 - 类型化事件流（`argos_agent/tui/events.py`，12 个冻结事件）+ event sourcing：`append_event` 持久化、`replay(session_id)` 重放续跑（一份事件三用：UI/日志/续跑同源）。
 - CJK 搜索双管：sqlite-vec 向量语义召回（主路径，对中文最稳健）+ FTS5 trigram 字面全文搜。
