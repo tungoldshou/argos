@@ -16,16 +16,18 @@ def _install_mock_page(mock_page: MagicMock) -> None:
 
 
 def _deny_gate_factory() -> tuple:
-    """建一个 deny gate + token;测试代码必须在 finally 调 reset_current_gate 收尾。"""
+    """建一个 deny gate + token;测试代码必须在 finally 调 reset_current_gate 收尾。
+    Phase 3 Task 9:新签名 request(action, args, *, description, risk, timeout)。"""
     from argos_agent import approval
 
     gate = approval.ApprovalGate()
     seen: dict = {}
 
-    async def fake_request(payload: dict, timeout: float = 60.0) -> "approval.Decision":
-        seen["tool"] = payload.get("tool")
-        seen["payload"] = payload
-        return approval.Decision(approved=False, reason="test-deny")
+    async def fake_request(action: str, args: dict, *, description: str,
+                           risk: str, timeout: float = 60.0) -> "approval.Decision":
+        seen["tool"] = action
+        seen["payload"] = {"tool": action, "args": args, "description": description, "risk": risk}
+        return approval.Decision(kind="deny", reason="test-deny")
 
     gate.request = fake_request  # type: ignore[assignment]
     token = approval.set_current_gate(gate)
@@ -69,8 +71,8 @@ def test_navigate_invokes_goto_and_waits():
     ))
 
     # 用 fake gate 直接批准
-    async def approve_all(payload, timeout=60.0):
-        return approval.Decision(approved=True, scope="once")
+    async def approve_all(action, args, *, description, risk, timeout=60.0):
+        return approval.Decision(kind="once")
 
     gate = approval.ApprovalGate()
     gate.request = approve_all  # type: ignore[assignment]
@@ -127,8 +129,8 @@ def test_click_invokes_page_click_when_approved():
     )
     _install_mock_page(mock_page)
 
-    async def approve_all(payload, timeout=60.0):
-        return approval.Decision(approved=True, scope="once")
+    async def approve_all(action, args, *, description, risk, timeout=60.0):
+        return approval.Decision(kind="once")
 
     gate = approval.ApprovalGate()
     gate.request = approve_all  # type: ignore[assignment]
@@ -157,8 +159,8 @@ def test_type_text_invokes_page_fill_when_approved():
     )
     _install_mock_page(mock_page)
 
-    async def approve_all(payload, timeout=60.0):
-        return approval.Decision(approved=True, scope="once")
+    async def approve_all(action, args, *, description, risk, timeout=60.0):
+        return approval.Decision(kind="once")
 
     gate = approval.ApprovalGate()
     gate.request = approve_all  # type: ignore[assignment]
@@ -189,8 +191,8 @@ def test_browser_lazy_init_only_on_first_invoke():
 
     playwright_tools._reset_for_test()  # 关键:清前几个测试注入的 mock _PAGE
 
-    async def approve_all(payload, timeout=60.0):
-        return approval.Decision(approved=True, scope="once")
+    async def approve_all(action, args, *, description, risk, timeout=60.0):
+        return approval.Decision(kind="once")
 
     gate = approval.ApprovalGate()
     gate.request = approve_all  # type: ignore[assignment]
@@ -317,9 +319,9 @@ def test_snapshot_does_not_trigger_approval_gate():
 
     called = {"hit": False}
 
-    async def explode_if_called(payload, timeout=60.0):
+    async def explode_if_called(action, args, *, description, risk, timeout=60.0):
         called["hit"] = True
-        return approval.Decision(approved=False, reason="should-not-be-called")
+        return approval.Decision(kind="deny", reason="should-not-be-called")
 
     gate = approval.ApprovalGate()
     gate.request = explode_if_called  # type: ignore[assignment]
@@ -349,8 +351,8 @@ def test_click_disabled_when_enabled_write_tools_false():
     )
     _install_mock_page(mock_page)
 
-    async def approve_all(payload, timeout=60.0):
-        return approval.Decision(approved=True, scope="once")
+    async def approve_all(action, args, *, description, risk, timeout=60.0):
+        return approval.Decision(kind="once")
 
     gate = approval.ApprovalGate()
     gate.request = approve_all  # type: ignore[assignment]

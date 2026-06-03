@@ -96,8 +96,4 @@ async def _run_one_task_impl(task: PlanTask, ws: Path, vd: Path) -> WorkerResult
 # 真实 plan 流程的审批闸由 orchestrator 层接(server 端已有 _SKILL_GATE 同款 _PLAN_GATE,本 task 不实现)
 def _per_task_gate():
     from . import approval
-    g = approval.ApprovalGate()
-    async def auto(payload, timeout=60.0):
-        return approval.Decision(approved=True, scope="once")
-    g.request = auto  # type: ignore[assignment]
-    return g
+    return approval.ApprovalGate(level=approval.ApprovalLevel.AUTO)

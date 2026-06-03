@@ -98,11 +98,11 @@ async def test_gate_mcp_tool_forwards_when_approved():
     t = _fake_tool(name="navigate")
     gated = mcp_client.gate_mcp_tool(t, "medium", "chrome-devtools")
     gate = approval.ApprovalGate()
-    async def _auto(payload, timeout=60.0):
-        # 弹窗 payload 应带来源 + 真实工具名
-        assert payload["tool"] == "navigate"
-        assert payload["source"] == "mcp:chrome-devtools"
-        return approval.Decision(approved=True, scope="once")
+    async def _auto(action: str, args: dict, *, description: str, risk: str, timeout: float = 60.0):
+        # Phase 3 Task 9:新签名;action=工具名,description 含 server 名
+        assert action == "navigate"
+        assert "chrome-devtools" in description
+        return approval.Decision(kind="once")
     gate.request = _auto  # type: ignore[assignment]
     token = approval.set_current_gate(gate)
     try:

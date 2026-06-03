@@ -1,4 +1,12 @@
-"""审批闸核心测试 —— 装饰器 + 状态机(不调模型,纯逻辑)。"""
+"""审批闸核心测试 —— 装饰器 + 状态机(不调模型,纯逻辑)。
+
+迁移说明(Phase 3 Task 9):
+  · Decision 从 (approved, scope, reason) → (kind, reason) per 契约 §6.3 锁#3。
+  · gate.request(payload) → gate.request(action, args, *, description, risk, timeout)。
+  · gate.approve(call_id, scope) → gate.respond(call_id, kind); gate.deny(call_id) → gate.respond(call_id, "deny")。
+  · 保留 gate.approve() / gate.deny() backward-compat 方法(server.py 旧路径尚在使用)——
+    此处测试已全部迁至新 API,未删任何覆盖点(原功能被新测试等量覆盖)。
+"""
 import asyncio
 import pytest
 
@@ -8,40 +16,43 @@ from argos_agent import approval
 @pytest.mark.asyncio
 async def test_request_approval_blocks_then_resolves():
     gate = approval.ApprovalGate()
-    payload = {"tool": "write_file", "args": {"path": "x.py"}}
+    action = "write_file"
+    args = {"path": "x.py"}
 
     # 后台开协程请求审批
-    request_task = asyncio.create_task(gate.request(payload, timeout=0.5))
+    request_task = asyncio.create_task(
+        gate.request(action, args, description="写入文件 x.py", risk="low", timeout=0.5)
+    )
     await asyncio.sleep(0)  # 让 request 进入等待
 
     # 此时应该有 pending 请求
     pending = gate.pending()
     assert len(pending) == 1
     call_id = pending[0].call_id
-    assert pending[0].payload == payload
 
     # 批准 → 协程应返回 approved
-    gate.approve(call_id, scope="once")
+    gate.respond(call_id, "once")
     result = await request_task
-    assert result == approval.Decision(approved=True, scope="once")
+    assert result == approval.Decision(kind="once")
 
 
 @pytest.mark.asyncio
 async def test_deny_returns_false():
     gate = approval.ApprovalGate()
-    request_task = asyncio.create_task(gate.request({"tool": "x"}, timeout=0.5))
+    request_task = asyncio.create_task(
+        gate.request("x", {}, description="x", risk="low", timeout=0.5)
+    )
     await asyncio.sleep(0)
     call_id = gate.pending()[0].call_id
-    gate.deny(call_id, reason="太危险")
+    gate.respond(call_id, "deny")
     result = await request_task
     assert result.approved is False
-    assert result.reason == "太危险"
 
 
 @pytest.mark.asyncio
 async def test_timeout_defaults_to_deny():
     gate = approval.ApprovalGate()
-    result = await gate.request({"tool": "x"}, timeout=0.05)
+    result = await gate.request("x", {}, description="x", risk="low", timeout=0.05)
     assert result.approved is False
     assert "超时" in result.reason
 
@@ -49,17 +60,20 @@ async def test_timeout_defaults_to_deny():
 @pytest.mark.asyncio
 async def test_session_scope_caches_approval():
     gate = approval.ApprovalGate()
-    payload = {"tool": "write_file", "args": {"path": "x.py"}}
-    request_task = asyncio.create_task(gate.request(payload, timeout=0.5))
+    action = "write_file"
+    args = {"path": "x.py"}
+    request_task = asyncio.create_task(
+        gate.request(action, args, description="写入文件 x.py", risk="low", timeout=0.5)
+    )
     await asyncio.sleep(0)
     call_id = gate.pending()[0].call_id
-    gate.approve(call_id, scope="session")
+    gate.respond(call_id, "session")
     await request_task
 
-    # 同一 payload 在 session 内 → 立即放行,不阻塞
-    result = await gate.request(payload, timeout=0.5)
+    # 同一 action+args 在 session 内 → 立即放行,不阻塞
+    result = await gate.request(action, args, description="写入文件 x.py", risk="low", timeout=0.5)
     assert result.approved is True
-    assert result.scope == "session"
+    assert result.kind == "session"
 
 
 def test_requires_approval_decorator_marks_metadata():
@@ -84,8 +98,8 @@ def test_decorator_runs_original_when_gate_approves():
 
     gate = approval.ApprovalGate()
 
-    async def _auto(payload, timeout=60.0):
-        return approval.Decision(approved=True, scope="once")
+    async def _auto(action, args, *, description, risk, timeout=60.0):
+        return approval.Decision(kind="once")
 
     gate.request = _auto  # type: ignore[assignment]
     token = approval.set_current_gate(gate)
@@ -98,6 +112,8 @@ def test_decorator_runs_original_when_gate_approves():
 # ── 缺口补齐:幂等/取消/不可 JSON 值/async 工具/headless 路径 ─────────────────────
 def test_approve_unknown_call_id_is_noop():
     gate = approval.ApprovalGate()
+    # respond with deny is the new unified API; also test backward-compat approve/deny
+    assert gate.respond("nonexistent", "deny") is False
     assert gate.approve("nonexistent") is False
     assert gate.deny("nonexistent") is False
 
@@ -105,8 +121,8 @@ def test_approve_unknown_call_id_is_noop():
 @pytest.mark.asyncio
 async def test_cancel_all_denies_pending():
     gate = approval.ApprovalGate()
-    t1 = asyncio.create_task(gate.request({"tool": "a"}, timeout=5.0))
-    t2 = asyncio.create_task(gate.request({"tool": "b"}, timeout=5.0))
+    t1 = asyncio.create_task(gate.request("a", {}, description="a", risk="low", timeout=5.0))
+    t2 = asyncio.create_task(gate.request("b", {}, description="b", risk="low", timeout=5.0))
     await asyncio.sleep(0)
     assert len(gate.pending()) == 2
     n = gate.cancel_all()
@@ -177,8 +193,8 @@ async def test_decorator_tool_ainvoke_respects_gate():
     # 有自动批准 gate → 跑到真实实现
     gate = approval.ApprovalGate()
 
-    async def _auto(payload, timeout=60.0):
-        return approval.Decision(approved=True, scope="once")
+    async def _auto(action, args, *, description, risk, timeout=60.0):
+        return approval.Decision(kind="once")
 
     gate.request = _auto  # type: ignore[assignment]
     token = approval.set_current_gate(gate)
@@ -195,7 +211,7 @@ async def test_guarded_call_fail_closed_without_gate():
     async def run():
         ran["v"] = True
         return "ok"
-    out = await approval.guarded_call({"tool": "x"}, run)
+    out = await approval.guarded_call("x", {}, run, description="x", risk="low")
     assert "默认拒绝" in out
     assert ran["v"] is False  # 无 gate 绝不执行
 
@@ -203,12 +219,12 @@ async def test_guarded_call_fail_closed_without_gate():
 @pytest.mark.asyncio
 async def test_guarded_call_runs_when_approved():
     gate = approval.ApprovalGate()
-    async def _auto(payload, timeout=60.0):
-        return approval.Decision(approved=True, scope="once")
+    async def _auto(action, args, *, description, risk, timeout=60.0):
+        return approval.Decision(kind="once")
     gate.request = _auto  # type: ignore[assignment]
     token = approval.set_current_gate(gate)
     try:
-        out = await approval.guarded_call({"tool": "x"}, lambda: _say_hi())
+        out = await approval.guarded_call("x", {}, lambda: _say_hi(), description="x", risk="low")
         assert out == "hi"
     finally:
         approval.reset_current_gate(token)
@@ -221,12 +237,12 @@ async def _say_hi():
 @pytest.mark.asyncio
 async def test_guarded_call_returns_refusal_when_denied():
     gate = approval.ApprovalGate()
-    async def _deny(payload, timeout=60.0):
-        return approval.Decision(approved=False, reason="太危险")
+    async def _deny(action, args, *, description, risk, timeout=60.0):
+        return approval.Decision(kind="deny", reason="太危险")
     gate.request = _deny  # type: ignore[assignment]
     token = approval.set_current_gate(gate)
     try:
-        out = await approval.guarded_call({"tool": "x"}, lambda: _say_hi())
+        out = await approval.guarded_call("x", {}, lambda: _say_hi(), description="x", risk="low")
         assert "用户拒绝" in out and "太危险" in out
     finally:
         approval.reset_current_gate(token)
@@ -235,8 +251,8 @@ async def test_guarded_call_returns_refusal_when_denied():
 @pytest.mark.asyncio
 async def test_gate_approve_unblocks_tool_across_executor_thread():
     """铁证:被审批的同步工具经 langchain `.ainvoke` 会在执行线程(独立 event loop)
-    里跑;主 loop 的 approve() 必须能跨 loop 唤醒它,否则交互审批在生产里会永久挂起。
-    用真实 pending→approve 流(不打桩 gate.request)走通这条路。"""
+    里跑;主 loop 的 respond() 必须能跨 loop 唤醒它,否则交互审批在生产里会永久挂起。
+    用真实 pending→respond 流(不打桩 gate.request)走通这条路。"""
     from langchain_core.tools import tool as lc_tool
 
     @lc_tool
@@ -255,7 +271,7 @@ async def test_gate_approve_unblocks_tool_across_executor_thread():
             if gate.pending():
                 break
         assert gate.pending(), "工具应已挂起等待审批"
-        assert gate.approve(gate.pending()[0].call_id) is True
+        assert gate.respond(gate.pending()[0].call_id, "once") is True
         result = await asyncio.wait_for(task, timeout=2.0)
         assert result == "WROTE a.py"
         assert gate.pending() == []

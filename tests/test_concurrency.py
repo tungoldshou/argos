@@ -22,10 +22,7 @@ def test_two_contexts_write_isolated_dirs(tmp_path, monkeypatch):
     monkeypatch.setattr(isolation, "RUNS_ROOT", tmp_path / "runs")
 
     # 装一个 auto-approve gate(write_file 需审批)
-    gate = approval.ApprovalGate()
-    async def auto(payload, timeout=60.0):
-        return approval.Decision(approved=True, scope="once")
-    gate.request = auto  # type: ignore[assignment]
+    gate = approval.ApprovalGate(level=approval.ApprovalLevel.AUTO)
 
     async def worker(tag: str):
         ws, vd = isolation.acquire_sandbox(f"sess-{tag}")

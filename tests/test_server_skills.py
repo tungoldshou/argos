@@ -30,10 +30,7 @@ def test_get_skills_lists_all(skills_dir_setup, monkeypatch):
 
 def test_toggle_calls_approval_then_persists(skills_dir_setup, monkeypatch):
     # 把 server._SKILL_GATE 替换成"自动批准"的 gate,然后断言 toggle 走通 + 写盘
-    gate = approval.ApprovalGate()
-    async def auto(payload, timeout=60.0):
-        return approval.Decision(approved=True, scope="once")
-    gate.request = auto  # type: ignore[assignment]
+    gate = approval.ApprovalGate(level=approval.ApprovalLevel.AUTO)
     monkeypatch.setattr(server, "_SKILL_GATE", gate)
 
     client = TestClient(server.app)
@@ -45,10 +42,7 @@ def test_toggle_calls_approval_then_persists(skills_dir_setup, monkeypatch):
 
 
 def test_toggle_deny_blocks(skills_dir_setup, monkeypatch):
-    gate = approval.ApprovalGate()
-    async def deny(payload, timeout=60.0):
-        return approval.Decision(approved=False, reason="no")
-    gate.request = deny  # type: ignore[assignment]
+    gate = approval.ApprovalGate(level=approval.ApprovalLevel.OBSERVE)
     monkeypatch.setattr(server, "_SKILL_GATE", gate)
 
     client = TestClient(server.app)

@@ -91,14 +91,13 @@ def classify(tool: BaseTool, server_cfg: dict[str, Any]) -> tuple[bool, RiskLeve
 def gate_mcp_tool(tool: BaseTool, risk: RiskLevel, server_name: str) -> BaseTool:
     """把一个 MCP 工具包成"先审批再执行"的等价工具,保名/保描述/保 args schema。"""
     async def _gated(**kwargs: Any) -> Any:
-        payload = {
-            "tool": tool.name,
-            "args": kwargs,
-            "description": f"经 MCP {server_name} 执行 {tool.name}",
-            "risk": risk,
-            "source": f"mcp:{server_name}",
-        }
-        return await approval.guarded_call(payload, lambda: tool.ainvoke(kwargs))
+        return await approval.guarded_call(
+            tool.name,
+            dict(kwargs),
+            lambda: tool.ainvoke(kwargs),
+            description=f"经 MCP {server_name} 执行 {tool.name}",
+            risk=risk,
+        )
 
     return StructuredTool.from_function(
         coroutine=_gated,

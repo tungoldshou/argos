@@ -23,12 +23,7 @@ def sandbox(tmp_path, monkeypatch):
     monkeypatch.setattr(tools, "WORKSPACE", ws)
     monkeypatch.setattr(tools, "VERIFY_DIR", vd)
     from argos_agent import approval
-    gate = approval.ApprovalGate()
-
-    async def _auto_approve(payload, timeout=60.0):
-        return approval.Decision(approved=True, scope="once")
-
-    gate.request = _auto_approve  # type: ignore[assignment]
+    gate = approval.ApprovalGate(level=approval.ApprovalLevel.AUTO)
     token = approval.set_current_gate(gate)
     try:
         yield ws, vd

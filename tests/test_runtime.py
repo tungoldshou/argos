@@ -20,12 +20,7 @@ def auto_approve_gate():
     """装一个自动批准的审批 gate —— runtime 测试验证的是项目模式/路径逻辑,不是审批流。
     缺 gate 时有副作用工具会 fail-closed 默认拒绝,影响 write_file 等工具的正常测试。"""
     from argos_agent import approval
-    gate = approval.ApprovalGate()
-
-    async def _auto_approve(payload, timeout=60.0):
-        return approval.Decision(approved=True, scope="once")
-
-    gate.request = _auto_approve  # type: ignore[assignment]
+    gate = approval.ApprovalGate(level=approval.ApprovalLevel.AUTO)
     token = approval.set_current_gate(gate)
     yield
     approval.reset_current_gate(token)

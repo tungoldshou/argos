@@ -180,8 +180,11 @@ async def _consume_agent_stream(agent, gate, st, goal, stream_input, cfg):
                     if p.call_id not in seen:
                         seen.add(p.call_id)
                         await events.put(_sse("approval_request", {
-                            "call_id": p.call_id, "tool": p.payload.get("tool"),
-                            "args": p.payload.get("args"), "description": p.payload.get("description"),
+                            "call_id": p.call_id,
+                            # payload key is "action" (Phase 3 §6.3); "tool" kept for SSE client compat
+                            "tool": p.payload.get("action") or p.payload.get("tool"),
+                            "args": p.payload.get("args"),
+                            "description": p.payload.get("description"),
                             "risk": p.payload.get("risk"),
                         }))
                 await asyncio.sleep(0.05)
@@ -413,14 +416,12 @@ async def import_skill(body: dict) -> dict:
         else:
             raise HTTPException(status_code=400, detail="need url or content")
 
-        payload = {
-            "tool": "skills.import",
-            "args": {"source": source, "len": len(content)},
-            "description": f"导入 skill: {source}",
-            "risk": "medium",
-            "source": "skill:import",
-        }
-        decision = await _SKILL_GATE.request(payload)
+        decision = await _SKILL_GATE.request(
+            "skills.import",
+            {"source": source, "len": len(content)},
+            description=f"导入 skill: {source}",
+            risk="medium",
+        )
         if not decision.approved:
             return {"ok": False, "reason": decision.reason or "denied"}
         try:
@@ -438,14 +439,12 @@ async def toggle_skill(name: str, body: dict) -> dict:
     token = approval.set_current_gate(_SKILL_GATE)
     try:
         enabled = bool(body.get("enabled", True))
-        payload = {
-            "tool": "skills.toggle",
-            "args": {"name": name, "enabled": enabled},
-            "description": f"{'启用' if enabled else '禁用'} skill: {name}",
-            "risk": "low",
-            "source": f"skill:{name}",
-        }
-        decision = await _SKILL_GATE.request(payload)
+        decision = await _SKILL_GATE.request(
+            "skills.toggle",
+            {"name": name, "enabled": enabled},
+            description=f"{'启用' if enabled else '禁用'} skill: {name}",
+            risk="low",
+        )
         if not decision.approved:
             return {"ok": False, "reason": decision.reason or "denied"}
         ok = _skills.toggle(name, enabled=enabled)
