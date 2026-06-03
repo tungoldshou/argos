@@ -102,6 +102,7 @@ class ArgosStore:
         con.execute("PRAGMA journal_mode=WAL")
         con.execute("PRAGMA synchronous=NORMAL")
         con.execute("PRAGMA foreign_keys=ON")
+        con.execute("PRAGMA busy_timeout=3000")  # 叠加应用层重试,双保险(spec §5.2 Step 3)
         self._load_vec(con)
         return con
 
