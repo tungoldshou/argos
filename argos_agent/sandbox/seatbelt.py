@@ -95,6 +95,16 @@ def spawn_child(*, workspace: Path, child_argv: list[str],
     )
 
 
+# 冻结 binary(PyInstaller)里 sys.executable 是 argos 自身,不支持 `-m module`。
+# 用这个哨兵 argv 让 argos 入口(__main__.main)在 argparse 之前早分发到沙箱子进程 RPC 循环。
+SANDBOX_CHILD_FLAG = "--__argos_sandbox_child__"
+
+
 def python_child_argv(child_module: str = "argos_agent.sandbox._sandbox_child") -> list[str]:
-    """沙箱子进程的 argv:用当前解释器跑子进程入口模块。"""
+    """沙箱子进程的 argv:
+    · 开发态:`python -m argos_agent.sandbox._sandbox_child`(sys.executable 是真解释器)。
+    · 冻结态(PyInstaller):sys.executable 是 argos binary,不能 `-m`;改用哨兵 argv 重新调起
+      自身,由 __main__ 早分发到 _sandbox_child.main()。"""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, SANDBOX_CHILD_FLAG]
     return [sys.executable, "-m", child_module]

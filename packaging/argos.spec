@@ -22,9 +22,17 @@ hiddenimports = (
     + collect_submodules("rich")
     + ["sqlite_vec"]
 )
+# 包内运行时数据文件(PyInstaller 默认只收 .py,这些非 .py 数据必须显式带):
+#   · memory/schema.sql —— ArgosStore 建库 schema(Path(__file__).with_name 定位)
+#   · skills_builtin/*.md —— 内置技能正文
+# SPECPATH = spec 所在目录(packaging/),.parent = 仓库根 → 用绝对源路径避免相对歧义。
+_ROOT = Path(SPECPATH).parent
 datas = (
     collect_data_files("textual", include_py_files=False)
     + collect_data_files("smolagents")
+    + [(str(_ROOT / "argos_agent" / "memory" / "schema.sql"), "argos_agent/memory")]
+    + [(str(p), "argos_agent/skills_builtin")
+       for p in (_ROOT / "argos_agent" / "skills_builtin").glob("*.md")]
 )
 
 a = Analysis(

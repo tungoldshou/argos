@@ -121,6 +121,15 @@ def _run_selftest() -> int:
 
 
 def main() -> None:
+    # 冻结 binary(PyInstaller)的沙箱子进程 re-exec:被哨兵 argv 调起时,直接跑沙箱子进程
+    # RPC 循环并退出(此时 sys.executable=argos binary,无法 `-m`;见 seatbelt.python_child_argv)。
+    # 必须在 argparse 之前 —— 否则未知 argv 会打印 usage 而非进子进程。
+    from argos_agent.sandbox.seatbelt import SANDBOX_CHILD_FLAG
+    if SANDBOX_CHILD_FLAG in sys.argv[1:]:
+        from argos_agent.sandbox import _sandbox_child
+        _sandbox_child.main()
+        return
+
     args = _build_parser().parse_args()
 
     if args.selftest:
