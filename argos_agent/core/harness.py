@@ -41,9 +41,25 @@ class Harness:
         self._last_failure = ""
 
     async def enter_phase(self, phase: Phase, *, actions: int) -> None:
-        """阶段门:只允许按 PHASE_ORDER 顺序前进(允许停留同阶段,不允许跳过中间阶段)。"""
+        """阶段门:只允许按 PHASE_ORDER 顺序前进(允许停留同阶段,不允许跳过中间阶段或倒退)。
+
+        规则(Phase 4 #2):
+          · 首次 enter_phase(_phase_idx == -1)必须从 plan 开始(target == 0)。
+          · 已进入阶段后不允许倒退(target < _phase_idx)。
+          · 不允许跳过中间阶段(target > _phase_idx + 1)。
+        """
         target = PHASE_ORDER.index(phase)
-        # 允许:前进 1 步、停留原阶段。禁止:跳过中间阶段(target > 当前+1)或倒退。
+        # 首次进入必须从 plan 开始。
+        if self._phase_idx == -1 and target != 0:
+            raise ValueError(
+                f"首次 enter_phase 必须从 plan 开始,收到 {phase}。"
+            )
+        # 不允许倒退。
+        if self._phase_idx >= 0 and 0 <= target < self._phase_idx:
+            raise ValueError(
+                f"阶段不可倒退:当前 {PHASE_ORDER[self._phase_idx]} → 试图回到 {phase}。"
+            )
+        # 不允许跳过中间阶段。
         if self._phase_idx >= 0 and target > self._phase_idx + 1:
             raise ValueError(
                 f"阶段不可跳:当前 {PHASE_ORDER[self._phase_idx]} → 试图直接到 {phase}"

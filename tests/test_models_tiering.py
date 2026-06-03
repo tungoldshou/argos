@@ -47,6 +47,35 @@ async def test_model_client_complete_returns_full_text():
 
 
 @pytest.mark.asyncio
+async def test_stream_rotates_credentials_via_mark_used():
+    """#1:ModelClient.stream 调用后 least_used 应能选到不同 key(mark_used 确实执行)。"""
+    tier = ModelTier(name="worker", model="m", base_url="https://api.x/anthropic", max_tokens=4096)
+    pool = CredentialPool(["key-x", "key-y"])
+    keys_used: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        keys_used.append(request.headers.get("x-api-key", ""))
+        data = {"type": "content_block_delta", "delta": {"type": "text_delta", "text": "ok"}}
+        return httpx.Response(
+            200,
+            text=f"data: {json.dumps(data)}\n\ndata: {{\"type\":\"message_stop\"}}\n",
+            headers={"content-type": "text/event-stream"},
+        )
+
+    client = ModelClient(tier=tier, pool=pool, transport=httpx.MockTransport(handler))
+    msgs = [{"role": "user", "content": "hi"}]
+    # 首次调用
+    _ = [c async for c in client.stream(msgs, system="S")]
+    # 二次调用
+    _ = [c async for c in client.stream(msgs, system="S")]
+    # 两次使用的 key 必须不同(mark_used 更新了 last_used → least_used 轮到另一个)
+    assert len(keys_used) == 2, "stream 应被调用两次"
+    assert keys_used[0] != keys_used[1], (
+        f"两次 stream 使用了同一个 key={keys_used[0]!r},mark_used 未正确轮换"
+    )
+
+
+@pytest.mark.asyncio
 async def test_model_client_sends_max_tokens_from_tier():
     captured = {}
 

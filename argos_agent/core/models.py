@@ -124,6 +124,7 @@ class ModelClient:
 
     async def stream(self, messages: list[dict], *, system: str) -> AsyncIterator[str]:
         cred = self.pool.least_used()
+        self.pool.mark_used(cred.key)  # 立即更新 last_used,确保 least_used 轮换(Phase 4 #1)
         headers = {
             "x-api-key": cred.key,
             "anthropic-version": "2023-06-01",

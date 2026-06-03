@@ -251,7 +251,9 @@ class AgentLoop:
             for ev in self._hbus.drain():
                 yield ev
 
-            if verdict.status == "passed":
+            # Defense-in-depth(Phase 4 #3):verify_cmd is None 时绝不以 passed 收尾 ——
+            # 非规范 verifier 可能对无测任务返回 passed;必须走诚实完成路径标 NO_TEST_LABEL。
+            if verdict.status == "passed" and self._cfg.verify_cmd is not None:
                 break                        # 通过 → 收尾
             if self._harness.is_honest_completion(verdict, verify_cmd=self._cfg.verify_cmd):
                 # HONESTY CORRECTION:无测任务的诚实非阻塞完成 —— 收尾,report 标"未机检验证"。

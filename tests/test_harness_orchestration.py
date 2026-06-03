@@ -123,3 +123,41 @@ async def test_accept_receipt_rejects_forgery():
 
 def test_phase_order_constant():
     assert PHASE_ORDER == ["plan", "act", "verify", "report"]
+
+
+# ── Phase 4 #2: 倒退 + 非 plan 首次进入 防护 ─────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_enter_phase_backward_raises():
+    """倒退(从 act 回 plan)必须抛 ValueError。"""
+    bus = _RecordingBus()
+    h = _harness(bus)
+    await h.enter_phase("plan", actions=0)
+    await h.enter_phase("act", actions=1)
+    with pytest.raises(ValueError, match="倒退"):
+        await h.enter_phase("plan", actions=0)
+
+
+@pytest.mark.asyncio
+async def test_enter_phase_first_must_be_plan():
+    """首次 enter_phase 非 plan 必须抛 ValueError。"""
+    bus = _RecordingBus()
+    h = _harness(bus)
+    with pytest.raises(ValueError, match="plan"):
+        await h.enter_phase("act", actions=0)
+
+
+@pytest.mark.asyncio
+async def test_full_plan_act_verify_report_still_works(in_project):
+    """正常 plan→act→verify→report 序列不应抛异常。"""
+    (in_project / "test_ok.py").write_text("def test_ok():\n    assert True\n")
+    bus = _RecordingBus()
+    h = _harness(bus)
+    await h.enter_phase("plan", actions=0)
+    await h.enter_phase("act", actions=1)
+    await h.enter_phase("verify", actions=2)
+    verdict = await h.run_verify_gate("pytest -q test_ok.py", attempt=1)
+    assert verdict.status == "passed"
+    await h.enter_phase("report", actions=3)
+    phases = [e.phase for e in bus.seen if isinstance(e, PhaseChange)]
+    assert phases == ["plan", "act", "verify", "report"]
