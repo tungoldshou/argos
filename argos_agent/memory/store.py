@@ -197,6 +197,17 @@ class ArgosStore:
         )
         return sid
 
+    def ensure_session(self, session_id: str, *, title: str = "", model: str = "",
+                       system_snapshot: str = "") -> None:
+        """幂等创建【指定 id】的 session —— loop/TUI 用稳定 session_id 驱动 event sourcing/replay/resume
+        (create_session 自生成 uuid,不接受指定 id;此方法补上"按既定 id 落 session 行"这一环)。
+        已存在则 no-op(resume 复用同一 session,不覆盖)。"""
+        self._write(
+            "INSERT OR IGNORE INTO sessions(session_id, parent, title, model, system_snapshot, started_at) "
+            "VALUES (?,?,?,?,?,?)",
+            (session_id, None, title, model, system_snapshot, time.time()),
+        )
+
     def get_session(self, session_id: str) -> "SessionRow | None":
         r = self._con.execute(
             "SELECT * FROM sessions WHERE session_id=?", (session_id,)

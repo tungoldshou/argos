@@ -93,6 +93,11 @@ class Verifier:
 
         env = dict(os.environ)
         env["PYTHONPATH"] = str(workspace) + os.pathsep + env.get("PYTHONPATH", "")
+        # 护城河可靠性:禁写 .pyc。agent 改源后重跑 verify 必须验证【当前源码】——
+        # 同尺寸改动(如 'a - b'→'a + b')若赶在同一秒(mtime 秒级分辨率),陈旧 .pyc 会被
+        # 复用导致 verify 对【旧字节码】下判,模型修好了却仍报 failed → 假 bounce/假升级。
+        # 禁写字节码 → 每个 verify 子进程都从源码现导,verdict 永远反映当前代码。
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
 
         try:
             r = subprocess.run(
