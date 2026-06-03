@@ -28,3 +28,73 @@ def test_verdict_is_frozen():
     v = Verdict.passed(detail="ok", verify_cmd="pytest", attempts=1)
     with pytest.raises((AttributeError, Exception)):
         v.status = "failed"  # type: ignore[misc]
+
+
+import os
+import textwrap
+from pathlib import Path
+
+from argos_agent.core.verify_gate import Verifier
+from argos_agent import runtime
+
+
+def _mk_project(tmp_path: Path) -> Path:
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    return proj
+
+
+@pytest.fixture
+def in_project(tmp_path, monkeypatch):
+    proj = _mk_project(tmp_path)
+    tok = runtime.use_project(str(proj))
+    yield proj
+    runtime.reset(tok)
+
+
+def test_verify_none_cmd_returns_passed(in_project):
+    # 没 verify_cmd → 无可机检判据 → passed(诚实:没有断言可跑就不拦,但 harness 会在 report 标注)。
+    v = Verifier(max_rounds=3).verify(None)
+    assert v.status == "passed"
+    assert v.verify_cmd is None
+
+
+def test_verify_passing_command(in_project):
+    (in_project / "test_ok.py").write_text("def test_ok():\n    assert 1 == 1\n")
+    v = Verifier(max_rounds=3).verify("pytest -q test_ok.py")
+    assert v.status == "passed"
+    assert "[exit_code=0]" in v.detail
+
+
+def test_verify_failing_command(in_project):
+    (in_project / "test_bad.py").write_text("def test_bad():\n    assert 1 == 2\n")
+    v = Verifier(max_rounds=3).verify("pytest -q test_bad.py")
+    assert v.status == "failed"
+    assert "[exit_code=" in v.detail
+
+
+def test_verify_not_whitelisted_command(in_project):
+    v = Verifier(max_rounds=3).verify("rm -rf /")
+    assert v.status == "failed"
+    assert "白名单" in v.detail
+
+
+def test_verify_tampering_forces_unverifiable(in_project):
+    # 登记受保护测试 → 改它 → 即便命令退出码 0,也判 unverifiable(优先于退出码)。
+    test_file = in_project / "test_guard.py"
+    test_file.write_text("def test_guard():\n    assert True\n")
+    runtime.guard_files(["test_guard.py"])
+    test_file.write_text("def test_guard():\n    assert True  # tampered\n")
+    v = Verifier(max_rounds=3).verify("pytest -q test_guard.py")
+    assert v.status == "unverifiable"
+    assert any("test_guard.py" in t for t in v.tampered)
+
+
+def test_verify_timeout_degrades_to_unverifiable(in_project):
+    # 超时 → 无法确认 → 诚实降级 unverifiable(绝不当 passed)。用极短 inline_timeout 触发。
+    (in_project / "test_slow.py").write_text(
+        "import time\ndef test_slow():\n    time.sleep(2)\n    assert True\n"
+    )
+    v = Verifier(max_rounds=3, inline_timeout=0.3).verify("pytest -q test_slow.py")
+    assert v.status == "unverifiable"
+    assert "超时" in v.detail

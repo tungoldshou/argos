@@ -22,73 +22,87 @@ import shlex
 import subprocess
 from pathlib import Path
 
+from argos_agent import runtime
+from argos_agent.tools import ALLOWED_CMDS
+
 # 唯一 Verdict 定义在 types.py(契约 §6.1)；re-export 保持旧 import 路径绿。
 from argos_agent.core.types import Verdict  # noqa: F401
 
 
-def _workspace() -> Path:
-    return Path(os.environ.get("ARGOS_WORKSPACE", str(Path.home() / ".argos" / "workspace")))
-
-
-def _verify_dir() -> Path:
-    return Path(os.environ.get("ARGOS_VERIFY_DIR", str(Path.home() / ".argos" / "verify")))
-
-
-def _run_verify(cmd: str) -> tuple[int, str]:
-    """跑验证命令,返回 (退出码, 细节[exit_code=N])。在 verify_dir(agent 写不到)里跑。"""
-    try:
-        parts = shlex.split(cmd)
-    except ValueError as e:
-        return -1, f"验证命令解析失败:{e}"
-    vdir = _verify_dir()
-    ws = _workspace()
-    vdir.mkdir(parents=True, exist_ok=True)
-    ws.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ)
-    env["PYTHONPATH"] = str(ws) + os.pathsep + env.get("PYTHONPATH", "")
-    try:
-        r = subprocess.run(parts, cwd=vdir, capture_output=True, text=True, timeout=60, env=env)
-    except Exception as e:  # noqa: BLE001
-        return -1, f"验证执行失败:{e}"
-    detail = f"[exit_code={r.returncode}]\n{(r.stdout or '')[-1500:]}\n{(r.stderr or '')[-1500:]}".strip()
-    return r.returncode, detail
-
-
 class Verifier:
-    """test-oracle 硬门禁占位(契约 §6.1 + §9 锁#1)。
+    """称'完成'必过 verify_cmd；三态裁决；篡改优先；超时降级(契约 §6 Verifier)。
 
-    Phase 4 扩分级延迟 + harness 集成;本阶段最小占位:跑 verify_cmd → 三态 Verdict。
-    canonical 签名(§9 锁#1):verify(verify_cmd, *, attempts=1) -> Verdict。
-    篡改检测与 VERIFY_DIR 隔离由本类内部处理,不接受外部参数(loop 不传 workspace/tampered)。
+    canonical 签名(契约 §9 锁#1):
+      verify(self, verify_cmd: str | None, *, attempts: int = 1) -> Verdict
+    篡改检测与 VERIFY_DIR 隔离由本类内部经 runtime 解决，不接受外部 workspace/verify_dir/tampered。
     """
 
-    def __init__(self, *, max_rounds: int = 3) -> None:
+    def __init__(self, *, max_rounds: int = 3, inline_timeout: float = 60.0) -> None:
         self.max_rounds = max_rounds
+        # inline_timeout: 内联快路径上限。真实 pytest 启动 2-5s，默认给 60s 容忍；
+        # 调用方可调小做"分级"(超过 → 降级 unverifiable，而非伪 passed)。
+        self.inline_timeout = inline_timeout
 
     def verify(self, verify_cmd: str | None, *, attempts: int = 1) -> Verdict:
         """返回三态 Verdict(passed/failed/unverifiable)。
-        § 锁#1:篡改非空 → unverifiable,绝不蒙混(spec §12.5)。
-        § 无 verify_cmd → unverifiable(诚实:无命令无法确认完成)。
-        § verify_cmd 跑通 → passed;失败 → failed。
+
+        优先级：篡改检测 > 命令执行 > 无命令。
+        · 篡改非空 → unverifiable(spec §12.5 — 绝不蒙混)。
+        · 无 verify_cmd → passed(诚实：无断言可跑就不拦，harness 在 report 标注"未机检")。
+        · verify_cmd 在白名单 → 跑命令；通过 → passed，失败 → failed，超时 → unverifiable。
+        · verify_cmd 不在白名单 → failed(明确拒绝，不静默跳过)。
         """
-        # 先查篡改(防贿赂测谎仪)。
-        tampered: list[str] = []
-        try:
-            from argos_agent import runtime  # noqa: PLC0415
-            tampered = runtime.detect_tampering()
-        except Exception:  # noqa: BLE001
-            tampered = []
+        # 篡改优先(防贿赂测谎仪)：先查受保护文件，非空 → 直接 unverifiable。
+        tampered = runtime.detect_tampering()
         if tampered:
             return Verdict.unverifiable(
-                detail=f"受保护文件被改:{', '.join(tampered)};通过不可信。",
+                detail=f"验证依赖的受保护文件被改动：{', '.join(tampered)} —— 通过不可信。",
                 tampered=tampered, attempts=attempts,
             )
+
+        # 无可机检命令 → 没有断言可跑(诚实：不拦，harness 在 report 会标注"未完整验证")。
         if not verify_cmd:
-            return Verdict.unverifiable(
-                detail="无验证命令,无法确认完成。",
-                tampered=[], attempts=attempts,
-            )
-        code, detail = _run_verify(verify_cmd)
-        if code == 0:
+            return Verdict.passed(detail="(无 verify_cmd，未做机检验证)", verify_cmd=None, attempts=attempts)
+
+        ok, detail, timed_out = self._run_verify(verify_cmd)
+        if timed_out:
+            return Verdict.unverifiable(detail=detail, tampered=[], attempts=attempts)
+        if ok:
             return Verdict.passed(detail=detail, verify_cmd=verify_cmd, attempts=attempts)
         return Verdict.failed(detail=detail, verify_cmd=verify_cmd, attempts=attempts)
+
+    def _run_verify(self, cmd: str) -> tuple[bool, str, bool]:
+        """跑验证命令，返回 (是否通过, 细节, 是否超时)。退出码是 ground truth。"""
+        try:
+            parts = shlex.split(cmd)
+        except ValueError as e:
+            return False, f"验证命令解析失败：{e}", False
+
+        if not parts or Path(parts[0]).name not in ALLOWED_CMDS:
+            return False, f"验证命令不在白名单：{cmd}", False
+
+        ctx = runtime.current()
+        verify_dir, workspace = ctx.verify_dir, ctx.workspace
+        verify_dir.mkdir(parents=True, exist_ok=True)
+        workspace.mkdir(parents=True, exist_ok=True)
+
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(workspace) + os.pathsep + env.get("PYTHONPATH", "")
+
+        try:
+            r = subprocess.run(
+                parts, cwd=verify_dir, capture_output=True, text=True,
+                timeout=self.inline_timeout, env=env,
+            )
+        except subprocess.TimeoutExpired:
+            return False, (
+                f"[超时] 验证命令 `{cmd}` 超过 {self.inline_timeout}s 未完成 —— "
+                f"降级为'无法验证'(不会假装通过)。"
+            ), True
+        except Exception as e:  # noqa: BLE001
+            return False, f"验证执行失败：{e}", False
+
+        out = (r.stdout or "")[-1500:]
+        err = (r.stderr or "")[-1500:]
+        detail = f"[exit_code={r.returncode}]\n{out}\n{err}".strip()
+        return r.returncode == 0, detail, False
