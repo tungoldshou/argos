@@ -38,3 +38,8 @@ agent/dist-arm64/
 agent/*.spec
 .venv/
 agent/.venv/
+
+# PyInstaller arm64 单 binary 产物(打包态,不进 git)
+/dist/
+/build/
+*.spec.bak
