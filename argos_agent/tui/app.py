@@ -83,6 +83,12 @@ class ArgosApp(App):
         yield Input(placeholder="› 输入目标,或 / 开始命令", id="prompt")
         yield Footer()
 
+    def on_mount(self) -> None:
+        """启动即把焦点放到输入框。否则 Textual 默认聚焦第一个可聚焦 widget —— TranscriptLog
+        (RichLog 可滚动故可聚焦)排在 Input 之前,会先抢焦点,按键全喂给它,用户在输入框
+        打不了任何字(汉字/ASCII 都进不去)。"""
+        self.query_one("#prompt", Input).focus()
+
     # ── 输入分发 ──────────────────────────────────────────────────────────
     def on_input_submitted(self, event: Input.Submitted) -> None:
         text = event.value

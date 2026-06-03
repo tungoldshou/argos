@@ -145,3 +145,34 @@ async def test_real_loop_has_no_demo_marker():
     async with app.run_test() as pilot:
         await pilot.pause()
         assert "DEMO" not in app.sub_title
+
+
+@pytest.mark.asyncio
+async def test_input_focused_on_mount_and_receives_typing():
+    """回归:启动后输入框必须自动获焦,否则按键被 TranscriptLog 抢走,用户打不了任何字。"""
+    from textual.widgets import Input
+
+    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        prompt = app.query_one("#prompt", Input)
+        assert app.focused is prompt, "启动后焦点必须在输入框(#prompt)"
+        await pilot.press("h", "i")
+        await pilot.pause()
+        assert prompt.value == "hi", "聚焦的输入框应接收按键"
+
+
+@pytest.mark.asyncio
+async def test_input_accepts_cjk_characters():
+    """回归:输入框能接收汉字(IME 合成后终端送出的字符走与 ASCII 同路径)。"""
+    from textual.widgets import Input
+
+    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        prompt = app.query_one("#prompt", Input)
+        # 模拟终端把已合成的汉字逐字送达(Textual 以可打印字符 Key 事件插入)。
+        for ch in "修个bug":
+            await pilot.press(ch)
+        await pilot.pause()
+        assert prompt.value == "修个bug", "输入框应接收汉字 + ASCII 混排"
