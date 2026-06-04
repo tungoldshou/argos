@@ -132,7 +132,8 @@ class ArgosApp(App):
         # 工作态边缘光(Task 13):idle 灭=中性灰;run 期间随真实阶段着色。纯事件驱动——
         # 颜色只在 PhaseChange/VerifyVerdict/Escalation/Error 真事件到达时变;不用空转计时器
         # (无呼吸动画可演时,定时重设同色既是 CPU churn 又踩 Textual 重绘缓存坑)。
-        self._glow_phase = "idle"
+        # 终态告警色(failed/unverifiable/escalation/error)锁定后,阶段色不得覆盖(诚实:告警不被 report 抹掉)。
+        self._terminal_glow = False
 
     # ── 工作态边缘光(spec §工作态边缘光) ─────────────────────────────────
     def _set_border(self, color) -> None:
@@ -140,12 +141,11 @@ class ArgosApp(App):
 
     def _glow_start(self) -> None:
         from argos_agent.tui import glow
-        self._glow_phase = "plan"
+        self._terminal_glow = False           # 新一轮:解锁告警色
         self._set_border(glow.phase_color("plan"))
 
     def _glow_stop(self) -> None:
         from argos_agent.tui import glow
-        self._glow_phase = "idle"
         self._set_border(glow.IDLE_BORDER)
 
     # ── 输入分发 ──────────────────────────────────────────────────────────
@@ -265,8 +265,8 @@ class ArgosApp(App):
             log.finalize_response()
             bar.set_phase(ev.phase, ev.actions)
             ap.on_phase(ev.phase, ev.actions)
-            self._glow_phase = ev.phase
-            self._set_border(glow.phase_color(ev.phase))
+            if not self._terminal_glow:        # 终态告警色锁定时阶段色不得覆盖(红/琥珀不被 report 抹掉)
+                self._set_border(glow.phase_color(ev.phase))
         elif isinstance(ev, CodeAction):
             block = CodeActionBlock(code=ev.code, step=ev.step)
             self._step_blocks[ev.step] = block
@@ -286,6 +286,8 @@ class ArgosApp(App):
                 await log.mount_block(badge)
             badge.show(ev.verdict)
             self._set_border(glow.verdict_color(ev.verdict.status))
+            if ev.verdict.status in ("failed", "unverifiable"):
+                self._terminal_glow = True     # 锁定告警色,后续 report 阶段色不得覆盖
         elif isinstance(ev, CostUpdate):
             bar.set_cost(
                 tokens_in=ev.tokens_in, tokens_out=ev.tokens_out,
@@ -305,10 +307,12 @@ class ArgosApp(App):
         elif isinstance(ev, Escalation):
             await log.append_line(f"⚠️ 卡住({ev.attempts} 轮):{ev.reason} — 最后失败:{ev.last_failure}", kind="escalation")
             self._set_border(glow.ERROR)
+            self._terminal_glow = True
         elif isinstance(ev, Error):
             chain = (" ← " + " ← ".join(ev.chain)) if ev.chain else ""
             await log.append_line(f"❌ 错误:{ev.message}{chain}", kind="error")
             self._set_border(glow.ERROR)
+            self._terminal_glow = True
 
     async def _handle_approval(self, req: ApprovalRequest) -> None:
         """Auto 档不弹窗直接 always;否则弹 ApprovalModal,回调里 respond。"""

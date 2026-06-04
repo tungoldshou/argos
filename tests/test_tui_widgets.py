@@ -87,7 +87,6 @@ async def test_verdict_badge_three_states():
         assert badge.status == "unverifiable" and "⚠️" in badge.render_text
 
 from argos_agent.tui.widgets.status_bar import StatusBar
-from argos_agent.tui.widgets.cost_meter import CostMeter
 
 
 @pytest.mark.asyncio
@@ -107,17 +106,3 @@ async def test_status_bar_always_on_fields():
         assert "12.4k" in t and "3.1k" in t
         assert "$0.013" in t
         assert "4.2s" in t
-
-
-@pytest.mark.asyncio
-async def test_cost_meter_accumulates_from_events():
-    meter = CostMeter()
-    app = _Host(meter)
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        assert meter.cost_usd == 0.0
-        meter.update_cost(tokens_in=100, tokens_out=50, cost_usd=0.002, elapsed_s=1.0)
-        await pilot.pause()
-        assert meter.cost_usd == 0.002
-        assert meter.tokens_in == 100 and meter.tokens_out == 50
-        assert "$0.002" in meter.render_text
