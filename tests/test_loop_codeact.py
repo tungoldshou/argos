@@ -171,6 +171,37 @@ async def test_loop_emits_costupdate_with_real_tokens_and_elapsed():
     assert last.context_used >= 100, "应带当前窗口占用(输入侧 token,供上下文用量条)"
 
 
+class _FakeModelWithTier(_FakeModelWithUsage):
+    """带 tier.model 的 FakeModel —— 验证 cost 接入 PRICING 表后真算成本。"""
+    def __init__(self, scripts, model_name):
+        super().__init__(scripts)
+        self.tier = type("_T", (), {"model": model_name})()
+
+
+@pytest.mark.asyncio
+async def test_cost_computed_for_known_pricing_model():
+    """回归:成本接入定价表后,已知模型(MiniMax-M2 在 PRICING)应算出真实正成本,
+    不再恒 $(N/A)。此前 cost_usd 硬编码 None → 即便模型在表里也永远 N/A(bug)。"""
+    from argos_agent.tui.events import CostUpdate
+    model = _FakeModelWithTier(["```python\nx=1\n```", "完成。"], "MiniMax-M2")
+    loop = _loop_with(model)
+    costs = [ev for ev in [e async for e in loop.run("g", "s")] if isinstance(ev, CostUpdate)]
+    assert costs and costs[-1].cost_usd is not None and costs[-1].cost_usd > 0, \
+        "已知定价模型应算出真实正成本(token>0),而非恒 None"
+
+
+@pytest.mark.asyncio
+async def test_cost_none_for_unknown_model_not_fake_zero():
+    """诚实:未知单价模型 → cost_usd 回退 None(UI 显 $(N/A)),
+    而非 cost_of 对未知模型返回的 0.0(那会显失真的恒 $0.000)。"""
+    from argos_agent.tui.events import CostUpdate
+    model = _FakeModelWithTier(["```python\nx=1\n```", "完成。"], "No-Such-Model-9000")
+    loop = _loop_with(model)
+    costs = [ev for ev in [e async for e in loop.run("g", "s")] if isinstance(ev, CostUpdate)]
+    assert costs and all(ev.cost_usd is None for ev in costs), \
+        "未知模型单价 → 全程 None,绝不显假 $0.000"
+
+
 @pytest.mark.asyncio
 async def test_loop_emits_visible_completion_line_no_test():
     """回归:无 verify_cmd 的诚实完成必须在 transcript 可见(此前只写进 DB,UI 一片空白)。"""

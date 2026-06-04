@@ -81,6 +81,13 @@ class Transcript(VerticalScroll):
             parts.append(strip_code_fences(self._current._raw))
         return "\n".join(p for p in parts if p)
 
+    def _stick_to_bottom(self) -> None:
+        """仅当用户已停在(或几乎停在)底部时才跟随到底——否则保留用户的滚动位置。
+        修复"滚不动":此前每个流式 token / 每条系统行都无条件 scroll_end,用户向上翻历史
+        会被下一个事件即时拽回底部,体感=滚动条失效。判据:距底 ≤2 行算"在底部跟随"。"""
+        if self.max_scroll_y - self.scroll_offset.y <= 2:
+            self.scroll_end(animate=False)
+
     async def user_line(self, text: str) -> None:
         self.finalize_response()
         # 非首条用户输入前插一条虚线分隔,把对话切成可读的"回合"(Task 14)。
@@ -89,7 +96,7 @@ class Transcript(VerticalScroll):
             await self.mount(Rule(line_style="dashed"))
         self._lines.append(f"› {text}")
         await self.mount(UserMessage(text))
-        self.scroll_end(animate=False)
+        self.scroll_end(animate=False)   # 用户刚提交新目标 → 无条件跳到底看自己的输入
 
     async def append_token(self, text: str) -> None:
         if self._current is None:
@@ -98,7 +105,7 @@ class Transcript(VerticalScroll):
             self._current = AssistantMessage()
             await self.mount(self._current)
         self._current.feed(text)
-        self.scroll_end(animate=False)
+        self._stick_to_bottom()
 
     def finalize_response(self) -> None:
         """当前流式段落定:记入 _lines,清 current 指针 → 下个 token 起新气泡。"""
@@ -110,17 +117,17 @@ class Transcript(VerticalScroll):
         self.finalize_response()
         self._lines.append(text)
         await self.mount(SystemLine(text, kind=kind))
-        self.scroll_end(animate=False)
+        self._stick_to_bottom()
 
     async def mount_block(self, widget) -> None:
         self.finalize_response()
         await self.mount(widget)
-        self.scroll_end(animate=False)
+        self._stick_to_bottom()
 
     async def show_thinking(self, label: str = "思考中…") -> None:
         self.finalize_response()
         await self.mount(ThinkingIndicator(label))
-        self.scroll_end(animate=False)
+        self._stick_to_bottom()
 
     async def clear(self) -> None:        # /clear 用:移除所有消息
         await self.remove_children()

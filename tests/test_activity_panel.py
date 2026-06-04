@@ -86,6 +86,30 @@ async def test_context_section_shows_usage_bar():
 
 
 @pytest.mark.asyncio
+async def test_panel_is_scrollable():
+    """修复:活动栏内容超出可视高度时必须可滚(overflow-y: auto);
+    此前继承 Vertical 默认 overflow-y: hidden,区块被裁死、滚轮/拖拽全失效。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        assert ap.styles.overflow_y == "auto", \
+            f"活动栏应 overflow-y: auto 才能滚动,实际 {ap.styles.overflow_y}"
+
+
+@pytest.mark.asyncio
+async def test_section_title_not_transparent():
+    """修复:区块标题此前 border-title-color 落到透明默认(alpha=0)完全看不见;
+    须为不透明可读色($foreground)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        c = ap._sections()[0].styles.border_title_color
+        assert c is not None and c.a > 0, f"区块标题颜色不得透明(alpha=0),实际 {c!r}"
+
+
+@pytest.mark.asyncio
 async def test_in_progress_phase_shows_ellipsis_not_zero():
     app = _H()
     async with app.run_test() as pilot:

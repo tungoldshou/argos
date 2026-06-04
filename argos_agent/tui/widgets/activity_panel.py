@@ -13,7 +13,7 @@ _PHASE_GLYPH = {"plan": "◇", "act": "✦", "verify": "✦", "report": "◇"}
 
 class _Section(Static):
     DEFAULT_CSS = """
-    _Section { height: auto; padding: 0 1; }
+    _Section { height: auto; padding: 0 1; border-title-color: $foreground; border-title-style: bold; }
     """
     def __init__(self, title: str, body: str = "") -> None:
         super().__init__(body)
@@ -21,8 +21,11 @@ class _Section(Static):
 
 
 class ActivityPanel(Vertical):
+    # overflow-y: auto → 内容超出可视高度时自动出竖向滚动条(滚轮+拖拽都恢复可用);
+    # 此前继承 Vertical 默认 overflow-y: hidden,区块超高即被裁且完全滚不动。
+    # border-title-color 在 _Section 显式给 $foreground(亮白)——默认是透明(alpha=0)看不见。
     DEFAULT_CSS = """
-    ActivityPanel { width: 34; border-left: solid $panel; padding: 0 0; }
+    ActivityPanel { width: 34; border-left: solid $panel; padding: 0 0; overflow-y: auto; scrollbar-size-vertical: 1; }
     ActivityPanel > _Section { border-top: solid $panel; }
     """
     def __init__(self, *, model_label: str = "—", tier: str = "—", **kwargs) -> None:

@@ -327,6 +327,7 @@ class AgentLoop:
         escalated = False
         noaction_nudged = False   # 0 动作守卫:只催一轮,催过后第二次无代码块允许纯文字收尾(防死循环)。
         compactions = 0           # 上下文压缩次数上限,防压缩仍溢出时无限重试。
+        text = ""                 # 在 while 外初始化:max_steps=0 等边界下收尾仍能安全 text.strip()
         while step < self._cfg.max_steps:
             # W3:流式 delta 过 StreamingContextScrubber,防模型把 untrusted 围栏吐回 UI 泄露。
             scrubber = StreamingContextScrubber()
@@ -365,7 +366,6 @@ class AgentLoop:
                 yield PlanUpdate(todos=new_todos)
 
             # CostUpdate:真 token(从 model.last_usage 累加)+ 真 elapsed,让状态栏/成本表走起来。
-            # 单价未知 → cost_usd 置 None(诚实:不编造成本,UI 显 $(N/A)),token 与计时仍如实反映。
             usage = getattr(self._model, "last_usage", None) or {}
             self._tok_in += int(usage.get("input_tokens") or 0)
             self._tok_out += int(usage.get("output_tokens") or 0)
@@ -375,9 +375,17 @@ class AgentLoop:
             context_used = (int(usage.get("input_tokens") or 0)
                             + int(usage.get("cache_read") or 0)
                             + int(usage.get("cache_creation") or 0))
+            # 成本:用已就绪的定价表算【会话累计】成本(此前硬编码 None → 永远 $(N/A) 是 bug)。
+            # 模型不在 PRICING(用户自带模型且未配单价)→ 回退 None,UI 诚实显 $(N/A),
+            # 而非 cost_of 对未知模型返回的 0.0(那会让 $(N/A) 变成失真的恒 $0.000)。
+            from argos_agent.core.observability import PRICING, cost_of
+            _tier = getattr(self._model, "tier", None)
+            model_name = getattr(_tier, "model", "") if _tier is not None else ""
+            _sc = cost_of({"input_tokens": self._tok_in, "output_tokens": self._tok_out}, model=model_name)
+            cost = _sc.cost_usd if model_name in PRICING else None
             yield CostUpdate(
                 tokens_in=self._tok_in, tokens_out=self._tok_out,
-                cost_usd=None, elapsed_s=time.time() - self._started,
+                cost_usd=cost, elapsed_s=time.time() - self._started,
                 cache_read=self._cache_read, context_used=context_used,
             )
 
@@ -457,8 +465,18 @@ class AgentLoop:
         # 否则历史只剩单边 user goal、agent 记不住自己上轮答了啥 → "好的/继续"接不上。
         # 只存最终答(非每个 act 步):内部代码步是 scratch,产物已落盘可 read_file 回看,
         # 跨轮上下文保持精简;增长由 compaction(批3)兜底。
-        if text.strip():
-            self._store.append_message(session_id, role="assistant", content=text)
+        # 关键修复:即使最终段为空(模型用空 turn 宣布完成、或答复被 scrubber 清空),也必须落
+        # 一条占位 assistant —— 否则本轮历史只剩单边 user(goal),连续多轮会在 DB 堆出
+        # [user, user, user...],模型看不出是独立任务、也记不住自己做过啥(=用户看到的"没串上下文")。
+        persisted = text.strip()
+        if not persisted:
+            if escalated:
+                persisted = "(本轮结束:未通过验证,已上报)"
+            elif report_note:
+                persisted = f"(本轮完成:{report_note})"
+            else:
+                persisted = "(本轮完成)"
+        self._store.append_message(session_id, role="assistant", content=persisted)
 
         # ── report ──
         if report_note:
