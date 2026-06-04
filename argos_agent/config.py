@@ -136,6 +136,7 @@ def load_env_file(path: Path) -> dict[str, str]:
 
 
 _REQUIRED = ("protocol", "base_url", "model")
+_VALID_PROTOCOLS = ("anthropic", "openai")
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,11 +168,22 @@ def load_config() -> ArgosConfig:
         for f in _REQUIRED:
             if not m.get(f):
                 raise ConfigError(f"profile '{name}' 缺必填字段 '{f}'")
+        # protocol 必须在已知集合内:拼错(如 'anthropc')会让 get_protocol 静默退化成 Anthropic
+        # 框架去打 OpenAI 端点 → 运行时困惑的假退化;在加载期 fail-closed 明确报错。
+        if m["protocol"] not in _VALID_PROTOCOLS:
+            raise ConfigError(
+                f"profile '{name}' 的 protocol='{m['protocol']}' 非法,只能是 {_VALID_PROTOCOLS}")
+        # 数字字段非数字时,int() 会漏 ValueError;包成 ConfigError 守住 fail-closed 契约
+        # (调用方只接 ConfigError;漏 ValueError = 未捕获崩溃)。
+        try:
+            max_tokens = int(m.get("max_tokens", 4096))
+            context_window = int(m.get("context_window", 200_000))
+        except (ValueError, TypeError) as e:
+            raise ConfigError(
+                f"profile '{name}' 的 max_tokens/context_window 必须是整数:{e}") from e
         tiers[name] = ModelTier(
             name=name, model=m["model"], base_url=m["base_url"],
-            max_tokens=int(m.get("max_tokens", 4096)),
-            context_window=int(m.get("context_window", 200_000)),
-            protocol=m["protocol"],
+            max_tokens=max_tokens, context_window=context_window, protocol=m["protocol"],
         )
         key_envs[name] = m.get("api_key_env", "")
         if m.get("price_in") is not None and m.get("price_out") is not None:

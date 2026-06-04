@@ -49,6 +49,32 @@ def test_missing_required_field_raises(tmp_path, monkeypatch):
         C.load_config()
 
 
+def test_malformed_json_raises_configerror(tmp_path, monkeypatch):
+    """fail-closed:config.json 畸形 → ConfigError(不漏 JSONDecodeError 击穿调用方)。"""
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    (tmp_path / "config.json").write_text("{ not valid json ,, }")
+    with pytest.raises(C.ConfigError):
+        C.load_config()
+
+
+def test_invalid_protocol_raises(tmp_path, monkeypatch):
+    """fail-closed:protocol 拼错(非 anthropic/openai)→ ConfigError,不静默退化成 Anthropic。"""
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    _write(tmp_path, {"active": "mm", "models": {"mm": {"protocol": "anthropc",  # 拼错
+           "base_url": "http://x/v1", "model": "m", "api_key_env": "K"}}})
+    with pytest.raises(C.ConfigError):
+        C.load_config()
+
+
+def test_non_numeric_max_tokens_raises_configerror(tmp_path, monkeypatch):
+    """fail-closed:max_tokens 非数字 → ConfigError(不漏 ValueError;调用方只接 ConfigError)。"""
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    _write(tmp_path, {"active": "mm", "models": {"mm": {"protocol": "openai",
+           "base_url": "http://x/v1", "model": "m", "api_key_env": "K", "max_tokens": "abc"}}})
+    with pytest.raises(C.ConfigError):
+        C.load_config()
+
+
 def test_price_registered_into_pricing(tmp_path, monkeypatch):
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     _write(tmp_path, {"active": "mm", "models": {"mm": {"protocol": "anthropic",
