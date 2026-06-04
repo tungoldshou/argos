@@ -7,6 +7,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+- **彻底去除 worker/premium 模型档位(贯彻"模型不绑定、无档位")。** 这套"便宜 worker 默认 + 验证失败升级到 Claude premium"是模型无关化之前的残留(且 `should_fallback` 级联是从不触发的死代码)。collapse 为**平等命名 profiles + 当前 active**:删 `PREMIUM_TIER`/`PREMIUM_KEY`/`--premium`;`WORKER_TIER`→`DEFAULT_TIER`(name `default`,旧 env 回退用,保留 `WORKER_KEYS` 别名);`ModelTierName` 由 `Literal["worker","premium"]` 改为自由 `str`;`build_components` 去 `premium` 参数、加 `model_override`;`argos --premium` → **`argos --model <name>`**(本次启动用指定 profile);TUI 活动栏/启动画面/上下文窗口统一走 `active_tier()`(`_display_tier()` 回退 `DEFAULT_TIER`);自动级联降为纯可选的 escalation profile(未默认启用)。另:去掉 `config.py`/`models.py` 里"默认就是 MiniMax"的误导注释——MiniMax 仅是历史预设之一,不代表绑定。
+
+### Added
+- **`/resume` 接成真的:重开窗口后续上上次会话。** 每次启动仍默认全新 session(故重开不自动记得上次);`/resume` 把当前会话切到**最近一次历史会话**,后续任务经 `get_messages` 带回其上下文(agent 记得上次干了啥)。无历史时诚实告知,不假装恢复。
+- **`argos setup` provider 菜单支持方向键。** 真终端用 ↑↓ 选 + 回车确认(termios raw 模式 + 反显高亮,`finally` 必复原终端);非 TTY/管道/测试自动回退编号输入(保持 headless 可测,`ARGOS_NO_ARROW_SELECT=1` 可强制回退)。自填项(model/key/url)仍打字。
+
 ### Fixed
 - **用户反馈四连修(滚动 / 标题 / 成本 / 多轮上下文)。** ① **滚动条滚不动** —— `Transcript` 此前每个流式 token / 系统行都无条件 `scroll_end`,用户向上翻历史被下一个事件即时拽回底部(体感=滚动条失效);改为 **stick-to-bottom**(仅当已停在底部时才跟随,`_stick_to_bottom` 距底 ≤2 行才到底);`ActivityPanel`(右侧活动栏)此前继承 `Vertical` 默认 `overflow-y: hidden`,内容超高被裁死、滚轮/拖拽全无效 → 改 `overflow-y: auto`。② **活动栏区块标题看不清** —— `_Section` 的 `border-title-color` 落到透明默认(`alpha=0`)叠深色背景=隐形;显式设 `$foreground`(亮白)+ bold。③ **成本恒 `$(N/A)`** —— `loop.py` 此前把 `cost_usd` 硬编码 `None` 从不调用已就绪的 `cost_of()`/`PRICING`(真 bug,非诚实无价);改为接入定价表算会话累计成本,**模型不在表里才回退 `None`**(诚实显 `$(N/A)`,而非 `cost_of` 对未知模型返回的失真 `$0.000`);新增 `ARGOS_LLM_PRICE_IN/OUT` 环境变量让自带模型(如 MiniMax-M3)填真实单价即可显成本(不填不编价)。④ **多轮"没串上下文"根因** —— 收尾仅在 `if text.strip():` 时持久化最终 assistant,某轮模型用**空 turn 宣布完成**则该轮只剩单边 `user(goal)`,连续多轮在 DB 堆出连续 `user` → 模型看不出是独立任务、记不住自己做过啥;改为**空答复也落占位 assistant**(`(本轮完成:…)`),保证跨轮 user/assistant 交替。回归:transcript 滚动位置保持 + 在底部跟随、活动栏可滚 + 标题不透明、已知模型算真成本 + 未知模型回退 None、空答复仍持久化 assistant(共 7 个新测试,非恒真式)。
 - **屏幕上看不到任何对话(transcript 被压成 1 列宽)。** `ArgosApp` 此前**完全没有 CSS**,`Horizontal(transcript, cost-meter)` 退回 Textual 默认布局:空 `RichLog`(transcript)收缩到 `width=1`、`CostMeter` 撑满整宽并占据左上角 → 所有对话/流式文本/代码块其实都写进了 transcript,只是渲染在 1 列宽里**完全不可见**(几乎所有截图的"空屏"真因,且 Pilot 测试只查 widget 树不查几何故一直漏掉)。修:给 `ArgosApp` 加布局 CSS —— `#transcript { width: 1fr; height: 1fr }` 占满主区,`#cost-meter { width: 34 }` 固定窄栏靠右。实测尺寸从 width=1 → width=86,SVG 导出确认对话文本真渲染出来。回归:`test_transcript_fills_main_area_not_collapsed` 断言 transcript 宽度 ≥40 且 > 成本栏(headless 能量几何,守得住)。另:`models.py` 从 `message_delta` 抓 `input_tokens`(MiniMax 在此才给真值,`message_start` 常为 0),成本栏输入 token 不再恒 0。
