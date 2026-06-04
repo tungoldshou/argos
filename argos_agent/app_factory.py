@@ -110,7 +110,9 @@ def build_components(
         mcp_hosts=set(),
     )
     signer = ReceiptSigner(key=_HOST_SIGNING_KEY)
-    broker = CapabilityBroker(gate=gate, egress=egress, signer=signer)
+    # workspace 传给 broker:host 侧 run_command 与沙箱子进程 write_file 用同一个 ws,
+    # 杜绝 --project 模式下两者分叉(run_command 落默认 workspace、write_file 落项目目录)。
+    broker = CapabilityBroker(gate=gate, egress=egress, signer=signer, workspace=ws)
 
     # 同步 broker_handler 桥:exec_code 阻塞等 broker_reply,故 handler 必须同步;走 _execute
     # (网络动作的 egress 校验在 _execute 内生效)。非 AUTO 档对 in-sandbox gated 工具的交互式

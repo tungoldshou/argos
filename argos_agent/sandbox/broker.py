@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from argos_agent.approval import ApprovalGate, ApprovalLevel
@@ -46,10 +47,14 @@ class BrokerResult:
 
 class CapabilityBroker:
     def __init__(self, *, gate: ApprovalGate, egress: EgressPolicy,
-                 signer: ReceiptSigner) -> None:
+                 signer: ReceiptSigner, workspace: Path | None = None) -> None:
         self._gate = gate
         self._egress = egress
         self._signer = signer
+        # host 侧 run_command 的工作目录 —— 必须与沙箱子进程(write_file 落地处)同一个 ws,
+        # 否则 --project 模式下 run_command 跑在默认 ~/.argos/workspace、write_file 落在项目目录
+        # → 脚本读不到刚写的文件(workspace 分叉 bug)。None 时回退 shell 自己的 _ws() 解析。
+        self._workspace = workspace
         self.last_receipt: Receipt | None = None   # loop 读它投 ToolReceipt 事件
 
     async def request(self, action: str, args: dict[str, Any]) -> Any:
@@ -127,7 +132,7 @@ class CapabilityBroker:
         它跳过 egress 校验、审批裁决与 Receipt 签发,直接产生真副作用。
         所有 broker-gated 动作必须经 request() 入口(它做完整 gating)。"""
         if action == "run_command":
-            return _shell.run_command(args.get("command", ""))
+            return _shell.run_command(args.get("command", ""), workspace=self._workspace)
         if action == "web_search":
             return _web.web_search(args.get("query", ""), int(args.get("limit", 5))), None
         if action == "web_extract":

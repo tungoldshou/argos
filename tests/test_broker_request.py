@@ -19,6 +19,41 @@ def _broker(level=ApprovalLevel.AUTO, search_hosts=None):
     return CapabilityBroker(gate=gate, egress=egress, signer=signer)
 
 
+def test_broker_passes_workspace_to_run_command(monkeypatch, tmp_path):
+    """workspace 分叉 bug 回归:broker 带 workspace 时,run_command 必须用【同一个 ws】,
+    而非 shell 自己的 _ws()(否则 --project 模式 run_command 落默认 workspace、write_file
+    落项目目录,脚本读不到刚写的文件)。"""
+    captured = {}
+
+    def fake_run(command, *, workspace=None):
+        captured["workspace"] = workspace
+        return ("ok", 0)
+
+    monkeypatch.setattr("argos_agent.tools.shell.run_command", fake_run)
+    gate = ApprovalGate(level=ApprovalLevel.AUTO)
+    egress = EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set())
+    broker = CapabilityBroker(gate=gate, egress=egress, signer=ReceiptSigner(key=b"k"),
+                              workspace=tmp_path)
+    broker._execute("run_command", {"command": "python app.py"})
+    assert captured["workspace"] == tmp_path   # 用 broker 的 ws,不回退默认
+
+
+def test_broker_workspace_defaults_none_back_compat(monkeypatch):
+    """不传 workspace 时维持旧行为:workspace=None 传给 shell(由 shell._ws() 解析)。"""
+    captured = {}
+
+    def fake_run(command, *, workspace=None):
+        captured["workspace"] = workspace
+        return ("ok", 0)
+
+    monkeypatch.setattr("argos_agent.tools.shell.run_command", fake_run)
+    gate = ApprovalGate(level=ApprovalLevel.AUTO)
+    egress = EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set())
+    broker = CapabilityBroker(gate=gate, egress=egress, signer=ReceiptSigner(key=b"k"))
+    broker._execute("run_command", {"command": "ls"})
+    assert captured["workspace"] is None
+
+
 async def _approve_pending_confirm(gate: ApprovalGate, kind: str = "once") -> None:
     """C1:run_command 即便 AUTO 也强制 CONFIRM → 它会挂起等 respond。
     本 helper 轮询 pending 并回 once 放行(模拟用户点'允许')。"""
