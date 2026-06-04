@@ -57,8 +57,11 @@ class ActivityPanel(Vertical):
             self._phases[-1] = (p, max(0.0, now - self._phase_start), "✓")
         self._phase_start = now
         self._phases.append((phase, 0.0, "▶"))
-        lines = [f" {_PHASE_GLYPH.get(p, '◇')} {p:<7} {('%.1fs' % e) if e else '—':>5} {s}"
-                 for p, e, s in self._phases]
+        lines = []
+        for p, e, s in self._phases:
+            # 进行中(▶,elapsed 还是 0.0)显 …;完成且无耗时显 —;否则显真实耗时。
+            elapsed = "…" if s == "▶" else (f"{e:.1f}s" if e else "—")
+            lines.append(f" {_PHASE_GLYPH.get(p, '◇')} {p:<7} {elapsed:>5} {s}")
         self._set(1, "\n".join(lines))
 
     def on_receipt(self, action: str) -> None:

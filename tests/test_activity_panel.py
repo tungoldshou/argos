@@ -70,3 +70,17 @@ async def test_cost_unknown_shows_na_not_zero():
         t = ap.snapshot_text()
         assert "N/A" in t, "单价未知应显 $(N/A)"
         assert "$0.000" not in t
+
+
+@pytest.mark.asyncio
+async def test_in_progress_phase_shows_ellipsis_not_zero():
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.on_phase("plan", 0)  # 刚进 plan,进行中
+        await pilot.pause()
+        # Textual 8.2.7 的 Static 用 .content 暴露正文(无 .renderable)
+        sec = str(ap._sections()[1].content)  # 任务进度区
+        assert "0.0s" not in sec, "进行中阶段不应显 0.0s"
+        assert "…" in sec, "进行中阶段应显占位 …"
