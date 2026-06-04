@@ -70,15 +70,62 @@ def _loop(model, store):
 
 
 @pytest.mark.asyncio
-async def test_w3_no_store_recall_degrades_to_honesty_only():
+async def test_w3_no_store_recall_degrades_to_honesty_only(monkeypatch):
+    # 隔离 store 召回降级这条不变量:把 skills 召回打桩成空,排除 skills 注入的干扰
+    # (skills 召回独立于 store,不依赖它的 recall;本测试只断言「无 store.recall → 无记忆注入」)。
+    monkeypatch.setattr("argos_agent.skills.recall", lambda *a, **k: [])
     model = CapturingModel(["完成。"])
     loop = _loop(model, FakeStore())  # 无 recall
     async for _ in loop.run("写个文件", "s"):
         pass
     assert model.systems, "模型没被调用"
-    # 诚实降级:system 就是纯 HONESTY_SYSTEM,不夹任何 untrusted 围栏。
+    # 诚实降级:无 store.recall 且无 skill 命中 → system 就是纯 HONESTY_SYSTEM,不夹 untrusted 围栏。
     assert model.systems[0] == HONESTY_SYSTEM
     assert UNTRUSTED_OPEN not in model.systems[0]
+
+
+@pytest.mark.asyncio
+async def test_skills_recalled_into_untrusted_without_store_recall(monkeypatch):
+    """skills 召回独立于 store:即便 store 没有 recall,命中的 skill 也进 untrusted 围栏段
+    (安全段 HONESTY 在前)。这是「skills 不需要大模型也能用 + 不需要记忆库也能用」的接线铁证。"""
+    from argos_agent import skills as _skills
+    fake = _skills.Skill(name="py-test-runner", description="跑 pytest", trust="builtin",
+                         enabled=True, body="用 `pytest -q` 跑测试。")
+    monkeypatch.setattr("argos_agent.skills.recall", lambda *a, **k: [fake])
+    model = CapturingModel(["完成。"])
+    loop = _loop(model, FakeStore())  # 无 recall,但 skill 仍应注入
+    async for _ in loop.run("帮我跑测试", "s"):
+        pass
+    sys_prompt = model.systems[0]
+    assert sys_prompt.startswith(HONESTY_SYSTEM)          # 安全段在前
+    assert UNTRUSTED_OPEN in sys_prompt                   # skill 进了 untrusted 围栏
+    assert "py-test-runner" in sys_prompt
+    assert sys_prompt.index(HONESTY_SYSTEM) < sys_prompt.index(UNTRUSTED_OPEN)
+
+
+@pytest.mark.asyncio
+async def test_contract_injected_for_structured_task(monkeypatch):
+    """结构化工程任务(REST API)→ 安全段 = HONESTY_SYSTEM + 契约 checklist(可信,在 untrusted 之前)。
+    契约层是 Argos 差异化资产;此前 loop 从不注入(死代码),现接进 _build_system。"""
+    monkeypatch.setattr("argos_agent.skills.recall", lambda *a, **k: [])
+    model = CapturingModel(["完成。"])
+    loop = _loop(model, FakeStore())
+    async for _ in loop.run("设计一个用户管理的 REST API 端点", "s"):
+        pass
+    sys_prompt = model.systems[0]
+    assert sys_prompt.startswith(HONESTY_SYSTEM)
+    assert "结构化工程任务" in sys_prompt and "[C1]" in sys_prompt   # REST 契约 checklist 注入
+
+
+@pytest.mark.asyncio
+async def test_no_contract_for_unstructured_task(monkeypatch):
+    """非结构化任务(写作)→ 不注入契约(实测契约对开放式任务有害),退裸 HONESTY_SYSTEM。"""
+    monkeypatch.setattr("argos_agent.skills.recall", lambda *a, **k: [])
+    model = CapturingModel(["完成。"])
+    loop = _loop(model, FakeStore())
+    async for _ in loop.run("写一篇关于猫的散文", "s"):
+        pass
+    assert model.systems[0] == HONESTY_SYSTEM   # 无契约、无 untrusted
 
 
 @pytest.mark.asyncio

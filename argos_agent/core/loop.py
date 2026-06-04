@@ -282,19 +282,48 @@ class AgentLoop:
             yield ev
 
     def _build_system(self, goal: str) -> str:
-        """W3:store 带 recall → compose_system(HONESTY_SYSTEM, untrusted=召回);否则诚实降级
-        为 HONESTY_SYSTEM only(不假装召回发生过)。召回失败也降级,不让 run 崩。"""
-        if not self._cfg.recall or not hasattr(self._store, "recall"):
-            return HONESTY_SYSTEM
+        """系统提示三段接线(顺序锁死,spec §12.1):
+          · 安全段 = HONESTY_SYSTEM + 结构化任务契约(命中时注入我们自己的可信 checklist,
+            便宜模型对齐形式约定的护城河;非结构化任务不注入)。
+          · untrusted 段 = 召回的 skills(社区/导入,围栏隔离防注入) + 任务记忆。
+        skills 召回零模型兜底、不依赖 store;memory 召回需 store.recall。任一失败都诚实降级
+        (不假装召回发生过),绝不让 run 崩。"""
+        # ── 安全段:结构化工程任务注入契约(契约层 = Argos 差异化资产;非结构化退裸 agent)──
+        safe = HONESTY_SYSTEM
         try:
-            hits = self._store.recall(goal)  # type: ignore[attr-defined]
-        except Exception:  # noqa: BLE001
-            return HONESTY_SYSTEM
-        memory_lines = [
-            f"- {rec.goal} → {rec.verdict or '?'}（{reason}）" for rec, reason in hits
-        ]
-        untrusted = format_untrusted(skill_bodies=[], memory_lines=memory_lines)
-        return compose_system(HONESTY_SYSTEM, untrusted=untrusted)
+            from argos_agent import contracts
+            _dom, contract_text = contracts.contract_for(goal)
+            if contract_text:
+                safe = HONESTY_SYSTEM + contract_text
+        except Exception:  # noqa: BLE001 — 契约分类失败不影响主流程
+            pass
+
+        if not self._cfg.recall:
+            return safe
+
+        # ── untrusted 段:skills(独立于 store,零模型兜底) + memory(需 store.recall)──
+        skill_bodies: list[str] = []
+        try:
+            from argos_agent import skills as _skills
+            skill_bodies = [
+                f"## 技能:{s.name}\n{s.description}\n\n{s.body.strip()}"
+                for s in _skills.recall(goal)
+            ]
+        except Exception:  # noqa: BLE001 — skill 召回失败诚实降级为无 skill
+            skill_bodies = []
+
+        memory_lines: list[str] = []
+        if hasattr(self._store, "recall"):
+            try:
+                hits = self._store.recall(goal)  # type: ignore[attr-defined]
+                memory_lines = [
+                    f"- {rec.goal} → {rec.verdict or '?'}（{reason}）" for rec, reason in hits
+                ]
+            except Exception:  # noqa: BLE001
+                memory_lines = []
+
+        untrusted = format_untrusted(skill_bodies=skill_bodies, memory_lines=memory_lines)
+        return compose_system(safe, untrusted=untrusted)
 
     async def _drive(self, goal: str, session_id: str) -> AsyncIterator["Event"]:
         """四阶段驱动(不可跳):plan → act(CodeAct 循环) → verify(门禁) → report。"""
