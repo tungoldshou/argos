@@ -262,3 +262,10 @@ def test_ask_float_or_none_fail_soft():
     assert _ask_float_or_none(lambda p="": "abc", out.append, "p:") is None  # 非数字→None,不抛
     assert _ask_float_or_none(lambda p="": "0.3", out.append, "p:") == 0.3
     assert _ask_float_or_none(lambda p="": "", out.append, "p:") is None
+
+
+def test_arrow_select_falls_back_when_not_tty():
+    """非 TTY(或 ARGOS_NO_ARROW_SELECT=1)→ _arrow_select 抛 _NotATTY,run() 据此回退编号输入。"""
+    from argos_agent.setup_wizard import _arrow_select, _NotATTY
+    with pytest.raises(_NotATTY):
+        _arrow_select(["OpenAI", "Anthropic"], title="选择 provider:", writer=lambda _: None)

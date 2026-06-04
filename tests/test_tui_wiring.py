@@ -251,3 +251,53 @@ async def test_user_goal_echoed_to_transcript():
         # FakeLoop 的 assistant token 也会带上 goal 文本,故只断言"包含 goal"会假绿;
         # 这里钉死 '› ' 前缀的用户行(user_line 的真实产物)才证明目标确实回显进了对话流。
         assert "› 修个 off-by-one" in log.rendered_text, "用户目标必须回显进对话流(› 行)"
+
+
+class _LoopWithStore:
+    """带 .store 的最小 loop 替身,供 /resume 取 store 用(不需要真 run)。"""
+    def __init__(self, store):
+        self.store = store
+    async def run(self, goal, session_id):
+        if False:
+            yield None  # 使其为 async generator
+
+
+@pytest.mark.asyncio
+async def test_resume_switches_to_most_recent_session(tmp_path):
+    """/resume:切到最近一次历史会话,使后续任务带回上下文(修『重开窗口不记得上次』)。"""
+    from argos_agent.memory.store import ArgosStore
+    from argos_agent.tui.widgets.transcript import Transcript
+
+    store = ArgosStore(db_path=str(tmp_path / "r.db"))
+    store.ensure_session("old-sess", title="贪吃蛇")
+    store.append_message("old-sess", role="user", content="做个贪吃蛇")
+    store.append_message("old-sess", role="assistant", content="好的,做完了")
+
+    app = ArgosApp(loop_factory=lambda: _LoopWithStore(store), demo=False)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        before = app._session_id                 # 启动是全新 uuid session
+        log = app.query_one("#transcript", Transcript)
+        await app._resume_recent(log)
+        await pilot.pause()
+        assert app._session_id == "old-sess", "/resume 应把会话切到最近一次历史会话"
+        assert app._session_id != before
+        assert "已恢复" in log.rendered_text and "2 条历史" in log.rendered_text
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_resume_honest_when_no_history(tmp_path):
+    """无历史会话时 /resume 诚实告知,不假装恢复。"""
+    from argos_agent.memory.store import ArgosStore
+    from argos_agent.tui.widgets.transcript import Transcript
+
+    store = ArgosStore(db_path=str(tmp_path / "empty.db"))
+    app = ArgosApp(loop_factory=lambda: _LoopWithStore(store), demo=False)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log = app.query_one("#transcript", Transcript)
+        await app._resume_recent(log)
+        await pilot.pause()
+        assert "没有可恢复" in log.rendered_text
+    store.close()

@@ -1,4 +1,5 @@
-"""模型分档 + 客户端(契约 §7;spec §3.4)。worker=MiniMax 默认,premium=Claude(--premium)。
+"""模型分档 + 客户端(契约 §7;spec §3.4)。模型不绑定:worker=默认档(协议/模型由 config.json /
+环境变量决定,经 ProtocolAdapter 支持 Anthropic 与 OpenAI 两类端点),premium=可选更强档(--premium)。
 ModelClient 直连 Anthropic-Messages 兼容端(httpx),stream() 出 text 增量(剥 thinking)。
 CredentialPool 在 Task 6 于本文件扩展(此处先给可用占位)。
 cascade 不变量(spec §12.2):升级到 premium 只看外部判据,绝不靠模型自报 confidence ——

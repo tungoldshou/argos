@@ -242,8 +242,31 @@ class ArgosApp(App):
             self._step_blocks.clear()
             self._session_id = uuid.uuid4().hex  # 换新 session = 开新会话、断多轮上下文。
             await log.append_line("已开新会话(clear)。")
-        elif cmd.name in ("undo", "retry", "resume"):
-            await log.append_line(f"/{cmd.name} 将在持久化(Phase 2)/loop(Phase 3)接线后生效。")
+        elif cmd.name == "resume":
+            await self._resume_recent(log)
+        elif cmd.name in ("undo", "retry"):
+            await log.append_line(f"/{cmd.name} 将在后续接线后生效。")
+
+    async def _resume_recent(self, log) -> None:
+        """/resume:把当前会话切到【最近一次历史会话】,使后续任务带回它的上下文(agent 记得上次)。
+        每次启动默认全新 session(故重开窗口不自动记得);想续上一次显式 /resume 即可。
+        实现:从 store 取最近会话(排除本次启动的空 session),切 self._session_id —— loop 跨轮据它
+        get_messages 还原历史。不做可视回放(屏幕仍空),但 agent 已带回上文。"""
+        loop = self._loop_factory()
+        store = getattr(loop, "store", None)
+        if store is None or not hasattr(store, "list_sessions"):
+            await log.append_line("/resume 不可用(当前无持久化会话)。", kind="error")
+            return
+        sessions = [s for s in store.list_sessions(limit=10) if s.session_id != self._session_id]
+        if not sessions:
+            await log.append_line("没有可恢复的历史会话。", kind="system")
+            return
+        prev = sessions[0]   # 最近一次(list_sessions 按 started_at DESC)
+        self._session_id = prev.session_id
+        msgs = store.get_messages(prev.session_id) if hasattr(store, "get_messages") else []
+        title = (prev.title or prev.session_id[:8]).strip() or prev.session_id[:8]
+        await log.append_line(
+            f"已恢复会话「{title}」,带回 {len(msgs)} 条历史 —— 继续输入即接上文。", kind="done")
 
     # ── 一轮 run:EventBus + loop + Worker 消费 ────────────────────────────
     async def start_run(self, goal: str) -> None:

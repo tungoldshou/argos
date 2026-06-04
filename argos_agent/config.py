@@ -41,7 +41,8 @@ def _first(*keys: str, default: str | None = None) -> str | None:
     return default
 
 
-# ── worker(便宜默认,MiniMax) ─────────────────────────────────────────────
+# ── 默认档(模型不绑定:由 config.json / 环境变量决定;以下仅是旧 env 用户的回退默认值,
+#    其中 MiniMax 是历史预设之一,不代表 Argos 绑定 MiniMax —— 新用户经 `argos setup` 接任意模型)──
 LLM_PROVIDER = _first("ARGOS_LLM_PROVIDER", "VITE_LLM_PROVIDER", default="anthropic")
 _WORKER_KEY_RAW = _first("ARGOS_LLM_KEY", "VITE_LLM_KEY", "VITE_MINIMAX_KEY", default="") or ""
 WORKER_KEYS: list[str] = [k.strip() for k in _WORKER_KEY_RAW.split(",") if k.strip()]

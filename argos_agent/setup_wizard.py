@@ -4,8 +4,68 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+
+class _NotATTY(Exception):
+    """stdin/stdout 不是真终端(测试/管道)→ 方向键选择不可用,调用方回退编号输入。"""
+
+
+def _arrow_select(options: list[str], *, title: str, writer) -> int:
+    """真终端下用 ↑↓ 选、回车确认,返回选中下标。
+    非 TTY(测试/管道/headless)抛 _NotATTY,让调用方回退编号输入(保持可测、不阻塞自动化)。
+    全程 raw 模式直接读 sys.stdin 转义序列;finally 必复原终端设置(异常/Ctrl-C 也不留坏状态)。"""
+    # 测试/自动化可设 ARGOS_NO_ARROW_SELECT=1 强制回退编号,杜绝 pytest -s(stdin 是真 tty)下卡住等键。
+    if os.environ.get("ARGOS_NO_ARROW_SELECT") == "1":
+        raise _NotATTY
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        raise _NotATTY
+    import termios
+    import tty
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    out = sys.stdout
+    n = len(options)
+    idx = 0
+    out.write(title + "\r\n(↑↓ 选,回车确认)\r\n")
+
+    def draw() -> None:
+        for i, opt in enumerate(options):
+            mark = "❯" if i == idx else " "
+            body = f" {mark} {opt}"
+            if i == idx:
+                body = f"\x1b[7m{body}\x1b[0m"   # 反显高亮当前项
+            out.write(f"\r\x1b[K{body}\r\n")
+        out.flush()
+
+    draw()
+    try:
+        tty.setraw(fd)
+        while True:
+            ch = sys.stdin.read(1)
+            if ch == "\x1b":                       # 转义序列(方向键)
+                seq = sys.stdin.read(2)
+                if seq == "[A":
+                    idx = (idx - 1) % n
+                elif seq == "[B":
+                    idx = (idx + 1) % n
+                else:
+                    continue
+            elif ch in ("\r", "\n"):               # 回车确认
+                break
+            elif ch == "\x03":                     # Ctrl-C
+                raise KeyboardInterrupt
+            else:
+                continue
+            out.write(f"\x1b[{n}A")                 # 光标上移 N 行重绘
+            draw()
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    out.write("\r\n")
+    out.flush()
+    return idx
 
 # provider 预设:预填 protocol + base_url + 常见默认 model(spec §6.1)。
 PRESETS: dict[str, dict] = {
@@ -176,15 +236,22 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
     cdir = config_dir or Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos"))
     names = list(PRESETS)
     while True:
-        writer("可选 provider 预设:")
-        for i, n in enumerate(names, 1):
-            writer(f"  {i}. {n}")
-        choice = (reader("选编号:") or "").strip()   # reader 调用 1
+        # provider 选择:真终端用 ↑↓ 方向键,非 TTY(测试/管道)回退编号输入(保持可测)。
         try:
-            preset = PRESETS[names[int(choice) - 1]]
-        except (ValueError, IndexError):
-            writer("无效编号,重来。")
-            continue
+            pidx = _arrow_select(names, title="选择 provider:", writer=writer)
+        except _NotATTY:
+            writer("可选 provider 预设:")
+            for i, n in enumerate(names, 1):
+                writer(f"  {i}. {n}")
+            choice = (reader("选编号:") or "").strip()
+            try:
+                pidx = int(choice) - 1
+                if not (0 <= pidx < len(names)):
+                    raise ValueError
+            except ValueError:
+                writer("无效编号,重来。")
+                continue
+        preset = PRESETS[names[pidx]]
         # 「自定义」预设 protocol/base_url 为空 → 向用户询问(spec §6.1 表格「(问)」)
         protocol = preset["protocol"] or (reader("协议 (anthropic/openai):") or "openai").strip()
         base_url = preset["base_url"] or (reader("base_url:") or "").strip()
