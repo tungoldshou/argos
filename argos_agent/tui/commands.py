@@ -1,6 +1,7 @@
 """slash 命令解析(spec §4.5)。纯解析,不渲染、不副作用——app.py 拿 SlashCommand 后分发。
 
 MVP 子集:/yolo /undo /clear /retry /status /model /resume /cost
+能力可见:/help /tools /skills /mcp
 """
 from __future__ import annotations
 
@@ -8,6 +9,7 @@ from dataclasses import dataclass
 
 COMMAND_NAMES: list[str] = [
     "yolo", "undo", "clear", "retry", "status", "model", "resume", "cost",
+    "help", "tools", "skills", "mcp",
 ]
 
 

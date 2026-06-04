@@ -250,8 +250,77 @@ class ArgosApp(App):
             await log.append_line("已开新会话(clear)。")
         elif cmd.name == "resume":
             await self._resume_recent(log)
+        elif cmd.name == "help":
+            await log.append_line(
+                "命令:/help 帮助 · /tools 列工具 · /skills 列技能 · /mcp MCP 服务 · "
+                "/model 切模型 · /status 状态 · /cost 成本 · /resume 续会话 · "
+                "/clear 新会话 · /yolo 放手执行", kind="system")
+        elif cmd.name == "tools":
+            await self._show_tools(log)
+        elif cmd.name == "skills":
+            await self._show_skills(log)
+        elif cmd.name == "mcp":
+            await self._show_mcp(log)
         elif cmd.name in ("undo", "retry"):
             await log.append_line(f"/{cmd.name} 将在后续接线后生效。")
+
+    async def _show_tools(self, log) -> None:
+        """/tools:列出 agent 可调用的全部工具(诚实:数量 = 真实可调用工具数)。"""
+        from argos_agent import tools as _tools
+        names = _tools.ALL_TOOL_NAMES
+        groups = [
+            ("文件", ["read_file", "write_file", "edit_file", "search_files"]),
+            ("命令/验证/计划", ["run_command", "propose_verify", "update_plan"]),
+            ("联网", ["web_search", "web_extract"]),
+            ("计算机控制(浏览器)", [n for n in names if n.startswith("browser_")]),
+            ("外部工具", ["mcp_call"]),
+        ]
+        lines = [f"共 {len(names)} 个工具:"]
+        for label, members in groups:
+            present = [m for m in members if m in names]
+            if present:
+                lines.append(f" · {label}:{', '.join(present)}")
+        await log.append_line("\n".join(lines), kind="system")
+
+    async def _show_skills(self, log) -> None:
+        """/skills:列出可用技能(按任务自动召回进系统提示)。诚实:读真实 skill 库。"""
+        try:
+            from argos_agent import skills as _skills
+            all_skills = _skills.load_all()
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(f"读取技能失败:{e}", kind="error")
+            return
+        if not all_skills:
+            await log.append_line("当前无可用技能(~/.argos/skills/ 为空,可导入)。", kind="system")
+            return
+        lines = [f"可用技能 {len(all_skills)} 个(运行任务时按相关性自动召回):"]
+        for s in all_skills:
+            mark = "" if s.enabled else "(已禁用)"
+            lines.append(f" · {s.name}{mark} — {s.description}")
+        await log.append_line("\n".join(lines), kind="system")
+
+    async def _show_mcp(self, log) -> None:
+        """/mcp:列出 ~/.argos/mcp.json 配置的 MCP server + 已连接工具(诚实:不谎报连接态)。"""
+        try:
+            from argos_agent import mcp_native
+            mgr = mcp_native.get_manager()
+            tools = mgr.list_tools()   # 阻塞确保连接(用户主动查时可接受短暂等待)
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(f"MCP 查询失败:{e}", kind="error")
+            return
+        if not tools:
+            await log.append_line(
+                "未配置 MCP,或配置的 server 未连上 / 无工具。\n"
+                "在 ~/.argos/mcp.json 配置 stdio server 即可扩展工具(默认零预配)。",
+                kind="system")
+            return
+        by_server: dict[str, list] = {}
+        for t in tools:
+            by_server.setdefault(t.server, []).append(t)
+        lines = [f"已连接 MCP 工具 {len(tools)} 个,经 mcp_call(server, tool, arguments) 调用:"]
+        for server, ts in by_server.items():
+            lines.append(f" · {server}:{', '.join(t.name for t in ts)}")
+        await log.append_line("\n".join(lines), kind="system")
 
     async def _resume_recent(self, log) -> None:
         """/resume:把当前会话切到【最近一次历史会话】,使后续任务带回它的上下文(agent 记得上次)。

@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **能力可见命令:`/help` `/tools` `/skills` `/mcp`(Claude Code 式可发现性)。** 新增超能力(浏览器/MCP/skills/契约)后,用户得能看见手上有什么。`/tools` 按组列全部 15 个工具(诚实:数量 = `ALL_TOOL_NAMES` 实长);`/skills` 列内置/导入技能库(说明"按任务自动召回");`/mcp` 列 `~/.argos/mcp.json` 已连接的 MCP 工具(未配置时诚实报"未配置 MCP",不谎报);`/help` 一行列出所有命令。+6 测试(解析 known + 经真 App/Pilot 分发断言 transcript 出现真实能力信息)。
 - **原生 MCP 接入(stdio,无 langchain)—— Claude Code 招牌的可扩展性。** Argos 现在能连用户 `~/.argos/mcp.json` 里配置的 MCP server,把它们的工具暴露给 agent(经 `mcp_call(server, tool, arguments)`,工具数 14→15)。**为什么自己写**:旧 `mcp_client.py`(随死栈删)绑死 langchain-mcp-adapters,而活引擎 framework-free;MCP 的 stdio 传输就是按行分隔的 JSON-RPC(不是 LSP 的 Content-Length 框),同步实现很轻、且天然契合同步的 broker `_execute`(无 async-from-sync 难题)。**握手**:initialize → notifications/initialized → tools/list → tools/call,全同步行帧。**诚实**:① 默认**零预配** —— 没有 mcp.json/没有 server → 系统提示不注入任何 MCP 段、`mcp_call` 诚实报"未配置";② 单个 server 连接/握手失败 → 标记不可用、其余照常,绝不崩;③ 畸形 config 退空(等于零 MCP);④ 调用包真错误返回可读串,不假装成功。**不阻塞**:`McpManager.start_warming()` 在 `build_components` 起后台线程预热连接(npx server 启动慢也不卡 TUI/首轮响应),`tools_summary()` 非阻塞只读已就绪工具,`AppComponents.close()`+`atexit` 收掉 server 子进程。活动栏 MCP 区诚实显配置态('未配置'/'N 个已配置',不谎报连接数)。+9 个测试,**含跑真 stdio echo server 子进程的端到端往返**(initialize/tools/list/tools/call 真协议,非 mock)。
 
 ### Fixed

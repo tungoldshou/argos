@@ -9,7 +9,15 @@ from argos_agent.tui.commands import SlashCommand, parse_slash, COMMAND_NAMES
 def test_known_commands_listed():
     assert set(COMMAND_NAMES) == {
         "yolo", "undo", "clear", "retry", "status", "model", "resume", "cost",
+        "help", "tools", "skills", "mcp",
     }
+
+
+def test_capability_discovery_commands_known():
+    """能力可见命令(/help /tools /skills /mcp)必须 known=True,才会进 _dispatch_slash 分发。"""
+    for name in ("help", "tools", "skills", "mcp"):
+        cmd = parse_slash(f"/{name}")
+        assert cmd is not None and cmd.known is True, f"/{name} 应为已知命令"
 
 
 def test_parse_plain_text_is_not_a_command():
