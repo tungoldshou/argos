@@ -54,6 +54,7 @@ class ArgosApp(App):
     # 用户看到的永远是空屏(事件其实都写进去了,只是不可见)。这里显式分配:transcript 占满
     # 剩余宽度(1fr);ActivityPanel 的固定窄栏宽度/左描边由其 DEFAULT_CSS 承担。
     CSS = """
+    Screen { border: round #3c3c46; }
     #transcript {
         width: 1fr;
         height: 1fr;
@@ -122,6 +123,29 @@ class ArgosApp(App):
         self.query_one("#transcript", Transcript).mount(
             StartupSplash(model_label=tier.model, tier=tier.name, live=not self._demo)
         )
+        # 工作态边缘光(Task 13):idle 灭=中性灰;run 期间随阶段着色,跑完复位。
+        self._glow_phase = "idle"
+        self._glow_timer = self.set_interval(0.12, self._glow_tick, pause=True)
+
+    # ── 工作态边缘光(spec §工作态边缘光) ─────────────────────────────────
+    def _set_border(self, color) -> None:
+        self.screen.styles.border = ("round", color)
+
+    def _glow_tick(self) -> None:
+        if not self._run_active:
+            return
+        # 轻呼吸:在当前阶段色与略暗之间插值(简化:阶段色常亮即可,呼吸为可选)
+        from argos_agent.tui import glow
+        self._set_border(glow.phase_color(self._glow_phase))
+
+    def _glow_start(self) -> None:
+        self._glow_phase = "plan"
+        self._glow_timer.resume()
+
+    def _glow_stop(self) -> None:
+        from argos_agent.tui import glow
+        self._glow_timer.pause()
+        self._set_border(glow.IDLE_BORDER)
 
     # ── 输入分发 ──────────────────────────────────────────────────────────
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -182,6 +206,7 @@ class ArgosApp(App):
         if self._run_active:
             return
         self._run_active = True
+        self._glow_start()
         for sp in self.query(StartupSplash):
             await sp.remove()
         self._step_blocks = {}  # 每轮独立,杜绝跨轮 step 串台。
@@ -222,9 +247,11 @@ class ArgosApp(App):
             # 一轮结束时强制落定残余,杜绝"模型最后一句没换行 → 永远不计入 rendered_text"的隐形吞字。
             log.finalize_response()
             self._run_active = False
+            self._glow_stop()
 
     async def _apply_event(self, ev: Event) -> None:
         """把一个契约 §1 Event 反映到对应 widget(一份事件三用的 UI 出口)。"""
+        from argos_agent.tui import glow
         log = self.query_one("#transcript", Transcript)
         bar = self.query_one("#status-bar", StatusBar)
         ap = self.query_one("#activity", ActivityPanel)
@@ -236,6 +263,8 @@ class ArgosApp(App):
             log.finalize_response()
             bar.set_phase(ev.phase, ev.actions)
             ap.on_phase(ev.phase, ev.actions)
+            self._glow_phase = ev.phase
+            self._set_border(glow.phase_color(ev.phase))
         elif isinstance(ev, CodeAction):
             block = CodeActionBlock(code=ev.code, step=ev.step)
             self._step_blocks[ev.step] = block
@@ -254,6 +283,7 @@ class ArgosApp(App):
                 badge = VerdictBadge(id="verdict-badge")
                 await log.mount_block(badge)
             badge.show(ev.verdict)
+            self._set_border(glow.verdict_color(ev.verdict.status))
         elif isinstance(ev, CostUpdate):
             bar.set_cost(
                 tokens_in=ev.tokens_in, tokens_out=ev.tokens_out,
@@ -272,9 +302,11 @@ class ArgosApp(App):
             await log.append_line(f"审批结果:{ev.call_id} → {ev.decision}")
         elif isinstance(ev, Escalation):
             await log.append_line(f"⚠️ 卡住({ev.attempts} 轮):{ev.reason} — 最后失败:{ev.last_failure}", kind="escalation")
+            self._set_border(glow.ERROR)
         elif isinstance(ev, Error):
             chain = (" ← " + " ← ".join(ev.chain)) if ev.chain else ""
             await log.append_line(f"❌ 错误:{ev.message}{chain}", kind="error")
+            self._set_border(glow.ERROR)
 
     async def _handle_approval(self, req: ApprovalRequest) -> None:
         """Auto 档不弹窗直接 always;否则弹 ApprovalModal,回调里 respond。"""
