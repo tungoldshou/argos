@@ -32,6 +32,7 @@ from argos_agent.tui.events import (
     VerifyVerdict,
 )
 from argos_agent.tui.fakeloop import FakeLoop
+from argos_agent.tui.theme import ARGOS_NIGHT
 from argos_agent.tui.widgets.approval_modal import ApprovalModal
 from argos_agent.tui.widgets.code_action import CodeActionBlock
 from argos_agent.tui.widgets.cost_meter import CostMeter
@@ -109,6 +110,8 @@ class ArgosApp(App):
         """启动即把焦点放到输入框。否则 Textual 默认聚焦第一个可聚焦 widget —— TranscriptLog
         (RichLog 可滚动故可聚焦)排在 Input 之前,会先抢焦点,按键全喂给它,用户在输入框
         打不了任何字(汉字/ASCII 都进不去)。与 AUTO_FOCUS 双保险。"""
+        self.register_theme(ARGOS_NIGHT)
+        self.theme = "argos-night"
         self.query_one("#prompt", Input).focus()
 
     # ── 输入分发 ──────────────────────────────────────────────────────────
