@@ -5,7 +5,6 @@ import pytest
 from textual.app import App, ComposeResult
 
 from argos_agent.core.types import Verdict
-from argos_agent.tui.widgets.transcript import TranscriptLog
 from argos_agent.tui.widgets.code_action import CodeActionBlock
 from argos_agent.tui.widgets.diff_view import DiffView
 from argos_agent.tui.widgets.verdict_badge import VerdictBadge
@@ -22,15 +21,8 @@ class _Host(App):
         yield self._w
 
 
-@pytest.mark.asyncio
-async def test_transcript_appends_token_deltas():
-    log = TranscriptLog(id="transcript")
-    app = _Host(log)
-    async with app.run_test() as pilot:
-        log.append_token("Hel")
-        log.append_token("lo")
-        await pilot.pause()
-        assert log.buffer == "Hello"
+# test_transcript_appends_token_deltas 已随 Task 3 删除 TranscriptLog(改用
+# Transcript+流式 Markdown);等价覆盖见 tests/test_transcript_widget.py。
 
 
 @pytest.mark.asyncio
