@@ -133,3 +133,38 @@ def test_set_active_rejects_malformed_target(tmp_path, monkeypatch):
         C.set_active("bad")
     # active 必须仍是 good(畸形切换被拒,未落盘)
     assert json.loads((tmp_path / "config.json").read_text())["active"] == "good"
+
+
+def test_active_embedder_openai_with_embedding_model(tmp_path, monkeypatch):
+    """active profile 是 openai 协议 + 配了 embedding_model → 复用同 provider 构 OpenAIEmbedder。"""
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    _write(tmp_path, {"active": "o", "models": {"o": {"protocol": "openai",
+           "base_url": "http://localhost:11434/v1", "model": "qwen", "api_key_env": "OK",
+           "embedding_model": "nomic-embed-text"}}}, env="OK=k\n")
+    emb = C.active_embedder()
+    from argos_agent.memory.embedding import OpenAIEmbedder
+    assert isinstance(emb, OpenAIEmbedder)
+    assert emb._model == "nomic-embed-text" and emb._base == "http://localhost:11434/v1"
+
+
+def test_active_embedder_none_without_embedding_model(tmp_path, monkeypatch):
+    """没配 embedding_model → None → 记忆走 FTS5(不偷调模型)。"""
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    _write(tmp_path, {"active": "o", "models": {"o": {"protocol": "openai",
+           "base_url": "http://x/v1", "model": "m", "api_key_env": "OK"}}}, env="OK=k\n")
+    assert C.active_embedder() is None
+
+
+def test_active_embedder_none_for_anthropic(tmp_path, monkeypatch):
+    """Anthropic 协议无 embeddings 端点 → None,即便误配了 embedding_model 也不构造。"""
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    _write(tmp_path, {"active": "a", "models": {"a": {"protocol": "anthropic",
+           "base_url": "https://api.anthropic.com", "model": "claude-sonnet-4-6",
+           "api_key_env": "AK", "embedding_model": "whatever"}}}, env="AK=k\n")
+    assert C.active_embedder() is None
+
+
+def test_active_embedder_none_without_config(tmp_path, monkeypatch):
+    """无 config.json(旧 env 回退)→ None(记忆走 FTS5)。"""
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "empty"))
+    assert C.active_embedder() is None

@@ -156,9 +156,10 @@ async def test_run_wizard_custom_preset(tmp_path, monkeypatch):
         "",                                     # 6. max_tokens 默认
         "",                                     # 7. context_window 默认
         "",                                     # 8. price 跳过
-        "n",                                    # 9. 深度探针 跳过
-        "local",                                # 10. profile 名
-        "n",                                    # 11. 不再加模型
+        "nomic-embed-text",                     # 9. embedding 模型(openai 协议才问)
+        "n",                                    # 10. 深度探针 跳过
+        "local",                                # 11. profile 名
+        "n",                                    # 12. 不再加模型
     ])
     out_lines = []
     async def fake_probe(**kw):
@@ -172,6 +173,7 @@ async def test_run_wizard_custom_preset(tmp_path, monkeypatch):
     assert prof["protocol"] == "openai"
     assert prof["base_url"] == "http://localhost:8000/v1"
     assert prof["model"] == "my-local-model"
+    assert prof["embedding_model"] == "nomic-embed-text"   # openai 协议:embedding 模型写入 profile
 
 
 @pytest.mark.asyncio
@@ -269,3 +271,35 @@ def test_arrow_select_falls_back_when_not_tty():
     from argos_agent.setup_wizard import _arrow_select, _NotATTY
     with pytest.raises(_NotATTY):
         _arrow_select(["OpenAI", "Anthropic"], title="选择 provider:", writer=lambda _: None)
+
+
+# ── 记忆向量召回:复用 provider 的 OpenAIEmbedder ─────────────────────────────────
+
+def test_openai_embedder_hits_embeddings_endpoint():
+    """OpenAIEmbedder 打 <base_url>/embeddings(Bearer),解析 data[].embedding,惰性置 dim。"""
+    import httpx
+    from argos_agent.memory.embedding import OpenAIEmbedder
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.url.path.endswith("/embeddings")
+        assert req.headers["authorization"] == "Bearer K"
+        import json as _j
+        body = _j.loads(req.content)
+        assert body["model"] == "nomic-embed-text" and body["input"] == ["a", "b"]
+        return httpx.Response(200, json={"data": [
+            {"embedding": [0.1, 0.2, 0.3]}, {"embedding": [0.4, 0.5, 0.6]}]})
+
+    emb = OpenAIEmbedder(base_url="http://x/v1", api_key="K", model="nomic-embed-text",
+                         transport=httpx.MockTransport(handler))
+    out = emb.embed(["a", "b"])
+    assert out == [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
+    assert emb.dim == 3   # 惰性置维度
+
+
+def test_openai_embedder_endpoint_idempotent():
+    """base_url 已含 /embeddings 时不重复追加。"""
+    from argos_agent.memory.embedding import OpenAIEmbedder
+    e1 = OpenAIEmbedder(base_url="http://x/v1", api_key="K", model="m")
+    e2 = OpenAIEmbedder(base_url="http://x/v1/embeddings", api_key="K", model="m")
+    assert e1._endpoint() == "http://x/v1/embeddings"
+    assert e2._endpoint() == "http://x/v1/embeddings"

@@ -78,7 +78,9 @@ def build_components(
     # 沙箱子进程 files.py 模块级 WORKSPACE 读这个 env —— 必须在 spawn 前设好,文件才落对地方。
     os.environ["ARGOS_WORKSPACE"] = str(ws)
 
-    store = ArgosStore()  # db_path=None → ARGOS_DB_PATH or ~/.argos/argos.db
+    # 记忆向量召回:复用 active profile 的 provider embeddings(配了 embedding_model 才有);
+    # 未配 / 非 openai / 无 key → active_embedder 返 None → 记忆诚实走 FTS5 关键词,不调模型。
+    store = ArgosStore(embedder=config.active_embedder())  # db_path=None → ARGOS_DB_PATH or ~/.argos/argos.db
 
     # 选模型:默认当前 active;`argos --model <name>` 指定某个具名 profile。无 key → 诚实抛 RuntimeError。
     if model_override:

@@ -162,6 +162,7 @@ class ArgosConfig:
     tiers: dict  # name -> ModelTier
     key_envs: dict  # name -> api_key_env(str)
     secrets: dict  # ~/.argos/.env 读出的密钥表
+    embed_models: dict  # name -> embedding 模型名(可选;空=该 profile 记忆走 FTS5 不调模型)
 
 
 def load_config() -> ArgosConfig:
@@ -180,7 +181,7 @@ def load_config() -> ArgosConfig:
     if not models or active not in models:
         raise ConfigError(f"active='{active}' 不在 models 中(或 models 为空)")
     secrets = load_env_file(cdir / ".env")
-    tiers, key_envs = {}, {}
+    tiers, key_envs, embed_models = {}, {}, {}
     for name, m in models.items():
         _validate_profile(name, m)
         max_tokens = int(m.get("max_tokens", 4096))
@@ -190,13 +191,15 @@ def load_config() -> ArgosConfig:
             max_tokens=max_tokens, context_window=context_window, protocol=m["protocol"],
         )
         key_envs[name] = m.get("api_key_env", "")
+        embed_models[name] = m.get("embedding_model", "")
         if m.get("price_in") is not None and m.get("price_out") is not None:
             try:
                 from argos_agent.core.observability import PRICING
                 PRICING[m["model"]] = {"in": float(m["price_in"]), "out": float(m["price_out"])}
             except Exception:  # noqa: BLE001
                 pass
-    return ArgosConfig(active=active, tiers=tiers, key_envs=key_envs, secrets=secrets)
+    return ArgosConfig(active=active, tiers=tiers, key_envs=key_envs,
+                       secrets=secrets, embed_models=embed_models)
 
 
 def _has_config_file() -> bool:
@@ -219,6 +222,26 @@ def active_key() -> str | None:
         env_name = cfg.key_envs.get(cfg.active) or ""
         return os.environ.get(env_name) or cfg.secrets.get(env_name) or None
     return DEFAULT_KEYS[0] if DEFAULT_KEYS else None
+
+
+def active_embedder():
+    """按 active profile 构造记忆向量召回的 embedder(复用同一 provider 的 base_url+key):
+    OpenAI 协议 + 配了 embedding_model → OpenAIEmbedder(打 /embeddings);否则 None → 记忆走 FTS5。
+    诚实:Anthropic 协议无 embeddings 端点 / 未配 embedding 模型 / 无 key → 一律 None,不偷调模型。
+    无 config.json(旧 env 回退)→ None(要语义召回请 `argos setup` 配 embedding 模型)。"""
+    try:
+        if not _has_config_file():
+            return None
+        cfg = load_config()
+        tier = cfg.tiers[cfg.active]
+        emb_model = cfg.embed_models.get(cfg.active) or ""
+        key = active_key()
+        if tier.protocol != "openai" or not emb_model or not key:
+            return None
+        from argos_agent.memory.embedding import OpenAIEmbedder
+        return OpenAIEmbedder(base_url=tier.base_url, api_key=key, model=emb_model)
+    except Exception:  # noqa: BLE001 — 任何配置问题 → None → FTS5(fail-soft,不崩)
+        return None
 
 
 def tier_for(name: str):

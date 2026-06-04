@@ -64,6 +64,39 @@ class MLXEmbedder:
         return self._embed_raw(texts)
 
 
+class OpenAIEmbedder:
+    """复用 active profile 的 OpenAI 兼容 provider 做向量召回:打 <base_url>/embeddings(Bearer)。
+    chat 模型 ≠ embedding 模型,故需单独的 embedding 模型名;上层(config.active_embedder)在未配
+    embedding 模型 / 非 openai 协议时返 None → 记忆诚实走 FTS5,绝不偷调模型。
+    构造不联网;dim 惰性(首次 embed 后置);首次 embed 失败由 store.recall 捕获降级 FTS5。"""
+
+    def __init__(self, *, base_url: str, api_key: str, model: str, transport=None) -> None:
+        self._base = base_url.rstrip("/")
+        self._key = api_key
+        self._model = model
+        self._transport = transport   # 测试注入 httpx.MockTransport
+        self.dim = 0                   # 惰性:首次 embed 后置真实维度
+
+    def _endpoint(self) -> str:
+        # base_url 约定含到 /v1;幂等拼 /embeddings(防已含后缀双拼)。
+        return self._base if self._base.endswith("/embeddings") else self._base + "/embeddings"
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        import httpx
+        with httpx.Client(transport=self._transport, timeout=30.0) as client:
+            resp = client.post(
+                self._endpoint(),
+                headers={"Authorization": f"Bearer {self._key}", "content-type": "application/json"},
+                json={"model": self._model, "input": texts},
+            )
+            resp.raise_for_status()
+            data = resp.json().get("data") or []
+        vecs = [(row.get("embedding") or []) for row in data]
+        if vecs and vecs[0]:
+            self.dim = len(vecs[0])
+        return vecs
+
+
 def _build_mlx_embedder() -> Embedder:
     """构造 MLXEmbedder(可被测试 monkeypatch 成抛错)。"""
     return MLXEmbedder()

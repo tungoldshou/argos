@@ -147,8 +147,10 @@ def _append_env(config_dir: Path, name: str, value: str) -> None:
 def write_profile(*, config_dir: Path, name: str, protocol: str, base_url: str, model: str,
                   api_key: str | None, api_key_env: str, set_active: bool,
                   max_tokens: int = 4096, context_window: int = 200_000,
-                  price_in: float | None = None, price_out: float | None = None) -> None:
-    """写一个 profile:设置进 config.json,密钥(若给)进 .env(0600);密钥绝不进 config.json。"""
+                  price_in: float | None = None, price_out: float | None = None,
+                  embedding_model: str = "") -> None:
+    """写一个 profile:设置进 config.json,密钥(若给)进 .env(0600);密钥绝不进 config.json。
+    embedding_model 非空 → 记忆向量召回复用本 provider 的 /embeddings;空 → 记忆走 FTS5。"""
     config_dir.mkdir(parents=True, exist_ok=True)
     prof = {"protocol": protocol, "base_url": base_url, "model": model,
             "api_key_env": api_key_env, "max_tokens": max_tokens,
@@ -156,6 +158,8 @@ def write_profile(*, config_dir: Path, name: str, protocol: str, base_url: str, 
     if price_in is not None and price_out is not None:
         prof["price_in"] = price_in
         prof["price_out"] = price_out
+    if embedding_model:
+        prof["embedding_model"] = embedding_model
     # fail-closed:落盘前校验本 profile 合法(空 base_url/model、非法 protocol、非正整数都拒)——
     # 否则会写出"假成功"的坏 config 并顶掉原可用 active(下次启动才 ConfigError 落 demo 态)。
     from argos_agent import config as _config
@@ -272,6 +276,15 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
         price_in = _ask_float_or_none(reader, writer, "价格 in (USD/1M, 留空跳过):")
         price_out = (_ask_float_or_none(reader, writer, "价格 out (USD/1M, 留空跳过):")
                      if price_in is not None else None)
+        # 记忆向量语义召回:复用本 provider 的 /embeddings(需一个 embedding 模型名)。
+        # 仅 OpenAI 协议有 /embeddings;Anthropic 端没有 → 不问,记忆走 FTS5 关键词。
+        embedding_model = ""
+        if protocol == "openai":
+            embedding_model = (reader(
+                "embedding 模型(留空=记忆走关键词,不额外调模型;如 text-embedding-3-small):"
+            ) or "").strip()
+        else:
+            writer("(此 provider 是 Anthropic 端,无 embeddings;记忆走关键词召回)")
         # 连通+格式探针(必做)
         writer("正在连通测试…")
         res = await probe_connection(protocol=protocol, base_url=base_url, model=model,
@@ -311,7 +324,8 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
             write_profile(config_dir=cdir, name=name, protocol=protocol, base_url=base_url,
                           model=model, api_key=api_key, api_key_env=api_key_env,
                           max_tokens=max_tokens, context_window=ctx,
-                          price_in=price_in, price_out=price_out, set_active=make_active)
+                          price_in=price_in, price_out=price_out,
+                          embedding_model=embedding_model, set_active=make_active)
         except C.ConfigError as e:
             # fail-closed:配置不合法绝不假成功,也不顶掉原 active;让用户重配这个模型。
             writer(f"保存失败(配置不合法):{e} —— 请重新配置这个模型。")
