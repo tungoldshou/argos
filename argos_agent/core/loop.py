@@ -328,6 +328,13 @@ class AgentLoop:
             messages.append({"role": "user", "content": bounce})
             step += 1
 
+        # 跨轮上下文:把本轮【最终 assistant 回答】持久化(get_messages 跨轮还原时带回)。
+        # 否则历史只剩单边 user goal、agent 记不住自己上轮答了啥 → "好的/继续"接不上。
+        # 只存最终答(非每个 act 步):内部代码步是 scratch,产物已落盘可 read_file 回看,
+        # 跨轮上下文保持精简;增长由 compaction(批3)兜底。
+        if text.strip():
+            self._store.append_message(session_id, role="assistant", content=text)
+
         # ── report ──
         if report_note:
             # 诚实标注挂在 report 的 PhaseChange 之前先记一笔(走持久化主路径)。
