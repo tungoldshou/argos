@@ -264,15 +264,27 @@ class AgentLoop:
         last_verdict: Any = None  # 最后一次 verify 结果,供 report 可见完成行诚实反映结局。
         escalated = False
         noaction_nudged = False   # 0 动作守卫:只催一轮,催过后第二次无代码块允许纯文字收尾(防死循环)。
+        compactions = 0           # 上下文压缩次数上限,防压缩仍溢出时无限重试。
         while step < self._cfg.max_steps:
             # W3:流式 delta 过 StreamingContextScrubber,防模型把 untrusted 围栏吐回 UI 泄露。
             scrubber = StreamingContextScrubber()
             text = ""
-            async for delta in self._model.stream(messages, system=system):
-                text += delta
-                clean = scrubber.feed(delta)
-                if clean:
-                    yield TokenDelta(text=clean)
+            try:
+                async for delta in self._model.stream(messages, system=system):
+                    text += delta
+                    clean = scrubber.feed(delta)
+                    if clean:
+                        yield TokenDelta(text=clean)
+            except Exception as e:  # noqa: BLE001 — 上下文溢出 → 压缩重试;其余异常上抛给 run() 顶层兜底。
+                from argos_agent.core.recovery import classify_error
+                ce = classify_error(e)
+                if (ce.should_compress and self._cfg.compaction and compactions < 3
+                        and hasattr(self._store, "compact_messages")):
+                    compactions += 1
+                    self._store.compact_messages(session_id, keep_recent=5)   # type: ignore[attr-defined]
+                    messages = self._store.get_messages(session_id)           # 重载压缩后线程(含本轮 goal)
+                    continue   # 重试本 step(不 step+=1)
+                raise
             tail = scrubber.flush()
             if tail:
                 yield TokenDelta(text=tail)

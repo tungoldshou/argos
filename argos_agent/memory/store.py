@@ -264,6 +264,33 @@ class ArgosStore:
         )
         return [{"role": r["role"], "content": r["content"]} for r in cur.fetchall()]
 
+    def compact_messages(self, session_id: str, *, keep_recent: int = 5) -> None:
+        """长上下文压缩:把老的 user/assistant 消息折叠成一条摘要,保留最近 keep_recent 条逐字。
+        删旧行(messages + FTS 同删保持一致),插摘要(用最早那条的 ts,排在最近之前)。
+        MVP:截断式占位摘要(取各条前 60 字拼接);真 LLM 摘要可后续增强。"""
+        cur = self._con.execute(
+            "SELECT message_id, content, ts FROM messages WHERE session_id = ? "
+            "AND role IN ('user','assistant') ORDER BY ts, rowid",
+            (session_id,),
+        )
+        rows = cur.fetchall()
+        if len(rows) <= keep_recent:
+            return
+        old = rows[:-keep_recent]
+        summary = "(早期对话摘要)" + " / ".join((r["content"] or "")[:60] for r in old)
+        old_ids = [r["message_id"] for r in old]
+        ph = ",".join("?" * len(old_ids))
+        sid = uuid.uuid4().hex[:12]
+        summary_ts = old[0]["ts"]   # 用最早 ts → 摘要排在保留的最近消息之前
+        self._write_txn([
+            (f"DELETE FROM messages WHERE message_id IN ({ph})", tuple(old_ids)),
+            (f"DELETE FROM messages_fts WHERE message_id IN ({ph})", tuple(old_ids)),
+            ("INSERT INTO messages(message_id, session_id, role, content, tool_calls_json, ts, token_count) "
+             "VALUES (?,?,?,?,?,?,?)", (sid, session_id, "user", summary, "", summary_ts, 0)),
+            ("INSERT INTO messages_fts(content, message_id, session_id) VALUES (?,?,?)",
+             (summary, sid, session_id)),
+        ])
+
     # ── events(event sourcing,契约 §2 / spec §12.6)──────────────────────
     def append_event(self, session_id: str, event: "Event") -> None:
         from argos_agent.tui.events import serialize_event, event_kind
