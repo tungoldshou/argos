@@ -221,7 +221,13 @@ class AgentLoop:
         # ── plan ──
         async for ev in self._enter_phase("plan"):
             yield ev
-        messages: list[dict] = [{"role": "user", "content": goal}]
+        # 多轮上下文:加载本 session 历史消息线程,再追加本轮 goal(全量重发,spec 已拍板)。
+        # get_messages 必须在 append_message(本轮 goal)之前调,否则本轮 goal 会重复一次。
+        if hasattr(self._store, "get_messages"):
+            messages: list[dict] = self._store.get_messages(session_id)
+        else:
+            messages = []
+        messages.append({"role": "user", "content": goal})
         self._store.append_message(session_id, role="user", content=goal)
         # W3:系统提示在 run 起始算一次(召回的 untrusted 段在安全段之后)。
         system = self._build_system(goal)

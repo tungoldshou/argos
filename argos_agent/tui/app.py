@@ -7,6 +7,7 @@ slash:输入以 / 开头走 commands.parse_slash 分发;否则当 goal 起一轮
 """
 from __future__ import annotations
 
+import uuid
 from collections.abc import Callable
 
 from textual.app import App, ComposeResult
@@ -94,6 +95,10 @@ class ArgosApp(App):
         self._step_blocks: dict[int, CodeActionBlock] = {}
         self._run_active = False
         self._yolo = False
+        # 每个 app 实例(=一段会话)用独立稳定 session_id —— loop 跨轮据它从 store 加载历史
+        # (多轮上下文)。/clear 换新 id = 开新会话、断上下文。uuid 避免硬编码 "tui-session"
+        # 致不同会话共享同一持久化线程。
+        self._session_id = uuid.uuid4().hex
         self.sub_title = self._compose_subtitle()
 
     def _compose_subtitle(self) -> str:
@@ -198,6 +203,7 @@ class ArgosApp(App):
         elif cmd.name == "clear":
             await log.clear()
             self._step_blocks.clear()
+            self._session_id = uuid.uuid4().hex  # 换新 session = 开新会话、断多轮上下文。
             await log.append_line("已开新会话(clear)。")
         elif cmd.name in ("undo", "retry", "resume"):
             await log.append_line(f"/{cmd.name} 将在持久化(Phase 2)/loop(Phase 3)接线后生效。")
@@ -228,7 +234,7 @@ class ArgosApp(App):
 
         async def _produce() -> None:
             try:
-                async for ev in loop.run(goal, session_id="tui-session"):
+                async for ev in loop.run(goal, session_id=self._session_id):
                     await bus.emit(ev)
             except Exception as e:  # noqa: BLE001 — loop 任何异常都降级为 Error 事件,绝不让 TUI 崩溃
                 chain: list[str] = []
