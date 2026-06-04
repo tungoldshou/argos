@@ -105,6 +105,23 @@ def _extract_text_delta(obj: dict[str, Any]) -> str:
     return ""
 
 
+def _coalesce_consecutive_roles(messages: list[dict]) -> list[dict]:
+    """合并连续同 role 的消息,保证 user/assistant 交替(Anthropic 兼容端要求,否则 400)。
+
+    多轮上下文会产生连续同 role:① 某轮最终 assistant 答复为空 → 只持久化了 user goal,
+    下一轮 [user(goal1), user(goal2)];② 压缩把摘要作为 user 插入 + 最近若干条首条也是 user。
+    在【真正发请求前】把相邻同 role 的 content 用换行并起来,杜绝畸形消息序列(I1 修复)。"""
+    out: list[dict] = []
+    for m in messages:
+        role = m.get("role")
+        content = m.get("content", "")
+        if out and out[-1]["role"] == role:
+            out[-1]["content"] = f"{out[-1]['content']}\n{content}"
+        else:
+            out.append({"role": role, "content": content})
+    return out
+
+
 # ── ModelClient ───────────────────────────────────────────────────────────────
 
 class ModelClient:
@@ -124,7 +141,8 @@ class ModelClient:
             "model": self.tier.model,
             "max_tokens": self.tier.max_tokens,
             "system": system,
-            "messages": messages,
+            # 发请求前归一化:相邻同 role 合并,保证 user/assistant 交替(防多轮/压缩产生畸形序列被端点 400)。
+            "messages": _coalesce_consecutive_roles(messages),
             "stream": True,
         }
 
