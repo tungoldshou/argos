@@ -83,6 +83,7 @@ class CostUpdate:
     tokens_out: int
     cost_usd: float
     elapsed_s: float
+    cache_read: int = 0
 
 
 @dataclass(frozen=True, slots=True)

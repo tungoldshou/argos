@@ -131,6 +131,7 @@ class AgentLoop:
         self._started = 0.0
         self._tok_in = 0        # 累计 token 用量(每步从 model.last_usage 累加,供 CostUpdate)
         self._tok_out = 0
+        self._cache_read = 0    # 累计缓存命中 token(成本栏诚实显示,从 model.last_usage 累加)
         # W2:loop 内部录制总线 + Harness。Harness 的 signer 取 broker 的 host signer
         # (同进程,沙箱拿不到),无 broker 时用 verifier 也无回执可验 → 给个一次性 key 占位
         # (无 broker 时 accept_receipt 不会被调用,故 key 不重要)。
@@ -251,9 +252,11 @@ class AgentLoop:
             usage = getattr(self._model, "last_usage", None) or {}
             self._tok_in += int(usage.get("input_tokens") or 0)
             self._tok_out += int(usage.get("output_tokens") or 0)
+            self._cache_read += int(usage.get("cache_read") or 0)
             yield CostUpdate(
                 tokens_in=self._tok_in, tokens_out=self._tok_out,
                 cost_usd=0.0, elapsed_s=time.time() - self._started,
+                cache_read=self._cache_read,
             )
 
             code = extract_code_block(text)

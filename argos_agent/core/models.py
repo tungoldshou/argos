@@ -114,7 +114,7 @@ class ModelClient:
         self._transport = transport  # 测试注入 MockTransport;生产为 None(真网络)
         # 最近一次 stream 的真实 token 用量(从 SSE 的 message_start/message_delta usage 帧抓)。
         # loop 据此发 CostUpdate 让状态栏 token/计时走起来 —— 真数据,不伪造。
-        self.last_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
+        self.last_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0, "cache_creation": 0}
 
     def _payload(self, messages: list[dict], system: str) -> dict[str, Any]:
         return {
@@ -135,7 +135,7 @@ class ModelClient:
         }
         url = self.tier.base_url.rstrip("/") + "/v1/messages"
         # 本次 stream 的 usage 清零;边流边抓 message_start(input)/message_delta(output) 帧。
-        self.last_usage = {"input_tokens": 0, "output_tokens": 0}
+        self.last_usage = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0, "cache_creation": 0}
         async with httpx.AsyncClient(transport=self._transport, timeout=300.0) as client:
             async with client.stream("POST", url, headers=headers,
                                      json=self._payload(messages, system)) as resp:
@@ -159,11 +159,16 @@ class ModelClient:
                         yield text
 
     def _capture_usage(self, obj: dict[str, Any]) -> None:
-        """从 Anthropic SSE 帧抓真实 token 用量:message_start 带 input,message_delta 带累计 output。"""
+        """从 Anthropic SSE 帧抓真实 token 用量:message_start 带 input,message_delta 带累计 output。
+        cache_read/cache_creation 同步抓(成本栏诚实显示缓存命中,不伪造)。"""
         t = obj.get("type")
         if t == "message_start":
             u = (obj.get("message") or {}).get("usage") or {}
             self.last_usage["input_tokens"] = int(u.get("input_tokens") or 0)
+            if u.get("cache_read_input_tokens") is not None:
+                self.last_usage["cache_read"] = int(u.get("cache_read_input_tokens") or 0)
+            if u.get("cache_creation_input_tokens") is not None:
+                self.last_usage["cache_creation"] = int(u.get("cache_creation_input_tokens") or 0)
         elif t == "message_delta":
             # MiniMax 在 message_delta 才给真 input_tokens(message_start 常为 0),output 累计也在此。
             u = obj.get("usage") or {}
@@ -171,6 +176,8 @@ class ModelClient:
                 self.last_usage["input_tokens"] = int(u.get("input_tokens") or 0)
             if u.get("output_tokens") is not None:
                 self.last_usage["output_tokens"] = int(u.get("output_tokens") or 0)
+            if u.get("cache_read_input_tokens") is not None:
+                self.last_usage["cache_read"] = int(u.get("cache_read_input_tokens") or 0)
 
     async def complete(self, messages: list[dict], *, system: str) -> str:
         parts = [c async for c in self.stream(messages, system=system)]
