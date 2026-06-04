@@ -57,3 +57,16 @@ async def test_model_section_shows_name_not_tier():
         txt = ap.snapshot_text()
         assert "MiniMax-M3" in txt, "应显示真实模型名"
         assert "档位" not in txt and "worker" not in txt, "不得暴露内部档位/tier 概念"
+
+
+@pytest.mark.asyncio
+async def test_cost_unknown_shows_na_not_zero():
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.on_cost(tokens_in=100, tokens_out=50, cost_usd=None, elapsed_s=1.0, cache_read=0)
+        await pilot.pause()
+        t = ap.snapshot_text()
+        assert "N/A" in t, "单价未知应显 $(N/A)"
+        assert "$0.000" not in t

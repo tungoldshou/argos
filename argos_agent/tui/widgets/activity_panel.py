@@ -68,9 +68,10 @@ class ActivityPanel(Vertical):
         self._receipts.append(action)
         self._set(3, "\n".join(f"🧾 {a}" for a in self._receipts[-6:]))
 
-    def on_cost(self, *, tokens_in: int, tokens_out: int, cost_usd: float,
+    def on_cost(self, *, tokens_in: int, tokens_out: int, cost_usd: float | None,
                 elapsed_s: float, cache_read: int = 0) -> None:
-        self._set(6, f"↑{tokens_in} ↓{tokens_out}  ${cost_usd:.3f}\n"
+        cost = "$(N/A)" if cost_usd is None else f"${cost_usd:.3f}"
+        self._set(6, f"↑{tokens_in} ↓{tokens_out}  {cost}\n"
                      f"缓存命中 {cache_read} tok  {elapsed_s:.1f}s")
 
     def reset_run(self) -> None:

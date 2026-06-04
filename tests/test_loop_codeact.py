@@ -167,7 +167,7 @@ async def test_loop_emits_costupdate_with_real_tokens_and_elapsed():
     assert last.tokens_out >= 50, "应累计真实 output token"
     assert last.tokens_in >= 100, "应累计真实 input token"
     assert last.elapsed_s >= 0.0, "elapsed 必须是真实计时(让 ⏱ 走起来)"
-    assert last.cost_usd == 0.0, "无单价表时诚实置 0,不编造成本"
+    assert last.cost_usd is None, "无单价表时诚实置 None(UI 显 $(N/A)),不编造成本"
 
 
 @pytest.mark.asyncio

@@ -28,7 +28,7 @@ class StatusBar(Static):
     actions: reactive[int] = reactive(0)
     tokens_in: reactive[int] = reactive(0)
     tokens_out: reactive[int] = reactive(0)
-    cost_usd: reactive[float] = reactive(0.0)
+    cost_usd: reactive[float | None] = reactive(0.0)
     elapsed_s: reactive[float] = reactive(0.0)
 
     def __init__(self, **kwargs) -> None:
@@ -36,17 +36,18 @@ class StatusBar(Static):
 
     @property
     def render_text(self) -> str:
+        cost = "$(N/A)" if self.cost_usd is None else f"${self.cost_usd:.3f}"
         return (
             f"⏵ phase:{self.phase} · ⚙{self.actions} actions · "
             f"↑{_k(self.tokens_in)}↓{_k(self.tokens_out)} tok · "
-            f"💰${self.cost_usd:.3f} · ⏱{self.elapsed_s:.1f}s"
+            f"💰{cost} · ⏱{self.elapsed_s:.1f}s"
         )
 
     def set_phase(self, phase: Phase, actions: int) -> None:
         self.phase = phase
         self.actions = actions
 
-    def set_cost(self, *, tokens_in: int, tokens_out: int, cost_usd: float, elapsed_s: float) -> None:
+    def set_cost(self, *, tokens_in: int, tokens_out: int, cost_usd: float | None, elapsed_s: float) -> None:
         self.tokens_in = tokens_in
         self.tokens_out = tokens_out
         self.cost_usd = cost_usd
@@ -68,7 +69,7 @@ class StatusBar(Static):
     def watch_tokens_out(self, value: int) -> None:
         self._refresh()
 
-    def watch_cost_usd(self, value: float) -> None:
+    def watch_cost_usd(self, value: float | None) -> None:
         self._refresh()
 
     def watch_elapsed_s(self, value: float) -> None:

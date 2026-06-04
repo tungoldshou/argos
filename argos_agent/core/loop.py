@@ -248,14 +248,14 @@ class AgentLoop:
             messages.append({"role": "assistant", "content": text})
 
             # CostUpdate:真 token(从 model.last_usage 累加)+ 真 elapsed,让状态栏/成本表走起来。
-            # 单价未知 → cost_usd 保持 0(诚实:不编造成本),token 与计时仍如实反映。
+            # 单价未知 → cost_usd 置 None(诚实:不编造成本,UI 显 $(N/A)),token 与计时仍如实反映。
             usage = getattr(self._model, "last_usage", None) or {}
             self._tok_in += int(usage.get("input_tokens") or 0)
             self._tok_out += int(usage.get("output_tokens") or 0)
             self._cache_read += int(usage.get("cache_read") or 0)
             yield CostUpdate(
                 tokens_in=self._tok_in, tokens_out=self._tok_out,
-                cost_usd=0.0, elapsed_s=time.time() - self._started,
+                cost_usd=None, elapsed_s=time.time() - self._started,
                 cache_read=self._cache_read,
             )
 
