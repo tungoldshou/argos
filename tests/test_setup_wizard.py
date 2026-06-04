@@ -7,9 +7,15 @@ from argos_agent.setup_wizard import PRESETS, write_profile
 
 
 def test_presets_have_protocol_and_base_url():
+    """预设必须有 protocol 和 base_url 字段;「自定义」的 protocol/base_url 允许为空(向导会询问)。"""
     for name, p in PRESETS.items():
-        assert p["protocol"] in ("anthropic", "openai")
-        assert "base_url" in p
+        if name == "自定义":
+            # 自定义预设的 protocol/base_url 为空,由向导交互询问(spec §6.1 「(问)」)
+            assert p["protocol"] == ""
+            assert p["base_url"] == ""
+        else:
+            assert p["protocol"] in ("anthropic", "openai")
+            assert "base_url" in p and p["base_url"]
 
 
 def test_write_profile_splits_secret_and_settings(tmp_path):
@@ -103,17 +109,21 @@ from argos_agent.setup_wizard import run
 
 @pytest.mark.asyncio
 async def test_run_wizard_happy_path(tmp_path, monkeypatch):
-    """脚本化输入跑完一轮:选 MiniMax 预设→默认 model→粘贴 key→跳过深探→不再加→完成。"""
+    """脚本化输入跑完一轮:选 MiniMax 预设→默认 model→粘贴 key→跳过深探→默认名→不再加→完成。
+    MiniMax 是 PRESETS 第 3 项;无 protocol/base_url 问询(预设已填)。
+    reader 调用顺序:选编号→model id→key方式→key值→max_tokens→ctx→price→深探→profile名→再配。
+    """
     inputs = iter([
-        "3",            # 选 MiniMax(PRESETS 第 3 项,实现里编号要稳定)
-        "",             # model 用默认 MiniMax-M3
-        "paste",        # key 方式:粘贴
-        "secret123",    # key 值
-        "",             # max_tokens 默认
-        "",             # context_window 默认
-        "",             # price 跳过
-        "n",            # 深度探针 跳过
-        "n",            # 不再加模型
+        "3",            # 1. 选 MiniMax(PRESETS 第 3 项,编号稳定)
+        "",             # 2. model 用默认 MiniMax-M3
+        "paste",        # 3. key 方式:粘贴
+        "secret123",    # 4. key 值
+        "",             # 5. max_tokens 默认
+        "",             # 6. context_window 默认
+        "",             # 7. price 跳过
+        "n",            # 8. 深度探针 跳过
+        "",             # 9. profile 名 留空=默认(minimax-m3)
+        "n",            # 10. 不再加模型
     ])
     out_lines = []
     # probe 注入成功(避免真网络):monkeypatch probe_connection
@@ -128,3 +138,58 @@ async def test_run_wizard_happy_path(tmp_path, monkeypatch):
     assert cfg["active"] in cfg["models"]
     assert any(m["model"] == "MiniMax-M3" for m in cfg["models"].values())
     assert "secret123" in (tmp_path / ".env").read_text()
+
+
+@pytest.mark.asyncio
+async def test_run_wizard_custom_preset(tmp_path, monkeypatch):
+    """「自定义」预设触发 protocol/base_url 额外询问(spec §6.1 「(问)」)。"""
+    import argos_agent.setup_wizard as W
+    # 自定义是 PRESETS 第 7 项(最后一项)
+    custom_idx = str(list(W.PRESETS.keys()).index("自定义") + 1)
+    inputs = iter([
+        custom_idx,                             # 1. 选「自定义」
+        "openai",                               # 2a. protocol(询问,因预设为空)
+        "http://localhost:8000/v1",             # 2b. base_url(询问,因预设为空)
+        "my-local-model",                       # 3. model id
+        "paste",                                # 4. key 方式
+        "localkey",                             # 5. key 值
+        "",                                     # 6. max_tokens 默认
+        "",                                     # 7. context_window 默认
+        "",                                     # 8. price 跳过
+        "n",                                    # 9. 深度探针 跳过
+        "local",                                # 10. profile 名
+        "n",                                    # 11. 不再加模型
+    ])
+    out_lines = []
+    async def fake_probe(**kw):
+        return W.ProbeResult(True, True, "行", "OK")
+    monkeypatch.setattr(W, "probe_connection", fake_probe)
+    await run(reader=lambda prompt="": next(inputs), writer=out_lines.append,
+              config_dir=tmp_path)
+    cfg = json.loads((tmp_path / "config.json").read_text())
+    assert "local" in cfg["models"]
+    prof = cfg["models"]["local"]
+    assert prof["protocol"] == "openai"
+    assert prof["base_url"] == "http://localhost:8000/v1"
+    assert prof["model"] == "my-local-model"
+
+
+@pytest.mark.asyncio
+async def test_run_wizard_duplicate_name_appends_index(tmp_path, monkeypatch):
+    """同名 profile 再配时自动追加序号(spec §6.1 step 5「重名追加序号」)。"""
+    import argos_agent.setup_wizard as W
+    async def fake_probe(**kw):
+        return W.ProbeResult(True, True, "行", "OK")
+    monkeypatch.setattr(W, "probe_connection", fake_probe)
+
+    # 第一轮:profile 名 "mm"
+    it1 = iter(["3", "", "paste", "k", "", "", "", "n", "mm", "n"])
+    await run(reader=lambda prompt="": next(it1), writer=lambda _: None, config_dir=tmp_path)
+    cfg1 = json.loads((tmp_path / "config.json").read_text())
+    assert "mm" in cfg1["models"]
+
+    # 第二轮:同名 "mm" → 应自动变 "mm-2"
+    it2 = iter(["3", "", "paste", "k", "", "", "", "n", "mm", "n"])
+    await run(reader=lambda prompt="": next(it2), writer=lambda _: None, config_dir=tmp_path)
+    cfg2 = json.loads((tmp_path / "config.json").read_text())
+    assert "mm" in cfg2["models"] and "mm-2" in cfg2["models"]
