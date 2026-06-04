@@ -81,8 +81,49 @@ class AnthropicProtocol:
 
 
 class OpenAIProtocol:
+    """OpenAI Chat Completions(覆盖 OpenRouter / Ollama / LM Studio / vLLM / DeepSeek 等)。
+    与 Anthropic 的差异:system 作首条消息(无顶层 system);Bearer 认证;
+    流式 usage 需 stream_options.include_usage;SSE 走 choices[].delta.content。"""
     name = "openai"
-    # Task 3 填实:endpoint/headers/payload/text_delta/capture_usage/is_done
+
+    def endpoint(self, base_url: str) -> str:
+        return base_url.rstrip("/") + "/chat/completions"
+
+    def headers(self, key: str) -> dict[str, str]:
+        return {"Authorization": f"Bearer {key}", "content-type": "application/json"}
+
+    def payload(self, messages: list[dict], *, system: str, tier: Any) -> dict[str, Any]:
+        msgs: list[dict] = [{"role": "system", "content": system}]
+        msgs.extend(_coalesce_consecutive_roles(messages))
+        return {
+            "model": tier.model,
+            "max_tokens": tier.max_tokens,
+            "messages": msgs,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+
+    def text_delta(self, obj: dict[str, Any]) -> str:
+        choices = obj.get("choices") or []
+        if not choices:
+            return ""
+        return (choices[0].get("delta") or {}).get("content") or ""
+
+    def capture_usage(self, obj: dict[str, Any], last_usage: dict[str, int]) -> None:
+        u = obj.get("usage") or {}
+        if not u:
+            return
+        if u.get("prompt_tokens") is not None:
+            last_usage["input_tokens"] = int(u.get("prompt_tokens") or 0)
+        if u.get("completion_tokens") is not None:
+            last_usage["output_tokens"] = int(u.get("completion_tokens") or 0)
+        details = u.get("prompt_tokens_details") or {}
+        if details.get("cached_tokens") is not None:
+            last_usage["cache_read"] = int(details.get("cached_tokens") or 0)
+
+    def is_done(self, obj: dict[str, Any]) -> bool:
+        choices = obj.get("choices") or []
+        return bool(choices) and choices[0].get("finish_reason") is not None
 
 
 def get_protocol(name: str) -> AnthropicProtocol | OpenAIProtocol:
