@@ -41,3 +41,17 @@ def test_anthropic_text_delta_and_usage():
     assert u["cache_read"] == 179 and u["cache_creation"] == 5
     p.capture_usage({"type": "message_delta", "usage": {"input_tokens": 65, "output_tokens": 41}}, u)
     assert u["input_tokens"] == 65 and u["output_tokens"] == 41
+
+
+def test_modelclient_selects_protocol_by_tier():
+    from argos_agent.core.models import ModelClient
+    mc = ModelClient.__new__(ModelClient)
+    mc.tier = _tier(protocol="openai")
+    mc._proto = get_protocol(mc.tier.protocol)
+    assert mc._proto.name == "openai"
+
+
+def test_coalesce_still_importable_from_models():
+    # 向后兼容:旧测试/代码 from argos_agent.core.models import _coalesce_consecutive_roles
+    from argos_agent.core.models import _coalesce_consecutive_roles as c
+    assert c([{"role": "user", "content": "a"}, {"role": "user", "content": "b"}])[0]["content"] == "a\nb"

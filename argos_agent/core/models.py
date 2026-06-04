@@ -12,6 +12,9 @@ from typing import Any, AsyncIterator
 
 import httpx
 
+from argos_agent.core.protocols import (  # re-export 保旧导入路径
+    get_protocol, _coalesce_consecutive_roles,
+)
 from argos_agent.core.types import ModelTierName
 
 
@@ -95,68 +98,37 @@ class CredentialPool:
         return any(m in b for m in terminal_markers) or b == ""
 
 
-# ── SSE parsing ──────────────────────────────────────────────────────────────
-
-def _extract_text_delta(obj: dict[str, Any]) -> str:
-    """从 Anthropic SSE 事件抽 text 增量(剥 thinking,沿用 core.text_delta 策略)。"""
-    if obj.get("type") == "content_block_delta":
-        delta = obj.get("delta") or {}
-        if delta.get("type") == "text_delta":
-            return delta.get("text", "") or ""
-    return ""
-
-
-def _coalesce_consecutive_roles(messages: list[dict]) -> list[dict]:
-    """合并连续同 role 的消息,保证 user/assistant 交替(Anthropic 兼容端要求,否则 400)。
-
-    多轮上下文会产生连续同 role:① 某轮最终 assistant 答复为空 → 只持久化了 user goal,
-    下一轮 [user(goal1), user(goal2)];② 压缩把摘要作为 user 插入 + 最近若干条首条也是 user。
-    在【真正发请求前】把相邻同 role 的 content 用换行并起来,杜绝畸形消息序列(I1 修复)。"""
-    out: list[dict] = []
-    for m in messages:
-        role = m.get("role")
-        content = m.get("content", "")
-        if out and out[-1]["role"] == role:
-            out[-1]["content"] = f"{out[-1]['content']}\n{content}"
-        else:
-            out.append({"role": role, "content": content})
-    return out
-
-
 # ── ModelClient ───────────────────────────────────────────────────────────────
 
 class ModelClient:
-    """Anthropic-Messages 兼容端直连(worker=MiniMax / premium=Claude)。"""
+    """协议无关的模型客户端:stream/complete 委托给 Protocol 适配器。
+    Anthropic-Messages / OpenAI-Chat-Completions 均走同一代码路径,行为由 tier.protocol 选定。"""
 
     def __init__(self, *, tier: ModelTier, pool: CredentialPool,
                  transport: httpx.BaseTransport | None = None) -> None:
         self.tier = tier
         self.pool = pool
         self._transport = transport  # 测试注入 MockTransport;生产为 None(真网络)
+        self._proto = get_protocol(tier.protocol)   # 按协议选适配器
         # 最近一次 stream 的真实 token 用量(从 SSE 的 message_start/message_delta usage 帧抓)。
         # loop 据此发 CostUpdate 让状态栏 token/计时走起来 —— 真数据,不伪造。
-        self.last_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0, "cache_creation": 0}
+        self.last_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0,
+                                           "cache_read": 0, "cache_creation": 0}
 
     def _payload(self, messages: list[dict], system: str) -> dict[str, Any]:
-        return {
-            "model": self.tier.model,
-            "max_tokens": self.tier.max_tokens,
-            "system": system,
-            # 发请求前归一化:相邻同 role 合并,保证 user/assistant 交替(防多轮/压缩产生畸形序列被端点 400)。
-            "messages": _coalesce_consecutive_roles(messages),
-            "stream": True,
-        }
+        # 委托协议(保留方法名:test_payload_normalizes_messages 仍调它)。
+        return self._proto.payload(messages, system=system, tier=self.tier)
+
+    def _capture_usage(self, obj: dict[str, Any]) -> None:
+        # 委托协议(保留方法名:test_capture_usage_reads_cache_tokens 仍调它)。
+        self._proto.capture_usage(obj, self.last_usage)
 
     async def stream(self, messages: list[dict], *, system: str) -> AsyncIterator[str]:
         cred = self.pool.least_used()
         self.pool.mark_used(cred.key)  # 立即更新 last_used,确保 least_used 轮换(Phase 4 #1)
-        headers = {
-            "x-api-key": cred.key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        }
-        url = self.tier.base_url.rstrip("/") + "/v1/messages"
-        # 本次 stream 的 usage 清零;边流边抓 message_start(input)/message_delta(output) 帧。
+        headers = self._proto.headers(cred.key)
+        url = self._proto.endpoint(self.tier.base_url)
+        # 本次 stream 的 usage 清零;边流边抓 usage 帧。
         self.last_usage = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0, "cache_creation": 0}
         async with httpx.AsyncClient(transport=self._transport, timeout=300.0) as client:
             async with client.stream("POST", url, headers=headers,
@@ -174,32 +146,11 @@ class ModelClient:
                     except json.JSONDecodeError:
                         continue
                     self._capture_usage(obj)
-                    if obj.get("type") == "message_stop":
+                    if self._proto.is_done(obj):
                         break
-                    text = _extract_text_delta(obj)
+                    text = self._proto.text_delta(obj)
                     if text:
                         yield text
-
-    def _capture_usage(self, obj: dict[str, Any]) -> None:
-        """从 Anthropic SSE 帧抓真实 token 用量:message_start 带 input,message_delta 带累计 output。
-        cache_read/cache_creation 同步抓(成本栏诚实显示缓存命中,不伪造)。"""
-        t = obj.get("type")
-        if t == "message_start":
-            u = (obj.get("message") or {}).get("usage") or {}
-            self.last_usage["input_tokens"] = int(u.get("input_tokens") or 0)
-            if u.get("cache_read_input_tokens") is not None:
-                self.last_usage["cache_read"] = int(u.get("cache_read_input_tokens") or 0)
-            if u.get("cache_creation_input_tokens") is not None:
-                self.last_usage["cache_creation"] = int(u.get("cache_creation_input_tokens") or 0)
-        elif t == "message_delta":
-            # MiniMax 在 message_delta 才给真 input_tokens(message_start 常为 0),output 累计也在此。
-            u = obj.get("usage") or {}
-            if u.get("input_tokens") is not None:
-                self.last_usage["input_tokens"] = int(u.get("input_tokens") or 0)
-            if u.get("output_tokens") is not None:
-                self.last_usage["output_tokens"] = int(u.get("output_tokens") or 0)
-            if u.get("cache_read_input_tokens") is not None:
-                self.last_usage["cache_read"] = int(u.get("cache_read_input_tokens") or 0)
 
     async def complete(self, messages: list[dict], *, system: str) -> str:
         parts = [c async for c in self.stream(messages, system=system)]
