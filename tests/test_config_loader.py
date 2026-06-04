@@ -57,3 +57,17 @@ def test_price_registered_into_pricing(tmp_path, monkeypatch):
     C.load_config()
     from argos_agent.core.observability import PRICING
     assert PRICING.get("PricedModel") == {"in": 0.5, "out": 2.0}
+
+
+def test_legacy_env_fallback_when_no_config(tmp_path, monkeypatch):
+    """无 config.json 时,旧 ARGOS_LLM_*/VITE_* 合成 default profile(现存用户零改动)。"""
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))   # 空目录,无 config.json
+    monkeypatch.setenv("ARGOS_LLM_KEY", "legacykey")
+    monkeypatch.setenv("ARGOS_LLM_MODEL", "MiniMax-M3")
+    import importlib
+    from argos_agent import config as C2
+    importlib.reload(C2)   # 重读模块级 _WORKER_* (它们在 import 时算)
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    tier = C2.active_tier()
+    assert tier.model == "MiniMax-M3" and tier.protocol == "anthropic"
+    assert C2.active_key() == "legacykey"

@@ -183,14 +183,23 @@ def load_config() -> ArgosConfig:
     return ArgosConfig(active=active, tiers=tiers, key_envs=key_envs, secrets=secrets)
 
 
+def _has_config_file() -> bool:
+    return (_config_dir() / "config.json").exists()
+
+
 def active_tier():
-    """当前激活模型的 ModelTier(优先 config.json;无则 Task 5 的旧 env 回退)。"""
-    cfg = load_config()
-    return cfg.tiers[cfg.active]
+    """当前激活模型的 ModelTier(优先 config.json;无则旧 env 回退至 WORKER_TIER)。"""
+    if _has_config_file():
+        cfg = load_config()
+        return cfg.tiers[cfg.active]
+    # 向后兼容:无 config.json → 用旧 env 合成的 WORKER_TIER(模块级已构造,protocol 默认 anthropic)。
+    return WORKER_TIER
 
 
 def active_key() -> str | None:
-    """当前激活模型的密钥:进程 env > ~/.argos/.env > None。"""
-    cfg = load_config()
-    env_name = cfg.key_envs.get(cfg.active) or ""
-    return os.environ.get(env_name) or cfg.secrets.get(env_name) or None
+    """当前激活模型的密钥:进程 env > ~/.argos/.env > None。无 config.json 则回退 WORKER_KEYS。"""
+    if _has_config_file():
+        cfg = load_config()
+        env_name = cfg.key_envs.get(cfg.active) or ""
+        return os.environ.get(env_name) or cfg.secrets.get(env_name) or None
+    return WORKER_KEYS[0] if WORKER_KEYS else None
