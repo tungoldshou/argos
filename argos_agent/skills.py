@@ -5,7 +5,6 @@ trust: builtin | imported | user_created
 """
 from __future__ import annotations
 
-import json
 import math
 import re
 from dataclasses import dataclass, field
@@ -13,8 +12,6 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-
-from . import llm_embed
 
 BUILTIN_DIR = Path(__file__).parent / "skills_builtin"
 USER_DIR = Path.home() / ".argos" / "skills"
@@ -140,10 +137,6 @@ def _parse_string(content: str) -> Skill | None:
 
 # ── recall:用 embedding 算余弦,top-k + sim_min 过滤 ─────────────────────────
 
-def _emb_index_path() -> Path:
-    return Path.home() / ".argos" / "skill_embeddings.json"
-
-
 def _cosine(a: list[float], b: list[float]) -> float:
     s = 0.0
     na = 0.0
@@ -158,37 +151,23 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
 
 def recall(goal: str, *, k: int = 3, sim_min: float = 0.4) -> list[Skill]:
-    """按 goal embedding 取 top-k 启用的 skill。失败/无 goal → 返回空(降级,不抛)。"""
+    """按 goal 语义相似度取 top-k 启用的 skill(复用记忆同款 embedder,模型不绑定)。
+    embedder 来自 config.active_embedder():未配 embedding / 非 OpenAI 协议 / 无 key → None →
+    返回空(降级,不绑定 MiniMax、不偷调模型);embedding 调用失败也降级返空。"""
     if not goal.strip():
         return []
     skills_all = [s for s in load_all() if s.enabled]
     if not skills_all:
         return []
+    from argos_agent import config
+    embedder = config.active_embedder()
+    if embedder is None:
+        return []  # 未配 embedding(或 Anthropic 端无 embeddings)→ 无语义召回,诚实降级
     try:
-        goal_emb = llm_embed.embed_text([goal])[0]
+        goal_emb = embedder.embed([goal])[0]
+        embeds = embedder.embed([f"{s.name}\n{s.description}" for s in skills_all])
     except Exception:
-        return []  # embedding 失败 = 无 recall(降级)
-    cache_path = _emb_index_path()
-    cache: dict[str, list[float]] = {}
-    if cache_path.exists():
-        try:
-            cache = {k: v for k, v in (json.loads(cache_path.read_text("utf-8")) or {}).items() if len(v) == llm_embed.EMBED_DIM}
-        except Exception:
-            cache = {}
-    texts = [f"{s.name}\n{s.description}" for s in skills_all]
-    try:
-        embeds = llm_embed.embed_text(texts)
-    except Exception:
-        return []
-    new_cache: dict[str, list[float]] = {}
-    for s, e in zip(skills_all, embeds):
-        new_cache[s.name] = e
-    cache.update(new_cache)
-    try:
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cache_path.write_text(json.dumps(cache), encoding="utf-8")
-    except Exception:
-        pass
+        return []  # embedding 调用失败 = 无 recall(降级,不抛)
     scored = sorted(
         ((_cosine(goal_emb, e), s) for s, e in zip(skills_all, embeds)),
         key=lambda x: x[0], reverse=True,
