@@ -247,6 +247,7 @@ class AgentLoop:
         report_note = ""   # 收尾时报告里诚实标注(如无测任务"未机检验证")。
         last_verdict: Any = None  # 最后一次 verify 结果,供 report 可见完成行诚实反映结局。
         escalated = False
+        noaction_nudged = False   # 0 动作守卫:只催一轮,催过后第二次无代码块允许纯文字收尾(防死循环)。
         while step < self._cfg.max_steps:
             # W3:流式 delta 过 StreamingContextScrubber,防模型把 untrusted 围栏吐回 UI 泄露。
             scrubber = StreamingContextScrubber()
@@ -292,7 +293,19 @@ class AgentLoop:
                 step += 1
                 continue
 
-            # 无代码块 → 模型宣布"完成" → 进 verify。
+            # 无代码块。但若整轮还没有任何动作(_actions==0),说明模型只是口头说说没真做
+            # —— 不得当"完成"收尾(防"说了没做"伪完成)。回灌催促,继续要它真执行。
+            # 只催一轮(noaction_nudged 兜底):催过后第二次仍无代码块,允许它作为纯文字答复
+            # 收尾(纯问答如"你好"本就无需动作;避免无限催促,max_steps 再兜底)。
+            if self._actions == 0 and not noaction_nudged:
+                noaction_nudged = True
+                messages.append({"role": "user", "content":
+                    "你还没有产出任何 ```python 代码动作就停了。如果要做事,请输出代码块真正执行;"
+                    "如果确认无需任何动作即可回答,请直接给出最终答复(我会据此收尾)。"})
+                step += 1
+                continue
+
+            # 有过动作(或已催过一轮)→ 模型宣布"完成" → 进 verify。
             # W1:先 enter_phase("verify")(投 PhaseChange),再 run_verify_gate(投 VerifyVerdict)。
             async for ev in self._enter_phase("verify"):
                 yield ev

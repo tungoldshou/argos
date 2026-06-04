@@ -199,3 +199,16 @@ def test_codeact_contract_in_honesty_system():
     assert "```python" in HONESTY_SYSTEM, "必须给出 ```python 围栏示例/要求"
     assert "JSON" in HONESTY_SYSTEM and "不会被执行" in HONESTY_SYSTEM, "必须明确禁止 JSON 工具调用"
     assert "write_file(path, content)" in HONESTY_SYSTEM, "应文档化工具的 Python 函数签名"
+
+
+@pytest.mark.asyncio
+async def test_no_action_bounces_not_completes():
+    """模型纯文字宣布完成、0 个代码动作 → 不得进 verify/收尾,应 bounce 催它真做。"""
+    # 第一段:纯文字(无代码块,0 action);第二段才给代码块;第三段完成。
+    model = FakeModel(["我来修这几处。", "```python\nwrite_file('a','b')\n```", "完成。"])
+    loop = _loop_with(model, verify_cmd=None)  # _loop_with 见本文件
+    actions = []
+    async for ev in loop.run("g", "s"):
+        if isinstance(ev, CodeAction):
+            actions.append(ev)
+    assert len(actions) >= 1, "应在第二段真执行代码,而非首段纯文字就收尾"
