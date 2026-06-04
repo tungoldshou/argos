@@ -159,11 +159,38 @@ class StreamingContextScrubber:
                 break
         return "".join(out)
 
+    @staticmethod
+    def _decor_prefix_len(marker: str) -> int:
+        """marker 开头的"装饰段"长度(─ 与空格构成的横线，OPEN/CLOSE 两端相同)。
+        装饰段是歧义性内容(正常文本里也会出现)，截到这里以内的 holdback 残余可安全补发;
+        一旦延伸进装饰段之后(已露出 untrusted 等可辨识围栏词)，就是泄露，必须丢弃(fail-closed)。
+        """
+        n = 0
+        for ch in marker:
+            if ch in ("─", " "):
+                n += 1
+            else:
+                break
+        return n
+
     def flush(self) -> str:
-        """流结束：OUTSIDE 态把 holdback 的残余(被证明不是 OPEN 标记)补发；INSIDE 态全吞。"""
+        """流结束：OUTSIDE 态处理 holdback 残余；INSIDE 态全吞(围栏未闭合也不外发)。
+
+        holdback 残余是"疑似被截断的围栏标记"。流已结束、无下个 chunk 可拼接判定:
+          · 若残余只到 OPEN 的装饰段(─/空格 横线)以内 → 歧义性内容，补发(不泄露任何围栏词);
+          · 若残余已延伸进装饰段之后(露出 untrusted 等可辨识标记体) → 视作截断的围栏，丢弃,
+            绝不吐回 UI(spec §3.5 不变量:围栏标记不得泄露)。
+        """
         if self._inside:
             self._buf = ""
             return ""
         tail = self._buf
         self._buf = ""
+        # 残余是 OPEN 真前缀且已越过装饰段 → 截断的围栏，丢弃(fail-closed)。
+        if (
+            tail
+            and UNTRUSTED_OPEN.startswith(tail)
+            and len(tail) > self._decor_prefix_len(UNTRUSTED_OPEN)
+        ):
+            return ""
         return tail
