@@ -17,8 +17,9 @@ async def test_panel_sections_present_and_honest_empty():
         ap = app.query_one("#ap", ActivityPanel)
         txt = ap.snapshot_text()
         assert "MiniMax-M3" in txt                              # 模型(真,只显模型名不露档位)
-        assert "未加载" in txt                                    # Skills 诚实空态
-        assert "0" in txt                                        # MCP 0 已连接
+        # Skills 已接进活 loop:诚实显真实可用数(内置 4 个)或"无可用",绝不谎报。
+        assert ("可用" in txt or "无可用" in txt)
+        assert "0 已连接" in txt                                 # MCP 诚实空态(尚未实现)
         assert "缓存" in txt                                      # 成本含缓存区
 
 

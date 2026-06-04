@@ -43,10 +43,23 @@ class ActivityPanel(Vertical):
         yield _Section("任务进度", "(待开始)", )  # id 设下方
         yield _Section("工具", "本轮 0 调用")
         yield _Section("回执(已签名)", "—")
-        yield _Section("Skills", "未加载")
+        yield _Section("Skills", self._skills_summary())
         yield _Section("MCP", "0 已连接")
         yield _Section("成本 + 缓存", "↑0 ↓0  $0.000\n缓存命中 0 tok  0.0s")
         yield _Section("上下文", "")
+
+    @staticmethod
+    def _skills_summary() -> str:
+        """诚实显示真实可用 skill 数(已接进活 loop:按 goal 召回进系统提示)。
+        读盘失败 → 诚实退回'—',绝不谎报数量。"""
+        try:
+            from argos_agent import skills
+            enabled = [s for s in skills.load_all() if s.enabled]
+            if not enabled:
+                return "无可用"
+            return f"{len(enabled)} 个可用(按任务召回)"
+        except Exception:  # noqa: BLE001
+            return "—"
 
     def _sections(self) -> list[_Section]:
         return list(self.query(_Section))
