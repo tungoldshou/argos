@@ -74,10 +74,16 @@ def _use_embedder(monkeypatch, fn):
     monkeypatch.setattr("argos_agent.config.active_embedder", lambda: _FakeEmbedder(fn))
 
 
-def test_recall_returns_empty_when_no_embedder(skills_dir, monkeypatch):
-    """未配 embedding(active_embedder 返 None)→ 记忆/skill 召回降级返空,不绑定不偷调。"""
+def test_recall_keyword_fallback_when_no_embedder(skills_dir, monkeypatch):
+    """零模型兜底:未配 embedding(active_embedder 返 None)→ skill 召回走关键词重叠(不返空)。
+    skills 不需要大模型也能用;不相关 goal 仍空(无关键词重叠)。"""
     monkeypatch.setattr("argos_agent.config.active_embedder", lambda: None)
-    assert skills.recall("anything", k=3, sim_min=0.4) == []
+    # skills_dir: a(desc=alpha,enabled) / b(disabled) / c(desc=charlie,enabled)
+    out = skills.recall("帮我处理 alpha 相关的事", k=3, sim_min=0.4)
+    assert "a" in {s.name for s in out}, "goal 含 'alpha' → 关键词命中 skill a 的描述"
+    assert "b" not in {s.name for s in out}, "disabled skill 不召回"
+    # 完全不相关 goal → 关键词无重叠 → 空
+    assert skills.recall("zzz totally unrelated", k=3) == []
 
 
 def test_recall_returns_top_k_enabled_by_cosine(monkeypatch, tmp_path):
@@ -126,12 +132,13 @@ def test_recall_filters_below_simmin(skills_dir, monkeypatch, tmp_path):
     assert out == []
 
 
-def test_recall_returns_empty_when_embed_fails(skills_dir, monkeypatch, tmp_path):
+def test_recall_embed_failure_falls_back_to_keyword(skills_dir, monkeypatch, tmp_path):
+    """embedding 调用失败 → 落关键词兜底(而非返空):相关 goal 仍召回,不相关才空。"""
     def boom(_texts):
         raise RuntimeError("simulated embedding failure")
     _use_embedder(monkeypatch, boom)
-    out = skills.recall("anything", k=3, sim_min=0.4)
-    assert out == []
+    assert "a" in {s.name for s in skills.recall("alpha 的活", k=3)}   # 失败后走关键词,命中 a
+    assert skills.recall("zzz unrelated", k=3) == []                   # 不相关 → 空
 
 
 def test_recall_excludes_disabled(skills_dir, monkeypatch, tmp_path):

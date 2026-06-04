@@ -150,10 +150,27 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return s / math.sqrt(na * nb)
 
 
+def _tokens(text: str) -> set[str]:
+    """分词:ASCII 词 + CJK 单字(兼顾中英),供无 embedding 时的关键词兜底召回。"""
+    low = text.lower()
+    return set(re.findall(r"[a-z0-9]+", low)) | set(re.findall(r"[一-鿿]", low))
+
+
+def _keyword_score(goal: str, s: "Skill") -> float:
+    """关键词重叠打分(0..1):goal 与 skill 名/描述的共同词占 goal 词的比例。
+    纯本地、零模型、零网络——语义弱但能把明显相关的 skill 浮出来(记忆 FTS5 兜底的 skill 版)。"""
+    g = _tokens(goal)
+    if not g:
+        return 0.0
+    st = _tokens(f"{s.name} {s.description}")
+    return len(g & st) / len(g)
+
+
 def recall(goal: str, *, k: int = 3, sim_min: float = 0.4) -> list[Skill]:
-    """按 goal 语义相似度取 top-k 启用的 skill(复用记忆同款 embedder,模型不绑定)。
-    embedder 来自 config.active_embedder():未配 embedding / 非 OpenAI 协议 / 无 key → None →
-    返回空(降级,不绑定 MiniMax、不偷调模型);embedding 调用失败也降级返空。"""
+    """按 goal 取 top-k 启用的 skill(模型不绑定,且不强制要模型)。
+    主路径:复用记忆同款 embedder(config.active_embedder)做语义召回。
+    兜底:未配 embedding / 非 OpenAI / 无 key / embedding 失败 → **关键词召回(零模型)**,
+    而非返空——skills 不需要大模型也能用。两条路径都对 disabled skill 不召回。"""
     if not goal.strip():
         return []
     skills_all = [s for s in load_all() if s.enabled]
@@ -161,15 +178,18 @@ def recall(goal: str, *, k: int = 3, sim_min: float = 0.4) -> list[Skill]:
         return []
     from argos_agent import config
     embedder = config.active_embedder()
-    if embedder is None:
-        return []  # 未配 embedding(或 Anthropic 端无 embeddings)→ 无语义召回,诚实降级
-    try:
-        goal_emb = embedder.embed([goal])[0]
-        embeds = embedder.embed([f"{s.name}\n{s.description}" for s in skills_all])
-    except Exception:
-        return []  # embedding 调用失败 = 无 recall(降级,不抛)
-    scored = sorted(
-        ((_cosine(goal_emb, e), s) for s, e in zip(skills_all, embeds)),
-        key=lambda x: x[0], reverse=True,
-    )
-    return [s for sim, s in scored[:k] if sim >= sim_min]
+    if embedder is not None:
+        try:
+            goal_emb = embedder.embed([goal])[0]
+            embeds = embedder.embed([f"{s.name}\n{s.description}" for s in skills_all])
+            scored = sorted(
+                ((_cosine(goal_emb, e), s) for s, e in zip(skills_all, embeds)),
+                key=lambda x: x[0], reverse=True,
+            )
+            return [s for sim, s in scored[:k] if sim >= sim_min]
+        except Exception:
+            pass  # embedding 调用失败 → 落到关键词兜底(而非返空)
+    # 零模型兜底:关键词重叠召回(score>0 才算相关,取 top-k)。
+    kw = sorted(((_keyword_score(goal, s), s) for s in skills_all),
+                key=lambda x: x[0], reverse=True)
+    return [s for sc, s in kw[:k] if sc > 0.0]
