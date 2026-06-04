@@ -225,7 +225,9 @@ class ArgosApp(App):
             else:
                 try:
                     _cfg.set_active(arg)
-                    await log.append_line(f"已切到 '{arg}'(下次启动/新任务生效)。", kind="done")
+                    # 诚实:模型在启动时 build_components 注入一次,会话内不热切换;只重启真生效
+                    #(不写"新任务生效"——那是假话,会话内新任务仍用旧模型)。
+                    await log.append_line(f"已切到 '{arg}'(重启 argos 后生效)。", kind="done")
                 except Exception as e:  # noqa: BLE001
                     await log.append_line(f"切换失败:{e}", kind="error")
         elif cmd.name == "status":
@@ -340,7 +342,13 @@ class ArgosApp(App):
                 cost_usd=ev.cost_usd, elapsed_s=ev.elapsed_s, cache_read=ev.cache_read,
             )
             from argos_agent import config
-            window = (config.PREMIUM_TIER if self._premium else config.WORKER_TIER).context_window
+            # 上下文占用%必须用【实际运行模型】的窗口当分母(active_tier),不能用模块级 WORKER_TIER
+            # 默认值——否则 active 是小窗口模型(如 Ollama 8192)时会拿 192000 当分母,谎报上下文压力。
+            try:
+                tier = config.PREMIUM_TIER if self._premium else config.active_tier()
+                window = tier.context_window
+            except Exception:  # noqa: BLE001 — 配置异常时退回模块级默认,不崩 UI
+                window = (config.PREMIUM_TIER if self._premium else config.WORKER_TIER).context_window
             ap.on_context(used=ev.context_used, window=window)
         elif isinstance(ev, PlanUpdate):
             # 真 TODO 拆解 → 活动栏"任务进度"区改渲染子任务进度(Task 12)。

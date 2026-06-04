@@ -36,7 +36,9 @@ class AnthropicProtocol:
     name = "anthropic"
 
     def endpoint(self, base_url: str) -> str:
-        return base_url.rstrip("/") + "/v1/messages"
+        # 幂等:用户已粘贴完整 .../v1/messages 时不重复追加(防双拼)。
+        b = base_url.rstrip("/")
+        return b if b.endswith("/v1/messages") else b + "/v1/messages"
 
     def headers(self, key: str) -> dict[str, str]:
         return {"x-api-key": key, "anthropic-version": "2023-06-01",
@@ -87,7 +89,9 @@ class OpenAIProtocol:
     name = "openai"
 
     def endpoint(self, base_url: str) -> str:
-        return base_url.rstrip("/") + "/chat/completions"
+        # 幂等:用户已粘贴完整 .../chat/completions 时不重复追加(防双拼)。
+        b = base_url.rstrip("/")
+        return b if b.endswith("/chat/completions") else b + "/chat/completions"
 
     def headers(self, key: str) -> dict[str, str]:
         return {"Authorization": f"Bearer {key}", "content-type": "application/json"}

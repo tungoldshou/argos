@@ -75,6 +75,15 @@ def test_non_numeric_max_tokens_raises_configerror(tmp_path, monkeypatch):
         C.load_config()
 
 
+def test_non_positive_max_tokens_raises(tmp_path, monkeypatch):
+    """fail-closed:max_tokens<=0(0 或负)→ ConfigError(防 400 / on_context 占用%除零)。"""
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    _write(tmp_path, {"active": "mm", "models": {"mm": {"protocol": "openai",
+           "base_url": "http://x/v1", "model": "m", "api_key_env": "K", "context_window": 0}}})
+    with pytest.raises(C.ConfigError):
+        C.load_config()
+
+
 def test_price_registered_into_pricing(tmp_path, monkeypatch):
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     _write(tmp_path, {"active": "mm", "models": {"mm": {"protocol": "anthropic",

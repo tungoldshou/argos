@@ -150,13 +150,17 @@ def _validate_profile(name: str, m: dict) -> None:
     if m["protocol"] not in _VALID_PROTOCOLS:
         raise ConfigError(
             f"profile '{name}' 的 protocol='{m['protocol']}' 非法,只能是 {_VALID_PROTOCOLS}")
-    # 数字字段非数字时,int() 会漏 ValueError;包成 ConfigError 守住 fail-closed 契约。
+    # 数字字段:非数字 int() 会漏 ValueError;0/负数会让请求 400 或 on_context 占用%除零。
+    # 一律包成 ConfigError 守住 fail-closed 契约,且要求为正整数。
     try:
-        int(m.get("max_tokens", 4096))
-        int(m.get("context_window", 200_000))
+        mt = int(m.get("max_tokens", 4096))
+        cw = int(m.get("context_window", 200_000))
     except (ValueError, TypeError) as e:
         raise ConfigError(
             f"profile '{name}' 的 max_tokens/context_window 必须是整数:{e}") from e
+    if mt <= 0 or cw <= 0:
+        raise ConfigError(
+            f"profile '{name}' 的 max_tokens/context_window 必须是正整数(得 {mt}/{cw})")
 
 
 @dataclass(frozen=True, slots=True)

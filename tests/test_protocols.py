@@ -95,11 +95,14 @@ from argos_agent.core.models import ModelClient, CredentialPool
 
 @pytest.mark.asyncio
 async def test_openai_stream_end_to_end_mock():
+    # 真实 OpenAI include_usage 形态:usage 在 finish_reason 之后的【单独一帧】(choices:[]),
+    # 不在完成帧里。stream 必须读到该尾帧才抓得到 usage(回归:此前一 is_done 即 break → usage 恒 0)。
     sse = (b'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n'
            b'data: {"choices":[{"delta":{"content":"he"}}]}\n\n'
            b'data: {"choices":[{"delta":{"content":"llo"}}]}\n\n'
-           b'data: {"choices":[{"finish_reason":"stop","delta":{}}],'
-           b'"usage":{"prompt_tokens":10,"completion_tokens":2}}\n\n'
+           b'data: {"choices":[{"finish_reason":"stop","delta":{}}]}\n\n'
+           b'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":2,'
+           b'"prompt_tokens_details":{"cached_tokens":4}}}\n\n'
            b'data: [DONE]\n\n')
 
     def handler(req: httpx.Request) -> httpx.Response:
@@ -111,4 +114,6 @@ async def test_openai_stream_end_to_end_mock():
                      pool=CredentialPool(["K"]), transport=httpx.MockTransport(handler))
     out = "".join([c async for c in mc.stream([{"role": "user", "content": "hi"}], system="s")])
     assert out == "hello"
+    # usage 来自完成帧【之后】的单独 usage-only 帧,必须被抓到(否则 OpenAI 成本恒 0)
     assert mc.last_usage["input_tokens"] == 10 and mc.last_usage["output_tokens"] == 2
+    assert mc.last_usage["cache_read"] == 4

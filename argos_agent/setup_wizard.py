@@ -67,13 +67,21 @@ def _ask_float_or_none(reader, writer, prompt: str) -> float | None:
 
 
 def _append_env(config_dir: Path, name: str, value: str) -> None:
-    """把 NAME=value 写进 ~/.argos/.env(已存在同名则替换),权限 0600。"""
+    """把 NAME=value 写进 ~/.argos/.env(已存在同名则替换),权限 0600。
+    以 0600 创建临时文件再原子替换 → 明文密钥从落盘第一刻就 0600,无 0644 暴露窗口(TOCTOU)。"""
     f = config_dir / ".env"
     lines = f.read_text().splitlines() if f.exists() else []
     lines = [ln for ln in lines if not ln.strip().startswith(f"{name}=")]
     lines.append(f"{name}={value}")
-    f.write_text("\n".join(lines) + "\n")
-    os.chmod(f, 0o600)
+    content = "\n".join(lines) + "\n"
+    tmp = f.with_suffix(".env.tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, content.encode())
+    finally:
+        os.close(fd)
+    os.replace(tmp, f)   # 原子替换:目标继承 tmp 的 0600,密钥从不以 0644 存在过
+    os.chmod(f, 0o600)   # 替换后再确保一次(防原已存在文件残留宽权限)
 
 
 def write_profile(*, config_dir: Path, name: str, protocol: str, base_url: str, model: str,
@@ -82,14 +90,18 @@ def write_profile(*, config_dir: Path, name: str, protocol: str, base_url: str, 
                   price_in: float | None = None, price_out: float | None = None) -> None:
     """写一个 profile:设置进 config.json,密钥(若给)进 .env(0600);密钥绝不进 config.json。"""
     config_dir.mkdir(parents=True, exist_ok=True)
-    cfg = _read_config(config_dir)
-    cfg.setdefault("models", {})
     prof = {"protocol": protocol, "base_url": base_url, "model": model,
             "api_key_env": api_key_env, "max_tokens": max_tokens,
             "context_window": context_window}
     if price_in is not None and price_out is not None:
         prof["price_in"] = price_in
         prof["price_out"] = price_out
+    # fail-closed:落盘前校验本 profile 合法(空 base_url/model、非法 protocol、非正整数都拒)——
+    # 否则会写出"假成功"的坏 config 并顶掉原可用 active(下次启动才 ConfigError 落 demo 态)。
+    from argos_agent import config as _config
+    _config._validate_profile(name, prof)
+    cfg = _read_config(config_dir)
+    cfg.setdefault("models", {})
     cfg["models"][name] = prof
     if set_active or "active" not in cfg:
         cfg["active"] = name
@@ -183,9 +195,11 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
         if way == "env":
             api_key = None
             api_key_env = (reader("环境变量名:") or "").strip()
+            derive_env = False
         else:
             api_key = (reader("粘贴 API key:") or "").strip()
-            api_key_env = f"{model.upper().replace('-', '_').replace('/', '_')}_KEY"
+            api_key_env = ""        # paste 路径:env 名延后由【唯一 profile 名】派生
+            derive_env = True       # (避免同 model 不同 key 的两 profile 撞同名 env 互相覆盖)
         max_tokens = _ask_int(reader, writer, "max_tokens [4096]:", 4096)
         ctx = _ask_int(reader, writer, "context_window [200000]:", 200000)
         price_in = _ask_float_or_none(reader, writer, "价格 in (USD/1M, 留空跳过):")
@@ -207,22 +221,37 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
             writer(f"深测结果 [{dres.rating}] {dres.message}")
         # profile 命名:向用户提问,默认用 model id;重名追加序号(spec §6.1 step 5)
         cfg_existing = _read_config(cdir)
+        existing_models = cfg_existing.get("models", {})
         default_name = model.lower().replace(" ", "-") if model else "custom"
         raw_name = (reader(f"给这个模型起个名 [{default_name}]:") or default_name).strip() or default_name
         name = raw_name
         idx = 2
-        while name in cfg_existing.get("models", {}):
+        while name in existing_models:
             name = f"{raw_name}-{idx}"
             idx += 1
-        if not res.connected:
+        # paste 路径:env 名由唯一 profile 名派生(此时 name 已去重),杜绝同 model 撞名覆盖。
+        if derive_env:
+            api_key_env = f"{name.upper().replace('-', '_').replace('/', '_')}_KEY"
+        # 是否设为当前默认:首个模型自动设;已有模型时默认【不】改 active(重跑 setup 加模型不静默劫持)。
+        if existing_models:
+            make_active = (reader("设为当前默认模型?(y/N):") or "n").strip().lower() == "y"
+        else:
+            make_active = True
+        if not res.connected and make_active:
             # 诚实:把明知连不通的模型设为当前 active 时不静默(spec §10 验收②的诚实兜底)。
-            writer("⚠️ 此模型连通测试未通过,仍按你的选择保存为当前模型——下次使用前请确认它可用。")
-        write_profile(config_dir=cdir, name=name, protocol=protocol, base_url=base_url,
-                      model=model, api_key=api_key, api_key_env=api_key_env,
-                      max_tokens=max_tokens, context_window=ctx,
-                      price_in=price_in, price_out=price_out, set_active=True)
-        writer(f"已保存 '{name}' 并设为当前模型。")
-        writer("注意:API key 以明文存于 ~/.argos/.env(权限 0600),不加密。")
+            writer("⚠️ 此模型连通测试未通过,仍按你的选择设为当前模型——下次使用前请确认它可用。")
+        try:
+            write_profile(config_dir=cdir, name=name, protocol=protocol, base_url=base_url,
+                          model=model, api_key=api_key, api_key_env=api_key_env,
+                          max_tokens=max_tokens, context_window=ctx,
+                          price_in=price_in, price_out=price_out, set_active=make_active)
+        except C.ConfigError as e:
+            # fail-closed:配置不合法绝不假成功,也不顶掉原 active;让用户重配这个模型。
+            writer(f"保存失败(配置不合法):{e} —— 请重新配置这个模型。")
+            continue
+        writer(f"已保存 '{name}'{'并设为当前模型' if make_active else '(未改当前默认模型)'}。")
+        if api_key:
+            writer("注意:API key 以明文存于 ~/.argos/.env(权限 0600),不加密。")
         if (reader("再配一个模型?(y/N):") or "n").strip().lower() != "y":
             break
     writer("setup 完成。运行 `argos` 即用当前模型。")
@@ -256,6 +285,7 @@ async def deep_probe(*, protocol: str, base_url: str, model: str, api_key: str |
             return ModelClient(tier=t, pool=CredentialPool([k or "x"]))
     with tempfile.TemporaryDirectory() as td:
         proj = _P(td) / "proj"; proj.mkdir()
+        _prev_ws = os.environ.get("ARGOS_WORKSPACE")   # 存旧值,finally 还原(防同进程复用时污染后续真 run)
         os.environ["ARGOS_WORKSPACE"] = str(proj)
         tok = runtime.use_project(str(proj))
         store = None
@@ -284,3 +314,7 @@ async def deep_probe(*, protocol: str, base_url: str, model: str, api_key: str |
             if store is not None:
                 store.close()
             runtime.reset(tok)
+            if _prev_ws is None:
+                os.environ.pop("ARGOS_WORKSPACE", None)
+            else:
+                os.environ["ARGOS_WORKSPACE"] = _prev_ws

@@ -94,7 +94,10 @@ class CredentialPool:
         if any(m in b for m in transient_markers):
             return False
         terminal_markers = ("authentication_error", "invalid x-api-key", "invalid api key",
-                            "permission_error", "unauthorized")
+                            "permission_error", "unauthorized",
+                            # OpenAI / OpenRouter 无效 key 措辞(否则 401 被当 transient 死重试)
+                            "invalid_api_key", "incorrect api key", "no auth credentials",
+                            "invalid_request_error")
         return any(m in b for m in terminal_markers) or b == ""
 
 
@@ -146,8 +149,13 @@ class ModelClient:
                     except json.JSONDecodeError:
                         continue
                     self._capture_usage(obj)
+                    # 不在 is_done 处提前 break:OpenAI 的 include_usage 把 usage 放在
+                    # finish_reason 之后的【单独一帧】(choices:[]),提前 break 会读不到 →
+                    # OpenAI 系模型 token/成本恒 0(诚实成本展示被架空)。继续读到流自然结束
+                    # (aiter_lines 耗尽 / [DONE]),让尾部 usage-only 帧被 _capture_usage 抓到。
+                    # 完成帧及其后的 usage 帧 text_delta 均为空,不会多吐文本。
                     if self._proto.is_done(obj):
-                        break
+                        continue
                     text = self._proto.text_delta(obj)
                     if text:
                         yield text

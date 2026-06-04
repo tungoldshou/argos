@@ -188,11 +188,24 @@ async def test_run_wizard_duplicate_name_appends_index(tmp_path, monkeypatch):
     cfg1 = json.loads((tmp_path / "config.json").read_text())
     assert "mm" in cfg1["models"]
 
-    # 第二轮:同名 "mm" → 应自动变 "mm-2"
-    it2 = iter(["3", "", "paste", "k", "", "", "", "n", "mm", "n"])
+    # 第二轮:同名 "mm" → 应自动变 "mm-2"。注意:已有 profile 时多一问「设为当前默认模型?(y/N)」
+    # (避免重跑 setup 加模型时静默劫持 active),故输入序列在 name 后、再配前多一个 "n"。
+    it2 = iter(["3", "", "paste", "k", "", "", "", "n", "mm", "n", "n"])
     await run(reader=lambda prompt="": next(it2), writer=lambda _: None, config_dir=tmp_path)
     cfg2 = json.loads((tmp_path / "config.json").read_text())
     assert "mm" in cfg2["models"] and "mm-2" in cfg2["models"]
+    assert cfg2["active"] == "mm", "第二轮答 n 不设为默认 → active 仍是第一轮的 mm(不被劫持)"
+    # paste 路径 env 名由【唯一 profile 名】派生 → 两 profile 的 api_key_env 必须不同(防撞名覆盖)
+    assert cfg2["models"]["mm"]["api_key_env"] != cfg2["models"]["mm-2"]["api_key_env"]
+
+
+def test_write_profile_rejects_empty_base_url(tmp_path):
+    """fail-closed:空 base_url 的 profile 不得落盘(否则假成功 + 下次启动 ConfigError)。"""
+    import argos_agent.config as C
+    with pytest.raises(C.ConfigError):
+        write_profile(config_dir=tmp_path, name="bad", protocol="openai", base_url="",
+                      model="m", api_key="k", api_key_env="K", set_active=True)
+    assert not (tmp_path / "config.json").exists(), "校验失败不得写出 config.json"
 
 
 # ── Task 10: 深度探针(可选 write+verify 往返) ─────────────────────────────────────
