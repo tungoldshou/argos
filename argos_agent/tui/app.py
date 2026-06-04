@@ -161,7 +161,7 @@ class ArgosApp(App):
         from argos_agent.tui import glow
         if self._terminal_glow or self._glow_base is None:
             return
-        self._glow_phase = (self._glow_phase + 0.1) % 1.0   # ~10s 一个呼吸周期
+        self._glow_phase = (self._glow_phase + 0.03) % 1.0   # 步长 0.03/0.1s tick → ~3.3s 一个呼吸周期(平静呼吸,非快速脉冲)
         self._set_border(glow.breathe(self._glow_base, self._glow_phase))
 
     def _glow_stop(self) -> None:
