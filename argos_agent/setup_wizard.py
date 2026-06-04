@@ -167,7 +167,9 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
                 continue
         # 可选深度探针(默认跳过)
         if (reader("要顺手深测一下吗?(真跑 write+verify, ~10-30s) [y/N]:") or "n").strip().lower() == "y":
-            writer("(深度探针见 Task 10;此处占位:已跳过)")
+            writer("正在深度探针(真跑 write+verify)…")
+            dres = await deep_probe(protocol=protocol, base_url=base_url, model=model, api_key=api_key)
+            writer(f"深测结果 [{dres.rating}] {dres.message}")
         # profile 命名:向用户提问,默认用 model id;重名追加序号(spec §6.1 step 5)
         cfg_existing = _read_config(cdir)
         default_name = model.lower().replace(" ", "-") if model else "custom"
@@ -186,3 +188,61 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
         if (reader("再配一个模型?(y/N):") or "n").strip().lower() != "y":
             break
     writer("setup 完成。运行 `argos` 即用当前模型。")
+
+
+# ── 深度探针(spec §6.3) ──────────────────────────────────────────────────────────
+
+async def deep_probe(*, protocol: str, base_url: str, model: str, api_key: str | None,
+                     model_factory=None) -> ProbeResult:
+    """可选深度探针(spec §6.3):真 sandbox+loop 跑一个极小 write+verify 往返,出 行/勉强/不行。
+    复用 __main__._run_selftest 的装配。非 macOS(无 Seatbelt)或异常 → 诚实返 '不行' 不抛。
+    model_factory(tier,key)->model 注入(测试用脚本模型,默认走真 ModelClient)。"""
+    import tempfile
+    from pathlib import Path as _P
+    from argos_agent import runtime
+    from argos_agent.approval import ApprovalGate, ApprovalLevel
+    from argos_agent.core.loop import AgentLoop, LoopConfig
+    from argos_agent.core.models import ModelClient, CredentialPool, ModelTier
+    from argos_agent.core.verify_gate import Verifier
+    from argos_agent.memory.store import ArgosStore
+    from argos_agent.sandbox.broker import CapabilityBroker
+    from argos_agent.sandbox.egress import EgressPolicy
+    from argos_agent.sandbox.executor import SeatbeltExecutor
+    from argos_agent.tools.receipts import ReceiptSigner
+    from argos_agent.tui.events import EventBus, VerifyVerdict
+
+    tier = ModelTier(name="probe", model=model, base_url=base_url, max_tokens=1024,
+                     context_window=8192, protocol=protocol)
+    if model_factory is None:
+        def model_factory(t, k):
+            return ModelClient(tier=t, pool=CredentialPool([k or "x"]))
+    with tempfile.TemporaryDirectory() as td:
+        proj = _P(td) / "proj"; proj.mkdir()
+        os.environ["ARGOS_WORKSPACE"] = str(proj)
+        tok = runtime.use_project(str(proj))
+        store = None
+        try:
+            gate = ApprovalGate(level=ApprovalLevel.AUTO)
+            broker = CapabilityBroker(gate=gate, egress=EgressPolicy(
+                llm_hosts=set(), search_hosts=set(), mcp_hosts=set()),
+                signer=ReceiptSigner(key=b"probe"))
+            sandbox = SeatbeltExecutor(broker_handler=lambda a, ar: broker._execute(a, ar)[0])
+            store = ArgosStore(db_path=str(_P(td) / "p.db"))
+            loop = AgentLoop(store=store, bus=EventBus(), sandbox=sandbox, broker=broker,
+                             model=model_factory(tier, api_key), verifier=Verifier(max_rounds=3),
+                             config=LoopConfig(approval_level=ApprovalLevel.AUTO, compaction=False),
+                             workspace=proj, verify_dir=proj)
+            vs = []
+            async for ev in loop.run("写 st.f 返回 1 并验证", "probe"):
+                if isinstance(ev, VerifyVerdict):
+                    vs.append(ev.verdict.status)
+            if vs and vs[-1] == "passed":
+                rating = "行" if len(vs) == 1 else "勉强"
+                return ProbeResult(True, True, rating, f"端到端跑通(verify {vs})。")
+            return ProbeResult(True, False, "不行", f"未跑通验证(verdicts={vs})。")
+        except Exception as e:  # noqa: BLE001 — 平台/装配失败诚实返不行,不抛
+            return ProbeResult(False, False, "不行", f"深度探针无法运行:{type(e).__name__}: {e}")
+        finally:
+            if store is not None:
+                store.close()
+            runtime.reset(tok)

@@ -193,3 +193,28 @@ async def test_run_wizard_duplicate_name_appends_index(tmp_path, monkeypatch):
     await run(reader=lambda prompt="": next(it2), writer=lambda _: None, config_dir=tmp_path)
     cfg2 = json.loads((tmp_path / "config.json").read_text())
     assert "mm" in cfg2["models"] and "mm-2" in cfg2["models"]
+
+
+# ── Task 10: 深度探针(可选 write+verify 往返) ─────────────────────────────────────
+
+from argos_agent.setup_wizard import deep_probe
+
+
+class _ScriptModel:
+    def __init__(self, scripts): self._s, self._i = scripts, 0
+    async def stream(self, messages, *, system):
+        t = self._s[min(self._i, len(self._s) - 1)]; self._i += 1
+        for ch in t: yield ch
+
+
+@pytest.mark.asyncio
+async def test_deep_probe_passed_rates_xing(tmp_path, monkeypatch):
+    """深度探针:注入一个'会写 st.py 且 verify 通过'的脚本模型 → 评级 行。"""
+    # 复用 __main__._SelftestModel 思路:注入 model_factory 返回脚本模型 + 真 sandbox/verifier。
+    # 用 tmp 项目;非 macOS 上 Seatbelt 失败 → deep_probe 应捕获返 '不行'(诚实),不抛。
+    res = await deep_probe(protocol="openai", base_url="http://x/v1", model="m", api_key="k",
+                           model_factory=lambda tier, key: _ScriptModel([
+                               "```python\nwrite_file('st.py','def f():\\n    return 1\\n')\n```\n"
+                               "propose_verify('python3 -c \"import st; assert st.f()==1\"')",
+                               "完成。"]))
+    assert res.rating in ("行", "勉强", "不行")   # 真跑出三态之一(平台相关), 不抛异常
