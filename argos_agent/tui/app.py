@@ -210,8 +210,25 @@ class ArgosApp(App):
             self.sub_title = self._compose_subtitle()
             await log.append_line("已切换到 Auto(YOLO)——放手执行,头部显示 ⏻ YOLO 标记。")
         elif cmd.name == "model":
-            tier = cmd.arg or "(当前)"
-            await log.append_line(f"模型切换:{tier}(多模型支持在后续子项目落地)")
+            from argos_agent import config as _cfg
+            arg = cmd.arg  # SlashCommand.arg 已是 parse_slash 拆出的参数部分
+            if not arg:
+                try:
+                    profs = _cfg.list_profiles()
+                    cur = _cfg.load_config().active if _cfg._has_config_file() else profs[0]
+                except Exception:  # noqa: BLE001
+                    from argos_agent import config as _c
+                    _fallback = _c.PREMIUM_TIER if self._premium else _c.WORKER_TIER
+                    profs, cur = [_fallback.name], _fallback.name
+                await log.append_line(
+                    "可用模型:" + ", ".join(f"{p}{' *' if p == cur else ''}" for p in profs),
+                    kind="system")
+            else:
+                try:
+                    _cfg.set_active(arg)
+                    await log.append_line(f"已切到 '{arg}'(下次启动/新任务生效)。", kind="done")
+                except Exception as e:  # noqa: BLE001
+                    await log.append_line(f"切换失败:{e}", kind="error")
         elif cmd.name == "status":
             bar = self.query_one("#status-bar", StatusBar)
             await log.append_line(bar.render_text)

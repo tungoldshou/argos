@@ -215,3 +215,23 @@ def active_key() -> str | None:
         env_name = cfg.key_envs.get(cfg.active) or ""
         return os.environ.get(env_name) or cfg.secrets.get(env_name) or None
     return WORKER_KEYS[0] if WORKER_KEYS else None
+
+
+def list_profiles() -> list[str]:
+    """返回所有可用 profile 名列表。无 config.json 时返回 ['worker'](回退态单 profile)。"""
+    if not _has_config_file():
+        return [WORKER_TIER.name]   # 回退态:单一 profile
+    return list(load_config().tiers)
+
+
+def set_active(name: str) -> None:
+    """把 config.json 里的 active 切到 name;不存在的 profile → ConfigError(fail-closed)。
+    切换后下次启动/新任务生效(模型在 build_components 时注入)。"""
+    cfile = _config_dir() / "config.json"
+    if not cfile.exists():
+        raise ConfigError("无 config.json,无法切换(请先 argos setup)")
+    raw = _json.loads(cfile.read_text())
+    if name not in (raw.get("models") or {}):
+        raise ConfigError(f"profile '{name}' 不存在")
+    raw["active"] = name
+    cfile.write_text(_json.dumps(raw, indent=2, ensure_ascii=False))

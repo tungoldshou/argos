@@ -97,3 +97,16 @@ def test_legacy_env_fallback_when_no_config(tmp_path, monkeypatch):
     tier = C2.active_tier()
     assert tier.model == "MiniMax-M3" and tier.protocol == "anthropic"
     assert C2.active_key() == "legacykey"
+
+
+def test_set_active_persists(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    import json
+    (tmp_path / "config.json").write_text(json.dumps({"active": "a", "models": {
+        "a": {"protocol": "openai", "base_url": "http://x/v1", "model": "m1", "api_key_env": "AK"},
+        "b": {"protocol": "openai", "base_url": "http://y/v1", "model": "m2", "api_key_env": "BK"}}}))
+    assert set(C.list_profiles()) == {"a", "b"}
+    C.set_active("b")
+    assert json.loads((tmp_path / "config.json").read_text())["active"] == "b"
+    with pytest.raises(C.ConfigError):
+        C.set_active("ghost")   # 不存在的 profile 拒绝
