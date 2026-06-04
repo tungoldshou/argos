@@ -65,7 +65,7 @@ async def test_failing_run_shows_escalation_and_failed_verdict():
         badge = app.query_one(VerdictBadge)
         assert badge.status == "failed"
         log = app.query_one("#transcript")
-        assert "无法自行收敛" in log._flushed or "诚实上报" in log._flushed
+        assert "无法自行收敛" in log.rendered_text or "诚实上报" in log.rendered_text
 
 
 @pytest.mark.asyncio
@@ -90,8 +90,8 @@ async def test_slash_status_and_cost_write_to_transcript():
         app.handle_input("/cost")
         await pilot.pause()
         log = app.query_one("#transcript")
-        assert "phase:" in log._flushed
-        assert "成本" in log._flushed or "$" in log._flushed
+        assert "phase:" in log.rendered_text
+        assert "成本" in log.rendered_text or "$" in log.rendered_text
 
 
 @pytest.mark.asyncio
@@ -102,7 +102,7 @@ async def test_unknown_slash_is_reported_not_run_as_goal():
         app.handle_input("/frobnicate")
         await pilot.pause()
         log = app.query_one("#transcript")
-        assert "未知命令" in log._flushed
+        assert "未知命令" in log.rendered_text
 
 
 # ── final review 回归:两个 HIGH ────────────────────────────────────────────
@@ -119,9 +119,9 @@ async def test_loop_exception_degrades_to_error_not_crash():
         await pilot.pause()
         log = app.query_one("#transcript")
         # 异常被容纳成 ❌ 错误 行(含异常链),而非 WorkerFailed 击穿 app。
-        assert "❌ 错误" in log._flushed
-        assert "模型 502" in log._flushed
-        assert "RuntimeError" in log._flushed
+        assert "❌ 错误" in log.rendered_text
+        assert "模型 502" in log.rendered_text
+        assert "RuntimeError" in log.rendered_text
 
 
 @pytest.mark.asyncio
@@ -135,7 +135,7 @@ async def test_demo_mode_marks_subtitle_and_warns_before_run():
         await app.workers.wait_for_complete()
         await pilot.pause()
         log = app.query_one("#transcript")
-        assert "演示模式" in log._flushed
+        assert "演示模式" in log.rendered_text
 
 
 @pytest.mark.asyncio
@@ -149,7 +149,7 @@ async def test_real_loop_has_no_demo_marker():
 
 @pytest.mark.asyncio
 async def test_input_focused_on_mount_and_receives_typing():
-    """回归:启动后输入框必须自动获焦,否则按键被 TranscriptLog 抢走,用户打不了任何字。
+    """回归:启动后输入框必须自动获焦,否则按键被其它可聚焦兄弟抢走,用户打不了任何字。
 
     注意作用域:run_test() 是 headless,pilot.press() 把合成 Key 事件直接塞进聚焦 widget,
     绕过了 driver 的真实输入管线(Kitty/legacy 协议、转义码解析、IME)。本测试只证明

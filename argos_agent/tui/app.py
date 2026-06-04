@@ -1,6 +1,6 @@
 """Argos TUI 主屏(spec §4.1)。
 
-布局:Header(含 YOLO 徽标) + TranscriptLog(主对话) + CostMeter(侧栏) + StatusBar(always-on) + Input。
+布局:Header(含 YOLO 徽标) + Transcript(主对话) + CostMeter(侧栏) + StatusBar(always-on) + Input。
 事件桥:start_run 起一个 EventBus + 注入的 loop,Worker async-for 消费 Event 并更新 widget(契约 §1/§3)。
 slash:输入以 / 开头走 commands.parse_slash 分发;否则当 goal 起一轮 run。
 审批:loop 投 ApprovalRequest → push ApprovalModal → 回调里 gate.respond(契约 §6.3)。
@@ -38,7 +38,7 @@ from argos_agent.tui.widgets.code_action import CodeActionBlock
 from argos_agent.tui.widgets.cost_meter import CostMeter
 from argos_agent.tui.widgets.diff_view import DiffView
 from argos_agent.tui.widgets.status_bar import StatusBar
-from argos_agent.tui.widgets.transcript import TranscriptLog
+from argos_agent.tui.widgets.transcript import Transcript
 from argos_agent.tui.widgets.verdict_badge import VerdictBadge
 
 _BASE_SUBTITLE = "诚实可靠的终端编码智能体"
@@ -65,8 +65,8 @@ class ArgosApp(App):
     """
 
     # 启动/换屏后由 Textual 自动把焦点放到输入框(声明式,框架在正确时机执行)——
-    # 否则默认聚焦第一个可聚焦 widget(TranscriptLog 可滚动会抢焦点),用户打不了字。
-    # 与 on_mount 的手动 focus 双保险。
+    # 否则默认聚焦第一个可聚焦 widget。Transcript 已 can_focus=False 不抢焦点,
+    # 这里仍显式声明作双保险。与 on_mount 的手动 focus 一致。
     AUTO_FOCUS = "#prompt"
 
     BINDINGS = [("ctrl+c", "quit", "退出")]
@@ -100,16 +100,16 @@ class ArgosApp(App):
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal():
-            yield TranscriptLog(id="transcript")
+            yield Transcript(id="transcript")
             yield CostMeter(id="cost-meter")
         yield StatusBar(id="status-bar")
         yield Input(placeholder="› 输入目标,或 / 开始命令", id="prompt")
         yield Footer()
 
     def on_mount(self) -> None:
-        """启动即把焦点放到输入框。否则 Textual 默认聚焦第一个可聚焦 widget —— TranscriptLog
-        (RichLog 可滚动故可聚焦)排在 Input 之前,会先抢焦点,按键全喂给它,用户在输入框
-        打不了任何字(汉字/ASCII 都进不去)。与 AUTO_FOCUS 双保险。"""
+        """启动即把焦点放到输入框。否则 Textual 默认聚焦第一个可聚焦 widget。Transcript 已
+        can_focus=False(不抢焦点),但仍显式 focus 输入框作双保险,杜绝任何可聚焦兄弟
+        排在 Input 之前抢走按键、用户在输入框打不了字(汉字/ASCII 都进不去)。与 AUTO_FOCUS 双保险。"""
         self.register_theme(ARGOS_NIGHT)
         self.theme = "argos-night"
         self.query_one("#prompt", Input).focus()
@@ -121,46 +121,51 @@ class ArgosApp(App):
         self.handle_input(text)
 
     def handle_input(self, text: str) -> None:
-        """slash 走分发;否则当 goal。同步入口(测试可直接调)。"""
+        """slash 走分发;否则当 goal。同步入口(测试可直接调)。
+
+        Transcript 落行是 async,故 slash 分发与"任务进行中"提示都包成 worker(测试 pause 后可见)。"""
         cmd = parse_slash(text)
         if cmd is None:
             if text.strip():
                 if self._run_active:
                     # 单会话编码 agent:一轮未完不并发起新轮(否则 step 块串台/漏渲染)。
-                    self.query_one("#transcript", TranscriptLog).append_line(
-                        "⏳ 当前任务进行中,请等它结束再起新任务。"
+                    self.run_worker(
+                        self.query_one("#transcript", Transcript).append_line(
+                            "⏳ 当前任务进行中,请等它结束再起新任务。"
+                        ),
+                        exclusive=False,
                     )
                     return
                 # 非测试同步场景:起一轮 run(测试用 start_run 显式 await)
                 self.run_worker(self.start_run(text.strip()), exclusive=False)
             return
-        self._dispatch_slash(cmd)
+        self.run_worker(self._dispatch_slash(cmd), exclusive=False)
 
-    def _dispatch_slash(self, cmd: SlashCommand) -> None:
-        log = self.query_one("#transcript", TranscriptLog)
+    async def _dispatch_slash(self, cmd: SlashCommand) -> None:
+        log = self.query_one("#transcript", Transcript)
         if not cmd.known:
-            log.append_line(f"未知命令 /{cmd.name}")
+            await log.append_line(f"未知命令 /{cmd.name}")
             return
         if cmd.name == "yolo":
             self.gate.set_level(ApprovalLevel.AUTO)
             self._yolo = True
             self.sub_title = self._compose_subtitle()
-            log.append_line("已切换到 Auto(YOLO)——放手执行,头部显示 ⏻ YOLO 标记。")
+            await log.append_line("已切换到 Auto(YOLO)——放手执行,头部显示 ⏻ YOLO 标记。")
         elif cmd.name == "model":
             tier = cmd.arg or "worker"
-            log.append_line(f"模型切档:{tier}(真切档在 Phase 4 ModelClient 落地)")
+            await log.append_line(f"模型切档:{tier}(真切档在 Phase 4 ModelClient 落地)")
         elif cmd.name == "status":
             bar = self.query_one("#status-bar", StatusBar)
-            log.append_line(bar.render_text)
+            await log.append_line(bar.render_text)
         elif cmd.name == "cost":
             meter = self.query_one("#cost-meter", CostMeter)
-            log.append_line(meter.render_text)
+            await log.append_line(meter.render_text)
         elif cmd.name == "clear":
-            log.clear()
+            await log.clear()
             self._step_blocks.clear()
-            log.append_line("已开新会话(clear)。")
+            await log.append_line("已开新会话(clear)。")
         elif cmd.name in ("undo", "retry", "resume"):
-            log.append_line(f"/{cmd.name} 将在持久化(Phase 2)/loop(Phase 3)接线后生效。")
+            await log.append_line(f"/{cmd.name} 将在持久化(Phase 2)/loop(Phase 3)接线后生效。")
 
     # ── 一轮 run:EventBus + loop + Worker 消费 ────────────────────────────
     async def start_run(self, goal: str) -> None:
@@ -170,16 +175,16 @@ class ArgosApp(App):
         self._step_blocks = {}  # 每轮独立,杜绝跨轮 step 串台。
         bus = EventBus()
         loop = self._loop_factory()
-        log = self.query_one("#transcript", TranscriptLog)
+        log = self.query_one("#transcript", Transcript)
         if self._demo:
             # 诚实:演示模式每轮起手就声明以下全是脚本假数据,绝不冒充真实执行/验证。
-            log.append_line(
+            await log.append_line(
                 "⚠️ 演示模式:以下为脚本化假数据,非真实执行/验证(真 AgentLoop 待 Phase 6 接入)。"
             )
         else:
             # 真模式即时回执:M3 plan 阶段推理要数秒,这期间若 transcript 全空,用户会以为
             # "回车没反应"。先落一行"思考中",让用户确认目标已收到、agent 正在跑。
-            log.append_line("⏳ 已收到目标,思考中…")
+            await log.append_line("⏳ 已收到目标,思考中…")
 
         async def _produce() -> None:
             try:
@@ -200,37 +205,37 @@ class ArgosApp(App):
             async for ev in bus:
                 await self._apply_event(ev)
         finally:
-            # 兜底 flush:append_token 把无换行的尾段滞留 buffer,只在 PhaseChange/append_line 落定。
-            # 一轮结束时强制落定残余,杜绝"模型最后一句没换行 → 永远不显示"的隐形吞字。
-            log.flush()
+            # 兜底落定:append_token 把流式尾段滞留 current 气泡,只在 PhaseChange/append_line 落定。
+            # 一轮结束时强制落定残余,杜绝"模型最后一句没换行 → 永远不计入 rendered_text"的隐形吞字。
+            log.finalize_response()
             self._run_active = False
 
     async def _apply_event(self, ev: Event) -> None:
         """把一个契约 §1 Event 反映到对应 widget(一份事件三用的 UI 出口)。"""
-        log = self.query_one("#transcript", TranscriptLog)
+        log = self.query_one("#transcript", Transcript)
         bar = self.query_one("#status-bar", StatusBar)
         if isinstance(ev, TokenDelta):
-            log.append_token(ev.text)
+            await log.append_token(ev.text)
         elif isinstance(ev, PhaseChange):
-            log.flush()
+            log.finalize_response()
             bar.set_phase(ev.phase, ev.actions)
         elif isinstance(ev, CodeAction):
             block = CodeActionBlock(code=ev.code, step=ev.step)
             self._step_blocks[ev.step] = block
-            await log.mount(block)
+            await log.mount_block(block)
         elif isinstance(ev, CodeResult):
             block = self._step_blocks.get(ev.step)
             if block is not None:
                 block.set_result(stdout=ev.stdout, value_repr=ev.value_repr, exc=ev.exc, ok=ev.ok)
         elif isinstance(ev, FileDiff):
-            await log.mount(DiffView(path=ev.path, added=ev.added, removed=ev.removed, unified=ev.unified))
+            await log.mount_block(DiffView(path=ev.path, added=ev.added, removed=ev.removed, unified=ev.unified))
         elif isinstance(ev, VerifyVerdict):
             existing = list(self.query(VerdictBadge))
             if existing:
                 badge = existing[0]
             else:
                 badge = VerdictBadge(id="verdict-badge")
-                await log.mount(badge)
+                await log.mount_block(badge)
             badge.show(ev.verdict)
         elif isinstance(ev, CostUpdate):
             bar.set_cost(
@@ -242,16 +247,17 @@ class ArgosApp(App):
                 cost_usd=ev.cost_usd, elapsed_s=ev.elapsed_s,
             )
         elif isinstance(ev, ToolReceipt):
-            log.append_line(f"🧾 receipt: {ev.receipt.action} (已签名)")
+            # 注:ToolReceipt 暂留 transcript(Task 10 ActivityPanel 落地后改路由到面板回执区)。
+            await log.append_line(f"🧾 receipt: {ev.receipt.action}(已签名)", kind="system")
         elif isinstance(ev, ApprovalRequest):
             await self._handle_approval(ev)
         elif isinstance(ev, ApprovalResponse):
-            log.append_line(f"审批结果:{ev.call_id} → {ev.decision}")
+            await log.append_line(f"审批结果:{ev.call_id} → {ev.decision}")
         elif isinstance(ev, Escalation):
-            log.append_line(f"⚠️ 卡住({ev.attempts} 轮):{ev.reason} — 最后失败:{ev.last_failure}")
+            await log.append_line(f"⚠️ 卡住({ev.attempts} 轮):{ev.reason} — 最后失败:{ev.last_failure}", kind="escalation")
         elif isinstance(ev, Error):
             chain = (" ← " + " ← ".join(ev.chain)) if ev.chain else ""
-            log.append_line(f"❌ 错误:{ev.message}{chain}")
+            await log.append_line(f"❌ 错误:{ev.message}{chain}", kind="error")
 
     async def _handle_approval(self, req: ApprovalRequest) -> None:
         """Auto 档不弹窗直接 always;否则弹 ApprovalModal,回调里 respond。"""
@@ -262,8 +268,12 @@ class ArgosApp(App):
         def _cb(decision: str | None) -> None:
             d = decision or "deny"
             self.gate.respond(req.call_id, d)  # type: ignore[arg-type]
-            self.query_one("#transcript", TranscriptLog).append_line(
-                f"审批结果:{req.action} → {d}"
+            # append_line 是 async,回调是同步的 → 包成 worker 落行。
+            self.run_worker(
+                self.query_one("#transcript", Transcript).append_line(
+                    f"审批结果:{req.action} → {d}"
+                ),
+                exclusive=False,
             )
 
         await self.push_screen(ApprovalModal(req), _cb)

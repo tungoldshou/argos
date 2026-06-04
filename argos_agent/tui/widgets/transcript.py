@@ -112,3 +112,8 @@ class Transcript(VerticalScroll):
         self.finalize_response()
         await self.mount(widget)
         self.scroll_end(animate=False)
+
+    async def clear(self) -> None:        # /clear 用:移除所有消息
+        await self.remove_children()
+        self._current = None
+        self._lines.clear()
