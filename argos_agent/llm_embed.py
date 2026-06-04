@@ -6,7 +6,7 @@ URL/协议/响应 shape 全部由 Task 1 探针确认:
   - Body: {"model": "embo-01", "type": "db", "texts": [...]}
   - Response: {"vectors": [[...1536 floats...]], "base_resp": {...}}
   - EMBED_DIM = 1536
-失败 → 抛 EmbedError,让上层(MemoryRecallMiddleware)决定降级到「无 recall」,不崩 sidecar。
+失败 → 抛 EmbedError,让上层(记忆召回 ArgosStore)决定降级到「FTS5 关键词召回」,不崩主进程。
 """
 from __future__ import annotations
 
