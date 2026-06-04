@@ -43,6 +43,10 @@ HONESTY_SYSTEM = (
     "- 验证：propose_verify(command)(声明用于验证本次改动的命令;收尾时 harness 独立运行,以退出码为准)。\n"
     "- 计划：update_plan(todos)(列出/更新子任务清单;todos 为 [{content, status, activeForm}] 列表)。\n"
     "- 联网：web_search(query)(查实时信息——天气、新闻、资料、最新文档)，web_extract(url)(取网页正文)。\n"
+    "- 浏览器（计算机控制，需要真实交互/JS 渲染/登录态的页面时用）："
+    "browser_navigate(url)（开页面）、browser_snapshot()（读当前页标题+URL+正文）、"
+    "browser_click(selector)、browser_type(selector, text)（CSS 选择器）、browser_screenshot(path)。"
+    "纯静态正文优先用 web_extract（更快）；需要点按/填表/看渲染后内容才用浏览器。\n"
     "需要实时或你不掌握的外部信息时，先用 web_search 去查，不要凭空说'我没法联网/获取'。"
     "查不到或工具报错再如实说明。"
 )

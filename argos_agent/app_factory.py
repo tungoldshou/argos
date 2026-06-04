@@ -59,6 +59,12 @@ class AppComponents:
     def close(self) -> None:
         self.sandbox.close()
         self.store.close()
+        # 收掉浏览器单例(若本会话用过计算机控制),不残留 chromium 子进程。
+        try:
+            from argos_agent import browser
+            browser.shutdown()
+        except Exception:  # noqa: BLE001 — 清理失败不应阻断关闭
+            pass
 
 
 def build_components(

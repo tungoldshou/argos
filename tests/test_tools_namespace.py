@@ -15,13 +15,25 @@ def test_all_tool_names_exact():
         "read_file", "write_file", "edit_file", "search_files",
         "run_command", "web_search", "web_extract", "propose_verify",
         "update_plan",
+        "browser_navigate", "browser_snapshot", "browser_click",
+        "browser_type", "browser_screenshot",
     ]
 
 
-def test_all_tool_names_count_is_9():
-    """MVP 核心工具恰好 9 个(含真验证门 propose_verify + 真 TODO 拆解 update_plan)—
-    确保 playwright 未混入(保证 UI 数字诚实:工具数必须等于真实可调用工具数)。"""
-    assert len(tools.ALL_TOOL_NAMES) == 9
+def test_all_tool_names_count_is_14():
+    """工具恰好 14 个:9 核心(文件/搜索/shell/web/验证/计划)+ 5 计算机控制(浏览器)。
+    UI 工具数必须等于真实可调用工具数(禁 seed 谎报);每个名字都真有 namespace 包装可调。"""
+    assert len(tools.ALL_TOOL_NAMES) == 14
+    # 5 个浏览器工具确实是 broker-gated 可调用(非占位名)。
+    ns = tools.build_child_namespace(broker=_FakeStub())
+    for name in ("browser_navigate", "browser_snapshot", "browser_click",
+                 "browser_type", "browser_screenshot"):
+        assert callable(ns[name]), f"{name} 不可调用(谎报)"
+
+
+class _FakeStub:
+    def request(self, action, args):
+        return f"FAKE[{action}]"
 
 
 def test_allowed_cmds_and_git_readonly_present():

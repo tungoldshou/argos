@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **计算机控制(浏览器自动化)—— 超越"编码+检索"的第一个超能力。** Argos 现在能真的开浏览器、导航、读渲染后页面、点按、填表、截图(`browser_navigate` / `browser_snapshot` / `browser_click` / `browser_type` / `browser_screenshot`,共 5 个 broker-gated 工具,工具数 9→14)。**关键工程**:Playwright 的 sync API 不能跑在 asyncio 事件循环线程里,而 broker `_execute` 恰恰跑在 loop 线程上(`exec_code` 同步阻塞 loop)——解法是 `browser.py` 的 `BrowserController` 起一条**守护线程**独占 sync Playwright + 持久 page,`_execute` 只投命令队列、阻塞取结果,真正的 Playwright 调用发生在 loop 线程之外。**诚实**:懒启动(第一次真用到才 launch chromium)、没装 chromium → 返回诚实错误串(提示 `playwright install chromium`)而非假装点过、每个动作 try/except 失败返回可读错误让模型换路、`atexit`+`AppComponents.close()` 收掉浏览器不残留 chromium。审批:读类(导航/快照/截图)low、写类(点击/填表)medium;不套出网白名单(浏览任意站点是浏览器本职)。提示里明确"纯静态正文优先 web_extract,需点按/填表/看渲染才用浏览器"。+10 个测试(fake page 测 _dispatch 全动作 / 线程化投递取结果 / 启动失败诚实降级 / broker 路由 / 风险表)。
 - **Skills 与契约层真正接进活 loop(此前是死代码)。** 两份休眠资产此前都没接到 CodeAct 主循环:`loop.py` 的 `_build_system` 把 `format_untrusted(skill_bodies=[])` 写死成空 → **skill 召回从不进系统提示**;契约层(`contracts.py`,Argos 唯一有实测数据的差异化资产)更是从未被 loop 调用过。现在 `_build_system` 三段接线、顺序锁死(spec §12.1):① **安全段** = `HONESTY_SYSTEM` + 命中时的**结构化任务契约 checklist**(REST API / DB schema / 状态机 / 配置 / 通用;`contracts.contract_for(goal)` 关键词判定,非结构化任务如写作/分析**不注入**——实测契约对开放式任务有害);② **untrusted 围栏段** = 召回的 **skills**(`skills.recall(goal)`,零模型关键词兜底,独立于记忆库)+ 任务记忆。skills/contracts/memory 任一召回失败都诚实降级、不崩 run。新增 4 个 loop 级测试锁死:无 store.recall 时 skill 仍注入、结构化任务注入契约 + `[C1]`、非结构化任务退裸 HONESTY、安全段永在 untrusted 之前。
 
 ### Removed

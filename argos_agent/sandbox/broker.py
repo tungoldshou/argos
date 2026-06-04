@@ -27,9 +27,12 @@ _RISK: dict[str, str] = {
     "run_command": "high",
     "web_search": "low",
     "web_extract": "low",
-    "navigate": "low",
-    "click": "low",
-    "type_text": "medium",
+    # 计算机控制(浏览器):读类(导航/快照/截图)low;写类(点击/填表 = 可触发表单提交)medium。
+    "browser_navigate": "low",
+    "browser_snapshot": "low",
+    "browser_screenshot": "low",
+    "browser_click": "medium",
+    "browser_type": "medium",
 }
 # C1:这些 action 即便在 AUTO(YOLO)档也强制逐个确认 —— 永不静默执行 shell。
 _FORCE_CONFIRM_ACTIONS: set[str] = {"run_command"}
@@ -129,7 +132,22 @@ class CapabilityBroker:
             return _web.web_search(args.get("query", ""), int(args.get("limit", 5))), None
         if action == "web_extract":
             return _web.web_extract(args.get("url", "")), None
-        # playwright 等(可选)在 Phase 5/6 接;此处未知 action 已被 request 顶部挡掉。
+        # 计算机控制(浏览器):走进程内单例 BrowserController(独占线程跑 sync Playwright,
+        # 绕开 asyncio loop 线程冲突);懒启动、无 chromium 时返回诚实错误串。
+        if action.startswith("browser_"):
+            from argos_agent import browser as _browser
+            ctrl = _browser.get_controller()
+            if action == "browser_navigate":
+                return ctrl.navigate(args.get("url", "")), None
+            if action == "browser_snapshot":
+                return ctrl.snapshot(int(args.get("max_chars", 4000))), None
+            if action == "browser_click":
+                return ctrl.click(args.get("selector", "")), None
+            if action == "browser_type":
+                return ctrl.type_text(args.get("selector", ""), args.get("text", "")), None
+            if action == "browser_screenshot":
+                return ctrl.screenshot(args.get("path", "screenshot.png")), None
+        # 未知 action 已被 request 顶部挡掉;此处兜底诚实返回。
         return f"错误:动作 {action!r} 暂未实现 host 执行。", None
 
     @staticmethod
@@ -140,4 +158,14 @@ class CapabilityBroker:
             return f"联网搜索 {args.get('query', '')}"
         if action == "web_extract":
             return f"取网页 {args.get('url', '')}"
+        if action == "browser_navigate":
+            return f"浏览器打开 {args.get('url', '')}"
+        if action == "browser_snapshot":
+            return "读取当前浏览器页面内容"
+        if action == "browser_screenshot":
+            return f"浏览器截图到 {args.get('path', 'screenshot.png')}"
+        if action == "browser_click":
+            return f"浏览器点击 {args.get('selector', '')}"
+        if action == "browser_type":
+            return f"浏览器在 {args.get('selector', '')} 填入文本"
         return f"{action} {args}"

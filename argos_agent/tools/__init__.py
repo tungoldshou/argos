@@ -26,7 +26,10 @@ ALL_TOOL_NAMES: list[str] = [
     "read_file", "write_file", "edit_file", "search_files",
     "run_command", "web_search", "web_extract", "propose_verify",
     "update_plan",
-]   # + playwright(可选,Phase 5/6 接)
+    # 计算机控制(浏览器)—— broker-gated,host 侧 sync Playwright 专线程执行。
+    "browser_navigate", "browser_snapshot", "browser_click",
+    "browser_type", "browser_screenshot",
+]
 
 __all__ = [
     "build_namespace", "build_child_namespace",
@@ -103,10 +106,31 @@ def _make_gated(broker: Any) -> dict[str, Any]:
     def web_extract_gated(url: str) -> str:
         return broker.request(action="web_extract", args={"url": url})
 
+    # 计算机控制(浏览器)—— broker-gated:host 侧 BrowserController 独占线程跑 sync Playwright。
+    def browser_navigate_gated(url: str) -> str:
+        return broker.request(action="browser_navigate", args={"url": url})
+
+    def browser_snapshot_gated(max_chars: int = 4000) -> str:
+        return broker.request(action="browser_snapshot", args={"max_chars": max_chars})
+
+    def browser_click_gated(selector: str) -> str:
+        return broker.request(action="browser_click", args={"selector": selector})
+
+    def browser_type_gated(selector: str, text: str) -> str:
+        return broker.request(action="browser_type", args={"selector": selector, "text": text})
+
+    def browser_screenshot_gated(path: str = "screenshot.png") -> str:
+        return broker.request(action="browser_screenshot", args={"path": path})
+
     return {
         "run_command": run_command_gated,
         "web_search": web_search_gated,
         "web_extract": web_extract_gated,
+        "browser_navigate": browser_navigate_gated,
+        "browser_snapshot": browser_snapshot_gated,
+        "browser_click": browser_click_gated,
+        "browser_type": browser_type_gated,
+        "browser_screenshot": browser_screenshot_gated,
     }
 
 
