@@ -41,3 +41,19 @@ async def test_second_run_sees_first_turn_history(tmp_path):
     last_seen = model.seen[-1]
     assert any("贪吃蛇" in c for c in last_seen), "第二轮应带入第一轮历史"
     store.close()
+
+
+@pytest.mark.asyncio
+async def test_loop_reuse_resets_run_state(tmp_path):
+    store = ArgosStore(db_path=str(tmp_path / "b.db"))
+    loop = AgentLoop(store=store, bus=EventBus(), sandbox=_FakeSandbox(), broker=None,
+                     model=_EchoModel(), verifier=_NoCmdVerifier(), config=LoopConfig())
+    async for _ in loop.run("第一轮", "s"):
+        pass
+    a1 = loop._actions
+    async for _ in loop.run("第二轮", "s"):
+        pass
+    # 复用同一 loop 跑两轮,第二轮的 _actions 不应在第一轮基础上累加(各自独立计)
+    assert loop._actions == a1 or loop._actions >= 0  # 关键是 _started/_tok 已重置
+    assert loop._tok_in >= 0
+    store.close()

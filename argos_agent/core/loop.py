@@ -160,12 +160,20 @@ class AgentLoop:
     def broker(self) -> "CapabilityBroker | None":
         return self._broker
 
+    def _reset_run_state(self) -> None:
+        self._actions = 0
+        self._fail_count = 0
+        self._tok_in = 0
+        self._tok_out = 0
+        self._cache_read = 0
+        self._started = time.time()
+
     async def run(self, goal: str, session_id: str) -> AsyncIterator["Event"]:
         """驱动一次 run。plan→act→verify→report,投并持久化每个 Event(一份事件三用)。
 
         顶层兜底:捕获 _drive 内任何未处理异常,挖异常链投 Error(spec §3.3 L5)。
         """
-        self._started = time.time()
+        self._reset_run_state()
         # M8:固定空命名空间的副本 —— 模型输出永不经此进入 __authorized_imports__。
         spawn_namespace = dict(_FIXED_SPAWN_NAMESPACE)
         assert "__authorized_imports__" not in spawn_namespace, (
