@@ -1,9 +1,8 @@
-"""模型分档 + 客户端(契约 §7;spec §3.4)。模型不绑定:worker=默认档(协议/模型由 config.json /
-环境变量决定,经 ProtocolAdapter 支持 Anthropic 与 OpenAI 两类端点),premium=可选更强档(--premium)。
-ModelClient 直连 Anthropic-Messages 兼容端(httpx),stream() 出 text 增量(剥 thinking)。
-CredentialPool 在 Task 6 于本文件扩展(此处先给可用占位)。
-cascade 不变量(spec §12.2):升级到 premium 只看外部判据,绝不靠模型自报 confidence ——
-该决策在 recovery/harness,ModelClient 本身不做升级判断。"""
+"""模型客户端(契约 §7;spec §3.4)。模型不绑定、无 worker/premium 档位:协议/模型由 config.json
+的 active profile / 环境变量决定,经 ProtocolAdapter(protocols.py)支持 Anthropic 与 OpenAI 两类端点。
+ModelClient 经协议适配器直连端点(httpx),stream() 出 text 增量(剥 thinking)。
+不变量(spec §12.2):若用户配了 escalation profile,切换决策只看外部判据(反复 verify 失败),
+绝不靠模型自报 confidence —— 该决策在 recovery/harness,ModelClient 本身不做切换判断。"""
 from __future__ import annotations
 
 import json

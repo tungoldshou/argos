@@ -39,7 +39,7 @@ def test_worker_keys_comma_split(monkeypatch, reload_config):
     assert cfg.WORKER_KEYS == ["k1", "k2", "k3"]
 
 
-def test_worker_tier_defaults(monkeypatch, reload_config):
+def test_default_tier_defaults(monkeypatch, reload_config):
     monkeypatch.delenv("ARGOS_LLM_MODEL", raising=False)
     monkeypatch.delenv("VITE_LLM_MODEL", raising=False)
     monkeypatch.delenv("VITE_MINIMAX_MODEL", raising=False)
@@ -48,24 +48,16 @@ def test_worker_tier_defaults(monkeypatch, reload_config):
     monkeypatch.delenv("VITE_MINIMAX_URL", raising=False)
     monkeypatch.delenv("ARGOS_LLM_MAX_TOKENS", raising=False)
     cfg = reload_config()
-    assert cfg.WORKER_TIER.name == "worker"
-    assert cfg.WORKER_TIER.model == "MiniMax-M2"
-    assert cfg.WORKER_TIER.base_url == "https://api.minimaxi.com/anthropic"
-    assert cfg.WORKER_TIER.max_tokens == 4096  # 替换硬编码 2048
-
-
-def test_premium_tier_defaults(monkeypatch, reload_config):
-    monkeypatch.delenv("ARGOS_PREMIUM_MODEL", raising=False)
-    monkeypatch.delenv("ARGOS_PREMIUM_BASE", raising=False)
-    monkeypatch.delenv("ARGOS_PREMIUM_MAX_TOKENS", raising=False)
-    cfg = reload_config()
-    assert cfg.PREMIUM_TIER.name == "premium"
-    assert cfg.PREMIUM_TIER.model == "claude-sonnet-4-6"
-    assert cfg.PREMIUM_TIER.base_url == "https://api.anthropic.com"
-    assert cfg.PREMIUM_TIER.max_tokens == 8192
+    # 已无 worker/premium 档位:就一个默认 profile,名为 "default"(旧 env 回退用)。
+    assert cfg.DEFAULT_TIER.name == "default"
+    assert cfg.DEFAULT_TIER.model == "MiniMax-M2"
+    assert cfg.DEFAULT_TIER.base_url == "https://api.minimaxi.com/anthropic"
+    assert cfg.DEFAULT_TIER.max_tokens == 4096  # 替换硬编码 2048
+    # premium 档位已移除:config 不再有 PREMIUM_TIER。
+    assert not hasattr(cfg, "PREMIUM_TIER")
 
 
 def test_max_tokens_configurable(monkeypatch, reload_config):
     monkeypatch.setenv("ARGOS_LLM_MAX_TOKENS", "16000")
     cfg = reload_config()
-    assert cfg.WORKER_TIER.max_tokens == 16000
+    assert cfg.DEFAULT_TIER.max_tokens == 16000

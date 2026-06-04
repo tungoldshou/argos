@@ -23,8 +23,9 @@ def test_risk_level_literal_values():
     assert set(T.RiskLevel.__args__) == {"low", "medium", "high"}
 
 
-def test_model_tier_literal_values():
-    assert set(T.ModelTierName.__args__) == {"worker", "premium"}
+def test_model_tier_name_is_free_string():
+    # 已无 worker/premium 档位:profile 名是自由字符串(config.json 里任意命名),不再是 Literal。
+    assert T.ModelTierName is str
 
 
 def test_approval_level_name_values():

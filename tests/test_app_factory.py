@@ -27,15 +27,17 @@ def test_build_components_assembles_full_stack(tmp_path, monkeypatch):
 
 def test_build_components_refuses_without_key(tmp_path, monkeypatch):
     monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))   # 空目录:走旧 env 回退路径
     # 诚实:无 key 不假装能跑,抛带指引的 RuntimeError(入口捕获→demo 态)。
-    monkeypatch.setattr(af.config, "WORKER_KEYS", [])
+    monkeypatch.setattr(af.config, "DEFAULT_KEYS", [])
     with pytest.raises(RuntimeError, match="key"):
         af.build_components(workspace=str(tmp_path / "ws"))
 
 
 def test_build_loop_factory_yields_agentloop(tmp_path, monkeypatch):
     monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
-    monkeypatch.setattr(af.config, "WORKER_KEYS", ["k-test"])
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))   # 空目录:走旧 env 回退路径
+    monkeypatch.setattr(af.config, "DEFAULT_KEYS", ["k-test"])
     c = af.build_components(workspace=str(tmp_path / "ws"))
     factory = af.build_loop_factory(c)
     loop = factory()
@@ -47,12 +49,18 @@ def test_build_loop_factory_yields_agentloop(tmp_path, monkeypatch):
     c.close()
 
 
-def test_premium_flag_picks_premium_tier(tmp_path, monkeypatch):
+def test_model_override_picks_named_profile(tmp_path, monkeypatch):
+    """--model NAME(取代旧 --premium):本次启动用指定的具名 profile,而非当前 active。"""
+    import json
     monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
-    monkeypatch.setattr(af.config, "WORKER_KEYS", ["k-worker"])
-    monkeypatch.setattr(af.config, "PREMIUM_KEY", "k-premium")
-    c = af.build_components(workspace=str(tmp_path / "ws"), premium=True)
-    assert c.model.tier.name == "premium"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    (tmp_path / "config.json").write_text(json.dumps({"active": "a", "models": {
+        "a": {"protocol": "openai", "base_url": "http://x/v1", "model": "m-a", "api_key_env": "AK"},
+        "b": {"protocol": "anthropic", "base_url": "https://y", "model": "m-b", "api_key_env": "BK"}}}))
+    (tmp_path / ".env").write_text("AK=ka\nBK=kb\n")
+    monkeypatch.setenv("ARGOS_WORKSPACE", str(tmp_path / "ws"))
+    c = af.build_components(workspace=str(tmp_path / "ws"), model_override="b")
+    assert c.model.tier.name == "b" and c.model.tier.model == "m-b"   # 用了指定 profile,不是 active 'a'
     c.close()
 
 

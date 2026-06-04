@@ -5,8 +5,8 @@
   --demo / --demo-fail   FakeLoop 演示(成功 / escalation 路径,沿用 Phase 5)
   --selftest             不连真模型自检:脚本模型跑一轮四阶段贯通,打印 verdict 退出
   --project PATH         在用户项目目录干活(runtime.use_project)
-  --premium              用 premium(Claude)档(需 ARGOS_PREMIUM_KEY)
-  --resume SESSION_ID    续跑历史会话(占位透传;真续跑走 TUI 内 /resume,Phase 5)
+  --model NAME           本次启动用指定的 config profile(默认当前 active;模型不绑定、无档位)
+  --resume SESSION_ID    续跑历史会话(占位透传;真续跑走 TUI 内 /resume)
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--demo-fail", action="store_true", help="FailingFakeLoop escalation 演示")
     p.add_argument("--selftest", action="store_true", help="不连真模型自检(脚本模型跑四阶段)")
     p.add_argument("--project", metavar="PATH", help="在用户项目目录干活")
-    p.add_argument("--premium", action="store_true", help="用 premium(Claude)档")
+    p.add_argument("--model", metavar="NAME", help="本次启动用指定 config profile(默认当前 active)")
     p.add_argument("--resume", metavar="SESSION_ID", help="续跑历史会话(占位:真续跑走 TUI /resume)")
     sub = p.add_subparsers(dest="command")
     sub.add_parser("setup", help="接入模型的交互向导(选 provider→填 key→连通测试→保存)")
@@ -160,10 +160,10 @@ def main() -> None:
         from argos_agent.app_factory import build_components, build_loop_factory
         from argos_agent.approval import ApprovalLevel
         components = build_components(
-            workspace=args.project, premium=args.premium, approval_level=ApprovalLevel.CONFIRM,
+            workspace=args.project, model_override=args.model, approval_level=ApprovalLevel.CONFIRM,
         )
         factory = build_loop_factory(components)
-        ArgosApp(loop_factory=factory, demo=False, premium=args.premium).run()
+        ArgosApp(loop_factory=factory, demo=False).run()
     except RuntimeError as e:
         from argos_agent.tui.fakeloop import FakeLoop
         print(f"[argos] {e}\n[argos] 运行 `argos setup` 接入模型,或配置环境变量后重启。", file=sys.stderr)

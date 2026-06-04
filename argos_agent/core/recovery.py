@@ -1,8 +1,8 @@
 """恢复层(契约 §7;spec §3.3 L4):error_classifier + jittered backoff + 死循环兜底。
 
-cascade 不变量(spec §12.2):should_fallback 升级到 premium 由【外部判据】(反复 verify 失败)
-决定,classify_error 仅在"反复 transient 失败耗尽 key"这类外部信号下置 should_fallback,
-绝不读模型自报 confidence。
+不变量(spec §12.2):should_fallback(切换到用户可选配置的 escalation profile)只由【外部判据】
+(反复 verify 失败)决定,绝不读模型自报 confidence。注:已无 worker/premium 档位之分;当前
+should_fallback 恒 False(escalation 为纯可选、未默认启用),保留字段供日后可选级联接线。
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ class ClassifiedError:
     retryable: bool
     should_compress: bool   # 上下文超限 → 触发 compaction
     should_rotate: bool     # 限流/transient/terminal 401 → 轮换 credential_pool
-    should_fallback: bool   # 反复失败 → cascade 升级 premium(由外部判据,非模型 confidence)
+    should_fallback: bool   # 反复失败 → 切到可选 escalation profile(外部判据;当前恒 False,见模块注)
     detail: str             # 挖到的真因(剥异常链)
 
 

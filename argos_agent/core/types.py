@@ -15,7 +15,8 @@ Phase = Literal["plan", "act", "verify", "report"]
 ApprovalLevelName = Literal["observe", "propose", "confirm", "auto"]
 DecisionKind = Literal["deny", "once", "session", "always"]
 RiskLevel = Literal["low", "medium", "high"]
-ModelTierName = Literal["worker", "premium"]
+# 模型 profile 名:自由字符串(已无 worker/premium 档位之分;就是 config.json 里的 profile 名)。
+ModelTierName = str
 
 
 @dataclass(frozen=True, slots=True)

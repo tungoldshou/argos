@@ -143,7 +143,7 @@ class _CollectingBus(EventBus):
 @dataclass(frozen=True, slots=True)
 class LoopConfig:
     """契约 §9 锁#6 — model_tier: ModelTierName, approval_level: ApprovalLevel。"""
-    model_tier: ModelTierName = "worker"
+    model_tier: ModelTierName = "default"
     verify_cmd: str | None = None
     max_rounds: int = 3              # verify bounce 上限
     max_steps: int = 40              # CodeAct 步数硬上限(death-spiral 兜底)

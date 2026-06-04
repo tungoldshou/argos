@@ -81,11 +81,9 @@ class ArgosApp(App):
 
     def __init__(
         self, *, loop_factory: Callable[[], object] | None = None, demo: bool = True,
-        premium: bool = False,
     ) -> None:
         super().__init__()
-        # premium=True 用 premium(Claude)档,否则 worker(便宜)档 —— 决定活动栏显示哪个真实模型名。
-        self._premium = premium
+        # 模型不绑定、无档位:活动栏显示的真实模型名取自 config.active_tier()(当前 active profile)。
         # loop_factory() 返回一个有 async run(goal, session_id) -> AsyncIterator[Event] 的对象。
         # 默认 FakeLoop(Phase 6 真 AgentLoop 落地后由入口注入真实工厂)。
         self._loop_factory = loop_factory or (lambda: FakeLoop())
@@ -102,6 +100,16 @@ class ArgosApp(App):
         self._session_id = uuid.uuid4().hex
         self.sub_title = self._compose_subtitle()
 
+    @staticmethod
+    def _display_tier():
+        """当前 active 模型的 tier(活动栏/启动画面/上下文窗口显示用);
+        配置异常或无 config 时回退 DEFAULT_TIER,绝不崩 UI。无 worker/premium 档位。"""
+        from argos_agent import config
+        try:
+            return config.active_tier()
+        except Exception:  # noqa: BLE001
+            return config.DEFAULT_TIER
+
     def _compose_subtitle(self) -> str:
         """头部副标题 = 基底 + DEMO 标识(脚本演示,demo 模式常驻)+ YOLO 标识(Auto 档)。
         DEMO 标识诚实告知"这不是真 agent 在跑";真 loop 注入(demo=False)后自动消失。"""
@@ -113,11 +121,10 @@ class ArgosApp(App):
         return "  ".join(parts)
 
     def compose(self) -> ComposeResult:
-        from argos_agent import config
         yield Header()
         with Horizontal():
             yield Transcript(id="transcript")
-            tier = config.PREMIUM_TIER if self._premium else config.WORKER_TIER
+            tier = self._display_tier()
             yield ActivityPanel(id="activity", model_label=tier.model, tier=tier.name)
         yield StatusBar(id="status-bar")
         yield Input(placeholder="› 输入目标,或 / 开始命令", id="prompt")
@@ -130,8 +137,7 @@ class ArgosApp(App):
         self.register_theme(ARGOS_NIGHT)
         self.theme = "argos-night"
         self.query_one("#prompt", Input).focus()
-        from argos_agent import config
-        tier = config.PREMIUM_TIER if self._premium else config.WORKER_TIER
+        tier = self._display_tier()
         self.query_one("#transcript", Transcript).mount(
             StartupSplash(model_label=tier.model, tier=tier.name, live=not self._demo)
         )
@@ -217,7 +223,7 @@ class ArgosApp(App):
                     profs = _cfg.list_profiles()
                     cur = _cfg.load_config().active if _cfg._has_config_file() else profs[0]
                 except Exception:  # noqa: BLE001
-                    _fallback = _cfg.PREMIUM_TIER if self._premium else _cfg.WORKER_TIER
+                    _fallback = _cfg.DEFAULT_TIER
                     profs, cur = [_fallback.name], _fallback.name
                 await log.append_line(
                     "可用模型:" + ", ".join(f"{p}{' *' if p == cur else ''}" for p in profs),
@@ -364,14 +370,9 @@ class ArgosApp(App):
                 tokens_in=ev.tokens_in, tokens_out=ev.tokens_out,
                 cost_usd=ev.cost_usd, elapsed_s=ev.elapsed_s, cache_read=ev.cache_read,
             )
-            from argos_agent import config
-            # 上下文占用%必须用【实际运行模型】的窗口当分母(active_tier),不能用模块级 WORKER_TIER
-            # 默认值——否则 active 是小窗口模型(如 Ollama 8192)时会拿 192000 当分母,谎报上下文压力。
-            try:
-                tier = config.PREMIUM_TIER if self._premium else config.active_tier()
-                window = tier.context_window
-            except Exception:  # noqa: BLE001 — 配置异常时退回模块级默认,不崩 UI
-                window = (config.PREMIUM_TIER if self._premium else config.WORKER_TIER).context_window
+            # 上下文占用%用【实际运行模型】的窗口当分母(active_tier),不能用模块级默认值——
+            # 否则 active 是小窗口模型(如 Ollama 8192)时会拿 192000 当分母,谎报上下文压力。
+            window = self._display_tier().context_window
             ap.on_context(used=ev.context_used, window=window)
         elif isinstance(ev, PlanUpdate):
             # 真 TODO 拆解 → 活动栏"任务进度"区改渲染子任务进度(Task 12)。

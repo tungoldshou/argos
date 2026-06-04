@@ -64,12 +64,13 @@ class AppComponents:
 def build_components(
     *,
     workspace: str | None = None,
-    premium: bool = False,
+    model_override: str | None = None,
     verify_cmd: str | None = None,
     approval_level: ApprovalLevel = ApprovalLevel.CONFIRM,
     max_rounds: int = 3,
 ) -> AppComponents:
-    """组装全栈。无 worker key → 诚实抛 RuntimeError(不假装能跑)。"""
+    """组装全栈(模型不绑定、无档位:用 config 的 active profile;model_override 指定别的 profile)。
+    无 key → 诚实抛 RuntimeError(不假装能跑)。"""
     ws = Path(workspace).expanduser().resolve() if workspace else Path(
         os.environ.get("ARGOS_WORKSPACE", Path.home() / ".argos" / "workspace")
     ).resolve()
@@ -79,10 +80,10 @@ def build_components(
 
     store = ArgosStore()  # db_path=None → ARGOS_DB_PATH or ~/.argos/argos.db
 
-    # 无 key → 诚实抛 RuntimeError(入口引导 argos setup)。
-    if premium:
-        tier = config.PREMIUM_TIER
-        key = config.PREMIUM_KEY
+    # 选模型:默认当前 active;`argos --model <name>` 指定某个具名 profile。无 key → 诚实抛 RuntimeError。
+    if model_override:
+        tier = config.tier_for(model_override)
+        key = config.key_for(model_override)
     else:
         tier = config.active_tier()
         key = config.active_key()

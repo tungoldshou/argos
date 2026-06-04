@@ -1,6 +1,7 @@
 """配置(契约 §8):ARGOS_* 最高优先,回退 VITE_LLM_* → VITE_MINIMAX_*(零破坏已配用户)。
 优先级:os.environ[ARGOS_*] > os.environ[VITE_*] > .env.local > 默认。
-组装 WORKER_TIER / PREMIUM_TIER(ModelTier) + WORKER_KEYS(逗号拆分喂 CredentialPool)。"""
+模型不绑定、无 worker/premium 档位:实际模型由 config.json 的 active(active_tier/active_key)决定;
+无 config.json 时合成单个 DEFAULT_TIER(旧 env 回退,DEFAULT_KEYS 逗号拆分喂 CredentialPool)。"""
 from __future__ import annotations
 
 import os
@@ -41,34 +42,27 @@ def _first(*keys: str, default: str | None = None) -> str | None:
     return default
 
 
-# ── 默认档(模型不绑定:由 config.json / 环境变量决定;以下仅是旧 env 用户的回退默认值,
-#    其中 MiniMax 是历史预设之一,不代表 Argos 绑定 MiniMax —— 新用户经 `argos setup` 接任意模型)──
+# ── 默认 profile(模型不绑定,无 worker/premium 档位之分:实际模型由 config.json 的 active /
+#    环境变量决定。以下仅是【无 config.json 时】旧 env 用户的回退默认值 —— MiniMax 是历史预设
+#    之一,不代表 Argos 绑定 MiniMax;新用户经 `argos setup` 接任意模型)──
 LLM_PROVIDER = _first("ARGOS_LLM_PROVIDER", "VITE_LLM_PROVIDER", default="anthropic")
-_WORKER_KEY_RAW = _first("ARGOS_LLM_KEY", "VITE_LLM_KEY", "VITE_MINIMAX_KEY", default="") or ""
-WORKER_KEYS: list[str] = [k.strip() for k in _WORKER_KEY_RAW.split(",") if k.strip()]
-_WORKER_MODEL = _first("ARGOS_LLM_MODEL", "VITE_LLM_MODEL", "VITE_MINIMAX_MODEL", default="MiniMax-M2")
-_WORKER_BASE = _first("ARGOS_LLM_BASE", "VITE_LLM_BASE", "VITE_MINIMAX_URL",
-                      default="https://api.minimaxi.com/anthropic")
-_WORKER_MAX_TOKENS = int(get("ARGOS_LLM_MAX_TOKENS", "4096") or "4096")
-# MiniMax-M2 官方上下文上限 ~192k;可经 ARGOS_LLM_CONTEXT_WINDOW 覆盖(按实际模型填真值)。
-_WORKER_CONTEXT_WINDOW = int(get("ARGOS_LLM_CONTEXT_WINDOW", "192000") or "192000")
+_DEFAULT_KEY_RAW = _first("ARGOS_LLM_KEY", "VITE_LLM_KEY", "VITE_MINIMAX_KEY", default="") or ""
+DEFAULT_KEYS: list[str] = [k.strip() for k in _DEFAULT_KEY_RAW.split(",") if k.strip()]
+_DEFAULT_MODEL = _first("ARGOS_LLM_MODEL", "VITE_LLM_MODEL", "VITE_MINIMAX_MODEL", default="MiniMax-M2")
+_DEFAULT_BASE = _first("ARGOS_LLM_BASE", "VITE_LLM_BASE", "VITE_MINIMAX_URL",
+                       default="https://api.minimaxi.com/anthropic")
+_DEFAULT_MAX_TOKENS = int(get("ARGOS_LLM_MAX_TOKENS", "4096") or "4096")
+_DEFAULT_CONTEXT_WINDOW = int(get("ARGOS_LLM_CONTEXT_WINDOW", "192000") or "192000")
 # 模型单价(USD / 1M tokens)——可选。设了才能在 UI 显真实成本;不设则诚实显 $(N/A),
 # 绝不为自带模型编造占位价(诚实协议)。两价都设才生效(不接受半价)。
-_WORKER_PRICE_IN = get("ARGOS_LLM_PRICE_IN")
-_WORKER_PRICE_OUT = get("ARGOS_LLM_PRICE_OUT")
+_DEFAULT_PRICE_IN = get("ARGOS_LLM_PRICE_IN")
+_DEFAULT_PRICE_OUT = get("ARGOS_LLM_PRICE_OUT")
 
-# ── premium(Claude,--premium) ───────────────────────────────────────────
-PREMIUM_KEY = get("ARGOS_PREMIUM_KEY")
-_PREMIUM_MODEL = get("ARGOS_PREMIUM_MODEL", "claude-sonnet-4-6")
-_PREMIUM_BASE = get("ARGOS_PREMIUM_BASE", "https://api.anthropic.com")
-_PREMIUM_MAX_TOKENS = int(get("ARGOS_PREMIUM_MAX_TOKENS", "8192") or "8192")
-# Claude 上下文上限 200k;可经 ARGOS_PREMIUM_CONTEXT_WINDOW 覆盖。
-_PREMIUM_CONTEXT_WINDOW = int(get("ARGOS_PREMIUM_CONTEXT_WINDOW", "200000") or "200000")
-
-# ── 向后兼容别名(旧代码仍引用) ───────────────────────────────────────────
-LLM_KEY = WORKER_KEYS[0] if WORKER_KEYS else None
-LLM_MODEL = _WORKER_MODEL
-LLM_BASE = _WORKER_BASE
+# ── 向后兼容别名(旧代码/旧测试仍引用) ───────────────────────────────────────
+WORKER_KEYS = DEFAULT_KEYS   # 旧名别名(已无 worker/premium 档位概念;逐步淘汰)
+LLM_KEY = DEFAULT_KEYS[0] if DEFAULT_KEYS else None
+LLM_MODEL = _DEFAULT_MODEL
+LLM_BASE = _DEFAULT_BASE
 MINIMAX_KEY = LLM_KEY
 MINIMAX_MODEL = LLM_MODEL
 MINIMAX_BASE = LLM_BASE
@@ -76,8 +70,8 @@ MINIMAX_BASE = LLM_BASE
 
 # ── ModelTier 组装 ──────────────────────────────────────────────────────
 try:
-    from argos_agent.core.models import ModelTier  # canonical(Task 5)
-except Exception:  # Task 5 未落地时的占位,结构与 canonical 一致
+    from argos_agent.core.models import ModelTier  # canonical
+except Exception:  # canonical 未就绪时的占位,结构与 canonical 一致
     @dataclass(frozen=True, slots=True)
     class ModelTier:  # type: ignore[no-redef]
         name: str
@@ -88,25 +82,23 @@ except Exception:  # Task 5 未落地时的占位,结构与 canonical 一致
         protocol: str = "anthropic"
 
 
-WORKER_TIER = ModelTier(name="worker", model=_WORKER_MODEL or "MiniMax-M2",
-                        base_url=_WORKER_BASE or "https://api.minimaxi.com/anthropic",
-                        max_tokens=_WORKER_MAX_TOKENS,
-                        context_window=_WORKER_CONTEXT_WINDOW)
-PREMIUM_TIER = ModelTier(name="premium", model=_PREMIUM_MODEL or "claude-sonnet-4-6",
-                         base_url=_PREMIUM_BASE or "https://api.anthropic.com",
-                         max_tokens=_PREMIUM_MAX_TOKENS,
-                         context_window=_PREMIUM_CONTEXT_WINDOW)
+# 默认 profile(旧 env 回退用):无 worker/premium 之分,就一个"默认模型"。
+# 真实选用走 active_tier()(config.json 的 active);此处仅是无 config 时的回退。
+DEFAULT_TIER = ModelTier(name="default", model=_DEFAULT_MODEL or "MiniMax-M2",
+                         base_url=_DEFAULT_BASE or "https://api.minimaxi.com/anthropic",
+                         max_tokens=_DEFAULT_MAX_TOKENS,
+                         context_window=_DEFAULT_CONTEXT_WINDOW)
 
 
 # ── 用户自带模型的单价注入(可选) ────────────────────────────────────────────
 # 用户在 .env.local / 环境变量里设 ARGOS_LLM_PRICE_IN / ARGOS_LLM_PRICE_OUT 后,
 # 把真实单价注册进 observability.PRICING,让成本栏对自带模型(如 MiniMax-M3)显真实成本。
 # 不设则该模型不在表里 → loop 诚实回退 $(N/A),不编价。
-if _WORKER_PRICE_IN and _WORKER_PRICE_OUT:
+if _DEFAULT_PRICE_IN and _DEFAULT_PRICE_OUT:
     try:
         from argos_agent.core.observability import PRICING as _PRICING
-        _PRICING[_WORKER_MODEL or "MiniMax-M2"] = {
-            "in": float(_WORKER_PRICE_IN), "out": float(_WORKER_PRICE_OUT),
+        _PRICING[_DEFAULT_MODEL or "MiniMax-M2"] = {
+            "in": float(_DEFAULT_PRICE_IN), "out": float(_DEFAULT_PRICE_OUT),
         }
     except Exception:  # noqa: BLE001 — 注册失败不应阻断启动;成本只是退回 $(N/A)
         pass
@@ -212,27 +204,49 @@ def _has_config_file() -> bool:
 
 
 def active_tier():
-    """当前激活模型的 ModelTier(优先 config.json;无则旧 env 回退至 WORKER_TIER)。"""
+    """当前激活模型的 ModelTier(优先 config.json;无则旧 env 回退至 DEFAULT_TIER)。"""
     if _has_config_file():
         cfg = load_config()
         return cfg.tiers[cfg.active]
-    # 向后兼容:无 config.json → 用旧 env 合成的 WORKER_TIER(模块级已构造,protocol 默认 anthropic)。
-    return WORKER_TIER
+    # 向后兼容:无 config.json → 用旧 env 合成的 DEFAULT_TIER(模块级已构造,protocol 默认 anthropic)。
+    return DEFAULT_TIER
 
 
 def active_key() -> str | None:
-    """当前激活模型的密钥:进程 env > ~/.argos/.env > None。无 config.json 则回退 WORKER_KEYS。"""
+    """当前激活模型的密钥:进程 env > ~/.argos/.env > None。无 config.json 则回退 DEFAULT_KEYS。"""
     if _has_config_file():
         cfg = load_config()
         env_name = cfg.key_envs.get(cfg.active) or ""
         return os.environ.get(env_name) or cfg.secrets.get(env_name) or None
-    return WORKER_KEYS[0] if WORKER_KEYS else None
+    return DEFAULT_KEYS[0] if DEFAULT_KEYS else None
+
+
+def tier_for(name: str):
+    """按 profile 名取 ModelTier(供 `argos --model <name>` 启动覆盖用);无 config.json 时只认
+    DEFAULT_TIER 的名字,其余 → ConfigError。"""
+    if _has_config_file():
+        cfg = load_config()
+        if name not in cfg.tiers:
+            raise ConfigError(f"profile '{name}' 不存在(可用:{list(cfg.tiers)})")
+        return cfg.tiers[name]
+    if name == DEFAULT_TIER.name:
+        return DEFAULT_TIER
+    raise ConfigError(f"无 config.json,仅有默认 profile '{DEFAULT_TIER.name}'(请先 argos setup)")
+
+
+def key_for(name: str) -> str | None:
+    """按 profile 名取密钥(供启动覆盖用)。"""
+    if _has_config_file():
+        cfg = load_config()
+        env_name = cfg.key_envs.get(name) or ""
+        return os.environ.get(env_name) or cfg.secrets.get(env_name) or None
+    return DEFAULT_KEYS[0] if DEFAULT_KEYS else None
 
 
 def list_profiles() -> list[str]:
-    """返回所有可用 profile 名列表。无 config.json 时返回 ['worker'](回退态单 profile)。"""
+    """返回所有可用 profile 名列表。无 config.json 时返回 ['default'](回退态单 profile)。"""
     if not _has_config_file():
-        return [WORKER_TIER.name]   # 回退态:单一 profile
+        return [DEFAULT_TIER.name]   # 回退态:单一 profile
     return list(load_config().tiers)
 
 
