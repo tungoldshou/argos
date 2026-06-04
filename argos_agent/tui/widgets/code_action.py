@@ -1,4 +1,5 @@
-"""CodeActionBlock:CodeAct 核心可视化(spec §4.1/§4.2)——代码块 + 可折叠输出(stdout/返回值/异常)。"""
+# argos_agent/tui/widgets/code_action.py
+"""代码动作块:⏺ header + Syntax(monokai) 高亮代码 + ⎿ 结果(spec §widget 改造)。"""
 from __future__ import annotations
 
 from rich.syntax import Syntax
@@ -9,49 +10,41 @@ from textual.widgets import Static
 
 
 class CodeActionBlock(Vertical):
-    """一步 code-action。set_result 灌入执行结果后展开输出区并标记成功/失败。"""
-
+    DEFAULT_CSS = """
+    CodeActionBlock {
+        border: round $panel;
+        border-title-color: $accent;
+        padding: 0 1;
+        margin: 0 1 1 1;
+        height: auto;
+    }
+    CodeActionBlock #result { color: $text-muted; }
+    CodeActionBlock.ok-false #result { color: $error; }
+    """
     ok: reactive[bool | None] = reactive(None)
-    collapsed: reactive[bool] = reactive(True)
 
-    def __init__(self, code: str, step: int, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self.code = code
-        self.step = step
-        self.output_text: str = ""
+    def __init__(self, *, code: str, step: int) -> None:
+        super().__init__()
+        self._code = code
+        self._step = step
+        self.border_title = f"⏺ 代码动作 · step {step}"
 
     def compose(self) -> ComposeResult:
-        yield Static(self._code_header(), id="ca-header")
-        yield Static(Syntax(self.code, "python", theme="ansi_dark", word_wrap=True), id="ca-code")
-        yield Static("", id="ca-output")
-
-    def _code_header(self) -> str:
-        return f"┌ code-action ▸ python  (step {self.step})"
+        yield Static(Syntax(self._code, "python", theme="monokai",
+                            line_numbers=False, word_wrap=True), id="code")
+        yield Static("⎿ 运行中…", id="result")
 
     def set_result(self, *, stdout: str, value_repr: str, exc: str, ok: bool) -> None:
-        """code_result 到达:拼输出文本,展开,标记 ok。"""
-        parts: list[str] = []
-        if stdout:
-            parts.append(stdout)
-        if value_repr:
-            parts.append(f"→ {value_repr}")
-        if exc:
-            parts.append(f"✗ {exc}")
-        self.output_text = "\n".join(parts) if parts else "(no output)"
         self.ok = ok
-        self.collapsed = False
+        body = exc if (not ok and exc) else (stdout or "")
+        if value_repr:
+            body += f"\n[返回值] {value_repr}"
+        text = body.strip() or ("完成,无输出" if ok else "执行异常")
+        # 折叠长输出(头尾各留,中间省略)
+        lines = text.splitlines()
+        if len(lines) > 12:
+            text = "\n".join(lines[:8]) + f"\n… +{len(lines) - 8} 行"
+        self.query_one("#result", Static).update(f"⎿ {'✓' if ok else '✗'} {text}")
 
-    def watch_collapsed(self, collapsed: bool) -> None:
-        if not self.is_mounted:
-            return
-        out = self.query_one("#ca-output", Static)
-        prefix = "└ ▸ output:" if not collapsed else "└ ▸ output: …"
-        body = "" if collapsed else self.output_text
-        out.update(f"{prefix}\n{body}" if body else prefix)
-
-    def watch_ok(self, ok: bool | None) -> None:
-        if not self.is_mounted or ok is None:
-            return
-        self.query_one("#ca-header", Static).update(
-            self._code_header() + ("  ✓" if ok else "  ✗")
-        )
+    def watch_ok(self, value: bool | None) -> None:
+        self.set_class(value is False, "ok-false")

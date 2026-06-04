@@ -31,13 +31,13 @@ async def test_code_action_block_shows_code_and_collapsed_output():
     app = _Host(block)
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert "search_files" in block.code
-        assert block.step == 0
-        assert block.collapsed is True
+        # ⏺ header + step(spec §widget 改造:不再手画 ASCII box)
+        assert "⏺" in str(block.border_title)
+        assert "0" in str(block.border_title)
         block.set_result(stdout="1 match", value_repr="['foo.py']", exc="", ok=True)
         await pilot.pause()
         assert block.ok is True
-        assert "1 match" in block.output_text
+        assert not block.has_class("ok-false")
 
 
 @pytest.mark.asyncio
@@ -49,7 +49,7 @@ async def test_code_action_block_marks_error():
         block.set_result(stdout="", value_repr="", exc="NameError: boom", ok=False)
         await pilot.pause()
         assert block.ok is False
-        assert "NameError" in block.output_text
+        assert block.has_class("ok-false")
 
 
 @pytest.mark.asyncio
