@@ -8,8 +8,14 @@
 本文每个论断都附实测证据(脚本/测试可复现),不是愿景陈述。
 
 > **v4 变更(2026-06-01)**:从 v3 的「站在 Hermes 之上的多 agent 蜂群工作台」彻底转向。
-> Hermes 已移除(它是同类竞品,非依赖)。现在是自建的独立 agent(LangGraph+MiniMax),
-> 单 agent loop + 确定性护城河。卖点也变了(见 §6,M3 实测逼出的转向)。
+> Hermes 已移除(它是同类竞品,非依赖)。单 agent loop + 确定性护城河。
+>
+> **v5 变更(2026-06-05)**:形态定为**单进程终端(TUI)编码超级智能体**(2026-06-03 删 Tauri/React
+> 桌面壳)。引擎从 LangGraph 重写为**自建 framework-free CodeAct loop**(仅依赖 smolagents 做沙箱
+> 执行器);彻底**模型无关**(Anthropic + OpenAI 双协议,`argos setup` 接任意模型)。能力从
+> 「编码 + 检索」扩到 **Claude Code + 通用 agent 合体**:计算机控制(浏览器自动化)、原生 MCP
+> 接入、按任务召回的 Skills、结构化任务契约层 —— 全部遵守同一条诚实底线。所有旧 LangChain/
+> LangGraph/FastAPI 死栈已清除(详见 CHANGELOG 2026-06-05)。灵魂与三道防线(§2)不变。
 
 ---
 
@@ -59,8 +65,9 @@ agent 声称「完成」时,Argos 不信文字,强制跑一条可机检的验证
 **端到端(懂技术用户真实场景)**:在用户自己的项目里,agent 修对一个有 bug 的函数、
 跑用户自己的 pytest 验证通过(独立复核退出码 0)、没篡改测试。
 
-**回归防线**:agent 端 40 个 pytest 锁死安全边界(路径牢笼/命令白名单/退出码/防作弊
-隔离/篡改检测/契约分类)。前端 43 测试 + 全栈构建绿。
+**回归防线**:476 个 pytest 锁死安全边界与行为(路径牢笼/命令白名单/退出码/防作弊隔离/
+篡改检测/契约分类/CodeAct 契约/浏览器与 MCP 端到端等),覆盖率 ≥80%;`argos --selftest`
+不连网整机自检 + 打包 binary smoke 全绿。
 
 ---
 
@@ -73,20 +80,25 @@ agent 声称「完成」时,Argos 不信文字,强制跑一条可机检的验证
 
 ---
 
-## 5. 架构
+## 5. 架构(v5,单进程 TUI · framework-free)
 
 ```
-Tauri 壳(React/TS UI + Rust 后端,Rust 拉起 Python sidecar)
-  └─ Python agent 服务(FastAPI + LangGraph)
-       ├─ MiniMax(Anthropic 兼容端,换模型只改 env 一个字符串)
-       ├─ 工具:read/write/edit_file + run_command(白名单 + 路径牢笼)
-       ├─ verify 硬门禁 + escalation(middleware)
-       └─ 契约层(结构化任务注入)
-  前端 AgentPanel:目标 + 验证命令 + 项目目录 + 监控测试;
-                  事件流渲染(工具/验证拦截橙/诚实求助红/篡改警告红)
+单个 Python 进程(Textual TUI)
+  └─ 自建 CodeAct 引擎(core/loop.py,framework-free,仅 smolagents 做沙箱执行器)
+       ├─ 四阶段不可跳:plan → act(抽 ```python 代码块→沙箱执行→回灌)→ verify → report
+       ├─ 任意模型(core/protocols.py:Anthropic + OpenAI 双协议;argos setup 接入)
+       ├─ 工具(15 个,注入沙箱命名空间):
+       │    · 文件:read/write/edit/search_file        · 计划:update_plan(真 TODO 拆解)
+       │    · shell:run_command(白名单+Seatbelt+路径牢笼)· 验证:propose_verify(独立硬门禁)
+       │    · 联网:web_search / web_extract            · 计算机控制:browser_*(浏览器自动化 ×5)
+       │    · 外部工具:mcp_call(原生 MCP,stdio JSON-RPC)
+       ├─ verify 硬门禁 + escalation(harness)        ├─ 审批闸(broker:egress+审批+HMAC 回执)
+       ├─ Skills 召回 + 契约层(按 goal 注入系统提示)  └─ SQLite 记忆 + 向量/FTS5 召回 + 上下文压缩
+  TUI:argos-night 主题 / Markdown 高亮 / 右侧诚实活动栏(模型·进度·工具·回执·成本)/ 启动 logo
 ```
 
-模型是可替换 provider(MiniMax M3 已接,逼近 Opus 4.7 但便宜)。不绑任何单一模型。
+模型是可替换 provider —— **不绑任何单一模型**(`argos setup` 选 provider 填 key 即可)。
+打包为单个 arm64 binary(PyInstaller,`argos --selftest` 验整机装配)。
 
 ---
 
