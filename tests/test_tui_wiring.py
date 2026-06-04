@@ -149,7 +149,12 @@ async def test_real_loop_has_no_demo_marker():
 
 @pytest.mark.asyncio
 async def test_input_focused_on_mount_and_receives_typing():
-    """回归:启动后输入框必须自动获焦,否则按键被 TranscriptLog 抢走,用户打不了任何字。"""
+    """回归:启动后输入框必须自动获焦,否则按键被 TranscriptLog 抢走,用户打不了任何字。
+
+    注意作用域:run_test() 是 headless,pilot.press() 把合成 Key 事件直接塞进聚焦 widget,
+    绕过了 driver 的真实输入管线(Kitty/legacy 协议、转义码解析、IME)。本测试只证明
+    "焦点接线 + value 插入逻辑正确",不能证明真实终端里用户敲键能送达——那个失败发生在
+    Pilot 跳过的 driver 层(见 test_kitty_keyboard_protocol_disabled_by_default)。"""
     from textual.widgets import Input
 
     app = ArgosApp(loop_factory=lambda: FakeLoop())
@@ -176,3 +181,59 @@ async def test_input_accepts_cjk_characters():
             await pilot.press(ch)
         await pilot.pause()
         assert prompt.value == "修个bug", "输入框应接收汉字 + ASCII 混排"
+
+
+# ── 真实终端键盘:driver 层护栏(Pilot headless 测不到,故用进程级断言守默认) ──────────
+
+
+@pytest.mark.asyncio
+async def test_transcript_fills_main_area_not_collapsed():
+    """回归(布局):transcript 必须占主区宽度。此前 ArgosApp 无 CSS → Horizontal 退回默认:
+    空 RichLog 收缩到 width=1、CostMeter 撑满整宽 → 对话渲染进 1 列宽 transcript,永远空屏
+    (事件其实都写进去了只是不可见)。headless 能量几何,故这条守得住(不像 driver 层 Kitty bug)。"""
+    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        t = app.query_one("#transcript")
+        c = app.query_one("#cost-meter")
+        assert t.size.width >= 40, f"transcript 宽度被压塌={t.size.width},对话会隐形"
+        assert t.size.height >= 10, f"transcript 高度不足={t.size.height}"
+        assert t.size.width > c.size.width, "transcript 是主区,应比成本侧栏宽"
+
+
+def test_kitty_keyboard_protocol_disabled_by_default():
+    """回归(真实终端 driver 层):导入 TUI 包即默认禁用 Kitty 键盘协议。
+
+    Textual 8.2.7 起默认启用 Kitty 协议,部分终端误解析其转义流 → 可打印键送不到
+    已聚焦 Input(表现为"打字完全不显示"),而 headless Pilot 在设计上测不到 driver 层。
+    这条进程级断言守住"默认禁用"这个真正修复用户问题的开关(textual.constants.
+    DISABLE_KITTY_KEY 只认值恰为 '1')。"""
+    import importlib
+    import os
+
+    import argos_agent.tui
+
+    saved = os.environ.pop("TEXTUAL_DISABLE_KITTY_KEY", None)
+    try:
+        importlib.reload(argos_agent.tui)  # 重跑包 __init__ 的 setdefault
+        assert os.environ.get("TEXTUAL_DISABLE_KITTY_KEY") == "1"
+    finally:
+        if saved is not None:
+            os.environ["TEXTUAL_DISABLE_KITTY_KEY"] = saved
+        else:
+            os.environ.setdefault("TEXTUAL_DISABLE_KITTY_KEY", "1")
+
+
+def test_kitty_disable_respects_explicit_user_optin():
+    """用户显式设非 '1' 值(opt-in 回 Kitty)时 setdefault 不覆盖 —— 默认安全但不剥夺选择。"""
+    import importlib
+    import os
+
+    import argos_agent.tui
+
+    os.environ["TEXTUAL_DISABLE_KITTY_KEY"] = "0"
+    try:
+        importlib.reload(argos_agent.tui)
+        assert os.environ.get("TEXTUAL_DISABLE_KITTY_KEY") == "0", "显式用户值必须被尊重"
+    finally:
+        os.environ["TEXTUAL_DISABLE_KITTY_KEY"] = "1"

@@ -46,6 +46,23 @@ _BASE_SUBTITLE = "诚实可靠的终端编码智能体"
 class ArgosApp(App):
     TITLE = "Argos"
 
+    # 布局 CSS(spec §4.1:主对话区 + 右侧成本栏)。没有它时 Horizontal 退回 Textual 默认:
+    # 空 RichLog 收缩到 width=1、CostMeter 撑满整宽 → 对话内容渲染进 1 列宽的 transcript,
+    # 用户看到的永远是空屏(事件其实都写进去了,只是不可见)。这里显式分配:transcript 占满
+    # 剩余宽度(1fr),CostMeter 固定窄栏靠右。
+    CSS = """
+    #transcript {
+        width: 1fr;
+        height: 1fr;
+    }
+    #cost-meter {
+        width: 34;
+        height: 1fr;
+        padding: 0 1;
+        border-left: solid $panel;
+    }
+    """
+
     # 启动/换屏后由 Textual 自动把焦点放到输入框(声明式,框架在正确时机执行)——
     # 否则默认聚焦第一个可聚焦 widget(TranscriptLog 可滚动会抢焦点),用户打不了字。
     # 与 on_mount 的手动 focus 双保险。
@@ -156,6 +173,10 @@ class ArgosApp(App):
             log.append_line(
                 "⚠️ 演示模式:以下为脚本化假数据,非真实执行/验证(真 AgentLoop 待 Phase 6 接入)。"
             )
+        else:
+            # 真模式即时回执:M3 plan 阶段推理要数秒,这期间若 transcript 全空,用户会以为
+            # "回车没反应"。先落一行"思考中",让用户确认目标已收到、agent 正在跑。
+            log.append_line("⏳ 已收到目标,思考中…")
 
         async def _produce() -> None:
             try:
@@ -176,6 +197,9 @@ class ArgosApp(App):
             async for ev in bus:
                 await self._apply_event(ev)
         finally:
+            # 兜底 flush:append_token 把无换行的尾段滞留 buffer,只在 PhaseChange/append_line 落定。
+            # 一轮结束时强制落定残余,杜绝"模型最后一句没换行 → 永远不显示"的隐形吞字。
+            log.flush()
             self._run_active = False
 
     async def _apply_event(self, ev: Event) -> None:

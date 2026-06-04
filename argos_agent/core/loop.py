@@ -37,7 +37,7 @@ from argos_agent.core.honesty import (
 )
 from argos_agent.core.types import ModelTierName
 from argos_agent.tui.events import (
-    CodeAction, CodeResult, Error, Event, EventBus, PhaseChange,
+    CodeAction, CodeResult, CostUpdate, Error, Event, EventBus, PhaseChange,
     TokenDelta, ToolReceipt,
 )
 
@@ -129,6 +129,8 @@ class AgentLoop:
         self._actions = 0
         self._fail_count = 0
         self._started = 0.0
+        self._tok_in = 0        # 累计 token 用量(每步从 model.last_usage 累加,供 CostUpdate)
+        self._tok_out = 0
         # W2:loop 内部录制总线 + Harness。Harness 的 signer 取 broker 的 host signer
         # (同进程,沙箱拿不到),无 broker 时用 verifier 也无回执可验 → 给个一次性 key 占位
         # (无 broker 时 accept_receipt 不会被调用,故 key 不重要)。
@@ -228,6 +230,8 @@ class AgentLoop:
             yield ev
         step = 0
         report_note = ""   # 收尾时报告里诚实标注(如无测任务"未机检验证")。
+        last_verdict: Any = None  # 最后一次 verify 结果,供 report 可见完成行诚实反映结局。
+        escalated = False
         while step < self._cfg.max_steps:
             # W3:流式 delta 过 StreamingContextScrubber,防模型把 untrusted 围栏吐回 UI 泄露。
             scrubber = StreamingContextScrubber()
@@ -241,6 +245,16 @@ class AgentLoop:
             if tail:
                 yield TokenDelta(text=tail)
             messages.append({"role": "assistant", "content": text})
+
+            # CostUpdate:真 token(从 model.last_usage 累加)+ 真 elapsed,让状态栏/成本表走起来。
+            # 单价未知 → cost_usd 保持 0(诚实:不编造成本),token 与计时仍如实反映。
+            usage = getattr(self._model, "last_usage", None) or {}
+            self._tok_in += int(usage.get("input_tokens") or 0)
+            self._tok_out += int(usage.get("output_tokens") or 0)
+            yield CostUpdate(
+                tokens_in=self._tok_in, tokens_out=self._tok_out,
+                cost_usd=0.0, elapsed_s=time.time() - self._started,
+            )
 
             code = extract_code_block(text)
             if code is not None:
@@ -271,6 +285,7 @@ class AgentLoop:
             verdict = await self._harness.run_verify_gate(
                 self._cfg.verify_cmd, attempt=self._fail_count + 1
             )
+            last_verdict = verdict
             for ev in self._hbus.drain():
                 yield ev
 
@@ -287,6 +302,7 @@ class AgentLoop:
             if self._fail_count > self._cfg.max_rounds:
                 # 此刻 run_verify_gate 这一轮(attempt = 本次 _fail_count,即 max_rounds+1)已
                 # 投出 Escalation —— 二者同一判据(attempt > max_rounds)同轮触发,诚实终止。
+                escalated = True
                 break
             bounce = (
                 f"[Argos 验证门] 你声称完成,但验证 `{self._cfg.verify_cmd}` 未通过/不可信:"
@@ -303,6 +319,19 @@ class AgentLoop:
             )
         async for ev in self._enter_phase("report"):
             yield ev
+        # 可见完成行(诚实反映结局):此前完成只翻 phase + 一条写进 DB 看不见的备注,UI 一片空白
+        # 像"没反应"。这里显式打一行,让用户看到本轮真的跑完了及结果。
+        if escalated:
+            done = "⚠️ 未能在限定轮内通过验证,已如实上报(见上方升级提示)。\n"
+        elif report_note:
+            done = f"✅ 完成。{report_note}\n"   # 无测任务:诚实标"未机检验证 (no test command)"
+        elif last_verdict is not None and getattr(last_verdict, "status", None) == "passed":
+            done = "✅ 完成,验证通过(测试/检查全绿)。\n"
+        elif last_verdict is not None and getattr(last_verdict, "status", None) != "passed":
+            done = "⚠️ 本轮结束:验证未通过/不可信(详见上)。\n"
+        else:
+            done = "✅ 本轮结束。\n"
+        yield TokenDelta(text=done)
 
     @staticmethod
     def _feedback(result: Any) -> str:
