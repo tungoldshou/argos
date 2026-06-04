@@ -110,3 +110,17 @@ def test_set_active_persists(tmp_path, monkeypatch):
     assert json.loads((tmp_path / "config.json").read_text())["active"] == "b"
     with pytest.raises(C.ConfigError):
         C.set_active("ghost")   # 不存在的 profile 拒绝
+
+
+def test_set_active_rejects_malformed_target(tmp_path, monkeypatch):
+    """fail-closed:切到一个畸形 profile(protocol 非法)应当场 ConfigError 拒绝,
+    而非落盘成功、把失败推迟到下次启动。"""
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    import json
+    (tmp_path / "config.json").write_text(json.dumps({"active": "good", "models": {
+        "good": {"protocol": "openai", "base_url": "http://x/v1", "model": "m", "api_key_env": "K"},
+        "bad": {"protocol": "bogus", "base_url": "http://y/v1", "model": "m2", "api_key_env": "K2"}}}))
+    with pytest.raises(C.ConfigError):
+        C.set_active("bad")
+    # active 必须仍是 good(畸形切换被拒,未落盘)
+    assert json.loads((tmp_path / "config.json").read_text())["active"] == "good"

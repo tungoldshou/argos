@@ -217,8 +217,7 @@ class ArgosApp(App):
                     profs = _cfg.list_profiles()
                     cur = _cfg.load_config().active if _cfg._has_config_file() else profs[0]
                 except Exception:  # noqa: BLE001
-                    from argos_agent import config as _c
-                    _fallback = _c.PREMIUM_TIER if self._premium else _c.WORKER_TIER
+                    _fallback = _cfg.PREMIUM_TIER if self._premium else _cfg.WORKER_TIER
                     profs, cur = [_fallback.name], _fallback.name
                 await log.append_line(
                     "可用模型:" + ", ".join(f"{p}{' *' if p == cur else ''}" for p in profs),
