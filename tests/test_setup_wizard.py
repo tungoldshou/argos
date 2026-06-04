@@ -218,3 +218,34 @@ async def test_deep_probe_passed_rates_xing(tmp_path, monkeypatch):
                                "propose_verify('python3 -c \"import st; assert st.f()==1\"')",
                                "完成。"]))
     assert res.rating in ("行", "勉强", "不行")   # 真跑出三态之一(平台相关), 不抛异常
+
+
+# ── Phase 3 加固回归(fail-closed / 诚实) ──────────────────────────────────────
+
+def test_corrupt_existing_config_backed_up_not_destroyed(tmp_path):
+    """fail-closed:既有 config.json 畸形时,write_profile 不静默覆盖销毁用户已配模型,
+    先把损坏文件改名到 .corrupt.bak 保住数据。"""
+    (tmp_path / "config.json").write_text('{ corrupt ,, not valid }')
+    write_profile(config_dir=tmp_path, name="new", protocol="openai", base_url="http://x/v1",
+                  model="m", api_key="k", api_key_env="NK", set_active=True)
+    bak = tmp_path / "config.json.corrupt.bak"
+    assert bak.exists() and "corrupt" in bak.read_text(), "损坏的旧 config 必须备份保住,不能静默丢"
+    cfg = json.loads((tmp_path / "config.json").read_text())
+    assert cfg["models"]["new"]["model"] == "m", "新 config 可解析且含新 profile"
+
+
+def test_ask_int_fail_soft_on_non_numeric():
+    """T9 HIGH:非数字输入不得崩溃整个 setup,退回默认值。"""
+    from argos_agent.setup_wizard import _ask_int
+    out: list = []
+    assert _ask_int(lambda p="": "abc", out.append, "max:", 4096) == 4096   # 非数字→默认,不抛
+    assert _ask_int(lambda p="": "8192", out.append, "max:", 4096) == 8192  # 合法→采用
+    assert _ask_int(lambda p="": "", out.append, "max:", 4096) == 4096      # 留空→默认
+
+
+def test_ask_float_or_none_fail_soft():
+    from argos_agent.setup_wizard import _ask_float_or_none
+    out: list = []
+    assert _ask_float_or_none(lambda p="": "abc", out.append, "p:") is None  # 非数字→None,不抛
+    assert _ask_float_or_none(lambda p="": "0.3", out.append, "p:") == 0.3
+    assert _ask_float_or_none(lambda p="": "", out.append, "p:") is None

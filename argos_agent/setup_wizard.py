@@ -25,13 +25,45 @@ PRESETS: dict[str, dict] = {
 
 
 def _read_config(config_dir: Path) -> dict:
+    """读现有 config.json。畸形(JSON 损坏)时绝不静默当作'空配置'返回——否则随后的
+    write_profile 会用仅含新 profile 的内容覆盖写回,静默销毁用户已配的全部模型(违 fail-closed)。
+    改为先把损坏文件改名到 .corrupt.bak 保住数据,再以空骨架继续(数据没丢,在 .bak,可恢复)。"""
     f = config_dir / "config.json"
-    if f.exists():
+    if not f.exists():
+        return {"models": {}}
+    try:
+        return json.loads(f.read_text())
+    except json.JSONDecodeError:
         try:
-            return json.loads(f.read_text())
-        except json.JSONDecodeError:
-            return {"models": {}}
-    return {"models": {}}
+            f.replace(config_dir / "config.json.corrupt.bak")
+        except OSError:
+            pass
+        return {"models": {}}
+
+
+def _ask_int(reader, writer, prompt: str, default: int) -> int:
+    """读整数输入。非数字时不崩溃(此前 int() 抛 ValueError 会击穿整个 setup、丢光本轮已填输入)
+    —— fail-soft:告知并退回默认值。"""
+    raw = (reader(prompt) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        writer(f"'{raw}' 不是整数,改用默认 {default}。")
+        return default
+
+
+def _ask_float_or_none(reader, writer, prompt: str) -> float | None:
+    """读可选浮点输入(价格)。留空或非数字 → None(非数字时告知,不崩溃)。"""
+    raw = (reader(prompt) or "").strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        writer(f"'{raw}' 不是数字,跳过该价格。")
+        return None
 
 
 def _append_env(config_dir: Path, name: str, value: str) -> None:
@@ -90,14 +122,18 @@ async def probe_connection(*, protocol: str, base_url: str, model: str, api_key:
         def client_factory(t, k):
             return ModelClient(tier=t, pool=CredentialPool([k or "x"]))
     client = client_factory(tier, api_key)
+    # 口径对齐真实 loop:用同一套 HONESTY_SYSTEM 契约提示 + 同一个 extract_code_block 抽取,
+    # 让"行/勉强"判定 == loop 真实行为(否则极简提示 + 朴素 '```python' in out 会产生假阴/假阳)。
+    from argos_agent.core.honesty import HONESTY_SYSTEM, compose_system, format_untrusted
+    from argos_agent.core.loop import extract_code_block
+    system = compose_system(HONESTY_SYSTEM, untrusted=format_untrusted(skill_bodies=[], memory_lines=[]))
     try:
         out = "".join([c async for c in client.stream(
-            [{"role": "user", "content": _PROBE_PROMPT}], system="You are a coding agent.")])
+            [{"role": "user", "content": _PROBE_PROMPT}], system=system)])
     except Exception as e:  # noqa: BLE001 — 连通失败如实报(含状态码/真因)
         detail = str(e)
         return ProbeResult(False, False, "不行", f"连不上 / 端点报错:{detail[:200]}")
-    fenced = "```python" in out
-    if fenced:
+    if extract_code_block(out) is not None:
         return ProbeResult(True, True, "行", "连通正常,CodeAct 格式合规。")
     return ProbeResult(True, False, "勉强",
                        "连通正常,但此模型默认不吐 ```python 围栏(Argos 实测 MiniMax-M3 也曾如此,"
@@ -150,12 +186,11 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
         else:
             api_key = (reader("粘贴 API key:") or "").strip()
             api_key_env = f"{model.upper().replace('-', '_').replace('/', '_')}_KEY"
-        max_tokens = int((reader("max_tokens [4096]:") or "4096").strip() or 4096)
-        ctx = int((reader("context_window [200000]:") or "200000").strip() or 200000)
-        pin = (reader("价格 in (USD/1M, 留空跳过):") or "").strip()
-        pout = (reader("价格 out (USD/1M, 留空跳过):") or "").strip() if pin else ""
-        price_in = float(pin) if pin else None
-        price_out = float(pout) if pout else None
+        max_tokens = _ask_int(reader, writer, "max_tokens [4096]:", 4096)
+        ctx = _ask_int(reader, writer, "context_window [200000]:", 200000)
+        price_in = _ask_float_or_none(reader, writer, "价格 in (USD/1M, 留空跳过):")
+        price_out = (_ask_float_or_none(reader, writer, "价格 out (USD/1M, 留空跳过):")
+                     if price_in is not None else None)
         # 连通+格式探针(必做)
         writer("正在连通测试…")
         res = await probe_connection(protocol=protocol, base_url=base_url, model=model,
@@ -179,6 +214,9 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
         while name in cfg_existing.get("models", {}):
             name = f"{raw_name}-{idx}"
             idx += 1
+        if not res.connected:
+            # 诚实:把明知连不通的模型设为当前 active 时不静默(spec §10 验收②的诚实兜底)。
+            writer("⚠️ 此模型连通测试未通过,仍按你的选择保存为当前模型——下次使用前请确认它可用。")
         write_profile(config_dir=cdir, name=name, protocol=protocol, base_url=base_url,
                       model=model, api_key=api_key, api_key_env=api_key_env,
                       max_tokens=max_tokens, context_window=ctx,
