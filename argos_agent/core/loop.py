@@ -55,6 +55,11 @@ except Exception:  # noqa: BLE001
 
 _CODE_BLOCK = re.compile(r"```(?:python)?\s*\n(.*?)```", re.DOTALL)
 
+# 真验证门:从模型【代码块文本】里抓 propose_verify('<cmd>') 的命令参数(host 侧解析)。
+# 沙箱是独立子进程(Seatbelt),host 回调无法注入其命名空间 —— 故 host 在 act 循环里解析
+# agent 输出登记验证命令;沙箱内的 propose_verify() 工具仅给个登记回执(真执行在 host verify 阶段)。
+_PROPOSE_VERIFY = re.compile(r"propose_verify\(\s*['\"](.+?)['\"]\s*\)")
+
 # M8 安全不变量:沙箱 spawn 用【固定空命名空间】—— 绝不把模型输出/外部数据塞进
 # namespace["__authorized_imports__"]。smolagents 在 AST 层把 "*" 当 allow-all,
 # 若模型能控制 authorized_imports 就能放开任意 import,绕过 AST 限制层(OS 沙箱仍在,
@@ -129,6 +134,10 @@ class AgentLoop:
         self._actions = 0
         self._fail_count = 0
         self._started = 0.0
+        # 真验证门:agent 在 act 阶段用 propose_verify('<cmd>') 声明验证命令(初值取 LoopConfig.verify_cmd
+        # 到可变实例字段)。verify 阶段 harness 在隔离 verify_dir 独立跑【这个】命令(退出码为准),
+        # agent 碰不到执行 —— 防 agent 篡改评判它的测试作弊。无 propose 维持 NO_TEST_LABEL 诚实路径。
+        self._verify_cmd: str | None = config.verify_cmd
         self._tok_in = 0        # 累计 token 用量(每步从 model.last_usage 累加,供 CostUpdate)
         self._tok_out = 0
         self._cache_read = 0    # 累计缓存命中 token(成本栏诚实显示,从 model.last_usage 累加)
@@ -163,10 +172,17 @@ class AgentLoop:
     def _reset_run_state(self) -> None:
         self._actions = 0
         self._fail_count = 0
+        self._verify_cmd = self._cfg.verify_cmd   # 每轮回到配置初值,上轮 propose 不跨轮泄漏
         self._tok_in = 0
         self._tok_out = 0
         self._cache_read = 0
         self._started = time.time()
+
+    def _on_propose_verify(self, cmd: str) -> None:
+        """agent 调 propose_verify('<cmd>') 时登记验证命令(host 侧;真执行在 verify 阶段)。"""
+        cmd = (cmd or "").strip()
+        if cmd:
+            self._verify_cmd = cmd
 
     async def run(self, goal: str, session_id: str) -> AsyncIterator["Event"]:
         """驱动一次 run。plan→act→verify→report,投并持久化每个 Event(一份事件三用)。
@@ -262,6 +278,11 @@ class AgentLoop:
                 yield TokenDelta(text=tail)
             messages.append({"role": "assistant", "content": text})
 
+            # 真验证门:抓本段里 agent 声明的验证命令(propose_verify('<cmd>')),登记到 _verify_cmd。
+            # verify 阶段 harness 独立跑它(退出码为准);agent 碰不到执行 → 防篡改测试作弊。
+            for m in _PROPOSE_VERIFY.finditer(text):
+                self._on_propose_verify(m.group(1))
+
             # CostUpdate:真 token(从 model.last_usage 累加)+ 真 elapsed,让状态栏/成本表走起来。
             # 单价未知 → cost_usd 置 None(诚实:不编造成本,UI 显 $(N/A)),token 与计时仍如实反映。
             usage = getattr(self._model, "last_usage", None) or {}
@@ -313,7 +334,7 @@ class AgentLoop:
             # W2:run_verify_gate 跑 verifier 出三态 Verdict,投 VerifyVerdict;真问题超
             # max_rounds 时它自己投 Escalation。loop 据返回的 verdict 决定 break / bounce。
             verdict = await self._harness.run_verify_gate(
-                self._cfg.verify_cmd, attempt=self._fail_count + 1
+                self._verify_cmd, attempt=self._fail_count + 1
             )
             last_verdict = verdict
             for ev in self._hbus.drain():
@@ -321,9 +342,9 @@ class AgentLoop:
 
             # Defense-in-depth(Phase 4 #3):verify_cmd is None 时绝不以 passed 收尾 ——
             # 非规范 verifier 可能对无测任务返回 passed;必须走诚实完成路径标 NO_TEST_LABEL。
-            if verdict.status == "passed" and self._cfg.verify_cmd is not None:
+            if verdict.status == "passed" and self._verify_cmd is not None:
                 break                        # 通过 → 收尾
-            if self._harness.is_honest_completion(verdict, verify_cmd=self._cfg.verify_cmd):
+            if self._harness.is_honest_completion(verdict, verify_cmd=self._verify_cmd):
                 # HONESTY CORRECTION:无测任务的诚实非阻塞完成 —— 收尾,report 标"未机检验证"。
                 report_note = "未机检验证 (no test command)"
                 break
@@ -335,7 +356,7 @@ class AgentLoop:
                 escalated = True
                 break
             bounce = (
-                f"[Argos 验证门] 你声称完成,但验证 `{self._cfg.verify_cmd}` 未通过/不可信:"
+                f"[Argos 验证门] 你声称完成,但验证 `{self._verify_cmd}` 未通过/不可信:"
                 f"\n{verdict.detail}\n请用工具定位并修复,改完再说完成。"
             )
             messages.append({"role": "user", "content": bounce})

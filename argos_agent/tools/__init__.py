@@ -27,7 +27,7 @@ VERIFY_DIR: Path = Path(os.environ.get("ARGOS_VERIFY_DIR",
 # UI 工具数必须等于此列表实长(spec/CLAUDE:禁 seed "60+ tools" 谎报)。
 ALL_TOOL_NAMES: list[str] = [
     "read_file", "write_file", "edit_file", "search_files",
-    "run_command", "web_search", "web_extract",
+    "run_command", "web_search", "web_extract", "propose_verify",
 ]   # + playwright(可选,Phase 5/6 接)
 
 __all__ = [
@@ -38,7 +38,7 @@ __all__ = [
     "_ws", "_vd", "_safe_path",
     # 旧 LangChain 工具对象(遗留路径使用中,Phase 5 后可删)
     "ALL_TOOLS", "read_file", "write_file", "edit_file", "search_files",
-    "run_command", "web_search", "web_extract",
+    "run_command", "web_search", "web_extract", "propose_verify",
 ]
 
 
@@ -115,12 +115,23 @@ def _make_gated(broker: Any) -> dict[str, Any]:
     }
 
 
+def _propose_verify_pure(command: str) -> str:
+    """声明用于验证本次改动的命令(如 'pytest tests/test_x.py')。
+
+    真验证门:沙箱是独立子进程,这里仅给个登记回执;host loop 在 act 循环解析 agent 输出里的
+    propose_verify('<cmd>') 登记命令,收尾时由 harness 在隔离 verify_dir 独立运行它(退出码为准),
+    agent 碰不到执行 —— 防 agent 篡改评判它的测试作弊。
+    """
+    return f"已登记验证命令:{command}(收尾时由 harness 独立运行,以退出码为准)"
+
+
 def _pure() -> dict[str, Any]:
     return {
         "read_file": files.read_file,
         "write_file": files.write_file,
         "edit_file": files.edit_file,
         "search_files": files.search_files,
+        "propose_verify": _propose_verify_pure,
     }
 
 
@@ -284,7 +295,14 @@ try:
         from .web import web_extract as _we_fn
         return _we_fn(url)
 
-    ALL_TOOLS = [read_file, write_file, edit_file, run_command, web_search, web_extract, search_files]
+    @_lc_tool
+    def propose_verify(command: str) -> str:  # type: ignore[misc]
+        """声明用于验证本次改动的命令(如 'pytest tests/test_x.py')。harness 会在收尾时
+        在隔离区独立运行它、以退出码为准(你碰不到该执行 → 真硬门禁)。"""
+        return _propose_verify_pure(command)
+
+    ALL_TOOLS = [read_file, write_file, edit_file, run_command, web_search, web_extract,
+                 search_files, propose_verify]
     try:
         from argos_agent import playwright_tools as _pt
         ALL_TOOLS = list(ALL_TOOLS) + _pt.all_tools()
