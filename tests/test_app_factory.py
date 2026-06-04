@@ -6,6 +6,7 @@
 import pytest
 
 import argos_agent.app_factory as af
+from argos_agent.app_factory import build_components
 from argos_agent.core.loop import AgentLoop
 from argos_agent.core.models import ModelClient
 from argos_agent.core.verify_gate import Verifier
@@ -52,4 +53,18 @@ def test_premium_flag_picks_premium_tier(tmp_path, monkeypatch):
     monkeypatch.setattr(af.config, "PREMIUM_KEY", "k-premium")
     c = af.build_components(workspace=str(tmp_path / "ws"), premium=True)
     assert c.model.tier.name == "premium"
+    c.close()
+
+
+def test_build_components_uses_active_profile(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    (tmp_path / "config.json").write_text(__import__("json").dumps({
+        "active": "local", "models": {"local": {"protocol": "openai",
+        "base_url": "http://localhost:11434/v1", "model": "qwen2.5-coder",
+        "api_key_env": "OLLAMA_API_KEY"}}}))
+    (tmp_path / ".env").write_text("OLLAMA_API_KEY=ollama\n")
+    monkeypatch.setenv("ARGOS_WORKSPACE", str(tmp_path / "ws"))
+    monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
+    c = build_components()
+    assert c.model.tier.model == "qwen2.5-coder" and c.model.tier.protocol == "openai"
     c.close()

@@ -70,12 +70,6 @@ def build_components(
     max_rounds: int = 3,
 ) -> AppComponents:
     """组装全栈。无 worker key → 诚实抛 RuntimeError(不假装能跑)。"""
-    if not config.WORKER_KEYS:
-        raise RuntimeError(
-            "未配置 worker key(ARGOS_LLM_KEY / VITE_LLM_KEY / VITE_MINIMAX_KEY 任一)。"
-            "Argos 不会假装能跑——请在 .env.local 或环境变量里配 key。"
-        )
-
     ws = Path(workspace).expanduser().resolve() if workspace else Path(
         os.environ.get("ARGOS_WORKSPACE", Path.home() / ".argos" / "workspace")
     ).resolve()
@@ -85,14 +79,24 @@ def build_components(
 
     store = ArgosStore()  # db_path=None → ARGOS_DB_PATH or ~/.argos/argos.db
 
-    tier = config.PREMIUM_TIER if premium else config.WORKER_TIER
-    keys = [config.PREMIUM_KEY] if premium and config.PREMIUM_KEY else config.WORKER_KEYS
-    pool = CredentialPool(keys)
+    # 无 key → 诚实抛 RuntimeError(入口引导 argos setup)。
+    if premium:
+        tier = config.PREMIUM_TIER
+        key = config.PREMIUM_KEY
+    else:
+        tier = config.active_tier()
+        key = config.active_key()
+    if not key:
+        raise RuntimeError(
+            "未配置当前模型的 API key。请运行 `argos setup` 接入模型,或设置对应环境变量。"
+            "Argos 不会假装能跑。"
+        )
+    pool = CredentialPool([key])
     model = ModelClient(tier=tier, pool=pool)
 
     gate = ApprovalGate(approval_level)
     egress = EgressPolicy(
-        llm_hosts=_host_of(config.WORKER_TIER.base_url) | _host_of(config.PREMIUM_TIER.base_url),
+        llm_hosts=_host_of(tier.base_url),
         search_hosts=set(_SEARCH_HOSTS),
         mcp_hosts=set(),
     )
