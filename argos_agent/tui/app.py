@@ -38,6 +38,7 @@ from argos_agent.tui.widgets.code_action import CodeActionBlock
 from argos_agent.tui.widgets.cost_meter import CostMeter
 from argos_agent.tui.widgets.diff_view import DiffView
 from argos_agent.tui.widgets.status_bar import StatusBar
+from argos_agent.tui.widgets.thinking import ThinkingIndicator
 from argos_agent.tui.widgets.transcript import Transcript
 from argos_agent.tui.widgets.verdict_badge import VerdictBadge
 
@@ -184,7 +185,7 @@ class ArgosApp(App):
         else:
             # 真模式即时回执:M3 plan 阶段推理要数秒,这期间若 transcript 全空,用户会以为
             # "回车没反应"。先落一行"思考中",让用户确认目标已收到、agent 正在跑。
-            await log.append_line("⏳ 已收到目标,思考中…")
+            await log.show_thinking("已收到目标,思考中…")
 
         async def _produce() -> None:
             try:
@@ -217,6 +218,8 @@ class ArgosApp(App):
         if isinstance(ev, TokenDelta):
             await log.append_token(ev.text)
         elif isinstance(ev, PhaseChange):
+            for sp in log.query(ThinkingIndicator):
+                sp.set_label({"plan": "规划中…", "act": "执行中…", "verify": "验证中…", "report": "汇总中…"}.get(ev.phase, "思考中…"))
             log.finalize_response()
             bar.set_phase(ev.phase, ev.actions)
         elif isinstance(ev, CodeAction):
