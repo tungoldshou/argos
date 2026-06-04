@@ -1,6 +1,6 @@
 """Argos TUI 主屏(spec §4.1)。
 
-布局:Header(含 YOLO 徽标) + Transcript(主对话) + CostMeter(侧栏) + StatusBar(always-on) + Input。
+布局:Header(含 YOLO 徽标) + Transcript(主对话) + ActivityPanel(右侧活动栏) + StatusBar(always-on) + Input。
 事件桥:start_run 起一个 EventBus + 注入的 loop,Worker async-for 消费 Event 并更新 widget(契约 §1/§3)。
 slash:输入以 / 开头走 commands.parse_slash 分发;否则当 goal 起一轮 run。
 审批:loop 投 ApprovalRequest → push ApprovalModal → 回调里 gate.respond(契约 §6.3)。
@@ -33,9 +33,9 @@ from argos_agent.tui.events import (
 )
 from argos_agent.tui.fakeloop import FakeLoop
 from argos_agent.tui.theme import ARGOS_NIGHT
+from argos_agent.tui.widgets.activity_panel import ActivityPanel
 from argos_agent.tui.widgets.approval_modal import ApprovalModal
 from argos_agent.tui.widgets.code_action import CodeActionBlock
-from argos_agent.tui.widgets.cost_meter import CostMeter
 from argos_agent.tui.widgets.diff_view import DiffView
 from argos_agent.tui.widgets.status_bar import StatusBar
 from argos_agent.tui.widgets.thinking import ThinkingIndicator
@@ -48,20 +48,17 @@ _BASE_SUBTITLE = "诚实可靠的终端编码智能体"
 class ArgosApp(App):
     TITLE = "Argos"
 
-    # 布局 CSS(spec §4.1:主对话区 + 右侧成本栏)。没有它时 Horizontal 退回 Textual 默认:
-    # 空 RichLog 收缩到 width=1、CostMeter 撑满整宽 → 对话内容渲染进 1 列宽的 transcript,
+    # 布局 CSS(spec §4.1:主对话区 + 右侧活动栏)。没有它时 Horizontal 退回 Textual 默认:
+    # 空 RichLog 收缩到 width=1、侧栏撑满整宽 → 对话内容渲染进 1 列宽的 transcript,
     # 用户看到的永远是空屏(事件其实都写进去了,只是不可见)。这里显式分配:transcript 占满
-    # 剩余宽度(1fr),CostMeter 固定窄栏靠右。
+    # 剩余宽度(1fr);ActivityPanel 的固定窄栏宽度/左描边由其 DEFAULT_CSS 承担。
     CSS = """
     #transcript {
         width: 1fr;
         height: 1fr;
     }
-    #cost-meter {
-        width: 34;
+    #activity {
         height: 1fr;
-        padding: 0 1;
-        border-left: solid $panel;
     }
     """
 
@@ -73,9 +70,12 @@ class ArgosApp(App):
     BINDINGS = [("ctrl+c", "quit", "退出")]
 
     def __init__(
-        self, *, loop_factory: Callable[[], object] | None = None, demo: bool = True
+        self, *, loop_factory: Callable[[], object] | None = None, demo: bool = True,
+        premium: bool = False,
     ) -> None:
         super().__init__()
+        # premium=True 用 premium(Claude)档,否则 worker(便宜)档 —— 决定活动栏显示哪个真实模型名。
+        self._premium = premium
         # loop_factory() 返回一个有 async run(goal, session_id) -> AsyncIterator[Event] 的对象。
         # 默认 FakeLoop(Phase 6 真 AgentLoop 落地后由入口注入真实工厂)。
         self._loop_factory = loop_factory or (lambda: FakeLoop())
@@ -99,10 +99,12 @@ class ArgosApp(App):
         return "  ".join(parts)
 
     def compose(self) -> ComposeResult:
+        from argos_agent import config
         yield Header()
         with Horizontal():
             yield Transcript(id="transcript")
-            yield CostMeter(id="cost-meter")
+            tier = config.PREMIUM_TIER if self._premium else config.WORKER_TIER
+            yield ActivityPanel(id="activity", model_label=tier.model, tier=tier.name)
         yield StatusBar(id="status-bar")
         yield Input(placeholder="› 输入目标,或 / 开始命令", id="prompt")
         yield Footer()
@@ -159,8 +161,9 @@ class ArgosApp(App):
             bar = self.query_one("#status-bar", StatusBar)
             await log.append_line(bar.render_text)
         elif cmd.name == "cost":
-            meter = self.query_one("#cost-meter", CostMeter)
-            await log.append_line(meter.render_text)
+            # CostMeter 已退役为活动栏内的"成本 + 缓存"区;/cost 直接回显该区当前正文。
+            ap = self.query_one("#activity", ActivityPanel)
+            await log.append_line("成本 + 缓存\n" + ap.snapshot_text())
         elif cmd.name == "clear":
             await log.clear()
             self._step_blocks.clear()
@@ -174,6 +177,7 @@ class ArgosApp(App):
             return
         self._run_active = True
         self._step_blocks = {}  # 每轮独立,杜绝跨轮 step 串台。
+        self.query_one("#activity", ActivityPanel).reset_run()  # 每轮起手清活动栏(进度/工具/回执)。
         bus = EventBus()
         loop = self._loop_factory()
         log = self.query_one("#transcript", Transcript)
@@ -215,6 +219,7 @@ class ArgosApp(App):
         """把一个契约 §1 Event 反映到对应 widget(一份事件三用的 UI 出口)。"""
         log = self.query_one("#transcript", Transcript)
         bar = self.query_one("#status-bar", StatusBar)
+        ap = self.query_one("#activity", ActivityPanel)
         if isinstance(ev, TokenDelta):
             await log.append_token(ev.text)
         elif isinstance(ev, PhaseChange):
@@ -222,6 +227,7 @@ class ArgosApp(App):
                 sp.set_label({"plan": "规划中…", "act": "执行中…", "verify": "验证中…", "report": "汇总中…"}.get(ev.phase, "思考中…"))
             log.finalize_response()
             bar.set_phase(ev.phase, ev.actions)
+            ap.on_phase(ev.phase, ev.actions)
         elif isinstance(ev, CodeAction):
             block = CodeActionBlock(code=ev.code, step=ev.step)
             self._step_blocks[ev.step] = block
@@ -245,13 +251,13 @@ class ArgosApp(App):
                 tokens_in=ev.tokens_in, tokens_out=ev.tokens_out,
                 cost_usd=ev.cost_usd, elapsed_s=ev.elapsed_s,
             )
-            self.query_one("#cost-meter", CostMeter).update_cost(
+            ap.on_cost(
                 tokens_in=ev.tokens_in, tokens_out=ev.tokens_out,
-                cost_usd=ev.cost_usd, elapsed_s=ev.elapsed_s,
+                cost_usd=ev.cost_usd, elapsed_s=ev.elapsed_s, cache_read=ev.cache_read,
             )
         elif isinstance(ev, ToolReceipt):
-            # 注:ToolReceipt 暂留 transcript(Task 10 ActivityPanel 落地后改路由到面板回执区)。
-            await log.append_line(f"🧾 receipt: {ev.receipt.action}(已签名)", kind="system")
+            # 回执进活动栏面板的"回执"区 + 工具计数,不再进 transcript(Task 10)。
+            ap.on_receipt(ev.receipt.action)
         elif isinstance(ev, ApprovalRequest):
             await self._handle_approval(ev)
         elif isinstance(ev, ApprovalResponse):

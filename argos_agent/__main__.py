@@ -155,7 +155,7 @@ def main() -> None:
             workspace=args.project, premium=args.premium, approval_level=ApprovalLevel.CONFIRM,
         )
         factory = build_loop_factory(components)
-        ArgosApp(loop_factory=factory, demo=False).run()
+        ArgosApp(loop_factory=factory, demo=False, premium=args.premium).run()
     except RuntimeError as e:
         from argos_agent.tui.fakeloop import FakeLoop
         print(f"[argos] {e}\n[argos] 落演示态(FakeLoop)——配好 key 后重启即接真模型。", file=sys.stderr)

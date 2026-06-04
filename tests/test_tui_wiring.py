@@ -195,10 +195,10 @@ async def test_transcript_fills_main_area_not_collapsed():
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         t = app.query_one("#transcript")
-        c = app.query_one("#cost-meter")
+        c = app.query_one("#activity")
         assert t.size.width >= 40, f"transcript 宽度被压塌={t.size.width},对话会隐形"
         assert t.size.height >= 10, f"transcript 高度不足={t.size.height}"
-        assert t.size.width > c.size.width, "transcript 是主区,应比成本侧栏宽"
+        assert t.size.width > c.size.width, "transcript 是主区,应比活动侧栏宽"
 
 
 def test_kitty_keyboard_protocol_disabled_by_default():
