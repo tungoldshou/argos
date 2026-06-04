@@ -83,6 +83,10 @@ class Transcript(VerticalScroll):
 
     async def user_line(self, text: str) -> None:
         self.finalize_response()
+        # 非首条用户输入前插一条虚线分隔,把对话切成可读的"回合"(Task 14)。
+        if self._lines:
+            from textual.widgets import Rule
+            await self.mount(Rule(line_style="dashed"))
         self._lines.append(f"› {text}")
         await self.mount(UserMessage(text))
         self.scroll_end(animate=False)
@@ -101,10 +105,6 @@ class Transcript(VerticalScroll):
         if self._current is not None:
             self._lines.append(strip_code_fences(self._current._raw))
             self._current = None
-
-    # 兼容旧调用名:flush 等价于 finalize_response。
-    def flush(self) -> None:
-        self.finalize_response()
 
     async def append_line(self, text: str, *, kind: str = "system") -> None:
         self.finalize_response()

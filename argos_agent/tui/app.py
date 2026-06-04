@@ -50,7 +50,7 @@ class ArgosApp(App):
     TITLE = "Argos"
 
     # 布局 CSS(spec §4.1:主对话区 + 右侧活动栏)。没有它时 Horizontal 退回 Textual 默认:
-    # 空 RichLog 收缩到 width=1、侧栏撑满整宽 → 对话内容渲染进 1 列宽的 transcript,
+    # 空 Transcript 收缩到 width=1、侧栏撑满整宽 → 对话内容渲染进 1 列宽的 transcript,
     # 用户看到的永远是空屏(事件其实都写进去了,只是不可见)。这里显式分配:transcript 占满
     # 剩余宽度(1fr);ActivityPanel 的固定窄栏宽度/左描边由其 DEFAULT_CSS 承担。
     CSS = """
@@ -61,8 +61,14 @@ class ArgosApp(App):
     }
     #activity {
         height: 1fr;
+        display: block;
     }
+    #prompt { border: tall $primary; }
+    ArgosApp.-narrow #activity { display: none; }
     """
+
+    # 窄屏(<90 列)折叠右侧活动栏,把整宽让给对话(Task 14:响应式)。
+    HORIZONTAL_BREAKPOINTS = [(0, "-narrow"), (90, "-wide")]
 
     # 启动/换屏后由 Textual 自动把焦点放到输入框(声明式,框架在正确时机执行)——
     # 否则默认聚焦第一个可聚焦 widget。Transcript 已 can_focus=False 不抢焦点,
@@ -214,6 +220,7 @@ class ArgosApp(App):
         bus = EventBus()
         loop = self._loop_factory()
         log = self.query_one("#transcript", Transcript)
+        await log.user_line(goal)  # 回显用户目标进对话流(› 行),否则对话看着单边(Task 14)。
         if self._demo:
             # 诚实:演示模式每轮起手就声明以下全是脚本假数据,绝不冒充真实执行/验证。
             await log.append_line(

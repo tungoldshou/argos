@@ -23,6 +23,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - **M5/M6/M8**：升级措辞用真实尝试次数;`_validate_git` 意图显式化（子命令前全局选项=RCE 向量拒,子命令后局部旗标如 `git show --stat` 放行）;loop spawn 固定空命名空间 + assert 红线,防 model-controlled 数据进 `__authorized_imports__`（smolagents 把 `"*"` 当 allow-all）。
 
 ### Added
+- **TUI 重设计(方向 A 极简 Claude-Code 风)**:argos-night 暗色主题、Markdown+语法高亮(杀围栏漏出)、user/assistant/系统角色区分、思考 spinner、verdict 三态着色;右侧诚实活动栏(模型/任务进度/工具/已签名回执/成本+缓存命中,Skills·MCP 诚实空态);ARGOS 启动 logo 画面;工作态阶段映射边缘光(颜色=真 phase/verdict,idle 灭,全彩虹为可选 party 模式);Input 描边、回合分隔、窄屏折叠面板。
 - **整机集成(Phase 6):** 装配层 `app_factory.py` 把 SQLite store / Seatbelt 沙箱 / capability broker / 模型分档 / Verifier / 自建 CodeAct loop 组装成 TUI 注入的 `loop_factory`(`AgentLoop` 暴露 `bus/store/sandbox/broker` 只读属性);`argos` 入口默认注入真 loop,无 key 时诚实落 demo 态(不假装能跑)。新增 CLI `--selftest`(不连网整机自检,打印 `verdicts=['passed'] → OK`)/`--project`/`--premium`/`--resume`。
 - **五条可证伪铁证 e2e(spec §9,`tests/e2e/`):** ① 便宜模型错改被 verify bounce 拦住、修好才翻 `passed`;② kill 中途经 `ArgosStore.replay` 重建、`/resume`(replay+重跑)续上;③ 中文(CJK)经 `recall`/`search` 命中且 reason 可解释;④ 沙箱外泄防线(读 `~/.ssh` 允许但写不出 workspace + 非 allowlist egress fail-closed,macOS Seatbelt);⑤ verify-loop P50/P99 延迟基线 + 超时降级断言。+ 整机贯通 e2e:四阶段不可跳 + 一份事件三用(run==persist==replay 逐事件一致)。用确定性 `ScriptedModelClient`(不连真 LLM,CI 可离线复现);真 LLM 烟测 `probe_real_llm.py`(CI skip)。
 - PyInstaller arm64 单 binary 打包(`packaging/argos.spec` + `build_arm64.sh` + `smoke_packaged.py` + smolagents/textual hooks),捆 sqlite-vec dylib,MLX 权重懒下载不进 binary,`console=True`(TUI 需终端)。

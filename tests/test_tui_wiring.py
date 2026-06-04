@@ -237,3 +237,17 @@ def test_kitty_disable_respects_explicit_user_optin():
         assert os.environ.get("TEXTUAL_DISABLE_KITTY_KEY") == "0", "显式用户值必须被尊重"
     finally:
         os.environ["TEXTUAL_DISABLE_KITTY_KEY"] = "1"
+
+
+@pytest.mark.asyncio
+async def test_user_goal_echoed_to_transcript():
+    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await app.start_run("修个 off-by-one")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        log = app.query_one("#transcript")
+        # FakeLoop 的 assistant token 也会带上 goal 文本,故只断言"包含 goal"会假绿;
+        # 这里钉死 '› ' 前缀的用户行(user_line 的真实产物)才证明目标确实回显进了对话流。
+        assert "› 修个 off-by-one" in log.rendered_text, "用户目标必须回显进对话流(› 行)"
