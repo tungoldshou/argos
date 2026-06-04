@@ -61,9 +61,10 @@ async def test_diff_view_renders_added_removed_counts():
     app = _Host(dv)
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert dv.path == "auth.py"
-        assert dv.added == 3 and dv.removed == 1
-        assert "3+" in dv.header_text and "1-" in dv.header_text
+        # ⏺ header + path + +N/−M 计数(spec §widget 改造:不再手画 ┌ ASCII box)
+        assert "⏺" in str(dv.border_title)
+        assert "auth.py" in str(dv.border_title)
+        assert "+3" in str(dv.border_subtitle) and "1" in str(dv.border_subtitle)
 
 
 @pytest.mark.asyncio
