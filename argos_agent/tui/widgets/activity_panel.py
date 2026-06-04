@@ -44,7 +44,7 @@ class ActivityPanel(Vertical):
         yield _Section("工具", "本轮 0 调用")
         yield _Section("回执(已签名)", "—")
         yield _Section("Skills", self._skills_summary())
-        yield _Section("MCP", "0 已连接")
+        yield _Section("MCP", self._mcp_summary())
         yield _Section("成本 + 缓存", "↑0 ↓0  $0.000\n缓存命中 0 tok  0.0s")
         yield _Section("上下文", "")
 
@@ -60,6 +60,24 @@ class ActivityPanel(Vertical):
             return f"{len(enabled)} 个可用(按任务召回)"
         except Exception:  # noqa: BLE001
             return "—"
+
+    @staticmethod
+    def _mcp_summary() -> str:
+        """诚实显示 MCP:读 ~/.argos/mcp.json 里配置的(启用)server 数。默认零预配 → '未配置'。
+        '已配置' 不等于 '已连接'(连接在后台异步预热);此处只如实报配置,不谎报连接态。"""
+        try:
+            import json
+
+            from argos_agent.mcp_native import CONFIG_PATH
+            if not CONFIG_PATH.exists():
+                return "未配置"
+            cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8")) or {}
+            servers = cfg.get("servers") or {}
+            enabled = [n for n, s in servers.items()
+                       if isinstance(s, dict) and s.get("enabled", True)]
+            return f"{len(enabled)} 个已配置" if enabled else "未配置"
+        except Exception:  # noqa: BLE001
+            return "未配置"
 
     def _sections(self) -> list[_Section]:
         return list(self.query(_Section))

@@ -34,6 +34,8 @@ _RISK: dict[str, str] = {
     "browser_screenshot": "low",
     "browser_click": "medium",
     "browser_type": "medium",
+    # MCP 外部工具调用:第三方 server 能力不可预知 → medium,默认走审批。
+    "mcp_call": "medium",
 }
 # C1:这些 action 即便在 AUTO(YOLO)档也强制逐个确认 —— 永不静默执行 shell。
 _FORCE_CONFIRM_ACTIONS: set[str] = {"run_command"}
@@ -152,6 +154,14 @@ class CapabilityBroker:
                 return ctrl.type_text(args.get("selector", ""), args.get("text", "")), None
             if action == "browser_screenshot":
                 return ctrl.screenshot(args.get("path", "screenshot.png")), None
+        # MCP 外部工具:转给进程内 McpManager(懒连 ~/.argos/mcp.json 的 stdio server)。
+        if action == "mcp_call":
+            from argos_agent import mcp_native
+            mgr = mcp_native.get_manager()
+            arguments = args.get("arguments")
+            if not isinstance(arguments, dict):
+                arguments = {}
+            return mgr.call(args.get("server", ""), args.get("tool", ""), arguments), None
         # 未知 action 已被 request 顶部挡掉;此处兜底诚实返回。
         return f"错误:动作 {action!r} 暂未实现 host 执行。", None
 
@@ -173,4 +183,6 @@ class CapabilityBroker:
             return f"浏览器点击 {args.get('selector', '')}"
         if action == "browser_type":
             return f"浏览器在 {args.get('selector', '')} 填入文本"
+        if action == "mcp_call":
+            return f"调用 MCP 工具 {args.get('server', '')}/{args.get('tool', '')}"
         return f"{action} {args}"

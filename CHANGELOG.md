@@ -7,6 +7,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+- **原生 MCP 接入(stdio,无 langchain)—— Claude Code 招牌的可扩展性。** Argos 现在能连用户 `~/.argos/mcp.json` 里配置的 MCP server,把它们的工具暴露给 agent(经 `mcp_call(server, tool, arguments)`,工具数 14→15)。**为什么自己写**:旧 `mcp_client.py`(随死栈删)绑死 langchain-mcp-adapters,而活引擎 framework-free;MCP 的 stdio 传输就是按行分隔的 JSON-RPC(不是 LSP 的 Content-Length 框),同步实现很轻、且天然契合同步的 broker `_execute`(无 async-from-sync 难题)。**握手**:initialize → notifications/initialized → tools/list → tools/call,全同步行帧。**诚实**:① 默认**零预配** —— 没有 mcp.json/没有 server → 系统提示不注入任何 MCP 段、`mcp_call` 诚实报"未配置";② 单个 server 连接/握手失败 → 标记不可用、其余照常,绝不崩;③ 畸形 config 退空(等于零 MCP);④ 调用包真错误返回可读串,不假装成功。**不阻塞**:`McpManager.start_warming()` 在 `build_components` 起后台线程预热连接(npx server 启动慢也不卡 TUI/首轮响应),`tools_summary()` 非阻塞只读已就绪工具,`AppComponents.close()`+`atexit` 收掉 server 子进程。活动栏 MCP 区诚实显配置态('未配置'/'N 个已配置',不谎报连接数)。+9 个测试,**含跑真 stdio echo server 子进程的端到端往返**(initialize/tools/list/tools/call 真协议,非 mock)。
+
 ### Fixed
 - **`--project` 模式 workspace 分叉(run_command 与 write_file 落不同目录)。** 真 `--project` 路径下:`write_file` 在沙箱子进程里写到项目目录(spawn workspace),但 `broker._execute` 调 `shell.run_command` 时**没传 workspace** → 回退到 import 期冻结的默认 `~/.argos/workspace`,导致 agent 写完文件、`run_command("python app.py")` 却在另一个目录跑、读不到刚写的文件(此前 changelog 标记的"已知遗留")。修:`CapabilityBroker` 增 `workspace` 字段,`build_components` 把 `ws` 传进去,`_execute` 的 run_command 用 broker 的 ws —— 与沙箱子进程同一个,彻底消除分叉(不依赖 host 是否进 runtime project 模式)。不传 workspace 时维持旧行为(回退 `shell._ws()`)。+2 回归测试(workspace 透传 / 缺省 None 向后兼容)。
 

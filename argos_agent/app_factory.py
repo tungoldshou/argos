@@ -65,6 +65,12 @@ class AppComponents:
             browser.shutdown()
         except Exception:  # noqa: BLE001 — 清理失败不应阻断关闭
             pass
+        # 收掉 MCP 单例(关掉所有 stdio server 子进程)。
+        try:
+            from argos_agent import mcp_native
+            mcp_native.shutdown()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def build_components(
@@ -123,6 +129,14 @@ def build_components(
 
     # 沙箱由 loop.run() 自己 spawn/close(每轮一个子进程),此处只构造,不预 spawn。
     sandbox = SeatbeltExecutor(broker_handler=broker_handler)
+
+    # MCP 后台预热:配了 ~/.argos/mcp.json 时,在后台线程连 stdio server(不阻塞 TUI 启动 /
+    # 首轮响应)。默认零预配 → 秒回无 server。_build_system 用非阻塞的 tools_summary 读已就绪工具。
+    try:
+        from argos_agent import mcp_native
+        mcp_native.get_manager().start_warming()
+    except Exception:  # noqa: BLE001 — 预热失败不应阻断启动
+        pass
 
     verifier = Verifier(max_rounds=max_rounds)
 

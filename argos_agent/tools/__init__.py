@@ -29,6 +29,9 @@ ALL_TOOL_NAMES: list[str] = [
     # 计算机控制(浏览器)—— broker-gated,host 侧 sync Playwright 专线程执行。
     "browser_navigate", "browser_snapshot", "browser_click",
     "browser_type", "browser_screenshot",
+    # MCP 外部工具调度入口 —— broker-gated;配了 ~/.argos/mcp.json 才有具体工具可调,
+    # 未配时调用诚实报"未配置 MCP"(工具本身始终可调,故计入工具数)。
+    "mcp_call",
 ]
 
 __all__ = [
@@ -122,6 +125,11 @@ def _make_gated(broker: Any) -> dict[str, Any]:
     def browser_screenshot_gated(path: str = "screenshot.png") -> str:
         return broker.request(action="browser_screenshot", args={"path": path})
 
+    # MCP 外部工具 —— broker-gated:host 侧 McpManager 转发到配置的 stdio server。
+    def mcp_call_gated(server: str, tool: str, arguments: dict | None = None) -> str:
+        return broker.request(action="mcp_call",
+                              args={"server": server, "tool": tool, "arguments": arguments or {}})
+
     return {
         "run_command": run_command_gated,
         "web_search": web_search_gated,
@@ -131,6 +139,7 @@ def _make_gated(broker: Any) -> dict[str, Any]:
         "browser_click": browser_click_gated,
         "browser_type": browser_type_gated,
         "browser_screenshot": browser_screenshot_gated,
+        "mcp_call": mcp_call_gated,
     }
 
 

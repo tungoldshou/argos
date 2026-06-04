@@ -19,7 +19,8 @@ async def test_panel_sections_present_and_honest_empty():
         assert "MiniMax-M3" in txt                              # 模型(真,只显模型名不露档位)
         # Skills 已接进活 loop:诚实显真实可用数(内置 4 个)或"无可用",绝不谎报。
         assert ("可用" in txt or "无可用" in txt)
-        assert "0 已连接" in txt                                 # MCP 诚实空态(尚未实现)
+        # MCP 诚实显配置态:'未配置'(零预配)或 'N 个已配置';绝不谎报连接数。
+        assert ("未配置" in txt or "已配置" in txt)
         assert "缓存" in txt                                      # 成本含缓存区
 
 

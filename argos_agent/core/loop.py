@@ -294,8 +294,17 @@ class AgentLoop:
             from argos_agent import contracts
             _dom, contract_text = contracts.contract_for(goal)
             if contract_text:
-                safe = HONESTY_SYSTEM + contract_text
+                safe = safe + contract_text
         except Exception:  # noqa: BLE001 — 契约分类失败不影响主流程
+            pass
+
+        # ── 安全段:可用 MCP 工具清单(配了 ~/.argos/mcp.json 才注入;默认零预配 → 空,不注入)──
+        try:
+            from argos_agent import mcp_native
+            mcp_summary = mcp_native.get_manager().tools_summary()
+            if mcp_summary:
+                safe = safe + "\n\n" + mcp_summary
+        except Exception:  # noqa: BLE001 — MCP 连接/读取失败诚实降级为无 MCP
             pass
 
         if not self._cfg.recall:
