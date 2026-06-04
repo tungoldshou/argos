@@ -37,6 +37,7 @@ from argos_agent.tui.widgets.activity_panel import ActivityPanel
 from argos_agent.tui.widgets.approval_modal import ApprovalModal
 from argos_agent.tui.widgets.code_action import CodeActionBlock
 from argos_agent.tui.widgets.diff_view import DiffView
+from argos_agent.tui.widgets.splash import StartupSplash
 from argos_agent.tui.widgets.status_bar import StatusBar
 from argos_agent.tui.widgets.thinking import ThinkingIndicator
 from argos_agent.tui.widgets.transcript import Transcript
@@ -116,6 +117,11 @@ class ArgosApp(App):
         self.register_theme(ARGOS_NIGHT)
         self.theme = "argos-night"
         self.query_one("#prompt", Input).focus()
+        from argos_agent import config
+        tier = config.PREMIUM_TIER if self._premium else config.WORKER_TIER
+        self.query_one("#transcript", Transcript).mount(
+            StartupSplash(model_label=tier.model, tier=tier.name, live=not self._demo)
+        )
 
     # ── 输入分发 ──────────────────────────────────────────────────────────
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -176,6 +182,8 @@ class ArgosApp(App):
         if self._run_active:
             return
         self._run_active = True
+        for sp in self.query(StartupSplash):
+            await sp.remove()
         self._step_blocks = {}  # 每轮独立,杜绝跨轮 step 串台。
         self.query_one("#activity", ActivityPanel).reset_run()  # 每轮起手清活动栏(进度/工具/回执)。
         bus = EventBus()
