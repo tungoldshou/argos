@@ -5,7 +5,21 @@ token_delta 高频到达 → 用 RichLog 追加 + 内部 buffer 累计当前 ass
 """
 from __future__ import annotations
 
+import re
+
 from textual.widgets import RichLog
+
+_FENCE_BLOCK = re.compile(r"```[^\n]*\n.*?```\n?", re.DOTALL)  # 连吃闭围栏后的换行,块间塌缩干净
+
+
+def strip_code_fences(text: str) -> str:
+    """剥掉 ```...``` 完整代码块 + 尾部未闭合的 ```(流式中途)。
+    代码权威展示在 CodeActionBlock,这里只留散文,避免代码显示两遍 / backtick 漏出。"""
+    text = _FENCE_BLOCK.sub("", text)
+    idx = text.rfind("```")        # 残留的开围栏(未闭合)
+    if idx != -1:
+        text = text[:idx]
+    return text.strip("\n")
 
 
 class TranscriptLog(RichLog):
