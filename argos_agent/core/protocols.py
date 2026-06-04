@@ -1,0 +1,92 @@
+"""协议适配层(spec §5):把"怎么拼请求 / 怎么解析 SSE / 怎么抓 usage"按协议封装,
+ModelClient 协议无关。AnthropicProtocol=现有逻辑抽出;OpenAIProtocol=新增(Task 3)。
+
+不在运行时 import models(避免与 models.py 循环):tier 以鸭子类型用(.model/.max_tokens)。"""
+from __future__ import annotations
+
+from typing import Any, Protocol as _TypingProtocol, runtime_checkable
+
+
+def _coalesce_consecutive_roles(messages: list[dict]) -> list[dict]:
+    """合并连续同 role 的消息,保证 user/assistant 交替(Anthropic 兼容端要求,否则 400)。
+    多轮/压缩会产生连续同 role;在发请求前把相邻同 role content 用换行并起来(I1 修复,已有逻辑)。"""
+    out: list[dict] = []
+    for m in messages:
+        role = m.get("role")
+        content = m.get("content", "")
+        if out and out[-1]["role"] == role:
+            out[-1]["content"] = f"{out[-1]['content']}\n{content}"
+        else:
+            out.append({"role": role, "content": content})
+    return out
+
+
+@runtime_checkable
+class Protocol(_TypingProtocol):
+    name: str
+    def endpoint(self, base_url: str) -> str: ...
+    def headers(self, key: str) -> dict[str, str]: ...
+    def payload(self, messages: list[dict], *, system: str, tier: Any) -> dict[str, Any]: ...
+    def text_delta(self, sse_obj: dict[str, Any]) -> str: ...
+    def capture_usage(self, sse_obj: dict[str, Any], last_usage: dict[str, int]) -> None: ...
+    def is_done(self, sse_obj: dict[str, Any]) -> bool: ...
+
+
+class AnthropicProtocol:
+    name = "anthropic"
+
+    def endpoint(self, base_url: str) -> str:
+        return base_url.rstrip("/") + "/v1/messages"
+
+    def headers(self, key: str) -> dict[str, str]:
+        return {"x-api-key": key, "anthropic-version": "2023-06-01",
+                "content-type": "application/json"}
+
+    def payload(self, messages: list[dict], *, system: str, tier: Any) -> dict[str, Any]:
+        return {
+            "model": tier.model,
+            "max_tokens": tier.max_tokens,
+            "system": system,
+            "messages": _coalesce_consecutive_roles(messages),
+            "stream": True,
+        }
+
+    def text_delta(self, obj: dict[str, Any]) -> str:
+        if obj.get("type") == "content_block_delta":
+            delta = obj.get("delta") or {}
+            if delta.get("type") == "text_delta":
+                return delta.get("text", "") or ""
+        return ""
+
+    def capture_usage(self, obj: dict[str, Any], last_usage: dict[str, int]) -> None:
+        t = obj.get("type")
+        if t == "message_start":
+            u = (obj.get("message") or {}).get("usage") or {}
+            last_usage["input_tokens"] = int(u.get("input_tokens") or 0)
+            if u.get("cache_read_input_tokens") is not None:
+                last_usage["cache_read"] = int(u.get("cache_read_input_tokens") or 0)
+            if u.get("cache_creation_input_tokens") is not None:
+                last_usage["cache_creation"] = int(u.get("cache_creation_input_tokens") or 0)
+        elif t == "message_delta":
+            u = obj.get("usage") or {}
+            if u.get("input_tokens") is not None:
+                last_usage["input_tokens"] = int(u.get("input_tokens") or 0)
+            if u.get("output_tokens") is not None:
+                last_usage["output_tokens"] = int(u.get("output_tokens") or 0)
+            if u.get("cache_read_input_tokens") is not None:
+                last_usage["cache_read"] = int(u.get("cache_read_input_tokens") or 0)
+
+    def is_done(self, obj: dict[str, Any]) -> bool:
+        return obj.get("type") == "message_stop"
+
+
+class OpenAIProtocol:
+    name = "openai"
+    # Task 3 填实:endpoint/headers/payload/text_delta/capture_usage/is_done
+
+
+def get_protocol(name: str) -> AnthropicProtocol | OpenAIProtocol:
+    name = (name or "anthropic").lower()
+    if name == "openai":
+        return OpenAIProtocol()
+    return AnthropicProtocol()

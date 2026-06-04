@@ -24,6 +24,7 @@ class ModelTier:
     # 模型上下文窗口上限(Task 10:ActivityPanel"上下文"区按此算占用百分比)。
     # 给默认值(200k)以不破坏既有按 max_tokens 收尾的构造点;config 按模型填真值。
     context_window: int = 200_000
+    protocol: str = "anthropic"   # "anthropic" | "openai";默认值保旧构造点/旧 env 回退零破坏
 
 
 # ── Credential + CredentialPool ──────────────────────────────────────────────

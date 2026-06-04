@@ -84,6 +84,7 @@ except Exception:  # Task 5 未落地时的占位,结构与 canonical 一致
         base_url: str
         max_tokens: int
         context_window: int = 200_000
+        protocol: str = "anthropic"
 
 
 WORKER_TIER = ModelTier(name="worker", model=_WORKER_MODEL or "MiniMax-M2",
