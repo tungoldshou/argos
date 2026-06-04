@@ -19,6 +19,12 @@ def _k(n: int) -> str:
 
 
 class StatusBar(Static):
+    # dock 底部、$panel 填充贯穿、phase 用 $accent 着色(朴素点分隔,成本明细在面板)。
+    DEFAULT_CSS = """
+    StatusBar { dock: bottom; height: 1; background: $panel; color: $text-muted; padding: 0 1; }
+    StatusBar > .phase { color: $accent; }
+    """
+
     phase: reactive[str] = reactive("idle")
     actions: reactive[int] = reactive(0)
     tokens_in: reactive[int] = reactive(0)
