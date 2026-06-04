@@ -1,65 +1,114 @@
-"""TranscriptLog:流式 markdown/token 增量(spec §4.2)。
+# argos_agent/tui/widgets/transcript.py
+"""主对话区:VerticalScroll + 可挂载消息 widget(spec §聊天渲染架构)。
 
-token_delta 高频到达 → 用 RichLog 追加 + 内部 buffer 累计当前 assistant 段。
-封装隔离 Textual API(风险:Textual API churn,spec §13)——外部只调 append_token/append_line/flush。
+替换旧 RichLog:
+  · UserMessage:暗灰 '› ' 前缀;
+  · AssistantMessage(Markdown):亮白,流式 update,剥代码围栏(代码在 CodeActionBlock);
+  · SystemLine:系统/错误/完成等单行,按 kind 着色;
+  · 结构化块(CodeActionBlock/DiffView/VerdictBadge)经 mount_block 作为兄弟挂入。
+rendered_text 聚合纯文本供测试断言(替代旧 _flushed/buffer)。
 """
 from __future__ import annotations
 
 import re
 
-from textual.widgets import RichLog
+from textual.containers import VerticalScroll
+from textual.widgets import Markdown, Static
 
 _FENCE_BLOCK = re.compile(r"```[^\n]*\n.*?```\n?", re.DOTALL)  # 连吃闭围栏后的换行,块间塌缩干净
 
 
 def strip_code_fences(text: str) -> str:
-    """剥掉 ```...``` 完整代码块 + 尾部未闭合的 ```(流式中途)。
-    代码权威展示在 CodeActionBlock,这里只留散文,避免代码显示两遍 / backtick 漏出。"""
+    """剥掉 ```...``` 完整块 + 尾部未闭合的 ```(流式中途)。"""
     text = _FENCE_BLOCK.sub("", text)
-    idx = text.rfind("```")        # 残留的开围栏(未闭合)
+    idx = text.rfind("```")
     if idx != -1:
         text = text[:idx]
     return text.strip("\n")
 
 
-class TranscriptLog(RichLog):
-    """主对话区。append_token 累计当前流式段;append_line 落一行系统/状态文本。
+class UserMessage(Static):
+    DEFAULT_CSS = """
+    UserMessage { color: $text-muted; padding: 0 1; }
+    """
+    def __init__(self, text: str) -> None:
+        super().__init__(f"› {text}")
+        self.add_class("user-msg")
 
-    can_focus=False:RichLog 默认可聚焦(键盘滚动),会在启动时抢走焦点 → 输入框收不到
-    键,用户打不了字。把它移出焦点链,保证唯一可聚焦的是输入框(滚动用鼠标/PageUp 仍可)。"""
 
-    can_focus = False
+class SystemLine(Static):
+    DEFAULT_CSS = """
+    SystemLine { padding: 0 1; }
+    SystemLine.sys-error { color: $error; }
+    SystemLine.sys-escalation { color: $warning; }
+    SystemLine.sys-done { color: $success; }
+    SystemLine.sys-system { color: $text-muted; }
+    """
+    def __init__(self, text: str, *, kind: str = "system") -> None:
+        super().__init__(text)
+        self.add_class(f"sys-{kind}")
+
+
+class AssistantMessage(Markdown):
+    DEFAULT_CSS = """
+    AssistantMessage { background: transparent; margin: 0 0 1 0; padding: 0 1; }
+    """
+    def __init__(self) -> None:
+        super().__init__("")
+        self.add_class("assistant-msg")
+        self._raw = ""
+
+    def feed(self, text: str) -> None:
+        self._raw += text
+        self.update(strip_code_fences(self._raw))
+
+
+class Transcript(VerticalScroll):
+    """主对话区。流式 token 进 current AssistantMessage;system/user 行与块作为兄弟挂入。"""
 
     def __init__(self, *args, **kwargs) -> None:
-        kwargs.setdefault("wrap", True)
-        kwargs.setdefault("markup", True)
-        kwargs.setdefault("highlight", False)
         super().__init__(*args, **kwargs)
-        self._buffer: str = ""
-        self._flushed: str = ""
+        self.can_focus = False               # 不抢输入框焦点(滚动用鼠标/PageUp)
+        self._current: AssistantMessage | None = None
+        self._lines: list[str] = []          # 已落定文本(供 rendered_text)
 
     @property
-    def buffer(self) -> str:
-        """当前未落定的流式段(测试可读)。"""
-        return self._buffer
+    def rendered_text(self) -> str:
+        parts = list(self._lines)
+        if self._current is not None:
+            parts.append(strip_code_fences(self._current._raw))
+        return "\n".join(p for p in parts if p)
 
-    def append_token(self, text: str) -> None:
-        """token_delta 增量:累计到 buffer;每到换行就 flush 一行进 RichLog(避免逐 token 刷屏)。"""
-        self._buffer += text
-        while "\n" in self._buffer:
-            line, self._buffer = self._buffer.split("\n", 1)
-            self.write(line)
-            self._flushed += line + "\n"
+    async def user_line(self, text: str) -> None:
+        self.finalize_response()
+        self._lines.append(f"› {text}")
+        await self.mount(UserMessage(text))
+        self.scroll_end(animate=False)
 
+    async def append_token(self, text: str) -> None:
+        if self._current is None:
+            self._current = AssistantMessage()
+            await self.mount(self._current)
+        self._current.feed(text)
+        self.scroll_end(animate=False)
+
+    def finalize_response(self) -> None:
+        """当前流式段落定:记入 _lines,清 current 指针 → 下个 token 起新气泡。"""
+        if self._current is not None:
+            self._lines.append(strip_code_fences(self._current._raw))
+            self._current = None
+
+    # 兼容旧调用名:flush 等价于 finalize_response。
     def flush(self) -> None:
-        """段结束(如下一个 phase/工具)时把残余 buffer 落定。"""
-        if self._buffer:
-            self.write(self._buffer)
-            self._flushed += self._buffer
-            self._buffer = ""
+        self.finalize_response()
 
-    def append_line(self, text: str) -> None:
-        """落一行系统/状态文本(escalation/error 摘要等)。"""
-        self.flush()
-        self.write(text)
-        self._flushed += text + "\n"
+    async def append_line(self, text: str, *, kind: str = "system") -> None:
+        self.finalize_response()
+        self._lines.append(text)
+        await self.mount(SystemLine(text, kind=kind))
+        self.scroll_end(animate=False)
+
+    async def mount_block(self, widget) -> None:
+        self.finalize_response()
+        await self.mount(widget)
+        self.scroll_end(animate=False)
