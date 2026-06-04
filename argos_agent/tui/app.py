@@ -129,28 +129,23 @@ class ArgosApp(App):
         self.query_one("#transcript", Transcript).mount(
             StartupSplash(model_label=tier.model, tier=tier.name, live=not self._demo)
         )
-        # 工作态边缘光(Task 13):idle 灭=中性灰;run 期间随阶段着色,跑完复位。
+        # 工作态边缘光(Task 13):idle 灭=中性灰;run 期间随真实阶段着色。纯事件驱动——
+        # 颜色只在 PhaseChange/VerifyVerdict/Escalation/Error 真事件到达时变;不用空转计时器
+        # (无呼吸动画可演时,定时重设同色既是 CPU churn 又踩 Textual 重绘缓存坑)。
         self._glow_phase = "idle"
-        self._glow_timer = self.set_interval(0.12, self._glow_tick, pause=True)
 
     # ── 工作态边缘光(spec §工作态边缘光) ─────────────────────────────────
     def _set_border(self, color) -> None:
         self.screen.styles.border = ("round", color)
 
-    def _glow_tick(self) -> None:
-        if not self._run_active:
-            return
-        # 轻呼吸:在当前阶段色与略暗之间插值(简化:阶段色常亮即可,呼吸为可选)
-        from argos_agent.tui import glow
-        self._set_border(glow.phase_color(self._glow_phase))
-
     def _glow_start(self) -> None:
+        from argos_agent.tui import glow
         self._glow_phase = "plan"
-        self._glow_timer.resume()
+        self._set_border(glow.phase_color("plan"))
 
     def _glow_stop(self) -> None:
         from argos_agent.tui import glow
-        self._glow_timer.pause()
+        self._glow_phase = "idle"
         self._set_border(glow.IDLE_BORDER)
 
     # ── 输入分发 ──────────────────────────────────────────────────────────
