@@ -109,3 +109,88 @@ if _WORKER_PRICE_IN and _WORKER_PRICE_OUT:
         }
     except Exception:  # noqa: BLE001 — 注册失败不应阻断启动;成本只是退回 $(N/A)
         pass
+
+
+# ── 声明式配置:config.json + .env 加载器(Phase 2 Task 4) ───────────────────
+import json as _json
+
+
+class ConfigError(Exception):
+    """配置文件畸形/缺字段/active 悬空 —— fail-closed,诚实报错不假装能跑。"""
+
+
+def _config_dir() -> Path:
+    return Path(get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+
+
+def load_env_file(path: Path) -> dict[str, str]:
+    """读 ~/.argos/.env(KEY=value 一行一个);文件不存在返回空 dict。"""
+    env: dict[str, str] = {}
+    if path.exists():
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if "=" in line and not line.startswith("#"):
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip()
+    return env
+
+
+_REQUIRED = ("protocol", "base_url", "model")
+
+
+@dataclass(frozen=True, slots=True)
+class ArgosConfig:
+    active: str
+    tiers: dict  # name -> ModelTier
+    key_envs: dict  # name -> api_key_env(str)
+    secrets: dict  # ~/.argos/.env 读出的密钥表
+
+
+def load_config() -> ArgosConfig:
+    """加载 ~/.argos/config.json + ~/.argos/.env,构造 ModelTier 表。
+    校验 fail-closed:active 悬空 / 缺必填 / json 畸形 → ConfigError。价格注入 PRICING。"""
+    cdir = _config_dir()
+    cfile = cdir / "config.json"
+    if not cfile.exists():
+        raise ConfigError(f"无 {cfile}")   # Task 5 的回退在 active_tier 层处理
+    try:
+        raw = _json.loads(cfile.read_text())
+    except _json.JSONDecodeError as e:
+        raise ConfigError(f"config.json 解析失败:{e}") from e
+    models = raw.get("models") or {}
+    active = raw.get("active")
+    if not models or active not in models:
+        raise ConfigError(f"active='{active}' 不在 models 中(或 models 为空)")
+    secrets = load_env_file(cdir / ".env")
+    tiers, key_envs = {}, {}
+    for name, m in models.items():
+        for f in _REQUIRED:
+            if not m.get(f):
+                raise ConfigError(f"profile '{name}' 缺必填字段 '{f}'")
+        tiers[name] = ModelTier(
+            name=name, model=m["model"], base_url=m["base_url"],
+            max_tokens=int(m.get("max_tokens", 4096)),
+            context_window=int(m.get("context_window", 200_000)),
+            protocol=m["protocol"],
+        )
+        key_envs[name] = m.get("api_key_env", "")
+        if m.get("price_in") is not None and m.get("price_out") is not None:
+            try:
+                from argos_agent.core.observability import PRICING
+                PRICING[m["model"]] = {"in": float(m["price_in"]), "out": float(m["price_out"])}
+            except Exception:  # noqa: BLE001
+                pass
+    return ArgosConfig(active=active, tiers=tiers, key_envs=key_envs, secrets=secrets)
+
+
+def active_tier():
+    """当前激活模型的 ModelTier(优先 config.json;无则 Task 5 的旧 env 回退)。"""
+    cfg = load_config()
+    return cfg.tiers[cfg.active]
+
+
+def active_key() -> str | None:
+    """当前激活模型的密钥:进程 env > ~/.argos/.env > None。"""
+    cfg = load_config()
+    env_name = cfg.key_envs.get(cfg.active) or ""
+    return os.environ.get(env_name) or cfg.secrets.get(env_name) or None
