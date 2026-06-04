@@ -64,7 +64,7 @@ async def test_diff_view_renders_added_removed_counts():
         # ⏺ header + path + +N/−M 计数(spec §widget 改造:不再手画 ┌ ASCII box)
         assert "⏺" in str(dv.border_title)
         assert "auth.py" in str(dv.border_title)
-        assert "+3" in str(dv.border_subtitle) and "1" in str(dv.border_subtitle)
+        assert "+3" in str(dv.border_subtitle) and "-1" in str(dv.border_subtitle)
 
 
 @pytest.mark.asyncio

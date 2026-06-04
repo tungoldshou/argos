@@ -19,9 +19,14 @@ class DiffView(Vertical):
     """
     def __init__(self, *, path: str, added: int, removed: int, unified: str) -> None:
         super().__init__()
+        # 保留公开属性(API 兼容:wiring/外部读 d.path/d.added/d.removed/d.unified)
+        self.path = path
+        self.added = added
+        self.removed = removed
+        self.unified = unified
         self._unified = unified
         self.border_title = f"⏺ Edit · {path}"
-        self.border_subtitle = f"+{added} −{removed}"
+        self.border_subtitle = f"+{added} -{removed}"
 
     def compose(self) -> ComposeResult:
         yield Static(Syntax(self._unified, "diff", theme="monokai", word_wrap=True), id="diff")
