@@ -94,3 +94,37 @@ async def test_probe_connection_http_error_honest():
                                      lambda r: httpx.Response(401, text="invalid api key")))
     assert res.connected is False and res.rating == "不行"
     assert "401" in res.message
+
+
+# ── Task 9: argos setup 子命令 + 交互 run ────────────────────────────────────────
+
+from argos_agent.setup_wizard import run
+
+
+@pytest.mark.asyncio
+async def test_run_wizard_happy_path(tmp_path, monkeypatch):
+    """脚本化输入跑完一轮:选 MiniMax 预设→默认 model→粘贴 key→跳过深探→不再加→完成。"""
+    inputs = iter([
+        "3",            # 选 MiniMax(PRESETS 第 3 项,实现里编号要稳定)
+        "",             # model 用默认 MiniMax-M3
+        "paste",        # key 方式:粘贴
+        "secret123",    # key 值
+        "",             # max_tokens 默认
+        "",             # context_window 默认
+        "",             # price 跳过
+        "n",            # 深度探针 跳过
+        "n",            # 不再加模型
+    ])
+    out_lines = []
+    # probe 注入成功(避免真网络):monkeypatch probe_connection
+    import argos_agent.setup_wizard as W
+    async def fake_probe(**kw):
+        return W.ProbeResult(True, True, "行", "OK")
+    monkeypatch.setattr(W, "probe_connection", fake_probe)
+    await run(reader=lambda prompt="": next(inputs), writer=out_lines.append,
+              config_dir=tmp_path)
+    import json
+    cfg = json.loads((tmp_path / "config.json").read_text())
+    assert cfg["active"] in cfg["models"]
+    assert any(m["model"] == "MiniMax-M3" for m in cfg["models"].values())
+    assert "secret123" in (tmp_path / ".env").read_text()

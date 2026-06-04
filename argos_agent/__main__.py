@@ -23,6 +23,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--project", metavar="PATH", help="在用户项目目录干活")
     p.add_argument("--premium", action="store_true", help="用 premium(Claude)档")
     p.add_argument("--resume", metavar="SESSION_ID", help="续跑历史会话(占位:真续跑走 TUI /resume)")
+    sub = p.add_subparsers(dest="command")
+    sub.add_parser("setup", help="接入模型的交互向导(选 provider→填 key→连通测试→保存)")
     return p
 
 
@@ -133,6 +135,12 @@ def main() -> None:
 
     args = _build_parser().parse_args()
 
+    if getattr(args, "command", None) == "setup":
+        from argos_agent import setup_wizard
+        asyncio.run(setup_wizard.run(
+            reader=lambda prompt="": input(prompt), writer=print))
+        return
+
     if args.selftest:
         sys.exit(_run_selftest())
 
@@ -158,7 +166,7 @@ def main() -> None:
         ArgosApp(loop_factory=factory, demo=False, premium=args.premium).run()
     except RuntimeError as e:
         from argos_agent.tui.fakeloop import FakeLoop
-        print(f"[argos] {e}\n[argos] 落演示态(FakeLoop)——配好 key 后重启即接真模型。", file=sys.stderr)
+        print(f"[argos] {e}\n[argos] 运行 `argos setup` 接入模型,或配置环境变量后重启。", file=sys.stderr)
         ArgosApp(loop_factory=lambda: FakeLoop(), demo=True).run()
 
 
