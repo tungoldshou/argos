@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 # provider 预设:预填 protocol + base_url + 常见默认 model(spec §6.1)。
@@ -63,3 +64,41 @@ def write_profile(*, config_dir: Path, name: str, protocol: str, base_url: str, 
     (config_dir / "config.json").write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
     if api_key:   # 仅"粘贴 key"路径写 .env;"用已有环境变量"路径 api_key=None 不写
         _append_env(config_dir, api_key_env, api_key)
+
+
+# ── 连通 + 格式探针(spec §6.2) ────────────────────────────────────────────────
+
+@dataclass(frozen=True, slots=True)
+class ProbeResult:
+    connected: bool
+    codeact_ok: bool
+    rating: str       # "行" | "勉强" | "不行"
+    message: str      # 给用户的诚实一句话
+
+
+_PROBE_PROMPT = "请只用一个 ```python 代码块输出:print('ok')。不要任何其它文字。"
+
+
+async def probe_connection(*, protocol: str, base_url: str, model: str, api_key: str | None,
+                           client_factory=None) -> ProbeResult:
+    """真发一次流式小调用(spec §6.2):连通?吐 ```python 围栏?诚实评级,绝不假定。
+    client_factory(tier, key)->ModelClient(可注入 MockTransport);默认走真网络。"""
+    from argos_agent.core.models import ModelClient, CredentialPool, ModelTier
+    tier = ModelTier(name="probe", model=model, base_url=base_url, max_tokens=256,
+                     context_window=8192, protocol=protocol)
+    if client_factory is None:
+        def client_factory(t, k):
+            return ModelClient(tier=t, pool=CredentialPool([k or "x"]))
+    client = client_factory(tier, api_key)
+    try:
+        out = "".join([c async for c in client.stream(
+            [{"role": "user", "content": _PROBE_PROMPT}], system="You are a coding agent.")])
+    except Exception as e:  # noqa: BLE001 — 连通失败如实报(含状态码/真因)
+        detail = str(e)
+        return ProbeResult(False, False, "不行", f"连不上 / 端点报错:{detail[:200]}")
+    fenced = "```python" in out
+    if fenced:
+        return ProbeResult(True, True, "行", "连通正常,CodeAct 格式合规。")
+    return ProbeResult(True, False, "勉强",
+                       "连通正常,但此模型默认不吐 ```python 围栏(Argos 实测 MiniMax-M3 也曾如此,"
+                       "靠系统提示契约掰正)——能用但可能需要更强提示;仍可保存。")

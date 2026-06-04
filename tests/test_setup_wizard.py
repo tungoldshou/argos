@@ -50,3 +50,47 @@ def test_write_profile_appends_to_existing_config(tmp_path):
     assert set(cfg["models"]) == {"a", "b"} and cfg["active"] == "a"   # 第二个 set_active=False
     assert "A_KEY=k1" in (tmp_path / ".env").read_text()
     assert "B_KEY=k2" in (tmp_path / ".env").read_text()
+
+
+# ── Task 8: 连通 + 格式探针 ─────────────────────────────────────────────────────
+
+import httpx
+from argos_agent.setup_wizard import probe_connection, ProbeResult
+
+
+def _mock_client(handler):
+    from argos_agent.core.models import ModelClient, CredentialPool, ModelTier
+    def make(tier, key):
+        return ModelClient(tier=tier, pool=CredentialPool([key or "x"]),
+                           transport=httpx.MockTransport(handler))
+    return make
+
+
+@pytest.mark.asyncio
+async def test_probe_connection_fenced_python_ok():
+    sse = (b'data: {"choices":[{"delta":{"content":"```python\\nprint(\'ok\')\\n```"}}]}\n\n'
+           b'data: {"choices":[{"finish_reason":"stop","delta":{}}]}\n\n')
+    res = await probe_connection(protocol="openai", base_url="http://x/v1", model="m",
+                                 api_key="k", client_factory=_mock_client(
+                                     lambda r: httpx.Response(200, content=sse)))
+    assert res.connected is True and res.codeact_ok is True and res.rating == "行"
+
+
+@pytest.mark.asyncio
+async def test_probe_connection_no_fence_warns():
+    sse = (b'data: {"choices":[{"delta":{"content":"{\\"name\\":\\"run\\"}"}}]}\n\n'
+           b'data: {"choices":[{"finish_reason":"stop","delta":{}}]}\n\n')
+    res = await probe_connection(protocol="openai", base_url="http://x/v1", model="m",
+                                 api_key="k", client_factory=_mock_client(
+                                     lambda r: httpx.Response(200, content=sse)))
+    assert res.connected is True and res.codeact_ok is False and res.rating == "勉强"
+    assert "CodeAct" in res.message or "围栏" in res.message
+
+
+@pytest.mark.asyncio
+async def test_probe_connection_http_error_honest():
+    res = await probe_connection(protocol="openai", base_url="http://x/v1", model="m",
+                                 api_key="bad", client_factory=_mock_client(
+                                     lambda r: httpx.Response(401, text="invalid api key")))
+    assert res.connected is False and res.rating == "不行"
+    assert "401" in res.message
