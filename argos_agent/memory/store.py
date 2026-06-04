@@ -254,6 +254,16 @@ class ArgosStore:
         ])
         return mid
 
+    def get_messages(self, session_id: str) -> list[dict]:
+        """按时间顺序还原该 session 的对话消息线程(供 loop 跨轮重发)。
+        只取模型对话角色 user/assistant;system/tool 行不进模型 messages(它们是元数据)。"""
+        cur = self._con.execute(
+            "SELECT role, content FROM messages WHERE session_id = ? "
+            "AND role IN ('user','assistant') ORDER BY ts, rowid",
+            (session_id,),
+        )
+        return [{"role": r["role"], "content": r["content"]} for r in cur.fetchall()]
+
     # ── events(event sourcing,契约 §2 / spec §12.6)──────────────────────
     def append_event(self, session_id: str, event: "Event") -> None:
         from argos_agent.tui.events import serialize_event, event_kind
