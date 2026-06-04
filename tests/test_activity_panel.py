@@ -73,6 +73,19 @@ async def test_cost_unknown_shows_na_not_zero():
 
 
 @pytest.mark.asyncio
+async def test_context_section_shows_usage_bar():
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.on_context(used=50000, window=200000)  # 25%
+        await pilot.pause()
+        t = ap.snapshot_text()
+        assert "25%" in t
+        assert "上下文" in t
+
+
+@pytest.mark.asyncio
 async def test_in_progress_phase_shows_ellipsis_not_zero():
     app = _H()
     async with app.run_test() as pilot:

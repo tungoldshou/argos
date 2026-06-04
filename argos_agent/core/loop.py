@@ -289,10 +289,15 @@ class AgentLoop:
             self._tok_in += int(usage.get("input_tokens") or 0)
             self._tok_out += int(usage.get("output_tokens") or 0)
             self._cache_read += int(usage.get("cache_read") or 0)
+            # 上下文窗口占用 = 本次调用【输入侧】token(input + cache),是【当前窗口】真实占用
+            # (对齐 Claude Code 口径),与上面 _tok_in 的【会话累计】是两个不同的数,不可混。
+            context_used = (int(usage.get("input_tokens") or 0)
+                            + int(usage.get("cache_read") or 0)
+                            + int(usage.get("cache_creation") or 0))
             yield CostUpdate(
                 tokens_in=self._tok_in, tokens_out=self._tok_out,
                 cost_usd=None, elapsed_s=time.time() - self._started,
-                cache_read=self._cache_read,
+                cache_read=self._cache_read, context_used=context_used,
             )
 
             code = extract_code_block(text)

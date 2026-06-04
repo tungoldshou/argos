@@ -21,6 +21,9 @@ class ModelTier:
     model: str
     base_url: str
     max_tokens: int  # 可配(spec §3.4:按模型选上限,解锁产出 ×4),不再硬编码 2048
+    # 模型上下文窗口上限(Task 10:ActivityPanel"上下文"区按此算占用百分比)。
+    # 给默认值(200k)以不破坏既有按 max_tokens 收尾的构造点;config 按模型填真值。
+    context_window: int = 200_000
 
 
 # ── Credential + CredentialPool ──────────────────────────────────────────────

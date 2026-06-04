@@ -42,6 +42,7 @@ class ActivityPanel(Vertical):
         yield _Section("Skills", "未加载")
         yield _Section("MCP", "0 已连接")
         yield _Section("成本 + 缓存", "↑0 ↓0  $0.000\n缓存命中 0 tok  0.0s")
+        yield _Section("上下文", "")
 
     def _sections(self) -> list[_Section]:
         return list(self.query(_Section))
@@ -76,6 +77,15 @@ class ActivityPanel(Vertical):
         cost = "$(N/A)" if cost_usd is None else f"${cost_usd:.3f}"
         self._set(6, f"↑{tokens_in} ↓{tokens_out}  {cost}\n"
                      f"缓存命中 {cache_read} tok  {elapsed_s:.1f}s")
+
+    def on_context(self, *, used: int, window: int) -> None:
+        """上下文窗口用量(当前窗口输入侧 token / 上限)。10 格进度条 + 百分比;
+        口径对齐 Claude Code:used 是【当前窗口占用】(input+cache),非会话累计成本。"""
+        pct = 0 if not window else round(used * 100 / window)
+        filled = min(10, max(0, round(pct / 10)))
+        bar = "▓" * filled + "░" * (10 - filled)
+        win = f"{window // 1000}k" if window else "?"
+        self._set(7, f"{self._model_label} · {win}\n{bar} {pct}%")
 
     def reset_run(self) -> None:
         self._phases.clear(); self._tool_counts.clear(); self._receipts.clear()

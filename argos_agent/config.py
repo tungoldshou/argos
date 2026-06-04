@@ -49,12 +49,16 @@ _WORKER_MODEL = _first("ARGOS_LLM_MODEL", "VITE_LLM_MODEL", "VITE_MINIMAX_MODEL"
 _WORKER_BASE = _first("ARGOS_LLM_BASE", "VITE_LLM_BASE", "VITE_MINIMAX_URL",
                       default="https://api.minimaxi.com/anthropic")
 _WORKER_MAX_TOKENS = int(get("ARGOS_LLM_MAX_TOKENS", "4096") or "4096")
+# MiniMax-M2 官方上下文上限 ~192k;可经 ARGOS_LLM_CONTEXT_WINDOW 覆盖(按实际模型填真值)。
+_WORKER_CONTEXT_WINDOW = int(get("ARGOS_LLM_CONTEXT_WINDOW", "192000") or "192000")
 
 # ── premium(Claude,--premium) ───────────────────────────────────────────
 PREMIUM_KEY = get("ARGOS_PREMIUM_KEY")
 _PREMIUM_MODEL = get("ARGOS_PREMIUM_MODEL", "claude-sonnet-4-6")
 _PREMIUM_BASE = get("ARGOS_PREMIUM_BASE", "https://api.anthropic.com")
 _PREMIUM_MAX_TOKENS = int(get("ARGOS_PREMIUM_MAX_TOKENS", "8192") or "8192")
+# Claude 上下文上限 200k;可经 ARGOS_PREMIUM_CONTEXT_WINDOW 覆盖。
+_PREMIUM_CONTEXT_WINDOW = int(get("ARGOS_PREMIUM_CONTEXT_WINDOW", "200000") or "200000")
 
 # ── 向后兼容别名(旧代码仍引用) ───────────────────────────────────────────
 LLM_KEY = WORKER_KEYS[0] if WORKER_KEYS else None
@@ -75,11 +79,14 @@ except Exception:  # Task 5 未落地时的占位,结构与 canonical 一致
         model: str
         base_url: str
         max_tokens: int
+        context_window: int = 200_000
 
 
 WORKER_TIER = ModelTier(name="worker", model=_WORKER_MODEL or "MiniMax-M2",
                         base_url=_WORKER_BASE or "https://api.minimaxi.com/anthropic",
-                        max_tokens=_WORKER_MAX_TOKENS)
+                        max_tokens=_WORKER_MAX_TOKENS,
+                        context_window=_WORKER_CONTEXT_WINDOW)
 PREMIUM_TIER = ModelTier(name="premium", model=_PREMIUM_MODEL or "claude-sonnet-4-6",
                          base_url=_PREMIUM_BASE or "https://api.anthropic.com",
-                         max_tokens=_PREMIUM_MAX_TOKENS)
+                         max_tokens=_PREMIUM_MAX_TOKENS,
+                         context_window=_PREMIUM_CONTEXT_WINDOW)

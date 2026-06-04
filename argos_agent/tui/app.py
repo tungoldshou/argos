@@ -303,6 +303,9 @@ class ArgosApp(App):
                 tokens_in=ev.tokens_in, tokens_out=ev.tokens_out,
                 cost_usd=ev.cost_usd, elapsed_s=ev.elapsed_s, cache_read=ev.cache_read,
             )
+            from argos_agent import config
+            window = (config.PREMIUM_TIER if self._premium else config.WORKER_TIER).context_window
+            ap.on_context(used=ev.context_used, window=window)
         elif isinstance(ev, ToolReceipt):
             # 回执进活动栏面板的"回执"区 + 工具计数,不再进 transcript(Task 10)。
             ap.on_receipt(ev.receipt.action)
