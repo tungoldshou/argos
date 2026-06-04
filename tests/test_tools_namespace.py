@@ -14,13 +14,14 @@ def test_all_tool_names_exact():
     assert tools.ALL_TOOL_NAMES == [
         "read_file", "write_file", "edit_file", "search_files",
         "run_command", "web_search", "web_extract", "propose_verify",
+        "update_plan",
     ]
 
 
-def test_all_tool_names_count_is_8():
-    """MVP 核心工具恰好 8 个(含真验证门 propose_verify)— 确保 playwright 未混入
-    (保证 UI 数字诚实:工具数必须等于真实可调用工具数)。"""
-    assert len(tools.ALL_TOOL_NAMES) == 8
+def test_all_tool_names_count_is_9():
+    """MVP 核心工具恰好 9 个(含真验证门 propose_verify + 真 TODO 拆解 update_plan)—
+    确保 playwright 未混入(保证 UI 数字诚实:工具数必须等于真实可调用工具数)。"""
+    assert len(tools.ALL_TOOL_NAMES) == 9
 
 
 def test_allowed_cmds_and_git_readonly_present():

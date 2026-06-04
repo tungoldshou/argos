@@ -33,6 +33,7 @@ class ActivityPanel(Vertical):
         self._phase_start = 0.0
         self._tool_counts: dict[str, int] = {}
         self._receipts: list[str] = []
+        self._todos: list[dict] = []   # 真 TODO 拆解(update_plan);非空时"任务进度"区改渲染它
 
     def compose(self) -> ComposeResult:
         yield _Section("模型", self._model_label)
@@ -51,6 +52,35 @@ class ActivityPanel(Vertical):
         self._sections()[idx].update(body)
 
     # ── 事件入口(app._apply_event 调) ──────────────────────────────
+    def _render_progress(self) -> None:
+        """"任务进度"区(idx 1):有真 TODO 拆解时渲染 todo,否则退回 4 阶段计时。"""
+        if self._todos:
+            self._set(1, self._render_todos())
+        else:
+            self._set(1, self._render_phases())
+
+    def _render_phases(self) -> str:
+        lines = []
+        for p, e, s in self._phases:
+            # 进行中(▶,elapsed 还是 0.0)显 …;完成且无耗时显 —;否则显真实耗时。
+            elapsed = "…" if s == "▶" else (f"{e:.1f}s" if e else "—")
+            lines.append(f" {_PHASE_GLYPH.get(p, '◇')} {p:<7} {elapsed:>5} {s}")
+        return "\n".join(lines) if lines else "(待开始)"
+
+    def _render_todos(self) -> str:
+        done = sum(1 for t in self._todos if t.get("status") == "completed")
+        lines = [f"进度 {done}/{len(self._todos)}"]
+        for t in self._todos:
+            status = t.get("status", "pending")
+            if status == "completed":
+                lines.append(f" ✅ {t.get('content', '')}")
+            elif status == "in_progress":
+                # 进行中显 activeForm(无则退回 content)。
+                lines.append(f" 🔧 {t.get('activeForm') or t.get('content', '')}")
+            else:
+                lines.append(f" ⬜ {t.get('content', '')}")
+        return "\n".join(lines)
+
     def on_phase(self, phase: str, actions: int) -> None:
         now = time.time()
         if self._phases:
@@ -58,12 +88,12 @@ class ActivityPanel(Vertical):
             self._phases[-1] = (p, max(0.0, now - self._phase_start), "✓")
         self._phase_start = now
         self._phases.append((phase, 0.0, "▶"))
-        lines = []
-        for p, e, s in self._phases:
-            # 进行中(▶,elapsed 还是 0.0)显 …;完成且无耗时显 —;否则显真实耗时。
-            elapsed = "…" if s == "▶" else (f"{e:.1f}s" if e else "—")
-            lines.append(f" {_PHASE_GLYPH.get(p, '◇')} {p:<7} {elapsed:>5} {s}")
-        self._set(1, "\n".join(lines))
+        self._render_progress()
+
+    def on_plan(self, todos: list[dict]) -> None:
+        """真 TODO 拆解(update_plan)到达 →"任务进度"区改渲染子任务进度(替代 4 阶段计时)。"""
+        self._todos = list(todos or [])
+        self._render_progress()
 
     def on_receipt(self, action: str) -> None:
         self._tool_counts[action] = self._tool_counts.get(action, 0) + 1
@@ -89,6 +119,7 @@ class ActivityPanel(Vertical):
 
     def reset_run(self) -> None:
         self._phases.clear(); self._tool_counts.clear(); self._receipts.clear()
+        self._todos.clear()
         self._set(1, "(待开始)"); self._set(2, "本轮 0 调用"); self._set(3, "—")
 
     def snapshot_text(self) -> str:

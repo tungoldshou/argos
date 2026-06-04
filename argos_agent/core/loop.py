@@ -38,7 +38,7 @@ from argos_agent.core.honesty import (
 from argos_agent.core.types import ModelTierName
 from argos_agent.tui.events import (
     CodeAction, CodeResult, CostUpdate, Error, Event, EventBus, PhaseChange,
-    TokenDelta, ToolReceipt,
+    PlanUpdate, TokenDelta, ToolReceipt,
 )
 
 if TYPE_CHECKING:
@@ -60,6 +60,11 @@ _CODE_BLOCK = re.compile(r"```(?:python)?\s*\n(.*?)```", re.DOTALL)
 # agent 输出登记验证命令;沙箱内的 propose_verify() 工具仅给个登记回执(真执行在 host verify 阶段)。
 _PROPOSE_VERIFY = re.compile(r"propose_verify\(\s*['\"](.+?)['\"]\s*\)")
 
+# 真 TODO 拆解:从模型代码块文本里抓 update_plan([{...}, ...]) 的列表字面量(host 侧解析,
+# 同 propose_verify 路径 —— 沙箱独立子进程,host 解析 agent 输出把 todos 传回再 yield PlanUpdate)。
+# 非贪婪不行(列表内有嵌套括号/逗号),故抓最外层 ([...]) 用括号配平在 _extract_plan 里做。
+_UPDATE_PLAN = re.compile(r"update_plan\(", re.DOTALL)
+
 # M8 安全不变量:沙箱 spawn 用【固定空命名空间】—— 绝不把模型输出/外部数据塞进
 # namespace["__authorized_imports__"]。smolagents 在 AST 层把 "*" 当 allow-all,
 # 若模型能控制 authorized_imports 就能放开任意 import,绕过 AST 限制层(OS 沙箱仍在,
@@ -73,6 +78,48 @@ def extract_code_block(text: str) -> str | None:
     if not m:
         return None
     return m.group(1).strip()
+
+
+def extract_plan_todos(text: str) -> list[dict] | None:
+    """从模型输出抽最后一次 update_plan([...]) 的 todos 列表字面量;无/解析失败则 None。
+
+    括号配平扫描(列表内含嵌套 {}/逗号/字符串,正则非贪婪做不到),取实参子串后 ast.literal_eval
+    —— 只认字面量(防注入,绝不 eval 任意表达式)。取【最后一次】调用反映 agent 最新状态。
+    """
+    import ast
+    last: list[dict] | None = None
+    for m in _UPDATE_PLAN.finditer(text):
+        i = m.end()                       # 紧随 '(' 之后
+        depth = 1
+        in_str: str | None = None
+        esc = False
+        j = i
+        while j < len(text) and depth > 0:
+            ch = text[j]
+            if in_str is not None:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == in_str:
+                    in_str = None
+            elif ch in ("'", '"'):
+                in_str = ch
+            elif ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            j += 1
+        if depth != 0:
+            continue                      # 括号没配平(截断/跨段)→ 跳过
+        arg = text[i:j - 1].strip()       # 去掉收尾的 ')'
+        try:
+            val = ast.literal_eval(arg)
+        except (ValueError, SyntaxError):
+            continue
+        if isinstance(val, list):
+            last = [d for d in val if isinstance(d, dict)]
+    return last
 
 
 class _CollectingBus(EventBus):
@@ -138,6 +185,9 @@ class AgentLoop:
         # 到可变实例字段)。verify 阶段 harness 在隔离 verify_dir 独立跑【这个】命令(退出码为准),
         # agent 碰不到执行 —— 防 agent 篡改评判它的测试作弊。无 propose 维持 NO_TEST_LABEL 诚实路径。
         self._verify_cmd: str | None = config.verify_cmd
+        # 真 TODO 拆解:agent 用 update_plan([...]) 列/更子任务清单。loop 解析后存这里,
+        # 变化才 yield PlanUpdate(去重),并把摘要回灌进 messages(锚机制,防长任务丢目标)。
+        self._todos: list[dict] = []
         self._tok_in = 0        # 累计 token 用量(每步从 model.last_usage 累加,供 CostUpdate)
         self._tok_out = 0
         self._cache_read = 0    # 累计缓存命中 token(成本栏诚实显示,从 model.last_usage 累加)
@@ -173,6 +223,7 @@ class AgentLoop:
         self._actions = 0
         self._fail_count = 0
         self._verify_cmd = self._cfg.verify_cmd   # 每轮回到配置初值,上轮 propose 不跨轮泄漏
+        self._todos = []                          # 每轮清空,上轮 todos 不跨轮泄漏
         self._tok_in = 0
         self._tok_out = 0
         self._cache_read = 0
@@ -183,6 +234,17 @@ class AgentLoop:
         cmd = (cmd or "").strip()
         if cmd:
             self._verify_cmd = cmd
+
+    @staticmethod
+    def _todos_summary(todos: list[dict]) -> str:
+        """把当前 todos 摘成一行行的进度文本(回灌 messages 的锚,防长任务丢目标)。"""
+        glyph = {"completed": "[x]", "in_progress": "[~]", "pending": "[ ]"}
+        done = sum(1 for t in todos if t.get("status") == "completed")
+        lines = [f"[Argos 任务清单 {done}/{len(todos)}]"]
+        for t in todos:
+            mark = glyph.get(t.get("status", "pending"), "[ ]")
+            lines.append(f"{mark} {t.get('content', '')}")
+        return "\n".join(lines)
 
     async def run(self, goal: str, session_id: str) -> AsyncIterator["Event"]:
         """驱动一次 run。plan→act→verify→report,投并持久化每个 Event(一份事件三用)。
@@ -295,6 +357,13 @@ class AgentLoop:
             for m in _PROPOSE_VERIFY.finditer(text):
                 self._on_propose_verify(m.group(1))
 
+            # 真 TODO 拆解:抓本段里 agent 的 update_plan([...]) 子任务清单。变化才 yield PlanUpdate
+            # (去重,不刷屏);活动栏据此渲染进度。同 propose_verify:host 侧解析(沙箱进程拿不到回调)。
+            new_todos = extract_plan_todos(text)
+            if new_todos is not None and new_todos != self._todos:
+                self._todos = new_todos
+                yield PlanUpdate(todos=new_todos)
+
             # CostUpdate:真 token(从 model.last_usage 累加)+ 真 elapsed,让状态栏/成本表走起来。
             # 单价未知 → cost_usd 置 None(诚实:不编造成本,UI 显 $(N/A)),token 与计时仍如实反映。
             usage = getattr(self._model, "last_usage", None) or {}
@@ -327,7 +396,12 @@ class AgentLoop:
                     new_receipt = self._broker.take_receipt()
                     if new_receipt is not None and self._harness.accept_receipt(new_receipt):
                         yield ToolReceipt(receipt=new_receipt)
-                messages.append({"role": "user", "content": self._feedback(result)})
+                feedback = self._feedback(result)
+                if self._todos:
+                    # 锚机制:每个 act step 把当前 todos 摘要回灌(随执行结果一起),
+                    # 防长任务在多步后丢失目标/漏更状态。
+                    feedback += "\n\n" + self._todos_summary(self._todos)
+                messages.append({"role": "user", "content": feedback})
                 step += 1
                 continue
 

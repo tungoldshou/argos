@@ -22,6 +22,7 @@ EventKind = Literal[
     "token_delta", "code_action", "code_result", "file_diff",
     "tool_receipt", "verify_verdict", "phase_change", "cost_update",
     "approval_request", "approval_response", "escalation", "error",
+    "plan_update",
 ]
 
 
@@ -119,10 +120,18 @@ class Error:
     chain: list[str] = field(default_factory=list)  # 异常链(挖 4 层真因)
 
 
+@dataclass(frozen=True, slots=True)
+class PlanUpdate:
+    kind = "plan_update"
+    # [{content, status: pending|in_progress|completed, activeForm}] —— 真 TODO 拆解
+    # (借 Claude Code TodoWrite),活动栏据此渲染子任务进度。
+    todos: list[dict] = field(default_factory=list)
+
+
 Event = (
     TokenDelta | CodeAction | CodeResult | FileDiff | ToolReceipt
     | VerifyVerdict | PhaseChange | CostUpdate | ApprovalRequest
-    | ApprovalResponse | Escalation | Error
+    | ApprovalResponse | Escalation | Error | PlanUpdate
 )
 
 # kind 常量 → 类,用于反序列化派发
@@ -131,7 +140,7 @@ _KIND_TO_CLASS: dict[str, type] = {
     for c in (
         TokenDelta, CodeAction, CodeResult, FileDiff, ToolReceipt,
         VerifyVerdict, PhaseChange, CostUpdate, ApprovalRequest,
-        ApprovalResponse, Escalation, Error,
+        ApprovalResponse, Escalation, Error, PlanUpdate,
     )
 }
 

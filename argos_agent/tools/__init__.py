@@ -28,6 +28,7 @@ VERIFY_DIR: Path = Path(os.environ.get("ARGOS_VERIFY_DIR",
 ALL_TOOL_NAMES: list[str] = [
     "read_file", "write_file", "edit_file", "search_files",
     "run_command", "web_search", "web_extract", "propose_verify",
+    "update_plan",
 ]   # + playwright(可选,Phase 5/6 接)
 
 __all__ = [
@@ -39,6 +40,7 @@ __all__ = [
     # 旧 LangChain 工具对象(遗留路径使用中,Phase 5 后可删)
     "ALL_TOOLS", "read_file", "write_file", "edit_file", "search_files",
     "run_command", "web_search", "web_extract", "propose_verify",
+    "update_plan",
 ]
 
 
@@ -125,6 +127,17 @@ def _propose_verify_pure(command: str) -> str:
     return f"已登记验证命令:{command}(收尾时由 harness 独立运行,以退出码为准)"
 
 
+def _update_plan_pure(todos: list[dict]) -> str:
+    """列出/更新任务的子任务清单(真 TODO 拆解,借 Claude Code TodoWrite)。
+
+    沙箱是独立子进程,这里仅给个登记回执;host loop 解析 agent 输出里的
+    update_plan([...]) 把 todos 传回 host,yield PlanUpdate 驱动活动栏渲染(类似 propose_verify)。
+    todos:[{content, status: pending|in_progress|completed, activeForm}]。
+    """
+    n = len(todos) if isinstance(todos, list) else 0
+    return f"已更新任务清单({n} 项,活动栏将渲染进度)。"
+
+
 def _pure() -> dict[str, Any]:
     return {
         "read_file": files.read_file,
@@ -132,6 +145,7 @@ def _pure() -> dict[str, Any]:
         "edit_file": files.edit_file,
         "search_files": files.search_files,
         "propose_verify": _propose_verify_pure,
+        "update_plan": _update_plan_pure,
     }
 
 
@@ -301,8 +315,14 @@ try:
         在隔离区独立运行它、以退出码为准(你碰不到该执行 → 真硬门禁)。"""
         return _propose_verify_pure(command)
 
+    @_lc_tool
+    def update_plan(todos: list[dict]) -> str:  # type: ignore[misc]
+        """列出/更新本任务的子任务清单(真 TODO 拆解):每项 {content, status, activeForm},
+        status ∈ pending|in_progress|completed。复杂(≥3 步)任务先列出,做的过程中更新各项 status。"""
+        return _update_plan_pure(todos)
+
     ALL_TOOLS = [read_file, write_file, edit_file, run_command, web_search, web_extract,
-                 search_files, propose_verify]
+                 search_files, propose_verify, update_plan]
     try:
         from argos_agent import playwright_tools as _pt
         ALL_TOOLS = list(ALL_TOOLS) + _pt.all_tools()

@@ -28,6 +28,7 @@ from argos_agent.tui.events import (
     EventBus,
     FileDiff,
     PhaseChange,
+    PlanUpdate,
     TokenDelta,
     ToolReceipt,
     VerifyVerdict,
@@ -306,6 +307,9 @@ class ArgosApp(App):
             from argos_agent import config
             window = (config.PREMIUM_TIER if self._premium else config.WORKER_TIER).context_window
             ap.on_context(used=ev.context_used, window=window)
+        elif isinstance(ev, PlanUpdate):
+            # 真 TODO 拆解 → 活动栏"任务进度"区改渲染子任务进度(Task 12)。
+            ap.on_plan(ev.todos)
         elif isinstance(ev, ToolReceipt):
             # 回执进活动栏面板的"回执"区 + 工具计数,不再进 transcript(Task 10)。
             ap.on_receipt(ev.receipt.action)
