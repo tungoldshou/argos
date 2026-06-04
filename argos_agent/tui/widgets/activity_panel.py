@@ -35,7 +35,7 @@ class ActivityPanel(Vertical):
         self._receipts: list[str] = []
 
     def compose(self) -> ComposeResult:
-        yield _Section("模型", f"{self._model_label}\n档位 {self._tier}")
+        yield _Section("模型", self._model_label)
         yield _Section("任务进度", "(待开始)", )  # id 设下方
         yield _Section("工具", "本轮 0 调用")
         yield _Section("回执(已签名)", "—")

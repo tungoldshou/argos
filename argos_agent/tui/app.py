@@ -186,8 +186,8 @@ class ArgosApp(App):
             self.sub_title = self._compose_subtitle()
             await log.append_line("已切换到 Auto(YOLO)——放手执行,头部显示 ⏻ YOLO 标记。")
         elif cmd.name == "model":
-            tier = cmd.arg or "worker"
-            await log.append_line(f"模型切档:{tier}(真切档在 Phase 4 ModelClient 落地)")
+            tier = cmd.arg or "(当前)"
+            await log.append_line(f"模型切换:{tier}(多模型支持在后续子项目落地)")
         elif cmd.name == "status":
             bar = self.query_one("#status-bar", StatusBar)
             await log.append_line(bar.render_text)
