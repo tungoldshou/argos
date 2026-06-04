@@ -18,6 +18,13 @@ def test_idle_is_neutral_not_rainbow():
     assert glow.IDLE_BORDER not in {glow.phase_color(p) for p in ("plan", "act", "verify", "report")}
 
 
+def test_breathe_color_dims_and_restores():
+    base = glow.phase_color("act")
+    dim = glow.breathe(base, 0.0)   # 谷(cos(0)=1 → k=0.55,最暗)
+    bright = glow.breathe(base, 0.5)  # 峰(cos(π)=-1 → k=1.0,基色满亮)
+    assert tuple(dim.rgb) != tuple(bright.rgb), "呼吸应在亮↔暗间变化"
+
+
 import pytest
 from argos_agent.tui.app import ArgosApp
 from argos_agent.tui.fakeloop import FakeLoop

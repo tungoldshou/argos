@@ -22,3 +22,11 @@ def phase_color(phase: str) -> Color:
 
 def verdict_color(status: str) -> Color:
     return {"passed": SUCCESS, "failed": ERROR, "unverifiable": WARNING}.get(status, IDLE_BORDER)
+
+
+def breathe(color: Color, t: float) -> Color:
+    """t∈[0,1] 正弦相位 → 在 color 与略暗之间插值(呼吸)。"""
+    import math
+
+    k = 0.55 + 0.45 * (0.5 - 0.5 * math.cos(2 * math.pi * t))  # 0.55↔1.0
+    return Color(int(color.r * k), int(color.g * k), int(color.b * k))

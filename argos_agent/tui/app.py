@@ -135,11 +135,13 @@ class ArgosApp(App):
         self.query_one("#transcript", Transcript).mount(
             StartupSplash(model_label=tier.model, tier=tier.name, live=not self._demo)
         )
-        # 工作态边缘光(Task 13):idle 灭=中性灰;run 期间随真实阶段着色。纯事件驱动——
-        # 颜色只在 PhaseChange/VerifyVerdict/Escalation/Error 真事件到达时变;不用空转计时器
-        # (无呼吸动画可演时,定时重设同色既是 CPU churn 又踩 Textual 重绘缓存坑)。
-        # 终态告警色(failed/unverifiable/escalation/error)锁定后,阶段色不得覆盖(诚实:告警不被 report 抹掉)。
+        # 工作态边缘光(Task 13):idle 灭=中性灰;run 期间随真实阶段着色,并在非终态做呼吸动画。
+        # 颜色基色只在 PhaseChange/VerifyVerdict/Escalation/Error 真事件到达时变;呼吸只在该基色上调亮暗。
+        # 终态告警色(failed/unverifiable/escalation/error)锁定后,阶段色不得覆盖且不呼吸(诚实:告警静止,不被 report 抹掉)。
         self._terminal_glow = False
+        self._glow_base = None          # 当前呼吸基色(None=不呼吸)
+        self._glow_phase = 0.0          # 呼吸相位累加器 t∈[0,1]
+        self._glow_timer = None
 
     # ── 工作态边缘光(spec §工作态边缘光) ─────────────────────────────────
     def _set_border(self, color) -> None:
@@ -148,10 +150,26 @@ class ArgosApp(App):
     def _glow_start(self) -> None:
         from argos_agent.tui import glow
         self._terminal_glow = False           # 新一轮:解锁告警色
-        self._set_border(glow.phase_color("plan"))
+        self._glow_phase = 0.0
+        self._glow_base = glow.phase_color("plan")
+        self._set_border(self._glow_base)
+        if self._glow_timer is None:          # 起呼吸计时器(边框色 set_interval 重设,glow 可行性研究已证安全无闪烁)
+            self._glow_timer = self.set_interval(0.1, self._glow_breathe)
+
+    def _glow_breathe(self) -> None:
+        """非终态时把当前阶段基色按 breathe 调亮暗(呼吸);终态告警色静止不呼吸。"""
+        from argos_agent.tui import glow
+        if self._terminal_glow or self._glow_base is None:
+            return
+        self._glow_phase = (self._glow_phase + 0.1) % 1.0   # ~10s 一个呼吸周期
+        self._set_border(glow.breathe(self._glow_base, self._glow_phase))
 
     def _glow_stop(self) -> None:
         from argos_agent.tui import glow
+        if self._glow_timer is not None:
+            self._glow_timer.stop()
+            self._glow_timer = None
+        self._glow_base = None
         self._set_border(glow.IDLE_BORDER)
 
     # ── 输入分发 ──────────────────────────────────────────────────────────
@@ -273,7 +291,8 @@ class ArgosApp(App):
             bar.set_phase(ev.phase, ev.actions)
             ap.on_phase(ev.phase, ev.actions)
             if not self._terminal_glow:        # 终态告警色锁定时阶段色不得覆盖(红/琥珀不被 report 抹掉)
-                self._set_border(glow.phase_color(ev.phase))
+                self._glow_base = glow.phase_color(ev.phase)  # 呼吸基色随阶段切换
+                self._set_border(self._glow_base)
         elif isinstance(ev, CodeAction):
             block = CodeActionBlock(code=ev.code, step=ev.step)
             self._step_blocks[ev.step] = block
