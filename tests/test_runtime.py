@@ -5,7 +5,8 @@
 """
 import pytest
 
-from argos_agent import runtime, tools
+from argos_agent import runtime
+from argos_agent.tools import files
 
 
 @pytest.fixture(autouse=True)
@@ -36,14 +37,14 @@ def test_use_project_switches_workspace(tmp_path):
 
 def test_tools_write_into_user_project(tmp_path):
     runtime.use_project(str(tmp_path))
-    tools.write_file.invoke({"path": "app.py", "content": "x=1"})
+    files.write_file("app.py", "x=1")
     assert (tmp_path / "app.py").read_text() == "x=1"
 
 
 def test_path_cage_still_holds_in_project_mode(tmp_path):
     # 即便在项目模式,也不能逃出项目根(防 agent 写到用户机器任意位置)。
     runtime.use_project(str(tmp_path))
-    out = tools.write_file.invoke({"path": "../../etc/evil", "content": "x"})
+    out = files.write_file("../../etc/evil", "x")
     assert "拒绝" in out
 
 

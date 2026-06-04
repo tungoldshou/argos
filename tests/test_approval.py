@@ -155,56 +155,8 @@ def test_decorator_wraps_async_function():
     assert getattr(my_async_tool, "_approval_description", None) == "async 工具"
 
 
-# ── 集成铁证:@tool 套在 @requires_approval 外层时,签名/schema 必须保住 ───────────
-def test_decorator_composes_with_langchain_tool_schema():
-    """`@tool` 在外、`@requires_approval` 在内时,langchain 必须能从 __wrapped__
-    透传出原签名 → 工具 args schema 是具名参数,而非 (*args, **kwargs)。
-    这是审批闸能真正套到工具上的前提,缺了模型就拿不到参数 schema。"""
-    from langchain_core.tools import tool as lc_tool
-
-    @lc_tool
-    @approval.requires_approval(description="写入 {path}", risk="low")
-    def write_thing(path: str, content: str) -> str:
-        """写"""
-        return f"ok {path}"
-
-    assert set(write_thing.args.keys()) == {"path", "content"}
-    # 标记落在底层可调用上(StructuredTool 是 pydantic 模型,挂不住自定义属性)
-    underlying = write_thing.coroutine or write_thing.func
-    assert getattr(underlying, "_approval_required", False) is True
-
-
-@pytest.mark.asyncio
-async def test_decorator_tool_ainvoke_respects_gate():
-    """经 langchain `.ainvoke` 调用时:无 gate → fail-closed;有自动批准 gate → 真执行。
-    证明 gate 的 ContextVar 能穿过 langchain 的同步执行线程被工具看到。"""
-    from langchain_core.tools import tool as lc_tool
-
-    @lc_tool
-    @approval.requires_approval(description="写入 {path}", risk="low")
-    def write_thing(path: str, content: str) -> str:
-        """写入一个东西。"""
-        return f"ok {path}"
-
-    # 无 gate → 默认拒绝
-    denied = await write_thing.ainvoke({"path": "a", "content": "b"})
-    assert "默认拒绝" in denied
-
-    # 有自动批准 gate → 跑到真实实现
-    gate = approval.ApprovalGate()
-
-    async def _auto(action, args, *, description, risk, timeout=60.0):
-        return approval.Decision(kind="once")
-
-    gate.request = _auto  # type: ignore[assignment]
-    token = approval.set_current_gate(gate)
-    try:
-        ran = await write_thing.ainvoke({"path": "a", "content": "b"})
-        assert ran == "ok a"
-    finally:
-        approval.reset_current_gate(token)
-
-
+# 旧 langchain `@tool` + `@requires_approval` 组合铁证随 2026-06-05 死栈清理移除 ——
+# 活路径审批走 broker(gate.request 先于 _execute);decorator 由下方 guarded_call 测试覆盖。
 @pytest.mark.asyncio
 async def test_guarded_call_fail_closed_without_gate():
     ran = {"v": False}
@@ -249,23 +201,16 @@ async def test_guarded_call_returns_refusal_when_denied():
 
 
 @pytest.mark.asyncio
-async def test_gate_approve_unblocks_tool_across_executor_thread():
-    """铁证:被审批的同步工具经 langchain `.ainvoke` 会在执行线程(独立 event loop)
-    里跑;主 loop 的 respond() 必须能跨 loop 唤醒它,否则交互审批在生产里会永久挂起。
-    用真实 pending→respond 流(不打桩 gate.request)走通这条路。"""
-    from langchain_core.tools import tool as lc_tool
-
-    @lc_tool
-    @approval.requires_approval(description="写入 {path}", risk="low")
-    def write_thing(path: str, content: str) -> str:
-        """写。"""
-        return f"WROTE {path}"
-
+async def test_gate_pending_respond_same_loop_wakeup():
+    """真实 pending→respond 流(不打桩 gate.request):一个协程经 guarded_call 阻塞等审批,
+    另一路 respond() 唤醒它放行。守住交互审批不会永久挂起这条生产关键路径。"""
     gate = approval.ApprovalGate()
     token = approval.set_current_gate(gate)
     try:
-        task = asyncio.create_task(write_thing.ainvoke({"path": "a.py", "content": "x"}))
-        # 等工具进入 pending(它在执行线程里阻塞等审批)
+        task = asyncio.create_task(
+            approval.guarded_call("write", {"path": "a.py"}, lambda: _say_hi(),
+                                  description="写入 a.py", risk="low")
+        )
         for _ in range(200):
             await asyncio.sleep(0.01)
             if gate.pending():
@@ -273,7 +218,7 @@ async def test_gate_approve_unblocks_tool_across_executor_thread():
         assert gate.pending(), "工具应已挂起等待审批"
         assert gate.respond(gate.pending()[0].call_id, "once") is True
         result = await asyncio.wait_for(task, timeout=2.0)
-        assert result == "WROTE a.py"
+        assert result == "hi"
         assert gate.pending() == []
     finally:
         approval.reset_current_gate(token)
