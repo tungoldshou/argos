@@ -52,6 +52,54 @@ def test_propose_verify_rejects_trivial_noop_commands():
     assert loop._verify_cmd == "pytest tests/test_x.py"   # 真命令照常登记
 
 
+class _RecModel:
+    """记录每次 stream 收到的 messages(用于断言催促被回灌);按脚本逐段出 text。"""
+    def __init__(self, scripts): self._s = scripts; self._i = 0; self.seen = []
+    async def stream(self, messages, *, system):
+        self.seen.append([m.get("content", "") for m in messages])
+        t = self._s[min(self._i, len(self._s) - 1)]; self._i += 1
+        for ch in t:
+            yield ch
+
+
+@pytest.mark.asyncio
+async def test_h2_nudges_to_verify_when_code_changed_without_verify_cmd():
+    """H2:agent 改了代码(write_file 真跑过)却没声明验证命令 → 回灌一次催促声明真验证;
+    仍不声明则诚实收尾(不无限催)。"""
+    from argos_agent.core.verify_gate import Verifier
+    model = _RecModel([
+        "```python\nwrite_file('x.py', 'x=1')\n```",   # 改代码
+        "完成。",                                        # 宣布完成、无 propose_verify → 该被催一次
+        "完成。",                                        # 仍不声明 → 诚实收尾(不再催)
+    ])
+    loop = AgentLoop(store=FakeStore(), bus=EventBus(), sandbox=_ProposeSandbox(lambda c: None),
+                     broker=None, model=model, verifier=Verifier(),
+                     config=LoopConfig(verify_cmd=None, max_steps=8))
+    async for _ in loop.run("改个文件", "s"):
+        pass
+    flat = "\n".join(msg for call in model.seen for msg in call)
+    assert "propose_verify" in flat and "没有声明验证" in flat, "改了代码却没声明验证 → 应回灌一次催促"
+    # 只催一轮:催促文本只应出现一次(防无限催)
+    assert flat.count("没有声明验证") == 1
+
+
+@pytest.mark.asyncio
+async def test_h2_no_nudge_for_readonly_task():
+    """纯读任务(只 read_file,没写)→ 不催验证(避免误催纯读/问答任务)。"""
+    from argos_agent.core.verify_gate import Verifier
+    model = _RecModel([
+        "```python\nprint(read_file('x.py'))\n```",   # 只读,没改
+        "完成。",
+    ])
+    loop = AgentLoop(store=FakeStore(), bus=EventBus(), sandbox=_ProposeSandbox(lambda c: None),
+                     broker=None, model=model, verifier=Verifier(),
+                     config=LoopConfig(verify_cmd=None, max_steps=8))
+    async for _ in loop.run("看看 x.py", "s"):
+        pass
+    flat = "\n".join(msg for call in model.seen for msg in call)
+    assert "没有声明验证" not in flat, "纯读任务不该被催验证"
+
+
 @pytest.mark.asyncio
 async def test_fake_verify_command_does_not_produce_false_green():
     """H1 端到端回归:模型声明 `echo ok` 当验证 → 被拒不登记 → verify 落 unverifiable(未机检验证),

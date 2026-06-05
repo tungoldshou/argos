@@ -466,6 +466,8 @@ class AgentLoop:
         last_verdict: Any = None  # 最后一次 verify 结果,供 report 可见完成行诚实反映结局。
         escalated = False
         noaction_nudged = False   # 0 动作守卫:只催一轮,催过后第二次无代码块允许纯文字收尾(防死循环)。
+        made_changes = False      # H2:本轮是否真发生过写操作(write_file/edit_file)。
+        verify_nudged = False     # H2:改了代码却没声明验证 → 只催一轮(防误催纯读/无限催)。
         compactions = 0           # 上下文压缩次数上限,防压缩仍溢出时无限重试。
         text = ""                 # 在 while 外初始化:max_steps=0 等边界下收尾仍能安全 text.strip()
         while step < self._cfg.max_steps:
@@ -541,6 +543,10 @@ class AgentLoop:
                 yield CodeAction(code=code, step=step)
                 result = self._sandbox.exec_code(code)
                 self._actions += 1
+                # H2:记录本轮是否真发生写操作(host 侧解析代码块,同 propose_verify 路径)。
+                # 用于"改了代码却没声明验证"的一次性催促,纯读/问答任务不触发。
+                if "write_file(" in code or "edit_file(" in code:
+                    made_changes = True
                 yield CodeResult(
                     step=step, stdout=result.stdout,
                     value_repr=result.value_repr, exc=result.exc, ok=result.ok,
@@ -576,6 +582,18 @@ class AgentLoop:
                 messages.append({"role": "user", "content":
                     "你还没有产出任何 ```python 代码动作就停了。如果要做事,请输出代码块真正执行;"
                     "如果确认无需任何动作即可回答,请直接给出最终答复(我会据此收尾)。"})
+                step += 1
+                continue
+
+            # H2:改了代码却没声明【有效】验证命令 → 回灌一次催促它声明真验证(测试/编译/lint),
+            # 再宣布完成。只催一轮(verify_nudged 兜底):仍不声明则照常走诚实"未机检验证"收尾,
+            # 不无限催;纯读/问答任务(made_changes=False)不触发,避免误催。
+            if made_changes and self._verify_cmd is None and not verify_nudged:
+                verify_nudged = True
+                messages.append({"role": "user", "content":
+                    "你改动了代码但没有声明验证命令。请用 `propose_verify('<测试/编译/lint 命令>')` "
+                    "声明如何机检本次改动(如 pytest、cargo test、ruff、mypy、tsc),我会独立运行它以退出码为准。"
+                    "若此项目确实无可机检验证,直接说明即可(我会如实标'未机检验证'收尾)。"})
                 step += 1
                 continue
 
