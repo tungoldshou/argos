@@ -135,6 +135,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `web_search`. Prompt now lists all three tool classes (file / command / web)
   and instructs the model to search before saying it can't. Verified
   end-to-end: asking weather now triggers a real `web_search` call.
+- **`/undo` `/retry` 是 stub 占位字符串** —— 此前点击只落 `"/undo 将在后续接线后生效。"`(陪了 ~24h),现在接真,描述去"待接线"。
 
 ### Added
 - **审批闸（approval gate）** — 有副作用的工具（写文件 / 编辑文件 / 执行命令）执行前
@@ -176,6 +177,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   cards, error blocks, and Composer stop button share one source of color truth.
 - **`Highlight.js` dark theme** — 13-line handcrafted stylesheet matching the
   argos palette, paired with `rehype-highlight`.
+- **TUI UX 欠账偿还(/undo /retry + read_file offset/limit + edit_file multi-replace)。** 三件一起做:
+  ① `/undo` 还原本轮 run 起点的文件改动(`RunSnapshot` 拍 tar 快照到 `tempfile.gettempdir()/argos-snapshots/`,剪枝目录复用 `runtime.SNAPSHOT_PRUNE_DIRS`;run 中新建文件不删,失败逐条报不静默);② `/retry` 重发本 session 最后一条 user 消息(busy 时先 Esc 打断,空 session / store 不支持诚实报);③ `read_file` 加 `offset`(0-based 行号)/ `limit`(行数,None=EOF),去掉 8000 字符硬截断;④ `edit_file` 加 `all_occurrences=False` 默认(唯一匹配,True 多处替换,N≤1000)。系统提示新增 `_tool_signatures_block`,跟 `_env_context` 同位置(HONESTY 之后、untrusted 之前),列新签名防漂移。+21 测试(snapshot 7 + signature 2 + loop snapshot 2 + read_file 5 + edit_file 4 + undo 3 + retry 5;部分为追加)。
 
 ### Changed
 - config 加 `ARGOS_*` 键（最高优先级），回退旧 `VITE_LLM_*` → `VITE_MINIMAX_*`，零破坏已配用户；组装 `WORKER_TIER`/`PREMIUM_TIER`/`WORKER_KEYS`。
