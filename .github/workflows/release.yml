@@ -1,0 +1,50 @@
+name: Release
+# spec §2.3:打 v* tag → 自动 build + 出 release
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write  # 发 release 需要
+
+jobs:
+  release:
+    name: Build + Release
+    runs-on: macos-14  # arm64 runner(2024 年起免费层 2000 分钟/月)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # git describe --tags 需要完整 history
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Install deps
+        run: uv sync
+
+      - name: Build arm64 binary
+        env:
+          ARGOS_VERSION: ${{ github.ref_name }}   # e.g. v0.1.0
+        run: bash packaging/build_arm64.sh
+
+      - name: Pack release tarball
+        run: |
+          VERSION="${ARGOS_VERSION#v}"  # strip v prefix
+          cd dist
+          tar czf "Argos-${VERSION}-arm64-mac.tar.gz" -C "Argos.app/.." "Argos.app"
+          shasum -a 256 "Argos-${VERSION}-arm64-mac.tar.gz" > "SHA256SUMS"
+          ls -la
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/Argos-${{ github.ref_name }}-arm64-mac.tar.gz
+            dist/SHA256SUMS
+          generate_release_notes: true
