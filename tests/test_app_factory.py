@@ -76,3 +76,16 @@ def test_build_components_uses_active_profile(tmp_path, monkeypatch):
     c = build_components()
     assert c.model.tier.model == "qwen2.5-coder" and c.model.tier.protocol == "openai"
     c.close()
+
+
+def test_build_loop_factory_wires_workflow_engine(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))   # 空目录:走旧 env 回退路径
+    monkeypatch.setattr(af.config, "DEFAULT_KEYS", ["k-test"])
+    c = af.build_components(workspace=str(tmp_path / "ws"))
+    loop = af.build_loop_factory(c)()
+    assert loop._workflow_engine_factory is not None
+    # 工厂能产出一个 WorkflowEngine
+    from argos_agent.workflow.engine import WorkflowEngine
+    assert isinstance(c.workflow_engine_factory(), WorkflowEngine)
+    c.close()

@@ -55,6 +55,7 @@ class AppComponents:
     gate: ApprovalGate
     config: LoopConfig
     workspace: Path
+    workflow_engine_factory: Callable[[], object]
 
     def close(self) -> None:
         self.sandbox.close()
@@ -140,6 +141,26 @@ def build_components(
 
     verifier = Verifier(max_rounds=max_rounds)
 
+    # 工作流引擎工厂:子 agent 按 task.model profile 各自造 ModelClient(模型无关 per-agent);
+    # 未知 profile / 无指定 → 退当前 active(诚实不崩)。子 agent 事件临时,用 in-memory store。
+    from argos_agent.workflow.engine import WorkflowEngine  # 延迟 import 避免循环依赖
+    from argos_agent.workflow.subagent import SubAgentFactory
+
+    def _sub_model_factory(profile: str | None) -> ModelClient:
+        try:
+            t = config.tier_for(profile) if profile else tier
+            k = config.key_for(profile) if profile else key
+        except Exception:  # noqa: BLE001 — 未知 profile 退当前 active(诚实降级)
+            t, k = tier, key
+        return ModelClient(tier=t, pool=CredentialPool([k]))
+
+    def _workflow_engine_factory() -> WorkflowEngine:
+        sub_factory = SubAgentFactory(
+            base_workspace=ws, pool=pool, egress=egress, signer=signer, verifier=verifier,
+            store_factory=lambda: ArgosStore(db_path=":memory:"), model_factory=_sub_model_factory,
+        )
+        return WorkflowEngine(sub_factory)
+
     loop_config = LoopConfig(
         model_tier=tier.name,
         verify_cmd=verify_cmd,
@@ -151,6 +172,7 @@ def build_components(
     return AppComponents(
         store=store, broker=broker, verifier=verifier, model=model,
         sandbox=sandbox, gate=gate, config=loop_config, workspace=ws,
+        workflow_engine_factory=_workflow_engine_factory,
     )
 
 
@@ -161,5 +183,6 @@ def build_loop_factory(c: AppComponents) -> Callable[[], AgentLoop]:
             store=c.store, bus=EventBus(), sandbox=c.sandbox,
             broker=c.broker, model=c.model, verifier=c.verifier, config=c.config,
             workspace=c.workspace, verify_dir=c.workspace,
+            workflow_engine_factory=c.workflow_engine_factory,
         )
     return factory
