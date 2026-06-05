@@ -115,6 +115,11 @@ class ArgosApp(App):
         self._produce_worker = None     # 当前 run 的生产 worker(Esc 打断时取消它)
         self._interrupted = False       # 本轮是否被用户 Esc 打断(收尾时落一行提示)
         self._yolo = False
+        # Plan mode 状态(spec §2.4 视觉指示):_plan_mode=True 时 splash 加 [plan mode] 前缀、
+        # status_bar Mode 段切 plan + 改色、sub_title 挂 [plan mode] 标识。set_plan_mode_indicators()
+        # 是 host 切换的单入口,/plan → EnterPlanMode 后调它一次,下一轮 start_run 起手也会按它
+        # 决定是否落 plan 阶段。
+        self._plan_mode = False
         # 每个 app 实例(=一段会话)用独立稳定 session_id —— loop 跨轮据它从 store 加载历史
         # (多轮上下文)。/clear 换新 id = 开新会话、断上下文。uuid 避免硬编码 "tui-session"
         # 致不同会话共享同一持久化线程。
@@ -137,9 +142,12 @@ class ArgosApp(App):
             return config.DEFAULT_TIER
 
     def _compose_subtitle(self) -> str:
-        """头部副标题 = 基底 + DEMO 标识(脚本演示,demo 模式常驻)+ YOLO 标识(Auto 档)。
-        DEMO 标识诚实告知"这不是真 agent 在跑";真 loop 注入(demo=False)后自动消失。"""
+        """头部副标题 = 基底 + DEMO 标识(脚本演示,demo 模式常驻)+ YOLO 标识(Auto 档)+ plan mode 标识。
+        DEMO 标识诚实告知"这不是真 agent 在跑";真 loop 注入(demo=False)后自动消失。
+        plan mode 标识 [plan mode] 在 /plan 切到后挂上,ExitPlanMode 后摘掉(经 set_plan_mode_indicators)。"""
         parts = [_BASE_SUBTITLE]
+        if self._plan_mode:
+            parts.append("· [plan mode]")
         if self._demo:
             parts.append("· DEMO 脚本演示(真 loop 待 Phase 6 接入)")
         if self._yolo:
@@ -169,6 +177,8 @@ class ArgosApp(App):
         self.query_one("#transcript", Transcript).mount(
             StartupSplash(model_label=tier.model, tier=tier.name, live=not self._demo)
         )
+        # 启动时根据 _plan_mode 状态把指示器对齐(默认 False;若 /plan 已触发过则 True)。
+        self._set_plan_mode_indicators()
         # 工作态边缘光(Task 13):idle 灭=中性灰;run 期间随真实阶段着色,并在非终态做呼吸动画。
         # 颜色基色只在 PhaseChange/VerifyVerdict/Escalation/Error 真事件到达时变;呼吸只在该基色上调亮暗。
         # 终态告警色(failed/unverifiable/escalation/error)锁定后,阶段色不得覆盖且不呼吸(诚实:告警静止,不被 report 抹掉)。
@@ -205,6 +215,25 @@ class ArgosApp(App):
             self._glow_timer = None
         self._glow_base = None
         self._set_border(glow.IDLE_BORDER)
+
+    # ── plan mode 视觉指示(spec §2.4) ─────────────────────────────
+    def _set_plan_mode_indicators(self) -> None:
+        """按 self._plan_mode 一次性把 splash / status_bar / sub_title 三个指示器对齐。
+
+        host 切 plan mode 的单入口:/plan → EnterPlanMode 后调它一次。
+        退出时再调一次(False)摘掉所有 [plan mode] 标记。
+        """
+        from argos_agent.tui import glow
+        for sp in self.query(StartupSplash):
+            sp.set_plan_mode(self._plan_mode)
+        try:
+            self.query_one("#status-bar", StatusBar).set_plan_mode(self._plan_mode)
+        except Exception:  # noqa: BLE001 — 测试中或在 on_mount 前调,status_bar 还没 mount,静默
+            pass
+        self.sub_title = self._compose_subtitle()
+        if self._plan_mode and not self._run_active:
+            # idle 切 plan mode 时把边框也换到 plan 基色(不呼吸 —— run 期间再由 _glow_start 接管)
+            self._set_border(glow.phase_color("plan"))
 
     # ── 输入分发 ──────────────────────────────────────────────────────────
     def on_prompt_area_submitted(self, event: PromptArea.Submitted) -> None:
@@ -299,6 +328,8 @@ class ArgosApp(App):
             await self._undo(log)
         elif cmd.name == "retry":
             await self._retry(log)
+        elif cmd.name == "plan":
+            await self._enter_plan_mode(log)
 
     async def _undo(self, log) -> None:
         """/undo:用本轮 run 起点的快照还原 workspace;不发 goal。"""
@@ -353,6 +384,27 @@ class ArgosApp(App):
             await log.append_line("当前会话没有可重试的消息。", kind="system")
             return
         await self.start_run(last_user["text"])
+
+    async def _enter_plan_mode(self, log) -> None:
+        """/plan slash 命令入口:把 host 切到 plan mode,让下一轮 run 走 plan 阶段(沙箱工具 dispatcher 守卫会拦截写操作)。
+
+        实现简化:loop factory 拿一个临时 loop(同 Task 5 /retry 注释里"临时方案"一样)调 EnterPlanMode;
+        EnterPlanMode 内部 set_plan_mode(True)(模块级) + loop.mode="plan" + 若 loop 有 _emit_phase 则发 PhaseChange。
+        FakeLoop 没 _emit_phase → 视觉指示器靠 _set_plan_mode_indicators() 手动对齐(标题/状态栏/边框),
+        真 loop 也会被 _set_plan_mode_indicators 覆盖一次以保 splash / status_bar 同步。
+        ExitPlanMode 由 host 在 plan 阶段产出 plan 文档后弹 PlanModal 取 4 选项,本方法不接管审批 modal 推屏。
+        """
+        from argos_agent.core.plan_mode import EnterPlanMode
+        try:
+            loop = self._loop_factory()
+        except Exception as e:  # noqa: BLE001 — loop 工厂抛(配错/无依赖)也落行告知,不崩 TUI
+            await log.append_line(f"/plan 不可用(loop factory 失败):{e}", kind="error")
+            return
+        msg = EnterPlanMode(loop)
+        # EnterPlanMode 内部已 set_plan_mode(True) + 设 loop.mode="plan";同步本端 flag + 指示器。
+        self._plan_mode = True
+        self._set_plan_mode_indicators()
+        await log.append_line(msg, kind="system")
 
     async def _show_tools(self, log) -> None:
         """/tools:列出 agent 可调用的全部工具(诚实:数量 = 真实可调用工具数)。"""
