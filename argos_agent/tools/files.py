@@ -81,9 +81,14 @@ def _normalize_ws(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
-def edit_file(path: str, old: str, new: str) -> str:
-    """在 workspace 内某文件里把 old 串替换成 new。先精确唯一匹配;精确找不到时
-    做空白归一化的模糊匹配兜底(仍要求唯一)。"""
+_OCCURRENCES_CAP = 1000  # 防爆:超过此数报"匹配过多"
+
+
+def edit_file(path: str, old: str, new: str, all_occurrences: bool = False) -> str:
+    """在 workspace 内某文件里把 old 串替换成 new。
+    all_occurrences=False(默认)=唯一匹配,多处命中报错(同旧);
+    all_occurrences=True = 替换全部出现,返回 '已编辑 path(N 处)';
+    上限 _OCCURRENCES_CAP=1000(防爆)。"""
     p = _safe_path(path)
     if p is None:
         return f"错误:路径 {path!r} 越出 workspace,拒绝编辑。"
@@ -91,11 +96,21 @@ def edit_file(path: str, old: str, new: str) -> str:
         return f"错误:文件 {path!r} 不存在。"
     text = p.read_text(encoding="utf-8")
     count = text.count(old)
+    if count >= 2 and not all_occurrences:
+        return f"错误:old 串多次匹配({count} 次,需唯一),请给更多上下文。"
+    if count >= 2 and all_occurrences:
+        if count > _OCCURRENCES_CAP:
+            return f"错误:匹配过多({count}>{_OCCURRENCES_CAP}),请给更多上下文。"
+        new_text = text.replace(old, new)
+        p.write_text(new_text, encoding="utf-8")
+        return f"已编辑 {path}({count} 处)。"
     if count == 1:
+        if all_occurrences:
+            p.write_text(text.replace(old, new), encoding="utf-8")
+            return f"已编辑 {path}(1 处)。"
         p.write_text(text.replace(old, new), encoding="utf-8")
         return f"已编辑 {path}。"
-    if count > 1:
-        return f"错误:old 串多次匹配({count} 次,需唯一),请给更多上下文。"
+    # count == 0:走模糊匹配兜底(同旧)
     target = _normalize_ws(old)
     lines = text.splitlines(keepends=True)
     matches: list[tuple[int, int]] = []
@@ -112,12 +127,26 @@ def edit_file(path: str, old: str, new: str) -> str:
     if len(matches) == 0:
         return "错误:未找到要替换的内容。"
     if len(matches) > 1:
-        return f"错误:old 串模糊匹配了 {len(matches)} 次(需唯一),请给更多上下文。"
+        if not all_occurrences:
+            return f"错误:old 串模糊匹配了 {len(matches)} 次(需唯一),请给更多上下文。"
+        if len(matches) > _OCCURRENCES_CAP:
+            return f"错误:匹配过多({len(matches)}>{_OCCURRENCES_CAP}),请给更多上下文。"
+        new_lines: list[str] = []
+        covered = 0
+        for i, j in matches:
+            new_lines.extend(lines[covered:i])
+            seg = new if new.endswith("\n") or j + 1 >= len(lines) else new + "\n"
+            new_lines.append(seg)
+            covered = j + 1
+        new_lines.extend(lines[covered:])
+        p.write_text("".join(new_lines), encoding="utf-8")
+        return f"已编辑 {path}({len(matches)} 处,模糊匹配)。"
+    # 模糊唯一
     i, j = matches[0]
     new_segment = new if new.endswith("\n") or j + 1 >= len(lines) else new + "\n"
     new_lines = lines[:i] + [new_segment] + lines[j + 1:]
     p.write_text("".join(new_lines), encoding="utf-8")
-    return f"已编辑 {path}(模糊匹配)。"
+    return f"已编辑 {path}(1 处,模糊匹配)。"
 
 
 def search_files(pattern: str, target: str = "content", file_glob: str = "", limit: int = 50) -> str:

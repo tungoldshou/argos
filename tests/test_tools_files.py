@@ -92,3 +92,35 @@ def test_read_file_default_unchanged(ws):
     (ws / "big.txt").write_text(big)
     r2 = files.read_file("big.txt")
     assert len(r2) >= 10000  # 全文返回
+
+
+def test_edit_file_all_occurrences_true(tmp_path, monkeypatch):
+    monkeypatch.setattr("argos_agent.tools.files.WORKSPACE", tmp_path)
+    (tmp_path / "a.py").write_text("x = 1\nx = 1\nx = 1\n")
+    r = files.edit_file("a.py", "x = 1", "x = 2", all_occurrences=True)
+    assert "3 处" in r
+    assert (tmp_path / "a.py").read_text() == "x = 2\nx = 2\nx = 2\n"
+
+
+def test_edit_file_all_occurrences_default_false_rejects_multi(tmp_path, monkeypatch):
+    monkeypatch.setattr("argos_agent.tools.files.WORKSPACE", tmp_path)
+    (tmp_path / "a.py").write_text("x = 1\nx = 1\n")
+    r = files.edit_file("a.py", "x = 1", "x = 2")
+    assert "多次匹配" in r  # 行为不变
+
+
+def test_edit_file_all_occurrences_with_fuzzy_fallback(tmp_path, monkeypatch):
+    monkeypatch.setattr("argos_agent.tools.files.WORKSPACE", tmp_path)
+    # 精确 0 处、模糊 1 处
+    (tmp_path / "a.py").write_text("x   =   1\ny = 2\n")
+    r = files.edit_file("a.py", "x = 1", "x = 9", all_occurrences=True)
+    assert "1 处" in r
+    assert "y = 2" in (tmp_path / "a.py").read_text()
+
+
+def test_edit_file_all_occurrences_cap(tmp_path, monkeypatch):
+    monkeypatch.setattr("argos_agent.tools.files.WORKSPACE", tmp_path)
+    content = "dup\n" * 1500
+    (tmp_path / "a.py").write_text(content)
+    r = files.edit_file("a.py", "dup", "x", all_occurrences=True)
+    assert "匹配过多" in r
