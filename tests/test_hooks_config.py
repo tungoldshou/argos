@@ -1,7 +1,9 @@
 """Hooks 配置 dataclass 单元测试(spec §2.2 / §2.4)。"""
 from __future__ import annotations
 
+import json
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 
 import pytest
 
@@ -10,8 +12,11 @@ from argos_agent.hooks.config import (
     HookMatcherEntry,
     HooksConfig,
     HooksConfigError,
+    load,
+    HOOKS_CONFIG_PATH,   # 期望:PosixPath('~/.argos/hooks.json')
 )
 from argos_agent.hooks.matcher import match
+from argos_agent.hooks import get_config, reload_config
 
 
 def test_hook_handler_frozen_dataclass():
@@ -148,3 +153,164 @@ def test_match_invalid_regex_ignored():
     result = match("PreToolUse", ["write_file"], cfg)
     assert len(result) == 1
     assert result[0].command == "good"
+
+
+# ── 加载 + 校验 + reload 流程测试(spec §4.1 / §3 错误处理表)────────────
+
+def test_hooks_config_path_is_argos_home():
+    """HOOKS_CONFIG_PATH = ~/.argos/hooks.json(spec §2.2)。"""
+    assert HOOKS_CONFIG_PATH == Path.home() / ".argos" / "hooks.json"
+
+
+def test_load_missing_file_returns_empty(tmp_path, monkeypatch):
+    """hooks.json 不存在 → 返 HooksConfig.empty()(spec §3 不存在行)。"""
+    monkeypatch.setattr(
+        "argos_agent.hooks.config.HOOKS_CONFIG_PATH", tmp_path / "hooks.json"
+    )
+    cfg = load()
+    assert cfg.entries == {}
+
+
+def test_load_valid_minimal(tmp_path, monkeypatch):
+    """合法最小配置:仅 version + 空 hooks dict。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({"version": 1, "hooks": {}}))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    cfg = load()
+    assert cfg.version == 1
+    assert cfg.entries == {}
+
+
+def test_load_valid_with_event_and_matcher(tmp_path, monkeypatch):
+    """合法配置:1 事件 + matcher。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "matcher": "write_file|edit_file",
+                    "hooks": [
+                        {"type": "command", "command": "echo audit", "timeout": 5000},
+                    ],
+                },
+            ],
+        },
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    cfg = load()
+    pre = cfg.entries["PreToolUse"]
+    assert len(pre) == 1
+    assert pre[0].matcher == "write_file|edit_file"
+    assert pre[0].hooks[0].command == "echo audit"
+    assert pre[0].hooks[0].timeout == 5000
+
+
+def test_load_invalid_json_raises(tmp_path, monkeypatch):
+    """JSON 坏字 → HooksConfigError(绝不部分加载,spec D11)。"""
+    p = tmp_path / "hooks.json"
+    p.write_text("{not valid json")
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    with pytest.raises(HooksConfigError):
+        load()
+
+
+def test_load_missing_version_raises(tmp_path, monkeypatch):
+    """version 缺 → HooksConfigError。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({"hooks": {}}))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    with pytest.raises(HooksConfigError, match="version"):
+        load()
+
+
+def test_load_wrong_version_raises(tmp_path, monkeypatch):
+    """version 不匹配(本机 v1,文件 v2)→ 报错 + 拒载。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({"version": 2, "hooks": {}}))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    with pytest.raises(HooksConfigError, match="version"):
+        load()
+
+
+def test_load_unknown_event_raises(tmp_path, monkeypatch):
+    """不识别的事件名 → HooksConfigError(spec §2.2)。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"NotARealEvent": [{"hooks": [{"type": "command", "command": "x"}]}]},
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    with pytest.raises(HooksConfigError, match="event"):
+        load()
+
+
+def test_load_matcher_not_string_raises(tmp_path, monkeypatch):
+    """matcher 字段非字符串 → HooksConfigError。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"PreToolUse": [{"matcher": 123, "hooks": [{"type": "command", "command": "x"}]}]},
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    with pytest.raises(HooksConfigError, match="matcher"):
+        load()
+
+
+def test_load_hooks_not_array_raises(tmp_path, monkeypatch):
+    """hooks 字段非 array → HooksConfigError。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({"version": 1, "hooks": {"PreToolUse": "not_array"}}))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    with pytest.raises(HooksConfigError, match="array"):
+        load()
+
+
+def test_load_handler_invalid_type_raises(tmp_path, monkeypatch):
+    """type 非 'command' → HooksConfigError。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"PreToolUse": [{"hooks": [{"type": "python", "command": "print(1)"}]}]},
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    with pytest.raises(HooksConfigError, match="type"):
+        load()
+
+
+def test_reload_replaces_singleton(tmp_path, monkeypatch):
+    """reload 改 ~/.argos/hooks.json 后,get_config() 返新配置。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({"version": 1, "hooks": {}}))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    # 旧配置
+    cfg1 = reload_config()
+    assert cfg1.entries == {}
+    # 改文件
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "x"}]}]},
+    }))
+    cfg2 = reload_config()
+    assert "Stop" in cfg2.entries
+    # get_config 应返新
+    assert "Stop" in get_config().entries
+
+
+def test_reload_invalid_keeps_old(tmp_path, monkeypatch):
+    """reload 时新配置不合规 → 保旧 + 报错(spec §3 reload 行)。"""
+    from argos_agent.hooks import _config
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "old"}]}]},
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    cfg_old = reload_config()
+    # 改坏
+    p.write_text("{not json")
+    with pytest.raises(HooksConfigError):
+        reload_config()
+    # 单例仍是旧的
+    assert get_config() is cfg_old
+    assert get_config().entries["PreToolUse"][0].hooks[0].command == "old"
