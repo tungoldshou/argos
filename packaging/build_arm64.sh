@@ -4,6 +4,19 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."   # 仓库根
 
+# 版本号来源(spec §2.6):
+# - 优先环境变量 ARGOS_VERSION(从 git tag 解析,CI 用)
+# - fallback 读 packaging/VERSION
+if [ -z "${ARGOS_VERSION:-}" ]; then
+  if [ -f packaging/VERSION ]; then
+    ARGOS_VERSION=$(cat packaging/VERSION)
+  else
+    ARGOS_VERSION="0.0.0+unknown"
+  fi
+fi
+export ARGOS_VERSION
+echo "=== Building Argos $ARGOS_VERSION ==="
+
 # 1. 确保 pyinstaller 在 venv 里。
 uv run python -c "import PyInstaller" 2>/dev/null || uv add --dev pyinstaller
 
