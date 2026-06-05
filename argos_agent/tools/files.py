@@ -36,20 +36,32 @@ def _safe_path(rel: str) -> Path | None:
     return p
 
 
-def read_file(path: str) -> str:
-    """读取 workspace 内某个文件的内容。path 是相对 workspace 的路径。"""
+def read_file(path: str, offset: int = 0, limit: int | None = None) -> str:
+    """读取 workspace 内某个文件。offset=起始行号(0-based,默认 0=从头);
+    limit=读多少行(默认 None=读到 EOF)。
+    越界 / 不存在 / offset 负数 / limit<=0 → 错误串(不抛异常)。"""
     p = _safe_path(path)
     if p is None:
         return f"错误:路径 {path!r} 越出 workspace,拒绝访问。"
     if not p.exists():
         return f"错误:文件 {path!r} 不存在。"
+    if offset < 0:
+        return f"错误:offset 须 ≥ 0(收到 {offset})。"
+    if limit is not None and limit <= 0:
+        return f"错误:limit 须为正整数或 None(收到 {limit})。"
     try:
         text = p.read_text(encoding="utf-8")
     except Exception as e:  # noqa: BLE001
         return f"错误:读取失败 {e}"
-    if len(text) > 8000:
-        return text[:8000] + f"\n…(文件共 {len(text)} 字符,已截断前 8000)"
-    return text
+    lines = text.splitlines(keepends=True)
+    total = len(lines)
+    if offset >= total:
+        return f"错误:offset 越界(文件共 {total} 行,offset={offset})。"
+    end = offset + limit if limit is not None else total
+    chunk = "".join(lines[offset:end])
+    start_line = offset + 1
+    end_line = min(end, total)
+    return f"{path}: 第 {start_line}–{end_line} 行 / 共 {total} 行\n{chunk}"
 
 
 def write_file(path: str, content: str) -> str:

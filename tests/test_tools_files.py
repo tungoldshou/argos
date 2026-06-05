@@ -17,7 +17,7 @@ def ws(tmp_path, monkeypatch):
 
 def test_write_then_read(ws):
     assert "已写入" in files.write_file("a.txt", "hello")
-    assert files.read_file("a.txt") == "hello"
+    assert "hello" in files.read_file("a.txt")
 
 
 def test_read_missing(ws):
@@ -44,3 +44,51 @@ def test_search_files_content(ws):
     files.write_file("d.py", "def foo():\n    return 1\n")
     out = files.search_files("foo", target="content")
     assert "d.py" in out and "foo" in out
+
+
+def test_read_file_offset_limit(ws):
+    (ws / "lines.txt").write_text("a\nb\nc\nd\ne\n")
+    r = files.read_file("lines.txt", offset=2, limit=2)
+    # 第一行(行号提示)含 "第 3-4 行" 或 "第 3–4 行"(U+2013 连字符)
+    head, _, body = r.partition("\n")
+    assert "第 3" in head and ("-4" in head or "–4" in head)
+    # 正文只含 c、d(从第 3 行起 2 行)
+    assert "c" in body
+    assert "d" in body
+    assert "a" not in body
+    assert "b" not in body
+    assert "e" not in body
+
+
+def test_read_file_offset_only(ws):
+    (ws / "lines.txt").write_text("a\nb\nc\nd\ne\n")
+    r = files.read_file("lines.txt", offset=3)
+    assert "d" in r
+    assert "e" in r
+    assert "a" not in r
+
+
+def test_read_file_offset_out_of_range(ws):
+    (ws / "lines.txt").write_text("a\nb\nc\n")
+    r = files.read_file("lines.txt", offset=100)
+    assert "越界" in r
+    assert "3" in r  # 总行数
+
+
+def test_read_file_limit_zero(ws):
+    (ws / "a.txt").write_text("x")
+    r = files.read_file("a.txt", limit=0)
+    assert "错误" in r
+    assert "limit" in r
+
+
+def test_read_file_default_unchanged(ws):
+    (ws / "a.txt").write_text("hello\nworld\n")
+    r = files.read_file("a.txt")
+    assert "hello" in r
+    assert "world" in r
+    # 向后兼容:不再有 8000 字符硬截断
+    big = "x" * 10000
+    (ws / "big.txt").write_text(big)
+    r2 = files.read_file("big.txt")
+    assert len(r2) >= 10000  # 全文返回
