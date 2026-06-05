@@ -33,6 +33,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--resume", metavar="SESSION_ID", help="续跑历史会话(占位:真续跑走 TUI /resume)")
     sub = p.add_subparsers(dest="command")
     sub.add_parser("setup", help="接入模型的交互向导(选 provider→填 key→连通测试→保存)")
+    sp_update = sub.add_parser(
+        "self-update",
+        help="检查并提示新版本(不自动下载;跳过 7 天缓存)",
+    )
+    sp_update.set_defaults(func=_cmd_self_update)
     return p
 
 
@@ -131,6 +136,36 @@ def _run_selftest() -> int:
             runtime.reset(tok)
 
 
+def _cmd_self_update(args) -> int:
+    """`argos self-update`:force 检查 + 提示如何升级。
+
+    不下载(用户拍)。Homebrew Cask 用户提示用 brew upgrade。
+    """
+    try:
+        from argos_agent import __version__
+        from argos_agent.core.updater import check_github_release
+        cache = Path.home() / ".argos" / ".last_update_check"
+        newer = check_github_release(
+            current_version=__version__,
+            cache_path=cache,
+            force=True,  # 主动命令跳过缓存
+        )
+    except Exception as e:  # noqa: BLE001
+        print(f"argos self-update: 检查失败:{e}", file=sys.stderr)
+        return 1
+    if newer:
+        print(f"🆕 Argos {newer} available (you have {__version__}).")
+        # 检测 Homebrew Cask 安装痕迹(spec §2.6 友好提示)
+        brew_cask = Path("/opt/homebrew/Caskroom/argos")
+        if brew_cask.exists():
+            print("   您通过 Homebrew 装的,请用:brew upgrade --cask argos")
+        else:
+            print("   重装最新版:curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash")
+        return 0
+    print(f"✓ argos {__version__} 已是最新 (up to date)。")
+    return 0
+
+
 def _spawn_update_check() -> None:
     """启动时 background check update(仅查不下载,网络失败静默)。
 
@@ -170,6 +205,10 @@ def main() -> None:
     # 启动时查更新(同步,失败静默,stderr 提示)。在 parse_args 之后 → future
     # `argos self-update` 子命令自身的执行不会被这条通知逻辑干扰。
     _spawn_update_check()
+
+    # 子命令分发:`setup` 走交互向导,`self-update` 走 _cmd_self_update(force 检查)
+    if hasattr(args, "func") and callable(getattr(args, "func", None)):
+        return args.func(args)
 
     if getattr(args, "command", None) == "setup":
         from argos_agent import setup_wizard
