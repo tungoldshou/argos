@@ -20,8 +20,8 @@ COMMAND_HELP: dict[str, str] = {
     "resume": "续上一次会话",
     "clear": "开新会话(清空)",
     "yolo": "放手执行(免审批)",
-    "undo": "撤销上一步(待接线)",
-    "retry": "重试上一步(待接线)",
+    "undo": "撤销本轮文件改动(还原到 run 起点)",
+    "retry": "重发上一条 user 消息",
 }
 
 COMMAND_NAMES: list[str] = list(COMMAND_HELP)
