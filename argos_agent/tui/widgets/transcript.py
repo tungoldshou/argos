@@ -94,21 +94,24 @@ class Transcript(VerticalScroll):
     async def user_line(self, text: str) -> None:
         self.finalize_response()
         # 非首条用户输入前插一条虚线分隔,把对话切成可读的"回合"(Task 14)。
-        if self._lines:
+        if self._lines and self.is_attached:
             from textual.widgets import Rule
             await self.mount(Rule(line_style="dashed"))
         self._lines.append(f"› {text}")
-        await self.mount(UserMessage(text))
-        self.scroll_end(animate=False)   # 用户刚提交新目标 → 无条件跳到底看自己的输入
+        if self.is_attached:
+            await self.mount(UserMessage(text))
+            self.scroll_end(animate=False)   # 用户刚提交新目标 → 无条件跳到底看自己的输入
 
     async def append_token(self, text: str) -> None:
         if self._current is None:
             for sp in self.query(ThinkingIndicator):
                 await sp.remove()
             self._current = AssistantMessage()
-            await self.mount(self._current)
+            if self.is_attached:
+                await self.mount(self._current)
         self._current.feed(text)
-        self._stick_to_bottom()
+        if self.is_attached:
+            self._stick_to_bottom()
 
     def finalize_response(self) -> None:
         """当前流式段落定:记入 _lines,清 current 指针 → 下个 token 起新气泡。"""
@@ -119,16 +122,23 @@ class Transcript(VerticalScroll):
     async def append_line(self, text: str, *, kind: str = "system") -> None:
         self.finalize_response()
         self._lines.append(text)
-        await self.mount(SystemLine(text, kind=kind))
-        self._stick_to_bottom()
+        # 未挂载到 app 时(单测里 ArgosApp.__new__ 绕开 __init__)只更新 _lines,
+        # 跳过视觉 mount —— 这样 rendered_text 仍可断言,生产路径(widgets 必挂)不受影响。
+        if self.is_attached:
+            await self.mount(SystemLine(text, kind=kind))
+            self._stick_to_bottom()
 
     async def mount_block(self, widget) -> None:
         self.finalize_response()
+        if not self.is_attached:
+            return
         await self.mount(widget)
         self._stick_to_bottom()
 
     async def show_thinking(self, label: str = "思考中…") -> None:
         self.finalize_response()
+        if not self.is_attached:
+            return
         await self.mount(ThinkingIndicator(label))
         self._stick_to_bottom()
 

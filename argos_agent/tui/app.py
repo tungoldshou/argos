@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
+from pathlib import Path
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Footer, Header
 
 from argos_agent.approval import ApprovalGate, ApprovalLevel
+from argos_agent.core.snapshot import SNAPSHOT_ROOT, RunSnapshot
 from argos_agent.tui.commands import SlashCommand, match_commands, parse_slash
 from argos_agent.tui.events import (
     ApprovalRequest,
@@ -117,6 +119,11 @@ class ArgosApp(App):
         # (多轮上下文)。/clear 换新 id = 开新会话、断上下文。uuid 避免硬编码 "tui-session"
         # 致不同会话共享同一持久化线程。
         self._session_id = uuid.uuid4().hex
+        # /undo 配套:workspace 根 + run 自增序号 + 本轮 run 起点的快照(供 /undo 还原)。
+        # 临时默认,真接 loop 时再校准(见 plan Task 10 校准 note §5)。
+        self._workspace: Path = Path.home() / ".argos" / "workspace"
+        self._run_seq: int = 0
+        self._snapshot: "RunSnapshot | None" = None
         self.sub_title = self._compose_subtitle()
 
     @staticmethod
@@ -288,8 +295,64 @@ class ArgosApp(App):
             await self._show_skills(log)
         elif cmd.name == "mcp":
             await self._show_mcp(log)
-        elif cmd.name in ("undo", "retry"):
-            await log.append_line(f"/{cmd.name} 将在后续接线后生效。")
+        elif cmd.name == "undo":
+            await self._undo(log)
+        elif cmd.name == "retry":
+            await self._retry(log)
+
+    async def _undo(self, log) -> None:
+        """/undo:用本轮 run 起点的快照还原 workspace;不发 goal。"""
+        if self._snapshot is None or not self._snapshot.tar_path.exists():
+            await log.append_line(
+                "无可撤销的运行(本会话尚未启动 run,或快照已清理)。",
+                kind="system",
+            )
+            return
+        result = self._snapshot.restore(self._workspace)
+        if result.errors:
+            head = "\n".join(f"  ✗ {p}: {e}" for p, e in result.errors[:5])
+            more = "\n  …(更多省略)" if len(result.errors) > 5 else ""
+            await log.append_line(
+                f"部分还原(成功 {len(result.restored)} / 失败 {len(result.errors)}):\n{head}{more}",
+                kind="error",
+            )
+        else:
+            await log.append_line(
+                f"已还原 {len(result.restored)} 个文件到 run 起点。\n"
+                f"如要继续,可 /retry 重发上一条 goal,或输入新 goal。",
+                kind="done",
+            )
+
+    async def _retry(self, log) -> None:
+        """/retry:重发本 session 最后一条 user 消息。busy / 空 / 无 store 诚实报。
+
+        实现简化:demo 模式(FakeLoop,无 store)下诚实报"当前 store 不支持"——
+        真模式需要 build_components 把 store 注入到 App(self._store 字段),
+        那是更大装配改动,留作下一 PR。
+        """
+        if self._run_active:  # busy 守卫(实际字段是 _run_active,非 _busy)
+            await log.append_line("先 Esc 打断当前任务,再 /retry。", kind="system")
+            return
+        # store 临时获取:走 loop_factory 拿一个临时 loop 借 .store 属性
+        # (实际应通过 build_components 注入;这是 demo 模式下的临时方案)
+        loop = self._loop_factory() if self._loop_factory is not None else None
+        store = getattr(loop, "store", None) if loop is not None else None
+        if store is None or not hasattr(store, "get_messages"):
+            await log.append_line("当前 store 不支持 /retry(demo 模式或未通过 build_components 注入)。", kind="error")
+            return
+        try:
+            msgs = store.get_messages(self._session_id)
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(f"读取历史失败:{e}", kind="error")
+            return
+        last_user = next(
+            (m for m in reversed(msgs) if m.get("role") == "user" and (m.get("text") or "").strip()),
+            None,
+        )
+        if last_user is None:
+            await log.append_line("当前会话没有可重试的消息。", kind="system")
+            return
+        await self.start_run(last_user["text"])
 
     async def _show_tools(self, log) -> None:
         """/tools:列出 agent 可调用的全部工具(诚实:数量 = 真实可调用工具数)。"""
@@ -376,6 +439,17 @@ class ArgosApp(App):
         if self._run_active:
             return
         self._run_active = True
+        # 拍本轮 run 的 workspace 快照(供 /undo 还原)。
+        # 命名 = {session_id}-app{run_seq}.tar,与 loop 内部 {session_id}-{ms}.tar 不冲突
+        # (两个快照并存,App 优先用自己拍的这个,loop 那个是 loop 自身的副本能继续 restore)。
+        # 拍快照失败不阻塞 run —— _snapshot 留 None,/undo 报"无可撤销"。
+        self._run_seq += 1
+        self._snapshot = None
+        try:
+            tar_path = SNAPSHOT_ROOT / f"{self._session_id}-app{self._run_seq}.tar"
+            self._snapshot = RunSnapshot.take(self._workspace, tar_path)
+        except Exception:  # noqa: BLE001
+            pass
         self._glow_start()
         for sp in self.query(StartupSplash):
             await sp.remove()
