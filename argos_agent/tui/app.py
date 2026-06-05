@@ -193,6 +193,13 @@ class ArgosApp(App):
         self._glow_base = None          # 当前呼吸基色(None=不呼吸)
         self._glow_phase = 0.0          # 呼吸相位累加器 t∈[0,1]
         self._glow_timer = None
+        # 启动时显坏配置 banner(若 ~/.argos/hooks.json 解析失败)
+        try:
+            from argos_agent.hooks import reload_config
+            reload_config()
+        except Exception as e:  # noqa: BLE001 — 坏配置 banner,run 正常起
+            for sp in self.query(StartupSplash):
+                sp.set_bad_config(str(e))
 
     # ── 工作态边缘光(spec §工作态边缘光) ─────────────────────────────────
     def _set_border(self, color) -> None:
@@ -337,6 +344,8 @@ class ArgosApp(App):
             await self._retry(log)
         elif cmd.name == "plan":
             await self._enter_plan_mode(log)
+        elif cmd.name == "hooks":
+            await self._hooks_cmd(log, cmd.arg)
 
     async def _undo(self, log) -> None:
         """/undo:用本轮 run 起点的快照还原 workspace;不发 goal。"""
@@ -412,6 +421,38 @@ class ArgosApp(App):
         self._plan_mode = True
         self._set_plan_mode_indicators()
         await log.append_line(msg, kind="system")
+
+    async def _hooks_cmd(self, log, arg: str) -> None:
+        """/hooks / /hooks reload slash 命令入口。"""
+        from argos_agent.hooks import get_config, reload_config, HooksConfigError
+        if arg == "reload":
+            try:
+                cfg = reload_config()
+                await log.append_line(
+                    f"已重载 hooks 配置(共 {len(cfg.entries)} 个事件)。",
+                    kind="system",
+                )
+            except HooksConfigError as e:
+                await log.append_line(f"/hooks reload 失败(保留旧配置):{e}", kind="error")
+            return
+        # /hooks 无参 → 列当前配置
+        cfg = get_config()
+        if not cfg.entries:
+            await log.append_line(
+                "当前无 hooks 配置(空 ~/.argos/hooks.json 或未配置)。",
+                kind="system",
+            )
+            return
+        lines = [f"当前 hooks 配置({len(cfg.entries)} 个事件):"]
+        for ev_name, entries in cfg.entries.items():
+            lines.append(f" · {ev_name}:")
+            for e in entries:
+                matcher_str = f"matcher={e.matcher!r}" if e.matcher else "(全匹配)"
+                lines.append(f"   - {matcher_str}")
+                for h in e.hooks:
+                    cmd_short = h.command[:60] + ("..." if len(h.command) > 60 else "")
+                    lines.append(f"     · {cmd_short}  (timeout={h.timeout}ms)")
+        await log.append_line("\n".join(lines), kind="system")
 
     async def _show_tools(self, log) -> None:
         """/tools:列出 agent 可调用的全部工具(诚实:数量 = 真实可调用工具数)。"""
@@ -514,6 +555,29 @@ class ArgosApp(App):
             await sp.remove()
         self._step_blocks = {}  # 每轮独立,杜绝跨轮 step 串台。
         self.query_one("#activity", ActivityPanel).reset_run()  # 每轮起手清活动栏(进度/工具/回执)。
+        # UserPromptSubmit hook fire(spec §2.5:TUI 端触发,不在 loop 内)
+        try:
+            from argos_agent import hooks as _hooks
+            from argos_agent.hooks.payload import build_user_prompt_payload
+            from argos_agent.hooks.events import HookFired as _HookFired
+            ups_payload = build_user_prompt_payload(
+                session_id=self._session_id, cwd=str(self._workspace), goal=goal,
+            )
+            ups_result = await _hooks.fire(
+                "UserPromptSubmit", ups_payload,
+                cwd=self._workspace, session_id=self._session_id,
+            )
+            for h in ups_result.per_hook:
+                # UserPromptSubmit 投 HookFired 走 EventBus 让活动栏渲染
+                self.run_worker(self._apply_event(_HookFired(
+                    event_name="UserPromptSubmit", command=h.command,
+                    success=h.success, returncode=h.returncode,
+                    elapsed_ms=h.elapsed_ms, timed_out=h.timed_out,
+                    not_found=h.not_found, stop_reason=h.stop_reason,
+                    error=h.error,
+                )), exclusive=False)
+        except Exception:  # noqa: BLE001 — hook 失败不阻断 start_run
+            pass
         bus = EventBus()
         loop = self._loop_factory()
         # Plan mode spec §2.5:loop 投 PlanRendered 事件时 _apply_event 回调里要调

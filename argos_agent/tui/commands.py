@@ -23,6 +23,7 @@ COMMAND_HELP: dict[str, str] = {
     "undo": "撤销本轮文件改动(还原到 run 起点)",
     "retry": "重发上一条 user 消息",
     "plan": "进入 plan mode(审批后继续 act)—对齐 CC /plan",
+    "hooks": "列出 / 重载 hooks 配置(/hooks, /hooks reload)",
 }
 
 COMMAND_NAMES: list[str] = list(COMMAND_HELP)

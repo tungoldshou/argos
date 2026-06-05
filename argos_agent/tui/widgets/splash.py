@@ -59,11 +59,21 @@ class StartupSplash(Static):
         """host 切换入口:切前缀 + 切色。"""
         self.plan_mode = bool(active)
 
-    def _refresh(self) -> None:
-        self._text = _compose_text(
+    def set_bad_config(self, reason: str) -> None:
+        """启动时坏配置 banner(覆盖主标题下一行)。
+        reason 来自 HooksConfigError,简洁一行即可,绝不长段(spec §2.4)。"""
+        # 存属性;_refresh 时拼到 _text 末尾
+        self._bad_config = reason
+        self._refresh()
+
+    def _refresh(self) -> None:  # type: ignore[no-redef]
+        text = _compose_text(
             model_label=self._model_label, live=self._live,
             plan_mode=self.plan_mode,
         )
+        if getattr(self, "_bad_config", None):
+            text += f"\n     ⚠ hooks 已禁用({self._bad_config})"
+        self._text = text
         self.update(self._text)
         # 切色 CSS 类:plan mode 走 $primary 冷靛蓝(对齐 glow.phase_color("plan")),act 走 $accent
         self.set_class(self.plan_mode, "-plan-mode")
