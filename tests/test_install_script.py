@@ -73,3 +73,14 @@ def test_non_darwin_exits_with_friendly_message(tmp_path):
     assert result.returncode != 0
     out = (result.stdout + result.stderr).lower()
     assert "darwin" in out or "macos" in out, f"未给 macOS 提示: {out!r}"
+
+
+def test_homebrew_formula_syntax():
+    """ruby -c 应不报错(语法正确)。"""
+    formula = Path(__file__).parent.parent / "packaging" / "homebrew" / "argos.rb"
+    assert formula.exists(), f"缺少 {formula}"
+    result = subprocess.run(
+        ["ruby", "-c", str(formula)],
+        capture_output=True, text=True, timeout=5,
+    )
+    assert result.returncode == 0, f"ruby -c 失败: {result.stderr}"
