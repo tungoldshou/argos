@@ -31,6 +31,7 @@ packages = ["argos_agent"]
 
 [dependency-groups]
 dev = [
+    "pygls>=1.3.0",
     "pyinstaller>=6.20.0",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
