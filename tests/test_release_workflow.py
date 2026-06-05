@@ -46,6 +46,12 @@ def test_workflow_uploads_assets():
 
     加强:解析 tarball 命名(从 pack 步的 `tar czf`)vs upload glob(从 files:),
     断言命名一致(防止 v-prefix 错位再发生)。
+
+    兼容性:pack 步在 run: 块(用 bash `${VAR#v}`),upload 步在 with: 块
+    (用 GitHub Actions 模板 `${{ ... }}`)。两边语法天然不同——
+    `${VAR#v}` 在 with: 块不被处理(就是 release.yml 第 2 个 bug 的成因),
+    `${{ ... }}` 在 run: 块也不被处理。本测试做归一化:把 `${...}` 和
+    `${{ ... }}` 都替成 `<VER>` 再比对 basename 结构。
     """
     import re
 
@@ -93,10 +99,19 @@ def test_workflow_uploads_assets():
                 if line and not line.startswith("#"):
                     upload_files.add(line)
 
-    # 解析后 pack 命名的 basename 必须出现在 upload files 里
+    # 归一化:把模板 `${{ ... }}` 和 bash `${...}` 都替成 `<VER>`
+    # (两边语法天然不同,只比 basename 结构是否一致)
+    def normalize(s: str) -> str:
+        s = re.sub(r"\$\{\{[^}]*\}\}", "<VER>", s)
+        s = re.sub(r"\$\{[^}]+\}", "<VER>", s)
+        return s
+
     for name in resolved_names:
         basename = Path(name).name
-        assert any(basename in f for f in upload_files), (
+        normalized_pack = normalize(basename)
+        assert any(
+            normalize(Path(f).name) == normalized_pack for f in upload_files
+        ), (
             f"pack step 命名 {basename!r} (resolved from {name!r}) "
-            f"不在 upload files {upload_files!r} 中"
+            f"归一化后 {normalized_pack!r} 不匹配任何 upload file {upload_files!r}"
         )
