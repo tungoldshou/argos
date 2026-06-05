@@ -89,7 +89,7 @@ def spawn_child(*, workspace: Path, child_argv: list[str],
     argv = wrap_command(str(prof_file), child_argv)
     child_env = dict(env or os.environ)
     return subprocess.Popen(
-        argv, cwd=str(workspace),
+        argv, cwd=str(workspace), env=child_env,
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, bufsize=1,
     )

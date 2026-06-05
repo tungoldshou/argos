@@ -146,10 +146,33 @@ class SubAgentFactory:
             output = "".join(report_parts).strip()
             if note:
                 output = f"{output}\n[隔离注记] {note}"
+            if workdir != self.base_workspace:
+                # worktree 隔离:RAII 拆 worktree 前把改动抓成 unified diff 放进 output
+                # (v1 不自动合并,给 diff 供父/用户审阅后决定)。在 with 块内抓,拆 worktree
+                # 之后改动就丢了。isolation=none 写共享工作区,改动直接留下,不走这条。
+                output += self._capture_diff(workdir)
             return AgentResult(
                 agent_id=agent_id, ok=True, output=output, verdict=verdict_status,
                 tokens_in=tokens_in, tokens_out=tokens_out,
             )
+
+    @staticmethod
+    def _capture_diff(workdir: Path) -> str:
+        """把 worktree 里未提交的改动抓成 unified diff 文本(失败返空串,不抛 —— 抓 diff
+        失败不该让一个本已跑成的子 agent 整体翻车)。"""
+        import subprocess
+        try:
+            subprocess.run(["git", "-C", str(workdir), "add", "-A"],
+                           capture_output=True, timeout=10)
+            diff = subprocess.run(
+                ["git", "-C", str(workdir), "diff", "--cached"],
+                capture_output=True, text=True, timeout=10,
+            ).stdout
+            if diff.strip():
+                return f"\n[worktree 改动 diff —— 未自动合并,请审阅后应用]\n{diff}"
+        except Exception:  # noqa: BLE001 — 抓 diff 失败不应让子 agent 整体失败
+            pass
+        return ""
 
     @classmethod
     def for_test(cls, *, workspace: Path, model_factory: Callable[[str | None], Any]) -> "SubAgentFactory":

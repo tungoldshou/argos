@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Callable
 
@@ -31,8 +32,13 @@ class SeatbeltExecutor:
     def spawn(self, *, workspace: Path, namespace: dict[str, Any],
               allow_workflow: bool = True) -> None:
         self._workspace = workspace
+        # 子进程 tools/files.py 的 write_file 牢笼按 ARGOS_WORKSPACE 解析(模块级 WORKSPACE)。
+        # 必须把它对齐到本次 spawn 的 workspace —— 否则写会落到继承自父进程的 env 默认目录
+        # (常是 ~/.argos/workspace),再被 Seatbelt 挡成 "Operation not permitted" 静默失败。
+        # worktree 隔离尤其依赖这条:子 agent 的写要落进 worktree,拆前才抓得到 diff。
+        child_env = {**os.environ, "ARGOS_WORKSPACE": str(workspace)}
         self._proc = seatbelt.spawn_child(
-            workspace=workspace, child_argv=seatbelt.python_child_argv(),
+            workspace=workspace, child_argv=seatbelt.python_child_argv(), env=child_env,
         )
         authorized = namespace.get("__authorized_imports__") or None
         self._send({"op": "init", "authorized_imports": authorized,
