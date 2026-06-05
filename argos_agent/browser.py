@@ -17,6 +17,7 @@
 """
 from __future__ import annotations
 
+import os
 import queue
 import threading
 from dataclasses import dataclass
@@ -38,7 +39,12 @@ class BrowserController:
     """单线程持有 sync Playwright + 持久 page 的浏览器控制器。线程安全入口:host 侧调
     navigate/snapshot/click/type_text/screenshot,内部投命令队列、阻塞取结果。"""
 
-    def __init__(self, *, headless: bool = True) -> None:
+    def __init__(self, *, headless: bool | None = None) -> None:
+        # 默认【有头/可见】—— 计算机控制的本意就是让用户**看着** agent 开浏览器、点按、填表;
+        # headless 模式不弹窗,用户会以为"没打开浏览器"。无显示器/CI/SSH 环境可 ARGOS_BROWSER_HEADLESS=1
+        # 强制无头(此时 launch 仍能成功;有头在无显示器环境才会失败 → 诚实错误)。
+        if headless is None:
+            headless = os.environ.get("ARGOS_BROWSER_HEADLESS", "") == "1"
         self._headless = headless
         self._cmd_q: "queue.Queue[_Cmd | None]" = queue.Queue()
         self._res_q: "queue.Queue[str]" = queue.Queue()
@@ -106,11 +112,17 @@ class BrowserController:
         try:
             with sync_playwright() as p:
                 try:
-                    browser = p.chromium.launch(headless=self._headless)
+                    # --disable-blink-features=AutomationControlled:去掉 navigator.webdriver
+                    # 自动化指纹,让真实站点(尤其 Google)少一点直接弹反机器人验证。诚实:这不
+                    # 保证绕过 CAPTCHA —— 大站仍可能挑战自动化;命中时 agent 会如实换路(web_search)。
+                    browser = p.chromium.launch(
+                        headless=self._headless,
+                        args=["--disable-blink-features=AutomationControlled"],
+                    )
                 except Exception as e:  # noqa: BLE001
                     self._res_q.put(
-                        f"错误:浏览器启动失败(可能未安装 chromium:{e})。"
-                        "请运行 `playwright install chromium` 后重试。"
+                        f"错误:浏览器启动失败(可能未安装 chromium,或当前环境无显示器无法开有头窗口:{e})。"
+                        "请运行 `playwright install chromium`;无显示器环境可设 ARGOS_BROWSER_HEADLESS=1。"
                     )
                     return
                 page = browser.new_page()

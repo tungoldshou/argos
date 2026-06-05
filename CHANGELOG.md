@@ -7,6 +7,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+- **浏览器默认改为【有头/可见】窗口(计算机控制本该让你看着它做)。** 此前 `BrowserController` 默认 `headless=True`,agent 调浏览器时不弹窗,用户会以为"根本没打开浏览器"(实测反馈)。现在默认开**可见 Chromium 窗口**,你能亲眼看着 agent 导航/点按/填表;无显示器/CI/SSH 环境可设 `ARGOS_BROWSER_HEADLESS=1` 强制无头。另加 `--disable-blink-features=AutomationControlled` 去掉 `navigator.webdriver` 自动化指纹,让真实站点(尤其 Google)少一点直接弹反机器人验证 —— **诚实**:不保证绕过 CAPTCHA,大站仍可能挑战自动化,命中时 agent 会如实换路(web_search,实测就是这么干的)。
+
 ### Fixed
 - **任意工具/模型文本含 `[...]` 时 TUI 直接崩(Rich markup 注入)。** 真终端实测:让 agent 用浏览器搜索,工具返回 `已点击 "input[value='Google Search']"`,其中 `[value='...']` / `[返回值]` 被 Textual 当**控制台 markup 标签**解析 → `MarkupError: Expected markup value` → 崩掉整个 TUI(worker 未捕获)。这不止浏览器:**任何含方括号的输出**(列表 `[1,2,3]`、类型注解 `list[str]`、正则、pytest 参数化用例名、用户输入)都会炸。根因:`UserMessage`/`SystemLine`/`CodeActionBlock` 结果区/活动栏 `_Section`/`VerdictBadge`/`StatusBar` 都是 `Static`,默认 `markup=True`。修:全部 `markup=False`(任意文本按纯文本渲染,`update()` 沿用 `_render_markup` 设置)。+3 回归测试(复现真崩溃路径:CodeResult.value_repr 含方括号经 `_apply_event`→`set_result` 渲染不崩 + 用户输入/系统行含方括号不崩 + 构造期 `_render_markup is False`)。
 
