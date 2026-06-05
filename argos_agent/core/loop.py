@@ -392,6 +392,22 @@ class AgentLoop:
         for ev in self._hbus.drain():
             yield ev
 
+    def _tool_signatures_block(self) -> str:
+        """工具签名提示(本 PR 新增 3 工具的签名,模型调用时不会因签名漂移跑错)。
+
+        spec §2.3.3:跟 _env_context 同位置(HONESTY 之后、untrusted 之前)。
+        顺序锁死——若改了位置,先看 spec §12.1。
+        """
+        return (
+            "\n\n## 工具签名速查(本会话新签名)\n"
+            "- read_file(path, offset: int = 0, limit: int | None = None)\n"
+            "  · offset=起始行号(0-based),limit=读多少行(None=读到 EOF)\n"
+            "- edit_file(path, old, new, all_occurrences: bool = False)\n"
+            "  · all_occurrences=False(默认)=唯一匹配;True=替换全部(上限 1000 处)\n"
+            "· 沙箱命令 /undo 还原本轮 run 起点的文件改动(不发)\n"
+            "· 沙箱命令 /retry 重发本会话最后一条 user 消息(忙时先 Esc)\n"
+        )
+
     def _build_system(self, goal: str) -> str:
         """系统提示三段接线(顺序锁死,spec §12.1):
           · 安全段 = HONESTY_SYSTEM + 结构化任务契约(命中时注入我们自己的可信 checklist,
@@ -400,7 +416,12 @@ class AgentLoop:
         skills 召回零模型兜底、不依赖 store;memory 召回需 store.recall。任一失败都诚实降级
         (不假装召回发生过),绝不让 run 崩。"""
         # ── 安全段:运行环境块(cwd/OS/日期前置,免得模型现场探目录)+ 结构化工程任务契约 ──
-        safe = HONESTY_SYSTEM + _env_context(self._workspace)
+        # spec §2.3.3:_tool_signatures_block 跟 _env_context 同位置(HONESTY 之后、untrusted 之前)
+        safe = (
+            HONESTY_SYSTEM
+            + _env_context(self._workspace)
+            + self._tool_signatures_block()
+        )
         try:
             from argos_agent import contracts
             _dom, contract_text = contracts.contract_for(goal)
