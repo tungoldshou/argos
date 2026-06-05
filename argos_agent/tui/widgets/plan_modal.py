@@ -70,7 +70,7 @@ class PlanModal(ModalScreen[PlanDecision]):
                 yield Button("4. Refine", id="btn-4")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        # 4 按钮映射 4 action
+        """按钮点击 → 复用 action_decide 保证路径一致。"""
         mapping = {
             "btn-1": "approve_start",
             "btn-2": "approve_accept_edits",
@@ -79,7 +79,7 @@ class PlanModal(ModalScreen[PlanDecision]):
         }
         action = mapping.get(event.button.id or "")
         if action:
-            self.dismiss(PlanDecision(action=action))
+            self.action_decide(action)
 
     def action_decide(self, action: str) -> None:
         """数字键 binding 入口。"""

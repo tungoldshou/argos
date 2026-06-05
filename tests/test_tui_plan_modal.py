@@ -1,6 +1,8 @@
 """PlanModal 4 选项审批 modal 渲染 + 数字键绑定。"""
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from argos_agent.tui.widgets.plan_modal import PlanModal, PlanDecision
@@ -31,3 +33,29 @@ def test_plan_modal_stores_plan_md():
     md = "# Plan\n## 任务分解\n- [ ] step 1\n## 审批\n..."
     m = PlanModal(plan_md=md)
     assert m.plan_md == md
+
+
+@pytest.mark.parametrize(
+    ("btn_id", "expected_action", "expected_feedback"),
+    [
+        ("btn-1", "approve_start", None),
+        ("btn-2", "approve_accept_edits", None),
+        ("btn-3", "keep_planning", None),
+        ("btn-4", "refine", ""),  # refine 经 action_decide 返空 feedback,跟数字键 4 一致
+    ],
+)
+def test_plan_modal_button_routes_through_action_decide(
+    btn_id, expected_action, expected_feedback
+):
+    """按钮点击路径必须与数字键路径走 action_decide,产出相同 PlanDecision。"""
+    m = PlanModal(plan_md="x")
+    m.dismiss = AsyncMock()
+
+    event = MagicMock()
+    event.button.id = btn_id
+
+    m.on_button_pressed(event)
+
+    m.dismiss.assert_called_once_with(
+        PlanDecision(action=expected_action, feedback=expected_feedback)
+    )
