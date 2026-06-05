@@ -30,7 +30,7 @@ class StartupSplash(Static):
             # ASCII art 是块字符,不含可检索的字面 "ARGOS" —— 补一行字面 wordmark,
             # 既让 renderable_text 含 "ARGOS"(测试断言/可访问性文本),又作品牌行。
             + "\n                   ARGOS\n"
-            + f"\n     诚实可靠的终端编码智能体 · v{_VERSION}\n\n"
+            + f"\n     终端超级智能体 · v{_VERSION}\n\n"
             + f"     模型 {model_label} · {mode}\n"
             + "     输入目标开始,或输入 / 看命令  ·  ^C 退出"
         )

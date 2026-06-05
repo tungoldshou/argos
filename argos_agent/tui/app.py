@@ -12,10 +12,10 @@ from collections.abc import Callable
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
-from textual.widgets import Footer, Header, Input
+from textual.widgets import Footer, Header
 
 from argos_agent.approval import ApprovalGate, ApprovalLevel
-from argos_agent.tui.commands import SlashCommand, parse_slash
+from argos_agent.tui.commands import SlashCommand, match_commands, parse_slash
 from argos_agent.tui.events import (
     ApprovalRequest,
     ApprovalResponse,
@@ -39,13 +39,14 @@ from argos_agent.tui.widgets.activity_panel import ActivityPanel
 from argos_agent.tui.widgets.approval_modal import ApprovalModal
 from argos_agent.tui.widgets.code_action import CodeActionBlock
 from argos_agent.tui.widgets.diff_view import DiffView
+from argos_agent.tui.widgets.prompt import PromptArea, SlashMenu
 from argos_agent.tui.widgets.splash import StartupSplash
 from argos_agent.tui.widgets.status_bar import StatusBar
 from argos_agent.tui.widgets.thinking import ThinkingIndicator
 from argos_agent.tui.widgets.transcript import Transcript
 from argos_agent.tui.widgets.verdict_badge import VerdictBadge
 
-_BASE_SUBTITLE = "诚实可靠的终端编码智能体"
+_BASE_SUBTITLE = "终端超级智能体"
 
 
 class ArgosApp(App):
@@ -77,7 +78,13 @@ class ArgosApp(App):
     # 这里仍显式声明作双保险。与 on_mount 的手动 focus 一致。
     AUTO_FOCUS = "#prompt"
 
-    BINDINGS = [("ctrl+c", "quit", "退出")]
+    # Esc 打断当前任务(对齐 Claude Code):取消正在跑的 run。模型推理/等待这类 await 点能即时
+    # 中断;若卡在同步 exec_code(命令/浏览器动作占住事件循环)则需等该动作返回后才落地(诚实:
+    # 不假装能瞬间杀掉同步子进程)。idle 时按 Esc 无副作用。
+    BINDINGS = [
+        ("ctrl+c", "quit", "退出"),
+        ("escape", "interrupt", "打断"),
+    ]
 
     def __init__(
         self, *, loop_factory: Callable[[], object] | None = None, demo: bool = True,
@@ -93,6 +100,8 @@ class ArgosApp(App):
         self.gate = ApprovalGate(ApprovalLevel.CONFIRM)
         self._step_blocks: dict[int, CodeActionBlock] = {}
         self._run_active = False
+        self._produce_worker = None     # 当前 run 的生产 worker(Esc 打断时取消它)
+        self._interrupted = False       # 本轮是否被用户 Esc 打断(收尾时落一行提示)
         self._yolo = False
         # 每个 app 实例(=一段会话)用独立稳定 session_id —— loop 跨轮据它从 store 加载历史
         # (多轮上下文)。/clear 换新 id = 开新会话、断上下文。uuid 避免硬编码 "tui-session"
@@ -127,7 +136,9 @@ class ArgosApp(App):
             tier = self._display_tier()
             yield ActivityPanel(id="activity", model_label=tier.model, tier=tier.name)
         yield StatusBar(id="status-bar")
-        yield Input(placeholder="› 输入目标,或 / 开始命令", id="prompt")
+        # slash 菜单(默认隐藏)叠在输入框上方:打 / 时列出命令;PromptArea 是多行输入(Enter 提交)。
+        yield SlashMenu(id="slash-menu")
+        yield PromptArea(placeholder="› 输入目标,或 / 开始命令", id="prompt")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -136,7 +147,7 @@ class ArgosApp(App):
         排在 Input 之前抢走按键、用户在输入框打不了字(汉字/ASCII 都进不去)。与 AUTO_FOCUS 双保险。"""
         self.register_theme(ARGOS_NIGHT)
         self.theme = "argos-night"
-        self.query_one("#prompt", Input).focus()
+        self.query_one("#prompt", PromptArea).focus()
         tier = self._display_tier()
         self.query_one("#transcript", Transcript).mount(
             StartupSplash(model_label=tier.model, tier=tier.name, live=not self._demo)
@@ -179,10 +190,15 @@ class ArgosApp(App):
         self._set_border(glow.IDLE_BORDER)
 
     # ── 输入分发 ──────────────────────────────────────────────────────────
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        text = event.value
-        self.query_one("#prompt", Input).value = ""
-        self.handle_input(text)
+    def on_prompt_area_submitted(self, event: PromptArea.Submitted) -> None:
+        # PromptArea 已在内部清空自身;这里只负责分发(slash / goal)。同时收掉 slash 菜单。
+        self.query_one("#slash-menu", SlashMenu).hide()
+        self.handle_input(event.text)
+
+    def on_text_area_changed(self, event) -> None:
+        """输入内容变化 → 驱动 slash 命令菜单(打 / 即列命令;带参/非 slash 则隐藏)。"""
+        menu = self.query_one("#slash-menu", SlashMenu)
+        menu.show_matches(match_commands(event.text_area.text))
 
     def handle_input(self, text: str) -> None:
         """slash 走分发;否则当 goal。同步入口(测试可直接调)。
@@ -251,10 +267,11 @@ class ArgosApp(App):
         elif cmd.name == "resume":
             await self._resume_recent(log)
         elif cmd.name == "help":
-            await log.append_line(
-                "命令:/help 帮助 · /tools 列工具 · /skills 列技能 · /mcp MCP 服务 · "
-                "/model 切模型 · /status 状态 · /cost 成本 · /resume 续会话 · "
-                "/clear 新会话 · /yolo 放手执行", kind="system")
+            from argos_agent.tui.commands import COMMAND_HELP
+            lines = ["命令(打 / 也会就地列出,Tab 补全):"]
+            lines += [f" · /{name:<8} {desc}" for name, desc in COMMAND_HELP.items()]
+            lines.append("快捷键:Esc 打断当前任务 · 行尾 \\ + 回车 换行 · ^C 退出")
+            await log.append_line("\n".join(lines), kind="system")
         elif cmd.name == "tools":
             await self._show_tools(log)
         elif cmd.name == "skills":
@@ -381,7 +398,8 @@ class ArgosApp(App):
             finally:
                 await bus.close()
 
-        self.run_worker(_produce(), exclusive=False)
+        self._interrupted = False
+        self._produce_worker = self.run_worker(_produce(), exclusive=False)
         try:
             async for ev in bus:
                 await self._apply_event(ev)
@@ -390,7 +408,12 @@ class ArgosApp(App):
             # 一轮结束时强制落定残余,杜绝"模型最后一句没换行 → 永远不计入 rendered_text"的隐形吞字。
             log.finalize_response()
             self._run_active = False
+            self._produce_worker = None
             self._glow_stop()
+            if self._interrupted:
+                # Esc 打断收尾:落一行明确告知(诚实——已停在当前步,不假装完成)。
+                await log.append_line("⎋ 已打断当前任务。", kind="system")
+                self._interrupted = False
 
     async def _apply_event(self, ev: Event) -> None:
         """把一个契约 §1 Event 反映到对应 widget(一份事件三用的 UI 出口)。"""
@@ -462,6 +485,23 @@ class ArgosApp(App):
             await log.append_line(f"❌ 错误:{ev.message}{chain}", kind="error")
             self._set_border(glow.ERROR)
             self._terminal_glow = True
+
+    def action_interrupt(self) -> None:
+        """Esc:打断当前 run。取消生产 worker → 其 finally 关闭 bus → 消费循环 start_run 自然收尾
+        (落 '已打断' 行、解锁 run_active、停呼吸光)。idle(无 run)时无副作用。
+        诚实边界:模型推理/网络等 await 点能即时停;卡在同步 exec_code(命令/浏览器)需等其返回。"""
+        # Esc 双用:slash 菜单开着时先收菜单(不打断);否则才打断当前 run。
+        menu = self.query_one("#slash-menu", SlashMenu)
+        if menu.display:
+            menu.hide()
+            return
+        if not self._run_active or self._produce_worker is None:
+            return
+        self._interrupted = True
+        try:
+            self._produce_worker.cancel()
+        except Exception:  # noqa: BLE001 — worker 可能已自然结束,取消失败无碍
+            pass
 
     async def _handle_approval(self, req: ApprovalRequest) -> None:
         """Auto 档不弹窗直接 always;否则弹 ApprovalModal,回调里 respond。"""

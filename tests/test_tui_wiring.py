@@ -153,34 +153,34 @@ async def test_input_focused_on_mount_and_receives_typing():
 
     注意作用域:run_test() 是 headless,pilot.press() 把合成 Key 事件直接塞进聚焦 widget,
     绕过了 driver 的真实输入管线(Kitty/legacy 协议、转义码解析、IME)。本测试只证明
-    "焦点接线 + value 插入逻辑正确",不能证明真实终端里用户敲键能送达——那个失败发生在
+    "焦点接线 + 字符插入逻辑正确",不能证明真实终端里用户敲键能送达——那个失败发生在
     Pilot 跳过的 driver 层(见 test_kitty_keyboard_protocol_disabled_by_default)。"""
-    from textual.widgets import Input
+    from argos_agent.tui.widgets.prompt import PromptArea
 
     app = ArgosApp(loop_factory=lambda: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
-        prompt = app.query_one("#prompt", Input)
+        prompt = app.query_one("#prompt", PromptArea)
         assert app.focused is prompt, "启动后焦点必须在输入框(#prompt)"
         await pilot.press("h", "i")
         await pilot.pause()
-        assert prompt.value == "hi", "聚焦的输入框应接收按键"
+        assert prompt.text == "hi", "聚焦的输入框应接收按键"
 
 
 @pytest.mark.asyncio
 async def test_input_accepts_cjk_characters():
     """回归:输入框能接收汉字(IME 合成后终端送出的字符走与 ASCII 同路径)。"""
-    from textual.widgets import Input
+    from argos_agent.tui.widgets.prompt import PromptArea
 
     app = ArgosApp(loop_factory=lambda: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
-        prompt = app.query_one("#prompt", Input)
+        prompt = app.query_one("#prompt", PromptArea)
         # 模拟终端把已合成的汉字逐字送达(Textual 以可打印字符 Key 事件插入)。
         for ch in "修个bug":
             await pilot.press(ch)
         await pilot.pause()
-        assert prompt.value == "修个bug", "输入框应接收汉字 + ASCII 混排"
+        assert prompt.text == "修个bug", "输入框应接收汉字 + ASCII 混排"
 
 
 # ── 真实终端键盘:driver 层护栏(Pilot headless 测不到,故用进程级断言守默认) ──────────

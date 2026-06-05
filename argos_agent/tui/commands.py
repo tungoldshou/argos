@@ -7,10 +7,37 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-COMMAND_NAMES: list[str] = [
-    "yolo", "undo", "clear", "retry", "status", "model", "resume", "cost",
-    "help", "tools", "skills", "mcp",
-]
+# 命令 → 一句话说明(单一来源:/help 文案、slash 菜单、Tab 补全都从这里取,杜绝漂移)。
+# 顺序 = slash 菜单展示顺序(按常用度排:能力发现在前,会话控制居中,待接线在后)。
+COMMAND_HELP: dict[str, str] = {
+    "help": "显示所有命令",
+    "tools": "列出可调用的工具",
+    "skills": "列出可用技能",
+    "mcp": "列出 MCP 外部工具",
+    "model": "查看 / 切换模型",
+    "status": "当前运行状态",
+    "cost": "本轮成本 + 缓存",
+    "resume": "续上一次会话",
+    "clear": "开新会话(清空)",
+    "yolo": "放手执行(免审批)",
+    "undo": "撤销上一步(待接线)",
+    "retry": "重试上一步(待接线)",
+}
+
+COMMAND_NAMES: list[str] = list(COMMAND_HELP)
+
+
+def match_commands(text: str) -> list[tuple[str, str]]:
+    """slash 菜单 / Tab 补全用:text 以 / 开头且尚未输入参数时,返回前缀匹配的 (name, desc) 列表
+    (按 COMMAND_HELP 顺序)。非 slash / 已带参数(出现空格)/ 无匹配 → 空列表。"""
+    s = text.lstrip()
+    if not s.startswith("/"):
+        return []
+    body = s[1:]
+    if " " in body:  # 已在输入参数,不再提示命令
+        return []
+    pref = body.lower()
+    return [(n, d) for n, d in COMMAND_HELP.items() if n.startswith(pref)]
 
 
 @dataclass(frozen=True, slots=True)

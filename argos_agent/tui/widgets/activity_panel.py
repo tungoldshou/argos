@@ -12,8 +12,18 @@ _PHASE_GLYPH = {"plan": "◇", "act": "✦", "verify": "✦", "report": "◇"}
 
 
 class _Section(Static):
+    # 每块自带"格子"观感:顶部 $text-muted 分隔线(可见,非近黑 $panel) + 嵌在线上的橙色粗体
+    # 标题 + 块间留 1 行空白。此前各块紧贴、分隔线用近黑 $panel 看不见 → 用户体感"全挤一起"。
     DEFAULT_CSS = """
-    _Section { height: auto; padding: 0 1; border-title-color: $foreground; border-title-style: bold; }
+    _Section {
+        height: auto;
+        padding: 0 1;
+        margin: 0 0 1 0;
+        border-top: solid $foreground-darken-3;
+        border-title-color: $accent;
+        border-title-style: bold;
+        border-title-align: left;
+    }
     """
     def __init__(self, title: str, body: str = "") -> None:
         # markup=False:区块正文含模型给的 TODO 文案 / 工具名等任意文本,可能带 `[...]`,
@@ -27,8 +37,7 @@ class ActivityPanel(Vertical):
     # 此前继承 Vertical 默认 overflow-y: hidden,区块超高即被裁且完全滚不动。
     # border-title-color 在 _Section 显式给 $foreground(亮白)——默认是透明(alpha=0)看不见。
     DEFAULT_CSS = """
-    ActivityPanel { width: 34; border-left: solid $panel; padding: 0 0; overflow-y: auto; scrollbar-size-vertical: 1; }
-    ActivityPanel > _Section { border-top: solid $panel; }
+    ActivityPanel { width: 34; border-left: solid $panel; padding: 1 0 0 0; overflow-y: auto; scrollbar-size-vertical: 1; }
     """
     def __init__(self, *, model_label: str = "—", tier: str = "—", **kwargs) -> None:
         super().__init__(**kwargs)

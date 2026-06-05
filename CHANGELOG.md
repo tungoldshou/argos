@@ -7,7 +7,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+- **多行输入框 + slash 命令菜单 + Esc 打断(对齐 Claude Code 的输入交互)。** 真终端反馈四连改:
+  ① **多行输入** —— 单行 `Input` 换成 `PromptArea`(基于 `TextArea`):Enter 提交整段;**行尾反斜杠 `\` + 回车 = 续行**(去掉反斜杠插入真换行、继续编辑,readline/shell 同款),多行粘贴原样进入,高度随行数自增长(1..8 行)。**为什么用反斜杠而非 Shift+Enter**:本项目禁用了 Kitty 协议(修过"打字不显示"的输入 bug),不能赌修饰键能被终端识别;反斜杠续行终端无关、确定可用。
+  ② **slash 菜单** —— 打 `/` 即在输入框上方弹出命令列表(命令 + 中文说明,▸ 标首项),继续输入收窄,**Tab 补全**到首个匹配(`/he`→`/help `),Enter 跑完整命令;命令清单单一来源 `COMMAND_HELP`(/help 文案、菜单、补全不漂移)。
+  ③ **Esc 打断当前任务** —— 取消正在跑的 run(模型推理/网络等 await 点即时停;**诚实**:卡在同步 `exec_code`(命令/浏览器占住事件循环)需等其返回,不假装能瞬杀同步子进程),收尾落明确的"⎋ 已打断"行;Esc 双用——slash 菜单开着时先收菜单(不打断);idle 时无副作用。
+  +9 个测试(match_commands 前缀/参数门、Enter 提交清空、反斜杠续行、菜单显隐、Tab 补全、Esc 打断活跃 run + idle 无副作用 + 先收菜单)。作用域诚实:Pilot headless 测的是 handler 逻辑,真终端转义解码仍由进程级 Kitty 断言守。
+
 ### Changed
+- **头部/启动画面标题去"诚实可靠的编码智能体",改"终端超级智能体"。** Argos 不只是编码 agent,而是 Claude Code + agent 的超级智能体;诚实仍是内核(HONESTY_SYSTEM/verify 门不变),但不必挂在标题上自我标榜。
+- **右侧活动栏分格(此前各区块挤成一坨)。** `_Section` 之间的分隔线原用近黑 `$panel` 几乎不可见、且零间距 → 用户体感"全挤一起、看不出格子"。改:每块顶部 `$foreground-darken-3` 灰色分隔线 + 嵌在线上的**橙色粗体标题** + 块间留 1 行空白,渲染成清晰的"格子"。(注:`$text-muted` 是自定义主题变量,在 DEFAULT_CSS 的 border 解析期不可用,故分隔线用内置派生色 `$foreground-darken-3`。)另:活动栏"任务进度"区在没有真 TODO 拆解时显示的是 4 个工作阶段(plan/act/verify/report),**不是被限制成 4 条**;agent 调 `update_plan` 后会渲染全部子任务(不截断)。
 - **浏览器默认改为【有头/可见】窗口(计算机控制本该让你看着它做)。** 此前 `BrowserController` 默认 `headless=True`,agent 调浏览器时不弹窗,用户会以为"根本没打开浏览器"(实测反馈)。现在默认开**可见 Chromium 窗口**,你能亲眼看着 agent 导航/点按/填表;无显示器/CI/SSH 环境可设 `ARGOS_BROWSER_HEADLESS=1` 强制无头。另加 `--disable-blink-features=AutomationControlled` 去掉 `navigator.webdriver` 自动化指纹,让真实站点(尤其 Google)少一点直接弹反机器人验证 —— **诚实**:不保证绕过 CAPTCHA,大站仍可能挑战自动化,命中时 agent 会如实换路(web_search,实测就是这么干的)。
 
 ### Fixed
