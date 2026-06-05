@@ -36,6 +36,7 @@ class ApprovalLevel(enum.Enum):
     PROPOSE = "propose"   # 出方案待批
     CONFIRM = "confirm"   # 逐个批(默认)
     AUTO = "auto"         # 放手(YOLO;TUI 头部亮红 ⏻)
+    ACCEPT_EDITS = "accept_edits"   # plan mode 选项 2(approve and accept edits):写/编辑工具自动批
 
 
 @dataclass(frozen=True, slots=True)

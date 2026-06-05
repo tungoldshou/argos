@@ -23,6 +23,7 @@ EventKind = Literal[
     "tool_receipt", "verify_verdict", "phase_change", "cost_update",
     "approval_request", "approval_response", "escalation", "error",
     "plan_update", "workflow_progress", "workflow_proposed", "workflow_done",
+    "plan_rendered",
 ]
 
 
@@ -159,11 +160,20 @@ class WorkflowDone:
     notes: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class PlanRendered:
+    """Plan mode spec §2.5:plan 阶段产出 → host 拼 markdown → 投此事件 → TUI 弹 PlanModal。
+    loop 在投事件后挂起(asyncio.Event)等用户决策,决策经 `ExitPlanMode` 落 `loop._plan_decision`
+    后 set event 唤醒 loop,4 分支按 spec §2.5 处理。"""
+    kind = "plan_rendered"
+    plan_md: str                     # PlanRenderer.render() 产出的 user-facing markdown
+
+
 Event = (
     TokenDelta | CodeAction | CodeResult | FileDiff | ToolReceipt
     | VerifyVerdict | PhaseChange | CostUpdate | ApprovalRequest
     | ApprovalResponse | Escalation | Error | PlanUpdate | WorkflowProgress
-    | WorkflowProposed | WorkflowDone
+    | WorkflowProposed | WorkflowDone | PlanRendered
 )
 
 # kind 常量 → 类,用于反序列化派发
@@ -173,7 +183,7 @@ _KIND_TO_CLASS: dict[str, type] = {
         TokenDelta, CodeAction, CodeResult, FileDiff, ToolReceipt,
         VerifyVerdict, PhaseChange, CostUpdate, ApprovalRequest,
         ApprovalResponse, Escalation, Error, PlanUpdate, WorkflowProgress,
-        WorkflowProposed, WorkflowDone,
+        WorkflowProposed, WorkflowDone, PlanRendered,
     )
 }
 
