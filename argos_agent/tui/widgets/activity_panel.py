@@ -1,12 +1,15 @@
-"""右侧诚实活动栏(spec §ActivityPanel)。区块:模型/任务进度/工具/回执/Skills/MCP/成本+缓存。
+"""右侧诚实活动栏(spec §ActivityPanel)。区块:模型/任务进度/工具/回执/Skills/MCP/成本+缓存/Hook。
 诚实铁律:每块只反映真实数据;Skills/MCP 无真实内容时显示诚实空态('未加载'/'0 已连接')。"""
 from __future__ import annotations
 
 import time
+from collections import deque
 
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import Static
+
+from argos_agent.hooks.events import HookFired
 
 _PHASE_GLYPH = {"plan": "◇", "act": "✦", "verify": "✦", "report": "◇"}
 
@@ -48,6 +51,7 @@ class ActivityPanel(Vertical):
         self._tool_counts: dict[str, int] = {}
         self._receipts: list[str] = []
         self._todos: list[dict] = []   # 真 TODO 拆解(update_plan);非空时"任务进度"区改渲染它
+        self._hook_log: deque[HookFired] = deque(maxlen=50)   # spec §2.4 最多 50
 
     def compose(self) -> ComposeResult:
         yield _Section("模型", self._model_label)
@@ -58,6 +62,7 @@ class ActivityPanel(Vertical):
         yield _Section("MCP", self._mcp_summary())
         yield _Section("成本 + 缓存", "↑0 ↓0  $0.000\n缓存命中 0 tok  0.0s")
         yield _Section("上下文", "")
+        yield _Section("Hook", "(无)")
 
     @staticmethod
     def _skills_summary() -> str:
@@ -162,10 +167,31 @@ class ActivityPanel(Vertical):
         win = f"{window // 1000}k" if window else "?"
         self._set(7, f"{self._model_label} · {win}\n{bar} {pct}%")
 
+    def on_hook_fired(self, ev: HookFired) -> None:
+        """单条 hook 触发结果(activity panel "Hook" 区段)。
+        3 态:ok(dim) / fail(red 标记) / timeout(red 标记)。"""
+        self._hook_log.append(ev)
+        # 渲染最近 5 条(避免区段超高);每条:event + command + 状态 + 耗时
+        lines = []
+        for h in list(self._hook_log)[-5:]:
+            cmd_short = h.command.split()[0] if h.command else "?"
+            if h.timed_out:
+                tag = f"timeout ({h.elapsed_ms}ms)"
+            elif h.not_found:
+                tag = "not found"
+            elif h.success:
+                tag = f"ok ({h.elapsed_ms}ms)"
+            else:
+                tag = f"fail (exit {h.returncode}, {h.elapsed_ms}ms)"
+            lines.append(f" {h.event_name}:{cmd_short} {tag}")
+        self._set(8, "\n".join(lines) if lines else "(无)")
+
     def reset_run(self) -> None:
         self._phases.clear(); self._tool_counts.clear(); self._receipts.clear()
         self._todos.clear()
+        self._hook_log.clear()
         self._set(1, "(待开始)"); self._set(2, "本轮 0 调用"); self._set(3, "—")
+        self._set(8, "(无)")
 
     def snapshot_text(self) -> str:
         # Textual 8.2.7 的 Static 用 .content 暴露当前正文(随 .update() 刷新),不再有 .renderable。

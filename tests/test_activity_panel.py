@@ -123,3 +123,96 @@ async def test_in_progress_phase_shows_ellipsis_not_zero():
         sec = str(ap._sections()[1].content)  # 任务进度区
         assert "0.0s" not in sec, "进行中阶段不应显 0.0s"
         assert "…" in sec, "进行中阶段应显占位 …"
+
+
+# ── Hooks(spec §2.4):ActivityPanel 'Hook' 区段 + 3 态渲染 + deque 50 ───────────
+@pytest.mark.asyncio
+async def test_activity_panel_has_hook_section():
+    """ActivityPanel.compose 含 'Hook' 区段(标题)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        titles = [getattr(s, "border_title", "") for s in ap._sections()]
+        assert "Hook" in titles
+
+
+@pytest.mark.asyncio
+async def test_activity_panel_on_hook_fired_ok():
+    """on_hook_fired(success=True) → 区段体含 'ok' / 命令名。"""
+    from argos_agent.hooks.events import HookFired
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ev = HookFired(event_name="PreToolUse", command="echo ok",
+                       success=True, returncode=0, elapsed_ms=130)
+        ap.on_hook_fired(ev)
+        snap = ap.snapshot_text()
+        assert "PreToolUse" in snap
+        assert "echo" in snap
+        assert "ok" in snap
+
+
+@pytest.mark.asyncio
+async def test_activity_panel_on_hook_fired_fail_red():
+    """on_hook_fired(success=False, returncode=2) → 显 fail 红色标记(行内含 'fail' 或 'exit 2')。"""
+    from argos_agent.hooks.events import HookFired
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ev = HookFired(event_name="PostToolUse", command="false",
+                       success=False, returncode=2, elapsed_ms=80)
+        ap.on_hook_fired(ev)
+        snap = ap.snapshot_text()
+        assert "exit 2" in snap or "fail" in snap.lower()
+
+
+@pytest.mark.asyncio
+async def test_activity_panel_on_hook_fired_timeout():
+    """on_hook_fired(timed_out=True) → 显 timeout 标记。"""
+    from argos_agent.hooks.events import HookFired
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ev = HookFired(event_name="PreToolUse", command="sleep 5",
+                       success=False, returncode=None, elapsed_ms=200, timed_out=True)
+        ap.on_hook_fired(ev)
+        snap = ap.snapshot_text()
+        assert "timeout" in snap.lower()
+
+
+@pytest.mark.asyncio
+async def test_activity_panel_hook_deque_caps_at_50():
+    """on_hook_fired 触发 60 次 → deque 最多 50 条(最近 50)。"""
+    from argos_agent.hooks.events import HookFired
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        for i in range(60):
+            ev = HookFired(
+                event_name="PostToolUse", command=f"cmd{i}",
+                success=True, returncode=0, elapsed_ms=10,
+            )
+            ap.on_hook_fired(ev)
+        # 内部 _hook_log 是 deque(maxlen=50)
+        assert len(ap._hook_log) == 50
+
+
+@pytest.mark.asyncio
+async def test_activity_panel_reset_run_clears_hook_log():
+    """reset_run 清空 hook log(每轮独立)。"""
+    from argos_agent.hooks.events import HookFired
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ev = HookFired(event_name="PreToolUse", command="x",
+                       success=True, returncode=0, elapsed_ms=10)
+        ap.on_hook_fired(ev)
+        assert len(ap._hook_log) == 1
+        ap.reset_run()
+        assert len(ap._hook_log) == 0
