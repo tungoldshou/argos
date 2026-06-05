@@ -24,6 +24,18 @@ from pathlib import Path
 _DEFAULT_WS = Path(os.environ.get("ARGOS_WORKSPACE", Path.home() / ".argos" / "workspace"))
 _DEFAULT_VERIFY = Path(os.environ.get("ARGOS_VERIFY_DIR", Path.home() / ".argos" / "verify"))
 
+# 沙箱外文件快照剪枝目录(纯剪枝名集合,被 snapshot.py 复用);
+# 与 guard_project_tests 内的 _SKIP_DIRS 是兄弟集合(同名同根,VCS/虚拟环境/缓存),
+# 但 _SKIP_DIRS 更宽(为测试发现服务,多排 .tox/dist/build/.next/target/.argos/.idea/.vscode);
+# 快照场景下"少剪一点更安全"(误剪比漏剪代价高 —— 快照大一些可接受,丢文件不可逆)。
+SNAPSHOT_PRUNE_DIRS: frozenset[str] = frozenset({
+    ".git", ".hg", ".svn",
+    ".venv", "venv", "env",
+    "node_modules",
+    "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    ".argo-snapshots",
+})
+
 
 def _sha256(path: Path) -> str:
     """文件内容的 sha256 十六进制摘要 —— 防篡改指纹(替代可被 touch 绕过的 mtime/size)。"""
