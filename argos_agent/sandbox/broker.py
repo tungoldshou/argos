@@ -116,6 +116,12 @@ class CapabilityBroker:
             self._gate.set_level(saved)
 
     @property
+    def gate(self) -> ApprovalGate:
+        """host 侧暴露审批闸 —— loop._run_workflow 在异步态(非 exec_code 内)await gate.request,
+        TUI 据 WorkflowProposed.call_id 调 gate.respond 放行/拒绝。同 signer:沙箱拿不到。"""
+        return self._gate
+
+    @property
     def signer(self) -> ReceiptSigner:
         """host 侧暴露签名器 —— 供 Harness.accept_receipt 在投 ToolReceipt 前核验回执
         (W2/§6.5)。broker 与 Harness/loop 同在 host 进程,沙箱拿到的只是 RPC stub,

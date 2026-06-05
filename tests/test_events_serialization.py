@@ -15,7 +15,7 @@ ALL_EVENT_KINDS = {
     "token_delta", "code_action", "code_result", "file_diff",
     "tool_receipt", "verify_verdict", "phase_change", "cost_update",
     "approval_request", "approval_response", "escalation", "error",
-    "plan_update", "workflow_progress",
+    "plan_update", "workflow_progress", "workflow_proposed", "workflow_done",
 }
 
 
@@ -28,9 +28,9 @@ def test_all_event_classes_frozen_and_slots():
         E.TokenDelta, E.CodeAction, E.CodeResult, E.FileDiff,
         E.ToolReceipt, E.VerifyVerdict, E.PhaseChange, E.CostUpdate,
         E.ApprovalRequest, E.ApprovalResponse, E.Escalation, E.Error,
-        E.PlanUpdate, E.WorkflowProgress,
+        E.PlanUpdate, E.WorkflowProgress, E.WorkflowProposed, E.WorkflowDone,
     ]
-    assert len(classes) == 14
+    assert len(classes) == 16
     for c in classes:
         params = c.__dataclass_params__
         assert params.frozen, f"{c.__name__} 必须 frozen"
@@ -73,6 +73,31 @@ def test_serialize_deserialize_workflow_progress_roundtrip():
     back = E.deserialize_event(E.serialize_event(ev))
     assert isinstance(back, E.WorkflowProgress)
     assert (back.stage_id, back.agent_id, back.phase, back.note) == ("r", "r#0", "act", "跑起来了")
+
+
+def test_serialize_deserialize_workflow_proposed_roundtrip():
+    ev = E.WorkflowProposed(name="审计", description="并行审计", preview="阶段 r: fan_out", call_id="abc123def456")
+    back = E.deserialize_event(E.serialize_event(ev))
+    assert isinstance(back, E.WorkflowProposed)
+    assert (back.name, back.description, back.preview, back.call_id) == (
+        "审计", "并行审计", "阶段 r: fan_out", "abc123def456")
+
+
+def test_serialize_deserialize_workflow_done_notes_back_to_tuple():
+    ev = E.WorkflowDone(name="审计", synthesis="结论已汇总", notes=("cap 截断", "1 个子任务失败"))
+    back = E.deserialize_event(E.serialize_event(ev))
+    assert isinstance(back, E.WorkflowDone)
+    assert back.name == "审计" and back.synthesis == "结论已汇总"
+    # notes 声明为 tuple:JSON round-trip 必须还原回 tuple 且精确相等(非 list)。
+    assert isinstance(back.notes, tuple)
+    assert back.notes == ("cap 截断", "1 个子任务失败")
+
+
+def test_workflow_done_default_notes_empty_tuple_roundtrip():
+    ev = E.WorkflowDone(name="x", synthesis="完成")
+    assert ev.notes == ()
+    back = E.deserialize_event(E.serialize_event(ev))
+    assert back.notes == () and isinstance(back.notes, tuple)
 
 
 def test_error_default_chain_is_empty_list():

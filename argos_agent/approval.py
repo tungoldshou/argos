@@ -96,7 +96,8 @@ class ApprovalGate:
         return list(self._pending.values())
 
     async def request(self, action: str, args: dict[str, Any], *, description: str,
-                      risk: RiskLevel, timeout: float = 60.0) -> Decision:
+                      risk: RiskLevel, timeout: float = 60.0,
+                      call_id: str | None = None) -> Decision:
         """阻塞等用户决定(契约 §6.3 签名)。
         AUTO 档 → 立即 once 放行;OBSERVE 档 → 立即 deny(只看不动手);
         session 缓存命中 → 立即放行;否则挂起等 respond,超时 fail-closed deny。"""
@@ -108,7 +109,9 @@ class ApprovalGate:
         key = _hash_payload(payload)
         if self._session_approvals.get(key) is not None:
             return Decision(kind="session", reason="session 已批准")
-        call_id = uuid.uuid4().hex[:12]
+        # call_id 可由调用方预生成(如工作流提议先投 WorkflowProposed 携带 call_id,TUI 据它放行);
+        # 未传则自生成,向后兼容。
+        call_id = call_id or uuid.uuid4().hex[:12]
         loop = asyncio.get_running_loop()
         fut: asyncio.Future[Decision] = loop.create_future()
         self._pending[call_id] = _Pending(

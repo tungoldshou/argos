@@ -12,6 +12,53 @@ def scripted_model_factory():
 
 
 @pytest.fixture
+def workflow_loop(tmp_path, scripted_model_factory):
+    """Task 9 集成:真 AgentLoop(父用 scripted 模型,gate=AUTO,真沙箱,注入 engine 工厂)。
+    父 step0 在 act 段提议工作流 → loop 钩子校验+审批+异步跑引擎+结果回灌;step1 收尾。"""
+    from argos_agent.core.loop import AgentLoop, LoopConfig
+    from argos_agent.core.verify_gate import Verifier
+    from argos_agent.memory.store import ArgosStore
+    from argos_agent.sandbox.broker import CapabilityBroker
+    from argos_agent.sandbox.egress import EgressPolicy
+    from argos_agent.sandbox.executor import SeatbeltExecutor
+    from argos_agent.tools.receipts import ReceiptSigner
+    from argos_agent.tui.events import EventBus
+    from argos_agent.approval import ApprovalGate, ApprovalLevel
+    from argos_agent.workflow.engine import WorkflowEngine
+    from tests.e2e.scripted_model import ScriptedModelClient
+    import os
+
+    # parent 模型:step0 提议工作流,step1 收尾(无代码)
+    parent_scripts = [
+        '我来编排。\n```python\npropose_workflow({\n'
+        '    "name": "demo", "description": "演示",\n'
+        '    "stages": [{"id": "r", "op": "fan_out", "over": ["a"],\n'
+        '                "agent": {"prompt": "看 {item}", "tool_scope": "read"}}],\n'
+        '})\n```',
+        '工作流已完成,结论已汇总。',
+    ]
+    parent_model = ScriptedModelClient(parent_scripts)
+    gate = ApprovalGate(ApprovalLevel.AUTO)
+    egress = EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set())
+    signer = ReceiptSigner(key=os.urandom(32))
+    broker = CapabilityBroker(gate=gate, egress=egress, signer=signer, workspace=tmp_path)
+
+    def _bridge(action, args):
+        v, _ = broker._execute(action, args)
+        return v
+
+    sandbox = SeatbeltExecutor(broker_handler=_bridge)
+    cfg = LoopConfig(model_tier="worker", verify_cmd=None, max_rounds=2, max_steps=8,
+                     compaction=True, approval_level=ApprovalLevel.AUTO)
+    engine_factory = lambda: WorkflowEngine.for_test(workspace=tmp_path,
+                                                     model_factory=scripted_model_factory)
+    return AgentLoop(store=ArgosStore(db_path=":memory:"), bus=EventBus(), sandbox=sandbox,
+                     broker=broker, model=parent_model, verifier=Verifier(max_rounds=2),
+                     config=cfg, workspace=tmp_path, verify_dir=tmp_path,
+                     workflow_engine_factory=engine_factory)
+
+
+@pytest.fixture
 def voting_model_factory():
     # 3 个 voter:前 2 个投 YES,第 3 个投 NO(用确定的投票标记,不靠 NLP)
     from tests.e2e.scripted_model import ScriptedModelClient

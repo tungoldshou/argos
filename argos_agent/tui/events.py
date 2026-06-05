@@ -22,7 +22,7 @@ EventKind = Literal[
     "token_delta", "code_action", "code_result", "file_diff",
     "tool_receipt", "verify_verdict", "phase_change", "cost_update",
     "approval_request", "approval_response", "escalation", "error",
-    "plan_update", "workflow_progress",
+    "plan_update", "workflow_progress", "workflow_proposed", "workflow_done",
 ]
 
 
@@ -138,10 +138,32 @@ class WorkflowProgress:
     note: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class WorkflowProposed:
+    kind = "workflow_proposed"
+    # Dynamic Workflows:agent 在 act 段调 propose_workflow({...}) → loop 校验出 spec 后投此事件。
+    # call_id 与 ApprovalGate 的待批项对应(TUI 据它调 gate.respond 放行/拒绝)。
+    name: str
+    description: str
+    preview: str                     # render_preview(spec) —— 人类可读的工作流编排预览
+    call_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowDone:
+    kind = "workflow_done"
+    # 工作流引擎跑完:综合结论 + 诚实注记(cap 截断/部分失败/表决结果等)。
+    # notes 是 tuple(不可变);序列化走 JSON 会摊成 list,deserialize 时还原回 tuple。
+    name: str
+    synthesis: str
+    notes: tuple[str, ...] = ()
+
+
 Event = (
     TokenDelta | CodeAction | CodeResult | FileDiff | ToolReceipt
     | VerifyVerdict | PhaseChange | CostUpdate | ApprovalRequest
     | ApprovalResponse | Escalation | Error | PlanUpdate | WorkflowProgress
+    | WorkflowProposed | WorkflowDone
 )
 
 # kind 常量 → 类,用于反序列化派发
@@ -151,6 +173,7 @@ _KIND_TO_CLASS: dict[str, type] = {
         TokenDelta, CodeAction, CodeResult, FileDiff, ToolReceipt,
         VerifyVerdict, PhaseChange, CostUpdate, ApprovalRequest,
         ApprovalResponse, Escalation, Error, PlanUpdate, WorkflowProgress,
+        WorkflowProposed, WorkflowDone,
     )
 }
 
@@ -230,4 +253,7 @@ def deserialize_event(blob: str) -> Event:
         data["receipt"] = _decode_receipt(data["receipt"])
     elif kind == "verify_verdict" and isinstance(data.get("verdict"), dict):
         data["verdict"] = _decode_verdict(data["verdict"])
+    elif kind == "workflow_done" and isinstance(data.get("notes"), list):
+        # JSON 不分 tuple/list:WorkflowDone.notes 声明为 tuple,还原回 tuple 保持精确相等。
+        data["notes"] = tuple(data["notes"])
     return cls(**data)

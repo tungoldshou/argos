@@ -29,7 +29,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable
 
 from argos_agent.core.harness import Harness
 from argos_agent.core.honesty import (
@@ -215,6 +215,7 @@ class AgentLoop:
         workspace: Path | None = None,
         verify_dir: Path | None = None,
         allow_workflow: bool = True,
+        workflow_engine_factory: Callable[[], object] | None = None,
     ) -> None:
         self._store = store
         self._bus = bus
@@ -226,6 +227,9 @@ class AgentLoop:
         self._workspace = workspace or Path.home() / ".argos" / "workspace"
         self._verify_dir = verify_dir or Path.home() / ".argos" / "verify"
         self._allow_workflow = allow_workflow  # 子 agent spawn 时传 False,深度护栏去 propose_workflow
+        # 工作流引擎工厂:None=未接入(诚实回错,不崩 run);非 None=act 段抓到 propose_workflow 后
+        # 在异步态校验+审批+异步跑引擎+结果回灌(每次提议 new 一个引擎,RAII 不复用状态)。
+        self._workflow_engine_factory = workflow_engine_factory
         self._actions = 0
         self._fail_count = 0
         self._started = 0.0
@@ -491,6 +495,13 @@ class AgentLoop:
                     new_receipt = self._broker.take_receipt()
                     if new_receipt is not None and self._harness.accept_receipt(new_receipt):
                         yield ToolReceipt(receipt=new_receipt)
+                # 工作流提议:agent 本段调了 propose_workflow({...}) → 异步态校验+审批+引擎执行+结果回灌。
+                raw_spec = extract_workflow_spec(text)
+                if raw_spec is not None:
+                    async for ev in self._run_workflow(raw_spec, messages):
+                        yield ev
+                    step += 1
+                    continue   # 工作流结果已作为 feedback 回灌,跳过常规 exec feedback
                 feedback = self._feedback(result)
                 if self._todos:
                     # 锚机制:每个 act step 把当前 todos 摘要回灌(随执行结果一起),
@@ -586,6 +597,45 @@ class AgentLoop:
         else:
             done = "✅ 本轮结束。\n"
         yield TokenDelta(text=done)
+
+    async def _run_workflow(self, raw_spec: dict, messages: list) -> "AsyncIterator[Event]":
+        """校验 spec → WorkflowProposed(预览)→ 审批(await gate,异步态不死锁)→ 引擎异步跑 →
+        WorkflowDone → 结果作 feedback 回灌 parent。校验失败/被拒/无引擎 → 诚实回错,不崩 run。"""
+        from argos_agent.tui.events import WorkflowProposed, WorkflowDone
+        from argos_agent.workflow.result import render_preview
+        from argos_agent.workflow.spec import WorkflowSpecError, parse_spec
+        import uuid as _uuid
+        if self._workflow_engine_factory is None:
+            messages.append({"role": "user", "content": "[工作流引擎未接入,无法编排;请单线程继续。]"})
+            return
+        try:
+            spec = parse_spec(raw_spec)
+        except WorkflowSpecError as e:
+            messages.append({"role": "user", "content": f"[工作流被拒:规格非法 — {e}。请修正或单线程继续。]"})
+            return
+        preview = render_preview(spec)
+        call_id = _uuid.uuid4().hex[:12]
+        yield WorkflowProposed(name=spec.name, description=spec.description,
+                               preview=preview, call_id=call_id)
+        gate = self._broker.gate if self._broker is not None else None
+        if gate is not None:
+            decision = await gate.request("run_workflow", {"name": spec.name},
+                                          description=preview, risk="high",
+                                          timeout=120.0, call_id=call_id)
+            if not decision.approved:
+                messages.append({"role": "user", "content": "[工作流被拒,单线程继续。]"})
+                return
+        engine = self._workflow_engine_factory()
+        async for ev in engine.run(spec):
+            yield ev
+        result = engine.last_result
+        synth = result.synthesis if result else "(工作流无结果)"
+        notes = result.notes if result else ()
+        yield WorkflowDone(name=spec.name, synthesis=synth, notes=notes)
+        summary = f"[工作流「{spec.name}」结果]\n{synth}"
+        if notes:
+            summary += "\n注记:" + " / ".join(notes)
+        messages.append({"role": "user", "content": summary})
 
     @staticmethod
     def _feedback(result: Any) -> str:
