@@ -17,6 +17,13 @@ import sys
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="argos", description="终端超级智能体")
+    # 版本号从 argos_agent.__version__ 读(importlib.metadata)
+    import argos_agent
+    p.add_argument(
+        "--version",
+        action="version",
+        version=f"argos {argos_agent.__version__}",
+    )
     p.add_argument("--demo", action="store_true", help="FakeLoop 成功演示")
     p.add_argument("--demo-fail", action="store_true", help="FailingFakeLoop escalation 演示")
     p.add_argument("--selftest", action="store_true", help="不连真模型自检(脚本模型跑四阶段)")
