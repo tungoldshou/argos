@@ -30,6 +30,7 @@ from argos_agent.tui.events import (
     EventBus,
     FileDiff,
     PhaseChange,
+    PlanRendered,
     PlanUpdate,
     TokenDelta,
     ToolReceipt,
@@ -42,6 +43,7 @@ from argos_agent.tui.fakeloop import FakeLoop
 from argos_agent.tui.theme import ARGOS_NIGHT
 from argos_agent.tui.widgets.activity_panel import ActivityPanel
 from argos_agent.tui.widgets.approval_modal import ApprovalModal
+from argos_agent.tui.widgets.plan_modal import PlanDecision, PlanModal
 from argos_agent.tui.widgets.code_action import CodeActionBlock
 from argos_agent.tui.widgets.diff_view import DiffView
 from argos_agent.tui.widgets.prompt import PromptArea, SlashMenu
@@ -115,6 +117,11 @@ class ArgosApp(App):
         self._produce_worker = None     # 当前 run 的生产 worker(Esc 打断时取消它)
         self._interrupted = False       # 本轮是否被用户 Esc 打断(收尾时落一行提示)
         self._yolo = False
+        # Plan mode spec §2.5:loop 投 PlanRendered 事件时 TUI 推 PlanModal + 在 modal 回调里
+        # 调 ExitPlanMode(loop, ...) + set loop._plan_decision_event 唤醒 loop 的 await。
+        # 需存本轮 run 的 loop 引用(start_run 是 async 但 loop 是局部变量,事件回调在 _apply_event
+        # 拿不到 —— 故暴露在 self 上,每轮 run 起始重设)。
+        self._current_loop: object | None = None
         # Plan mode 状态(spec §2.4 视觉指示):_plan_mode=True 时 splash 加 [plan mode] 前缀、
         # status_bar Mode 段切 plan + 改色、sub_title 挂 [plan mode] 标识。set_plan_mode_indicators()
         # 是 host 切换的单入口,/plan → EnterPlanMode 后调它一次,下一轮 start_run 起手也会按它
@@ -509,6 +516,10 @@ class ArgosApp(App):
         self.query_one("#activity", ActivityPanel).reset_run()  # 每轮起手清活动栏(进度/工具/回执)。
         bus = EventBus()
         loop = self._loop_factory()
+        # Plan mode spec §2.5:loop 投 PlanRendered 事件时 _apply_event 回调里要调
+        # ExitPlanMode(loop, ...) + set _plan_decision_event 唤醒 loop 的 await。把本轮
+        # loop 引用挂到 self 上,事件回调闭包外也能拿到(每轮 run 起始重设,无跨轮泄漏)。
+        self._current_loop = loop
         log = self.query_one("#transcript", Transcript)
         await log.user_line(goal)  # 回显用户目标进对话流(› 行),否则对话看着单边(Task 14)。
         if self._demo:
@@ -623,6 +634,10 @@ class ArgosApp(App):
             ap.on_receipt(ev.receipt.action)
         elif isinstance(ev, ApprovalRequest):
             await self._handle_approval(ev)
+        elif isinstance(ev, PlanRendered):
+            # Plan mode spec §2.5:loop 投 PlanRendered → TUI 推 PlanModal + 回调里把用户决策
+            # 写回 loop._plan_decision + set event 唤醒 loop 的 await(见 _handle_plan_rendered)。
+            await self._handle_plan_rendered(ev)
         elif isinstance(ev, ApprovalResponse):
             await log.append_line(f"审批结果:{ev.call_id} → {ev.decision}")
         elif isinstance(ev, Escalation):
@@ -694,3 +709,41 @@ class ArgosApp(App):
             )
 
         await self.push_screen(ApprovalModal(req), _cb)
+
+    async def _handle_plan_rendered(self, ev: "PlanRendered") -> None:
+        """Plan mode spec §2.5:PlanRendered 事件 → 推 PlanModal(4 选项审批)→ 决策回传 loop。
+
+        流程:
+          1. AUTO 档(YOLO)直接按 approve_start 落决策 + 唤醒 loop(不弹窗)
+          2. CONFIRM/PROPOSE 档 → push_screen(PlanModal) 等用户选 1/2/3/4
+          3. modal 回调里 ExitPlanMode(loop, action, feedback) + set _plan_decision_event 唤醒
+        """
+        from argos_agent.core.plan_mode import ExitPlanMode
+        loop = self._current_loop
+        if loop is None:
+            return  # run 已结束(并发事件兜底)
+
+        if self.gate.level is ApprovalLevel.AUTO:
+            # YOLO:不弹窗,直接 approve_start 走完(spec §2.5 等价于按 1)
+            ExitPlanMode(loop, "approve_start")
+            ev_set = getattr(loop, "_plan_decision_event", None)
+            if ev_set is not None:
+                ev_set.set()
+            return
+
+        def _cb(decision: PlanDecision | None) -> None:
+            if decision is None:
+                return  # Esc 退屏:不写决策,让 loop 继续挂(诚实:用户没拍就不放)
+            ExitPlanMode(loop, decision.action, decision.feedback)
+            ev_set = getattr(loop, "_plan_decision_event", None)
+            if ev_set is not None:
+                ev_set.set()
+            # 落一行告知用户(append_line 是 async,回调是同步的 → 包成 worker)
+            self.run_worker(
+                self.query_one("#transcript", Transcript).append_line(
+                    f"Plan 决策:{decision.action}", kind="system"
+                ),
+                exclusive=False,
+            )
+
+        await self.push_screen(PlanModal(plan_md=ev.plan_md), _cb)
