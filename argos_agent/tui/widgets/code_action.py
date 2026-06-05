@@ -32,7 +32,9 @@ class CodeActionBlock(Vertical):
     def compose(self) -> ComposeResult:
         yield Static(Syntax(self._code, "python", theme="monokai",
                             line_numbers=False, word_wrap=True), id="code")
-        yield Static("⎿ 运行中…", id="result")
+        # markup=False:结果区显工具/命令真实输出(value_repr/stdout 常含 `[...]`,如
+        # 浏览器返回 `已点击 "input[value='x']"`)—— 绝不能当 Rich markup 解析,否则崩 TUI。
+        yield Static("⎿ 运行中…", id="result", markup=False)
 
     def set_result(self, *, stdout: str, value_repr: str, exc: str, ok: bool) -> None:
         self.ok = ok

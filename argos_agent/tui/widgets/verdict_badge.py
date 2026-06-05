@@ -26,7 +26,9 @@ class VerdictBadge(Static):
     status: reactive[VerdictStatus | None] = reactive(None)
 
     def __init__(self, **kwargs) -> None:
-        super().__init__("", **kwargs)
+        # markup=False:verdict.detail 是 verify/pytest 真实输出(常含 `[...]`:断言 repr、
+        # 参数化用例名、列表),不可被当 Rich markup 解析,否则崩 TUI。
+        super().__init__("", markup=False, **kwargs)
         self.render_text: str = ""
 
     def watch_status(self, value: str) -> None:

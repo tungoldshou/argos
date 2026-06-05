@@ -34,7 +34,9 @@ class UserMessage(Static):
     UserMessage { color: $text-muted; padding: 0 1; }
     """
     def __init__(self, text: str) -> None:
-        super().__init__(f"› {text}")
+        # markup=False:用户输入是任意文本,含 `[...]`(列表/正则/类型注解)绝不能被当
+        # Rich 控制台 markup 解析 —— 否则非法标签直接崩 TUI(真终端实测:输入带方括号即炸)。
+        super().__init__(f"› {text}", markup=False)
         self.add_class("user-msg")
 
 
@@ -47,7 +49,8 @@ class SystemLine(Static):
     SystemLine.sys-system { color: $text-muted; }
     """
     def __init__(self, text: str, *, kind: str = "system") -> None:
-        super().__init__(text)
+        # markup=False:系统/错误/工具行可能含工具输出里的 `[...]`,不可被当 markup 解析(防崩)。
+        super().__init__(text, markup=False)
         self.add_class(f"sys-{kind}")
 
 

@@ -16,7 +16,9 @@ class _Section(Static):
     _Section { height: auto; padding: 0 1; border-title-color: $foreground; border-title-style: bold; }
     """
     def __init__(self, title: str, body: str = "") -> None:
-        super().__init__(body)
+        # markup=False:区块正文含模型给的 TODO 文案 / 工具名等任意文本,可能带 `[...]`,
+        # 不可被当 Rich markup 解析(防崩);update() 沿用此 markup 设置。
+        super().__init__(body, markup=False)
         self.border_title = title
 
 

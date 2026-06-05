@@ -32,7 +32,8 @@ class StatusBar(Static):
     elapsed_s: reactive[float] = reactive(0.0)
 
     def __init__(self, **kwargs) -> None:
-        super().__init__("", **kwargs)
+        # markup=False:状态栏含模型名等动态串,统一关 markup 解析(防任意文本里的 `[...]` 崩)。
+        super().__init__("", markup=False, **kwargs)
 
     @property
     def render_text(self) -> str:
