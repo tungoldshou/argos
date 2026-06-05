@@ -23,7 +23,7 @@ class _OverflowThenOkModel:
 
 
 class _FakeSandbox:
-    def spawn(self, *, workspace, namespace, allow_workflow=True): pass
+    def spawn(self, *, workspace, namespace, allow_workflow=True, read_only=False): pass
     def exec_code(self, code): return ExecResult(stdout="", value_repr="", exc="")
     def close(self): pass
 

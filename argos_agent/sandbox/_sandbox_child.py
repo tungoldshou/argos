@@ -51,12 +51,17 @@ class _BrokerStub:
             # 其它消息(理论上不会有)忽略,继续等 reply。
 
 
-def _build_namespace(broker: _BrokerStub, allow_workflow: bool = True) -> dict[str, Any]:
+def _build_namespace(
+    broker: _BrokerStub,
+    allow_workflow: bool = True,
+    read_only: bool = False,
+) -> dict[str, Any]:
     """子进程内构造工具命名空间。纯沙箱工具直接用 tools.files 的原函数;
     broker-gated 工具用调 broker 的薄包装。
-    allow_workflow=False 时去掉 propose_workflow(子 agent 深度护栏)。"""
+    allow_workflow=False 时去掉 propose_workflow(子 agent 深度护栏)。
+    read_only=True 时剔除写工具(tool_scope=read 真正强制只读)。"""
     from argos_agent.tools import build_child_namespace
-    return build_child_namespace(broker, allow_workflow=allow_workflow)
+    return build_child_namespace(broker, allow_workflow=allow_workflow, read_only=read_only)
 
 
 def main() -> None:
@@ -72,8 +77,9 @@ def main() -> None:
             imports = msg.get("authorized_imports") or ["json", "re", "pathlib", "math",
                                                          "itertools", "collections", "datetime"]
             allow_workflow = msg.get("allow_workflow", True)
+            read_only = msg.get("read_only", False)
             executor = LocalPythonExecutor(additional_authorized_imports=imports)
-            executor.send_tools(_build_namespace(broker, allow_workflow))
+            executor.send_tools(_build_namespace(broker, allow_workflow, read_only))
             _emit({"type": "init_ok"})
         elif op == "exec":
             if executor is None:

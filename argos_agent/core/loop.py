@@ -215,6 +215,7 @@ class AgentLoop:
         workspace: Path | None = None,
         verify_dir: Path | None = None,
         allow_workflow: bool = True,
+        read_only: bool = False,
         workflow_engine_factory: Callable[[], object] | None = None,
     ) -> None:
         self._store = store
@@ -227,6 +228,7 @@ class AgentLoop:
         self._workspace = workspace or Path.home() / ".argos" / "workspace"
         self._verify_dir = verify_dir or Path.home() / ".argos" / "verify"
         self._allow_workflow = allow_workflow  # 子 agent spawn 时传 False,深度护栏去 propose_workflow
+        self._read_only = read_only  # tool_scope=read 时传 True,剔除写工具兑现「只读」承诺
         # 工作流引擎工厂:None=未接入(诚实回错,不崩 run);非 None=act 段抓到 propose_workflow 后
         # 在异步态校验+审批+异步跑引擎+结果回灌(每次提议 new 一个引擎,RAII 不复用状态)。
         self._workflow_engine_factory = workflow_engine_factory
@@ -311,7 +313,8 @@ class AgentLoop:
             "(smolagents 把 '*' 当 allow-all,模型可控会绕过 AST 限制层)。"
         )
         self._sandbox.spawn(workspace=self._workspace, namespace=spawn_namespace,
-                            allow_workflow=self._allow_workflow)
+                            allow_workflow=self._allow_workflow,
+                            read_only=self._read_only)
         try:
             async for ev in self._drive(goal, session_id):
                 self._store.append_event(session_id, ev)

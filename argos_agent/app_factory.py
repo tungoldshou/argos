@@ -121,9 +121,10 @@ def build_components(
     # 杜绝 --project 模式下两者分叉(run_command 落默认 workspace、write_file 落项目目录)。
     broker = CapabilityBroker(gate=gate, egress=egress, signer=signer, workspace=ws)
 
-    # 同步 broker_handler 桥:exec_code 阻塞等 broker_reply,故 handler 必须同步;走 _execute
-    # (网络动作的 egress 校验在 _execute 内生效)。非 AUTO 档对 in-sandbox gated 工具的交互式
-    # 审批受限于 exec_code 同步性(无法 await gate),留 v1.1;MVP 主路径(file/verify)不经此。
+    # 同步 broker_handler 桥走 broker._execute(裸执行):exec_code 阻塞等 broker_reply,
+    # 无法 await gate,故绕过 request() 的 egress 校验/交互审批/Receipt。真正的硬边界是
+    # Seatbelt(网络系统级 OFF、写限 workspace),egress 白名单这道第二防线在同步桥路径上
+    # 不生效(既有限制,非本功能引入)。非 AUTO 档的交互式审批同样受此限,留 v1.1。
     def broker_handler(action: str, args: dict) -> object:
         value, _exit = broker._execute(action, args)
         return value

@@ -91,9 +91,10 @@ class SubAgentFactory:
             )
 
             def _bridge(action: str, args: dict) -> object:
-                # 同步桥(与 app_factory.py 一致):exec_code 同步阻塞,无法 await gate,故走
-                # _execute —— 网络动作的 egress 白名单校验在 _execute 内仍生效(仍受出网约束),
-                # 只是交互式审批受同步性限制;子 agent 本就 AUTO 档,不需交互审批,无影响。
+                # 同步桥走 broker._execute(裸执行):exec_code 同步阻塞无法 await gate,故绕过
+                # request() 的 egress 校验/交互审批/Receipt。真正的硬边界是 Seatbelt(网络系统级
+                # OFF、写限 workspace),egress 白名单这道第二防线在同步桥路径上不生效(既有限制,
+                # 非本功能引入)。子 agent 本就 AUTO 档不需交互审批。
                 value, _exit = broker._execute(action, args)
                 return value
 
@@ -117,6 +118,7 @@ class SubAgentFactory:
                 workspace=workdir,
                 verify_dir=workdir,
                 allow_workflow=False,   # 深度护栏:子 agent 沙箱不含 propose_workflow
+                read_only=(task.tool_scope == "read"),   # tool_scope=read → 剔除写工具,兑现「只读」承诺
             )
             try:
                 async for ev in loop.run(prompt, session_id=agent_id):

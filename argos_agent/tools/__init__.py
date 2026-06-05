@@ -196,12 +196,20 @@ def build_namespace(broker: Any) -> dict[str, Any]:
     return ns
 
 
-def build_child_namespace(broker: Any, *, allow_workflow: bool = True) -> dict[str, Any]:
+def build_child_namespace(
+    broker: Any,
+    *,
+    allow_workflow: bool = True,
+    read_only: bool = False,
+) -> dict[str, Any]:
     """【沙箱子进程侧】命名空间:纯沙箱原函数 + 调 _broker(RPC stub)的 broker-gated 包装.
 
     broker=None 时 broker-gated 工具不注入(纯沙箱单测)。
     allow_workflow=True(默认):父 agent 保留 propose_workflow,否则沙箱里调它会 NameError。
     allow_workflow=False:子 agent spawn 时传入,深度护栏去掉 propose_workflow,工作流深度恒为 1。
+    read_only=True:tool_scope=read 强制只读 —— 剔除一切会改动文件/系统/外部状态的工具,
+    兑现审批预览里的「只读」承诺。子 agent 保留:read_file/search_files/web_search/web_extract/
+    browser_navigate/browser_snapshot/browser_screenshot/propose_verify/update_plan。
     """
     ns: dict[str, Any] = {}
     ns.update(_pure())
@@ -211,6 +219,12 @@ def build_child_namespace(broker: Any, *, allow_workflow: bool = True) -> dict[s
     # 父 agent(默认 True)必须保留它,否则在沙箱里调 propose_workflow 会 NameError。
     if not allow_workflow:
         ns.pop("propose_workflow", None)
+    # 只读作用域强制:tool_scope=read 的子 agent 剔除一切会改动文件/系统/外部状态的工具,
+    # 真正兑现审批预览里的「只读」承诺(否则显示「只读」但实际仍能写,是审批所见即所跑的假承诺)。
+    if read_only:
+        for _t in ("write_file", "edit_file", "run_command",
+                   "browser_click", "browser_type", "mcp_call"):
+            ns.pop(_t, None)
     return ns
 
 

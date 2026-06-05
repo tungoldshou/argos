@@ -35,7 +35,7 @@ class FakeSandbox:
     def __init__(self):
         self.spawned = False
         self.codes: list[str] = []
-    def spawn(self, *, workspace, namespace, allow_workflow=True):
+    def spawn(self, *, workspace, namespace, allow_workflow=True, read_only=False):
         self.spawned = True
     def exec_code(self, code):
         self.codes.append(code)
