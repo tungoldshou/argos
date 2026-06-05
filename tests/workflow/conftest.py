@@ -12,6 +12,22 @@ def scripted_model_factory():
 
 
 @pytest.fixture
+def voting_model_factory():
+    # 3 个 voter:前 2 个投 YES,第 3 个投 NO(用确定的投票标记,不靠 NLP)
+    from tests.e2e.scripted_model import ScriptedModelClient
+
+    class _Factory:
+        def __init__(self):
+            self._n = 0
+        def __call__(self, profile=None):
+            self._n += 1
+            if self._n <= 2:
+                return ScriptedModelClient(["[VOTE:YES] 该问题真实存在,确认。"])
+            return ScriptedModelClient(["[VOTE:NO] 不成立。"])
+    return _Factory()
+
+
+@pytest.fixture
 def counting_model_factory():
     import asyncio
     from argos_agent.core.models import ModelTier
