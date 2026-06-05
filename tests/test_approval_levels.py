@@ -9,7 +9,11 @@ from argos_agent.approval import ApprovalGate, ApprovalLevel, Decision
 
 
 def test_approval_levels():
-    assert {l.value for l in ApprovalLevel} == {"observe", "propose", "confirm", "auto"}
+    # Plan mode spec §2.5 选项 2 (approve and accept edits) → ACCEPT_EDITS 档(临时切 act 阶段
+    # 写/编辑工具自动批,act 完恢复)。原 4 档不变 + 这一档;枚举值集合断言需含。
+    assert {l.value for l in ApprovalLevel} == {
+        "observe", "propose", "confirm", "auto", "accept_edits",
+    }
 
 
 def test_decision_kind_and_approved():

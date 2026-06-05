@@ -16,6 +16,7 @@ ALL_EVENT_KINDS = {
     "tool_receipt", "verify_verdict", "phase_change", "cost_update",
     "approval_request", "approval_response", "escalation", "error",
     "plan_update", "workflow_progress", "workflow_proposed", "workflow_done",
+    "plan_rendered",  # plan mode spec §2.5:plan 阶段产出 markdown 后 TUI 弹 PlanModal 用
 }
 
 
