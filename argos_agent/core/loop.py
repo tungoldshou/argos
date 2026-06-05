@@ -343,6 +343,15 @@ class AgentLoop:
         顶层兜底:捕获 _drive 内任何未处理异常,挖异常链投 Error(spec §3.3 L5)。
         """
         self._reset_run_state()
+        # 拍 workspace 快照(供 /undo 还原);失败不阻断 run,仅 _last_snapshot = None 走"/undo
+        # 不可用"诚实降级路径。延迟 import 避免 core.snapshot ↔ runtime 之间未来的循环风险。
+        self._last_snapshot = None
+        try:
+            from argos_agent.core.snapshot import RunSnapshot, SNAPSHOT_ROOT
+            tar_path = SNAPSHOT_ROOT / f"{session_id}-{int(time.time() * 1000)}.tar"
+            self._last_snapshot = RunSnapshot.take(self._workspace, tar_path)
+        except Exception:  # noqa: BLE001 — 诚实:拍快照失败 = /undo 不可用,run 照常进行
+            pass
         # M8:固定空命名空间的副本 —— 模型输出永不经此进入 __authorized_imports__。
         spawn_namespace = dict(_FIXED_SPAWN_NAMESPACE)
         assert "__authorized_imports__" not in spawn_namespace, (
