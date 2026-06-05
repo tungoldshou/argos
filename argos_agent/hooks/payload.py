@@ -38,19 +38,24 @@ def extract_tool_names(code: str) -> list[str]:
 
 
 def render_command(command: str, **kwargs: Any) -> str:
-    """str.format 单层占位替换(spec D8)。占位:{cwd} / {session_id} / {tool_names}。
+    """单层占位替换(spec D8)。占位:{cwd} / {session_id} / {tool_names}。
 
-    实现细节:用 `str.format_map` + 自定义 mapping,缺失占位不抛 KeyError 而保留原文
-    (让用户写 `{x}` 不被误删;反之 hook 用未提供占位时看原文不会被替换)。
+    实现:re 找已知占位 → 替换;缺失占位 / 其他 `{...}` 字面保留(spec D8 _SafeDict)。
+    不走 str.format_map(会被 JSON 字面 `{...}` 误判为 format spec 抛 ValueError)。
     """
     safe = {k: v for k, v in kwargs.items() if v is not None}
     # tool_names 列表 → 逗号拼接;其他原样
     if "tool_names" in safe and isinstance(safe["tool_names"], list):
         safe["tool_names"] = ",".join(safe["tool_names"])
-    class _SafeDict(dict):
-        def __missing__(self, key):  # type: ignore[override]
-            return "{" + key + "}"
-    return command.format_map(_SafeDict(**safe))
+
+    def _sub(m: "re.Match[str]") -> str:
+        key = m.group(1)
+        if key in safe:
+            return str(safe[key])
+        return m.group(0)   # 未知占位 → 保留原文(spec D8)
+
+    # 单层占位,不是 `{{` / `}}`;负 lookbehind 防 matched `{{cwd}}`
+    return re.sub(r"(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})", _sub, command)
 
 
 # ── 5 个 payload 构造器 ─────────────────────────────────────────────

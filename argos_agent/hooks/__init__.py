@@ -7,6 +7,7 @@ from argos_agent.hooks.config import (
     HooksConfig,
     HooksConfigError,
 )
+from argos_agent.hooks.runner import HookFireResult
 
 __all__ = [
     "HooksConfig",
@@ -16,6 +17,7 @@ __all__ = [
     "fire",
     "get_config",
     "reload_config",
+    "HookFireResult",
     # 测试需要(确认单例被替换):
     "_reset_config",
 ]
@@ -65,5 +67,6 @@ def reload_config() -> HooksConfig:
 
 
 async def fire(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """触发 hook(下一 Task 实现)。"""
-    raise NotImplementedError("hooks.fire 将在 Task 5 实现")
+    """触发 hook(转发到 runner.fire,避免循环 import)。"""
+    from argos_agent.hooks.runner import fire as _fire
+    return await _fire(*args, **kwargs)
