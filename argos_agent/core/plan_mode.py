@@ -75,3 +75,72 @@ def ExitPlanMode(loop, action: str, feedback: str | None = None) -> str:
     loop.mode = "act"
     loop._plan_decision = decision
     return f"已退出 plan mode,action={action}。"
+
+
+class PlanRenderer:
+    """把 plan 阶段产出拼成 user-facing markdown plan 文档(spec §2.3)。"""
+
+    @staticmethod
+    def render(
+        goal: str,
+        todos: list[dict],
+        tool_calls: list[dict],
+        risks: list[str] | None = None,
+    ) -> str:
+        """拼 markdown plan 文档。"""
+        title = goal.strip()[:50] + ("..." if len(goal.strip()) > 50 else "")
+        lines = [f"# Plan: {title}", ""]
+
+        # 任务分解
+        lines.append("## 任务分解")
+        if todos:
+            for t in todos:
+                step = t.get("step", "?")
+                desc = t.get("description", "")
+                tool = t.get("tool", "")
+                tool_part = f"(tool: {tool})" if tool else ""
+                lines.append(f"- [ ] **step {step}**: {desc} {tool_part}")
+        else:
+            lines.append("- (无具体任务分解)")
+        lines.append("")
+
+        # 涉及文件(从 tool_calls 抽)
+        files = set()
+        for tc in tool_calls:
+            if tc.get("tool") in ("write_file", "edit_file", "read_file"):
+                p = tc.get("args", {}).get("path")
+                if p:
+                    files.add(p)
+        if files:
+            lines.append("## 涉及文件")
+            for f in sorted(files):
+                lines.append(f"- `{f}`")
+            lines.append("")
+
+        # 风险
+        if risks:
+            lines.append("## 风险")
+            for r in risks:
+                lines.append(f"- {r}")
+            lines.append("")
+
+        # 工具调用序列
+        if tool_calls:
+            lines.append("## 工具调用序列")
+            for tc in tool_calls:
+                tool = tc.get("tool", "?")
+                args = tc.get("args", {})
+                args_str = ", ".join(f"{k}={v!r}" for k, v in args.items()) if args else ""
+                lines.append(f"- `{tool}({args_str})`")
+            lines.append("")
+
+        # 审批
+        lines.extend([
+            "## 审批",
+            "请选择下一步:",
+            "- ✅ **Approve and start** — 全权限,继续 act",
+            "- ✏️ **Approve and accept edits** — 写/编辑工具自动批,其他按现有审批",
+            "- 🔄 **Keep planning** — 继续 plan 阶段",
+            "- 📝 **Refine with feedback** — 提供补充上下文后重新 plan",
+        ])
+        return "\n".join(lines)

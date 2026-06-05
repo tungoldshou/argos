@@ -117,3 +117,60 @@ def test_exit_plan_mode_invalid_action():
     msg = ExitPlanMode(loop, action="bogus")
     assert loop.mode == "plan"  # 没变
     assert "approve_start" in msg or "invalid" in msg.lower() or "approve" in msg
+
+
+# --- PlanRenderer.render() ---
+
+from argos_agent.core.plan_mode import PlanRenderer  # noqa: E402
+
+
+def test_render_empty_plan():
+    """0 todos + 0 tool_calls 仍产 markdown('无具体任务分解'段)。"""
+    md = PlanRenderer.render(goal="noop", todos=[], tool_calls=[])
+    assert "# Plan: noop" in md
+    assert "无具体任务分解" in md
+    assert "审批" in md or "Approve" in md or "approve" in md.lower()
+
+
+def test_render_with_todos():
+    """有 todos 时 markdown 含任务分解列表。"""
+    todos = [
+        {"step": 1, "description": "Read main.py", "tool": "read_file"},
+        {"step": 2, "description": "Edit config", "tool": "edit_file"},
+    ]
+    md = PlanRenderer.render(goal="fix bug", todos=todos, tool_calls=[])
+    assert "Read main.py" in md
+    assert "Edit config" in md
+    assert "read_file" in md
+    assert "edit_file" in md
+
+
+def test_render_with_tool_calls():
+    """有 tool_calls 时 markdown 含工具调用段。"""
+    tool_calls = [
+        {"tool": "read_file", "args": {"path": "x.py"}},
+        {"tool": "run_command", "args": {"command": "pytest"}},
+    ]
+    md = PlanRenderer.render(goal="refactor", todos=[], tool_calls=tool_calls)
+    assert "工具" in md or "tool" in md.lower()
+    assert "read_file" in md
+    assert "run_command" in md
+
+
+def test_render_with_risks():
+    """有 risks 段时 markdown 含风险段。"""
+    md = PlanRenderer.render(
+        goal="x", todos=[], tool_calls=[], risks=["rm -rf 风险", "无 verify_cmd"],
+    )
+    assert "风险" in md
+    assert "rm -rf" in md
+    assert "verify_cmd" in md
+
+
+def test_render_goal_truncated_to_title():
+    """goal 长时只取前 50 字符作标题(避免 plan 标题过长)。"""
+    long_goal = "x" * 200
+    md = PlanRenderer.render(goal=long_goal, todos=[], tool_calls=[])
+    # 标题行不应含 200 字符
+    title_line = [l for l in md.splitlines() if l.startswith("# Plan:")][0]
+    assert len(title_line) < 100, f"标题过长: {title_line}"
