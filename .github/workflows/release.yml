@@ -39,12 +39,11 @@ jobs:
           cd dist
           tar czf "Argos-${VERSION}-arm64-mac.tar.gz" -C "Argos.app/.." "Argos.app"
           shasum -a 256 "Argos-${VERSION}-arm64-mac.tar.gz" > "SHA256SUMS"
-          ls -la
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/Argos-${{ github.ref_name }}-arm64-mac.tar.gz
+            dist/Argos-${ARGOS_VERSION#v}-arm64-mac.tar.gz
             dist/SHA256SUMS
           generate_release_notes: true
