@@ -49,6 +49,12 @@ from argos_agent.tui.events import (
     CodeAction, CodeResult, CostUpdate, Error, Event, EventBus, PhaseChange,
     PlanRendered, PlanUpdate, TokenDelta, ToolReceipt,
 )
+from argos_agent import hooks as _hooks
+from argos_agent.hooks.payload import (
+    build_post_payload, build_pre_payload, build_session_start_payload,
+    build_stop_payload, extract_tool_names,
+)
+from argos_agent.hooks.events import HookFired
 
 if TYPE_CHECKING:
     from argos_agent.memory.store import ArgosStore
@@ -497,6 +503,23 @@ class AgentLoop:
             self._store.ensure_session(  # type: ignore[attr-defined]
                 session_id, title=goal[:80], model=self._cfg.model_tier, system_snapshot="",
             )
+        # ── hooks: SessionStart(spec §2.5 触发点表)──────────────────
+        from argos_agent import config as _config
+        try:
+            tier_name = _config.active_tier().name
+        except Exception:  # noqa: BLE001
+            tier_name = "default"
+        ss_payload = build_session_start_payload(
+            session_id=session_id, cwd=str(self._workspace), model_tier=tier_name,
+        )
+        ss_result = await _hooks.fire("SessionStart", ss_payload,
+                                      cwd=self._workspace, session_id=session_id)
+        for h in ss_result.per_hook:
+            yield HookFired(event_name="SessionStart", command=h.command,
+                            success=h.success, returncode=h.returncode,
+                            elapsed_ms=h.elapsed_ms, timed_out=h.timed_out,
+                            not_found=h.not_found, stop_reason=h.stop_reason,
+                            error=h.error)
         # ── plan ──
         async for ev in self._enter_phase("plan"):
             yield ev
@@ -601,6 +624,30 @@ class AgentLoop:
 
             code = extract_code_block(text)
             if code is not None:
+                # ── PreToolUse hook fire(spec §2.5)────────────────
+                tool_names = extract_tool_names(code)
+                pre_payload = build_pre_payload(
+                    session_id=session_id, cwd=str(self._workspace),
+                    code=code, tool_names=tool_names,
+                )
+                pre_result = await _hooks.fire(
+                    "PreToolUse", pre_payload,
+                    cwd=self._workspace, session_id=session_id,
+                )
+                for h in pre_result.per_hook:
+                    yield HookFired(event_name="PreToolUse", command=h.command,
+                                    success=h.success, returncode=h.returncode,
+                                    elapsed_ms=h.elapsed_ms, timed_out=h.timed_out,
+                                    not_found=h.not_found, stop_reason=h.stop_reason,
+                                    error=h.error)
+                # PreToolUse 阻塞:任一 fail 且非 timeout → 拒,反喂(spec D4 / §2.5)
+                if not pre_result.success and not pre_result.timed_out:
+                    reason = pre_result.stop_reason or "(无理由)"
+                    messages.append({"role": "user", "content":
+                        f"[Argos Hook] PreToolUse 工具调用被 hook 拒绝:"
+                        f"\n{reason}\n请调整方案后再试,或与用户沟通。"})
+                    step += 1
+                    continue   # 不调 exec_code,走下一轮
                 yield CodeAction(code=code, step=step)
                 result = self._sandbox.exec_code(code)
                 self._actions += 1
@@ -612,6 +659,24 @@ class AgentLoop:
                     step=step, stdout=result.stdout,
                     value_repr=result.value_repr, exc=result.exc, ok=result.ok,
                 )
+                # ── PostToolUse hook fire(spec §2.5)───────────────
+                post_payload = build_post_payload(
+                    session_id=session_id, cwd=str(self._workspace),
+                    code=code, tool_names=extract_tool_names(code),
+                    stdout=result.stdout, value_repr=result.value_repr,
+                    exc=result.exc, ok=result.ok,
+                )
+                post_result = await _hooks.fire(
+                    "PostToolUse", post_payload,
+                    cwd=self._workspace, session_id=session_id,
+                )
+                for h in post_result.per_hook:
+                    yield HookFired(event_name="PostToolUse", command=h.command,
+                                    success=h.success, returncode=h.returncode,
+                                    elapsed_ms=h.elapsed_ms, timed_out=h.timed_out,
+                                    not_found=h.not_found, stop_reason=h.stop_reason,
+                                    error=h.error)
+                # PostToolUse 非 0 不阻塞(只 warn),continue 不受影响
                 # I2 + W2(§6.5):只在【本步新签了 Receipt】且【HMAC 核验通过】时投 ToolReceipt。
                 # accept_receipt 在投事件前核验回执 —— 伪造/篡改的回执拒投(防谎报工具执行)。
                 if self._broker is not None:
@@ -731,6 +796,25 @@ class AgentLoop:
             done = "⚠️ 本轮结束:验证未通过/不可信(详见上)。\n"
         else:
             done = "✅ 本轮结束。\n"
+        # ── Stop hook fire(spec §2.5)───────────────────────
+        stop_payload = build_stop_payload(
+            session_id=session_id, cwd=str(self._workspace),
+            goal=goal, verdict_status=(last_verdict.status
+                if last_verdict is not None else "unknown"),
+            actions=self._actions, elapsed_s=time.time() - self._started,
+            escalated=escalated,
+        )
+        stop_result = await _hooks.fire(
+            "Stop", stop_payload,
+            cwd=self._workspace, session_id=session_id,
+        )
+        for h in stop_result.per_hook:
+            yield HookFired(event_name="Stop", command=h.command,
+                            success=h.success, returncode=h.returncode,
+                            elapsed_ms=h.elapsed_ms, timed_out=h.timed_out,
+                            not_found=h.not_found, stop_reason=h.stop_reason,
+                            error=h.error)
+        # Stop 非 0 不阻塞
         yield TokenDelta(text=done)
 
     async def _run_workflow(self, raw_spec: dict, messages: list) -> "AsyncIterator[Event]":
