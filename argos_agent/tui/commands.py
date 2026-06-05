@@ -22,6 +22,7 @@ COMMAND_HELP: dict[str, str] = {
     "yolo": "放手执行(免审批)",
     "undo": "撤销本轮文件改动(还原到 run 起点)",
     "retry": "重发上一条 user 消息",
+    "plan": "进入 plan mode(审批后继续 act)—对齐 CC /plan",
 }
 
 COMMAND_NAMES: list[str] = list(COMMAND_HELP)
