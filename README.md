@@ -25,6 +25,40 @@ uv run pytest -q          # 跑测试
 
 无 API key 时 `argos` 会诚实落 demo 态(不假装能跑),并提示运行 `argos setup`。
 
+## 安装
+
+### 一键安装(macOS arm64)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash
+```
+
+装到 `/Applications/Argos.app`,建 `/usr/local/bin/argos` 符号链接。
+
+### Homebrew Cask(macOS arm64)
+
+```bash
+brew install --cask -s packaging/homebrew/argos.rb
+```
+
+(TODO:单建 `tungoldshou/homebrew-argos` tap 后改用 `brew install --cask argos`——见 #12 阶段。)
+
+### 升级
+
+```bash
+argos self-update   # 提示新版本(不下载)
+# 实际升级重跑 install.sh / brew upgrade
+```
+
+### 从源码
+
+```bash
+git clone https://github.com/tungoldshou/argos
+cd argos
+uv sync
+uv run argos
+```
+
 ## 架构
 
 活引擎是 **framework-free** 的(不依赖 langchain/langgraph),唯一外部执行器是
