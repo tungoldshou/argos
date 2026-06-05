@@ -186,6 +186,20 @@ class _CollectingBus(EventBus):
         return out
 
 
+def _env_context(workspace: Path) -> str:
+    """运行环境块(可信安全段的一部分):把 cwd/OS/日期前置喂给模型,免得它为了回答
+    "在哪个目录"之类的事实去现场跑 os.getcwd()/pwd(对齐 Claude Code 的 environment 块)。"""
+    import platform
+    from datetime import date
+    return (
+        "\n\n【运行环境】\n"
+        f"- 工作目录(相对路径都相对它解析):{workspace}\n"
+        f"- 操作系统:{platform.system()} {platform.machine()}\n"
+        f"- 今天日期:{date.today().isoformat()}\n"
+        "以上为已知事实,无需用代码现场探测(如 os.getcwd / pathlib.Path.cwd / pwd)。"
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class LoopConfig:
     """契约 §9 锁#6 — model_tier: ModelTierName, approval_level: ApprovalLevel。"""
@@ -315,6 +329,15 @@ class AgentLoop:
         self._sandbox.spawn(workspace=self._workspace, namespace=spawn_namespace,
                             allow_workflow=self._allow_workflow,
                             read_only=self._read_only)
+        # 头号护城河洞修复:project_mode 下 verify_dir==workspace,agent 技术上能改"评判自己的
+        # 测试"。run 起始(agent 动手前)快照既有测试指纹 → detect_tampering 见改/删即判篡改,
+        # verify 据此判 unverifiable(诚实)。沙箱模式靠 VERIFY_DIR 隔离,guard_project_tests 自返 0。
+        # 与 propose_verify 时机无关(快照早于任何 agent 动作)→ 堵"先改弱测试再声明"那条绕过。
+        try:
+            from argos_agent import runtime
+            runtime.guard_project_tests()
+        except Exception:  # noqa: BLE001 — 守护快照失败不阻断 run(诚实降级:此 run 无篡改检测)
+            pass
         try:
             async for ev in self._drive(goal, session_id):
                 self._store.append_event(session_id, ev)
@@ -344,8 +367,8 @@ class AgentLoop:
           · untrusted 段 = 召回的 skills(社区/导入,围栏隔离防注入) + 任务记忆。
         skills 召回零模型兜底、不依赖 store;memory 召回需 store.recall。任一失败都诚实降级
         (不假装召回发生过),绝不让 run 崩。"""
-        # ── 安全段:结构化工程任务注入契约(契约层 = Argos 差异化资产;非结构化退裸 agent)──
-        safe = HONESTY_SYSTEM
+        # ── 安全段:运行环境块(cwd/OS/日期前置,免得模型现场探目录)+ 结构化工程任务契约 ──
+        safe = HONESTY_SYSTEM + _env_context(self._workspace)
         try:
             from argos_agent import contracts
             _dom, contract_text = contracts.contract_for(goal)

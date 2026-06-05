@@ -19,9 +19,21 @@ def test_anthropic_payload_system_toplevel_and_coalesced():
     p = AnthropicProtocol()
     pl = p.payload([{"role": "user", "content": "a"}, {"role": "user", "content": "b"}],
                    system="sys", tier=_tier())
-    assert pl["system"] == "sys"
+    assert pl["system"][-1]["text"] == "sys"   # system 以内容块承载(见 caching 测试),原文保留
     assert pl["model"] == "m" and pl["max_tokens"] == 99 and pl["stream"] is True
     assert len(pl["messages"]) == 1 and pl["messages"][0]["content"] == "a\nb"  # coalesced
+
+
+def test_anthropic_payload_marks_system_for_prompt_caching():
+    """Anthropic 缓存是显式 opt-in:system 必须作带 cache_control 的内容块,否则永远 0 命中。
+    缓存最大、最稳、每个 CodeAct 步都原样重发的系统提示 → 同一 run 内第二步起全命中。
+    (OpenAI 协议靠服务端自动缓存、不认此字段 —— 见 test_openai_payload_*,system 仍是纯消息。)"""
+    p = AnthropicProtocol()
+    pl = p.payload([{"role": "user", "content": "a"}], system="sys", tier=_tier())
+    assert isinstance(pl["system"], list), "system 应为内容块列表(才能挂 cache_control)"
+    block = pl["system"][-1]
+    assert block["type"] == "text" and block["text"] == "sys"   # 原文保留
+    assert block["cache_control"] == {"type": "ephemeral"}        # 缓存断点已打
 
 
 def test_anthropic_endpoint_and_headers():

@@ -119,3 +119,44 @@ def detect_tampering() -> list[str]:
         for frel in sorted(now - set(snap)):
             changed.append(frel + "(新增)")
     return changed
+
+
+# 测试文件发现模式(常见语言)+ 跳过的重目录(不下钻,防大 repo 卡顿)。
+_TEST_GLOBS = (
+    "test_*.py", "*_test.py", "*_spec.py", "conftest.py",
+    "*.test.ts", "*.test.tsx", "*.test.js", "*.spec.ts", "*.spec.js",
+    "*_test.go", "*_spec.rb", "test_*.rb",
+)
+_SKIP_DIRS = frozenset({
+    ".git", ".hg", ".svn", ".venv", "venv", "env", "node_modules", "__pycache__",
+    ".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox", "dist", "build",
+    ".next", "target", ".argos", ".idea", ".vscode",
+})
+
+
+def guard_project_tests(*, cap: int = 2000) -> int:
+    """头号护城河洞修复:project_mode 下 verify 与 agent 共享目录(verify_dir==workspace),
+    agent 技术上能改"评判自己的测试"。run 起始(agent 动手前)快照工作区里【既有】的单个
+    测试文件指纹 —— 之后 `detect_tampering` 见它们被改/删即判篡改,verify 据此判 unverifiable
+    (诚实:不替偷改测试的结果担保通过)。
+
+    只登记【既有单个文件】(非目录)是关键:agent 之后【写新测试】不算篡改(TDD 合法,
+    诚实协议自己鼓励先写测试);只有【改/删既有测试】才被抓。沙箱模式靠 VERIFY_DIR 隔离,
+    无需此守 → 直接返 0。返回登记的文件数。"""
+    ctx = current()
+    if not ctx.project_mode:
+        return 0
+    from fnmatch import fnmatch
+    rels: list[str] = []
+    for root, dirs, files in os.walk(ctx.workspace):
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]   # 原地剪枝,不下钻重目录
+        for fn in files:
+            if any(fnmatch(fn, g) for g in _TEST_GLOBS):
+                rels.append(os.path.relpath(os.path.join(root, fn), ctx.workspace))
+                if len(rels) >= cap:
+                    break
+        if len(rels) >= cap:
+            break
+    if rels:
+        guard_files(rels)
+    return len(rels)

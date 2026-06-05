@@ -79,9 +79,56 @@ async def test_w3_no_store_recall_degrades_to_honesty_only(monkeypatch):
     async for _ in loop.run("写个文件", "s"):
         pass
     assert model.systems, "模型没被调用"
-    # 诚实降级:无 store.recall 且无 skill 命中 → system 就是纯 HONESTY_SYSTEM,不夹 untrusted 围栏。
-    assert model.systems[0] == HONESTY_SYSTEM
+    # 诚实降级:无 store.recall 且无 skill 命中 → 安全段(HONESTY + 环境块),不夹 untrusted 围栏。
+    assert model.systems[0].startswith(HONESTY_SYSTEM)
+    assert "【运行环境】" in model.systems[0]   # 环境块属可信安全段,始终注入
     assert UNTRUSTED_OPEN not in model.systems[0]
+
+
+@pytest.mark.asyncio
+async def test_env_context_injected_into_safe_segment(monkeypatch, tmp_path):
+    """系统提示注入运行环境块(cwd/OS/日期),在可信安全段(HONESTY 之后、untrusted 之前),
+    并明示无需用代码现场探测目录 —— 根治"问目录却跑 os.getcwd/pwd"那类无谓代码动作。"""
+    monkeypatch.setattr("argos_agent.skills.recall", lambda *a, **k: [])
+    model = CapturingModel(["完成。"])
+    loop = AgentLoop(
+        store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(), broker=None,
+        model=model, verifier=PassVerifier(),
+        config=LoopConfig(verify_cmd=None, max_steps=4),
+        workspace=tmp_path,
+    )
+    async for _ in loop.run("你在什么目录?", "s"):
+        pass
+    sys_prompt = model.systems[0]
+    assert sys_prompt.startswith(HONESTY_SYSTEM)        # 安全段仍在最前
+    assert "【运行环境】" in sys_prompt
+    assert str(tmp_path) in sys_prompt                   # 真实 workspace 路径已喂
+    assert "无需用代码现场探测" in sys_prompt            # 明示别跑 os.getcwd/pwd
+    assert UNTRUSTED_OPEN not in sys_prompt              # 环境块是可信段,不在围栏内
+
+
+@pytest.mark.asyncio
+async def test_project_mode_run_guards_existing_tests(monkeypatch, tmp_path):
+    """头号护城河洞修复接线:project_mode 起 run 时自动快照既有测试 →
+    之后改它即被 detect_tampering 抓到(此前 guard_files 生产零调用 = 死代码,篡改检测形同虚设)。"""
+    from argos_agent import runtime
+    monkeypatch.setattr("argos_agent.skills.recall", lambda *a, **k: [])
+    (tmp_path / "test_existing.py").write_text("def test(): assert True\n")
+    runtime.use_project(str(tmp_path))
+    try:
+        model = CapturingModel(["完成。"])
+        loop = AgentLoop(
+            store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(), broker=None,
+            model=model, verifier=PassVerifier(),
+            config=LoopConfig(verify_cmd=None, max_steps=4), workspace=tmp_path,
+        )
+        async for _ in loop.run("改点东西", "s"):
+            pass
+        # run 起始已快照既有测试 → agent 之后偷改评判自己的测试必被抓
+        (tmp_path / "test_existing.py").write_text("def test(): pass  # 偷偷改弱\n")
+        assert any("test_existing.py" in f for f in runtime.detect_tampering())
+    finally:
+        runtime.use_sandbox()
 
 
 @pytest.mark.asyncio
@@ -125,7 +172,11 @@ async def test_no_contract_for_unstructured_task(monkeypatch):
     loop = _loop(model, FakeStore())
     async for _ in loop.run("写一篇关于猫的散文", "s"):
         pass
-    assert model.systems[0] == HONESTY_SYSTEM   # 无契约、无 untrusted
+    # 无契约、无 untrusted(只剩 HONESTY + 环境块这两段可信内容)。
+    sys_prompt = model.systems[0]
+    assert sys_prompt.startswith(HONESTY_SYSTEM)
+    assert "结构化工程任务" not in sys_prompt and "[C1]" not in sys_prompt   # 未注入契约
+    assert UNTRUSTED_OPEN not in sys_prompt
 
 
 @pytest.mark.asyncio

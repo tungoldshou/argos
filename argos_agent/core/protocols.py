@@ -45,10 +45,14 @@ class AnthropicProtocol:
                 "content-type": "application/json"}
 
     def payload(self, messages: list[dict], *, system: str, tier: Any) -> dict[str, Any]:
+        # prompt caching(显式 opt-in):system 作带 cache_control 的内容块。系统提示是最大、
+        # 最稳、且每个 CodeAct 步都原样重发的前缀 → 缓存它,同一 run 内第二步起全命中,
+        # 这才是多步 run 真正的省钱点(对齐"让便宜模型可及")。低于端点最小可缓存长度时
+        # Anthropic 静默忽略 cache_control(无害);不支持的兼容代理至多忽略该字段。
         return {
             "model": tier.model,
             "max_tokens": tier.max_tokens,
-            "system": system,
+            "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             "messages": _coalesce_consecutive_roles(messages),
             "stream": True,
         }

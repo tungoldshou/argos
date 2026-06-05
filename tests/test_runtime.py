@@ -85,6 +85,44 @@ def test_tamper_detection_catches_same_size_same_mtime(tmp_path):
     assert any("test_a.py" in x for x in flagged)  # 内容变了 → sha256 抓到
 
 
+def test_guard_project_tests_snapshots_existing_only(tmp_path):
+    """头号护城河洞修复:project_mode 起 run 时自动快照【既有】测试文件。
+    · 改/删既有测试 → detect_tampering 抓到(堵"偷改评判自己的测试骗过 verify");
+    · 写【新】测试 → 不算篡改(TDD 合法,诚实协议自己鼓励先写测试);
+    · 改源码(非测试)→ 不算篡改。
+    覆盖测试发现模式 + 跳过 node_modules/.venv 等重目录。"""
+    import time
+    (tmp_path / "test_app.py").write_text("def test_a(): assert add(1, 1) == 2\n")
+    (tmp_path / "src.py").write_text("def add(a, b): return a + b\n")
+    sub = tmp_path / "pkg"; sub.mkdir()
+    (sub / "feature_test.py").write_text("def test_b(): assert True\n")   # *_test.py 也算
+    heavy = tmp_path / "node_modules" / "lib"; heavy.mkdir(parents=True)
+    (heavy / "test_vendor.py").write_text("def test_v(): pass\n")          # 重目录里的不该被守
+
+    runtime.use_project(str(tmp_path))
+    n = runtime.guard_project_tests()
+    assert n == 2, "只该守 test_app.py + pkg/feature_test.py(node_modules 跳过)"
+    assert runtime.detect_tampering() == []
+
+    # 改源码:不算篡改
+    (tmp_path / "src.py").write_text("def add(a, b): return a + b  # tweak\n")
+    assert runtime.detect_tampering() == []
+    # 写新测试:不算篡改(TDD)
+    (tmp_path / "test_new.py").write_text("def test_new(): pass\n")
+    assert runtime.detect_tampering() == []
+    # 改既有测试:必须被抓
+    time.sleep(0.01)
+    (tmp_path / "test_app.py").write_text("def test_a(): assert True  # 改弱\n")
+    flagged = runtime.detect_tampering()
+    assert any("test_app.py" in f for f in flagged)
+
+
+def test_guard_project_tests_noop_in_sandbox_mode(tmp_path):
+    """沙箱模式靠 verify_dir 隔离(agent 写不到),无需篡改快照 → guard_project_tests 返 0、不登记。"""
+    runtime.use_sandbox()
+    assert runtime.guard_project_tests() == 0
+
+
 def test_guard_directory_flags_added_file(tmp_path):
     """守护整个测试目录:agent 偷偷新增 conftest.py(autouse fixture 中和断言)也算篡改。"""
     runtime.use_project(str(tmp_path))
