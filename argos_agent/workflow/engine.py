@@ -98,13 +98,16 @@ class WorkflowEngine:
         return StageResult(stage_id=stage.id, results=tuple(results))
 
     async def _run_pipeline(self, stage: Stage, prior, notes) -> StageResult:
-        """每 item 独立串过多阶段模板(阶段间无 barrier);item 之间并发,item 内部串行。"""
+        """每 item 独立串过多阶段模板(阶段间无 barrier);item 之间并发,item 内部串行。
+
+        注意 cap 语义:此处 Semaphore(cap) 限的是**同时在飞的 item 数**(item 内多阶段
+        串行,共用一张许可),区别于 fan_out 里 cap 限的是**同时在飞的 agent 调用数**。
+        """
         items = self._items_for(stage, prior)
         templates = stage.agent if isinstance(stage.agent, tuple) else (stage.agent,)
         sem = asyncio.Semaphore(stage.cap)
 
         async def _chain(idx: int, item) -> AgentResult:
-            agent_id = f"{stage.id}#{idx}"
             async with sem:
                 cur = item
                 res: AgentResult | None = None
