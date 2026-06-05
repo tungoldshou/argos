@@ -16,7 +16,7 @@ import sys
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="argos", description="诚实可靠的终端编码超级智能体")
+    p = argparse.ArgumentParser(prog="argos", description="终端超级智能体")
     p.add_argument("--demo", action="store_true", help="FakeLoop 成功演示")
     p.add_argument("--demo-fail", action="store_true", help="FailingFakeLoop escalation 演示")
     p.add_argument("--selftest", action="store_true", help="不连真模型自检(脚本模型跑四阶段)")
