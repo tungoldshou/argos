@@ -7,7 +7,7 @@
 """
 import sqlite_vec
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files, copy_metadata
 
 block_cipher = None
 
@@ -33,6 +33,9 @@ datas = (
     + [(str(_ROOT / "argos_agent" / "memory" / "schema.sql"), "argos_agent/memory")]
     + [(str(p), "argos_agent/skills_builtin")
        for p in (_ROOT / "argos_agent" / "skills_builtin").glob("*.md")]
+    # 版本号:同步 packaging/VERSION + dist-info 让 frozen bundle 报 0.1.0(非 0.0.0+unknown)
+    + [(str(_ROOT / "packaging" / "VERSION"), "packaging")]
+    + copy_metadata("argos-agent")
 )
 
 a = Analysis(
