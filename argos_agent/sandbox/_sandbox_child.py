@@ -51,11 +51,12 @@ class _BrokerStub:
             # 其它消息(理论上不会有)忽略,继续等 reply。
 
 
-def _build_namespace(broker: _BrokerStub) -> dict[str, Any]:
+def _build_namespace(broker: _BrokerStub, allow_workflow: bool = True) -> dict[str, Any]:
     """子进程内构造工具命名空间。纯沙箱工具直接用 tools.files 的原函数;
-    broker-gated 工具用调 broker 的薄包装。"""
+    broker-gated 工具用调 broker 的薄包装。
+    allow_workflow=False 时去掉 propose_workflow(子 agent 深度护栏)。"""
     from argos_agent.tools import build_child_namespace
-    return build_child_namespace(broker)
+    return build_child_namespace(broker, allow_workflow=allow_workflow)
 
 
 def main() -> None:
@@ -70,8 +71,9 @@ def main() -> None:
             from smolagents.local_python_executor import LocalPythonExecutor
             imports = msg.get("authorized_imports") or ["json", "re", "pathlib", "math",
                                                          "itertools", "collections", "datetime"]
+            allow_workflow = msg.get("allow_workflow", True)
             executor = LocalPythonExecutor(additional_authorized_imports=imports)
-            executor.send_tools(_build_namespace(broker))
+            executor.send_tools(_build_namespace(broker, allow_workflow))
             _emit({"type": "init_ok"})
         elif op == "exec":
             if executor is None:

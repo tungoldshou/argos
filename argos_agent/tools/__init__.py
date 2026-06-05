@@ -196,17 +196,21 @@ def build_namespace(broker: Any) -> dict[str, Any]:
     return ns
 
 
-def build_child_namespace(broker: Any) -> dict[str, Any]:
+def build_child_namespace(broker: Any, *, allow_workflow: bool = True) -> dict[str, Any]:
     """【沙箱子进程侧】命名空间:纯沙箱原函数 + 调 _broker(RPC stub)的 broker-gated 包装.
 
     broker=None 时 broker-gated 工具不注入(纯沙箱单测)。
+    allow_workflow=True(默认):父 agent 保留 propose_workflow,否则沙箱里调它会 NameError。
+    allow_workflow=False:子 agent spawn 时传入,深度护栏去掉 propose_workflow,工作流深度恒为 1。
     """
     ns: dict[str, Any] = {}
     ns.update(_pure())
     if broker is not None:
         ns.update(_make_gated(broker))
-    # 深度护栏:子 agent 命名空间不含 propose_workflow,防止嵌套工作流(工作流深度恒为 1)。
-    ns.pop("propose_workflow", None)
+    # 深度护栏:工作流深度恒为 1 —— 只有子 agent(allow_workflow=False)才去掉 propose_workflow;
+    # 父 agent(默认 True)必须保留它,否则在沙箱里调 propose_workflow 会 NameError。
+    if not allow_workflow:
+        ns.pop("propose_workflow", None)
     return ns
 
 

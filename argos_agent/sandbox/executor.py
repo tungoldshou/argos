@@ -28,13 +28,15 @@ class SeatbeltExecutor:
         self._proc = None
         self._workspace: Path | None = None
 
-    def spawn(self, *, workspace: Path, namespace: dict[str, Any]) -> None:
+    def spawn(self, *, workspace: Path, namespace: dict[str, Any],
+              allow_workflow: bool = True) -> None:
         self._workspace = workspace
         self._proc = seatbelt.spawn_child(
             workspace=workspace, child_argv=seatbelt.python_child_argv(),
         )
         authorized = namespace.get("__authorized_imports__") or None
-        self._send({"op": "init", "authorized_imports": authorized})
+        self._send({"op": "init", "authorized_imports": authorized,
+                    "allow_workflow": allow_workflow})
         msg = self._recv()
         if not msg or msg.get("type") != "init_ok":
             raise RuntimeError(f"sandbox init 失败:{msg!r};stderr={self._drain_stderr()}")

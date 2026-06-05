@@ -13,7 +13,11 @@ def test_propose_workflow_registered():
     assert "propose_workflow" in tools.ALL_TOOL_NAMES
 
 
-def test_child_namespace_excludes_propose_workflow():
-    # 深度护栏:子 agent 不得再开子工作流
-    child = tools.build_child_namespace(broker=None)
-    assert "propose_workflow" not in child
+def test_child_namespace_default_keeps_propose_workflow():
+    # 父 agent(默认 allow_workflow=True)必须保留 propose_workflow,否则沙箱里调它 NameError
+    assert "propose_workflow" in tools.build_child_namespace(broker=None)
+
+
+def test_child_namespace_excludes_propose_workflow_when_disallowed():
+    # 子 agent(allow_workflow=False):深度护栏去掉 propose_workflow(深度恒 1)
+    assert "propose_workflow" not in tools.build_child_namespace(broker=None, allow_workflow=False)

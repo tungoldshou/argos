@@ -18,7 +18,7 @@ from tests.test_loop_codeact import FakeStore  # 复用
 class _ProposeSandbox:
     """exec_code 时若代码含 propose_verify(...) 模拟把 cmd 回传(经 broker_handler 风格)。"""
     def __init__(self, on_propose): self._on_propose = on_propose
-    def spawn(self, *, workspace, namespace): pass
+    def spawn(self, *, workspace, namespace, allow_workflow=True): pass
     def exec_code(self, code):
         if "propose_verify" in code:
             import re

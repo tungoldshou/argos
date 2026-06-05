@@ -214,6 +214,7 @@ class AgentLoop:
         config: LoopConfig,
         workspace: Path | None = None,
         verify_dir: Path | None = None,
+        allow_workflow: bool = True,
     ) -> None:
         self._store = store
         self._bus = bus
@@ -224,6 +225,7 @@ class AgentLoop:
         self._cfg = config
         self._workspace = workspace or Path.home() / ".argos" / "workspace"
         self._verify_dir = verify_dir or Path.home() / ".argos" / "verify"
+        self._allow_workflow = allow_workflow  # 子 agent spawn 时传 False,深度护栏去 propose_workflow
         self._actions = 0
         self._fail_count = 0
         self._started = 0.0
@@ -304,7 +306,8 @@ class AgentLoop:
             "M8 安全不变量:loop spawn 的 namespace 绝不可携带 __authorized_imports__"
             "(smolagents 把 '*' 当 allow-all,模型可控会绕过 AST 限制层)。"
         )
-        self._sandbox.spawn(workspace=self._workspace, namespace=spawn_namespace)
+        self._sandbox.spawn(workspace=self._workspace, namespace=spawn_namespace,
+                            allow_workflow=self._allow_workflow)
         try:
             async for ev in self._drive(goal, session_id):
                 self._store.append_event(session_id, ev)

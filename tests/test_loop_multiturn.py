@@ -17,7 +17,7 @@ class _EchoModel:
 
 
 class _FakeSandbox:
-    def spawn(self, *, workspace, namespace): pass
+    def spawn(self, *, workspace, namespace, allow_workflow=True): pass
     def exec_code(self, code): return ExecResult(stdout="", value_repr="", exc="")
     def close(self): pass
 
