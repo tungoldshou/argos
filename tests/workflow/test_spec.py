@@ -45,3 +45,17 @@ def test_tool_scope_and_isolation_enums():
         parse_spec({"name": "x", "description": "", "stages": [
             {"id": "s", "op": "fan_out", "over": ["a"],
              "agent": {"prompt": "p", "tool_scope": "wat"}}]})
+
+
+def test_duplicate_stage_id_rejected():
+    with pytest.raises(WorkflowSpecError, match="重复"):
+        parse_spec({"name": "x", "description": "", "stages": [
+            {"id": "s", "op": "fan_out", "over": ["a"], "agent": {"prompt": "p"}},
+            {"id": "s", "op": "synthesize", "agent": {"prompt": "q"}}]})
+
+
+def test_negative_voters_normalized_not_misjudged():
+    # voters/threshold 负值/0 规范化为 1,不应误抛 threshold 错误
+    spec = parse_spec({"name": "x", "description": "", "stages": [
+        {"id": "s", "op": "panel", "voters": 0, "threshold": 0, "agent": {"prompt": "p"}}]})
+    assert spec.stages[0].voters == 1 and spec.stages[0].threshold == 1

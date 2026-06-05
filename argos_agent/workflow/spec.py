@@ -96,6 +96,8 @@ def parse_spec(raw: dict) -> WorkflowSpec:
         sid = str(sr.get("id") or "").strip()
         if not sid:
             raise WorkflowSpecError("stage 缺 id")
+        if sid in seen_ids:
+            raise WorkflowSpecError(f"重复的 stage id:{sid!r}")
         op = sr.get("op")
         if op not in _OPS:
             raise WorkflowSpecError(f"非法 op:{op!r}(只允许 {_OPS})")
@@ -121,8 +123,8 @@ def parse_spec(raw: dict) -> WorkflowSpec:
             )
         else:
             agent = _parse_agent(agent_raw)
-        voters = int(sr.get("voters", 1))
-        threshold = int(sr.get("threshold", 1))
+        voters = max(1, int(sr.get("voters", 1)))
+        threshold = max(1, int(sr.get("threshold", 1)))
         if op == "panel" and threshold > voters:
             raise WorkflowSpecError(
                 f"panel threshold({threshold})不可大于 voters({voters})"
@@ -134,8 +136,8 @@ def parse_spec(raw: dict) -> WorkflowSpec:
                 op=op,
                 agent=agent,
                 over=over,
-                voters=max(1, voters),
-                threshold=max(1, threshold),
+                voters=voters,
+                threshold=threshold,
                 target=sr.get("target"),
                 max_dry_rounds=int(sr.get("max_dry_rounds", 2)),
                 cap=max(1, cap),
