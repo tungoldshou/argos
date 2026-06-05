@@ -81,7 +81,7 @@ class SubAgentFactory:
 
         report_parts: list[str] = []
         verdict_status: str | None = None
-        early: AgentResult | None = None       # Error 事件 → 提前 return 的结果
+        early_error: str | None = None         # Error 事件的 message → 提前 return(带真实 token)
         tokens_in = 0
         tokens_out = 0
 
@@ -91,6 +91,9 @@ class SubAgentFactory:
             )
 
             def _bridge(action: str, args: dict) -> object:
+                # 同步桥(与 app_factory.py 一致):exec_code 同步阻塞,无法 await gate,故走
+                # _execute —— 网络动作的 egress 白名单校验在 _execute 内仍生效(仍受出网约束),
+                # 只是交互式审批受同步性限制;子 agent 本就 AUTO 档,不需交互审批,无影响。
                 value, _exit = broker._execute(action, args)
                 return value
 
@@ -124,18 +127,21 @@ class SubAgentFactory:
                     elif isinstance(ev, VerifyVerdict):
                         verdict_status = ev.verdict.status
                     elif isinstance(ev, Error):
-                        early = AgentResult(
-                            agent_id=agent_id, ok=False, output="", error=ev.message,
-                        )
+                        early_error = ev.message
                         break
             finally:
                 sandbox.close()
+                # 诚实成本核算:在 finally 读 token,覆盖 ok=True 与 Error 两条返回路径 —— 失败
+                # 子 agent 的开销也要带真实 token,否则引擎汇总成本会漏算它。
                 usage = getattr(model, "last_usage", {}) or {}
                 tokens_in = int(usage.get("input_tokens") or 0)
                 tokens_out = int(usage.get("output_tokens") or 0)
 
-            if early is not None:
-                return early
+            if early_error is not None:
+                return AgentResult(
+                    agent_id=agent_id, ok=False, output="", error=early_error,
+                    tokens_in=tokens_in, tokens_out=tokens_out,
+                )
 
             output = "".join(report_parts).strip()
             if note:
