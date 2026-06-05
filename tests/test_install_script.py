@@ -84,3 +84,43 @@ def test_homebrew_formula_syntax():
         capture_output=True, text=True, timeout=5,
     )
     assert result.returncode == 0, f"ruby -c 失败: {result.stderr}"
+
+
+def test_app_bundle_built():
+    """build_arm64.sh 后,dist/Argos.app 应存在且结构正确。"""
+    import platform
+    if platform.machine() != "arm64":
+        pytest.skip("仅 arm64 macOS 需要 .app bundle")
+    app_dir = Path(__file__).parent.parent / "dist" / "Argos.app"
+    if not app_dir.exists():
+        pytest.skip("dist/Argos.app 不存在;先跑 `bash packaging/build_arm64.sh`")
+    assert app_dir.is_dir(), f"{app_dir} 不是目录"
+    # 标准 macOS .app bundle 结构
+    assert (app_dir / "Contents" / "MacOS" / "argos").exists(), "缺 MacOS/argos binary"
+    assert (app_dir / "Contents" / "Info.plist").exists(), "缺 Info.plist"
+    # Info.plist 必含 CFBundleExecutable
+    import plistlib
+    with (app_dir / "Contents" / "Info.plist").open("rb") as f:
+        plist = plistlib.load(f)
+    assert plist.get("CFBundleExecutable") == "argos", "CFBundleExecutable 不是 argos"
+    assert plist.get("CFBundleIdentifier", "").startswith("com.tungoldshou"), (
+        f"CFBundleIdentifier 错: {plist.get('CFBundleIdentifier')}"
+    )
+
+
+def test_build_script_creates_bundle_when_run(tmp_path, monkeypatch):
+    """跑 build_arm64.sh 后 dist/Argos.app 应存在。本测试需要 ~2-3 分钟 build,标 slow。"""
+    import platform
+    if platform.machine() != "arm64":
+        pytest.skip("仅 arm64 macOS 能 build .app bundle")
+    repo = Path(__file__).parent.parent
+    # 跑 build 到 tmp 目录(不污染真实 dist)
+    monkeypatch.chdir(repo)
+    result = subprocess.run(
+        ["bash", "packaging/build_arm64.sh"],
+        capture_output=True, text=True, timeout=300, cwd=str(repo),
+    )
+    assert result.returncode == 0, f"build 失败: {result.returncode}\n{result.stdout}\n{result.stderr}"
+    assert (repo / "dist" / "Argos.app" / "Contents" / "MacOS" / "argos").exists(), (
+        "build 后 dist/Argos.app 仍不存在"
+    )

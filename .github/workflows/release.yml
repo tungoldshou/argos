@@ -42,6 +42,20 @@ jobs:
           tar czf "Argos-${VERSION}-arm64-mac.tar.gz" -C "Argos.app/.." "Argos.app"
           shasum -a 256 "Argos-${VERSION}-arm64-mac.tar.gz" > "SHA256SUMS"
 
+      - name: Update Cask formula (version + sha256)
+        env:
+          ARGOS_VERSION: ${{ github.ref_name }}
+        run: |
+          VERSION="${ARGOS_VERSION#v}"
+          cd dist
+          SHA256=$(shasum -a 256 "Argos-${VERSION}-arm64-mac.tar.gz" | awk '{print $1}')
+          # Back to repo root for Cask
+          cd ..
+          sed -i.bak "s/version \".*\"/version \"${VERSION}\"/" packaging/homebrew/argos.rb
+          sed -i.bak "s/sha256 \".*\"/sha256 \"${SHA256}\"/" packaging/homebrew/argos.rb
+          rm -f packaging/homebrew/argos.rb.bak
+          cat packaging/homebrew/argos.rb
+
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:

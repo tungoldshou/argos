@@ -27,10 +27,32 @@ ARCH=$(uv run python -c "import platform; print(platform.machine())")
 # 3. 打包(用 spec)。
 uv run pyinstaller --clean --noconfirm packaging/argos.spec
 
-# 4. 验产物架构 + 端到端自检。
+# 4. 验产物架构。
 BIN=dist/argos
 file "$BIN"                          # 必须 Mach-O arm64
 shasum -a 256 "$BIN"
+
+# 5. 把单 binary 包成 .app bundle(macOS 应用标准结构)
+echo "=== Wrap into Argos.app bundle ==="
+APP_DIR="dist/Argos.app"
+mkdir -p "$APP_DIR/Contents/MacOS"
+mkdir -p "$APP_DIR/Contents/Resources"
+cp dist/argos "$APP_DIR/Contents/MacOS/argos"
+chmod +x "$APP_DIR/Contents/MacOS/argos"
+# 注入版本号到 Info.plist(从 packaging/VERSION 读)
+VERSION=$(cat packaging/VERSION)
+# macOS BSD sed 需要 '' 后缀;若失败 fallback 用 GNU sed 风格
+if ! sed -i '' "s/<string>0\.1\.0<\/string>/<string>$VERSION<\/string>/g" packaging/Info.plist 2>/dev/null; then
+  sed -i.bak "s/<string>0\.1\.0<\/string>/<string>$VERSION<\/string>/g" packaging/Info.plist
+  rm -f packaging/Info.plist.bak
+fi
+cp packaging/Info.plist "$APP_DIR/Contents/Info.plist"
+# 简单 PkgInfo(macOS Finder 用)
+printf 'APPL????' > "$APP_DIR/Contents/PkgInfo"
+echo "   ✓ $APP_DIR/Contents/MacOS/argos + Info.plist"
+ls -la "$APP_DIR/Contents/"
+
+# 6. 端到端自检。
 echo "=== smoke: argos --selftest(不连网,验整机装配) ==="
 "$BIN" --selftest                    # 期望打印 [selftest] ... OK,退出 0
-echo "=== 打包完成: $BIN ==="
+echo "=== 打包完成: $APP_DIR ==="
