@@ -22,7 +22,7 @@ EventKind = Literal[
     "token_delta", "code_action", "code_result", "file_diff",
     "tool_receipt", "verify_verdict", "phase_change", "cost_update",
     "approval_request", "approval_response", "escalation", "error",
-    "plan_update",
+    "plan_update", "workflow_progress",
 ]
 
 
@@ -128,10 +128,20 @@ class PlanUpdate:
     todos: list[dict] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class WorkflowProgress:
+    kind = "workflow_progress"
+    # Dynamic Workflows:子 agent 阶段流转汇进活动栏(stage 内第 N 个 agent 的 phase)。
+    stage_id: str
+    agent_id: str
+    phase: str
+    note: str = ""
+
+
 Event = (
     TokenDelta | CodeAction | CodeResult | FileDiff | ToolReceipt
     | VerifyVerdict | PhaseChange | CostUpdate | ApprovalRequest
-    | ApprovalResponse | Escalation | Error | PlanUpdate
+    | ApprovalResponse | Escalation | Error | PlanUpdate | WorkflowProgress
 )
 
 # kind 常量 → 类,用于反序列化派发
@@ -140,7 +150,7 @@ _KIND_TO_CLASS: dict[str, type] = {
     for c in (
         TokenDelta, CodeAction, CodeResult, FileDiff, ToolReceipt,
         VerifyVerdict, PhaseChange, CostUpdate, ApprovalRequest,
-        ApprovalResponse, Escalation, Error, PlanUpdate,
+        ApprovalResponse, Escalation, Error, PlanUpdate, WorkflowProgress,
     )
 }
 

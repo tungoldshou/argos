@@ -12,6 +12,29 @@ def scripted_model_factory():
 
 
 @pytest.fixture
+def counting_model_factory():
+    import asyncio
+    from argos_agent.core.models import ModelTier
+
+    class _Factory:
+        def __init__(self):
+            self.peak_concurrency = 0
+            self._active = 0
+        def __call__(self, profile=None):
+            outer = self
+            class _M:
+                tier = ModelTier(name="worker", model="c", base_url="memory://", max_tokens=64)
+                async def stream(self, messages, *, system):
+                    outer._active += 1
+                    outer.peak_concurrency = max(outer.peak_concurrency, outer._active)
+                    await asyncio.sleep(0.05)
+                    outer._active -= 1
+                    yield "并发计数结果。"
+            return _M()
+    return _Factory()
+
+
+@pytest.fixture
 def failing_model_factory():
     class _Boom:
         from argos_agent.core.models import ModelTier

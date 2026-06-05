@@ -1,7 +1,7 @@
 """Phase 2:§1 事件类冻结性 + serialize/deserialize round-trip。
 
 events.py 是「一份事件三用」(spec §12.6)的源:UI 渲染 = events 表持久化 = replay 重建。
-本测试锁死:① 13 个事件类齐全且 frozen+slots;② kind 常量 = 类名 snake_case;
+本测试锁死:① 14 个事件类齐全且 frozen+slots;② kind 常量 = 类名 snake_case;
 ③ 不含 Receipt/Verdict 的简单事件 round-trip 无损。
 """
 import dataclasses
@@ -15,7 +15,7 @@ ALL_EVENT_KINDS = {
     "token_delta", "code_action", "code_result", "file_diff",
     "tool_receipt", "verify_verdict", "phase_change", "cost_update",
     "approval_request", "approval_response", "escalation", "error",
-    "plan_update",
+    "plan_update", "workflow_progress",
 }
 
 
@@ -28,9 +28,9 @@ def test_all_event_classes_frozen_and_slots():
         E.TokenDelta, E.CodeAction, E.CodeResult, E.FileDiff,
         E.ToolReceipt, E.VerifyVerdict, E.PhaseChange, E.CostUpdate,
         E.ApprovalRequest, E.ApprovalResponse, E.Escalation, E.Error,
-        E.PlanUpdate,
+        E.PlanUpdate, E.WorkflowProgress,
     ]
-    assert len(classes) == 13
+    assert len(classes) == 14
     for c in classes:
         params = c.__dataclass_params__
         assert params.frozen, f"{c.__name__} 必须 frozen"
@@ -66,6 +66,13 @@ def test_serialize_deserialize_phase_change_and_cost():
     cu = E.CostUpdate(tokens_in=100, tokens_out=50, cost_usd=0.001, elapsed_s=2.5)
     back = E.deserialize_event(E.serialize_event(cu))
     assert isinstance(back, E.CostUpdate) and back.tokens_out == 50
+
+
+def test_serialize_deserialize_workflow_progress_roundtrip():
+    ev = E.WorkflowProgress(stage_id="r", agent_id="r#0", phase="act", note="跑起来了")
+    back = E.deserialize_event(E.serialize_event(ev))
+    assert isinstance(back, E.WorkflowProgress)
+    assert (back.stage_id, back.agent_id, back.phase, back.note) == ("r", "r#0", "act", "跑起来了")
 
 
 def test_error_default_chain_is_empty_list():
