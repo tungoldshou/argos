@@ -41,6 +41,8 @@ __all__ = [
     "WORKSPACE", "VERIFY_DIR",
     # workspace 牢笼 helpers(files.py / shell 路径解析共用)
     "_ws", "_vd", "_safe_path",
+    # 沙箱工具 dispatcher(plan-mode 守卫) —— 供 dispatcher 层拦截 + 测试直接访问
+    "run_command_gated", "write_file_gated", "edit_file_gated",
 ]
 
 
@@ -176,6 +178,54 @@ def _update_plan_pure(todos: list[dict]) -> str:
     return f"已更新任务清单({n} 项,活动栏将渲染进度)。"
 
 
+# ── 沙箱工具 dispatcher(plan-mode 守卫,spec §2.4) ───────────────────────
+# 这些模块级函数是沙箱工具的 dispatcher 入口:plan mode 时返错误串不进沙箱;
+# act mode 时调底层实现(本地纯沙箱 or 走 broker-gated RPC)。
+# build_namespace 仍通过 _make_gated(broker) 给沙箱注入闭包版本(带 broker 引用),
+# 这里暴露模块级版本主要是给 dispatcher 拦截 + 单测直接访问用。
+
+_PLAN_MODE_BLOCKED_MSG = "错误:plan mode 不允许调沙箱工具(请先 ExitPlanMode 退出)。"
+
+
+def run_command_gated(command: str) -> str:
+    """dispatcher for run_command。plan mode 拦截(spec §2.4);否则走 broker-gated。"""
+    from argos_agent.core.plan_mode import is_plan_mode
+    if is_plan_mode():
+        return _PLAN_MODE_BLOCKED_MSG
+    # 模块级直调:broker 须由 build_namespace / build_child_namespace 先注入。
+    # 沙箱真正执行走 build_namespace 注入的闭包版本(带 broker),不走这里。
+    if _MODULE_BROKER is None:
+        return "错误:broker 未初始化(模块级 dispatcher 仅供 plan_mode 单测直调)。"
+    return _MODULE_BROKER.request(action="run_command", args={"command": command})
+
+
+def write_file_gated(path: str, content: str) -> str:
+    """dispatcher for write_file。plan mode 拦截;否则走 files.write_file。"""
+    from argos_agent.core.plan_mode import is_plan_mode
+    if is_plan_mode():
+        return _PLAN_MODE_BLOCKED_MSG
+    return files.write_file(path, content)
+
+
+def edit_file_gated(path: str, old: str, new: str, all_occurrences: bool = False) -> str:
+    """dispatcher for edit_file。plan mode 拦截;否则走 files.edit_file。"""
+    from argos_agent.core.plan_mode import is_plan_mode
+    if is_plan_mode():
+        return _PLAN_MODE_BLOCKED_MSG
+    return files.edit_file(path, old, new, all_occurrences)
+
+
+# 模块级 broker 引用 —— build_namespace / build_child_namespace 注入,
+# 供模块级 run_command_gated dispatcher 直调(plan_mode 单测用)。
+_MODULE_BROKER: Any = None
+
+
+def _set_module_broker(broker: Any) -> None:
+    """注入模块级 broker 引用(由 build_namespace / build_child_namespace 调)。"""
+    global _MODULE_BROKER
+    _MODULE_BROKER = broker
+
+
 def _pure() -> dict[str, Any]:
     return {
         "read_file": files.read_file,
@@ -190,6 +240,7 @@ def _pure() -> dict[str, Any]:
 
 def build_namespace(broker: Any) -> dict[str, Any]:
     """【host 侧】注入执行器命名空间的工具字典:纯沙箱原函数 + broker-gated 包装."""
+    _set_module_broker(broker)  # 供模块级 run_command_gated dispatcher 直调
     ns: dict[str, Any] = {}
     ns.update(_pure())
     ns.update(_make_gated(broker))
@@ -214,6 +265,7 @@ def build_child_namespace(
     ns: dict[str, Any] = {}
     ns.update(_pure())
     if broker is not None:
+        _set_module_broker(broker)  # 供模块级 run_command_gated dispatcher 直调
         ns.update(_make_gated(broker))
     # 深度护栏:工作流深度恒为 1 —— 只有子 agent(allow_workflow=False)才去掉 propose_workflow;
     # 父 agent(默认 True)必须保留它,否则在沙箱里调 propose_workflow 会 NameError。

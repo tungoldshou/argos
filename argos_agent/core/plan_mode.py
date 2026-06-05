@@ -3,7 +3,9 @@
 包含:
 - `PlanModeError`:plan mode 期间调用沙箱工具抛
 - `PlanExitDecision`:4 选项审批结果(frozen dataclass)
-- (后续 Task 加 EnterPlanMode / ExitPlanMode / PlanRenderer)
+- `set_plan_mode` / `is_plan_mode`:模块级 plan mode 状态(供沙箱工具 dispatcher 守卫)
+- `EnterPlanMode` / `ExitPlanMode`:模式切换 host 端入口
+- `PlanRenderer`:plan 阶段产出 → user-facing markdown
 """
 from __future__ import annotations
 
@@ -17,6 +19,20 @@ class PlanModeError(Exception):
 
 PlanExitAction = Literal["approve_start", "approve_accept_edits", "keep_planning", "refine"]
 _VALID_ACTIONS = ("approve_start", "approve_accept_edits", "keep_planning", "refine")
+
+
+_plan_mode_active: bool = False  # 模块级 plan mode 状态(MVP 简化)
+
+
+def set_plan_mode(active: bool) -> None:
+    """设置模块级 plan mode 状态(由 EnterPlanMode / ExitPlanMode 调用)。"""
+    global _plan_mode_active
+    _plan_mode_active = active
+
+
+def is_plan_mode() -> bool:
+    """返回当前 plan mode 状态(供沙箱工具 dispatcher 守卫)。"""
+    return _plan_mode_active
 
 
 @dataclass(frozen=True)
@@ -46,6 +62,7 @@ def EnterPlanMode(loop) -> str:
     if getattr(loop, "mode", "act") == "plan":
         return "已在 plan mode。"
     loop.mode = "plan"
+    set_plan_mode(True)  # 模块级标记(供沙箱工具 dispatcher 守卫)
     # emit PhaseChange 事件(给前端,标题/边缘光变色)
     if hasattr(loop, "_emit_phase"):
         loop._emit_phase("plan")
@@ -73,6 +90,7 @@ def ExitPlanMode(loop, action: str, feedback: str | None = None) -> str:
     except ValueError as e:
         return f"错误:{e}"
     loop.mode = "act"
+    set_plan_mode(False)  # 模块级清掉
     loop._plan_decision = decision
     return f"已退出 plan mode,action={action}。"
 
