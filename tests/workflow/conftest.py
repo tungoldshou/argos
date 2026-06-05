@@ -98,6 +98,23 @@ def counting_model_factory():
 
 
 @pytest.fixture
+def slow_model_factory():
+    # 慢模型:stream 睡久(卡在 sleep)→ 好让取消发生在中途,验证 RAII 拆资源。
+    import asyncio
+    from argos_agent.core.models import ModelTier
+
+    def make(profile=None):
+        class _Slow:
+            tier = ModelTier(name="worker", model="slow", base_url="memory://", max_tokens=64)
+
+            async def stream(self, messages, *, system):
+                await asyncio.sleep(30)   # 卡在这,等取消
+                yield "永远到不了"
+        return _Slow()
+    return make
+
+
+@pytest.fixture
 def failing_model_factory():
     class _Boom:
         from argos_agent.core.models import ModelTier
