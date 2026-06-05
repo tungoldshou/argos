@@ -65,6 +65,10 @@ _PROPOSE_VERIFY = re.compile(r"propose_verify\(\s*['\"](.+?)['\"]\s*\)")
 # 非贪婪不行(列表内有嵌套括号/逗号),故抓最外层 ([...]) 用括号配平在 _extract_plan 里做。
 _UPDATE_PLAN = re.compile(r"update_plan\(", re.DOTALL)
 
+# 紧跟现有 _UPDATE_PLAN 模式:抓 propose_workflow({...}) 的 dict 字面量实参(host 侧解析,
+# 沙箱独立子进程拿不到回调)。括号配平 + ast.literal_eval(只认字面量,绝不 eval 任意表达式)。
+_PROPOSE_WORKFLOW = re.compile(r"propose_workflow\(", re.DOTALL)
+
 # M8 安全不变量:沙箱 spawn 用【固定空命名空间】—— 绝不把模型输出/外部数据塞进
 # namespace["__authorized_imports__"]。smolagents 在 AST 层把 "*" 当 allow-all,
 # 若模型能控制 authorized_imports 就能放开任意 import,绕过 AST 限制层(OS 沙箱仍在,
@@ -119,6 +123,48 @@ def extract_plan_todos(text: str) -> list[dict] | None:
             continue
         if isinstance(val, list):
             last = [d for d in val if isinstance(d, dict)]
+    return last
+
+
+def extract_workflow_spec(text: str) -> dict | None:
+    """从模型输出抽最后一次 propose_workflow({...}) 的规格字面量;无/解析失败/非 dict → None。
+
+    括号配平扫描(dict 内含嵌套 []/{}/ 字符串,正则非贪婪做不到),取实参子串后 ast.literal_eval
+    —— 只认字面量(防注入,绝不 eval 任意表达式)。取【最后一次】调用反映 agent 最新状态。
+    """
+    import ast
+    last: dict | None = None
+    for m in _PROPOSE_WORKFLOW.finditer(text):
+        i = m.end()                       # 紧随 '(' 之后
+        depth = 1
+        in_str: str | None = None
+        esc = False
+        j = i
+        while j < len(text) and depth > 0:
+            ch = text[j]
+            if in_str is not None:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == in_str:
+                    in_str = None
+            elif ch in ("'", '"'):
+                in_str = ch
+            elif ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            j += 1
+        if depth != 0:
+            continue                      # 括号没配平(截断/跨段)→ 跳过
+        arg = text[i:j - 1].strip()       # 去掉收尾的 ')'
+        try:
+            val = ast.literal_eval(arg)
+        except (ValueError, SyntaxError):
+            continue
+        if isinstance(val, dict):
+            last = val
     return last
 
 
