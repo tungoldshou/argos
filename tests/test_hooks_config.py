@@ -314,3 +314,198 @@ def test_reload_invalid_keeps_old(tmp_path, monkeypatch):
     # 单例仍是旧的
     assert get_config() is cfg_old
     assert get_config().entries["PreToolUse"][0].hooks[0].command == "old"
+
+
+# ── D14 matcher 编译期校验(spec D14)────────────────────────────────────
+# 三拒:长度 > 256 / 嵌套量词(ReDoS)/ re.error;三过:普通字符 / '*' / 'write_file|edit_file'。
+# 整配拒载(D11 一致):同 config 里其他 event 的 entry 也不会加载。
+
+
+def test_validate_matcher_rejects_overlong(tmp_path, monkeypatch):
+    """matcher 长度 > 256 → HooksConfigError(spec D14 第一条)。"""
+    long_matcher = "a" * 257
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"PreToolUse": [
+            {"matcher": long_matcher, "hooks": [{"type": "command", "command": "x"}]},
+        ]},
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    with pytest.raises(HooksConfigError, match="长度"):
+        load()
+
+
+def test_validate_matcher_accepts_exactly_256(tmp_path, monkeypatch):
+    """matcher 长度恰好 256 → 通过(边界值,不等号 = 256 OK)。"""
+    matcher_256 = "a" * 256
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"PreToolUse": [
+            {"matcher": matcher_256, "hooks": [{"type": "command", "command": "x"}]},
+        ]},
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    cfg = load()
+    assert cfg.entries["PreToolUse"][0].matcher == matcher_256
+
+
+def test_validate_matcher_rejects_nested_quantifier_star_star(tmp_path, monkeypatch):
+    """matcher `(.*)*` → HooksConfigError(ReDoS 经典模式,spec D14 第二条)。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"PreToolUse": [
+            {"matcher": "(.*)*", "hooks": [{"type": "command", "command": "x"}]},
+        ]},
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    with pytest.raises(HooksConfigError, match="嵌套量词"):
+        load()
+
+
+def test_validate_matcher_rejects_nested_quantifier_plus_plus(tmp_path, monkeypatch):
+    """matcher `(.+)+$` → HooksConfigError(ReDoS 经典模式,带锚点也拦)。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"PreToolUse": [
+            {"matcher": "(.+)+$", "hooks": [{"type": "command", "command": "x"}]},
+        ]},
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    with pytest.raises(HooksConfigError, match="嵌套量词"):
+        load()
+
+
+def test_validate_matcher_rejects_nested_quantifier_star_plus(tmp_path, monkeypatch):
+    """matcher `(.*)+` → HooksConfigError(混合嵌套也算,spec D14 第二条)。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"PreToolUse": [
+            {"matcher": "(.*)+", "hooks": [{"type": "command", "command": "x"}]},
+        ]},
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    with pytest.raises(HooksConfigError, match="嵌套量词"):
+        load()
+
+
+def test_validate_matcher_rejects_unclosed_group(tmp_path, monkeypatch):
+    """matcher `(unclosed` → HooksConfigError(re.error,spec D14 第三条)。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"PreToolUse": [
+            {"matcher": "(unclosed", "hooks": [{"type": "command", "command": "x"}]},
+        ]},
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    with pytest.raises(HooksConfigError, match="编译失败"):
+        load()
+
+
+def test_validate_matcher_accepts_simple_or(tmp_path, monkeypatch):
+    """合法 matcher 'write_file|edit_file' → 通过。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"PreToolUse": [
+            {"matcher": "write_file|edit_file",
+             "hooks": [{"type": "command", "command": "x"}]},
+        ]},
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    cfg = load()
+    assert cfg.entries["PreToolUse"][0].matcher == "write_file|edit_file"
+
+
+def test_validate_matcher_accepts_star_wildcard(tmp_path, monkeypatch):
+    """合法 matcher '*' → 通过(全匹配通配符,语义化由 match() 处理)。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"PreToolUse": [
+            {"matcher": "*", "hooks": [{"type": "command", "command": "x"}]},
+        ]},
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    cfg = load()
+    assert cfg.entries["PreToolUse"][0].matcher == "*"
+
+
+def test_validate_matcher_accepts_none_omitted(tmp_path, monkeypatch):
+    """matcher 字段省略 → 通过(语义为 None = 全匹配,spec §2.2)。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"PreToolUse": [
+            {"hooks": [{"type": "command", "command": "x"}]},
+        ]},
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    cfg = load()
+    assert cfg.entries["PreToolUse"][0].matcher is None
+
+
+def test_validate_matcher_rejects_empty_string(tmp_path, monkeypatch):
+    """matcher 为空串 "" → 仍按"全匹配语义"放行(匹配 match() 的语义:空 == '*')。
+
+    注:这里没把空串列为"非法",因 match() 已把空串当 '*' 处理;若改用
+    `len(matcher) == 0` 单独拒,会破坏"空 = 全匹配"的现有契约(spec §2.2)。
+    """
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"PreToolUse": [
+            {"matcher": "", "hooks": [{"type": "command", "command": "x"}]},
+        ]},
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    cfg = load()
+    assert cfg.entries["PreToolUse"][0].matcher == ""
+
+
+def test_validate_matcher_rejects_single_quantifier_no_nesting(tmp_path, monkeypatch):
+    """非嵌套量词(`a+` / `(a+)`)→ 通过。
+    启发式只拦"组内已有量词且组外再加量词"的真嵌套,单层不算。"""
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {"PreToolUse": [
+            {"matcher": "(a+)", "hooks": [{"type": "command", "command": "x"}]},
+        ]},
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    cfg = load()
+    assert cfg.entries["PreToolUse"][0].matcher == "(a+)"
+
+
+def test_validate_matcher_rejects_whole_config_bad_entry_doesnt_load_others(tmp_path, monkeypatch):
+    """D11 一致:坏 matcher → 整配拒载,同 config 里其他 event 的合法 entry 也不进。
+
+    验证点:PreToolUse 里有合法 matcher + PostToolUse 里有合法配置;
+    PreToolUse 里**另一条 entry** matcher 是嵌套量词 → 整 load() 抛,
+    后续 PostToolUse 也不会被加载(单条 entry 失败 ≠ 跳过该 entry 继续)。
+    """
+    p = tmp_path / "hooks.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "hooks": {
+            "PreToolUse": [
+                {"matcher": "write_file", "hooks": [{"type": "command", "command": "good"}]},
+                {"matcher": "(.*)*", "hooks": [{"type": "command", "command": "bad"}]},
+            ],
+            "PostToolUse": [
+                {"matcher": "read_file", "hooks": [{"type": "command", "command": "post"}]},
+            ],
+        },
+    }))
+    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    with pytest.raises(HooksConfigError, match="嵌套量词"):
+        load()
+    # reload_config 应保留旧单例(本测试前 reload_config 未调,_config 为 None,
+    # 走 _load_or_empty → empty),但关键断言是 load() 抛了 HooksConfigError
+    # —— 整配拒载,绝不返回"部分加载"的 HooksConfig。

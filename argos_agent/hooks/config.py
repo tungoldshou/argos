@@ -94,6 +94,12 @@ def _parse_entry(raw: dict) -> HookMatcherEntry:
     matcher = raw.get("matcher")
     if matcher is not None and not isinstance(matcher, str):
         raise HooksConfigError(f"matcher 必须是 string 或省略,收到 {type(matcher).__name__}")
+    # 加载期 matcher 编译校验(spec D14:长度 / ReDoS / re.error)
+    # matcher 为 None / 空串 / '*' 的语义化处理归 _MATCHER_USED_EVENTS 路径,
+    # 校验只对"真要编译"的字符串生效——空串虽能 compile 但语义无意义,这里拒。
+    if matcher is not None and matcher != "" and matcher != "*":
+        from argos_agent.hooks.matcher import validate_matcher
+        validate_matcher(matcher)
     handlers = tuple(_parse_handler(h) for h in raw_hooks)
     return HookMatcherEntry(matcher=matcher, hooks=handlers)
 
