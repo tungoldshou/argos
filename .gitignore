@@ -1,22 +1,14 @@
-node_modules
-dist
-dist-ssr
-*.local
+# macOS / logs
 .DS_Store
 *.log
-.vite
-
-# tauri / rust
-src-tauri/target
-src-tauri/gen
 
 # local env (dev keys — never commit)
 .env.local
 .env*.local
 
-# codegraph index + tsc build cache
+# codegraph index
 .codegraph
-*.tsbuildinfo
+
 # ignore local .claude state (settings, locks) but DO track shared project skills
 .claude/*
 !.claude/skills/
@@ -24,23 +16,15 @@ src-tauri/gen
 # QA verification screenshots (throwaway)
 screenshots/
 
-# stray root build dir (sidecar copies land here from some build steps)
-/build/
-
-# python (agent sidecar)
+# python
 __pycache__/
 *.pyc
 *.egg-info/
 .coverage
-agent/build/
-agent/dist/
-agent/dist-arm64/
-# PyInstaller 派生 spec(命令行动态生成,源码用 CLI 参数拼)
-agent/*.spec
+.pytest_cache/
 .venv/
-agent/.venv/
 
 # PyInstaller arm64 单 binary 产物(打包态,不进 git)
-/dist/
 /build/
+/dist/
 *.spec.bak
