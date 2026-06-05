@@ -278,6 +278,9 @@ class AgentLoop:
             bus=self._hbus,
             max_rounds=config.max_rounds,   # bounce 上限以 LoopConfig 为准(loop 拥有 bounce 策略)。
         )
+        # Plan mode spec §2.1:默认 act,EnterPlanMode 切到 plan,ExitPlanMode 切回 act。
+        # 沙箱工具 dispatcher 后续 Task 会读 loop.mode 抛 PlanModeError(留接口,本 Task 不接线)。
+        self.mode: str = "act"
 
     # ── 只读访问(Phase 6 装配/e2e 核验用;构造参数即这些,属性化是最小暴露)──────────
     @property
