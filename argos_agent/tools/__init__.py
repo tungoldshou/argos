@@ -26,6 +26,7 @@ ALL_TOOL_NAMES: list[str] = [
     "read_file", "write_file", "edit_file", "search_files",
     "run_command", "web_search", "web_extract", "propose_verify",
     "update_plan",
+    "propose_workflow",
     # 计算机控制(浏览器)—— broker-gated,host 侧 sync Playwright 专线程执行。
     "browser_navigate", "browser_snapshot", "browser_click",
     "browser_type", "browser_screenshot",
@@ -143,6 +144,17 @@ def _make_gated(broker: Any) -> dict[str, Any]:
     }
 
 
+def _propose_workflow_pure(spec: dict) -> str:
+    """propose_workflow({...}) 登记工作流规格,host 在异步态校验+审批+引擎执行(类似 propose_verify)。
+
+    沙箱内仅给登记回执;真执行在 host(子进程拿不到回调)。
+    spec: {name: str, stages: list[dict]}
+    """
+    name = (spec or {}).get("name", "?") if isinstance(spec, dict) else "?"
+    n = len((spec or {}).get("stages", [])) if isinstance(spec, dict) else 0
+    return f"[已登记工作流「{name}」:{n} 个 stage,待审批后执行]"
+
+
 def _propose_verify_pure(command: str) -> str:
     """声明用于验证本次改动的命令(如 'pytest tests/test_x.py')。
 
@@ -172,6 +184,7 @@ def _pure() -> dict[str, Any]:
         "search_files": files.search_files,
         "propose_verify": _propose_verify_pure,
         "update_plan": _update_plan_pure,
+        "propose_workflow": _propose_workflow_pure,
     }
 
 
@@ -192,6 +205,8 @@ def build_child_namespace(broker: Any) -> dict[str, Any]:
     ns.update(_pure())
     if broker is not None:
         ns.update(_make_gated(broker))
+    # 深度护栏:子 agent 命名空间不含 propose_workflow,防止嵌套工作流(工作流深度恒为 1)。
+    ns.pop("propose_workflow", None)
     return ns
 
 
