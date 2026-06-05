@@ -10,7 +10,7 @@ from argos_agent.core.plan_mode import (
 
 
 def test_plan_mode_error_is_exception():
-    """PlanModeError 是 Exception 子类,带 mode 字段。"""
+    """PlanModeError 是 Exception 子类,带 plan mode 错误串。"""
     err = PlanModeError("sandbox tool not allowed in plan mode")
     assert isinstance(err, Exception)
     assert "sandbox" in str(err).lower() or "plan" in str(err).lower()
