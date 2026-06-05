@@ -27,13 +27,32 @@ from argos_agent.core.plan_mode import PlanExitDecision
 from tests.test_loop_codeact import FakeModel, FakeSandbox, FakeStore, FakeVerifier
 
 
-def _plan_mode_loop(scripts: list[str], *, verify_cmd=None, level=ApprovalLevel.AUTO):
+class _RecordingFakeModel(FakeModel):
+    """记录每次 stream 调用收到的 messages 快照 — 供 refine/keep_planning 路径断言
+    "模型第 N 轮看到的 messages 是什么样"。只浅拷 list 即可(loop 不会 mutate 已存在
+    message dict,只会 append),不浪费 token 拍深拷贝。
+    """
+    def __init__(self, scripts: list[str]):
+        super().__init__(scripts)
+        self.calls: list[list[dict]] = []
+
+    async def stream(self, messages, *, system):
+        self.calls.append(list(messages))
+        text = self._scripts[min(self._i, len(self._scripts) - 1)]
+        self._i += 1
+        for ch in text:
+            yield ch
+
+
+def _plan_mode_loop(scripts: list[str], *, verify_cmd=None, level=ApprovalLevel.AUTO,
+                    model: FakeModel | None = None):
     """造一个进入 plan mode 状态的 loop:先经 EnterPlanMode 切到 plan(同真用户打 /plan 路径),
-    用 FakeModel/FakeSandbox 跑 plan 阶段模型输出。verify_cmd 缺省 = 无测任务(走诚实收尾)。"""
+    用 FakeModel/FakeSandbox 跑 plan 阶段模型输出。verify_cmd 缺省 = 无测任务(走诚实收尾)。
+    model 缺省 = 自建 FakeModel(scripts);传 _RecordingFakeModel 等子类以断言模型看到的 messages。"""
     from argos_agent.core.plan_mode import EnterPlanMode
     loop = AgentLoop(
         store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(),
-        broker=None, model=FakeModel(scripts), verifier=FakeVerifier(),
+        broker=None, model=model or FakeModel(scripts), verifier=FakeVerifier(),
         config=LoopConfig(verify_cmd=verify_cmd, max_steps=3, approval_level=level),
     )
     # 真用户 /plan slash 调的就是这条 EnterPlanMode:mode 切 "plan" + 模块级 set_plan_mode(True)
@@ -151,13 +170,21 @@ async def test_plan_mode_approve_accept_edits_sets_approval_level():
 
 @pytest.mark.asyncio
 async def test_plan_mode_keep_planning_re_enters_plan_phase():
-    """keep_planning 决策:再投 1 个 PlanRendered(共 2 个);最后 approve_start 才退出。"""
-    loop = _plan_mode_loop([
+    """keep_planning 决策:再投 1 个 PlanRendered(共 2 个);最后 approve_start 才退出。
+    且第 2 轮 plan 时模型看到的 messages 仍含本轮 goal(messages 列表未被清空,
+    即 loop 是"同一会话再走一轮"而非"开新会话")。"""
+    goal = "build a CLI parser for the user"
+    model = _RecordingFakeModel([
         "第一轮 plan",   # 0
         "第二轮 plan",   # 1
         "```python\nwrite_file('x.py','y')\n```",  # 2
         "完成。",         # 3
     ])
+    loop = _plan_mode_loop(
+        ["第一轮 plan", "第二轮 plan",
+         "```python\nwrite_file('x.py','y')\n```", "完成。"],
+        model=model,
+    )
 
     async def _decide_later() -> None:
         await asyncio.sleep(0.05)
@@ -168,7 +195,7 @@ async def test_plan_mode_keep_planning_re_enters_plan_phase():
         # 2) approve_start:跳出子循环
         _set_decision(loop, "approve_start")
     dec_task = asyncio.create_task(_decide_later())
-    events = await _drive_until(loop, "x")
+    events = await _drive_until(loop, goal)
     await dec_task
 
     plan_rendered = [ev for ev in events if isinstance(ev, PlanRendered)]
@@ -176,17 +203,32 @@ async def test_plan_mode_keep_planning_re_enters_plan_phase():
         f"keep_planning + approve_start 应产 2 个 PlanRendered,实际 {len(plan_rendered)}"
     )
 
+    # 第 2 轮 plan 阶段模型收到的 messages 仍应含原 goal(messages 没被清空)。
+    # 1st call:仅含本轮 goal;2nd call:goal + 第 1 轮 assistant 回复(messages 在子循环内累积)。
+    assert len(model.calls) >= 2, f"模型应被调 ≥2 次,实际 {len(model.calls)} 次"
+    second_round_msgs = model.calls[1]
+    user_contents = [m["content"] for m in second_round_msgs if m.get("role") == "user"]
+    assert any(goal in c for c in user_contents), (
+        f"keep_planning 后第 2 轮 plan 的 messages 应保留原 goal,实际 user 内容: {user_contents}"
+    )
+
 
 @pytest.mark.asyncio
 async def test_plan_mode_refine_injects_feedback_as_user_message():
-    """refine 决策:feedback 作 user message 注入 messages,继续 plan 子循环;最后一次 approve。"""
-    loop = _plan_mode_loop([
+    """refine 决策:feedback 作 user message 注入 messages,继续 plan 子循环;最后一次 approve。
+    第 2 轮 plan 时模型看到的 messages 应含 feedback_text 作为 user message。"""
+    model = _RecordingFakeModel([
         "第一轮 plan",
         "第二轮(应见到 feedback)plan",
         "```python\nwrite_file('x.py','y')\n```",
         "完成。",
     ])
-    feedback_text = "需要补这个上下文"
+    loop = _plan_mode_loop(
+        ["第一轮 plan", "第二轮(应见到 feedback)plan",
+         "```python\nwrite_file('x.py','y')\n```", "完成。"],
+        model=model,
+    )
+    feedback_text = "需要补这个上下文:别用 sqlite,直接读文件"
 
     async def _decide_later() -> None:
         await asyncio.sleep(0.05)
@@ -200,7 +242,15 @@ async def test_plan_mode_refine_injects_feedback_as_user_message():
     events = await _drive_until(loop, "x")
     await dec_task
 
-    # 第二轮 plan 阶段模型收到的 messages 应含 refine feedback
-    from argos_agent.tui.events import PlanRendered
     plan_rendered = [ev for ev in events if isinstance(ev, PlanRendered)]
     assert len(plan_rendered) == 2, f"refine + approve 应产 2 个 PlanRendered,实际 {len(plan_rendered)}"
+
+    # 关键断言:第 2 轮 plan 阶段模型收到的 messages 应含 refine feedback 作 user message。
+    # (非 1st call:1st call 时 refine 还没发生,不应含 feedback)
+    assert len(model.calls) >= 2, f"模型应被调 ≥2 次,实际 {len(model.calls)} 次"
+    second_round_msgs = model.calls[1]
+    user_contents = [m["content"] for m in second_round_msgs if m.get("role") == "user"]
+    assert any(feedback_text in c for c in user_contents), (
+        f"refine 后第 2 轮 plan 的 messages 应含 feedback 作 user message,"
+        f"实际 user 内容: {user_contents}"
+    )
