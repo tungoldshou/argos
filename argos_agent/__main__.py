@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from pathlib import Path
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -130,6 +131,31 @@ def _run_selftest() -> int:
             runtime.reset(tok)
 
 
+def _spawn_update_check() -> None:
+    """启动时 background check update(仅查不下载,网络失败静默)。
+
+    spec §2.5:缓存 7 天,启动不卡,user 主动跑 `argos self-update` 升级。
+    """
+    try:
+        from argos_agent import __version__
+        from argos_agent.core.updater import check_github_release
+        cache = Path.home() / ".argos" / ".last_update_check"
+        # 同步阻塞一次(短,网络 5s 超时,启动开销可接受)
+        newer = check_github_release(
+            repo="tungoldshou/argos",
+            current_version=__version__,
+            cache_path=cache,
+        )
+        if newer:
+            print(
+                f"🆕 Argos {newer} available (you have {__version__}). "
+                f"Run `argos self-update` to upgrade.",
+                file=sys.stderr,
+            )
+    except Exception:  # noqa: BLE001 — 任何失败都不阻断启动
+        pass
+
+
 def main() -> None:
     # 冻结 binary(PyInstaller)的沙箱子进程 re-exec:被哨兵 argv 调起时,直接跑沙箱子进程
     # RPC 循环并退出(此时 sys.executable=argos binary,无法 `-m`;见 seatbelt.python_child_argv)。
@@ -141,6 +167,9 @@ def main() -> None:
         return
 
     args = _build_parser().parse_args()
+    # 启动时查更新(同步,失败静默,stderr 提示)。在 parse_args 之后 → future
+    # `argos self-update` 子命令自身的执行不会被这条通知逻辑干扰。
+    _spawn_update_check()
 
     if getattr(args, "command", None) == "setup":
         from argos_agent import setup_wizard
