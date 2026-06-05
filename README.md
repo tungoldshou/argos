@@ -90,3 +90,23 @@ smolagents 的沙箱 `LocalPythonExecutor`。
 
 PyInstaller 打成**单个 arm64 binary**(`packaging/build_arm64.sh` → `dist/argos`)。
 用 `dist/argos --selftest` + `python smoke_packaged.py` 验收。详见 `package-app` skill。
+
+## 交互
+
+### Plan mode
+
+```bash
+/plan
+```
+
+进入"只看 plan 不动手"模式,host 拼 markdown plan 文档(任务分解 / 涉及文件 / 风险 / 审批 4 段),
+完成后弹审批 modal 让你挑 4 选项之一:
+
+- `1` **Approve and start** —— 全权限,继续 act 阶段
+- `2` **Approve and accept edits** —— 写/编辑类工具自动批,其他按现有审批流
+- `3` **Keep planning** —— 继续 plan 阶段(不退出 plan mode)
+- `4` **Refine** —— 提供补充上下文后重新 plan
+
+期间 TUI 标题前缀 `[plan mode]` + 边缘光变色 + status_bar Mode 段同步;沙箱工具
+(`write_file` / `edit_file` / `run_command` 等)被 dispatcher 拦截,不进沙箱。
+对齐 Claude Code user-facing `EnterPlanMode` / `ExitPlanMode` 的"看 → 批 → 干"流。
