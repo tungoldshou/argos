@@ -110,3 +110,46 @@ PyInstaller 打成**单个 arm64 binary**(`packaging/build_arm64.sh` → `dist/a
 期间 TUI 标题前缀 `[plan mode]` + 边缘光变色 + status_bar Mode 段同步;沙箱工具
 (`write_file` / `edit_file` / `run_command` 等)被 dispatcher 拦截,不进沙箱。
 对齐 Claude Code user-facing `EnterPlanMode` / `ExitPlanMode` 的"看 → 批 → 干"流。
+
+### Hooks
+
+在 `~/.argos/hooks.json` 配置 5 个生命周期点的自定义脚本(secret 扫描 / auto-format / 桌面通知 / 自定义验证 / metrics 上报)。对齐 Claude Code hooks 行为。
+
+**示例**:
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "write_file|edit_file",
+        "hooks": [
+          {"type": "command", "command": "~/.argos/hooks/audit-mutate.sh", "timeout": 5000}
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "write_file|edit_file",
+        "hooks": [
+          {"type": "command", "command": "ruff check {cwd}", "timeout": 30000}
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {"type": "command", "command": "osascript -e 'display notification \"Argos done\" with title \"Argos\"'"}
+        ]
+      }
+    ]
+  }
+}
+```
+
+**命令**:
+- `/hooks` — 列出当前生效配置
+- `/hooks reload` — 重读 `~/.argos/hooks.json`
+
+**⚠️ 安全警示**:hook = 用户脚本,与 agent **同权限**运行(不进 Seatbelt 沙箱);装第三方 hook 前请**审计源码**。PreToolUse 退非 0 = 阻塞工具调用;反喂消息经 agent 看到。
