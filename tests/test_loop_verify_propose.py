@@ -35,6 +35,44 @@ class _RecordingVerifier:
         return Verdict.passed(detail="[exit_code=0]", verify_cmd=verify_cmd, attempts=attempts)
 
 
+def test_propose_verify_rejects_trivial_noop_commands():
+    """H1 修复:propose_verify 拒绝 echo/true/ls/pwd/cat 等永远通过的伪验证命令(防假绿)。
+    伪命令不登记 → 不产生 verdict.passed,落回"未机检验证"诚实路径;真命令(pytest)正常登记。"""
+    from tests.test_loop_codeact import FakeModel
+    loop = AgentLoop(store=FakeStore(), bus=EventBus(),
+                     sandbox=_ProposeSandbox(lambda c: None), broker=None,
+                     model=FakeModel([]), verifier=_RecordingVerifier(),
+                     config=LoopConfig(verify_cmd=None))
+    for fake in ["echo ok", "true", "ls", "pwd", "cat x.txt", ":", "printf hi"]:
+        loop._verify_cmd = None
+        loop._on_propose_verify(fake)
+        assert loop._verify_cmd is None, f"{fake!r} 不该被当验证命令登记(伪验证)"
+    loop._verify_cmd = None
+    loop._on_propose_verify("pytest tests/test_x.py")
+    assert loop._verify_cmd == "pytest tests/test_x.py"   # 真命令照常登记
+
+
+@pytest.mark.asyncio
+async def test_fake_verify_command_does_not_produce_false_green():
+    """H1 端到端回归:模型声明 `echo ok` 当验证 → 被拒不登记 → verify 落 unverifiable(未机检验证),
+    绝不报 passed 假绿。修复前 echo 在白名单、跑出 exit 0 → 会误判 passed(本测试即守此回归)。"""
+    from tests.test_loop_codeact import FakeModel
+    from argos_agent.core.verify_gate import Verifier   # 真 Verifier:verify_cmd=None → unverifiable
+    model = FakeModel([
+        "```python\npropose_verify('echo ok')\nwrite_file('x.py','x=1')\n```",
+        "完成。",
+    ])
+    loop = AgentLoop(store=FakeStore(), bus=EventBus(), sandbox=_ProposeSandbox(lambda c: None),
+                     broker=None, model=model, verifier=Verifier(), config=LoopConfig(verify_cmd=None))
+    verdicts = []
+    async for ev in loop.run("g", "s"):
+        if isinstance(ev, VerifyVerdict):
+            verdicts.append(ev.verdict)
+    assert verdicts, "应有 verify 裁决"
+    assert verdicts[-1].status != "passed", "echo ok 绝不得产生假绿 passed"
+    assert verdicts[-1].status == "unverifiable"
+
+
 @pytest.mark.asyncio
 async def test_agent_proposed_cmd_is_run_by_harness():
     verifier = _RecordingVerifier()
