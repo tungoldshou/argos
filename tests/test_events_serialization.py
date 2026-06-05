@@ -17,6 +17,7 @@ ALL_EVENT_KINDS = {
     "approval_request", "approval_response", "escalation", "error",
     "plan_update", "workflow_progress", "workflow_proposed", "workflow_done",
     "plan_rendered",  # plan mode spec §2.5:plan 阶段产出 markdown 后 TUI 弹 PlanModal 用
+    "hook_fired",  # hooks spec §2.4:HookFired 经 EventBus 走 TUI 活动栏
 }
 
 
@@ -30,8 +31,9 @@ def test_all_event_classes_frozen_and_slots():
         E.ToolReceipt, E.VerifyVerdict, E.PhaseChange, E.CostUpdate,
         E.ApprovalRequest, E.ApprovalResponse, E.Escalation, E.Error,
         E.PlanUpdate, E.WorkflowProgress, E.WorkflowProposed, E.WorkflowDone,
+        E.PlanRendered,
     ]
-    assert len(classes) == 16
+    assert len(classes) == 17
     for c in classes:
         params = c.__dataclass_params__
         assert params.frozen, f"{c.__name__} 必须 frozen"
@@ -144,3 +146,27 @@ def test_verify_verdict_unverifiable_roundtrip_with_tampered():
     assert isinstance(back.verdict, Verdict)
     assert back.verdict.status == "unverifiable"
     assert back.verdict.tampered == ["a.py", "b.py"]
+
+
+# ── Hooks(spec §2.4):HookFired 经 EventBus 走 TUI 活动栏 ─────────────────────
+def test_hook_fired_in_kind_to_class():
+    """HookFired 注册到 _KIND_TO_CLASS(否则 deserialize 抛 ValueError,events.py:259)。"""
+    from argos_agent.hooks.events import HookFired
+    assert E._KIND_TO_CLASS.get("hook_fired") is HookFired
+
+
+def test_hook_fired_serialize_roundtrip():
+    """HookFired serialize → deserialize → 等价。"""
+    from argos_agent.hooks.events import HookFired
+    ev = HookFired(
+        event_name="PreToolUse", command="echo ok",
+        success=True, returncode=0, elapsed_ms=130,
+    )
+    blob = E.serialize_event(ev)
+    ev2 = E.deserialize_event(blob)
+    assert isinstance(ev2, HookFired)
+    assert ev2.event_name == "PreToolUse"
+    assert ev2.command == "echo ok"
+    assert ev2.success is True
+    assert ev2.returncode == 0
+    assert ev2.elapsed_ms == 130

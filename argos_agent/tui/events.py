@@ -17,6 +17,7 @@ from argos_agent.core.types import Phase, RiskLevel, DecisionKind
 
 if TYPE_CHECKING:  # Phase 3 落地;Phase 2 只序列化其 dict 形态
     from argos_agent.core.types import Verdict, Receipt  # noqa: F401
+    from argos_agent.hooks.events import HookFired  # noqa: F401
 
 EventKind = Literal[
     "token_delta", "code_action", "code_result", "file_diff",
@@ -24,6 +25,7 @@ EventKind = Literal[
     "approval_request", "approval_response", "escalation", "error",
     "plan_update", "workflow_progress", "workflow_proposed", "workflow_done",
     "plan_rendered",
+    "hook_fired",
 ]
 
 
@@ -169,11 +171,17 @@ class PlanRendered:
     plan_md: str                     # PlanRenderer.render() 产出的 user-facing markdown
 
 
+# ── Hooks(spec 2026-06-06 §2.4):HookFired 在 hooks/events.py 定义(spec 强制在
+#  hooks 子模块独立 dataclass,不让 tui 反向依赖 hooks 配置);TUI Event 联合
+# 通过 `from argos_agent.hooks.events import HookFired` 接进来。───────────────
+from argos_agent.hooks.events import HookFired  # noqa: E402
+
+
 Event = (
     TokenDelta | CodeAction | CodeResult | FileDiff | ToolReceipt
     | VerifyVerdict | PhaseChange | CostUpdate | ApprovalRequest
     | ApprovalResponse | Escalation | Error | PlanUpdate | WorkflowProgress
-    | WorkflowProposed | WorkflowDone | PlanRendered
+    | WorkflowProposed | WorkflowDone | PlanRendered | HookFired
 )
 
 # kind 常量 → 类,用于反序列化派发
@@ -183,7 +191,7 @@ _KIND_TO_CLASS: dict[str, type] = {
         TokenDelta, CodeAction, CodeResult, FileDiff, ToolReceipt,
         VerifyVerdict, PhaseChange, CostUpdate, ApprovalRequest,
         ApprovalResponse, Escalation, Error, PlanUpdate, WorkflowProgress,
-        WorkflowProposed, WorkflowDone, PlanRendered,
+        WorkflowProposed, WorkflowDone, PlanRendered, HookFired,
     )
 }
 
