@@ -163,7 +163,9 @@ def main() -> None:
             workspace=args.project, model_override=args.model, approval_level=ApprovalLevel.CONFIRM,
         )
         factory = build_loop_factory(components)
-        ArgosApp(loop_factory=factory, demo=False).run()
+        # 用 broker 的 gate 作 app.gate(同一实例)→ 工作流/工具审批 respond 落在 loop 真正
+        # await 的那个 gate 上;顺带让 /yolo 对真 gate 生效(不再是 app 自建的孤儿 gate)。
+        ArgosApp(loop_factory=factory, gate=components.gate, demo=False).run()
     except RuntimeError as e:
         from argos_agent.tui.fakeloop import FakeLoop
         print(f"[argos] {e}\n[argos] 运行 `argos setup` 接入模型,或配置环境变量后重启。", file=sys.stderr)

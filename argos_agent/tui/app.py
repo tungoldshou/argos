@@ -32,6 +32,9 @@ from argos_agent.tui.events import (
     TokenDelta,
     ToolReceipt,
     VerifyVerdict,
+    WorkflowDone,
+    WorkflowProgress,
+    WorkflowProposed,
 )
 from argos_agent.tui.fakeloop import FakeLoop
 from argos_agent.tui.theme import ARGOS_NIGHT
@@ -45,6 +48,8 @@ from argos_agent.tui.widgets.status_bar import StatusBar
 from argos_agent.tui.widgets.thinking import ThinkingIndicator
 from argos_agent.tui.widgets.transcript import Transcript
 from argos_agent.tui.widgets.verdict_badge import VerdictBadge
+from argos_agent.tui.widgets.workflow_approval_modal import WorkflowApprovalModal
+from argos_agent.tui.widgets.workflow_panel import WorkflowPanel
 
 _BASE_SUBTITLE = "终端超级智能体"
 
@@ -88,6 +93,7 @@ class ArgosApp(App):
 
     def __init__(
         self, *, loop_factory: Callable[[], object] | None = None, demo: bool = True,
+        gate: ApprovalGate | None = None,
     ) -> None:
         super().__init__()
         # 模型不绑定、无档位:活动栏显示的真实模型名取自 config.active_tier()(当前 active profile)。
@@ -97,8 +103,12 @@ class ArgosApp(App):
         # demo=True:当前驱动 FakeLoop,产出脚本化假数据 —— 头部常驻 DEMO 标识 + 每轮起手 banner
         # 都如实标注(诚实灵魂:任何脚本化全绿不得在无标识下冒充真实执行)。注入真 loop 时传 demo=False。
         self._demo = demo
-        self.gate = ApprovalGate(ApprovalLevel.CONFIRM)
+        # 给了共享 gate(真 loop 路径:= broker.gate)就用它 —— 这样工作流/工具审批 respond
+        # 落在 loop 真正 await 的那个 gate 上(否则打错实例,审批永远不放行)。
+        # 没给(demo/fake 路径)自建一个 CONFIRM 档,行为不变。
+        self.gate = gate or ApprovalGate(ApprovalLevel.CONFIRM)
         self._step_blocks: dict[int, CodeActionBlock] = {}
+        self._workflow_panel: WorkflowPanel | None = None  # 当前工作流的进度树面板(WorkflowProposed 时 mount)
         self._run_active = False
         self._produce_worker = None     # 当前 run 的生产 worker(Esc 打断时取消它)
         self._interrupted = False       # 本轮是否被用户 Esc 打断(收尾时落一行提示)
@@ -469,6 +479,18 @@ class ArgosApp(App):
         elif isinstance(ev, PlanUpdate):
             # 真 TODO 拆解 → 活动栏"任务进度"区改渲染子任务进度(Task 12)。
             ap.on_plan(ev.todos)
+        elif isinstance(ev, WorkflowProposed):
+            await self._handle_workflow_proposed(ev)
+        elif isinstance(ev, WorkflowProgress):
+            # 子 agent 阶段流转 → 刷新进度树那一行。面板不存在(异常/乱序)则忽略,不崩。
+            if self._workflow_panel is not None:
+                self._workflow_panel.update_progress(ev.agent_id, ev.phase, ev.note)
+        elif isinstance(ev, WorkflowDone):
+            if self._workflow_panel is not None:
+                self._workflow_panel.finish(ev.synthesis, ev.notes)
+            # 汇总落对话流(synthesis 可能含 `[...]`,append_line 走 SystemLine 已 markup=False,安全)。
+            await log.append_line(
+                f"⚙ 工作流「{ev.name}」完成:{ev.synthesis}", kind="done")
         elif isinstance(ev, ToolReceipt):
             # 回执进活动栏面板的"回执"区 + 工具计数,不再进 transcript(Task 10)。
             ap.on_receipt(ev.receipt.action)
@@ -502,6 +524,30 @@ class ArgosApp(App):
             self._produce_worker.cancel()
         except Exception:  # noqa: BLE001 — worker 可能已自然结束,取消失败无碍
             pass
+
+    async def _handle_workflow_proposed(self, ev: WorkflowProposed) -> None:
+        """工作流提议:① mount 进度树面板(存引用,后续 Progress/Done 据它刷新);
+        ② 非 AUTO 档弹审批模态显 preview,回调 gate.respond(call_id, decision) 放行 loop 的 await。
+        AUTO 档下 loop 侧 gate.request 已自动放行、不真等 respond,故只 mount 面板、不弹模态
+        (弹了也无 respond 对象,且 always 会多余)。"""
+        log = self.query_one("#transcript", Transcript)
+        panel = WorkflowPanel(name=ev.name)
+        self._workflow_panel = panel
+        await log.mount_block(panel)
+        if self.gate.level is ApprovalLevel.AUTO:
+            return  # loop 侧已自放行,不再弹模态
+
+        call_id = ev.call_id
+
+        def _cb(decision: str | None) -> None:
+            d = decision or "deny"
+            self.gate.respond(call_id, d)  # type: ignore[arg-type]
+            self.run_worker(
+                log.append_line(f"工作流审批:{ev.name} → {d}"),
+                exclusive=False,
+            )
+
+        await self.push_screen(WorkflowApprovalModal(ev.preview), _cb)
 
     async def _handle_approval(self, req: ApprovalRequest) -> None:
         """Auto 档不弹窗直接 always;否则弹 ApprovalModal,回调里 respond。"""
