@@ -25,6 +25,9 @@ COMMAND_HELP: dict[str, str] = {
     "plan": "进入 plan mode(审批后继续 act)—对齐 CC /plan",
     "hooks": "列出 / 重载 hooks 配置(/hooks, /hooks reload)",
     "lsp": "列出 / 重载 LSP 配置(/lsp, /lsp reload)",
+    "verify": "显式跑 verify_cmd(/verify [path])—用户复核 verify 门",
+    "security-review": "安全审计(secrets + 依赖漏洞 + 危险 API)(/security-review [path])",
+    "simplify": "代码重复 / 复杂度 / 死代码扫描(/simplify [path])",
 }
 
 COMMAND_NAMES: list[str] = list(COMMAND_HELP)

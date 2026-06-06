@@ -354,6 +354,12 @@ class ArgosApp(App):
             await self._hooks_cmd(log, cmd.arg)
         elif cmd.name == "lsp":
             await self._lsp_cmd(log, cmd.arg)
+        elif cmd.name == "verify":
+            await self._skill_cmd(log, "verify", cmd.arg)
+        elif cmd.name == "security-review":
+            await self._skill_cmd(log, "security-review", cmd.arg)
+        elif cmd.name == "simplify":
+            await self._skill_cmd(log, "simplify", cmd.arg)
 
     async def _undo(self, log) -> None:
         """/undo:用本轮 run 起点的快照还原 workspace;不发 goal。"""
@@ -521,6 +527,39 @@ class ArgosApp(App):
             if present:
                 lines.append(f" · {label}:{', '.join(present)}")
         await log.append_line("\n".join(lines), kind="system")
+
+    async def _skill_cmd(self, log, skill_name: str, arg: str) -> None:
+        """/verify / /security-review / /simplify 统一入口(spec §2.6 / §2.7)。
+
+        解析 path → run_skill → chat 追加 summary + findings 表格。
+        """
+        from pathlib import Path as _P
+        from argos_agent.skills_runtime.analysis import AnalysisSkillContext
+        from argos_agent.skills_runtime import run_skill, register_builtin_skills
+
+        # 首次调用注册 builtin(幂等)
+        register_builtin_skills()
+        path = arg.strip() or None
+        workspace = _P.cwd()
+        ctx = AnalysisSkillContext(
+            workspace=workspace, approval_level="auto", run_id=f"slash-{skill_name}",
+        )
+        try:
+            result = await run_skill(skill_name, {"path": path}, ctx)
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(f"/{skill_name} 失败:{e}", kind="error")
+            return
+        await log.append_line(result.summary, kind="info")
+        if result.findings:
+            await log.append_line("", kind="info")
+            for f in result.findings:
+                loc = f"{f.file}:{f.line}" if f.file and f.line else (f.file or "(workspace)")
+                await log.append_line(
+                    f"  F-{f.severity} · {f.category} · {loc} · {f.message}",
+                    kind="error" if f.severity == "error" else "info",
+                )
+                if f.suggestion:
+                    await log.append_line(f"    fix: {f.suggestion}", kind="info")
 
     async def _show_skills(self, log) -> None:
         """/skills:列出可用技能(按任务自动召回进系统提示)。诚实:读真实 skill 库。"""

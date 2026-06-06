@@ -20,6 +20,8 @@ ALL_EVENT_KINDS = {
     "hook_fired",  # hooks spec §2.4:HookFired 经 EventBus 走 TUI 活动栏
     "lsp_server_event",  # lsp spec §10.1:server 生命周期(spawn/ready/crash/disabled)
     "lsp_diagnostic_event",  # lsp spec §10.1:diagnostics 数据流(publishDiagnostics 推送)
+    "skill_run_start",  # skills spec §2.6:on-demand skill 开始
+    "skill_run_end",  # skills spec §2.6:on-demand skill 结束
 }
 
 

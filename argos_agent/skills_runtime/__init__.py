@@ -41,5 +41,25 @@ async def run_skill(name, args, ctx, *, timeout_s=60.0, event_bus=None):  # type
 
 
 def register_builtin_skills() -> None:
-    """Task 8/9/10 实现:注册 verify / security-review / simplify。"""
-    raise NotImplementedError("skills_runtime.register_builtin_skills 将在 Task 8 实现")
+    """注册 3 个内置 skill(verify / security-review / simplify);幂等。"""
+    from argos_agent.skills_runtime.analysis import AnalysisSkill
+    from argos_agent.skills_runtime.builtin import security_review, simplify
+    from argos_agent.skills_runtime.builtin.verify import run as _verify_run
+
+    for name, run_fn, desc in [
+        ("verify", _verify_run, "显式跑 verify_cmd(D9/D13 — 不走 propose_verify)"),
+        ("security-review", security_review.run, "3-pass 安全审计(secrets + deps + permissions)"),
+        ("simplify", simplify.run, "3-pass 重复/复杂度/死代码扫描"),
+    ]:
+        if get(name) is not None:
+            continue
+        try:
+            register(AnalysisSkill(
+                name=name,
+                description=desc,
+                parameters_schema={"path": "optional str", "top": "optional int"},
+                run=run_fn,
+                requires_approval=False,
+            ))
+        except ValueError:
+            pass
