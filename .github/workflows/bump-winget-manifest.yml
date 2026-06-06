@@ -1,0 +1,59 @@
+name: Bump WinGet manifest
+# spec §8:release published → 同步更新 packaging/winget/ 3 件 manifest 的 version + sha256 + URL
+# 推到本仓 main,winget-pkgs 真 PR 留手动(审核期)。
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect version + digest
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${TAG#v}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          SHA256_WIN=$(curl -fsSL "https://api.github.com/repos/tungoldshou/argos/releases/tags/v${VERSION}" \
+            | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+for a in d.get('assets', []):
+    if a['name'].endswith('-x86_64-windows.zip'):
+        dig = a.get('digest', '') or ''
+        if dig.startswith('sha256:'):
+            print(dig.split(':', 1)[1]); break
+")
+          [ -n "${SHA256_WIN:-}" ] && echo "SHA256_WIN=${SHA256_WIN}" >> "$GITHUB_ENV" || \
+            echo "WARN: 缺 windows zip digest" >&2
+
+      - name: Update packaging/winget/ 3 files
+        run: |
+          set -e
+          cd packaging/winget
+          # 3 文件 version + sha256 注入
+          for f in tungoldshou.argos.installer.yaml tungoldshou.argos.locale.en-US.yaml tungoldshou.argos.yaml; do
+            [ -f "$f" ] || continue
+            sed -i "s/PackageVersion: .*/PackageVersion: ${VERSION}/" "$f"
+          done
+          # installer.yaml 必含 InstallerUrl + InstallerSha256
+          if [ -f tungoldshou.argos.installer.yaml ] && [ -n "${SHA256_WIN:-}" ]; then
+            sed -i "s|InstallerUrl: .*|InstallerUrl: https://github.com/tungoldshou/argos/releases/download/v${VERSION}/Argos-${VERSION}-x86_64-windows.zip|" tungoldshou.argos.installer.yaml
+            sed -i "s/InstallerSha256: .*/InstallerSha256: ${SHA256_WIN}/" tungoldshou.argos.installer.yaml
+          fi
+          echo "--- after bump ---"
+          cat tungoldshou.argos.installer.yaml
+
+      - name: Commit + push
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "bump winget manifest to v${{ github.event.release.tag_name }}"

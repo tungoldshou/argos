@@ -1,0 +1,30 @@
+# WinGet installer manifest for Argos
+# spec §8.1:PackageIdentifier tungoldshou.argos,ManifestType installer,ManifestVersion 1.6.0
+# version + sha256 由 .github/workflows/bump-winget-manifest.yml 在 release published 时注入
+PackageIdentifier: tungoldshou.argos
+PackageVersion: 0.1.0
+PackageLocale: en-US
+PackageName: Argos
+Publisher: tungoldshou
+License: MIT
+ShortDescription: Terminal super-agent (CodeAct + verify gate + OS sandbox)
+ManifestType: installer
+ManifestVersion: 1.6.0
+Installers:
+  - Architecture: x64
+    InstallerType: zip
+    InstallerUrl: https://github.com/tungoldshou/argos/releases/download/v0.1.0/Argos-0.1.0-x86_64-windows.zip
+    InstallerSha256: PLACEHOLDER_FROM_BUMP
+InstallBehavior:
+  Architecture: x64
+  FileExtensions: []
+  Commands:
+    - argos
+  InstallModes:
+    - silent
+  UninstallCommands:
+    - cmd: powershell -Command "Remove-Item -Recurse -Force $env:LOCALAPPDATA\\Programs\\Argos"
+UpgradeBehavior:
+  Architecture: x64
+  UpgradeCommands:
+    - cmd: powershell -Command "Stop-Process -Name argos -ErrorAction SilentlyContinue; Start-Sleep 1; Invoke-WebRequest -Uri 'https://github.com/tungoldshou/argos/releases/latest' -UseBasicParsing | Out-Null"

@@ -1,0 +1,7 @@
+# WinGet defaultLocale manifest for Argos
+# spec §8.3:ManifestType defaultLocale,指向 PackageLocale en-US
+PackageIdentifier: tungoldshou.argos
+PackageVersion: 0.1.0
+PackageLocale: en-US
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

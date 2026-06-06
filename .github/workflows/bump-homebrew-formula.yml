@@ -1,0 +1,80 @@
+name: Bump Homebrew formula
+# spec §7.4:release published → 拉 release JSON 拿 sha256 → 注入 Formula/argos.rb + Casks/argos.rb
+# → commit 推回 tungoldshou/homebrew-argos 仓。需 secrets.HOMEBREW_TAP_TOKEN(PAT,写 tap 仓权限)。
+# 注:本期不真触发(本仓库的 homebrew-tap/ 暂是同仓镜像,真正 tap 仓等用户手动建);workflow
+# 写好待 v0.2.0 切真 tap 时启用。
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout tap repo
+        if: ${{ env.HAS_TOKEN == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          repository: tungoldshou/homebrew-argos
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Detect (dry-run) — print what would change
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${TAG#v}"
+          echo "Would update Formula/argos.rb + Casks/argos.rb to version ${VERSION}"
+          # 注:真 sha256 拉取走 release API(避免软依赖 softprops):
+          #   SHA256_ARM64=$(curl -fsSL "https://api.github.com/repos/tungoldshou/argos/releases/tags/v${VERSION}" \
+          #     | python3 -c "import json,sys;d=json.load(sys.stdin);[print(a['digest']) for a in d['assets'] if a['name'].endswith('-arm64-mac.tar.gz') and a.get('digest','').startswith('sha256:')] or [print(a['digest']) for a in d['assets'] if a['name'].endswith('.sha256') and 'arm64' in a['name']]" | head -1)
+          #   SHA256_APPIMAGE=$(... 同上 ...)
+          # 简化:此步仅打印占位,真 sed 注入 + commit 在用户配 HOMEBREW_TAP_TOKEN 后启用
+          echo "(set HOMEBREW_TAP_TOKEN repo secret to enable the live bump)"
+
+      - name: Update Formula + Cask (live, when token present)
+        if: ${{ env.HAS_TOKEN == 'true' }}
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${TAG#v}"
+          cd tap
+          # 拉 release JSON 拿各产物的 sha256 digest
+          SHA256_ARM64=$(curl -fsSL "https://api.github.com/repos/tungoldshou/argos/releases/tags/v${VERSION}" \
+            | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+for a in d.get('assets', []):
+    if a['name'].endswith('-arm64-mac.tar.gz.sha256') or a['name'].endswith('-arm64-mac.tar.gz'):
+        dig = a.get('digest', '') or ''
+        if dig.startswith('sha256:'):
+            print(dig.split(':', 1)[1]); break
+        # 退而求其次,看 .sha256 旁挂文件
+        if a['name'].endswith('.sha256'):
+            print(dig); break
+")
+          SHA256_APPIMAGE=$(curl -fsSL "https://api.github.com/repos/tungoldshou/argos/releases/tags/v${VERSION}" \
+            | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+for a in d.get('assets', []):
+    if a['name'].endswith('.AppImage.sha256') or a['name'].endswith('.AppImage'):
+        dig = a.get('digest', '') or ''
+        if dig.startswith('sha256:'):
+            print(dig.split(':', 1)[1]); break
+")
+          # 注入
+          sed -i "s/version \".*\"/version \"${VERSION}\"/" Formula/argos.rb Casks/argos.rb
+          [ -n "${SHA256_APPIMAGE:-}" ] && sed -i "s/sha256 \"PLACEHOLDER_FROM_BUMP\"/sha256 \"${SHA256_APPIMAGE}\"/" Formula/argos.rb
+          [ -n "${SHA256_ARM64:-}" ] && sed -i "s/sha256 \"PLACEHOLDER_FROM_BUMP\"/sha256 \"${SHA256_ARM64}\"/" Casks/argos.rb
+          cat Formula/argos.rb Casks/argos.rb
+
+      - name: Commit + push
+        if: ${{ env.HAS_TOKEN == 'true' }}
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "bump argos to v${{ github.event.release.tag_name }}"
+          working_directory: tap

@@ -1,0 +1,33 @@
+# WinGet locale manifest (en-US) for Argos
+# spec §8.2:PackageLocale en-US,长描述
+PackageIdentifier: tungoldshou.argos
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: tungoldshou
+PackageName: Argos
+License: MIT
+ShortDescription: Terminal super-agent (CodeAct + verify gate + OS sandbox)
+Description: |
+  Argos is a standalone terminal (TUI) coding super-agent. It self-builds a
+  framework-free CodeAct loop with a verify hard-gate, an honesty protocol,
+  and an OS-sandboxed executor. The soul of the project is making cheap
+  models reliable: every change must pass a real verifier before it is
+  considered done, and the agent never silently swallows errors.
+  Argos runs anywhere Python 3.12+ runs: macOS, Linux, and Windows. It ships
+  a single bundled binary on each platform (no Python install required for
+  end users), integrates the OpenAI-compatible and Anthropic APIs, exposes
+  web search and structured page extraction as live tools, and remembers
+  project conventions across sessions via a local four-tier memory store.
+  Install on Windows via `winget install tungoldshou.argos`, on macOS via
+  Homebrew Cask or the curl one-liner, and on Linux via pip, AppImage, .deb,
+  or .rpm. See https://github.com/tungoldshou/argos for full docs.
+Moniker: argos
+Tags:
+  - agent
+  - ai
+  - cli
+  - terminal
+  - codeact
+  - verifier
+  - sandbox
+  - tui
