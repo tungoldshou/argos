@@ -5,6 +5,7 @@ from argos_agent.context.analyzer import (
     ContextBucket,
     analyze,
 )
+from argos_agent.context.render import format_json, format_table
 from argos_agent.context.threshold import LastCompactedAt, _should_compact
 from argos_agent.context.tokens import token_estimate
 
@@ -15,5 +16,7 @@ __all__ = [
     "LastCompactedAt",
     "_should_compact",
     "analyze",
+    "format_json",
+    "format_table",
     "token_estimate",
 ]
