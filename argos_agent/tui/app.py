@@ -464,6 +464,7 @@ class ArgosApp(App):
             ("联网", ["web_search", "web_extract"]),
             ("计算机控制(浏览器)", [n for n in names if n.startswith("browser_")]),
             ("外部工具", ["mcp_call"]),
+            ("LSP 语言服务器", [n for n in names if n.startswith("lsp_")]),
             ("编排(工作流)", ["propose_workflow"]),
         ]
         lines = [f"共 {len(names)} 个工具:"]
