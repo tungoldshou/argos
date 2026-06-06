@@ -5,6 +5,23 @@ All notable changes to Argos are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Auto memory + CLAUDE.md 自动加载 (#9)**:让 Argos 跨会话记住用户偏好 / 项目约定 / 失败模式,把 `CLAUDE.md` / `~/.argos/CLAUDE.md` / `AGENTS.md` 自动装进 LLM 系统提示。**4 层记忆**(append-only JSONL,无 sqlite 新依赖):
+  - **Project**(`~/.argos/memory/projects/<sha1(cwd)[:16]>.jsonl`,5MB cap):项目约定、构建命令、忌讳、verify 失败模式
+  - **User**(`~/.argos/memory/user.jsonl`,2MB cap):个人偏好、风格、常用别名
+  - **Skill**(`~/.argos/memory/skills/<name>.jsonl`,1MB cap):per-skill 失败库
+  - **Session**(`~/.argos/memory/sessions/<sid>.jsonl`,1MB,30 天自动 rotate):本 run 临时状态
+  - **5 隐式触发点**:`core/loop.py` escalation 决策 / verify 失败 / 同 tool ≥3 次失败 / run 成功且 ≥5 步 / `/undo`;走单一入口 `memory.auto.capture_event()`,**24h 同 (scope,key,value) 去重**;secret pattern 写入前 redact
+  - **3 显式 slash**:`/remember <text>`(自动判 user/project,1.0 confidence)/`/forget <id|key|text>`(软删,后台 prune)/`/memory`(只读 4 tier 摘要)
+  - **系统提示注入**:`_build_system` 在 `_env_context` 之后、`_tool_signatures_block` 之前插入 `<memory_context>` 段,含 CLAUDE.md 合并(全局 → 项目根,子覆盖父,20k/文件 30k/总 截断)+ 4 tier top 50/50/20/20 召回
+  - **Decay / 容量 cap**:`decay_pass()` 物理写回(`confidence -= 0.01 * days_since_last_used`)/`prune()` 物理删 `confidence==0` 条目/`_enforce_cap()` 写前检查 + 删最旧到 < cap/`purge_old_sessions()` 30 天清 session
+  - **secret redaction**:复用 `security_review` 9 条 regex(`sk-ant-` / `sk-` / `Bearer *` / 长 base64 / `.pem` / 私钥)写入前 redact
+  - **opt-out**:`ARGOS_NO_MEMORY=1` 跳过注入
+  - **D16**:`/memory` / `/remember` / `/forget` 不进 `COMMAND_HELP`(避免菜单过宽),`parse_slash` 仍识别为 known
+  - **0 新外部依赖**(stdlib only);+69 测试(6 文件:`test_memory_tiers` 11 / `test_memory_ranking` 11 / `test_claude_md_walker` 12 / `test_memory_commands` 26 / `test_memory_capture` 10 / `test_memory_injection` 6 / `test_memory_decay` 7);不做(留 v1.1):embedding 语义检索 / 跨机同步 / memory 写入 hook / per-skill 真实隔离
+
 ## [0.1.0] - 2026-06-06
 
 ### Added
