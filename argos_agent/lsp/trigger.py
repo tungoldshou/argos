@@ -39,11 +39,8 @@ def extract_file_writes(code: str) -> list[tuple[str, str]]:
     for m in _WRITE_FILE_RE.finditer(code):
         path = m.group(2)
         raw_body = m.group(5)
-        # 处理转义(\\n / \\t / \\\\) Python-style;errors="replace" 防坏字
-        try:
-            content = raw_body.encode("utf-8").decode("unicode_escape")
-        except UnicodeDecodeError:
-            content = raw_body.encode("utf-8").decode("unicode_escape", errors="replace")
+        # 处理转义(\\n / \\t / \\\\) Python-style;errors="replace" 兜底防坏字
+        content = raw_body.encode("utf-8").decode("unicode_escape", errors="replace")
         writes.append((path, content))
     return writes
 
