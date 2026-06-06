@@ -34,8 +34,9 @@ _manager = None  # type: ignore[var-annotated]  # Task 4 实现 LspManager
 
 def _reset_config() -> None:
     """清空单例(测试用)。"""
-    global _config
+    global _config, _manager
     _config = None
+    _manager = None
 
 
 def get_config() -> LspConfig:
@@ -67,8 +68,12 @@ def reload_config() -> LspConfig:
 
 
 def get_manager():  # type: ignore[no-untyped-def]
-    """拿当前 manager(Task 4 实现)。"""
-    raise NotImplementedError("lsp.get_manager 将在 Task 4 实现")
+    """惰性构造 + 返回当前 manager。配置变化 → 自动重建。"""
+    global _manager
+    if _manager is None:
+        from argos_agent.lsp.manager import LspManager
+        _manager = LspManager(get_config())
+    return _manager
 
 
 def get_diagnostics(file: str):  # type: ignore[no-untyped-def]

@@ -19,6 +19,10 @@ class LspProtocolError(Exception):
     """LSP 帧 / JSON 解析失败 → manager 走 crash 路径(spec §3)。"""
 
 
+class LspStreamClosed(Exception):
+    """LSP server 流关闭(EOF)→ manager 走 crash 路径(spec §3)。"""
+
+
 def encode_frame(message: dict) -> bytes:
     """dict → `Content-Length: N\\r\\n\\r\\n{json}` bytes(N 按 UTF-8 字节数)。"""
     body = json.dumps(message, ensure_ascii=False).encode("utf-8")
@@ -115,8 +119,15 @@ class LspClient:
             self._reader_task = None
 
     async def _reader_loop(self) -> None:
-        """持续从 proc.stdout 读帧;response 按 id 路由,notification 入队。"""
+        """持续从 proc.stdout 读帧;response 按 id 路由,notification 入队。
+
+        异常处理:
+        - LspProtocolError(帧格式坏字)→ 让所有 pending future 失败
+        - 任何非 CancelledError 异常 → 同样让所有 pending future 失败
+        - 正常 EOF(stream ended,buffer empty)→ 让所有 pending future 失败(manager 走 crash)
+        """
         stream = self._proc.stdout
+        protocol_error: Exception | None = None
         try:
             async for msg in parse_frames(stream):
                 msg_id = msg.get("id")
@@ -132,12 +143,18 @@ class LspClient:
                     await self._notifications.put(msg)
         except asyncio.CancelledError:
             raise
-        except LspProtocolError:
-            for fut in self._pending.values():
-                if not fut.done():
-                    fut.set_exception(RuntimeError("LSP protocol error"))
-            self._pending.clear()
-            raise
+        except LspProtocolError as e:
+            protocol_error = e
+        except Exception as e:  # noqa: BLE001
+            protocol_error = e
+        # 流结束(EOF 或协议错):让所有挂起 future 失败,manager 据此走 crash 路径
+        msg = "LSP stream closed" if protocol_error is None else f"LSP protocol error: {protocol_error}"
+        for fut in self._pending.values():
+            if not fut.done():
+                fut.set_exception(LspStreamClosed(msg))
+        self._pending.clear()
+        if protocol_error is not None:
+            raise LspProtocolError(str(protocol_error))
 
     async def send_request(
         self, method: str, params: dict | None = None, *, timeout: float = 5.0,
