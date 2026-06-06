@@ -15,6 +15,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import threading
 import time
 import uuid
@@ -247,3 +248,147 @@ def _dedup(scope: Scope, key: str, value: str, *,
         if e.key == key and e.value == value and e.ts >= cutoff:
             return True
     return False
+
+
+# ── CLAUDE.md / AGENTS.md 自动发现 + 合并(spec §5)──────────────────────────
+_PER_FILE_LIMIT = 20_000   # spec §5.2:每文件 ≤ 20k 字符
+_TOTAL_LIMIT = 30_000      # spec §5.2:总 ≤ 30k 字符
+
+
+def _ARGOS_HOME() -> Path:
+    """Argos home 用于放全局 CLAUDE.md / AGENTS.md。
+
+    优先 ARGOS_HOME env var(测试),否则 ~/.argos/。"""
+    override = os.environ.get("ARGOS_HOME")
+    return Path(override) if override else Path.home() / ".argos"
+
+
+def _global_claude() -> Path:
+    return _ARGOS_HOME() / "CLAUDE.md"
+
+
+def _global_agents() -> Path:
+    return _ARGOS_HOME() / "AGENTS.md"
+
+
+def walk_claude_md_files(start: Path) -> list[Path]:
+    """从 start 向上走到 filesystem root,收集 CLAUDE.md / AGENTS.md。
+
+    返回 [最近, ..., 最远] 顺序(子→父)。同目录里两个文件都收。
+    失败/不存在静默跳过。
+    """
+    out: list[Path] = []
+    seen: set[Path] = set()
+    try:
+        cur = start.resolve()
+    except (OSError, RuntimeError):
+        return out
+    while True:
+        for name in ("CLAUDE.md", "AGENTS.md"):
+            try:
+                p = cur / name
+            except (OSError, ValueError):
+                continue
+            try:
+                if p.is_file() and p not in seen:
+                    out.append(p)
+                    seen.add(p)
+            except OSError:
+                continue
+        parent = cur.parent
+        if parent == cur:
+            break
+        cur = parent
+    return out
+
+
+# 9 条 secret pattern 与 security_review/secrets.py 一致,用于 redact
+# (复用 9 条 regex,避免 spec §5.4 / D7 漏掉)
+_SECRET_RES: tuple[re.Pattern, ...] = (
+    re.compile(r"AKIA[0-9A-Z]{16}"),
+    re.compile(r"(?i)aws_secret_access_key\s*=\s*[\"'][A-Za-z0-9/+=]{40}[\"']"),
+    re.compile(r"ghp_[A-Za-z0-9]{36}"),
+    re.compile(r"github_pat_[A-Za-z0-9_]{82}"),
+    re.compile(r"sk-ant-[A-Za-z0-9-_]{20,}"),
+    re.compile(r"sk-[A-Za-z0-9-_]{20,}"),
+    re.compile(r"-----BEGIN (RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----"),
+    re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/=-]{20,}"),
+    re.compile(r"(?i)(password|passwd|pwd)\s*=\s*[\"'][^\"'\s]{4,}[\"']"),
+)
+
+
+def _redact_secrets(text: str) -> str:
+    """匹配 secret 模式 → <redacted:kind>。空内容/全 redact 后返空。"""
+    out = text
+    has_any = False
+    for pat in _SECRET_RES:
+        new = pat.sub("<redacted:secret>", out)
+        if new != out:
+            has_any = True
+        out = new
+    return out if (out.strip() or not has_any) else ""
+
+
+def _read_text_safely(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ""
+
+
+def merge_claude_documents(files: list[Path], *,
+                           global_paths: list[Path] = ()) -> str:
+    """合并 [global_paths, ...files(子→父)] → <memory_context>...</...> 字符串。
+
+    - 每文件 ≤ 20k(超截 + <truncated>)
+    - 合计 ≤ 30k(超出截全局段,优先保项目段)
+    - secret 模式 → <redacted:secret>
+    - 无任何文件 / 全空 → ""(空态,不注入)
+    """
+    sections: list[str] = []
+    # 全局段先(spec §5.2 顺序:全局 → 项目根子→父)
+    for p in global_paths:
+        body = _read_text_safely(p)
+        if not body:
+            continue
+        body = _redact_secrets(body)
+        if not body:
+            continue
+        sections.append(_format_section("global", p, body))
+    # 项目段
+    for p in files:
+        body = _read_text_safely(p)
+        if not body:
+            continue
+        body = _redact_secrets(body)
+        if not body:
+            continue
+        sections.append(_format_section("project", p, body))
+    if not sections:
+        return ""
+    inner = "\n\n".join(sections)
+    if len(inner) > _TOTAL_LIMIT:
+        # 截全局段(优先),保留项目段
+        global_secs = [s for s in sections if s.startswith("[global:")]
+        proj_secs = [s for s in sections if s.startswith("[project:")]
+        inner = "\n\n".join(proj_secs)
+        if len(inner) > _TOTAL_LIMIT:
+            inner = inner[:_TOTAL_LIMIT] + "\n<truncated:total>"
+        else:
+            # 全局段超出 → 截总长度内的全局段
+            budget = _TOTAL_LIMIT - len(inner) - 2
+            for s in global_secs:
+                if budget <= 0:
+                    break
+                snippet = s[:budget]
+                inner += "\n\n" + snippet
+                budget -= len(snippet) + 2
+            inner += "\n<truncated:total>"
+    return f"<memory_context>\n{inner}\n</memory_context>"
+
+
+def _format_section(kind: str, path: Path, body: str) -> str:
+    """单文件 → '[kind: relpath]\\n<body>'(截 20k)。"""
+    if len(body) > _PER_FILE_LIMIT:
+        body = body[:_PER_FILE_LIMIT] + "\n<truncated>"
+    return f"[{kind}: {path.name}]\n{body}"
