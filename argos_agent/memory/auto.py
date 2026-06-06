@@ -628,3 +628,145 @@ def view_all(*, project_id: str | None = None,
     else:
         lines.append("  (空)")
     return "\n".join(lines)
+
+
+# ── auto-capture 触发点(spec §7)──────────────────────────────────────────────
+_TYPE_MAP = {
+    "escalation_decision": "decision",
+    "verify_fail": "failure",
+    "tool_repeat_fail": "failure",
+    "run_success": "fact",
+    "undo": "convention",
+}
+_DEFAULT_CONFIDENCE = {
+    "escalation_decision": 0.9,
+    "verify_fail": 0.8,
+    "tool_repeat_fail": 0.7,
+    "run_success": 0.6,
+    "undo": 0.7,
+}
+_SCOPE_MAP = {
+    "escalation_decision": "project",
+    "verify_fail": "project",
+    "tool_repeat_fail": "skill",  # spec §7.1
+    "run_success": "project",
+    "undo": "project",
+}
+_tool_fail_count: dict[tuple[str | None, str], int] = {}
+
+
+def _tool_fail_counter_key(project_id: str | None, tool: str) -> tuple[str | None, str]:
+    return (project_id, tool)
+
+
+def _tool_fail_count_increment(project_id: str | None, tool: str) -> int:
+    """返回递增后的计数(同 (project, tool) 累加)。"""
+    k = _tool_fail_counter_key(project_id, tool)
+    _tool_fail_count[k] = _tool_fail_count.get(k, 0) + 1
+    return _tool_fail_count[k]
+
+
+def _reset_tool_fail_counter(project_id: str | None, tool: str) -> None:
+    """成功一次 → 计数清零(避免下次的真 fail 因累计的旧 fail 误触 3 次)。"""
+    _tool_fail_count.pop(_tool_fail_counter_key(project_id, tool), None)
+
+
+def capture_event(kind: str, *, project_id: str | None = None,
+                  session_id: str | None = None,
+                  **payload) -> MemoryEntry | None:
+    """单入口:kind ∈ {escalation_decision, verify_fail, tool_repeat_fail,
+    run_success, undo}。未知 kind 返 None。
+
+    spec §7.1 表:
+    - escalation_decision: scope=project, conf=0.9
+    - verify_fail: scope=project, conf=0.8
+    - tool_repeat_fail: scope=skill, conf=0.7(同 tool 累计 ≥3 次才写)
+    - run_success: scope=project, conf=0.6(goal + 关键命令,steps ≥ 5)
+    - undo: scope=project, conf=0.7
+    """
+    if kind not in _TYPE_MAP:
+        return None
+    if kind == "tool_repeat_fail":
+        tool = payload.get("tool", "")
+        if not tool:
+            return None
+        cnt = _tool_fail_count_increment(project_id, tool)
+        if cnt < 3:
+            return None
+        # 触发后清零(下一次再计数)
+        _reset_tool_fail_counter(project_id, tool)
+    if kind == "run_success":
+        steps = int(payload.get("steps", 0))
+        if steps < 5:
+            return None
+    scope = _SCOPE_MAP[kind]
+    mem_type = _TYPE_MAP[kind]
+    conf = _DEFAULT_CONFIDENCE[kind]
+    # 构造 value + key
+    if kind == "escalation_decision":
+        reply = payload.get("user_reply", "")
+        reason = payload.get("reason", "")
+        value = f"escalation → {reply} ({reason})".strip(" ()")
+        key = f"escalation.{reason or 'unknown'}"
+    elif kind == "verify_fail":
+        cmd = payload.get("cmd", "")
+        snippet = payload.get("stderr_snippet", "")
+        h = payload.get("stderr_hash", "")
+        value = f"{cmd} → {snippet[:200]}" + (f" [{h[:8]}]" if h else "")
+        key = f"verify_fail.{cmd[:40]}"
+    elif kind == "tool_repeat_fail":
+        tool = payload.get("tool", "")
+        err = payload.get("error", "")[:120]
+        value = f"{tool} 3x fail: {err}"
+        key = f"tool_fail.{tool}"
+    elif kind == "run_success":
+        goal = payload.get("goal", "")
+        kcmd = payload.get("key_cmd", "")
+        value = f"{goal} (key_cmd={kcmd})"
+        key = f"run_success.{kcmd[:40]}"
+    elif kind == "undo":
+        reason = payload.get("reason", "(no reason given)")
+        value = f"undo: {reason}"
+        key = f"undo.{reason[:40]}"
+    else:
+        return None
+    # secret redact
+    value = _redact_secrets(value)
+    if not value.strip():
+        return None
+    # 路径 + 24h dedup
+    if scope == "user":
+        path = _user_path()
+        eid_extra = None
+    elif scope == "project":
+        pid = project_id or project_id_for()
+        path = _project_path(pid)
+        eid_extra = pid
+    elif scope == "skill":
+        # 走 user tier,evidence 标 skill;真正的 per-skill 是 v1.1
+        path = _user_path()
+        eid_extra = None
+    else:  # session
+        sid = session_id or uuid.uuid4().hex
+        path = _session_path(sid)
+        eid_extra = sid
+    if _dedup(scope, key, value, path=path):
+        return None
+    now = time.time()
+    entry = MemoryEntry(
+        id=_new_id(),
+        type=mem_type,
+        scope=scope,
+        key=key,
+        value=value,
+        confidence=conf,
+        evidence=(f"auto-capture:{kind}",),
+        ts=now,
+        last_used_at=now,
+        use_count=0,
+        project_id=eid_extra if scope == "project" else None,
+        session_id=eid_extra if scope == "session" else None,
+        skill_name=tool if scope == "skill" and kind == "tool_repeat_fail" else None,
+    )
+    _append_jsonl(path, entry)
+    return entry

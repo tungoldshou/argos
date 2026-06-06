@@ -713,6 +713,35 @@ class AgentLoop:
                 # PostToolUse 非 0 不阻塞(只 warn),continue 不受影响
                 # I2 + W2(§6.5):只在【本步新签了 Receipt】且【HMAC 核验通过】时投 ToolReceipt。
                 # accept_receipt 在投事件前核验回执 —— 伪造/篡改的回执拒投(防谎报工具执行)。
+
+                # #9 T5:auto-capture tool repeat fail(同 tool ≥3 次失败 → 记)
+                if not result.ok and result.exc:
+                    try:
+                        from argos_agent.memory import auto as _mem_auto
+                        from argos_agent.memory.auto import project_id_for as _pid
+                        _tool_names = extract_tool_names(code)
+                        for _t in _tool_names:
+                            _mem_auto.capture_event(
+                                "tool_repeat_fail",
+                                project_id=_pid(self._workspace),
+                                tool=_t,
+                                error=str(result.exc)[:200],
+                            )
+                    except Exception:  # noqa: BLE001
+                        pass
+                elif result.ok:
+                    # 成功一次:同 tool 的失败计数清零(避免下次的真 fail 因累计误触)
+                    try:
+                        from argos_agent.memory import auto as _mem_auto
+                        from argos_agent.memory.auto import (
+                            project_id_for as _pid,
+                            _reset_tool_fail_counter as _rst,
+                        )
+                        for _t in extract_tool_names(code):
+                            _rst(_pid(self._workspace), _t)
+                    except Exception:  # noqa: BLE001
+                        pass
+
                 if self._broker is not None:
                     new_receipt = self._broker.take_receipt()
                     if new_receipt is not None and self._harness.accept_receipt(new_receipt):
@@ -771,6 +800,23 @@ class AgentLoop:
             for ev in self._hbus.drain():
                 yield ev
 
+            # #9 T5:auto-capture verify fail(失败命令 + stderr hash + 200 字 snippet)
+            if verdict.status == "failed" and self._verify_cmd:
+                try:
+                    from argos_agent.memory import auto as _mem_auto
+                    from argos_agent.memory.auto import project_id_for as _pid
+                    import hashlib as _hl
+                    _snip = (verdict.detail or "")[:200]
+                    _mem_auto.capture_event(
+                        "verify_fail",
+                        project_id=_pid(self._workspace),
+                        cmd=self._verify_cmd,
+                        stderr_hash=_hl.sha1(_snip.encode()).hexdigest()[:16],
+                        stderr_snippet=_snip,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+
             # Defense-in-depth(Phase 4 #3):verify_cmd is None 时绝不以 passed 收尾 ——
             # 非规范 verifier 可能对无测任务返回 passed;必须走诚实完成路径标 NO_TEST_LABEL。
             if verdict.status == "passed" and self._verify_cmd is not None:
@@ -800,6 +846,30 @@ class AgentLoop:
         # 关键修复:即使最终段为空(模型用空 turn 宣布完成、或答复被 scrubber 清空),也必须落
         # 一条占位 assistant —— 否则本轮历史只剩单边 user(goal),连续多轮会在 DB 堆出
         # [user, user, user...],模型看不出是独立任务、也记不住自己做过啥(=用户看到的"没串上下文")。
+
+        # #9 T5:auto-capture escalation / run_success(escalation 在 run 末尾,capture 一次)
+        try:
+            from argos_agent.memory import auto as _mem_auto
+            from argos_agent.memory.auto import project_id_for as _pid
+            if escalated:
+                _mem_auto.capture_event(
+                    "escalation_decision",
+                    project_id=_pid(self._workspace),
+                    reason="max_rounds_exceeded",
+                    user_reply="escalated",
+                )
+            elif not report_note and step >= 5:
+                # run_success:passed 且 ≥5 步 → 记 goal + key_cmd
+                _mem_auto.capture_event(
+                    "run_success",
+                    project_id=_pid(self._workspace),
+                    goal=(self._user_goal or "")[:120],
+                    steps=step,
+                    key_cmd=(self._verify_cmd or "")[:120],
+                )
+        except Exception:  # noqa: BLE001
+            pass
+
         persisted = text.strip()
         if not persisted:
             if escalated:

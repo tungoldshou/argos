@@ -418,6 +418,14 @@ class ArgosApp(App):
             )
             return
         result = self._snapshot.restore(self._workspace)
+        # #9 T5:auto-capture undo 事件
+        try:
+            from argos_agent.memory import auto as _mem_auto
+            from argos_agent.memory.auto import project_id_for as _pid
+            reason = "snapshot restored" if not result.errors else f"partial restore ({len(result.errors)} errors)"
+            _mem_auto.capture_event("undo", project_id=_pid(self._workspace), reason=reason)
+        except Exception:  # noqa: BLE001
+            pass
         if result.errors:
             head = "\n".join(f"  ✗ {p}: {e}" for p, e in result.errors[:5])
             more = "\n  …(更多省略)" if len(result.errors) > 5 else ""
