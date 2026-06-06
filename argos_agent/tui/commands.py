@@ -31,6 +31,7 @@ COMMAND_HELP: dict[str, str] = {
     "security-review": "安全审计(secrets + 依赖漏洞 + 危险 API)(/security-review [path])",
     "simplify": "代码重复 / 复杂度 / 死代码扫描(/simplify [path])",
     "eval": "Agent 自我评估 + A/B(/eval, /eval run <id>, /eval compare <a> <b>)",
+    "routing": "查看 / 切换路由配置(/routing, /routing set <cat> <tier>)",
 }
 
 COMMAND_NAMES: list[str] = list(COMMAND_HELP)

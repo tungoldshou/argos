@@ -176,9 +176,14 @@ class ActivityPanel(Vertical):
         self._set(3, "\n".join(f"🧾 {a}" for a in self._receipts[-6:]))
 
     def on_cost(self, *, tokens_in: int, tokens_out: int, cost_usd: float | None,
-                elapsed_s: float, cache_read: int = 0) -> None:
+                elapsed_s: float, cache_read: int = 0, tier_name: str = "") -> None:
         cost = "$(N/A)" if cost_usd is None else f"${cost_usd:.3f}"
-        self._set(7, f"↑{tokens_in} ↓{tokens_out}  {cost}\n"
+        # #11 per-task routing:每步成本归属具体 profile(3 字母短标签 + 颜色,spec D15)
+        tier_tag = ""
+        if tier_name:
+            short = tier_name[:3]
+            tier_tag = f" [{short}]"
+        self._set(7, f"↑{tokens_in} ↓{tokens_out}{tier_tag}  {cost}\n"
                      f"缓存命中 {cache_read} tok  {elapsed_s:.1f}s")
 
     def on_context(self, *, used: int, window: int) -> None:

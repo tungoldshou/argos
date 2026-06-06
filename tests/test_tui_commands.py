@@ -15,6 +15,7 @@ def test_known_commands_listed():
         "verify", "security-review", "simplify",  # 2026-06-06:3 skill slash
         "runs",  # 2026-06-06:列出 / 控制 daemon run(/runs, /runs {id} resume|cancel)
         "eval",  # 2026-06-07:Agent 自我评估 + A/B(/eval, /eval run, /eval compare)
+        "routing",  # 2026-06-07:per-task model routing 配置 + history(/routing, /routing set)
     }
 
 

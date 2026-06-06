@@ -494,6 +494,8 @@ class ArgosApp(App):
             await self._memory_cmd(log)
         elif cmd.name == "eval":
             await self._eval_cmd(log, cmd.arg)
+        elif cmd.name == "routing":
+            await self._routing_cmd(log, cmd.arg)
 
     async def _undo(self, log) -> None:
         """/undo:用本轮 run 起点的快照还原 workspace;不发 goal。"""
@@ -1033,6 +1035,89 @@ class ArgosApp(App):
         else:
             await log.append_line(md, kind="system")
 
+    async def _routing_cmd(self, log, arg: str) -> None:
+        """#11 per-task routing TUI:无参列配置 + 最近 10 步决策;
+        set <category> <tier> 改写 ~/.argos/config.json(下次 run 生效)。"""
+        parts = arg.strip().split()
+        if parts and parts[0] == "set":
+            await self._routing_set(log, " ".join(parts[1:]))
+            return
+        # 无参:列 routing config + history
+        router = self._current_router()
+        if router is None:
+            await log.append_line(
+                "/routing 不可用(无 router 注入;demo/fake 模式)。",
+                kind="system")
+            return
+        routing = router.routing
+        lines = ["[Argos routing]"]
+        lines.append(f"  default:        {routing.default}")
+        if routing.by_category:
+            lines.append("  by_category:")
+            for k, v in sorted(routing.by_category.items()):
+                lines.append(f"    {k:14}→ {v}")
+        if routing.by_tool:
+            lines.append("  by_tool:")
+            for k, v in sorted(routing.by_tool.items()):
+                lines.append(f"    {k:14}→ {v}")
+        if routing.tier_force_confirm:
+            lines.append(f"  tier_force_confirm: {routing.tier_force_confirm}")
+        lines.append("")
+        lines.append("[最近 10 步决策]")
+        hist = router.history()
+        if not hist:
+            lines.append("  (无;本 run 尚未调模型)")
+        else:
+            for d in hist:
+                lines.append(
+                    f"  step {d.step:3}  cat={d.category.value:13} "
+                    f"tool={d.tool or '-':14} → {d.tier:8} ({d.source})"
+                )
+        await log.append_line("\n".join(lines), kind="system")
+
+    async def _routing_set(self, log, arg: str) -> None:
+        """#11 /routing set <category> <tier>:原子改写 config.json。"""
+        import os
+        from pathlib import Path
+        from argos_agent.config import ConfigError
+        from argos_agent.routing.categorizer import TaskCategory
+        from argos_agent.routing.config import set_category
+
+        parts = arg.strip().split()
+        if len(parts) != 2:
+            await log.append_line(
+                "用法:/routing set <category> <tier>  "
+                f"(8 个合法 category: {[c.value for c in TaskCategory]})",
+                kind="error")
+            return
+        cat_name, tier = parts
+        try:
+            category = TaskCategory(cat_name)
+        except ValueError:
+            await log.append_line(
+                f"category '{cat_name}' 不存在;8 个合法值:"
+                f"{[c.value for c in TaskCategory]}",
+                kind="error")
+            return
+        try:
+            config_dir = Path(os.environ.get("ARGOS_CONFIG_DIR")
+                              or Path.home() / ".argos")
+            set_category(config_dir, category, tier)
+        except ConfigError as e:
+            await log.append_line(f"/routing set 失败:{e}", kind="error")
+            return
+        await log.append_line(
+            f"已写入 {config_dir}/config.json:"
+            f"routing.by_category.{category.value} = {tier}",
+            kind="done")
+
+    def _current_router(self):
+        """拿当前 run 的 router(若存在);无 router 注入 → None(spec D16 友好提示)。"""
+        loop = getattr(self, "_current_loop", None)
+        if loop is None:
+            return None
+        return getattr(loop, "_router", None)
+
     async def _show_skills(self, log) -> None:
         """/skills:#10 重写:列 installed + available from index + 推荐。
 
@@ -1282,6 +1367,8 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             ap.on_cost(
                 tokens_in=ev.tokens_in, tokens_out=ev.tokens_out,
                 cost_usd=ev.cost_usd, elapsed_s=ev.elapsed_s, cache_read=ev.cache_read,
+                # #11 per-task routing:成本归属实际 profile(spec D15 短标签)。
+                tier_name=ev.tier_name,
             )
             # 上下文占用%用【实际运行模型】的窗口当分母(active_tier),不能用模块级默认值——
             # 否则 active 是小窗口模型(如 Ollama 8192)时会拿 192000 当分母,谎报上下文压力。
