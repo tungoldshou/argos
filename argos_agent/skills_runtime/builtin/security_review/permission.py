@@ -132,6 +132,10 @@ _TEST_PATH_PATTERNS: tuple[str, ...] = (
 )
 
 _SNIPPET_MAX = 120
+_BINARY_EXTS: frozenset[str] = frozenset({
+    ".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip", ".tar", ".gz",
+    ".pyc", ".so", ".dll", ".dylib", ".bin",
+})
 
 
 def _is_test_path(relpath: str) -> bool:
@@ -151,6 +155,8 @@ def scan_file_for_permission_issues(
 ) -> tuple[Finding, ...]:
     """单文件扫危险 API → 0..N 条 Finding。"""
     ext = file.suffix.lower()
+    if ext in _BINARY_EXTS:
+        return ()  # 二进制静默跳
     entry = _EXT_TABLE.get(ext)
     if entry is None:
         if ext:
