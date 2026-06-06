@@ -74,12 +74,19 @@ def ExitPlanMode(loop, action: str, feedback: str | None = None) -> str:
     """退出 plan mode,根据 action 决定下一步。
 
     Args:
-        loop: AgentLoop 实例(只需 `mode` / `_plan_decision` 2 个属性)
+        loop: AgentLoop 实例(只需 `mode` / `_plan_decision` / `_plan_decision_event` 属性)
         action: 4 选项之一(approve_start / approve_accept_edits / keep_planning / refine)
         feedback: 仅 refine 时用(不能为空)
 
     Returns:
         用户可见消息
+
+    不变量(spec §2.5 铁证 + 防 Refine→Approve 静默兜底 bug):
+    校验失败 → 返错误串 + mode/decision/event 全部不动(让 caller 知道失败真发生了)。
+    校验成功 → mode 切回 act + 存 decision + 【主动 set _plan_decision_event】唤醒 loop 的 await。
+    历史上 TUI 端在 ExitPlanMode 失败后仍 set event,导致 loop 的 `_plan_decision is None`
+    兜底成 `approve_start` —— 用户点 Refine 被静默改成 Approve。现在由本函数原子地
+    "校验-切 mode-存 decision-唤醒 await"一次完成,caller 不需记忆设 event。
     """
     if getattr(loop, "mode", "act") != "plan":
         return "错误:当前不在 plan mode。"
@@ -92,6 +99,10 @@ def ExitPlanMode(loop, action: str, feedback: str | None = None) -> str:
     loop.mode = "act"
     set_plan_mode(False)  # 模块级清掉
     loop._plan_decision = decision
+    # 主动唤醒 loop 的 await(无 event 属性 = 非 loop 路径,例如单测 stub,跳过)。
+    ev = getattr(loop, "_plan_decision_event", None)
+    if ev is not None:
+        ev.set()
     return f"已退出 plan mode,action={action}。"
 
 

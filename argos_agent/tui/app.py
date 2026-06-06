@@ -1092,7 +1092,10 @@ class ArgosApp(App):
         流程:
           1. AUTO 档(YOLO)直接按 approve_start 落决策 + 唤醒 loop(不弹窗)
           2. CONFIRM/PROPOSE 档 → push_screen(PlanModal) 等用户选 1/2/3/4
-          3. modal 回调里 ExitPlanMode(loop, action, feedback) + set _plan_decision_event 唤醒
+          3. modal 回调里 ExitPlanMode(loop, action, feedback);唤醒 loop 的 await 由
+             ExitPlanMode 自己负责(校验通过 → 自动 set event),TUI 不再手动 set。
+             (历史教训:之前 TUI 在 ExitPlanMode 失败后仍 set event,导致 Refine 校验失败
+             时被静默兜底成 Approve;现在 ExitPlanMode 原子完成,失败时不 set,无此洞。)
         """
         from argos_agent.core.plan_mode import ExitPlanMode
         loop = self._current_loop
@@ -1102,18 +1105,13 @@ class ArgosApp(App):
         if self.gate.level is ApprovalLevel.AUTO:
             # YOLO:不弹窗,直接 approve_start 走完(spec §2.5 等价于按 1)
             ExitPlanMode(loop, "approve_start")
-            ev_set = getattr(loop, "_plan_decision_event", None)
-            if ev_set is not None:
-                ev_set.set()
             return
 
         def _cb(decision: PlanDecision | None) -> None:
             if decision is None:
                 return  # Esc 退屏:不写决策,让 loop 继续挂(诚实:用户没拍就不放)
             ExitPlanMode(loop, decision.action, decision.feedback)
-            ev_set = getattr(loop, "_plan_decision_event", None)
-            if ev_set is not None:
-                ev_set.set()
+            # ExitPlanMode 内部已 set event(校验失败时不动,避免 Refine→Approve 兜底)。
             # 落一行告知用户(append_line 是 async,回调是同步的 → 包成 worker)
             self.run_worker(
                 self.query_one("#transcript", Transcript).append_line(

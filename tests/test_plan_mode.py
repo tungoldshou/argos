@@ -90,12 +90,51 @@ def test_exit_plan_mode_approve_start():
 
 
 def test_exit_plan_mode_refine_requires_feedback():
-    """refine 模式 feedback 为空时报错,不变 mode。"""
+    """refine 模式 feedback 为空时报错,不变 mode,【不】唤醒 loop 的 await event。
+
+    关键防御:历史上 TUI 端在 ExitPlanMode 失败后仍 set event,导致 loop 的 `_plan_decision is None`
+    兜底成 `approve_start` —— 用户点的 Refine 被静默改成 Approve。修复后 ExitPlanMode 在校验
+    失败时绝不动 event,保证错误真传递。"""
+    import asyncio
     loop = _FakeLoop(mode="plan")
+    # 模拟真 loop:有 _plan_decision_event
+    loop._plan_decision_event = asyncio.Event()
     msg = ExitPlanMode(loop, action="refine", feedback="")
     assert loop.mode == "plan"  # 没变
     assert "feedback" in msg.lower() or "不能为空" in msg or "refine" in msg.lower()
     assert loop._plan_decision is None
+    # 关键:event 必须仍是 cleared(否则 loop 被错误唤醒 → 兜底 approve_start)
+    assert not loop._plan_decision_event.is_set(), (
+        "ExitPlanMode 在校验失败时不应唤醒 loop,否则 Refine 会被静默兜底成 Approve"
+    )
+
+
+def test_exit_plan_mode_succeeds_sets_event():
+    """成功路径(approve_start / refine-with-feedback)必须 set event 唤醒 loop 的 await。
+
+    历史上 TUI 端在 ExitPlanMode 后手动 set event,造成 ExitPlanMode "半成品"(存了 decision
+    但没唤醒 await,调用方必须记得 set)。修复后 ExitPlanMode 自己 set event —— 一次原子操作,
+    任何 caller(测试 / 脚本 / 别的 UI)都不用操心唤醒。"""
+    import asyncio
+    loop = _FakeLoop(mode="plan")
+    loop._plan_decision_event = asyncio.Event()
+    msg = ExitPlanMode(loop, action="approve_start")
+    assert loop.mode == "act"
+    assert loop._plan_decision == PlanExitDecision(action="approve_start")
+    assert loop._plan_decision_event.is_set(), (
+        "ExitPlanMode 成功后应唤醒 loop 的 await event,而不是让 caller 手动 set"
+    )
+
+
+def test_exit_plan_mode_refine_with_feedback_sets_event():
+    """refine + 非空 feedback 成功后必须 set event 唤醒 loop。"""
+    import asyncio
+    loop = _FakeLoop(mode="plan")
+    loop._plan_decision_event = asyncio.Event()
+    msg = ExitPlanMode(loop, action="refine", feedback="更多上下文")
+    assert loop.mode == "act"
+    assert loop._plan_decision.feedback == "更多上下文"
+    assert loop._plan_decision_event.is_set()
 
 
 def test_exit_plan_mode_refine_with_feedback():
