@@ -38,6 +38,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="检查并提示新版本(不自动下载;跳过 7 天缓存)",
     )
     sp_update.set_defaults(func=_cmd_self_update)
+    # #7:argos eval 子命令
+    from argos_agent.cli import eval as _eval_cli
+    _eval_cli.add_subparser(sub)
     return p
 
 
