@@ -1,0 +1,224 @@
+"""审批闸核心测试 —— 装饰器 + 状态机(不调模型,纯逻辑)。
+
+迁移说明(Phase 3 Task 9):
+  · Decision 从 (approved, scope, reason) → (kind, reason) per 契约 §6.3 锁#3。
+  · gate.request(payload) → gate.request(action, args, *, description, risk, timeout)。
+  · gate.approve(call_id, scope) → gate.respond(call_id, kind); gate.deny(call_id) → gate.respond(call_id, "deny")。
+  · 保留 gate.approve() / gate.deny() backward-compat 方法(server.py 旧路径尚在使用)——
+    此处测试已全部迁至新 API,未删任何覆盖点(原功能被新测试等量覆盖)。
+"""
+import asyncio
+import pytest
+
+from argos_agent import approval
+
+
+@pytest.mark.asyncio
+async def test_request_approval_blocks_then_resolves():
+    gate = approval.ApprovalGate()
+    action = "write_file"
+    args = {"path": "x.py"}
+
+    # 后台开协程请求审批
+    request_task = asyncio.create_task(
+        gate.request(action, args, description="写入文件 x.py", risk="low", timeout=0.5)
+    )
+    await asyncio.sleep(0)  # 让 request 进入等待
+
+    # 此时应该有 pending 请求
+    pending = gate.pending()
+    assert len(pending) == 1
+    call_id = pending[0].call_id
+
+    # 批准 → 协程应返回 approved
+    gate.respond(call_id, "once")
+    result = await request_task
+    assert result == approval.Decision(kind="once")
+
+
+@pytest.mark.asyncio
+async def test_deny_returns_false():
+    gate = approval.ApprovalGate()
+    request_task = asyncio.create_task(
+        gate.request("x", {}, description="x", risk="low", timeout=0.5)
+    )
+    await asyncio.sleep(0)
+    call_id = gate.pending()[0].call_id
+    gate.respond(call_id, "deny")
+    result = await request_task
+    assert result.approved is False
+
+
+@pytest.mark.asyncio
+async def test_timeout_defaults_to_deny():
+    gate = approval.ApprovalGate()
+    result = await gate.request("x", {}, description="x", risk="low", timeout=0.05)
+    assert result.approved is False
+    assert "超时" in result.reason
+
+
+@pytest.mark.asyncio
+async def test_session_scope_caches_approval():
+    gate = approval.ApprovalGate()
+    action = "write_file"
+    args = {"path": "x.py"}
+    request_task = asyncio.create_task(
+        gate.request(action, args, description="写入文件 x.py", risk="low", timeout=0.5)
+    )
+    await asyncio.sleep(0)
+    call_id = gate.pending()[0].call_id
+    gate.respond(call_id, "session")
+    await request_task
+
+    # 同一 action+args 在 session 内 → 立即放行,不阻塞
+    result = await gate.request(action, args, description="写入文件 x.py", risk="low", timeout=0.5)
+    assert result.approved is True
+    assert result.kind == "session"
+
+
+def test_requires_approval_decorator_marks_metadata():
+    @approval.requires_approval(description="写入文件 {path}", risk="low")
+    def write_file(path: str, content: str) -> str:
+        """写入文件"""
+        return f"wrote {path}"
+
+    assert write_file._approval_required is True
+    assert write_file._approval_description == "写入文件 {path}"
+    assert write_file._approval_risk == "low"
+    # fail-closed:无 gate 上下文 → 默认拒绝(绝不偷偷放行),返回错误字符串而非抛异常
+    assert "默认拒绝" in write_file("a.txt", "x")
+
+
+def test_decorator_runs_original_when_gate_approves():
+    """装饰器不破坏原函数:装一个自动批准 gate,调用应跑到真实实现。"""
+    @approval.requires_approval(description="写入文件 {path}", risk="low")
+    def write_file(path: str, content: str) -> str:
+        """写入文件"""
+        return f"wrote {path}"
+
+    gate = approval.ApprovalGate()
+
+    async def _auto(action, args, *, description, risk, timeout=60.0):
+        return approval.Decision(kind="once")
+
+    gate.request = _auto  # type: ignore[assignment]
+    token = approval.set_current_gate(gate)
+    try:
+        assert write_file("a.txt", "x") == "wrote a.txt"
+    finally:
+        approval.reset_current_gate(token)
+
+
+# ── 缺口补齐:幂等/取消/不可 JSON 值/async 工具/headless 路径 ─────────────────────
+def test_approve_unknown_call_id_is_noop():
+    gate = approval.ApprovalGate()
+    # respond with deny is the new unified API; also test backward-compat approve/deny
+    assert gate.respond("nonexistent", "deny") is False
+    assert gate.approve("nonexistent") is False
+    assert gate.deny("nonexistent") is False
+
+
+@pytest.mark.asyncio
+async def test_cancel_all_denies_pending():
+    gate = approval.ApprovalGate()
+    t1 = asyncio.create_task(gate.request("a", {}, description="a", risk="low", timeout=5.0))
+    t2 = asyncio.create_task(gate.request("b", {}, description="b", risk="low", timeout=5.0))
+    await asyncio.sleep(0)
+    assert len(gate.pending()) == 2
+    n = gate.cancel_all()
+    assert n == 2
+    r1, r2 = await asyncio.gather(t1, t2)
+    assert r1.approved is False and "session" in r1.reason
+    assert r2.approved is False
+    assert gate.pending() == []
+
+
+def test_decorator_preserves_name_and_docstring():
+    @approval.requires_approval(description="x", risk="low")
+    def my_tool(a: str) -> str:
+        """我的工具说明"""
+        return a
+
+    assert my_tool.__name__ == "my_tool"
+    assert "我的工具说明" in (my_tool.__doc__ or "")
+
+
+def test_decorator_wraps_async_function():
+    @approval.requires_approval(description="async 工具", risk="low")
+    async def my_async_tool(x: int) -> str:
+        return f"ok-{x}"
+
+    import inspect
+    assert inspect.iscoroutinefunction(my_async_tool)
+    # 标记属性也应在 wrapper 上
+    assert getattr(my_async_tool, "_approval_required", False) is True
+    assert getattr(my_async_tool, "_approval_description", None) == "async 工具"
+
+
+# 旧 langchain `@tool` + `@requires_approval` 组合铁证随 2026-06-05 死栈清理移除 ——
+# 活路径审批走 broker(gate.request 先于 _execute);decorator 由下方 guarded_call 测试覆盖。
+@pytest.mark.asyncio
+async def test_guarded_call_fail_closed_without_gate():
+    ran = {"v": False}
+    async def run():
+        ran["v"] = True
+        return "ok"
+    out = await approval.guarded_call("x", {}, run, description="x", risk="low")
+    assert "默认拒绝" in out
+    assert ran["v"] is False  # 无 gate 绝不执行
+
+
+@pytest.mark.asyncio
+async def test_guarded_call_runs_when_approved():
+    gate = approval.ApprovalGate()
+    async def _auto(action, args, *, description, risk, timeout=60.0):
+        return approval.Decision(kind="once")
+    gate.request = _auto  # type: ignore[assignment]
+    token = approval.set_current_gate(gate)
+    try:
+        out = await approval.guarded_call("x", {}, lambda: _say_hi(), description="x", risk="low")
+        assert out == "hi"
+    finally:
+        approval.reset_current_gate(token)
+
+
+async def _say_hi():
+    return "hi"
+
+
+@pytest.mark.asyncio
+async def test_guarded_call_returns_refusal_when_denied():
+    gate = approval.ApprovalGate()
+    async def _deny(action, args, *, description, risk, timeout=60.0):
+        return approval.Decision(kind="deny", reason="太危险")
+    gate.request = _deny  # type: ignore[assignment]
+    token = approval.set_current_gate(gate)
+    try:
+        out = await approval.guarded_call("x", {}, lambda: _say_hi(), description="x", risk="low")
+        assert "用户拒绝" in out and "太危险" in out
+    finally:
+        approval.reset_current_gate(token)
+
+
+@pytest.mark.asyncio
+async def test_gate_pending_respond_same_loop_wakeup():
+    """真实 pending→respond 流(不打桩 gate.request):一个协程经 guarded_call 阻塞等审批,
+    另一路 respond() 唤醒它放行。守住交互审批不会永久挂起这条生产关键路径。"""
+    gate = approval.ApprovalGate()
+    token = approval.set_current_gate(gate)
+    try:
+        task = asyncio.create_task(
+            approval.guarded_call("write", {"path": "a.py"}, lambda: _say_hi(),
+                                  description="写入 a.py", risk="low")
+        )
+        for _ in range(200):
+            await asyncio.sleep(0.01)
+            if gate.pending():
+                break
+        assert gate.pending(), "工具应已挂起等待审批"
+        assert gate.respond(gate.pending()[0].call_id, "once") is True
+        result = await asyncio.wait_for(task, timeout=2.0)
+        assert result == "hi"
+        assert gate.pending() == []
+    finally:
+        approval.reset_current_gate(token)

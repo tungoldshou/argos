@@ -1,20 +1,30 @@
-node_modules
-dist
-dist-ssr
-*.local
+# macOS / logs
 .DS_Store
 *.log
-.vite
-
-# tauri / rust
-src-tauri/target
-src-tauri/gen
 
 # local env (dev keys — never commit)
 .env.local
 .env*.local
 
-# codegraph index + tsc build cache
+# codegraph index
 .codegraph
-*.tsbuildinfo
-.claude/
+
+# ignore local .claude state (settings, locks) but DO track shared project skills
+.claude/*
+!.claude/skills/
+
+# QA verification screenshots (throwaway)
+screenshots/
+
+# python
+__pycache__/
+*.pyc
+*.egg-info/
+.coverage
+.pytest_cache/
+.venv/
+
+# PyInstaller arm64 单 binary 产物(打包态,不进 git)
+/build/
+/dist/
+*.spec.bak

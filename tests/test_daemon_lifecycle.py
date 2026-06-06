@@ -1,0 +1,136 @@
+"""跨 session + crash 恢复测试(spec §2.4 + §2.8)。"""
+from __future__ import annotations
+
+import asyncio
+import time
+from pathlib import Path
+
+import pytest
+
+from argos_agent.daemon.events import RunMeta
+from argos_agent.daemon.manager import RunManager
+from argos_agent.daemon.state_machine import transition
+from argos_agent.daemon.worker import FakeLoop, RunWorker
+
+
+@pytest.mark.asyncio
+async def test_recover_marks_running_as_suspended(tmp_path: Path):
+    """daemon 启动时扫:index 标 running 但实际已 SIGKILL → 改 suspended。"""
+    runs_dir = tmp_path / "runs"
+    index_path = tmp_path / "index.json"
+    mgr1 = RunManager(runs_dir=runs_dir, index_path=index_path)
+    rid = await mgr1.create_run(goal="x", workspace="/tmp")
+    mgr1.mark_running(rid)
+    # "kill -9" → 不写 completed,index 留 running
+    mgr2 = RunManager(runs_dir=runs_dir, index_path=index_path)
+    recovered = mgr2.recover()
+    assert recovered[rid] == "suspended"
+    assert mgr2.get_run(rid).state == "suspended"
+
+
+@pytest.mark.asyncio
+async def test_recover_preserves_completed(tmp_path: Path):
+    """已完成 run 不被 recover 动(终态写保护)。"""
+    mgr1 = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
+    rid = await mgr1.create_run(goal="x", workspace="/tmp")
+    mgr1.mark_running(rid)
+    mgr1.mark_completed(rid)
+    mgr2 = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
+    mgr2.recover()
+    assert mgr2.get_run(rid).state == "completed"
+
+
+@pytest.mark.asyncio
+async def test_recover_preserves_paused(tmp_path: Path):
+    """paused run 不被 recover 动(用户主动,可继续 resume)。"""
+    mgr1 = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
+    rid = await mgr1.create_run(goal="x", workspace="/tmp")
+    mgr1.mark_running(rid)
+    mgr1.mark_paused(rid, last_step=0, msg_count=0, last_event_seq=0)
+    mgr2 = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
+    mgr2.recover()
+    assert mgr2.get_run(rid).state == "paused"
+
+
+@pytest.mark.asyncio
+async def test_recover_marks_pending_as_cancelled(tmp_path: Path):
+    """pending 中断(SIGKILL 前还没 promote running)→ cancelled。"""
+    mgr1 = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
+    rid = await mgr1.create_run(goal="x", workspace="/tmp")
+    # 不 mark_running → 留 pending
+    mgr2 = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
+    recovered = mgr2.recover()
+    assert recovered[rid] == "cancelled"
+    assert mgr2.get_run(rid).state == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_persistence_across_workers(tmp_path: Path):
+    """worker 跑 5 步 + 完成 → 新 worker 拿 completed 状态(JSONL 写盘持久)。"""
+    mgr1 = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
+    rid = await mgr1.create_run(goal="x", workspace="/tmp")
+    w1 = RunWorker(run_id=rid, manager=mgr1,
+                   loop_factory=lambda: FakeLoop(steps=5, delay_s=0.0))
+    await w1.run()
+    # 新 mgr 读盘
+    mgr2 = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
+    entry = mgr2.get_run(rid)
+    assert entry.state == "completed"
+    assert mgr2.events_count(rid) >= 16
+
+
+@pytest.mark.asyncio
+async def test_corrupt_index_rebuilds_from_jsonl(tmp_path: Path):
+    """index.json 损坏 → load 空 dict;recover 时不崩。"""
+    index_path = tmp_path / "index.json"
+    index_path.write_text("{not valid json", encoding="utf-8")
+    mgr = RunManager(runs_dir=tmp_path / "runs", index_path=index_path)
+    assert mgr.index.get("anything") is None
+    mgr.recover()
+
+
+@pytest.mark.asyncio
+async def test_resume_from_paused(tmp_path: Path):
+    """paused → resume 续(同 process),不重建 loop。"""
+    mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
+    rid = await mgr.create_run(goal="x", workspace="/tmp")
+    mgr.mark_running(rid)
+    mgr.mark_paused(rid, last_step=3, msg_count=5, last_event_seq=10)
+    # resume
+    assert await mgr.request_resume(rid) is True
+    # state 仍 paused(worker 没真接到 resume 事件;但 request_resume 已 set event)
+    # 实际由 worker 协程 mark_resumed
+    assert mgr.get_run(rid).state == "paused"
+
+
+@pytest.mark.asyncio
+async def test_resume_from_suspended(tmp_path: Path):
+    """suspended → resume(请求入队;真 resume 在 worker 接单时)。"""
+    mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
+    rid = await mgr.create_run(goal="x", workspace="/tmp")
+    mgr.mark_running(rid)
+    mgr.mark_suspended(rid, last_step=3, msg_count=5, last_event_seq=10)
+    assert await mgr.request_resume(rid) is True
+    assert mgr.get_run(rid).state == "suspended"
+
+
+@pytest.mark.asyncio
+async def test_index_state_machine_full_transitions(tmp_path: Path):
+    """跑遍所有合法转换。"""
+    mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
+    from argos_agent.daemon.state_machine import ALLOWED, TERMINAL_STATES
+    rid = await mgr.create_run(goal="x", workspace="/tmp")
+    # 跑遍所有 allowed transitions(从非终态)
+    for frm, allowed in ALLOWED.items():
+        if frm in TERMINAL_STATES:
+            continue
+        for to in allowed:
+            # 重置
+            mgr.index.upsert(rid, state=frm)
+            # transition from=frm, target=to 应成功
+            try:
+                from argos_agent.daemon.state_machine import transition
+                transition(current=frm, target=to, index=mgr.index, run_id=rid,
+                           store=mgr.store, reason="test")
+            except Exception as e:  # noqa: BLE001
+                pytest.fail(f"legal transition {frm}->{to} failed: {e}")

@@ -1,0 +1,81 @@
+name: 🐛 Bug Report
+description: Report a bug or unexpected behavior
+title: "[bug]: "
+labels: ["bug"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! Please fill out the template below.
+        **The more detail you provide, the faster we can fix it.**
+
+  - type: input
+    id: argos-version
+    attributes:
+      label: Argos version
+      description: Output of `argos --version`
+      placeholder: "0.1.0 (arm64-darwin)"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS + Arch
+      description: Output of `uname -a`
+      placeholder: "Darwin 25.5.0 arm64"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Install method
+      description: How did you install Argos?
+      options:
+        - curl install.sh (one-liner)
+        - brew install --cask tungoldshou/argos/argos
+        - uv tool install argos-agent
+        - PyInstaller binary (manual)
+        - From source (uv sync)
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal sequence of actions to trigger the bug
+      placeholder: |
+        1. Run `argos`
+        2. Type goal: "fix typo in README.md"
+        3. Press Enter
+        4. Observe: crash with traceback
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened? Paste log lines, traceback, screenshots.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else relevant (LLM model, hook configs, etc.)
+    validations:
+      required: false
