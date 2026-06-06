@@ -336,6 +336,22 @@ Different tasks → different models. Configure in `~/.argos/config.json`:
 TUI: `/routing` to see last 10 calls; `/routing set verify strong` to update.
 See [docs/per-task-routing.md](docs/per-task-routing.md) for the full reference.
 
+## Context viz + proactive compaction (#12)
+
+See where your context goes, and stop the model from blowing past the window:
+
+```bash
+argos context show              # 4-bucket breakdown: system / memory (4 tier) / tools / messages
+argos context show --json       # machine-readable for evals / integrations
+uv run argos --compact-threshold=0.7   # tighten / loosen the auto-compact trigger
+```
+
+TUI: `/context` for the same table with markup colors; the activity panel
+shows a `[ctx N/M X%]` badge per step and a red dot on the status bar once
+usage passes 80%. When the threshold trips, Argos fires `compact_messages`
+automatically and prints `[compact 4500 → 2200 (52% reduction)]` in the
+activity log. See [docs/context-viz.md](docs/context-viz.md).
+
 ---
 
 ## Security model
