@@ -58,6 +58,21 @@ def test_openai_key_detected(tmp_path):
     assert any(f.severity == "error" and "openai" in f.message.lower() for f in findings)
 
 
+def test_openai_proj_key_detected(tmp_path):
+    """现代 OpenAI 项目 key 格式:sk-proj-...(body 含 -_)。regex 必须允许 -_,否则
+    弱模型可把 sk-proj-... 整段塞进源码而不被 secret 扫描抓到 → 假绿 gate 让它
+    走完 verify → 真绿 commit 落库。"""
+    f = tmp_path / "leak.py"
+    # 真实 OpenAI project key 风格:sk-proj- 后面是字母数字和 -_ 混合,>40 字符
+    f.write_text(
+        'OPENAI_API_KEY = "sk-proj-aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789-_aBcDe"\n'
+    )
+    findings = scan_file_for_secrets(f, relpath="leak.py", workspace=tmp_path)
+    assert any(f.severity == "error" and "openai" in f.message.lower() for f in findings), (
+        f"modern sk-proj- key not detected; findings={[f.message for f in findings]}"
+    )
+
+
 def test_anthropic_key_detected_d4_new(tmp_path):
     """D4 新增第 6 条:sk-ant-[A-Za-z0-9-_]{20,} 检测(覆盖 Argos 自身用户的 ANTHROPIC_API_KEY)。"""
     f = tmp_path / "leak.py"

@@ -53,14 +53,18 @@ SECRET_PATTERNS: tuple[_SecretPattern, ...] = (
         description="rotate token + use env var",
     ),
     _SecretPattern(
-        name="OpenAI API key",
-        regex=re.compile(r"sk-[A-Za-z0-9]{20,}"),  # 含 sk-proj-...
+        name="Anthropic API key",   # D4 新增(必须排在 OpenAI 之前:sk-ant- 也满足
+        # 扩展后的 OpenAI regex `sk-[A-Za-z0-9-_]{20,}` —— OpenAI 在前会把 Anthropic
+        # key 误报为 OpenAI,触发"假阳性转移",反令用户怀疑 Anthropic 报点错。)
+        regex=re.compile(r"sk-ant-[A-Za-z0-9-_]{20,}"),
         severity="error",
         description="rotate key + use env var",
     ),
     _SecretPattern(
-        name="Anthropic API key",   # D4 新增
-        regex=re.compile(r"sk-ant-[A-Za-z0-9-_]{20,}"),
+        name="OpenAI API key",
+        # 含 sk-proj-<id>-<secret> 现代项目 key 格式:body 允许 -_/字母数字
+        # (与 sk-ant- 同档字符集,保 D4 收尾). 历史 sk-... 旧 key 仍命中。
+        regex=re.compile(r"sk-[A-Za-z0-9-_]{20,}"),
         severity="error",
         description="rotate key + use env var",
     ),
