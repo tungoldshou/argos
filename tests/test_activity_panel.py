@@ -216,3 +216,126 @@ async def test_activity_panel_reset_run_clears_hook_log():
         assert len(ap._hook_log) == 1
         ap.reset_run()
         assert len(ap._hook_log) == 0
+
+
+# ── LSP(spec 2026-06-06 §2.7)────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_activity_panel_has_lsp_section():
+    """ActivityPanel.compose 含 'LSP' 区段(标题)。"""
+    from argos_agent.lsp.events import LspServerEvent
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        titles = [s.border_title for s in ap._sections()]
+        assert "LSP" in titles
+
+
+@pytest.mark.asyncio
+async def test_activity_panel_on_lsp_server_event_ready():
+    """status='ready' + elapsed_ms=820 → 区段体显 'python' + 'ready' + 耗时。"""
+    from argos_agent.lsp.events import LspServerEvent
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.on_lsp_server_event(LspServerEvent(
+            server_name="python", status="ready", command="pyright",
+            elapsed_ms=820, cwd="",
+        ))
+        snap = ap.snapshot_text()
+        assert "python" in snap
+        assert "ready" in snap.lower()
+        assert "820" in snap
+
+
+@pytest.mark.asyncio
+async def test_activity_panel_on_lsp_server_event_disabled():
+    """status='disabled' → 区段体显 'disabled'。"""
+    from argos_agent.lsp.events import LspServerEvent
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.on_lsp_server_event(LspServerEvent(
+            server_name="python", status="disabled", command="x",
+            error="not found", cwd="",
+        ))
+        snap = ap.snapshot_text()
+        assert "disabled" in snap.lower()
+
+
+@pytest.mark.asyncio
+async def test_activity_panel_on_lsp_server_event_crash():
+    """status='crash' + error → 区段体显 'crash' + 错误。"""
+    from argos_agent.lsp.events import LspServerEvent
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.on_lsp_server_event(LspServerEvent(
+            server_name="python", status="crash", command="x",
+            error="sigsegv", elapsed_ms=100, cwd="",
+        ))
+        snap = ap.snapshot_text()
+        assert "crash" in snap.lower()
+        assert "sigsegv" in snap
+
+
+@pytest.mark.asyncio
+async def test_activity_panel_lsp_diag_change_detection():
+    """lsp_diagnostic_event 同 uri 同 count → 不重渲;新 count → 渲。"""
+    from argos_agent.lsp.events import LspDiagnosticEvent
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ev_a = LspDiagnosticEvent(
+            server_name="python", uri="file:///a.py", count=3,
+            severity_counts={"error": 3}, cached=False, cwd="",
+        )
+        ap.on_lsp_diagnostic_event(ev_a)
+        # 第二次同 uri 同 count → 内部 cache 不变
+        ap.on_lsp_diagnostic_event(ev_a)
+        assert ap._lsp_diag_cache.get("file:///a.py") == 3
+        # 第三次同 uri 新 count=5 → cache 更新
+        ap.on_lsp_diagnostic_event(LspDiagnosticEvent(
+            server_name="python", uri="file:///a.py", count=5,
+            severity_counts={"error": 5}, cached=False, cwd="",
+        ))
+        assert ap._lsp_diag_cache.get("file:///a.py") == 5
+
+
+@pytest.mark.asyncio
+async def test_activity_panel_lsp_diag_dedup_no_cache_growth():
+    """同 uri 同 count 重复推 → _lsp_diag_cache 不增(5 次推 → 1 个 entry)。"""
+    from argos_agent.lsp.events import LspDiagnosticEvent
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        for _ in range(5):
+            ap.on_lsp_diagnostic_event(LspDiagnosticEvent(
+                server_name="python", uri="file:///a.py", count=2,
+                severity_counts={"error": 2}, cached=False, cwd="",
+            ))
+        assert ap._lsp_diag_cache.get("file:///a.py") == 2
+        assert len(ap._lsp_diag_cache) == 1
+
+
+@pytest.mark.asyncio
+async def test_activity_panel_reset_run_clears_lsp_log():
+    """reset_run 清空 LSP cache(每轮独立)。"""
+    from argos_agent.lsp.events import LspDiagnosticEvent
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.on_lsp_diagnostic_event(LspDiagnosticEvent(
+            server_name="python", uri="file:///a.py", count=2,
+            severity_counts={"error": 2}, cached=False, cwd="",
+        ))
+        assert ap._lsp_diag_cache
+        ap.reset_run()
+        assert ap._lsp_diag_cache == {}
+

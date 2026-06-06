@@ -1,5 +1,5 @@
-"""右侧诚实活动栏(spec §ActivityPanel)。区块:模型/任务进度/工具/回执/Skills/MCP/成本+缓存/Hook。
-诚实铁律:每块只反映真实数据;Skills/MCP 无真实内容时显示诚实空态('未加载'/'0 已连接')。"""
+"""右侧诚实活动栏(spec §ActivityPanel)。区块:模型/任务进度/工具/回执/Skills/MCP/成本+缓存/Hook/LSP。
+诚实铁律:每块只反映真实数据;Skills/MCP/LSP 无真实内容时显示诚实空态('未加载'/'0 已连接'/'(无)')。"""
 from __future__ import annotations
 
 import time
@@ -10,6 +10,7 @@ from textual.containers import Vertical
 from textual.widgets import Static
 
 from argos_agent.hooks.events import HookFired
+from argos_agent.lsp.events import LspServerEvent, LspDiagnosticEvent
 
 _PHASE_GLYPH = {"plan": "◇", "act": "✦", "verify": "✦", "report": "◇"}
 
@@ -52,6 +53,10 @@ class ActivityPanel(Vertical):
         self._receipts: list[str] = []
         self._todos: list[dict] = []   # 真 TODO 拆解(update_plan);非空时"任务进度"区改渲染它
         self._hook_log: deque[HookFired] = deque(maxlen=50)   # spec §2.4 最多 50
+        # LSP 状态(spec 2026-06-06 §2.7):server_name → 最新 status(spawn/ready/crash/disabled)
+        # + uri → 最近 count(变化检测 dedup)
+        self._lsp_servers: dict[str, str] = {}
+        self._lsp_diag_cache: dict[str, int] = {}   # uri → 最近 count
 
     def compose(self) -> ComposeResult:
         yield _Section("模型", self._model_label)
@@ -63,6 +68,7 @@ class ActivityPanel(Vertical):
         yield _Section("成本 + 缓存", "↑0 ↓0  $0.000\n缓存命中 0 tok  0.0s")
         yield _Section("上下文", "")
         yield _Section("Hook", "(无)")
+        yield _Section("LSP", "(无)")
 
     @staticmethod
     def _skills_summary() -> str:
@@ -186,12 +192,47 @@ class ActivityPanel(Vertical):
             lines.append(f" {h.event_name}:{cmd_short} {tag}")
         self._set(8, "\n".join(lines) if lines else "(无)")
 
+    # ── LSP(spec §2.7):4 态 + 变化检测 dedup ─────────────────────────
+    # LSP 段 idx = 9(在 Hook 段后,见 compose 顺序)
+    _LSP_IDX: int = 9
+
+    def on_lsp_server_event(self, ev: LspServerEvent) -> None:
+        """单条 LSP server 生命周期事件(活动栏 "LSP" 区段)。
+        4 态:spawn / ready / crash / disabled(各显一行,带 elapsed_ms)。"""
+        self._lsp_servers[ev.server_name] = ev.status
+        lines: list[str] = []
+        for name, status in self._lsp_servers.items():
+            ms = ev.elapsed_ms if name == ev.server_name else 0
+            if status == "spawn":
+                tag = f"spawning ({ms}ms)" if ms else "spawning"
+            elif status == "ready":
+                tag = f"ready ({ms}ms)"
+            elif status == "crash":
+                tag = f"crash: {ev.error or '?'} ({ms}ms)"
+            elif status == "disabled":
+                tag = f"disabled: {ev.error or '?'}"
+            elif status == "restart":
+                tag = f"restarting ({ms}ms)"
+            else:   # exit / unknown
+                tag = status
+            lines.append(f" · LSP {name}: {tag}")
+        self._set(self._LSP_IDX, "\n".join(lines) if lines else "(无)")
+
+    def on_lsp_diagnostic_event(self, ev: LspDiagnosticEvent) -> None:
+        """诊断推送事件:仅当 count 变化时更新活动栏(spec §2.7 dedup)。"""
+        prev = self._lsp_diag_cache.get(ev.uri)
+        if prev == ev.count:
+            return   # dedup:不重渲
+        self._lsp_diag_cache[ev.uri] = ev.count
+
     def reset_run(self) -> None:
         self._phases.clear(); self._tool_counts.clear(); self._receipts.clear()
         self._todos.clear()
         self._hook_log.clear()
+        self._lsp_servers.clear()
+        self._lsp_diag_cache.clear()
         self._set(1, "(待开始)"); self._set(2, "本轮 0 调用"); self._set(3, "—")
-        self._set(8, "(无)")
+        self._set(8, "(无)"); self._set(self._LSP_IDX, "(无)")
 
     def snapshot_text(self) -> str:
         # Textual 8.2.7 的 Static 用 .content 暴露当前正文(随 .update() 刷新),不再有 .renderable。
