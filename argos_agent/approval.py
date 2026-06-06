@@ -24,7 +24,10 @@ import json
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Callable, Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal
+
+if TYPE_CHECKING:
+    from argos_agent.permissions.evaluator import DecisionMeta  # noqa: F401
 
 
 RiskLevel = Literal["low", "medium", "high"]
@@ -83,15 +86,42 @@ def _hash_payload(payload: dict[str, Any]) -> str:
 class ApprovalGate:
     """每个 session 一个实例。契约 §6.3:level 拨盘 + respond 速选(1=deny 2=once 3=session 4=always)。
     保留旧的跨 loop 唤醒、超时 fail-closed、session 缓存语义。
-    旧 approve()/deny() 方法保留 backward-compat(server.py 旧路径使用中)。"""
+    旧 approve()/deny() 方法保留 backward-compat(server.py 旧路径使用中)。
+
+    Smart approval(spec 2026-06-06 §2.6):request() 在 gate.level 短路前先跑 evaluator
+    串联 hard → soft → level,把决策来源贴上 trigger 标签;deny / approve 都写 AuditLog;
+    ask 仍走原弹窗等用户。set_workspace 让 evaluator 拿到 workspace 边界(workspace 内文件
+    不走系统路径 deny)。"""
 
     def __init__(self, level: ApprovalLevel = ApprovalLevel.CONFIRM) -> None:
         self.level = level
         self._pending: dict[str, _Pending] = {}
         self._session_approvals: dict[str, _SessionApproval] = {}
+        # Smart approval(spec 2026-06-06):workspace 边界,evaluator 据它跑 system_path check。
+        # None = 不知(测试 / headless 默认),evaluator 走原 system path 系统前缀 deny 路径。
+        self._workspace: str | None = None
+        # session_id 供 AuditLog 关联(诚实:无 id 时落空串而非编造)。
+        self._session_id: str = ""
+        # 决策回调(TUI ActivityPanel 接入):接 (action, decision_str, trigger)。
+        # 默认空 lambda(headless / 测试无 UI)→ 不抛。
+        self._decision_listener: Callable[[str, str, str], None] | None = None
 
     def set_level(self, level: ApprovalLevel) -> None:
         self.level = level
+
+    def set_workspace(self, workspace: str | None) -> None:
+        """Smart approval(spec 2026-06-06 §2.3 / D14):host 启动时把当前 workspace 注入
+        gate,evaluator 据此跑 workspace 边界 check(workspace 内写文件不算系统路径)。"""
+        self._workspace = workspace
+
+    def set_session_id(self, session_id: str) -> None:
+        """绑定 AuditLog 的 session_id(供 jsonl 行携带 session 关联)。"""
+        self._session_id = session_id or ""
+
+    def set_decision_listener(self, fn: Callable[[str, str, str], None] | None) -> None:
+        """TUI ActivityPanel 接入:每次 evaluator 出结论 → 调 fn(action, decision_str, trigger)。
+        decision_str ∈ {approved, denied, asked}。None = 取消监听(headless / 测试默认)。"""
+        self._decision_listener = fn
 
     def pending(self) -> list[_Pending]:
         return list(self._pending.values())
@@ -99,31 +129,126 @@ class ApprovalGate:
     async def request(self, action: str, args: dict[str, Any], *, description: str,
                       risk: RiskLevel, timeout: float = 60.0,
                       call_id: str | None = None) -> Decision:
-        """阻塞等用户决定(契约 §6.3 签名)。
-        AUTO 档 → 立即 once 放行;OBSERVE 档 → 立即 deny(只看不动手);
-        session 缓存命中 → 立即放行;否则挂起等 respond,超时 fail-closed deny。"""
-        if self.level is ApprovalLevel.AUTO:
+        """阻塞等用户决定(契约 §6.3 签名 + spec 2026-06-06 §2.6 Smart approval 接入)。
+
+        Smart approval 评估顺序(D15 锁):
+          1. evaluator 跑 hard → soft deny → soft allow → soft ask → per-tool → default
+          2. evaluator → "approve" → Decision(kind=once) + AuditLog 写 approved
+          3. evaluator → "deny" → Decision(kind=deny, reason=evaluator.reason) + AuditLog 写 denied
+          4. evaluator → "ask" → 走原弹窗等用户 respond,respond 时再写一次 AuditLog
+        gate.level=AUTO/OBSERVE 仍走原快捷路径(短路在 evaluator 决策后),
+        session 缓存继续在 ask 之上作用(用户已 session-allow 同 payload → 不再弹窗)。
+
+        evaluator 调用包 try/except:Smart approval 模块出错 → 退回原审批语义(legacy
+        fast-path),不让 evaluator bug 阻塞调用方。
+        """
+        # 1) Smart approval 评估(spec 2026-06-06 §2.6)
+        eval_meta = self._evaluate(action, args)
+        if eval_meta is not None:
+            if eval_meta.decision == "approve":
+                self._audit(
+                    action=action, args=args, decision="approved",
+                    trigger=eval_meta.trigger, by="rule" if eval_meta.rule_name else "level",
+                    risk=risk, secret_pattern=eval_meta.secret_pattern,
+                )
+                self._notify("approved", action, eval_meta.trigger)
+                return Decision(kind="once", reason=eval_meta.reason or eval_meta.trigger)
+            if eval_meta.decision == "deny":
+                self._audit(
+                    action=action, args=args, decision="denied",
+                    trigger=eval_meta.trigger, by="rule",
+                    risk=risk, secret_pattern=eval_meta.secret_pattern,
+                )
+                self._notify("denied", action, eval_meta.trigger)
+                return Decision(kind="deny", reason=eval_meta.reason or eval_meta.trigger)
+            # decision == "ask" → fallthrough 到原弹窗等用户 respond 路径
+        # 2) legacy fast-path(gate.level 短路;Smart 评估 ask 也走到这里)
+        if self.level is ApprovalLevel.AUTO and (eval_meta is None or eval_meta.decision != "ask"):
+            self._audit(
+                action=action, args=args, decision="approved",
+                trigger="level:auto", by="level", risk=risk,
+            )
+            self._notify("approved", action, "level:auto")
             return Decision(kind="once", reason="AUTO 档放手")
-        if self.level is ApprovalLevel.OBSERVE:
+        if self.level is ApprovalLevel.OBSERVE and (eval_meta is None or eval_meta.decision != "ask"):
+            self._audit(
+                action=action, args=args, decision="denied",
+                trigger="level:observe", by="level", risk=risk,
+            )
+            self._notify("denied", action, "level:observe")
             return Decision(kind="deny", reason="OBSERVE 档:只看不执行副作用")
+        # 3) session 缓存命中:同 payload 整 session 已批 → 不再弹窗
         payload = {"action": action, "args": args}
         key = _hash_payload(payload)
         if self._session_approvals.get(key) is not None:
+            self._notify("approved", action, "session:cached")
             return Decision(kind="session", reason="session 已批准")
+        # 4) ask:挂起等 respond
         # call_id 可由调用方预生成(如工作流提议先投 WorkflowProposed 携带 call_id,TUI 据它放行);
         # 未传则自生成,向后兼容。
         call_id = call_id or uuid.uuid4().hex[:12]
         loop = asyncio.get_running_loop()
         fut: asyncio.Future[Decision] = loop.create_future()
+        ask_trigger = eval_meta.trigger if eval_meta is not None else (
+            f"level:{self.level.value}"
+        )
+        ask_payload: dict[str, Any] = {
+            **payload, "description": description, "risk": risk,
+            "trigger": ask_trigger,
+        }
+        if eval_meta is not None and eval_meta.secret_pattern:
+            ask_payload["secret_pattern"] = eval_meta.secret_pattern
         self._pending[call_id] = _Pending(
-            call_id=call_id, payload={**payload, "description": description, "risk": risk},
+            call_id=call_id, payload=ask_payload,
             created_at=time.time(), future=fut, loop=loop,
         )
+        self._notify("asked", action, ask_trigger)
         try:
             return await asyncio.wait_for(fut, timeout=timeout)
         except asyncio.TimeoutError:
             self._pending.pop(call_id, None)
             return Decision(kind="deny", reason="审批超时,默认拒绝")
+
+    # ── Smart approval 内部 helper(spec 2026-06-06 §2.6) ──────────────
+    def _evaluate(self, action: str, args: dict[str, Any]) -> "DecisionMeta | None":
+        """跑 evaluator;模块出错(import / config 坏)→ 返 None 退回 legacy 语义。"""
+        try:
+            from argos_agent.permissions import evaluate, get_config
+            cfg = get_config()
+            return evaluate(
+                action, args, gate_level=self.level, config=cfg,
+                workspace=self._workspace,
+            )
+        except Exception:  # noqa: BLE001 — Smart approval 出错绝不阻塞调用方
+            return None
+
+    def _audit(
+        self, *, action: str, args: dict[str, Any], decision: str, trigger: str,
+        by: str, risk: str, secret_pattern: str | None = None,
+    ) -> None:
+        """写 AuditLog;模块出错(权限 / IO / import)→ 静默(spec §2.7 锁不抛)。"""
+        try:
+            from argos_agent.permissions import get_audit_log
+            log = get_audit_log()
+            # session_id 通过 set_session_id 注入;未注入则落空串(诚实)
+            log.session_id = self._session_id or log.session_id
+            args_str = json.dumps(args, ensure_ascii=False, sort_keys=True)
+            log.log(
+                tool=action, args=args_str, decision=decision, trigger=trigger,
+                by=by, secret_pattern=secret_pattern, risk=str(risk),
+            )
+        except Exception:  # noqa: BLE001 — audit 失败永不阻塞审批主路
+            pass
+
+    def _notify(self, decision: str, action: str, trigger: str) -> None:
+        """触发 decision listener(TUI ActivityPanel 更新);未设监听 → 静默。"""
+        fn = self._decision_listener
+        if fn is None:
+            return
+        try:
+            fn(action, decision, trigger)
+        except Exception:  # noqa: BLE001 — UI 侧异常绝不阻塞审批
+            pass
 
     def respond(self, call_id: str, decision: DecisionKind) -> bool:
         """TUI ApprovalModal 速选(1=deny 2=once 3=session 4=always)回灌。
