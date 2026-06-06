@@ -24,6 +24,7 @@ COMMAND_HELP: dict[str, str] = {
     "retry": "重发上一条 user 消息",
     "plan": "进入 plan mode(审批后继续 act)—对齐 CC /plan",
     "hooks": "列出 / 重载 hooks 配置(/hooks, /hooks reload)",
+    "lsp": "列出 / 重载 LSP 配置(/lsp, /lsp reload)",
 }
 
 COMMAND_NAMES: list[str] = list(COMMAND_HELP)

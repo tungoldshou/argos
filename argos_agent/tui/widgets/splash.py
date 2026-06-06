@@ -61,7 +61,8 @@ class StartupSplash(Static):
 
     def set_bad_config(self, reason: str) -> None:
         """启动时坏配置 banner(覆盖主标题下一行)。
-        reason 来自 HooksConfigError,简洁一行即可,绝不长段(spec §2.4)。"""
+        reason 来自 HooksConfigError / LspConfigError,简洁一行即可,绝不长段(spec §2.4)。
+        reason 串首部含 'LSP' → 显 'LSP 已禁用' 前缀;否则显 'hooks 已禁用'(默认,向后兼容)。"""
         # 存属性;_refresh 时拼到 _text 末尾
         self._bad_config = reason
         self._refresh()
@@ -72,7 +73,10 @@ class StartupSplash(Static):
             plan_mode=self.plan_mode,
         )
         if getattr(self, "_bad_config", None):
-            text += f"\n     ⚠ hooks 已禁用({self._bad_config})"
+            # reason 串首部含 'LSP' → 显 'LSP 已禁用' 前缀(同 hooks 行为,区分来源)
+            reason = str(self._bad_config)
+            prefix = "LSP" if "LSP" in reason else "hooks"
+            text += f"\n     ⚠ {prefix} 已禁用({reason})"
         self._text = text
         self.update(self._text)
         # 切色 CSS 类:plan mode 走 $primary 冷靛蓝(对齐 glow.phase_color("plan")),act 走 $accent

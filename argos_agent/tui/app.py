@@ -193,13 +193,19 @@ class ArgosApp(App):
         self._glow_base = None          # 当前呼吸基色(None=不呼吸)
         self._glow_phase = 0.0          # 呼吸相位累加器 t∈[0,1]
         self._glow_timer = None
-        # 启动时显坏配置 banner(若 ~/.argos/hooks.json 解析失败)
+        # 启动时显坏配置 banner(若 ~/.argos/hooks.json 或 lsp.json 解析失败)
         try:
             from argos_agent.hooks import reload_config
             reload_config()
         except Exception as e:  # noqa: BLE001 — 坏配置 banner,run 正常起
             for sp in self.query(StartupSplash):
                 sp.set_bad_config(str(e))
+        try:
+            from argos_agent.lsp import reload_config as _lsp_reload_config
+            _lsp_reload_config()
+        except Exception as e:  # noqa: BLE001 — LSP 坏配置 banner,run 正常起
+            for sp in self.query(StartupSplash):
+                sp.set_bad_config(f"LSP {e}")
 
     # ── 工作态边缘光(spec §工作态边缘光) ─────────────────────────────────
     def _set_border(self, color) -> None:
@@ -346,6 +352,8 @@ class ArgosApp(App):
             await self._enter_plan_mode(log)
         elif cmd.name == "hooks":
             await self._hooks_cmd(log, cmd.arg)
+        elif cmd.name == "lsp":
+            await self._lsp_cmd(log, cmd.arg)
 
     async def _undo(self, log) -> None:
         """/undo:用本轮 run 起点的快照还原 workspace;不发 goal。"""
@@ -452,6 +460,46 @@ class ArgosApp(App):
                 for h in e.hooks:
                     cmd_short = h.command[:60] + ("..." if len(h.command) > 60 else "")
                     lines.append(f"     · {cmd_short}  (timeout={h.timeout}ms)")
+        await log.append_line("\n".join(lines), kind="system")
+
+    async def _lsp_cmd(self, log, arg: str) -> None:
+        """/lsp / /lsp reload slash 命令入口(spec 2026-06-06 §2.7)。"""
+        from argos_agent import lsp as _lsp
+        from argos_agent.lsp import get_config, reload_config, LspConfigError
+        if arg == "reload":
+            try:
+                cfg = reload_config()
+                await log.append_line(
+                    f"已重载 LSP 配置(共 {len(cfg.servers)} 个 server)。",
+                    kind="system",
+                )
+            except LspConfigError as e:
+                await log.append_line(f"/lsp reload 失败(保留旧配置):{e}", kind="error")
+            return
+        # /lsp 无参 → 列当前 servers
+        cfg = get_config()
+        if not cfg.servers:
+            await log.append_line(
+                "当前无 LSP 配置(空 ~/.argos/lsp.json 或不可读 → 走 built-in 默认)。",
+                kind="system",
+            )
+            return
+        try:
+            mgr = _lsp.get_manager()
+            servers = mgr.list_servers()
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(f"LSP manager 初始化失败:{e}", kind="error")
+            return
+        lines = [f"当前 LSP 配置({len(servers)} 个 server):"]
+        for s in servers:
+            ft = ",".join(s["filetypes"])
+            disabled_tag = " (disabled)" if cfg.servers.get(s["name"], None) and cfg.servers[s["name"]].disabled else ""
+            lines.append(
+                f" · {s['name']:<12} status={s['status']:<11} "
+                f"ft={ft:<20} cmd={s['command']}{disabled_tag}"
+            )
+            if s.get("diag_count", 0) > 0:
+                lines.append(f"     diagnostics: {s['diag_count']} 条")
         await log.append_line("\n".join(lines), kind="system")
 
     async def _show_tools(self, log) -> None:
