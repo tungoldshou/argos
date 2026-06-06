@@ -28,8 +28,8 @@ from urllib.parse import parse_qs, urlsplit
 
 from argos_agent.daemon.manager import RunManager
 from argos_agent.daemon.protocol import (
-    CODE_BAD_REQUEST, CODE_INTERNAL, CODE_INVALID_TRANSITION, CODE_MISSING_SESSION,
-    CODE_NOT_FOUND, HEADER_SESSION,
+    CODE_BAD_REQUEST, CODE_BUSY, CODE_INTERNAL, CODE_INVALID_TRANSITION,
+    CODE_MISSING_SESSION, CODE_NOT_FOUND, HEADER_SESSION,
 )
 from argos_agent.daemon.sessions import SessionRegistry
 
@@ -47,12 +47,30 @@ class DaemonHTTPServer:
     """Unix socket HTTP server,async。"""
 
     def __init__(self, *, manager: RunManager, socket_path: Path,
-                 session_timeout_s: float = 30.0):
+                 session_timeout_s: float = 30.0,
+                 registry=None, worktree=None):
         self._manager = manager
         self._socket_path = Path(socket_path)
         self._sessions = SessionRegistry(heartbeat_timeout_s=session_timeout_s)
+        # #5b 扩展(向后兼容,缺省时建空):注册表 + worktree manager
+        if registry is None:
+            from argos_agent.daemon.registry import RunRegistry
+            registry = RunRegistry()
+        if worktree is None:
+            from argos_agent.daemon.worktree import WorktreeManager
+            worktree = WorktreeManager()
+        self._registry = registry
+        self._worktree = worktree
         self._server: asyncio.base_events.Server | None = None
         self._started_at: float = 0.0
+
+    @property
+    def registry(self):
+        return self._registry
+
+    @property
+    def worktree(self):
+        return self._worktree
 
     @property
     def socket_path(self) -> Path:
@@ -162,6 +180,9 @@ class DaemonHTTPServer:
                 if method == "GET" and rest.endswith("/events"):
                     rid = rest[:-len("/events")]
                     return await self._handle_sse(writer, headers, rid, query)
+                if method == "POST" and rest.endswith("/focus"):
+                    rid = rest[:-len("/focus")]
+                    return await self._handle_focus(writer, headers, rid)
                 if method == "POST" and rest.endswith("/pause"):
                     rid = rest[:-len("/pause")]
                     return await self._handle_pause(writer, headers, rid)
@@ -235,6 +256,15 @@ class DaemonHTTPServer:
         if "state" in query and query["state"]:
             state_filter = query["state"][0]
         runs = self._manager.list_runs(state=state_filter)
+        # #5b 合并 registry 的 cost/worktree/focus 字段
+        for r in runs:
+            entry = self._registry.get(r["run_id"])
+            if entry is not None:
+                r["tokens_in"] = entry.tokens_in
+                r["tokens_out"] = entry.tokens_out
+                r["cost_usd"] = entry.cost_usd
+                r["worktree_path"] = entry.worktree_path
+                r["focus_session_id"] = entry.focus_session_id
         await self._send_json(writer, 200, runs)
 
     async def _handle_create_run(self, writer, headers, body):
@@ -247,11 +277,48 @@ class DaemonHTTPServer:
         goal = data.get("goal")
         if not goal or not isinstance(goal, str):
             return await self._send_error(writer, 400, CODE_BAD_REQUEST, "missing goal")
-        run_id = await self._manager.create_run(
-            goal=goal,
-            workspace=data.get("workspace", ""),
-            model=data.get("model", ""),
-            approval_level=data.get("approval_level", "confirm"),
+        # #5b 并发满 → 503(spec §5.2)
+        if not self._registry.has_capacity():
+            return await self._send_error(
+                writer, 503, CODE_BUSY,
+                f"max_concurrent_runs_reached "
+                f"(max={self._registry.max_concurrent}, "
+                f"active={self._registry.active_count})",
+            )
+        # 抢 slot(同步路径,has_capacity 已 check,不该阻塞)
+        try:
+            await asyncio.wait_for(self._registry.acquire_slot(), timeout=0.01)
+        except asyncio.TimeoutError:
+            return await self._send_error(
+                writer, 503, CODE_BUSY,
+                f"max_concurrent_runs_reached "
+                f"(max={self._registry.max_concurrent}, "
+                f"active={self._registry.active_count})",
+            )
+        try:
+            run_id = await self._manager.create_run(
+                goal=goal,
+                workspace=data.get("workspace", ""),
+                model=data.get("model", ""),
+                approval_level=data.get("approval_level", "confirm"),
+            )
+        except Exception:
+            self._registry.release_slot()
+            raise
+        # #5b worktree(若请求 isolation=worktree)
+        wt_path = None
+        workspace = data.get("workspace", "")
+        if data.get("isolation") == "worktree" and workspace:
+            try:
+                wt_path = self._worktree.create(run_id=run_id, workspace=workspace)
+            except Exception as e:  # noqa: BLE001
+                self._registry.release_slot()
+                return await self._send_error(
+                    writer, 503, "worktree_failed", str(e),
+                )
+        # 注册到 registry
+        await self._registry.register(
+            run_id=run_id, goal=goal, workspace=workspace, worktree_path=wt_path,
         )
         await self._send_json(writer, 201, {"run_id": run_id})
 
@@ -261,14 +328,23 @@ class DaemonHTTPServer:
         entry = self._manager.get_run(run_id)
         if entry is None:
             return await self._send_error(writer, 404, CODE_NOT_FOUND, "run not found")
-        await self._send_json(writer, 200, {
+        # #5b 优先从 registry 读(可能更精确)
+        reg_entry = self._registry.get(run_id)
+        body = {
             "run_id": run_id,
-            "state": entry.state,
+            "state": (reg_entry.state if reg_entry else entry.state),
             "events_count": self._manager.events_count(run_id),
             "last_event_seq": entry.last_event_seq,
             "goal": entry.goal,
             "workspace": entry.workspace,
-        })
+        }
+        if reg_entry is not None:
+            body["tokens_in"] = reg_entry.tokens_in
+            body["tokens_out"] = reg_entry.tokens_out
+            body["cost_usd"] = reg_entry.cost_usd
+            body["worktree_path"] = reg_entry.worktree_path
+            body["focus_session_id"] = reg_entry.focus_session_id
+        await self._send_json(writer, 200, body)
 
     async def _handle_pause(self, writer, headers, run_id):
         if (sid := await self._require_session(writer, headers)) is None:
@@ -296,6 +372,20 @@ class DaemonHTTPServer:
             return await self._send_error(writer, 409, CODE_INVALID_TRANSITION,
                                           "run is in terminal state (cannot cancel)")
         await self._send_json(writer, 202, {"state": "cancel_requested"})
+
+    async def _handle_focus(self, writer, headers, run_id):
+        """#5b POST /runs/{id}/focus:TUI 告诉 daemon "此 run 是我的 active 焦点"。
+
+        暂不限制 owner/observer(T3 补 _require_owner)。"""
+        if (sid := await self._require_session(writer, headers)) is None:
+            return
+        if self._registry.get(run_id) is None:
+            return await self._send_error(writer, 404, CODE_NOT_FOUND, "run not found")
+        self._registry.set_focus(run_id=run_id, session_id=sid)
+        await self._send_json(writer, 200, {
+            "run_id": run_id,
+            "focus_session_id": sid,
+        })
 
     async def _handle_approval(self, writer, headers, run_id, call_id, body):
         if (sid := await self._require_session(writer, headers)) is None:
