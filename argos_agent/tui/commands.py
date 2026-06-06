@@ -25,6 +25,7 @@ COMMAND_HELP: dict[str, str] = {
     "plan": "进入 plan mode(审批后继续 act)—对齐 CC /plan",
     "hooks": "列出 / 重载 hooks 配置(/hooks, /hooks reload)",
     "lsp": "列出 / 重载 LSP 配置(/lsp, /lsp reload)",
+    "permissions": "查看 / 重载权限配置(/permissions, /permissions reload)",
     "runs": "列出 / 后台 run(/runs, /runs {id} resume/cancel)—daemon 模式",
     "verify": "显式跑 verify_cmd(/verify [path])—用户复核 verify 门",
     "security-review": "安全审计(secrets + 依赖漏洞 + 危险 API)(/security-review [path])",

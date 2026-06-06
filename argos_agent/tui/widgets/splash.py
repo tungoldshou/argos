@@ -73,9 +73,15 @@ class StartupSplash(Static):
             plan_mode=self.plan_mode,
         )
         if getattr(self, "_bad_config", None):
-            # reason 串首部含 'LSP' → 显 'LSP 已禁用' 前缀(同 hooks 行为,区分来源)
+            # reason 串首部含 'permissions' → 'permissions 已禁用'(spec 2026-06-06 §2.6);
+            # 'LSP' → 'LSP 已禁用'(同 hooks/LSP 行为);否则 'hooks 已禁用'(默认)。
             reason = str(self._bad_config)
-            prefix = "LSP" if "LSP" in reason else "hooks"
+            if "permissions" in reason:
+                prefix = "permissions"
+            elif "LSP" in reason:
+                prefix = "LSP"
+            else:
+                prefix = "hooks"
             text += f"\n     ⚠ {prefix} 已禁用({reason})"
         self._text = text
         self.update(self._text)

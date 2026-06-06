@@ -208,7 +208,7 @@ class ArgosApp(App):
         self._glow_base = None          # 当前呼吸基色(None=不呼吸)
         self._glow_phase = 0.0          # 呼吸相位累加器 t∈[0,1]
         self._glow_timer = None
-        # 启动时显坏配置 banner(若 ~/.argos/hooks.json 或 lsp.json 解析失败)
+        # 启动时显坏配置 banner(若 ~/.argos/hooks.json 或 lsp.json 或 permissions.json 解析失败)
         try:
             from argos_agent.hooks import reload_config
             reload_config()
@@ -221,6 +221,29 @@ class ArgosApp(App):
         except Exception as e:  # noqa: BLE001 — LSP 坏配置 banner,run 正常起
             for sp in self.query(StartupSplash):
                 sp.set_bad_config(f"LSP {e}")
+        # Smart approval(spec 2026-06-06 §2.6):启动时 reload + 接 TUI ActivityPanel 决策监听 +
+        # 把 workspace 注入 gate 让 evaluator 跑 system path / workspace 边界 check。
+        try:
+            from argos_agent.permissions import reload_config as _perm_reload_config
+            _perm_reload_config()
+        except Exception as e:  # noqa: BLE001 — permissions 坏配置 banner,run 正常起
+            for sp in self.query(StartupSplash):
+                sp.set_bad_config(f"permissions: {e}")
+        # gate 接 ActivityPanel 'Approval' 区段(每次评估完触发 listener,UI 实时反映)
+        try:
+            ap = self.query_one("#activity", ActivityPanel)
+            self.gate.set_decision_listener(
+                lambda action, decision, trigger: ap.on_approval_decision(
+                    action=action, decision=decision, trigger=trigger,
+                )
+            )
+        except Exception:  # noqa: BLE001 — 未 mount 或测试场景:静默
+            pass
+        # workspace 注入(诚实:_workspace 是 host 启动时计算好的工作目录;evaluator 据此跑边界)
+        try:
+            self.gate.set_workspace(str(self._workspace))
+        except Exception:  # noqa: BLE001
+            pass
 
     # ── 工作态边缘光(spec §工作态边缘光) ─────────────────────────────────
     def _set_border(self, color) -> None:
@@ -369,6 +392,8 @@ class ArgosApp(App):
             await self._hooks_cmd(log, cmd.arg)
         elif cmd.name == "lsp":
             await self._lsp_cmd(log, cmd.arg)
+        elif cmd.name == "permissions":
+            await self._permissions_cmd(log, cmd.arg)
         elif cmd.name == "runs":
             await self._runs_cmd(log, cmd.arg)
         elif cmd.name == "verify":
@@ -523,6 +548,54 @@ class ArgosApp(App):
             )
             if s.get("diag_count", 0) > 0:
                 lines.append(f"     diagnostics: {s['diag_count']} 条")
+        await log.append_line("\n".join(lines), kind="system")
+
+    async def _permissions_cmd(self, log, arg: str) -> None:
+        """/permissions / /permissions reload slash 命令入口(spec 2026-06-06 §2.6)。
+
+        无参 → 列当前配置摘要(default_level / per-tool / allow / deny / ask 计数 + 关键 matcher 预览)
+        reload → 重读 ~/.argos/permissions.json,坏配置保旧 + 报错(同 hooks / lsp 行为)。"""
+        from argos_agent.permissions import (
+            get_config, reload_config, PermissionsConfigError,
+        )
+        if arg == "reload":
+            try:
+                cfg = reload_config()
+                await log.append_line(
+                    f"已重载 permissions 配置(allow {len(cfg.allow)} / deny {len(cfg.deny)} / "
+                    f"ask {len(cfg.ask)} / per-tool {len(cfg.tools)} / "
+                    f"default_level={cfg.default_level or '(沿用 gate.level)'})。",
+                    kind="system",
+                )
+            except PermissionsConfigError as e:
+                await log.append_line(
+                    f"/permissions reload 失败(保留旧配置):{e}", kind="error",
+                )
+            return
+        # /permissions 无参 → 列当前配置摘要
+        try:
+            cfg = get_config()
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(f"读取 permissions 配置失败:{e}", kind="error")
+            return
+        lines = [
+            "当前 permissions 配置:",
+            f" · default_level: {cfg.default_level or '(沿用 gate.level)'}",
+            f" · per-tool 覆盖: {len(cfg.tools)} 个" + (
+                "  " + ", ".join(f"{t}={lv}" for t, lv in cfg.tools.items()) if cfg.tools else ""
+            ),
+            f" · allow rules: {len(cfg.allow)} 条",
+        ]
+        for e in list(cfg.allow)[:5]:
+            lines.append(f"   · {e.tool}  matcher={e.matcher!r}")
+        if len(cfg.allow) > 5:
+            lines.append(f"   …(共 {len(cfg.allow)} 条,省略 {len(cfg.allow) - 5})")
+        lines.append(f" · deny rules: {len(cfg.deny)} 条")
+        for e in list(cfg.deny)[:5]:
+            lines.append(f"   · {e.tool}  matcher={e.matcher!r}")
+        lines.append(f" · ask rules: {len(cfg.ask)} 条")
+        for e in list(cfg.ask)[:5]:
+            lines.append(f"   · {e.tool}  matcher={e.matcher!r}")
         await log.append_line("\n".join(lines), kind="system")
 
     async def _show_tools(self, log) -> None:

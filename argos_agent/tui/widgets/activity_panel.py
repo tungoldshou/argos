@@ -61,6 +61,11 @@ class ActivityPanel(Vertical):
         # Skill run 状态(spec §2.6 / §2.7):新 idx 10 区段
         # 存最近 N 条 SkillRunStart / SkillRunEnd,渲染时按 start/end 配对
         self._skill_runs: deque[SkillRunStart | SkillRunEnd] = deque(maxlen=20)
+        # Approval 段(spec 2026-06-06 §2.6 Smart approval):3 类决策计数器 + 最近 N 条 log。
+        # log 元素 = (action, decision_str, trigger);decision_str ∈ {approved, denied, asked}。
+        # 显示口径对齐用户体感:approved=ok(自动放过)/ denied=deny(硬规则或用户拒)/ asked=ask(弹窗)。
+        self._approval_count: dict[str, int] = {"ok": 0, "ask": 0, "deny": 0}
+        self._approval_log: deque[tuple[str, str, str]] = deque(maxlen=10)
 
     def compose(self) -> ComposeResult:
         yield _Section("模型", self._model_label)
@@ -75,6 +80,7 @@ class ActivityPanel(Vertical):
         yield _Section("Hook", "(无)")
         yield _Section("LSP", "(无)")
         yield _Section("Skill", self._skill_summary())  # ← 新增 idx 10(singular,运行时执行)
+        yield _Section("Approval", "(无)")  # ← Smart approval(spec 2026-06-06 §2.6):3 类决策计数器 + 最近 log
 
     @staticmethod
     def _skills_summary() -> str:
@@ -243,10 +249,14 @@ class ActivityPanel(Vertical):
         self._lsp_servers.clear()
         self._lsp_diag_cache.clear()
         self._skill_runs.clear()
+        # Smart approval(spec 2026-06-06 §2.6):新 run 起点重置 3 类计数器 + log。
+        self._approval_count = {"ok": 0, "ask": 0, "deny": 0}
+        self._approval_log.clear()
         self._set(1, "(待开始)"); self._set(2, "本轮 0 调用"); self._set(3, "—")
         self._set(9, "(无)"); self._set(self._LSP_IDX, "(无)")
         self._set(self._SKILL_IDX, "(无)")
         self._set(self._RUN_IDX, "(无)")
+        self._set(self._APPROVAL_IDX, "(无)")
 
     # ── Run 段(spec §2.6 b/c 段)──────────────────────────────────
     _RUN_IDX: int = 4   # 任务进度后,Skill Catalog 前
@@ -311,3 +321,42 @@ class ActivityPanel(Vertical):
                     f"{ev.finding_count} finding{'s' if ev.finding_count != 1 else ''})"
                 )
         return "\n".join(lines[-6:])   # 最多 6 行
+
+    # ── Approval 段(Smart approval,spec 2026-06-06 §2.6):3 类决策计数 + log ────
+    _APPROVAL_IDX: int = 12
+
+    def on_approval_decision(self, *, action: str, decision: str, trigger: str) -> None:
+        """收到一次审批结论 → 计数器 +1 + 入 log + 刷新区段。
+
+        decision ∈ {approved, denied, asked};对位 _approval_count 三键 {ok, ask, deny}。
+        trigger = evaluator 贴的标签(hard_rule:X / soft_allow:Y / level:auto 等),
+        log 行据它显示"为什么";只截最近 10 条。"""
+        bucket = {"approved": "ok", "denied": "deny", "asked": "ask"}.get(decision)
+        if bucket is None:
+            return  # 非法值忽略(诚实:坏数据不假装计入)
+        self._approval_count[bucket] = self._approval_count.get(bucket, 0) + 1
+        self._approval_log.append((action, decision, trigger))
+        self._refresh_approval_section()
+
+    def _refresh_approval_section(self) -> None:
+        """刷新 'Approval' 区段:首行计数器 + 最近 5 条 log(action  decision  trigger)。"""
+        try:
+            self._set(self._APPROVAL_IDX, self._approval_summary())
+        except (IndexError, Exception):
+            # 未 mount 时(测试直接构造)_sections() 为空,update 抛 → 忽略,数据已记录。
+            pass
+
+    def _approval_summary(self) -> str:
+        if not self._approval_log and not any(self._approval_count.values()):
+            return "(无)"
+        ok = self._approval_count.get("ok", 0)
+        ask = self._approval_count.get("ask", 0)
+        deny = self._approval_count.get("deny", 0)
+        head = f"✓{ok}  ?{ask}  ✗{deny}"
+        if not self._approval_log:
+            return head
+        lines = [head]
+        for action, decision, trigger in list(self._approval_log)[-5:]:
+            mark = {"approved": "✓", "denied": "✗", "asked": "?"}.get(decision, "·")
+            lines.append(f" {mark} {action}  {trigger}")
+        return "\n".join(lines)

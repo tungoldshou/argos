@@ -11,6 +11,7 @@ def test_known_commands_listed():
         "yolo", "undo", "clear", "retry", "status", "model", "resume", "cost",
         "help", "tools", "skills", "mcp", "plan", "hooks",
         "lsp",  # 2026-06-06:列出 / 重载 LSP 配置(/lsp, /lsp reload)
+        "permissions",  # 2026-06-06:Smart approval — 列出 / 重载 permissions 配置(/permissions, /permissions reload)
         "verify", "security-review", "simplify",  # 2026-06-06:3 skill slash
         "runs",  # 2026-06-06:列出 / 控制 daemon run(/runs, /runs {id} resume|cancel)
     }
