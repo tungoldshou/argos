@@ -462,6 +462,7 @@ class ArgosApp(App):
         elif cmd.name == "tools":
             await self._show_tools(log)
         elif cmd.name == "skills":
+            self._last_skills_arg = cmd.arg
             await self._show_skills(log)
         elif cmd.name == "mcp":
             await self._show_mcp(log)
@@ -1033,20 +1034,69 @@ class ArgosApp(App):
             await log.append_line(md, kind="system")
 
     async def _show_skills(self, log) -> None:
-        """/skills:列出可用技能(按任务自动召回进系统提示)。诚实:读真实 skill 库。"""
+        """/skills:#10 重写:列 installed + available from index + 推荐。
+
+支持子命令(本 TUI **不**直接 install/remove,沿 transcript 提示到 host CLI 跑,
+spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
+"""
+        # 取上一条 slash 命令的 arg(由 _dispatch_slash 在 call 前 set)
+        cmd_arg = getattr(self, "_last_skills_arg", "")
+        sub_parts = cmd_arg.split()
+        if sub_parts and sub_parts[0] in ("install", "remove", "refresh", "test"):
+            sub = sub_parts[0]
+            sub_arg = sub_parts[1] if len(sub_parts) > 1 else ""
+            hint = (
+                f"[skills] TUI 不直装副作用。请到 host 跑:\n"
+                f"        $ argos skills {sub} {sub_arg}"
+            )
+            await log.append_line(hint, kind="system")
+            return
+
         try:
-            from argos_agent import skills as _skills
-            all_skills = _skills.load_all()
+            from argos_agent.skills_curator.capabilities import list_installed
+            from argos_agent.skills_curator.index import cache_age_days, load_cache
+            from argos_agent.skills_curator.recommend import (
+                SessionActivity, build_activity_from_session, recommend,
+            )
         except Exception as e:  # noqa: BLE001
-            await log.append_line(f"读取技能失败:{e}", kind="error")
+            await log.append_line(f"curator 未加载:{e}", kind="error")
             return
-        if not all_skills:
-            await log.append_line("当前无可用技能(~/.argos/skills/ 为空,可导入)。", kind="system")
-            return
-        lines = [f"可用技能 {len(all_skills)} 个(运行任务时按相关性自动召回):"]
-        for s in all_skills:
-            mark = "" if s.enabled else "(已禁用)"
-            lines.append(f" · {s.name}{mark} — {s.description}")
+
+        installed = list_installed()
+        by_name = {s.name: s for s in installed}
+        cache = load_cache()
+        lines: list[str] = []
+        lines.append(f"Installed skills ({len(installed)}):")
+        if not installed:
+            lines.append("  (no skills installed;跑 `argos skills refresh` 拉 index)")
+        for s in installed:
+            flag = "OK" if s.enabled else "OFF"
+            flag2 = "" if s.enabled else "  (unreviewed)"
+            caps = "[" + ", ".join(s.capabilities) + "]"
+            lines.append(f"  {flag:3} {s.name:<20} {s.version:<10} {caps}{flag2}")
+        if cache is not None and cache.skills:
+            avail = [e for e in cache.skills if e.name not in by_name]
+            age = cache_age_days() or 0.0
+            lines.append(f"\nAvailable from index ({len(avail)}, last refresh {age:.1f}d ago):")
+            for e in avail[:10]:
+                caps = "[" + ", ".join(e.capabilities) + "]"
+                lines.append(
+                    f"  ..  {e.name:<20} {e.version:<10} {caps}  "
+                    f'"{e.description[:40]}"'
+                )
+        try:
+            activity = build_activity_from_session()
+            recs = recommend(
+                activity,
+                installed={s.name for s in installed if s.enabled},
+                cache=cache,
+            )
+            if recs:
+                lines.append(f"\nRecommended for this session ({len(recs)}):")
+                for r in recs[:3]:
+                    lines.append(f"  *** {r.name}  -- {r.reason}")
+        except Exception:  # noqa: BLE001
+            pass
         await log.append_line("\n".join(lines), kind="system")
 
     async def _show_mcp(self, log) -> None:

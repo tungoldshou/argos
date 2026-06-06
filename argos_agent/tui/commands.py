@@ -12,7 +12,7 @@ from dataclasses import dataclass
 COMMAND_HELP: dict[str, str] = {
     "help": "显示所有命令",
     "tools": "列出可调用的工具",
-    "skills": "列出可用技能",
+    "skills": "管理 skill 生态:list/install/remove/refresh/test (跑 argos skills ...)",
     "mcp": "列出 MCP 外部工具",
     "model": "查看 / 切换模型",
     "status": "当前运行状态",
