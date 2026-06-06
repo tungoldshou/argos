@@ -253,6 +253,7 @@ class AgentLoop:
         allow_workflow: bool = True,
         read_only: bool = False,
         workflow_engine_factory: Callable[[], object] | None = None,
+        router: Any = None,    # #11 per-task routing(契约 §11):ModelRouter | None
     ) -> None:
         self._store = store
         self._bus = bus
@@ -302,6 +303,11 @@ class AgentLoop:
         self._plan_decision_event: asyncio.Event = asyncio.Event()
         self._plan_decision: PlanExitDecision | None = None
         self._approval_level_override: Any = None
+        # #11 per-task routing(spec §10;契约 §11):router 不为 None 时每步按
+        # (tool, code, phase) 选 tier;_current_tier 跟踪当前步实际 tier,CostUpdate 附
+        # tier_name 字段(spec §15.2 可见性防线)。router=None 走原路径(零破坏既有 1507 测试)。
+        self._router = router
+        self._current_tier: str = config.model_tier
 
     # ── 只读访问(Phase 6 装配/e2e 核验用;构造参数即这些,属性化是最小暴露)──────────
     @property
@@ -567,6 +573,30 @@ class AgentLoop:
         compactions = 0           # 上下文压缩次数上限,防压缩仍溢出时无限重试。
         text = ""                 # 在 while 外初始化:max_steps=0 等边界下收尾仍能安全 text.strip()
         while step < self._cfg.max_steps:
+            # #11 per-task routing(spec §10):每步按 (tool, code, phase) 选 tier;router
+            # 不存在时静默用既有 self._model(零破坏默认路径)。text 还没拿到,先按
+            # 上一轮 code 抽;首轮 text=="" → primary_tool=None → 用 default 兜底。
+            if self._router is not None:
+                _code_so_far = text or ""
+                _code_block = extract_code_block(_code_so_far) if _code_so_far else None
+                _tool_names = extract_tool_names(_code_block) if _code_block else []
+                _primary_tool = _tool_names[0] if _tool_names else None
+                _phase = "act"
+                try:
+                    from argos_agent.routing.categorizer import categorize as _categorize
+                    _category = _categorize(
+                        tool=_primary_tool, code=_code_block, phase=_phase, step=step,
+                    )
+                    _client, _decision = self._router.select(
+                        category=_category, tool=_primary_tool, step=step,
+                    )
+                    self._model = _client
+                    self._current_tier = _decision.tier
+                    if self._router.routing.is_force_confirm(_decision.tier):
+                        from argos_agent.approval import ApprovalLevel as _AL
+                        self._approval_level_override = _AL.CONFIRM
+                except Exception:  # noqa: BLE001 — 路由失败不挂 run(走默认)
+                    self._current_tier = self._cfg.model_tier
             # W3:流式 delta 过 StreamingContextScrubber,防模型把 untrusted 围栏吐回 UI 泄露。
             scrubber = StreamingContextScrubber()
             text = ""
@@ -632,6 +662,8 @@ class AgentLoop:
                 tokens_in=self._tok_in, tokens_out=self._tok_out,
                 cost_usd=cost, elapsed_s=time.time() - self._started,
                 cache_read=self._cache_read, context_used=context_used,
+                # #11 per-task routing:实际跑这步的 profile 名(spec §15.2 可见性防线)。
+                tier_name=self._current_tier,
             )
 
             code = extract_code_block(text)
@@ -1059,6 +1091,8 @@ class AgentLoop:
             context_used=(int(usage.get("input_tokens") or 0)
                           + int(usage.get("cache_read") or 0)
                           + int(usage.get("cache_creation") or 0)),
+            # #11 per-task routing:plan 阶段也带 tier_name(默认 = config.model_tier)。
+            tier_name=self._current_tier,
         )
 
         # 拼 markdown → 投 PlanRendered 事件(TUI 弹 PlanModal 用此渲染)。

@@ -31,6 +31,12 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--project", metavar="PATH", help="在用户项目目录干活")
     p.add_argument("--model", metavar="NAME", help="本次启动用指定 config profile(默认当前 active)")
     p.add_argument("--resume", metavar="SESSION_ID", help="续跑历史会话(占位:真续跑走 TUI /resume)")
+    # #11 per-task routing:effort 等级(契约 §11;spec §8):low/medium/high 映射到
+    # max_steps + approval_level;CLI 默认 medium。
+    from argos_agent.routing.effort import EffortLevel
+    p.add_argument("--effort", choices=[e.value for e in EffortLevel],
+                   default=EffortLevel.MEDIUM.value,
+                   help="任务努力档(low=8 步+AUTO;medium=40+CONFIRM;high=80+CONFIRM)")
     sub = p.add_subparsers(dest="command")
     sub.add_parser("setup", help="接入模型的交互向导(选 provider→填 key→连通测试→保存)")
     sp_update = sub.add_parser(
@@ -240,8 +246,10 @@ def main() -> None:
     try:
         from argos_agent.app_factory import build_components, build_loop_factory
         from argos_agent.approval import ApprovalLevel
+        from argos_agent.routing.effort import EffortLevel
         components = build_components(
             workspace=args.project, model_override=args.model, approval_level=ApprovalLevel.CONFIRM,
+            effort=EffortLevel(args.effort),
         )
         factory = build_loop_factory(components)
         # 用 broker 的 gate 作 app.gate(同一实例)→ 工作流/工具审批 respond 落在 loop 真正

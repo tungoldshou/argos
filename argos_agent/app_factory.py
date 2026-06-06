@@ -33,6 +33,11 @@ from argos_agent.sandbox.executor import SeatbeltExecutor
 from argos_agent.tools.receipts import ReceiptSigner
 from argos_agent.tui.events import EventBus
 
+# #11 per-task routing
+from argos_agent.routing.config import load_routing
+from argos_agent.routing.effort import EffortLevel, effort_settings
+from argos_agent.routing.router import ModelRouter
+
 # Receipt 签名 key:host 进程内随机一份(沙箱碰不到,spec §12.3)。回执只在单进程生命周期内核验。
 _HOST_SIGNING_KEY = os.urandom(32)
 
@@ -56,6 +61,8 @@ class AppComponents:
     config: LoopConfig
     workspace: Path
     workflow_engine_factory: Callable[[], object]
+    # #11 per-task routing:多个 ModelClient + RoutingConfig 注入 AgentLoop;None = 走原路径。
+    router: ModelRouter | None = None
 
     def close(self) -> None:
         self.sandbox.close()
@@ -81,6 +88,7 @@ def build_components(
     verify_cmd: str | None = None,
     approval_level: ApprovalLevel = ApprovalLevel.CONFIRM,
     max_rounds: int = 3,
+    effort: EffortLevel = EffortLevel.MEDIUM,
 ) -> AppComponents:
     """组装全栈(模型不绑定、无档位:用 config 的 active profile;model_override 指定别的 profile)。
     无 key → 诚实抛 RuntimeError(不假装能跑)。"""
@@ -162,18 +170,39 @@ def build_components(
         )
         return WorkflowEngine(sub_factory)
 
+    # #11 per-task routing(契约 §11;spec §10):effort 拆 preset 填既有 max_steps +
+    # approval_level(spec D6 不引入新 LoopConfig 字段)。
+    preset = effort_settings(effort)
     loop_config = LoopConfig(
         model_tier=tier.name,
         verify_cmd=verify_cmd,
         max_rounds=max_rounds,
-        max_steps=40,
+        max_steps=preset.max_steps,
         compaction=True,
-        approval_level=approval_level,
+        approval_level=preset.approval_level,
     )
+
+    # #11 per-task routing(契约 §11;spec §7):构造 ModelRouter。routing config 从
+    # ~/.argos/config.json 读;client_factory 懒构造每个 tier 的 ModelClient(无 key
+    # 的 tier 在 router.select 时才报,不阻断启动)。
+    config_dir = Path(os.environ.get("ARGOS_CONFIG_DIR") or Path.home() / ".argos")
+    routing_cfg = load_routing(config_dir)
+
+    def _router_client_factory(name: str) -> ModelClient:
+        try:
+            t = config.tier_for(name)
+            k = config.key_for(name) or ""   # key 缺时 tier_for 抛/此处留空让上层错
+        except Exception:  # noqa: BLE001 — 未知 profile 退当前 active
+            t, k = tier, key
+        return ModelClient(tier=t, pool=CredentialPool([k] or ["_missing_"]))
+
+    router = ModelRouter(routing=routing_cfg, client_factory=_router_client_factory)
+
     return AppComponents(
         store=store, broker=broker, verifier=verifier, model=model,
         sandbox=sandbox, gate=gate, config=loop_config, workspace=ws,
         workflow_engine_factory=_workflow_engine_factory,
+        router=router,
     )
 
 
@@ -185,5 +214,6 @@ def build_loop_factory(c: AppComponents) -> Callable[[], AgentLoop]:
             broker=c.broker, model=c.model, verifier=c.verifier, config=c.config,
             workspace=c.workspace, verify_dir=c.workspace,
             workflow_engine_factory=c.workflow_engine_factory,
+            router=c.router,    # #11 per-task routing 透传(spec §10)
         )
     return factory

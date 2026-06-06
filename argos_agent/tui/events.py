@@ -94,6 +94,8 @@ class CostUpdate:
     elapsed_s: float
     cache_read: int = 0
     context_used: int = 0     # 当前窗口占用 token(输入侧 input+cache),供上下文用量条;非会话累计
+    # #11 per-task routing:实际跑这步的 profile(默认 ""=沿用 active;空串保旧事件兼容)。
+    tier_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
