@@ -104,6 +104,13 @@ class ApprovalRequest:
     args: dict[str, Any]
     description: str
     risk: RiskLevel
+    # Smart approval(spec 2026-06-06 §2.6 / D6):evaluator 把决策来源贴上标签,
+    # TUI ApprovalModal 据此渲染 [hard rule: X] / [soft rule: ask Y] / [secret: Z] / [level: confirm]
+    # 副标题,让用户一眼看清"为什么要审批"。空串 = 无标签(向后兼容,纯走 gate.level 走默认审批语义)。
+    trigger: str = ""
+    # secret pattern 命中时的 pattern name(secret:AWS access key 之类),用于副标题二行
+    # "did you mean to commit this?";None = 非 secret 触发。
+    secret_pattern: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
