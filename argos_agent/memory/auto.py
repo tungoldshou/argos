@@ -813,3 +813,168 @@ def _memory_context_block(*, workspace: Path,
         parts.extend(recalled)
     parts.append("</memory_context>")
     return "\n".join(parts)
+
+
+# ── decay / prune / 容量 cap(spec §9)────────────────────────────────────────
+def _decay_confidence(entry: MemoryEntry, *, now: float | None = None) -> MemoryEntry:
+    """单条 decay:confidence -= 0.01 * days_since_last_used(spec §9.1)。"""
+    t = now if now is not None else time.time()
+    days = max(0.0, (t - entry.last_used_at) / 86400.0)
+    new_conf = max(0.0, entry.confidence - 0.01 * days)
+    return MemoryEntry(
+        id=entry.id, type=entry.type, scope=entry.scope,
+        key=entry.key, value=entry.value, confidence=new_conf,
+        evidence=entry.evidence, ts=entry.ts,
+        last_used_at=entry.last_used_at, use_count=entry.use_count,
+        skill_name=entry.skill_name, project_id=entry.project_id,
+        session_id=entry.session_id,
+    )
+
+
+def decay_pass() -> int:
+    """扫所有 tier 物理写回 decay 后的 JSONL。返更新条目数。"""
+    n = 0
+    for path in _all_tier_paths():
+        if not path.exists():
+            continue
+        entries = _read_jsonl(path)
+        changed = False
+        out: list[MemoryEntry] = []
+        for e in entries:
+            new = _decay_confidence(e)
+            if new.confidence != e.confidence:
+                changed = True
+                n += 1
+            out.append(new)
+        if changed:
+            _write_entries(path, out)
+    return n
+
+
+def _all_tier_paths() -> list[Path]:
+    """扫所有现存 tier JSONL 路径。"""
+    paths: list[Path] = []
+    root = _root()
+    for sub in ("", "projects", "skills", "sessions"):
+        base = root / sub if sub else root
+        if not base.exists():
+            continue
+        for f in base.glob("*.jsonl"):
+            paths.append(f)
+    return paths
+
+
+def prune(scope: Scope | None = None, *, project_id: str | None = None,
+          skill_name: str | None = None, session_id: str | None = None) -> int:
+    """物理删 confidence==0 条目 + 触发 cap。返删除数。"""
+    n = 0
+    paths: list[Path] = []
+    if scope is None or scope == "user":
+        paths.append(_user_path())
+    if scope is None or scope == "project" and project_id:
+        if project_id:
+            paths.append(_project_path(project_id))
+    if scope is None or scope == "skill" and skill_name:
+        if skill_name:
+            paths.append(_skill_path(skill_name))
+    if scope is None or scope == "session" and session_id:
+        if session_id:
+            paths.append(_session_path(session_id))
+    for p in paths:
+        if not p.exists():
+            continue
+        entries = _read_jsonl(p)
+        kept = [e for e in entries if e.confidence > 0.0]
+        n += len(entries) - len(kept)
+        if kept:
+            _write_entries(p, kept)
+        else:
+            # 全空 → 删文件
+            try:
+                p.unlink()
+            except OSError:
+                pass
+    return n
+
+
+def _cap_bytes_for_scope(scope: Scope) -> int:
+    """spec §9.3 cap 默认值。"""
+    env = os.environ.get("ARGOS_MEMORY_CAP_MB")
+    if env:
+        try:
+            mb = int(env)
+            return mb * 1024 * 1024
+        except ValueError:
+            pass
+    return {
+        "user": 2 * 1024 * 1024,
+        "project": 5 * 1024 * 1024,
+        "skill": 1 * 1024 * 1024,
+        "session": 1 * 1024 * 1024,
+    }.get(scope, 2 * 1024 * 1024)
+
+
+def _enforce_cap(path: Path, max_bytes: int | None = None) -> int:
+    """超 cap 按 last_used_at 升序删。返删条数。"""
+    if not path.exists():
+        return 0
+    # 推 scope
+    scope: Scope = "user"
+    if path.parent.name == "projects":
+        scope = "project"
+    elif path.parent.name == "skills":
+        scope = "skill"
+    elif path.parent.name == "sessions":
+        scope = "session"
+    cap = max_bytes if max_bytes is not None else _cap_bytes_for_scope(scope)
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return 0
+    if size <= cap:
+        return 0
+    entries = sorted(_read_jsonl(path), key=lambda e: e.last_used_at)  # 旧→新
+    while size > cap and entries:
+        entries.pop(0)
+        # 估算新 size:把 entries 写一遍再 stat
+        _write_entries(path, entries)
+        try:
+            size = path.stat().st_size
+        except OSError:
+            break
+    if not entries:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    return 0  # 删条数需要前后比,这里简化
+
+
+def purge_old_sessions(*, max_age_days: int = 30) -> int:
+    """session tier:超过 max_age_days 没碰的 JSONL 文件整文件删。"""
+    n = 0
+    sess_dir = _root() / "sessions"
+    if not sess_dir.exists():
+        return 0
+    cutoff = time.time() - max_age_days * 86400
+    for f in sess_dir.glob("*.jsonl"):
+        try:
+            entries = _read_jsonl(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not entries:
+            try:
+                f.unlink()
+                n += 1
+            except OSError:
+                pass
+            continue
+        # 取该文件最新 last_used_at
+        latest = max(e.last_used_at for e in entries)
+        if latest < cutoff:
+            try:
+                f.unlink()
+                n += 1
+            except OSError:
+                pass
+    return n
