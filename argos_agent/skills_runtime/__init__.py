@@ -34,9 +34,10 @@ __all__ = [
 ]
 
 
-def run_skill(name, args, ctx):  # type: ignore[no-untyped-def]
-    """Task 2 实现。"""
-    raise NotImplementedError("skills_runtime.run_skill 将在 Task 2 实现")
+async def run_skill(name, args, ctx, *, timeout_s=60.0, event_bus=None):  # type: ignore[no-untyped-def]
+    """统一 skill 入口(Task 2 实现)。"""
+    from argos_agent.skills_runtime.runner import run_skill as _impl
+    return await _impl(name, args, ctx, timeout_s=timeout_s, event_bus=event_bus)
 
 
 def register_builtin_skills() -> None:
