@@ -12,6 +12,7 @@ def test_known_commands_listed():
         "help", "tools", "skills", "mcp", "plan", "hooks",
         "lsp",  # 2026-06-06:列出 / 重载 LSP 配置(/lsp, /lsp reload)
         "verify", "security-review", "simplify",  # 2026-06-06:3 skill slash
+        "runs",  # 2026-06-06:列出 / 控制 daemon run(/runs, /runs {id} resume|cancel)
     }
 
 

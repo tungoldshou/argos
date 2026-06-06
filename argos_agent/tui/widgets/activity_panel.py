@@ -172,7 +172,7 @@ class ActivityPanel(Vertical):
     def on_cost(self, *, tokens_in: int, tokens_out: int, cost_usd: float | None,
                 elapsed_s: float, cache_read: int = 0) -> None:
         cost = "$(N/A)" if cost_usd is None else f"${cost_usd:.3f}"
-        self._set(6, f"↑{tokens_in} ↓{tokens_out}  {cost}\n"
+        self._set(7, f"↑{tokens_in} ↓{tokens_out}  {cost}\n"
                      f"缓存命中 {cache_read} tok  {elapsed_s:.1f}s")
 
     def on_context(self, *, used: int, window: int) -> None:
@@ -182,7 +182,7 @@ class ActivityPanel(Vertical):
         filled = min(10, max(0, round(pct / 10)))
         bar = "▓" * filled + "░" * (10 - filled)
         win = f"{window // 1000}k" if window else "?"
-        self._set(7, f"{self._model_label} · {win}\n{bar} {pct}%")
+        self._set(8, f"{self._model_label} · {win}\n{bar} {pct}%")
 
     def on_hook_fired(self, ev: HookFired) -> None:
         """单条 hook 触发结果(activity panel "Hook" 区段)。
@@ -201,11 +201,11 @@ class ActivityPanel(Vertical):
             else:
                 tag = f"fail (exit {h.returncode}, {h.elapsed_ms}ms)"
             lines.append(f" {h.event_name}:{cmd_short} {tag}")
-        self._set(8, "\n".join(lines) if lines else "(无)")
+        self._set(9, "\n".join(lines) if lines else "(无)")
 
     # ── LSP(spec §2.7):4 态 + 变化检测 dedup ─────────────────────────
-    # LSP 段 idx = 9(在 Hook 段后,见 compose 顺序)
-    _LSP_IDX: int = 9
+    # LSP 段 idx = 10(在 Hook 段后,见 compose 顺序)
+    _LSP_IDX: int = 10
 
     def on_lsp_server_event(self, ev: LspServerEvent) -> None:
         """单条 LSP server 生命周期事件(活动栏 "LSP" 区段)。
@@ -244,7 +244,7 @@ class ActivityPanel(Vertical):
         self._lsp_diag_cache.clear()
         self._skill_runs.clear()
         self._set(1, "(待开始)"); self._set(2, "本轮 0 调用"); self._set(3, "—")
-        self._set(8, "(无)"); self._set(self._LSP_IDX, "(无)")
+        self._set(9, "(无)"); self._set(self._LSP_IDX, "(无)")
         self._set(self._SKILL_IDX, "(无)")
         self._set(self._RUN_IDX, "(无)")
 
@@ -269,8 +269,8 @@ class ActivityPanel(Vertical):
         # Textual 8.2.7 的 Static 用 .content 暴露当前正文(随 .update() 刷新),不再有 .renderable。
         return "\n".join(str(s.content) + " " + str(s.border_title) for s in self._sections())
 
-    # ── Skill run(新 idx 10 区段)────────────────────────────────────
-    _SKILL_IDX: int = 10
+    # ── Skill run(新 idx 11 区段)────────────────────────────────────
+    _SKILL_IDX: int = 11
 
     def _on_skill_run_start(self, ev: SkillRunStart) -> None:
         """收到 SkillRunStart → 入 deque + 触发区段刷新。"""

@@ -8,6 +8,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **Long-running task + background daemon (#5a):5+ 分钟任务不再"必须守着等"**。新模块 `argos_agent/daemon/`:daemon 进程(`python -m argos_agent.daemon`,Unix socket `~/.argos/daemon.sock` 0600) + `RunStore`(JSONL append-only 真相源,坏行跳过,`run_meta` 落盘 fsync) + `StateIndex`(小 JSON 索引,atomic 写) + 7 状态机(`pending` / `running` / `paused` / `suspended` / `completed` / `failed` / `cancelled`,白名单 + 终态写保护 + dynamic from-state) + `RunManager`(单例 + fan-out + 2 阶段 pause/resume/cancel) + `RunWorker`(单 run 协程 + checkpoint + 步边界 pause) + `SessionRegistry`(UUID + 30s heartbeat 过期) + stdlib `asyncio.start_unix_server` + 手写 HTTP/1.1(**0 新依赖**);`RunMeta` / `RunCheckpoint` / `RunFailure` 3 个 frozen dataclass;tui `EventKind` 联合加 3 类 daemon 事件。
+  - **`Ctrl+B` 后台化**:正在跑的 run → daemon → `state=suspended` + checkpoint 落盘,transcript 显一行 "Run {id} suspended",用户立刻可开新目标
+  - **`Esc` step-boundary pause**:`POST /runs/{id}/pause` → worker 在下一个 step 边界 await 阻塞(同 `PlanMode._plan_decision_event` 模式);`Esc Esc`(1.5s 内)= cancel
+  - **跨 session resume**:`Ctrl+C` 关 TUI / 拔电 / 升级,任务状态不丢;重启时弹 inline modal 选 suspended run 续跑
+  - **持久化恢复**:daemon 启动时扫 `running` 改 `suspended` + JSONL 末态胜(`completed` 不复活)
+  - **Status bar**:`⏵{active} / ⏸{paused} / ⏹{history}` count badges;**Activity panel**:"Run" 区段
+  - **`/runs` 命令**:list + `/runs {id} resume|cancel|info`
+  - **opt-in**:`--with-daemon` 显式开(默认 False,legacy 行为完整保留)
+  - 53+ 新测试(7 文件:`test_daemon_store` / `test_daemon_sessions` / `test_daemon_server` / `test_daemon_worker` / `test_daemon_lifecycle` / `test_tui_run_integration` 等)
+  - **不做(留 v1.1 / #5b)**:多 run 并行 + Run tabs + 多 TUI 互斥 read-only + worktree-per-run + cost tracking per run
 - **Skills 3-pack:on-demand 自检原语(`/verify` / `/security-review` / `/simplify`)。** 用户中途一键复跑 verify、提交前扫 secrets + dep 漏洞 + 危险 API、重构前看重复 / 复杂度 / 死代码。架构:`skills_runtime/` 模块(skill registry 单例 + `run_skill()` 编排 + 2 个 TUI event 接入);`builtin/` 子模块分离数据契约与具体 skill 实现;slash command 走 TUI `_dispatch_slash` + `_skill_cmd` 统一入口(同 `/lsp` 模式)。**3 个 skill**:`/verify` 薄包装 `Verifier.verify`(**D9/D13 关键 — 显式走 verify 入口不绕 `propose_verify`**,诚实:无 `verify_cmd` 配置 → verdict=n_a 引导用户配);`/security-review` 3-pass 编排(secrets 9 regex 含 `sk-ant-` 新增 + dep audit shell out 缺工具必报 error severity **D5 防假绿** + permission Python/JS-TS 危险 API)+ dedup + sort;`/simplify` 3-pass(token shingle 重复 + 复杂度 + 死代码启发)+ top-N 截断。**3 个 SKILL.md** 配方 + 3 skill 注册到 `~/.argos/skills_builtin/` 供 LLM 召回。TUI 活动栏 "Skill Catalog" / "Skill"(重排,避撞既有 `Skill` 标识)。`+110+ 测试`(3 pass 独立 + 3 整合 + 边界 + Pilot e2e);`COMMAND_HELP` 15→18;不引入新外部依赖;**不做(v1.1)**:`/lsp` 类子命令(`/security-review src/` 路径限定本期 v1 实装)、Web 仪表盘。**安全警示**:Pass 2 需用户自装 `pip-audit` / `npm` / `cargo-audit`(同 hooks spec D11 用户责任);`.env` / `.env.*` / `secrets.toml` / `*.pem` / `*.key` 跳过不扫(D4 user-controlled 秘密存储);测试代码 `eval` / `exec` 降级 info(避免误报)。
 
 ### Fixed
