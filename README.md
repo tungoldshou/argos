@@ -92,13 +92,67 @@ brew install --cask -s packaging/homebrew/argos.rb
 ```
 
 (TODO: once a `tungoldshou/homebrew-argos` tap is published, this becomes
-`brew install --cask argos` — tracked in the #12 stage.)
+`brew install --cask argos` — tracked in the #13 stage.)
+
+### pip / uv (any platform, #13)
+
+```bash
+pip install argos-agent        # or: uv tool install argos-agent
+argos --version
+```
+
+`argospkg` ships in the same install for packaging helpers (`argospkg info`,
+`argospkg check`, `argospkg manifest`).
+
+### Linux AppImage / .deb / .rpm (#13)
+
+```bash
+# AppImage (cross-glibc universal)
+curl -fsSL https://github.com/tungoldshou/argos/releases/latest/download/Argos-X.Y.Z-x86_64.AppImage -o argos
+chmod +x argos && ./argos
+
+# .deb (apt route)
+curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install-deb.sh | bash
+
+# .rpm (dnf/yum route)
+sudo dnf install ./argos-X.Y.Z-1.x86_64.rpm
+```
+
+### Windows (#13)
+
+```powershell
+# WinGet (once accepted into microsoft/winget-pkgs)
+winget install tungoldshou.argos
+
+# Or grab the .exe zip directly
+Invoke-WebRequest -Uri "https://github.com/tungoldshou/argos/releases/latest/download/Argos-X.Y.Z-x86_64-windows.zip" -OutFile argos.zip
+Expand-Archive argos.zip ; .\argos.exe
+```
+
+### Homebrew tap (Linux CLI + macOS GUI, #13)
+
+```bash
+brew tap tungoldshou/argos
+brew install argos           # Linux CLI: AppImage
+brew install --cask argos    # macOS GUI: .app bundle
+```
+
+### Nix (#13)
+
+```bash
+nix run github:tungoldshou/argos#argos
+```
+
+(Flake is a simplified `buildPythonApplication`;full nixpkgs coverage lands in v1.1.)
+
+See [`docs/packaging-c.md`](docs/packaging-c.md) for the full per-channel
+install matrix, known limitations, and upgrade commands.
 
 ### Upgrade
 
 ```bash
 argos self-update   # notifies when a new version is available (does not download)
-# to actually upgrade, re-run install.sh or `brew upgrade`
+# to actually upgrade: re-run install.sh | `brew upgrade` | `pip install --upgrade argos-agent` | `winget upgrade`
 ```
 
 ### From source
