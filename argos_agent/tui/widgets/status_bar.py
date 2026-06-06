@@ -43,11 +43,36 @@ class StatusBar(Static):
     def render_text(self) -> str:
         cost = "$(N/A)" if self.cost_usd is None else f"${self.cost_usd:.3f}"
         mode_str = "plan" if self.plan_mode else "act"
+        # run 计数 badges(daemon 模式,默认 0/0/0)
+        run_badges = self.render_count_badges(self._run_summary)
         return (
             f"⏵ phase:{self.phase} · ⚙{self.actions} actions · "
             f"↑{_k(self.tokens_in)}↓{_k(self.tokens_out)} tok · "
-            f"💰{cost} · ⏱{self.elapsed_s:.1f}s · Mode:{mode_str}"
+            f"💰{cost} · ⏱{self.elapsed_s:.1f}s · Mode:{mode_str}  {run_badges}"
         )
+
+    # ── Run 计数 badges(spec §2.5 d 段)────────────────────────────
+    # ⏵N active / ⏸N paused / ⏹N history
+    # 由 app.on_run_state_changed 推(daemon 模式;legacy 模式给空元组)
+    _run_summary: list[tuple[str, str]] = []
+
+    def set_run_summary(self, runs: list[tuple[str, str]]) -> None:
+        """runs: [(run_id, state), ...]"""
+        self._run_summary = list(runs)
+        self._refresh()
+
+    def render_count_badges(self, runs: list[tuple[str, str]]) -> str:
+        """run 列表 → 紧凑 count badges:`⏵1 / ⏸0 / ⏹3`。
+
+        active = running;paused = paused;history = suspended+completed+failed+cancelled。
+        单 TUI 模式:始终显示 0/0/0 表示"无 daemon"(诚实)。"""
+        if not runs:
+            return "⏵0 / ⏸0 / ⏹0"
+        active = sum(1 for _, s in runs if s == "running")
+        paused = sum(1 for _, s in runs if s == "paused")
+        history = sum(1 for _, s in runs
+                      if s in ("suspended", "completed", "failed", "cancelled"))
+        return f"⏵{active} / ⏸{paused} / ⏹{history}"
 
     def set_phase(self, phase: Phase, actions: int) -> None:
         self.phase = phase

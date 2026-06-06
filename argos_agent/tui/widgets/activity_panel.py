@@ -67,6 +67,7 @@ class ActivityPanel(Vertical):
         yield _Section("任务进度", "(待开始)", )  # id 设下方
         yield _Section("工具", "本轮 0 调用")
         yield _Section("回执(已签名)", "—")
+        yield _Section("Run", "(无)")   # ← 新增 idx 4:daemon 模式 run 概览
         yield _Section("Skill Catalog", self._skill_catalog_summary())  # ← 重命名(原 Skills)
         yield _Section("MCP", self._mcp_summary())
         yield _Section("成本 + 缓存", "↑0 ↓0  $0.000\n缓存命中 0 tok  0.0s")
@@ -245,6 +246,24 @@ class ActivityPanel(Vertical):
         self._set(1, "(待开始)"); self._set(2, "本轮 0 调用"); self._set(3, "—")
         self._set(8, "(无)"); self._set(self._LSP_IDX, "(无)")
         self._set(self._SKILL_IDX, "(无)")
+        self._set(self._RUN_IDX, "(无)")
+
+    # ── Run 段(spec §2.6 b/c 段)──────────────────────────────────
+    _RUN_IDX: int = 4   # 任务进度后,Skill Catalog 前
+
+    def on_run_summary(self, *, active: int, paused: int, suspended: int, history: int) -> None:
+        """渲染 'Run' 区段:⏵N active / ⏸N paused / ⏹N history。
+
+        active = running;paused = paused;
+        history = suspended + completed + failed + cancelled;
+        走 state count → 不存 id 列表(本期单 TUI 限定)。"""
+        if active == 0 and paused == 0 and suspended == 0 and history == 0:
+            self._set(self._RUN_IDX, "(无)")
+        else:
+            self._set(
+                self._RUN_IDX,
+                f"⏵{active}  ⏸{paused}  ⏹{history}\n(suspended {suspended})",
+            )
 
     def snapshot_text(self) -> str:
         # Textual 8.2.7 的 Static 用 .content 暴露当前正文(随 .update() 刷新),不再有 .renderable。

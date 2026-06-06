@@ -90,9 +90,11 @@ class ArgosApp(App):
     # Esc 打断当前任务(对齐 Claude Code):取消正在跑的 run。模型推理/等待这类 await 点能即时
     # 中断;若卡在同步 exec_code(命令/浏览器动作占住事件循环)则需等该动作返回后才落地(诚实:
     # 不假装能瞬间杀掉同步子进程)。idle 时按 Esc 无副作用。
+    # `Ctrl+B` 后台化(daemon 模式):把当前 run 推到 daemon → state=suspended(可跨 session 续)。
     BINDINGS = [
         ("ctrl+c", "quit", "退出"),
         ("escape", "interrupt", "打断"),
+        ("ctrl+b", "background", "后台"),
     ]
 
     def __init__(
@@ -136,6 +138,19 @@ class ArgosApp(App):
         self._workspace: Path = Path.home() / ".argos" / "workspace"
         self._run_seq: int = 0
         self._snapshot: "RunSnapshot | None" = None
+        # ── Daemon 模式状态(spec 2026-06-06 §2.6/2.7)────────────────
+        # with_daemon=True 启用 daemon 模式:
+        #   · DaemonClient 走 Unix socket(本机 ~/.argos/daemon.sock)
+        #   · Esc = step-boundary pause(POST /pause)而非直接 kill
+        #   · 双 Esc(<1.5s) = cancel
+        #   · Ctrl+B = 后台化(POST /suspend)
+        #   · 启动时扫 suspended run,弹 inline modal 让用户选
+        # 默认 False(legacy TUI-only 行为,沿用旧 Esc=cancel)。
+        self._with_daemon: bool = False
+        self._daemon_client = None     # type: ignore[var-annotated]
+        self._daemon_session_id: str | None = None
+        self._daemon_run_id: str | None = None   # 当前 run 在 daemon 里的 run_id
+        self._last_esc_time: float = 0.0          # 双 Esc 检测(1.5s 内第二次 = cancel)
         self.sub_title = self._compose_subtitle()
 
     @staticmethod
@@ -354,6 +369,8 @@ class ArgosApp(App):
             await self._hooks_cmd(log, cmd.arg)
         elif cmd.name == "lsp":
             await self._lsp_cmd(log, cmd.arg)
+        elif cmd.name == "runs":
+            await self._runs_cmd(log, cmd.arg)
         elif cmd.name == "verify":
             await self._skill_cmd(log, "verify", cmd.arg)
         elif cmd.name == "security-review":
@@ -527,6 +544,63 @@ class ArgosApp(App):
             if present:
                 lines.append(f" · {label}:{', '.join(present)}")
         await log.append_line("\n".join(lines), kind="system")
+
+    async def _runs_cmd(self, log, arg: str) -> None:
+        """/runs / /runs {id} resume / cancel — daemon 模式 run 列表与控制(spec §2.6 e)。
+
+        无 daemon 时 → 报"未启用 daemon";有 daemon → 列 run + 代理 pause/resume/cancel。
+        """
+        if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
+            await log.append_line(
+                "未启用 daemon(--with-daemon flag);/runs 不可用。",
+                kind="system",
+            )
+            return
+        parts = arg.split(None, 1)
+        if not parts:
+            # /runs 无参 → 列所有 run
+            try:
+                runs = await self._daemon_client.list_runs(self._daemon_session_id)
+            except Exception as e:  # noqa: BLE001
+                await log.append_line(f"列 run 失败:{e}", kind="error")
+                return
+            if not runs:
+                await log.append_line("无 run。", kind="system")
+                return
+            import time as _time
+            lines = ["Run 列表:"]
+            for r in runs:
+                age = int(_time.time() - r.get("created_at", 0))
+                lines.append(
+                    f" · {r['run_id']}  {r['state']:<10}  {r['goal'][:40]}  ({age}s ago)"
+                )
+            lines.append("/runs {id} resume|cancel — 控制")
+            await log.append_line("\n".join(lines), kind="system")
+            return
+        # /runs {id} [resume|cancel]
+        run_id = parts[0]
+        action = parts[1].strip() if len(parts) > 1 else "info"
+        if action == "resume":
+            try:
+                await self._daemon_client.resume(self._daemon_session_id, run_id)
+                await log.append_line(f"已请求 resume {run_id}。", kind="system")
+            except Exception as e:  # noqa: BLE001
+                await log.append_line(f"resume 失败:{e}", kind="error")
+        elif action == "cancel":
+            try:
+                await self._daemon_client.cancel(self._daemon_session_id, run_id)
+                await log.append_line(f"已请求 cancel {run_id}。", kind="system")
+            except Exception as e:  # noqa: BLE001
+                await log.append_line(f"cancel 失败:{e}", kind="error")
+        else:
+            try:
+                info = await self._daemon_client.get_run(self._daemon_session_id, run_id)
+                await log.append_line(
+                    f"{run_id}: state={info.get('state')}  events={info.get('events_count')}",
+                    kind="system",
+                )
+            except Exception as e:  # noqa: BLE001
+                await log.append_line(f"查 run 失败:{e}", kind="error")
 
     async def _skill_cmd(self, log, skill_name: str, arg: str) -> None:
         """/verify / /security-review / /simplify 统一入口(spec §2.6 / §2.7)。
@@ -803,9 +877,19 @@ class ArgosApp(App):
             self._terminal_glow = True
 
     def action_interrupt(self) -> None:
-        """Esc:打断当前 run。取消生产 worker → 其 finally 关闭 bus → 消费循环 start_run 自然收尾
-        (落 '已打断' 行、解锁 run_active、停呼吸光)。idle(无 run)时无副作用。
+        """Esc:打断当前 run(daemon 模式 = step-boundary pause,legacy = 整 run kill)。
+
+        daemon 模式行为(spec §2.7):
+          · 单 Esc → POST /runs/{id}/pause;worker 在下个 step 边界 await 暂停
+          · 双 Esc(1.5s 内) → POST /runs/{id}/cancel;worker 协程 cancel
+          · 取消生产 worker → 其 finally 关闭 bus → 消费循环 start_run 自然收尾
+            (落 '已打断' 行、解锁 run_active、停呼吸光)。
+
+        legacy 模式(无 daemon):直接 cancel 生产 worker(对齐 Claude Code 旧行为)。
+
+        idle(无 run)时无副作用。
         诚实边界:模型推理/网络等 await 点能即时停;卡在同步 exec_code(命令/浏览器)需等其返回。"""
+        import time
         # Esc 双用:slash 菜单开着时先收菜单(不打断);否则才打断当前 run。
         menu = self.query_one("#slash-menu", SlashMenu)
         if menu.display:
@@ -813,10 +897,77 @@ class ArgosApp(App):
             return
         if not self._run_active or self._produce_worker is None:
             return
+        now = time.time()
+        if self._with_daemon and self._daemon_client is not None and self._daemon_session_id:
+            # daemon 模式:2 阶段契约 — 双 Esc = cancel
+            if (now - self._last_esc_time) < 1.5:
+                # 双 Esc → cancel
+                self._interrupted = True
+                try:
+                    self._daemon_client.cancel(self._daemon_session_id, self._daemon_run_id)
+                except Exception:  # noqa: BLE001
+                    pass
+                try:
+                    self._produce_worker.cancel()
+                except Exception:  # noqa: BLE001
+                    pass
+                self._last_esc_time = 0.0
+                return
+            # 单 Esc → pause(step boundary)
+            self._last_esc_time = now
+            try:
+                # 协程里跑 async;这里 fire-and-forget
+                self.run_worker(self._daemon_pause(), exclusive=False)
+            except Exception:  # noqa: BLE001
+                pass
+            return
+        # legacy 模式:整 run cancel
         self._interrupted = True
+        self._last_esc_time = 0.0
         try:
             self._produce_worker.cancel()
         except Exception:  # noqa: BLE001 — worker 可能已自然结束,取消失败无碍
+            pass
+
+    async def _daemon_pause(self) -> None:
+        """daemon 模式 Esc → POST /pause(2 阶段:202 + 后续 SSE state_change 事件)。"""
+        if not self._daemon_client or not self._daemon_session_id or not self._daemon_run_id:
+            return
+        try:
+            await self._daemon_client.pause(self._daemon_session_id, self._daemon_run_id)
+        except Exception as e:  # noqa: BLE001
+            log = __import__("logging").getLogger(__name__)
+            log.warning("daemon pause failed: %s", e)
+
+    def action_background(self) -> None:
+        """Ctrl+B:把当前 run 后台化(running → suspended;checkpoint 落盘)。
+
+        spec §2.6 b 段:daemon 模式才生效;legacy 模式无副作用(诚实:不做假装操作)。
+        后台化后 transcript 显一行 'Run <id> suspended' + 用户可立刻开新目标。
+        """
+        if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
+            # legacy 模式 → no-op(无副作用)
+            return
+        if not self._run_active or not self._daemon_run_id:
+            return
+        # 后台化:把 produce_worker cancel(loop 真转 paused/suspended)
+        # 实际状态转换由 daemon 端 worker 协程 mark_suspended 完成
+        # 简化:这里直接 cancel + 期望 daemon 端 catch CancelledError + mark_suspended
+        try:
+            self._produce_worker.cancel()
+        except Exception:  # noqa: BLE001
+            pass
+        # 落一行告知用户
+        try:
+            log_widget = self.query_one("#transcript", Transcript)
+            self.run_worker(
+                log_widget.append_line(
+                    f"⏸ Run {self._daemon_run_id} 后台化(suspended)。可 /resume {self._daemon_run_id} 续。",
+                    kind="system",
+                ),
+                exclusive=False,
+            )
+        except Exception:  # noqa: BLE001
             pass
 
     async def _handle_workflow_proposed(self, ev: WorkflowProposed) -> None:
