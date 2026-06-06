@@ -274,23 +274,25 @@ Slash commands live in the TUI. Tab completion is built in.
 
 ## Memory & state
 
-Four-tier memory, all local:
+**Task history** (the original 4-tier): per-run records persisted to
+`~/.argos/runs/<id>.jsonl` — append-only, fsync on meta, replayable
+byte-for-byte. The same event stream drives the live UI, the on-disk
+journal, and `/resume`. Recall is hybrid: vector recall when an
+embedder is available (reusing the active provider's embeddings
+endpoint), FTS5 keyword fallback otherwise. Argos will never call a
+model it isn't configured to call.
 
-- **Project memory** — file-grounded facts scoped to the current working
-  directory.
-- **User memory** — cross-project preferences, kept under `~/.argos/`.
-- **Skill memory** — per-skill notes, scoped to where the skill runs.
-- **Session memory** — the live transcript, compacted on overflow by
-  a summarisation step.
-
-Retrieval is hybrid: vector recall when an embedder is available
-(reusing the active provider's embeddings endpoint), FTS5 keyword
-fallback otherwise. Argos will never call a model it isn't configured
-to call.
-
-Every run is persisted to `~/.argos/runs/<id>.jsonl` — append-only,
-fsync on meta, and replayable byte-for-byte. The same event stream
-drives the live UI, the on-disk journal, and the `/resume` workflow.
+**Auto memory** (#9, this release): a second 4-tier layer for
+**cross-session** recall. Project / User / Skill / Session scopes,
+JSONL at `~/.argos/memory/{user,projects/<hash>,skills/<name>,sessions/<sid>}.jsonl`.
+5 implicit triggers (escalation / verify fail / repeat tool fail /
+run success / undo) + 3 explicit slash commands (`/remember`,
+`/forget`, `/memory`). Auto-loads `CLAUDE.md` / `AGENTS.md` (project
+walk-up + `~/.argos/CLAUDE.md` global) into the system prompt's
+`<memory_context>` segment. Secret redaction on write. Decay
+`0.01/day` with use-count recovery `+0.02`. Capacity caps enforced
+on write. `ARGOS_NO_MEMORY=1` to opt out. See
+[`docs/auto-memory.md`](docs/auto-memory.md).
 
 ---
 
