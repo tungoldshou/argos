@@ -1,56 +1,107 @@
-# Argos — 终端超级智能体
+# Argos — A Terminal Super-Agent
 
-一个独立的终端(TUI)超级智能体:**单个 Python 进程**,基于 Textual。它通过
-Anthropic-Messages / OpenAI 兼容端点驱动**任意模型**(不绑定厂商),核心是一套**自建的
-CodeAct 循环** + **verify 硬门禁** + **诚实协议** + **OS 沙箱执行器**。
+Argos is a single-process terminal (TUI) super-agent for engineers who want
+**reliable, verifiable work from cheap models** — without the lying.
 
-项目灵魂:让便宜模型变得*可靠* —— 诚实协议 + verify 硬门禁,而不只是又一个模型套壳。
+Three pillars carry the design:
 
-> 不只是编码智能体:Argos 是 **Claude Code + 通用 agent** 的合体 —— 在写代码之外,还能
-> 联网检索、**开浏览器操控电脑**(导航/点按/填表/截图)、按需调技能(Skills)、对结构化任务
-> 注入"必检约定"契约、经 **MCP** 扩展任意外部工具、**把大任务确定性 fan-out 给多个子 agent
-> 并行**(Dynamic Workflows)。每一项能力都遵循同一条底线:**能验证才说完成,不行就如实说,绝不假装。**
+- **A verify hard-gate.** No task is marked "done" until a real, user-defined
+  check command (`pytest`, `cargo test`, `ruff`, `tsc`, `mypy`, …) returns
+  zero. The agent must *declare* how its work will be verified before the
+  gate trusts it, and a three-state verdict (`passed` / `failed` /
+  `unverifiable`) prevents fake-greens.
+- **An honesty protocol.** Argos would rather say "I don't know" than ship
+  a lie. Failed checks bounce the actual error back to the agent; an
+  unverifiable task is *unverifiable*, not passed. Every action the agent
+  takes leaves a signed receipt; every event is persisted to a JSONL
+  journal you can replay.
+- **An OS-level sandbox.** macOS Seatbelt confines the agent at the kernel
+  boundary — no network by default, writes only inside the declared
+  workspace. Approval gates sit on top for the destructive paths the
+  user wants to opt into.
 
-## 快速开始
+Built as one Python process on Textual. Model-agnostic (Anthropic-Messages
+and OpenAI-compatible endpoints are both first-class). Designed to make
+honest results cheap, not to make a single model cleverer.
 
-需要 Python 3.12+ 与 [uv](https://docs.astral.sh/uv/)。
+---
+
+## Why Argos
+
+Cheap models fail in two painful ways: they get the work wrong, **and** they
+say "done" anyway. The first problem gets better with every new model
+release; the second is structural — it's a politeness failure, not a
+capability failure, and a cleverer model often lies more smoothly.
+
+We built Argos around the assumption that **trustworthy output is an
+engineering problem, not a model problem**. Four design choices follow:
+
+1. The verify gate turns "is it done?" from a sentence the model writes
+   into an exit code a harness reads. A model can bluff the user, but
+   not `subprocess.run()`.
+2. The honesty protocol makes "I don't know" a first-class outcome —
+   escalation paths to the human, never a fake completion, every
+   unverifiable step flagged in the activity panel.
+3. The smart-approval system puts a hard wall in front of destructive
+   operations (`rm -rf`, system paths, secret patterns) that **never
+   bypasses** even at the most permissive AUTO level. The user is always
+   the final reviewer for the actions that hurt most.
+4. A long-running daemon (opt-in via `--with-daemon`) lets 5+ minute
+   tasks survive a closed terminal, a power loss, or a model upgrade —
+   state, checkpoints, and the event journal all live on disk, so the
+   next session picks up exactly where the last left off.
+
+The result is a tool that lets a developer pick a cheap model, ship real
+work, and catch the lies.
+
+---
+
+## Quick start
+
+Needs Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
-uv run argos              # 启动 Argos TUI
-uv run argos setup        # 交互向导:接入任意模型(选 provider→填 key→连通+格式探针)
-uv run argos --selftest   # 不连网整机自检(脚本模型跑四阶段,打印 verdicts)
-uv run pytest -q          # 跑测试
+uv run argos              # launch the Argos TUI
+uv run argos setup        # interactive wizard: pick a provider, paste a key,
+                          # connection + CodeAct-format probe (real request)
+uv run argos --selftest   # offline full-machine self-check, prints verdicts
+uv run pytest -q          # run the test suite
 ```
 
-无 API key 时 `argos` 会诚实落 demo 态(不假装能跑),并提示运行 `argos setup`。
+Without an API key, `argos` falls back to an honest demo state — it does
+**not** pretend to run. The TUI tells you to run `argos setup`.
 
-## 安装
+---
 
-### 一键安装(macOS arm64)
+## Install
+
+### One-line installer (macOS arm64)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash
 ```
 
-装到 `/Applications/Argos.app`,建 `/usr/local/bin/argos` 符号链接。
+Installs to `/Applications/Argos.app` and creates an `/usr/local/bin/argos`
+symlink.
 
-### Homebrew Cask(macOS arm64)
+### Homebrew Cask (macOS arm64)
 
 ```bash
 brew install --cask -s packaging/homebrew/argos.rb
 ```
 
-(TODO:单建 `tungoldshou/homebrew-argos` tap 后改用 `brew install --cask argos`——见 #12 阶段。)
+(TODO: once a `tungoldshou/homebrew-argos` tap is published, this becomes
+`brew install --cask argos` — tracked in the #12 stage.)
 
-### 升级
+### Upgrade
 
 ```bash
-argos self-update   # 提示新版本(不下载)
-# 实际升级重跑 install.sh / brew upgrade
+argos self-update   # notifies when a new version is available (does not download)
+# to actually upgrade, re-run install.sh or `brew upgrade`
 ```
 
-### 从源码
+### From source
 
 ```bash
 git clone https://github.com/tungoldshou/argos
@@ -59,166 +110,255 @@ uv sync
 uv run argos
 ```
 
-## 架构
+---
 
-活引擎是 **framework-free** 的(不依赖 langchain/langgraph),唯一外部执行器是
-smolagents 的沙箱 `LocalPythonExecutor`。
+## Core architecture
 
-- **`argos_agent/core/`** — agent 大脑:自建 **CodeAct** 主循环(`loop.py`,
-  plan→act→verify→report 四阶段不可跳)、5 层 harness、诚实栈(`honesty.py`)、模型协议
-  适配(`protocols.py`,Anthropic + OpenAI 双协议)、模型分档(`models.py`)。
-- **`argos_agent/sandbox/`** — OS 沙箱:macOS Seatbelt 执行器 + capability broker
-  (特权动作边界:egress allowlist + 审批闸 + HMAC 回执)。
-- **`argos_agent/tools/`** — 注入沙箱命名空间的 16 个工具:文件读写编辑搜索、白名单 shell、
-  联网检索/正文提取、**浏览器计算机控制**(`browser_navigate/snapshot/click/type/screenshot`,
-  见 `browser.py`,守护线程跑 sync Playwright,默认有头可见窗口)、**`mcp_call`**(经 `mcp_native.py`
-  连 `~/.argos/mcp.json` 的 MCP server 扩展任意外部工具)、`propose_verify`(独立验证门)、
-  `update_plan`(真 TODO 拆解)、`propose_workflow`(提议 Dynamic Workflow)。
-- **`argos_agent/workflow/`** — Dynamic Workflows:声明式 `WorkflowSpec` + host 确定性引擎,
-  agent 经 `propose_workflow` 提议,fan_out/pipeline/panel/loop_until/synthesize 五形态把任务
-  并行派给隔离子 agent(独立沙箱/worktree,模型无关 per-agent),逐阶段验证、汇总回灌。
-- **`argos_agent/memory/`** — SQLite + 向量召回(复用 active provider 的 embeddings,
-  否则诚实退 FTS5 关键词,绝不偷调模型)。
-- **`argos_agent/skills.py` / `contracts.py`** — 按 goal 召回的技能库(零模型关键词兜底)+
-  结构化任务"必检约定"契约层(REST/DB/状态机/配置;非结构化不注入)。
-- **`argos_agent/approval.py`** — 有副作用动作执行前的审批闸(默认确认,fail-closed)。
-- **`argos_agent/tui/`** — Textual TUI 外壳:argos-night 主题、Markdown/语法高亮、
-  右侧诚实活动栏(模型/进度/工具/签名回执/成本)、启动 logo、verdict 三态着色。
-- **`tests/`** — pytest 测试套件。**`pyproject.toml`** — 单 Python 项目,`argos` 控制台入口。
+### The verify hard-gate
 
-## 打包
+Every run that touches code is bound to a user-declared verification
+command. When the agent claims "done", the gate runs that command in
+isolation and emits a three-state verdict:
 
-PyInstaller 打成**单个 arm64 binary**(`packaging/build_arm64.sh` → `dist/argos`)。
-用 `dist/argos --selftest` + `python smoke_packaged.py` 验收。详见 `package-app` skill。
+- **`passed`** — the command exited 0. The work is genuinely done.
+- **`failed`** — non-zero exit; the actual error text is bounced back to
+  the agent so it can fix and retry.
+- **`unverifiable`** — the agent never declared a meaningful check (or
+  the check looks trivial, e.g. `echo ok`). The task is *not* marked
+  done; it is flagged for human review.
 
-## 交互
+The gate is host-side, not model-side. It reads exit codes; it does not
+trust assertions.
 
-### Plan mode
+### Honesty protocol
+
+The agent cannot self-certify. Three rules enforce this:
+
+- No fake-greens — a trivial verification command (`echo`, `true`, `:`)
+  is rejected at registration. If the agent tries to claim success with
+  an empty check, the verdict degrades to `unverifiable`.
+- No pretend-success — completion is the gate's verdict, not the
+  model's text. If the gate says `unverifiable`, the transcript says
+  `unverifiable`.
+- Full audit trail — every tool call leaves a signed receipt (HMAC over
+  the broker's request envelope), the full event stream is persisted to
+  JSONL, and the activity panel shows a live signature counter for the
+  human to watch.
+
+### OS sandbox
+
+The agent runs inside a macOS Seatbelt profile: no outbound network
+unless explicitly approved, writes confined to the declared workspace,
+reads scoped to the project plus user home. The capability broker on
+top adds egress allowlists (Tavily / DDGS / configured MCP hosts) and
+per-action approval requests. Network is *off* by default — and the
+AUTO (`/yolo`) approval level does not silently flip it on.
+
+### Smart approval
+
+Four approval levels (`Observe` / `Propose` / `Confirm` / `Auto`) are
+configurable per session, but **certain hard rules never bypass** even
+at AUTO:
+
+- Destructive shell operations (`rm -rf`, system paths, format
+  commands).
+- Writes outside the declared workspace.
+- Reads or writes matching secret patterns (private keys, credential
+  files, anything in `~/.ssh`).
+- Outbound network access to non-allowlisted hosts.
+
+The approval modal itself is a real keyboard-driven prompt, not a
+decorative pause: `1` deny, `2` once, `3` session, `4` always, with a
+visible diff of what the tool would do.
+
+### Long-running daemon
+
+A 7-state machine (`pending` / `running` / `paused` / `suspended` /
+`completed` / `failed` / `cancelled`) lives in an opt-in daemon process.
+Keyboard bindings on the TUI:
+
+- **`Ctrl+B`** — background the current run. It enters `suspended`
+  state on disk; you can start a new goal immediately and resume the old
+  one later.
+- **`Esc`** — pause at the next step boundary. The worker only blocks at
+  well-defined step entry, so the pause is deterministic, not
+  interrupt-the-LLM-token.
+- **`Esc Esc`** (within 1.5s) — cancel.
+- **`Ctrl+C`** — soft interrupt. The TUI exits; the daemon keeps the
+  run alive, persisted to JSONL.
+
+When the daemon is enabled (`--with-daemon`), a startup modal lists
+suspended runs and lets you resume any of them. State survives TUI
+exit, terminal close, machine reboot, and even a model upgrade (the
+worker reattaches from the last checkpoint).
+
+### 22 broker-gated tools
+
+Every tool call — from the agent or from a sub-agent — flows through the
+capability broker. The broker is the only path to the sandbox; it
+checks the action against the egress policy, asks the approval gate
+when needed, signs a receipt, and only then hands off to the executor.
+
+Tools span the breadth of an engineer's day:
+
+- **Files** — `read_file`, `write_file`, `edit_file`, `search_files`
+- **Shell** — `run_command` (allowlist + Seatbelt + workspace cage)
+- **Verification** — `propose_verify` (declare-then-execute, isolated
+  from the agent's own code path)
+- **Plan** — `update_plan` (real TODO breakdown, rendered in the
+  activity panel)
+- **Web** — `web_search`, `web_extract` (Tavily or DDGS, egress
+  allowlisted)
+- **Browser** — `browser_navigate`, `browser_snapshot`, `browser_click`,
+  `browser_type`, `browser_screenshot` (Playwright on a dedicated
+  thread; visible window by default so you can watch)
+- **LSP** — `lsp_definition`, `lsp_references`, `lsp_hover`,
+  `lsp_document_symbols`, `lsp_workspace_symbols`, `lsp_diagnostics`
+  (real language-server protocol against user-configured servers)
+- **MCP** — `mcp_call(server, tool, args)` (native stdio JSON-RPC,
+  zero pre-configuration; `~/.argos/mcp.json` is read on demand)
+- **Workflow** — `propose_workflow({name, description, stages})` to
+  request a Dynamic Workflow (see below)
+- **Skill** — built-in skills (`/verify`, `/security-review`,
+  `/simplify`) callable on demand without re-using the agent's code
+
+The tool count shown in `/tools` is always the real number from
+`ALL_TOOL_NAMES`. No padding, no "60+ tools" lies.
+
+### Dynamic Workflows
+
+Big tasks that can be split — refactor + test, fan-out search, panel
+review — are expressed as a declarative `WorkflowSpec` (`name`,
+`description`, `stages`) and run by a host-side deterministic engine.
+The agent *proposes* the spec; the engine *runs* it. The split keeps
+the model from writing brittle orchestration code (cheap models are
+better at JSON than at Python async) while keeping the user in the
+approval loop.
+
+Five shapes are supported:
+
+- **`fan_out`** — one agent per item, run in parallel.
+- **`pipeline`** — items traverse stages sequentially, no barriers.
+- **`panel`** — N voters, adversarial verify generalised.
+- **`loop_until`** — accumulate to a target, or stop on consecutive
+  empty rounds (hard cap prevents runaway).
+- **`synthesize`** — roll up results into a single report.
+
+Each sub-agent is a full Argos — its own ModelClient, its own broker,
+its own Seatbelt sandbox, its own verify gate. Sub-agents can be
+assigned any config profile, so a cheap tier can do the parallel
+work and a stronger model can adjudicate. `isolation: worktree` gives
+parallel write-agents their own git worktree, with a diff captured
+before teardown for the user to review.
+
+---
+
+## Commands
+
+Slash commands live in the TUI. Tab completion is built in.
+
+| Command | Purpose |
+|---|---|
+| `/plan` | Enter "look at the plan, then act" mode. The agent writes a markdown plan (task breakdown / files touched / risks / approval gates) and the host presents a 4-option approval modal: `1` approve and start, `2` approve and accept edits, `3` keep planning, `4` refine with feedback. Plan-mode tool dispatch blocks `write_file` / `edit_file` / `run_command` until you exit. |
+| `/hooks` | List the active `~/.argos/hooks.json` lifecycle hooks. `/hooks reload` re-reads the config without restarting. |
+| `/lsp` | List the language servers currently in scope. `/lsp reload` re-reads `~/.argos/lsp.json`. |
+| `/verify` | Run `Verifier.verify` against the configured `verify_cmd`. The user-facing path; never goes through `propose_verify`. Without a `verify_cmd` configured, the verdict is `n_a` and the TUI prompts you to set one. |
+| `/security-review` | Three passes: secrets (9 regexes incl. `sk-ant-`), dependency vulnerabilities (shells out to `npm` / `pip-audit` / `cargo-audit` — missing tools are reported as `error`, never silently skipped), dangerous APIs (Python `eval` / JS-TS `eval` / `innerHTML` / `child_process`). Read-only — never modifies code. |
+| `/simplify` | Three passes: token-shingle duplicate detection, function-complexity hotspots, dead-code heuristics. Read-only. |
+| `/permissions` | Inspect or change the current approval level. Hard rules are always shown. |
+| `/runs` | List persisted runs. `/runs {id} resume\|cancel\|info` acts on one. |
+| `/model` | List configured profiles and switch `active` (takes effect on next launch). |
+| `/help`, `/tools`, `/skills`, `/mcp` | Discovery: what can this thing actually do right now? |
+
+---
+
+## Memory & state
+
+Four-tier memory, all local:
+
+- **Project memory** — file-grounded facts scoped to the current working
+  directory.
+- **User memory** — cross-project preferences, kept under `~/.argos/`.
+- **Skill memory** — per-skill notes, scoped to where the skill runs.
+- **Session memory** — the live transcript, compacted on overflow by
+  a summarisation step.
+
+Retrieval is hybrid: vector recall when an embedder is available
+(reusing the active provider's embeddings endpoint), FTS5 keyword
+fallback otherwise. Argos will never call a model it isn't configured
+to call.
+
+Every run is persisted to `~/.argos/runs/<id>.jsonl` — append-only,
+fsync on meta, and replayable byte-for-byte. The same event stream
+drives the live UI, the on-disk journal, and the `/resume` workflow.
+
+---
+
+## CLI flags
 
 ```bash
-/plan
+uv run argos                  # launch TUI
+uv run argos setup            # provider + key + format-probe wizard
+uv run argos --selftest       # offline self-check, prints verdicts
+uv run argos --version        # version (single source: importlib.metadata)
+uv run argos self-update      # check GitHub for new version, notify only
+uv run argos --with-daemon    # opt into the long-running run daemon
+uv run argos --project <path> # confine to a specific project directory
+uv run argos --model <name>   # use a specific config profile for this run
+uv run argos --resume         # reattach to the last session
 ```
 
-进入"只看 plan 不动手"模式,host 拼 markdown plan 文档(任务分解 / 涉及文件 / 风险 / 审批 4 段),
-完成后弹审批 modal 让你挑 4 选项之一:
+---
 
-- `1` **Approve and start** —— 全权限,继续 act 阶段
-- `2` **Approve and accept edits** —— 写/编辑类工具自动批,其他按现有审批流
-- `3` **Keep planning** —— 继续 plan 阶段(不退出 plan mode)
-- `4` **Refine** —— 提供补充上下文后重新 plan
+## Security model
 
-期间 TUI 标题前缀 `[plan mode]` + 边缘光变色 + status_bar Mode 段同步;沙箱工具
-(`write_file` / `edit_file` / `run_command` 等)被 dispatcher 拦截,不进沙箱。
-对齐 Claude Code user-facing `EnterPlanMode` / `ExitPlanMode` 的"看 → 批 → 干"流。
+The threat model is **"a model that wants to please you into trouble"**.
+The defences compose:
 
-### Hooks
+1. **Verify gate** — even a perfectly executed attack ends in
+   `unverifiable` if the agent can't pass a real test.
+2. **Smart approval** — destructive operations require explicit human
+   consent, with a hard wall around the most dangerous patterns.
+3. **OS sandbox** — Seatbelt enforces the workspace cage and the
+   network policy at the kernel boundary, regardless of what the
+   model says.
+4. **Audit trail** — every action is signed, persisted, and visible
+   in the activity panel. The JSONL journal is the source of truth.
+5. **Memory privacy** — memory never leaves the local filesystem
+   unless the user explicitly exports it. Embeddings are computed
+   by the active provider, not by a third party.
 
-在 `~/.argos/hooks.json` 配置 5 个生命周期点的自定义脚本(secret 扫描 / auto-format / 桌面通知 / 自定义验证 / metrics 上报)。对齐 Claude Code hooks 行为。
+The two trust-outs that remain (and the user is told about both):
 
-**示例**:
+- **Hooks and LSP servers run outside the Seatbelt sandbox** at the
+  user's permission level, since they are user-controlled code by
+  design. Argos logs a warning at startup for every configured hook
+  and LSP server, and the docs tell you to audit third-party code
+  before installing it.
+- **Browser-based tools** can reach any URL the user is willing to
+  approve. The visible-window default is deliberate: you should
+  *see* the browser doing what the agent claims.
 
-```json
-{
-  "version": 1,
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "write_file|edit_file",
-        "hooks": [
-          {"type": "command", "command": "~/.argos/hooks/audit-mutate.sh", "timeout": 5000}
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "write_file|edit_file",
-        "hooks": [
-          {"type": "command", "command": "ruff check {cwd}", "timeout": 30000}
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {"type": "command", "command": "osascript -e 'display notification \"Argos done\" with title \"Argos\"'"}
-        ]
-      }
-    ]
-  }
-}
-```
+---
 
-**命令**:
-- `/hooks` — 列出当前生效配置
-- `/hooks reload` — 重读 `~/.argos/hooks.json`
+## License
 
-**⚠️ 安全警示**:hook = 用户脚本,与 agent **同权限**运行(不进 Seatbelt 沙箱);装第三方 hook 前请**审计源码**。PreToolUse 退非 0 = 阻塞工具调用;反喂消息经 agent 看到。
+MIT. See `LICENSE`.
 
-### LSP(语言服务器集成)
+---
 
-Argos agent 可调 6 个真语言服务器原语:`lsp_definition` / `lsp_references` / `lsp_hover` / `lsp_document_symbols` / `lsp_workspace_symbols` / `lsp_diagnostics`,从中大型项目里拿结构化代码情报(symbol 位置 / references / type 错),替代纯文本 grep + 全文读。
+## Contributing
 
-**配置**:`~/.argos/lsp.json`(`lsp.json` 不存在 → 走 built-in 默认单 python server;`pyright-langserver` 未装 → 该 server 自动 disabled + log 一行):
+See `CONTRIBUTING.md` for the development workflow, the test-first
+discipline, and the coding standards. The short version: every change
+ships with tests (≥80% coverage is the floor), the verify gate stays
+hard, and "honest about what works" beats "polished about what
+doesn't".
 
-```json
-{
-  "version": 1,
-  "servers": {
-    "python": {"command": ["pyright-langserver", "--stdio"], "filetypes": [".py", ".pyi"]},
-    "rust":   {"command": ["rust-analyzer"], "filetypes": [".rs"],
-               "init_options": {"cargo": {"allFeatures": true}}},
-    "typescript": {"command": ["typescript-language-server", "--stdio"], "filetypes": [".ts", ".tsx"]}
-  }
-}
-```
+---
 
-**安装示例**: `pip install pyright` / `brew install rust-analyzer` / `npm i -g typescript-language-server typescript`
+## Trademark
 
-**命令**:
-- `/lsp` — 列出当前生效 servers(状态 / filetype / diagnostics 计数)
-- `/lsp reload` — 重读 `~/.argos/lsp.json`;不影响正在跑的 run(下个 `lsp_*` 起新规则)
-
-**⚠️ 安全警示**:**LSP server 跑在沙箱(Sandbox)外,以你的账户权限运行**。`command` 数组直接 spawn 子进程;若装"看起来像 language server"实为木马的二进制,会跑用户全权限代码。**只配你审计过二进制的 command** —— 装第三方 LSP server 前请检查来源/源码。Argos 启动时 stderr 会显一行 `⚠ LSP server '<name>' running: <command>` 告警。
-
-### Skills(自检原语 3 件套)
-
-Argos 提供 3 个 on-demand 自检 slash —— 用户中途一键复跑,**不复用 agent 自己写的代码**:
-- `/verify` —— 显式跑 `Verifier.verify`(D9/D13:用户路径,不走 agent 的 `propose_verify`);无 `verify_cmd` 配置时 verdict=`n_a` 并引导配
-- `/security-review` —— 3 pass:secrets(9 regex 含 `sk-ant-`)/ 依赖漏洞(shell out to `npm`/`pip-audit`/`cargo-audit`)/ 危险 API(Python + JS/TS `eval`/`child_process`/`innerHTML`);缺审计工具必报 error(D5 防假绿)
-- `/simplify` —— 3 pass:token shingle 重复块 / 函数体复杂度(> 15 分支 warning)/ 死代码启发;默认 top-10 截断
-
-**⚠️ 安全警示**:
-- `pip-audit` / `cargo-audit` **需用户自装**;缺 → 报 error severity(D5 假绿护栏),不静默跳
-- `.env` / `.env.*` / `secrets.toml` / `*.pem` / `*.key` **跳过不扫**(user-controlled 秘密存储,误报多)
-- 测试代码 `eval` / `exec` **降级 info**(避免误报测试 fixture)
-- 这些 skill **只报不修**;改不改由你拍板(同 `/lsp` 模式)
-
-### Long-running task + 后台 daemon(5+ 分钟任务)
-
-`#5a` 落地,5+ 分钟任务不再"必须守着等"。所有 run 由独立 daemon 进程托管,持久化到 `~/.argos/runs/<id>.jsonl`(真相源 + checkpoint + SSE 事件流);`~/.argos/runs/index.json` 是缓存。
-
-**键盘**:
-- `Ctrl+B` — 后台化(正在跑 → `suspended`;立刻可开新目标,跨 session 续跑)
-- `Esc` — 在下一个 step 边界暂停(`paused`;worker 真到 step 入口才阻塞,resume 接着 yield)
-- `Esc Esc`(1.5s 内)— 取消
-- `Ctrl+C` — 软中断(TUI 退;daemon 继续跑,run 持久化)
-
-**启用 daemon**(`--with-daemon` 显式 opt-in,默认 False):
-```bash
-uv run argos --with-daemon
-```
-
-启动时弹 inline modal 让你挑 suspended run 续跑(若没有 → 直进 idle)。
-
-**文件路径**(全部 0600 权限):
-```
-~/.argos/daemon.sock        # Unix socket(IPC)
-~/.argos/daemon.pid         # daemon PID
-~/.argos/daemon.log         # stderr/stdout
-~/.argos/runs/<id>.jsonl    # 单 run 事件流(真相源)
-~/.argos/runs/index.json    # 小状态索引(缓存)
-```
-
-**不启用 daemon 时**(默认):`Esc` 沿用旧行为(整 run cancel),无跨 session 续跑。
-
-**不做(留 v1.1 / #5b)**:多 run 并行 + Run tabs + 多 TUI 实例互斥 + worktree-per-run + cost tracking per run。
+Argos is an independent project. All product names, logos, and brands
+referenced in this repository are property of their respective owners
+and are used here only to describe compatibility or context.

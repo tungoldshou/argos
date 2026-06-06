@@ -13,10 +13,11 @@
 > **v5 变更(2026-06-05)**:形态定为**单进程终端(TUI)超级智能体**(2026-06-03 删 Tauri/React
 > 桌面壳)。引擎从 LangGraph 重写为**自建 framework-free CodeAct loop**(仅依赖 smolagents 做沙箱
 > 执行器);彻底**模型无关**(Anthropic + OpenAI 双协议,`argos setup` 接任意模型)。能力从
-> 「编码 + 检索」扩到 **Claude Code + 通用 agent 合体**:计算机控制(浏览器自动化)、原生 MCP
-> 接入、按任务召回的 Skills、结构化任务契约层、**Dynamic Workflows(声明式 fan-out 编排,
-> 模型无关 per-agent,子 agent 隔离+逐阶段 verify)** —— 全部遵守同一条诚实底线。所有旧
-> LangChain/LangGraph/FastAPI 死栈已清除(详见 CHANGELOG 2026-06-05)。灵魂与三道防线(§2)不变。
+> 「编码 + 检索」扩到 **编码 + 检索 + 计算机控制 + 结构化任务契约 + Dynamic Workflows 的
+> 超级智能体**:浏览器自动化、原生 MCP 接入、按任务召回的 Skills、结构化任务契约层、
+> **Dynamic Workflows(声明式 fan-out 编排,模型无关 per-agent,子 agent 隔离+逐阶段 verify)**
+> —— 全部遵守同一条诚实底线。所有旧 LangChain/LangGraph/FastAPI 死栈已清除(详见
+> CHANGELOG 2026-06-05)。灵魂与三道防线(§2)不变。
 
 ---
 
