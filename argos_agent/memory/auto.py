@@ -770,3 +770,46 @@ def capture_event(kind: str, *, project_id: str | None = None,
     )
     _append_jsonl(path, entry)
     return entry
+
+
+# ── 系统提示 <memory_context> 段注入(spec §5.3 / T6)─────────────────────────
+def _format_recalled(entries: list[MemoryEntry]) -> list[str]:
+    """top N 记忆 → 1 行/条。"""
+    out: list[str] = []
+    for e in entries:
+        out.append(
+            f"  - {e.type}: {e.key} = {e.value} (conf={e.confidence:.2f}, used {e.use_count}x)"
+        )
+    return out
+
+
+def _memory_context_block(*, workspace: Path,
+                          project_id: str,
+                          session_id: str | None = None) -> str:
+    """构造注入到系统提示的 <memory_context> 段。
+
+    段顺序:docs(全局 + 项目根)→ [Recalled memories](top 50/50/20/20)
+    空态(无 CLAUDE.md 且无记忆 / ARGOS_NO_MEMORY=1)→ ""(不注入)
+    """
+    if os.environ.get("ARGOS_NO_MEMORY") == "1":
+        return ""
+    files = walk_claude_md_files(workspace)
+    global_paths = [gp for gp in (_global_claude(), _global_agents()) if gp.exists()]
+    docs = merge_claude_documents(files, global_paths=global_paths)
+    user_mems = load(scope="user", limit=50)
+    proj_mems = load(scope="project", project_id=project_id, limit=50)
+    skill_mems = load(scope="skill", limit=20)
+    sess_mems: list[MemoryEntry] = []
+    if session_id:
+        sess_mems = load(scope="session", session_id=session_id, limit=20)
+    recalled = _format_recalled(user_mems + proj_mems + skill_mems + sess_mems)
+    if not docs and not recalled:
+        return ""
+    parts: list[str] = ["<memory_context>"]
+    if docs:
+        parts.append(docs)
+    if recalled:
+        parts.append("[Recalled memories]")
+        parts.extend(recalled)
+    parts.append("</memory_context>")
+    return "\n".join(parts)

@@ -449,8 +449,20 @@ class AgentLoop:
         safe = (
             HONESTY_SYSTEM
             + _env_context(self._workspace)
-            + self._tool_signatures_block()
         )
+        # #9 T6:<memory_context> 段(spec §5.3)— CLAUDE.md / AGENTS.md + 4 tier 召回
+        try:
+            from argos_agent.memory import auto as _mem_auto
+            _mem_block = _mem_auto._memory_context_block(
+                workspace=self._workspace,
+                project_id=_mem_auto.project_id_for(self._workspace),
+                session_id=None,
+            )
+            if _mem_block:
+                safe = safe + "\n\n" + _mem_block
+        except Exception:  # noqa: BLE001 — 记忆模块故障不阻塞 run
+            pass
+        safe = safe + self._tool_signatures_block()
         try:
             from argos_agent import contracts
             _dom, contract_text = contracts.contract_for(goal)
