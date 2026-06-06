@@ -18,6 +18,7 @@ from argos_agent.core.types import Phase, RiskLevel, DecisionKind
 if TYPE_CHECKING:  # Phase 3 落地;Phase 2 只序列化其 dict 形态
     from argos_agent.core.types import Verdict, Receipt  # noqa: F401
     from argos_agent.hooks.events import HookFired  # noqa: F401
+    from argos_agent.skills_runtime.events import SkillRunStart, SkillRunEnd  # noqa: F401
 
 EventKind = Literal[
     "token_delta", "code_action", "code_result", "file_diff",
@@ -28,6 +29,8 @@ EventKind = Literal[
     "hook_fired",
     "lsp_server_event",
     "lsp_diagnostic_event",
+    "skill_run_start",   # ← 新增
+    "skill_run_end",     # ← 新增
 ]
 
 
@@ -186,12 +189,19 @@ from argos_agent.hooks.events import HookFired  # noqa: E402
 from argos_agent.lsp.events import LspServerEvent, LspDiagnosticEvent  # noqa: E402
 
 
+# ── Skills runtime(spec 2026-06-06 §2.2):SkillRunStart / SkillRunEnd 在
+# skills_runtime/events.py 定义(同 hooks/lsp 模式:spec 强制 skills 子模块独立
+# dataclass,不让 tui 反向依赖 skills_runtime 配置 / registry)。
+from argos_agent.skills_runtime.events import SkillRunStart, SkillRunEnd  # noqa: E402
+
+
 Event = (
     TokenDelta | CodeAction | CodeResult | FileDiff | ToolReceipt
     | VerifyVerdict | PhaseChange | CostUpdate | ApprovalRequest
     | ApprovalResponse | Escalation | Error | PlanUpdate | WorkflowProgress
     | WorkflowProposed | WorkflowDone | PlanRendered | HookFired
     | LspServerEvent | LspDiagnosticEvent
+    | SkillRunStart | SkillRunEnd   # ← 新增
 )
 
 # kind 常量 → 类,用于反序列化派发
@@ -203,6 +213,7 @@ _KIND_TO_CLASS: dict[str, type] = {
         ApprovalResponse, Escalation, Error, PlanUpdate, WorkflowProgress,
         WorkflowProposed, WorkflowDone, PlanRendered, HookFired,
         LspServerEvent, LspDiagnosticEvent,
+        SkillRunStart, SkillRunEnd,   # ← 新增
     )
 }
 
