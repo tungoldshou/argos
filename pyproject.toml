@@ -44,6 +44,9 @@ pythonpath = ["."]
 testpaths = ["tests"]
 # 80% 覆盖门(spec §9)。注:跑测试子集时总覆盖会低于门 → 以全量 `uv run pytest` 为准。
 addopts = "--cov=argos_agent --cov-report=term-missing --cov-fail-under=80"
+markers = [
+    "slow: 真进程/真 pyright e2e,默认 skip(uv run pytest -m 'not slow' 跑快测)",
+]
 
 [tool.coverage.run]
 omit = [
