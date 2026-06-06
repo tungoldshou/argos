@@ -402,6 +402,12 @@ class ArgosApp(App):
             await self._skill_cmd(log, "security-review", cmd.arg)
         elif cmd.name == "simplify":
             await self._skill_cmd(log, "simplify", cmd.arg)
+        elif cmd.name == "remember":
+            await self._remember_cmd(log, cmd.arg)
+        elif cmd.name == "forget":
+            await self._forget_cmd(log, cmd.arg)
+        elif cmd.name == "memory":
+            await self._memory_cmd(log)
 
     async def _undo(self, log) -> None:
         """/undo:用本轮 run 起点的快照还原 workspace;不发 goal。"""
@@ -707,6 +713,48 @@ class ArgosApp(App):
                 )
                 if f.suggestion:
                     await log.append_line(f"    fix: {f.suggestion}", kind="info")
+
+    async def _remember_cmd(self, log, text: str) -> None:
+        """/remember <text>:追加一条用户记忆(scope 自动判 user/project)。"""
+        if not text.strip():
+            await log.append_line("用法:/remember <要记住的内容>", kind="error")
+            return
+        from argos_agent.memory import auto as _mem
+        pid = _mem.project_id_for()
+        e = _mem.remember(text, project_id=pid)
+        if e is None:
+            await log.append_line("(已是最新 — 24h 内重复 / 空内容 / 解析失败,跳过)",
+                                 kind="info")
+            return
+        await log.append_line(
+            f"已记住 ({e.scope}): {e.value} (id={e.id}, conf={e.confidence:.2f})",
+            kind="done",
+        )
+
+    async def _forget_cmd(self, log, query: str) -> None:
+        """/forget <id|key|text>:软删(confidence=0,后台 prune 真删)。"""
+        if not query.strip():
+            await log.append_line("用法:/forget <id 或 key 或 文本>", kind="error")
+            return
+        from argos_agent.memory import auto as _mem
+        pid = _mem.project_id_for()
+        sid = self._session_id
+        out = _mem.forget(query, project_id=pid, session_id=sid)
+        if not out:
+            await log.append_line(f"未找到匹配 '{query}' 的记忆。", kind="info")
+            return
+        await log.append_line(f"已软删 {len(out)} 条:", kind="done")
+        for e in out:
+            await log.append_line(f"  - {e.id} ({e.scope}) {e.key} = {e.value[:60]}",
+                                 kind="info")
+
+    async def _memory_cmd(self, log) -> None:
+        """/memory:列出 4 tier 摘要(只读)。"""
+        from argos_agent.memory import auto as _mem
+        pid = _mem.project_id_for()
+        sid = self._session_id
+        text = _mem.view_all(project_id=pid, session_id=sid)
+        await log.append_line(text, kind="system")
 
     async def _show_skills(self, log) -> None:
         """/skills:列出可用技能(按任务自动召回进系统提示)。诚实:读真实 skill 库。"""

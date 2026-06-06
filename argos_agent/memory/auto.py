@@ -392,3 +392,239 @@ def _format_section(kind: str, path: Path, body: str) -> str:
     if len(body) > _PER_FILE_LIMIT:
         body = body[:_PER_FILE_LIMIT] + "\n<truncated>"
     return f"[{kind}: {path.name}]\n{body}"
+
+
+# ── /remember / /forget 入口(spec §6)────────────────────────────────────────
+_PROJECT_KEYWORDS = ("项目", "本项目", "build", "test", "测试", "build_cmd", "verify")
+_USER_KEYWORDS = ("我", "用户", "personally", "i prefer", "always", "习惯")
+
+
+@dataclass(frozen=True, slots=True)
+class RememberCmd:
+    text: str
+    scope: Scope
+    key: str | None
+    value: str
+    confidence: float = 1.0
+    type: Type = "preference"
+
+
+@dataclass(frozen=True, slots=True)
+class ForgetCmd:
+    query: str
+    kind: str  # "id" | "key" | "text"
+
+
+def parse_remember(text: str) -> RememberCmd | None:
+    """解析 /remember <text>。支持 --project scope 显式标注。
+
+    - 缺省 scope:检测关键词 → project / user
+    - 支持 `key: value` 格式提取 key
+    """
+    raw = text.strip()
+    if not raw:
+        return None
+    scope: Scope = "user"
+    key: str | None = None
+    body = raw
+    if raw.startswith("--project"):
+        scope = "project"
+        body = raw[len("--project"):].strip()
+    elif raw.startswith("--user"):
+        scope = "user"
+        body = raw[len("--user"):].strip()
+    if not body:
+        return None
+    # 提取 "key: value" 格式
+    extracted_value: str | None = None
+    if ":" in body and not body.startswith("http"):
+        first, _, rest = body.partition(":")
+        if first.strip() and " " not in first.strip():
+            key = first.strip()
+            extracted_value = rest.strip()
+    if not body:
+        return None
+    # 自动判 project
+    if scope == "user":
+        lower = body.lower()
+        if any(kw in body for kw in _PROJECT_KEYWORDS) or any(
+            kw in lower for kw in _PROJECT_KEYWORDS
+        ):
+            scope = "project"
+    return RememberCmd(
+        text=body, scope=scope, key=key,
+        value=extracted_value if extracted_value is not None else body,
+    )
+
+
+def parse_forget(text: str) -> ForgetCmd | None:
+    """解析 /forget <id | key | text>。
+
+    - id 格式:mem_* 前缀(长度不限)或 8-32 字符纯 hex
+    - key 格式:含 _ 或 camelCase、无空格、长度 ≤ 64(典型 key 命名)
+    - text:其他(走 value 子串匹配)
+    """
+    q = text.strip()
+    if not q:
+        return None
+    if q.startswith("mem_"):
+        return ForgetCmd(query=q, kind="id")
+    # _new_id() produces 12 hex chars
+    if 8 <= len(q) <= 32 and all(c in "0123456789abcdef" for c in q.lower()):
+        return ForgetCmd(query=q, kind="id")
+    # 含下划线 or camelCase → key
+    if "_" in q or (any(c.isupper() for c in q[1:]) and q[0].isalpha()):
+        if " " not in q and len(q) <= 64:
+            return ForgetCmd(query=q, kind="key")
+    return ForgetCmd(query=q, kind="text")
+
+
+def _auto_key(value: str) -> str:
+    """为 /remember 文本生成确定性 key(同文本 → 同 key → 24h dedup 命中)。"""
+    h = hashlib.sha1(value.encode("utf-8")).hexdigest()[:12]
+    return f"remember.{h}"
+
+
+def remember(text: str, *, scope: Scope | None = None,
+             key: str | None = None, type: Type = "preference",
+             evidence: tuple[str, ...] = ("user explicit /remember command",),
+             project_id: str | None = None) -> MemoryEntry | None:
+    """追加一条 user/project 记忆。scope 缺省:检测文本关键词自动判。
+
+    24h 内同 (scope,key,value) 重复 → 返 None(spec D14 / §6.1)。
+    """
+    cmd = parse_remember(text)
+    if cmd is None:
+        return None
+    final_scope: Scope = scope or cmd.scope
+    final_key = key or cmd.key or _auto_key(cmd.value)
+    final_value = cmd.value
+    pid = project_id if final_scope == "project" else None
+    path = _project_path(pid) if final_scope == "project" else _user_path()
+    if _dedup(final_scope, final_key, final_value, path=path):
+        return None
+    now = time.time()
+    entry = MemoryEntry(
+        id=_new_id(),
+        type=type,
+        scope=final_scope,
+        key=final_key,
+        value=final_value,
+        confidence=1.0,  # explicit = full conf(spec §6.1)
+        evidence=evidence,
+        ts=now,
+        last_used_at=now,
+        use_count=0,
+        project_id=pid,
+    )
+    _append_jsonl(path, entry)
+    return entry
+
+
+def forget(query: str, *, project_id: str | None = None,
+           session_id: str | None = None) -> list[MemoryEntry]:
+    """按 id / key / text 软删(confidence=0)。返被软删的条目列表。"""
+    cmd = parse_forget(query)
+    if cmd is None:
+        return []
+    out: list[MemoryEntry] = []
+    # 扫所有 tier
+    for p in (_user_path(),
+              _project_path(project_id) if project_id else None,
+              _session_path(session_id) if session_id else None):
+        if p is None:
+            continue
+        if not p.exists():
+            continue
+        entries = _read_jsonl(p)
+        changed = False
+        for e in entries:
+            if _matches(e, cmd):
+                soft = MemoryEntry(
+                    id=e.id, type=e.type, scope=e.scope, key=e.key,
+                    value=e.value, confidence=0.0, evidence=e.evidence,
+                    ts=e.ts, last_used_at=e.last_used_at, use_count=e.use_count,
+                    skill_name=e.skill_name, project_id=e.project_id,
+                    session_id=e.session_id,
+                )
+                entries[entries.index(e)] = soft
+                out.append(soft)
+                changed = True
+        if changed:
+            _write_entries(p, entries)
+    return out
+
+
+def _matches(entry: MemoryEntry, cmd: ForgetCmd) -> bool:
+    if cmd.kind == "id":
+        return entry.id == cmd.query
+    if cmd.kind == "key":
+        return entry.key == cmd.query
+    # text 子串
+    return cmd.query in entry.value or cmd.query in entry.key
+
+
+def _write_entries(path: Path, entries: list[MemoryEntry]) -> None:
+    """原子写一份 entries → path(JSONL)。"""
+    with _write_lock:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            with tmp.open("w", encoding="utf-8") as fh:
+                for e in entries:
+                    d = asdict(e)
+                    d["evidence"] = list(e.evidence)
+                    fh.write(json.dumps(d, ensure_ascii=False) + "\n")
+            tmp.replace(path)
+        except OSError:
+            pass
+
+
+# ── /memory 视图 ─────────────────────────────────────────────────────────────
+def view_all(*, project_id: str | None = None,
+             session_id: str | None = None,
+             limit_per_tier: int = 20) -> str:
+    """拼 4 tier 摘要 → markdown list 字符串,空 tier 标 (空)。"""
+    lines: list[str] = []
+    user = load(scope="user", limit=limit_per_tier)
+    lines.append(f"[User memories] ({len(user)})")
+    if user:
+        for e in user:
+            lines.append(
+                f"  - {e.type}: {e.key} = {e.value} (conf={e.confidence:.2f}, used {e.use_count}x)"
+            )
+    else:
+        lines.append("  (空)")
+    if project_id:
+        proj = load(scope="project", project_id=project_id, limit=limit_per_tier)
+        lines.append("")
+        lines.append(f"[Project memories] ({len(proj)})")
+        if proj:
+            for e in proj:
+                lines.append(
+                    f"  - {e.type}: {e.key} = {e.value} (conf={e.confidence:.2f}, used {e.use_count}x)"
+                )
+        else:
+            lines.append("  (空)")
+    if session_id:
+        sess = load(scope="session", session_id=session_id, limit=limit_per_tier)
+        lines.append("")
+        lines.append(f"[Session memories] ({len(sess)})")
+        if sess:
+            for e in sess:
+                lines.append(
+                    f"  - {e.type}: {e.key} = {e.value} (conf={e.confidence:.2f}, used {e.use_count}x)"
+                )
+        else:
+            lines.append("  (空)")
+    skill = load(scope="skill", limit=limit_per_tier)
+    lines.append("")
+    lines.append(f"[Skill memories] ({len(skill)})")
+    if skill:
+        for e in skill:
+            lines.append(
+                f"  - {e.type}: {e.key} = {e.value} (conf={e.confidence:.2f}, used {e.use_count}x)"
+            )
+    else:
+        lines.append("  (空)")
+    return "\n".join(lines)

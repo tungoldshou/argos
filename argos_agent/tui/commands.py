@@ -34,6 +34,10 @@ COMMAND_HELP: dict[str, str] = {
 
 COMMAND_NAMES: list[str] = list(COMMAND_HELP)
 
+# Hidden commands(spec D16):parse_slash 仍识别为 known,但不显示在 /help / slash 菜单
+# —memory 管理是 meta 操作,藏起来避免菜单过长
+_HIDDEN_KNOWN: frozenset[str] = frozenset({"remember", "forget", "memory"})
+
 
 def match_commands(text: str) -> list[tuple[str, str]]:
     """slash 菜单 / Tab 补全用:text 以 / 开头且尚未输入参数时,返回前缀匹配的 (name, desc) 列表
@@ -66,4 +70,5 @@ def parse_slash(text: str) -> SlashCommand | None:
     parts = body.split(None, 1)
     name = parts[0].lower()
     arg = parts[1].strip() if len(parts) > 1 else ""
-    return SlashCommand(name=name, arg=arg, known=name in COMMAND_NAMES)
+    known = name in COMMAND_NAMES or name in _HIDDEN_KNOWN
+    return SlashCommand(name=name, arg=arg, known=known)
