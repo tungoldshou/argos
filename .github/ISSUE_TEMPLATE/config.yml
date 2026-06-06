@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 GitHub Discussions
+    url: https://github.com/tungoldshou/argos/discussions
+    about: Questions, ideas, show & tell
+  - name: 📖 Documentation
+    url: https://github.com/tungoldshou/argos/tree/main/docs
+    about: Specs, plans, architecture
+  - name: 🔒 Security issues
+    url: https://github.com/tungoldshou/argos/blob/main/SECURITY.md
+    about: Report vulnerabilities privately via email

@@ -1,0 +1,49 @@
+name: ✨ Feature Request
+description: Suggest a new feature or improvement
+title: "[feat]: "
+labels: ["enhancement"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tell us what you'd like Argos to do differently. We love concrete proposals.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem does this solve? What pain are you experiencing?
+      placeholder: |
+        I often run long refactors that take 5+ minutes. I have to keep the TUI open
+        the whole time, and if my SSH session drops I lose the work.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How would you solve it? Be specific.
+      placeholder: |
+        Add a daemon mode where the agent runs as a background process. The TUI
+        connects to it via Unix socket. Ctrl+B backgrounds the current run, and
+        runs persist across TUI restarts.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you consider? Why this one?
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, screenshots, similar features in other tools, etc.
+    validations:
+      required: false
