@@ -18,9 +18,37 @@ dependencies = [
     "textual>=8.2.7",
     "trafilatura>=2.0.0",
 ]
+# C 阶段(2026-06-07)加 PyPI 元数据 + spec D1/D9/D14 锁:license/authors/classifiers/urls
+license = {text = "MIT"}
+authors = [
+  {name = "tungoldshou", email = "tungoldshou@users.noreply.github.com"},
+]
+keywords = ["agent", "ai", "cli", "terminal", "codeact", "verifier", "sandbox", "tui"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Environment :: Console :: Curses",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS :: MacOS X",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: Microsoft :: Windows :: Windows 10",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Code Generators",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
 
 [project.scripts]
 argos = "argos_agent.__main__:main"
+# C 阶段(2026-06-07)加打包工具 dispatcher(spec D8);主 argos 启动 0 影响
+argospkg = "argos_agent.cli.pkg:main"
+
+[project.urls]
+Homepage = "https://github.com/tungoldshou/argos"
+Repository = "https://github.com/tungoldshou/argos"
+Issues = "https://github.com/tungoldshou/argos/issues"
+Changelog = "https://github.com/tungoldshou/argos/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling"]
@@ -28,6 +56,30 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["argos_agent"]
+
+# C 阶段(2026-06-07)显式 sdist include:wheel 自动收 *.py,但 sdist 要列数据文件
+# (schema.sql / skills_builtin / packaging/VERSION) — 否则 pip install --no-binary 装不起来
+[tool.hatch.build.targets.sdist]
+include = [
+  "argos_agent",
+  "README.md",
+  "LICENSE",
+  "CHANGELOG.md",
+  "packaging/VERSION",
+  "packaging/Info.plist",
+  "packaging/argos.spec",
+]
+exclude = [
+  "tests",
+  "build",
+  "dist",
+  "docs",
+  "*.egg-info",
+  ".venv",
+  ".pytest_cache",
+  ".codegraph",
+  ".coverage",
+]
 
 [dependency-groups]
 dev = [
