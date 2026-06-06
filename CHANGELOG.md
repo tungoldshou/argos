@@ -5,7 +5,7 @@ All notable changes to Argos are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] - 2026-06-06
 
 ### Added
 - **Long-running task + background daemon (#5a):5+ 分钟任务不再"必须守着等"**。新模块 `argos_agent/daemon/`:daemon 进程(`python -m argos_agent.daemon`,Unix socket `~/.argos/daemon.sock` 0600) + `RunStore`(JSONL append-only 真相源,坏行跳过,`run_meta` 落盘 fsync) + `StateIndex`(小 JSON 索引,atomic 写) + 7 状态机(`pending` / `running` / `paused` / `suspended` / `completed` / `failed` / `cancelled`,白名单 + 终态写保护 + dynamic from-state) + `RunManager`(单例 + fan-out + 2 阶段 pause/resume/cancel) + `RunWorker`(单 run 协程 + checkpoint + 步边界 pause) + `SessionRegistry`(UUID + 30s heartbeat 过期) + stdlib `asyncio.start_unix_server` + 手写 HTTP/1.1(**0 新依赖**);`RunMeta` / `RunCheckpoint` / `RunFailure` 3 个 frozen dataclass;tui `EventKind` 联合加 3 类 daemon 事件。
