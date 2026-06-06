@@ -49,6 +49,7 @@ from argos_agent.tui.widgets.diff_view import DiffView
 from argos_agent.tui.widgets.prompt import PromptArea, SlashMenu
 from argos_agent.tui.widgets.splash import StartupSplash
 from argos_agent.tui.widgets.status_bar import StatusBar
+from argos_agent.tui.widgets.tab_strip import TabActivated, TabStrip
 from argos_agent.tui.widgets.thinking import ThinkingIndicator
 from argos_agent.tui.widgets.transcript import Transcript
 from argos_agent.tui.widgets.verdict_badge import VerdictBadge
@@ -95,6 +96,7 @@ class ArgosApp(App):
         ("ctrl+c", "quit", "退出"),
         ("escape", "interrupt", "打断"),
         ("ctrl+b", "background", "后台"),
+        # #5b T7:tab 切换(放在 Ctrl+1..5 子绑定,tab_strip widget 自己处理)
     ]
 
     def __init__(
@@ -178,6 +180,8 @@ class ArgosApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
+        # #5b 多 run tabs:顶部 tab 条(隐藏当 daemon 未启用时)
+        yield TabStrip(id="tab-strip")
         with Horizontal():
             yield Transcript(id="transcript")
             tier = self._display_tier()
@@ -298,6 +302,85 @@ class ArgosApp(App):
         # PromptArea 已在内部清空自身;这里只负责分发(slash / goal)。同时收掉 slash 菜单。
         self.query_one("#slash-menu", SlashMenu).hide()
         self.handle_input(event.text)
+
+    # ── #5b 多 run tab 切换 ────────────────────────────────────────
+    def on_tab_strip_tab_activated(self, event: TabActivated) -> None:
+        """TabStrip 发 TabActivated → 调 focus POST + 切 active 标识。"""
+        self.run_worker(self._on_tab_activated(event.run_id), exclusive=False)
+
+    async def _on_tab_activated(self, run_id: str) -> None:
+        """user 激活某 tab:调 focus 端点 + 切 active + 更新 TabStrip 视觉。
+
+        observer 调 /focus 拿 403 — 我们不假装成功,在 transcript 落 READ-ONLY 提示。
+        """
+        if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
+            return
+        try:
+            status, _, raw = await self._daemon_client._request(
+                "POST", f"/runs/{run_id}/focus", session_id=self._daemon_session_id,
+            )
+        except Exception as e:  # noqa: BLE001
+            # 403 / daemon 失联等 — 落行告知
+            try:
+                log_widget = self.query_one(Transcript)
+                await log_widget.append_line(
+                    f"⚠️ focus 失败({run_id[:8]}…):{e}", kind="error",
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            return
+        # 切 active run_id
+        self._daemon_run_id = run_id
+        # 同步更新 TabStrip 的 active
+        try:
+            strip = self.query_one(TabStrip)
+            strip.set_active(run_id)
+        except Exception:  # noqa: BLE001
+            pass
+        # 重置 Esc 双击检测(切 tab 避免误触发)
+        self._last_esc_time = 0.0
+        # 拉新 run 的 events 重放(transcript 清空 + replay)
+        self.run_worker(self._replay_run_to_transcript(run_id), exclusive=False)
+
+    async def _replay_run_to_transcript(self, run_id: str) -> None:
+        """切到新 run → 清空本地 transcript → 拉 events 重新渲染。
+
+        简化:本期仅落一行标记,真 replay 走 SSE 订阅时即时渲染;
+        切到新 run 时,我们已绑 SSE 订阅进 produce worker(下个 task),SSE 收的事件按 EventBus
+        走 _apply_event 全套渲染路径,自动重放 run 期间所有事件。
+        """
+        try:
+            log_widget = self.query_one(Transcript)
+            await log_widget.append_line(
+                f"━━━ 切到 run {run_id[:8]}… ━━━", kind="system",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _refresh_tab_strip(self) -> None:
+        """从 daemon 拉所有 run 列表 → 更新 TabStrip(daemon 模式才调)。"""
+        if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
+            return
+        async def _do():
+            try:
+                runs = await self._daemon_client.list_runs(self._daemon_session_id)
+            except Exception:  # noqa: BLE001
+                return
+            tabs_data = [
+                {
+                    "run_id": r["run_id"],
+                    "goal": r.get("goal", ""),
+                    "state": r.get("state", "pending"),
+                    "cost_usd": r.get("cost_usd"),
+                }
+                for r in runs
+            ]
+            try:
+                strip = self.query_one(TabStrip)
+                strip.update_tabs(tabs_data, active=self._daemon_run_id)
+            except Exception:  # noqa: BLE001
+                pass
+        self.run_worker(_do(), exclusive=False)
 
     def on_text_area_changed(self, event) -> None:
         """输入内容变化 → 驱动 slash 命令菜单(打 / 即列命令;带参/非 slash 则隐藏)。"""
@@ -633,9 +716,10 @@ class ArgosApp(App):
         await log.append_line("\n".join(lines), kind="system")
 
     async def _runs_cmd(self, log, arg: str) -> None:
-        """/runs / /runs {id} resume / cancel — daemon 模式 run 列表与控制(spec §2.6 e)。
+        """/runs / /runs {id} focus|resume|cancel — daemon 模式 run 列表与控制(spec §2.6 e + #5b §8)。
 
-        无 daemon 时 → 报"未启用 daemon";有 daemon → 列 run + 代理 pause/resume/cancel。
+        无 daemon 时 → 报"未启用 daemon";有 daemon → 列 run + 代理 pause/resume/cancel/focus。
+        #5b 扩展:列 run 时显示 cost + worktree + observer 标识(owner vs readonly)。
         """
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             await log.append_line(
@@ -643,6 +727,9 @@ class ArgosApp(App):
                 kind="system",
             )
             return
+        # #5b observer 标识
+        rec = self._daemon_client.__class__  # type: ignore[attr-defined]
+        # 用 daemon sessions 表查 role(client 端无 sessions 查,fallback:不加 banner)
         parts = arg.split(None, 1)
         if not parts:
             # /runs 无参 → 列所有 run
@@ -655,18 +742,58 @@ class ArgosApp(App):
                 await log.append_line("无 run。", kind="system")
                 return
             import time as _time
-            lines = ["Run 列表:"]
+            from argos_agent.tui.widgets.tab_strip import _format_cost
+            _ICON = {
+                "pending": "⏳", "running": "🟢", "paused": "🟡",
+                "suspended": "⚪", "completed": "✓",
+                "failed": "🔴", "cancelled": "❌",
+            }
+            lines = ["Run 列表(#5b 扩展:cost / worktree):"]
             for r in runs:
+                icon = _ICON.get(r.get("state", "pending"), "⏳")
                 age = int(_time.time() - r.get("created_at", 0))
+                cost = _format_cost(r.get("cost_usd"))
+                wt = r.get("worktree_path") or ""
+                wt_short = (wt.split("/")[-1] if wt else "(none)")[:20]
+                focus_tag = " ★" if r.get("focus_session_id") == self._daemon_session_id else ""
                 lines.append(
-                    f" · {r['run_id']}  {r['state']:<10}  {r['goal'][:40]}  ({age}s ago)"
+                    f" · {icon} {r['run_id']}  {r['state']:<10}  "
+                    f"{r['goal'][:32]}  {cost}  [{wt_short}]{focus_tag}  ({age}s ago)"
                 )
-            lines.append("/runs {id} resume|cancel — 控制")
+            lines.append("")
+            lines.append("/runs {id} focus|resume|cancel — 控制")
             await log.append_line("\n".join(lines), kind="system")
             return
-        # /runs {id} [resume|cancel]
+        # /runs {id} [focus|resume|cancel]
         run_id = parts[0]
         action = parts[1].strip() if len(parts) > 1 else "info"
+        if action == "focus":
+            # #5b:owner-only;observer 拿 403
+            try:
+                status, _, _ = await self._daemon_client._request(
+                    "POST", f"/runs/{run_id}/focus", session_id=self._daemon_session_id,
+                )
+                if status == 200:
+                    self._daemon_run_id = run_id
+                    await log.append_line(
+                        f"已 focus {run_id}(active 切到该 run)。",
+                        kind="system",
+                    )
+                    self._refresh_tab_strip()
+                else:
+                    await log.append_line(
+                        f"focus 失败:HTTP {status}", kind="error",
+                    )
+            except Exception as e:  # noqa: BLE001
+                err = str(e)
+                if "session_readonly" in err or "403" in err:
+                    await log.append_line(
+                        "🔒 READ-ONLY 观察者不能 focus(只有 owner TUI 能切 active)。",
+                        kind="error",
+                    )
+                else:
+                    await log.append_line(f"focus 失败:{e}", kind="error")
+            return
         if action == "resume":
             try:
                 await self._daemon_client.resume(self._daemon_session_id, run_id)
@@ -682,8 +809,12 @@ class ArgosApp(App):
         else:
             try:
                 info = await self._daemon_client.get_run(self._daemon_session_id, run_id)
+                from argos_agent.tui.widgets.tab_strip import _format_cost
+                cost = _format_cost(info.get("cost_usd"))
+                wt = info.get("worktree_path") or "(none)"
                 await log.append_line(
-                    f"{run_id}: state={info.get('state')}  events={info.get('events_count')}",
+                    f"{run_id}: state={info.get('state')}  events={info.get('events_count')}  "
+                    f"cost={cost}  worktree={wt}",
                     kind="system",
                 )
             except Exception as e:  # noqa: BLE001
