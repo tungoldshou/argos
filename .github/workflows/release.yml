@@ -12,12 +12,20 @@ jobs:
   release:
     name: Build + Release
     runs-on: macos-14  # arm64 runner(2024 年起免费层 2000 分钟/月)
+    permissions:
+      contents: write  # 发 release 需要(同时在 workflow 顶层声明,这里冗余以防权限继承失败)
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # git describe --tags 需要完整 history
 
-      - uses: actions/setup-python@v5
+      # 显式装 Node 20:macOS-14 runner 默认 Node 已够用,但 softprops/action-gh-release@v2 需要 Node 20 运行时,显式声明更稳
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # v5 在 2024 末~2025 初与 macos-14 偶发 validator 报 0 jobs,回退 v4 是最稳的修法
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.12"
 
