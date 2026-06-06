@@ -17,6 +17,8 @@ import pytest
 def test_eval_list_no_runs_prints_message(capsys, tmp_path, monkeypatch):
     """无 run 跑过 → 友好提示,不假绿。"""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    from argos_agent.eval import results as _results
+    monkeypatch.setattr(_results, "_RUNS_DIR", tmp_path / "eval" / "runs")
     from argos_agent.cli import eval as cli
     rc = cli.cmd_list(_ns(limit=20))
     assert rc == 0

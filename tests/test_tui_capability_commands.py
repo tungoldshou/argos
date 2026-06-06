@@ -37,14 +37,17 @@ async def test_tools_lists_real_22_tools_grouped():
 
 
 @pytest.mark.asyncio
-async def test_skills_lists_builtin_library():
+async def test_skills_lists_builtin_library(tmp_path, monkeypatch):
+    """#10 T6:/skills 重写为 curator 视图,列 installed + available + Recommended."""
+    import argos_agent.skills_curator.index as _idx
+    monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     app = ArgosApp(loop_factory=lambda: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         txt = await _dispatch(app, "/skills")
-        # 内置技能库非空 → 列出名字(按相关性自动召回的说明也在)。
-        assert "自动召回" in txt
-        assert ("py-test-runner" in txt or "可用技能" in txt)
+        # 新实现:列 installed + available + Recommended
+        assert "Installed skills" in txt
+        assert "(no skills installed" in txt or "Recommended" in txt
 
 
 @pytest.mark.asyncio

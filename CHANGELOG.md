@@ -8,6 +8,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **Skill 生态 curator (#10)**:让用户**安全地**发现/装/卸/测/被推荐社区 skill,5 道防线治理"装了就跑"风险(不 marketplace,但也不黑盒)。**核心架构**:
+  - **Curated index**(`https://raw.githubusercontent.com/tungoldshou/argos-skills-index/main/index.json`,只读):每条 `{name, version, author, sha256, description, skill_md_url, compatibility, capabilities, size_bytes}`;本地缓存 `~/.argos/skills/index.json` 原子写
+  - **Install 流程**(`argos skills install <name>` 或 /skills install 提示):**5 道防线**① sha256 下载后**重算**,与 index 不一致 → 拒装 ② size drift > 20% → 警告 ③ capability 声明 (`read/write/execute/network` 4 个) 缺则拒装 ④ 装后强制 `enabled: false`(user review gate,沿用 verify 门灵魂)⑤ builtin 3 名 (`verify`/`security-review`/`simplify`) 硬拒 install/remove,基础信任根不可破
+  - **User review gate(D8 灵魂)**:装完默认 `enabled: false`,需用户手动改 frontmatter;`enabled: true` 才会被 `recall()` 召回 + 在 `/skills` 列表显示 OK
+  - **Capability 安全声明(D11)**:frontmatter 必填 `capabilities: [read, write, execute, network]`;`read` 自动 enabled(只读是低风险),`execute`/`write`/`network` 装后默认 disabled + 跑时弹 approval gate(沿用 #8);`network` 装时再问"该 skill 声明会发网络,装?"
+  - **Smoke test**(`argos skills test <name>`):两种路径——skill 自带 `tests/smoke.md` 的 python code block 跑;无则通用探针 (`print('ARGOS_SMOKE_PASS')` 跑 python3);timeout 60s;装时 quick path 跑(失败仅警告,spec §6.4)
+  - **TUI `/skills` 重写**:列 installed + available from index + Recommended;`/skills install/remove/refresh/test` 子命令**TUI 内不执行**,落 transcript 提示"请到 host 跑 `argos skills ...`"(D10 把副作用稳定面缩到 host,防 LLM 暗里跑 skill 破坏 trust 根)
+  - **Remove 流程**(`argos skills remove <name>`):`.trash/<name>-<ts>/` 备份 30d 可恢复;builtin 3 名硬拒
+  - **12 规则推荐引擎**(`recommend.py`):R1 编辑 ≥3 个 `.py` → `python-lint`;R2 编辑 `tests/` → `test-debugger`;R3 verify 失败 ≥1 → `test-debugger`;R4 verify 失败 ≥3 → + `simplify`;R5 编辑 `.ts` → `ts-lint`;R6 `.sql` → `sql-query-safety`;R7 `git commit` → `git-commit-hygiene`;R8 `web_search` → `web-search-recipe`;R9 `/security-review` → `security-review-extended`;R10 项目 ≥5 种后缀 → `simplify`;R11 verify ≥2 + edit_file ≥5 → `test-debugger`;R12 session ≥30 步 → `simplify`;**跳过已 enabled 安装的**(已装未 review 仍推荐);R13 memory 接入留 v1.1
+  - **0 新外部依赖**(stdlib only:urllib.request / json / hashlib / shutil / subprocess / dataclasses);**+86 测试**(8 文件:index 21 / install 24 / remove 9 / smoke 集成在 install / recommend 19 / CLI 9 / TUI 11 / e2e 8);**不**改 `skills.py` / `skills_runtime/`(沿用);spec 在 `docs/superpowers/specs/2026-06-07-skills-curator-design.md`,plan 在 `docs/superpowers/plans/2026-06-07-skills-curator.md`
 - **Agent 自我评估 + A/B 对比 (#7)**:让 Argos 跑真实任务题库、量化 pass rate / time / cost,做 model tier A/B 对比(dogfooding 护城河 —— "我敢给跑出来的 A/B 报告证明 verify 门 + 诚实协议让便宜模型不掉链子")。**核心架构**:
   - **Task corpus**(`~/.argos/eval/corpus/<task_id>/`,每任务一目录):`goal.md` + `verify_cmd` + `category` + `difficulty` + `setup.sh`(可选) + `expected_files`(可选);`corpus.json` 顶层 manifest;**14 种子任务**(bug_fix 5 / refactor 3 / test_write 3 / doc 3,5 类)由 `tests/eval/_seed_corpus.py` 落,不 git 跟踪,用户可改;**人工维护**(LLM 不生任务,防"我测我多聪明"循环)
   - **EvalRunner**(`eval/runner.py`):接 `WorktreeManager`(复用 `#5b`)+ `loop_factory`(测试桩;真 LLM v1.1)+ `budget_s=600` / `budget_cost_usd=$1`,走 setup → loop → verify → capture → cleanup;5 类 `pass_status`:`passed` / `failed` / `unverifiable` / `setup_failed` / `error`;worktree 终态 finally cleanup(失败静默 log)
