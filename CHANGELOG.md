@@ -8,6 +8,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **多 run tabs + 多 TUI 互斥 + worktree-per-run + cost tracking (#5b)**:在 #5a 长跑 daemon 之上加并发多 run。**1 daemon 同时跑最多 5 个 run,TUI 顶部 tab 条切换 active,worktree 自动隔离,每 run 累计 cost,多 TUI 互斥**:
+  - **RunRegistry**(`daemon/registry.py`,新):`run_id → RunEntry` 内存注册表 + `asyncio.Semaphore(5)` + `max_history=100` 缩 cap;字段含 worktree_path / tokens_in / tokens_out / cost_usd / focus_session_id
+  - **多 run 并发 dispatch**:`POST /runs` 满 5 个 → `503 busy: max_concurrent_runs_reached (max=5, active=5)`(直接拒,不排队);owner-only
+  - **`POST /runs/{id}/focus` 新端点**:TUI 告诉 daemon "此 run 是我的 active 焦点";owner-only
+  - **多 TUI 互斥**:第 1 个 session = `owner`(写权限),之后 = `observer`(只读,POST /runs / focus / pause / resume / cancel / approval 全部 403 `code: session_readonly`);owner DELETE /sessions/{id} → 自动 promote 最旧 observer;`reap_expired` 也支持 owner 过期 promote
+  - **Worktree-per-run**(`daemon/worktree.py`,新):`POST /runs` body `isolation: "worktree"` → workspace 是 git repo 走 `git worktree add -b argos/<run_id>`(路径 `~/.argos/worktrees/<run_id>`),否则 tempfile mkdtemp 兜底(标 fallback);`RunWorker` 终态时 `cleanup()` 自动删 worktree(失败静默 log)
+  - **Cost tracking per-run**:`cost_update` 事件 → `RunRegistry.add_cost` 累加(cost_usd=None 不累加保 None 语义);`RunWorker.run()` finally 块释放 semaphore slot + 调 worktree cleanup + 缩 cap
+  - **TUI TabStrip widget**(`tui/widgets/tab_strip.py`,新):4 状态图标(🟢 running / 🟡 paused / ⚪ suspended / 🔴 failed / ❌ cancelled / ✓ completed / ⏳ pending)+ goal 截断 24 字符 + cost 简写(`$N/A` / `$<0.01` / `$0.050` / `$1.50`);鼠标 click 任意 tab + 键盘 `Ctrl+1`..`Ctrl+5` + `Ctrl+Tab` / `Ctrl+Shift+Tab`;active tab `[reverse]` 高亮
+  - **TUI 集成**:`ArgosApp.compose()` 挂 TabStrip;`on_tab_strip_tab_activated` → `POST /runs/{id}/focus` + 切 active + 重置双 Esc 检测;observer focus 失败 → transcript 落 `⚠️ focus 失败` 兜底
+  - **`/runs` 命令扩展**:列 run 时显示 `🟢 run-id  state  goal[:32]  $0.05  [wt-name]  (age s ago)`;`/runs {id} focus` 新 action(observer 拿 403 → 显 `🔒 READ-ONLY 观察者`);`/runs {id} info` 显示 cost + worktree_path
+  - **0 新外部依赖**(stdlib + asyncio only);+50 测试(7 文件:`test_daemon_registry` 16 / `test_daemon_multirun` 8 / `test_daemon_focus` 5 / `test_daemon_sessions_owner` 15 / `test_daemon_worktree` 10 / `test_daemon_cost_tracking` 6 / `test_tui_tab_strip` 16 / `test_tui_multirun_focus` 6)
+
 - **Auto memory + CLAUDE.md 自动加载 (#9)**:让 Argos 跨会话记住用户偏好 / 项目约定 / 失败模式,把 `CLAUDE.md` / `~/.argos/CLAUDE.md` / `AGENTS.md` 自动装进 LLM 系统提示。**4 层记忆**(append-only JSONL,无 sqlite 新依赖):
   - **Project**(`~/.argos/memory/projects/<sha1(cwd)[:16]>.jsonl`,5MB cap):项目约定、构建命令、忌讳、verify 失败模式
   - **User**(`~/.argos/memory/user.jsonl`,2MB cap):个人偏好、风格、常用别名
