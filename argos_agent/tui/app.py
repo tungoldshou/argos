@@ -496,6 +496,8 @@ class ArgosApp(App):
             await self._eval_cmd(log, cmd.arg)
         elif cmd.name == "routing":
             await self._routing_cmd(log, cmd.arg)
+        elif cmd.name == "context":
+            await self._context_cmd(log, cmd.arg)
 
     async def _undo(self, log) -> None:
         """/undo:用本轮 run 起点的快照还原 workspace;不发 goal。"""
@@ -1074,6 +1076,27 @@ class ArgosApp(App):
                     f"tool={d.tool or '-':14} → {d.tier:8} ({d.source})"
                 )
         await log.append_line("\n".join(lines), kind="system")
+
+    async def _context_cmd(self, log, arg: str) -> None:
+        """/context:看当前 LLM 上下文分桶(契约 §12;spec §10)。
+        无参 → 文本表格(逐行 markup 着色);--json → 整段 JSON(无 markup)。
+        analyzer 失败永不崩 run(降级返全空桶,记 error)。"""
+        from argos_agent.context.analyzer import analyze
+        from argos_agent.context.render import format_json, format_table
+        # 找 loop 实例 / store / workspace;无 loop 实例(罕见 e.g. demo)→ 走空分析
+        loop = getattr(self, "_agent_loop", None)
+        store = getattr(self, "_store", None)
+        workspace = getattr(self, "_workspace", None) or Path.home() / ".argos" / "workspace"
+        try:
+            b = analyze(loop, store=store, workspace=workspace)  # type: ignore[arg-type]
+        except Exception as e:  # noqa: BLE001 — 任何分析失败都降级
+            await log.append_line(f"/context 失败:{e}", kind="error")
+            return
+        if "--json" in arg:
+            await log.append_line(format_json(b), kind="info")
+            return
+        for line in format_table(b).split("\n"):
+            await log.append_line(line, kind="info")
 
     async def _routing_set(self, log, arg: str) -> None:
         """#11 /routing set <category> <tier>:原子改写 config.json。"""

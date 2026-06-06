@@ -187,13 +187,16 @@ class ActivityPanel(Vertical):
                      f"缓存命中 {cache_read} tok  {elapsed_s:.1f}s")
 
     def on_context(self, *, used: int, window: int) -> None:
-        """上下文窗口用量(当前窗口输入侧 token / 上限)。10 格进度条 + 百分比;
-        口径对齐 Claude Code:used 是【当前窗口占用】(input+cache),非会话累计成本。"""
+        """上下文窗口用量(当前窗口输入侧 token / 上限)。10 格进度条 + 百分比 +
+        #12 badge `[ctx N/M X%]`(spec §10.3);口径对齐 Claude Code:used 是【当前窗口
+        占用】(input+cache),非会话累计成本。"""
         pct = 0 if not window else round(used * 100 / window)
         filled = min(10, max(0, round(pct / 10)))
         bar = "▓" * filled + "░" * (10 - filled)
         win = f"{window // 1000}k" if window else "?"
-        self._set(8, f"{self._model_label} · {win}\n{bar} {pct}%")
+        # #12 显式 [ctx N/M X%] badge(用户可一眼读数字 + 单位,不再混 cost/累计)
+        badge = f"[ctx {used:,}/{window:,} {pct}%]"
+        self._set(8, f"{self._model_label} · {win}\n{bar} {pct}%\n{badge}")
 
     def on_hook_fired(self, ev: HookFired) -> None:
         """单条 hook 触发结果(activity panel "Hook" 区段)。

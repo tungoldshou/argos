@@ -16,6 +16,7 @@ def test_known_commands_listed():
         "runs",  # 2026-06-06:列出 / 控制 daemon run(/runs, /runs {id} resume|cancel)
         "eval",  # 2026-06-07:Agent 自我评估 + A/B(/eval, /eval run, /eval compare)
         "routing",  # 2026-06-07:per-task model routing 配置 + history(/routing, /routing set)
+        "context",  # 2026-06-07:Context 可视化(/context, /context --json)
     }
 
 

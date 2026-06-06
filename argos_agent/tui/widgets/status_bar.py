@@ -22,9 +22,11 @@ def _k(n: int) -> str:
 class StatusBar(Static):
     # dock 底部、$panel 填充贯穿、整条 $text-muted 朴素文本(点分隔;成本明细在右侧活动栏)。
     # Mode 段在 plan mode 期间切到 $primary(冷靛蓝),其他时段 $text-muted。
+    # #12 Context 可视化:>80% 时加 .ctx-warn 红点(最小装饰,无文字)。
     DEFAULT_CSS = """
     StatusBar { dock: bottom; height: 1; background: $panel; color: $text-muted; padding: 0 1; }
     StatusBar.-plan-mode { color: $primary; }
+    StatusBar.-ctx-warn { color: $error; text-style: bold; }
     """
 
     phase: reactive[str] = reactive("idle")
@@ -34,6 +36,8 @@ class StatusBar(Static):
     cost_usd: reactive[float | None] = reactive(0.0)
     elapsed_s: reactive[float] = reactive(0.0)
     plan_mode: reactive[bool] = reactive(False)
+    # #12 上下文压力(0-1,>0.8 红点;0 = 未知 / 关掉)
+    ctx_pct: reactive[float] = reactive(0.0)
 
     def __init__(self, **kwargs) -> None:
         # markup=False:状态栏含模型名等动态串,统一关 markup 解析(防任意文本里的 `[...]` 崩)。
@@ -88,9 +92,18 @@ class StatusBar(Static):
         """host 切 plan mode 时调:改文案 Mode 段 + 切色。"""
         self.plan_mode = bool(active)
 
+    def update_ctx_pressure(self, pct: float) -> None:
+        """#12 Context 可视化(spec §10.4 + D8):>80% 加 .ctx-warn class;不显文字,只切色。
+        pct=0(无数据)→ 移除。"""
+        self.ctx_pct = max(0.0, min(1.0, float(pct or 0.0)))
+
     def _refresh(self) -> None:
         self.update(self.render_text)
         self.set_class(self.plan_mode, "-plan-mode")
+        # ctx_warn 在 render_text 末位追加点(spec §10.4 最小装饰)
+        if self.ctx_pct >= 0.8:
+            self.update(self.render_text + "  ●")
+        self.set_class(self.ctx_pct >= 0.8, "-ctx-warn")
 
     # P2-2:每个 reactive 字段一个独立 watch_ 方法(不用别名赌注)。
     def watch_phase(self, value: str) -> None:

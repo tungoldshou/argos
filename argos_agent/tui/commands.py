@@ -32,6 +32,7 @@ COMMAND_HELP: dict[str, str] = {
     "simplify": "代码重复 / 复杂度 / 死代码扫描(/simplify [path])",
     "eval": "Agent 自我评估 + A/B(/eval, /eval run <id>, /eval compare <a> <b>)",
     "routing": "查看 / 切换路由配置(/routing, /routing set <cat> <tier>)",
+    "context": "查看当前 LLM 上下文分桶(/context, /context --json)",
 }
 
 COMMAND_NAMES: list[str] = list(COMMAND_HELP)
