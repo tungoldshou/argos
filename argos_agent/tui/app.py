@@ -491,6 +491,8 @@ class ArgosApp(App):
             await self._forget_cmd(log, cmd.arg)
         elif cmd.name == "memory":
             await self._memory_cmd(log)
+        elif cmd.name == "eval":
+            await self._eval_cmd(log, cmd.arg)
 
     async def _undo(self, log) -> None:
         """/undo:用本轮 run 起点的快照还原 workspace;不发 goal。"""
@@ -894,6 +896,141 @@ class ArgosApp(App):
         sid = self._session_id
         text = _mem.view_all(project_id=pid, session_id=sid)
         await log.append_line(text, kind="system")
+
+    async def _eval_cmd(self, log, arg: str) -> None:
+        """/eval [run <id> | compare <a> <b>] — Agent 自我评估 + A/B 对比(#7)。
+
+        - 无参:列最近 20 run + 7d pass rate
+        - run <task_id>:跑单个 task(走 config active model)
+        - compare <a> <b>:<a> / <b> 形如 `<task_id>:<model>`,或纯 run_id
+        """
+        import time as _time
+        from argos_agent.eval.results import list_runs, summary
+        if not arg.strip():
+            runs = list_runs(limit=20)
+            if not runs:
+                await log.append_line(
+                    "尚未跑过 eval。试试 /eval run <task_id> 或 argos eval corpus",
+                    kind="system")
+                return
+            lines = [
+                "最近 eval runs(最多 20):",
+                (f"  {'Date':<11} {'Task':<32} {'Tier':<10} {'Status':<14} "
+                 f"{'Cost':<8} {'Time':<5}"),
+            ]
+            for r in runs:
+                cost = f"${r.cost_usd:.4f}" if r.cost_usd is not None else "$N/A"
+                lines.append(
+                    f"  {_time.strftime('%Y-%m-%d', _time.localtime(r.finished_at)):<11} "
+                    f"{r.task_id:<32} {r.model_tier:<10} {r.pass_status:<14} "
+                    f"{cost:<8} {r.duration_s:.0f}s")
+            s = summary()
+            if s:
+                lines.append("\nPass rate (last 7d):")
+                for m, cats in s.items():
+                    lines.append(f"  {m}:")
+                    for c, stats in cats.items():
+                        lines.append(
+                            f"    {c:<14} {stats['passed']}/{stats['total']} "
+                            f"({stats['pass_rate']*100:.0f}%)")
+            await log.append_line("\n".join(lines), kind="system")
+            return
+        # 有参:解析 "run <id>" / "compare <a> <b>"
+        parts = arg.split()
+        if parts[0] == "run" and len(parts) == 2:
+            await self._eval_run_cmd(log, parts[1])
+            return
+        if parts[0] == "compare" and len(parts) == 3:
+            await self._eval_compare_cmd(log, parts[1], parts[2])
+            return
+        await log.append_line(
+            "用法:/eval [run <task_id> | compare <a> <b>]", kind="error")
+
+    async def _eval_run_cmd(self, log, task_id: str) -> None:
+        """/eval run <task_id>:跑单个 task(走 EvalRunner)。"""
+        from argos_agent.eval.corpus import load_task
+        from argos_agent.eval.runner import EvalRunner, PASS_PASSED
+        from argos_agent.eval.results import append as append_result
+        from argos_agent.daemon.worktree import WorktreeManager
+        try:
+            task = load_task(task_id)
+        except FileNotFoundError as e:
+            await log.append_line(f"未找到 task: {e}", kind="error")
+            return
+        # 用 config active model(本期不热切换)
+        model_tier = "default"
+        try:
+            from argos_agent import config as _cfg
+            if _cfg._has_config_file():
+                model_tier = _cfg.load_config().active
+        except Exception:  # noqa: BLE001
+            pass
+        base = Path.home() / ".argos" / "eval"
+        await log.append_line(
+            f"[eval] task={task.id} category={task.category} difficulty={task.difficulty} "
+            f"model={model_tier}")
+        wm = WorktreeManager(base_dir=base / "worktrees")
+        runner = EvalRunner(worktree=wm, base_dir=base)
+        result = runner.run(task, model_tier=model_tier)
+        append_result(result, base=base)
+        cost = f"${result.cost_usd:.4f}" if result.cost_usd is not None else "$N/A"
+        await log.append_line(
+            f"[eval] {result.pass_status}  cost={cost}  duration={result.duration_s:.0f}s  "
+            f"steps={result.steps}  run_id={result.run_id}",
+            kind="done" if result.pass_status == PASS_PASSED else "error",
+        )
+        if result.error:
+            await log.append_line(f"[eval] error: {result.error}", kind="error")
+
+    async def _eval_compare_cmd(self, log, a: str, b: str) -> None:
+        """/eval compare <a> <b>:A/B side-by-side,渲 markdown 报告到 transcript。"""
+        from argos_agent.eval.corpus import load_task
+        from argos_agent.eval.compare import run_pair, write_report
+        from argos_agent.eval.runner import EvalRunner
+        from argos_agent.daemon.worktree import WorktreeManager
+        # 解析 a/b:<task_id>:<model> 或纯 <task_id>(默认 = 同一 model 两遍)
+        def _parse(spec: str) -> tuple[str | None, str | None]:
+            if ":" in spec:
+                tid, m = spec.split(":", 1)
+                return tid, m
+            return spec, None
+        ta, ma = _parse(a)
+        tb, mb = _parse(b)
+        if not (ta and tb):
+            await log.append_line(
+                "用法:/eval compare <task_id>[:<model>] <task_id>[:<model>]", kind="error")
+            return
+        if ta != tb:
+            await log.append_line(f"task_id 不一致:{ta} vs {tb}", kind="error")
+            return
+        try:
+            task = load_task(ta)
+        except FileNotFoundError as e:
+            await log.append_line(f"未找到 task: {e}", kind="error")
+            return
+        # model 缺省 = active
+        active = "default"
+        try:
+            from argos_agent import config as _cfg
+            if _cfg._has_config_file():
+                active = _cfg.load_config().active
+        except Exception:  # noqa: BLE001
+            pass
+        ma = ma or active
+        mb = mb or active
+        base = Path.home() / ".argos" / "eval"
+        await log.append_line(f"[eval] A/B: {ma} vs {mb} on {ta} ...")
+        wm = WorktreeManager(base_dir=base / "worktrees")
+        runner = EvalRunner(worktree=wm, base_dir=base)
+        ra, rb = run_pair(runner, task, model_a=ma, model_b=mb)
+        p = write_report(ra, rb, base=base)
+        md = p.read_text("utf-8")
+        if md.count("\n") > 200:
+            await log.append_line(
+                md[:8000] + "\n\n... (truncated; 完整报告看:cat " + str(p) + ")",
+                kind="system")
+        else:
+            await log.append_line(md, kind="system")
 
     async def _show_skills(self, log) -> None:
         """/skills:列出可用技能(按任务自动召回进系统提示)。诚实:读真实 skill 库。"""
