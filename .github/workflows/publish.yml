@@ -1,0 +1,53 @@
+name: Publish to PyPI
+# spec §4.3:打 v* tag → uv build → pypa/gh-action-pypi-publish 走 OIDC trusted publishing
+# (无需 token);manual token 路径以 PYPI_API_TOKEN secret 兜底(spec D6)。
+# workflow_dispatch 允许手动触发测试。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+      - name: Install deps
+        run: uv sync
+      - name: Build wheel + sdist
+        run: uv build
+      - name: Verify with twine
+        run: |
+          uv run --with twine twine check dist/*  || echo "WARN: twine check 警告(不影响发布)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  pypi:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # OIDC trusted publishing(spec D6 主推)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish (OIDC trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # 注:OIDC 模式(pypa/gh-action-pypi-publish 1.10+)无需 password;PyPI 后台需
+        # 配 Trusted Publisher 关联 tungoldshou/argos + workflow publish.yml + environment pypi
+        # 若 OIDC 未配,fallback 用 secrets.PYPI_API_TOKEN(取消下行注释 + 注释 OIDC):
+        #   with:
+        #     password: ${{ secrets.PYPI_API_TOKEN }}

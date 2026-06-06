@@ -21,31 +21,25 @@ jobs:
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
+          set -e
           VERSION="${TAG#v}"
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
-          SHA256_WIN=$(curl -fsSL "https://api.github.com/repos/tungoldshou/argos/releases/tags/v${VERSION}" \
-            | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-for a in d.get('assets', []):
-    if a['name'].endswith('-x86_64-windows.zip'):
-        dig = a.get('digest', '') or ''
-        if dig.startswith('sha256:'):
-            print(dig.split(':', 1)[1]); break
-")
-          [ -n "${SHA256_WIN:-}" ] && echo "SHA256_WIN=${SHA256_WIN}" >> "$GITHUB_ENV" || \
-            echo "WARN: 缺 windows zip digest" >&2
+          # python 脚本拿 sha256 digest(base64 编码避开 YAML 解析坑)
+          cat > /tmp/digest.b64 <<'B64'
+          aW1wb3J0IGpzb24sIHN5cwpkID0ganNvbi5sb2FkKHN5cy5zdGRpbikKZm9yIGEgaW4gZC5nZXQoImFzc2V0cyIsIFtdKToKICAgIGlmIGFbIm5hbWUiXS5lbmRzd2l0aCgiLXg4Nl82NC13aW5kb3dzLnppcCIpOgogICAgICAgIGRpZyA9IGEuZ2V0KCJkaWdlc3QiLCAiIikgb3IgIiIKICAgICAgICBpZiBkaWcuc3RhcnRzd2l0aCgic2hhMjU2OiIpOgogICAgICAgICAgICBwcmludChkaWcuc3BsaXQoIjoiLCAxKVsxXSkKICAgICAgICAgICAgYnJlYWs=
+          B64
+          python3 -c "import base64; open('/tmp/digest.py','w').write(base64.b64decode(open('/tmp/digest.b64').read().strip()).decode())"
+          SHA256_WIN=$(curl -fsSL "https://api.github.com/repos/tungoldshou/argos/releases/tags/v${VERSION}" | python3 /tmp/digest.py 2>/dev/null || true)
+          [ -n "${SHA256_WIN:-}" ] && echo "SHA256_WIN=${SHA256_WIN}" >> "$GITHUB_ENV" || echo "WARN: 缺 windows zip digest" >&2
 
       - name: Update packaging/winget/ 3 files
         run: |
           set -e
           cd packaging/winget
-          # 3 文件 version + sha256 注入
           for f in tungoldshou.argos.installer.yaml tungoldshou.argos.locale.en-US.yaml tungoldshou.argos.yaml; do
             [ -f "$f" ] || continue
             sed -i "s/PackageVersion: .*/PackageVersion: ${VERSION}/" "$f"
           done
-          # installer.yaml 必含 InstallerUrl + InstallerSha256
           if [ -f tungoldshou.argos.installer.yaml ] && [ -n "${SHA256_WIN:-}" ]; then
             sed -i "s|InstallerUrl: .*|InstallerUrl: https://github.com/tungoldshou/argos/releases/download/v${VERSION}/Argos-${VERSION}-x86_64-windows.zip|" tungoldshou.argos.installer.yaml
             sed -i "s/InstallerSha256: .*/InstallerSha256: ${SHA256_WIN}/" tungoldshou.argos.installer.yaml

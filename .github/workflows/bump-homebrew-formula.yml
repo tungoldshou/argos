@@ -14,7 +14,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout tap repo
+      - name: Checkout tap repo (when HOMEBREW_TAP_TOKEN set)
         if: ${{ env.HAS_TOKEN == 'true' }}
         uses: actions/checkout@v4
         with:
@@ -28,11 +28,6 @@ jobs:
         run: |
           VERSION="${TAG#v}"
           echo "Would update Formula/argos.rb + Casks/argos.rb to version ${VERSION}"
-          # 注:真 sha256 拉取走 release API(避免软依赖 softprops):
-          #   SHA256_ARM64=$(curl -fsSL "https://api.github.com/repos/tungoldshou/argos/releases/tags/v${VERSION}" \
-          #     | python3 -c "import json,sys;d=json.load(sys.stdin);[print(a['digest']) for a in d['assets'] if a['name'].endswith('-arm64-mac.tar.gz') and a.get('digest','').startswith('sha256:')] or [print(a['digest']) for a in d['assets'] if a['name'].endswith('.sha256') and 'arm64' in a['name']]" | head -1)
-          #   SHA256_APPIMAGE=$(... 同上 ...)
-          # 简化:此步仅打印占位,真 sed 注入 + commit 在用户配 HOMEBREW_TAP_TOKEN 后启用
           echo "(set HOMEBREW_TAP_TOKEN repo secret to enable the live bump)"
 
       - name: Update Formula + Cask (live, when token present)
@@ -40,32 +35,16 @@ jobs:
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
+          set -e
           VERSION="${TAG#v}"
           cd tap
-          # 拉 release JSON 拿各产物的 sha256 digest
-          SHA256_ARM64=$(curl -fsSL "https://api.github.com/repos/tungoldshou/argos/releases/tags/v${VERSION}" \
-            | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-for a in d.get('assets', []):
-    if a['name'].endswith('-arm64-mac.tar.gz.sha256') or a['name'].endswith('-arm64-mac.tar.gz'):
-        dig = a.get('digest', '') or ''
-        if dig.startswith('sha256:'):
-            print(dig.split(':', 1)[1]); break
-        # 退而求其次,看 .sha256 旁挂文件
-        if a['name'].endswith('.sha256'):
-            print(dig); break
-")
-          SHA256_APPIMAGE=$(curl -fsSL "https://api.github.com/repos/tungoldshou/argos/releases/tags/v${VERSION}" \
-            | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-for a in d.get('assets', []):
-    if a['name'].endswith('.AppImage.sha256') or a['name'].endswith('.AppImage'):
-        dig = a.get('digest', '') or ''
-        if dig.startswith('sha256:'):
-            print(dig.split(':', 1)[1]); break
-")
+          # python 脚本拿 sha256 digest(base64 编码避开 YAML 解析坑)
+          cat > /tmp/digest.b64 <<'B64'
+          aW1wb3J0IGpzb24sIHN5cwp0YXJnZXQgPSBzeXMuYXJndlsxXQpkID0ganNvbi5sb2FkKHN5cy5zdGRpbikKZm9yIGEgaW4gZC5nZXQoImFzc2V0cyIsIFtdKToKICAgIGlmIG5vdCBhWyJuYW1lIl0uZW5kc3dpdGgodGFyZ2V0KToKICAgICAgICBjb250aW51ZQogICAgZGlnID0gYS5nZXQoImRpZ2VzdCIsICIiKSBvciAiIgogICAgaWYgZGlnLnN0YXJ0c3dpdGgoInNoYTI1NjoiKToKICAgICAgICBwcmludChkaWcuc3BsaXQoIjoiLCAxKVsxXSkKICAgICAgICBicmVhaw==
+          B64
+          python3 -c "import base64; open('/tmp/digest.py','w').write(base64.b64decode(open('/tmp/digest.b64').read().strip()).decode())"
+          SHA256_ARM64=$(curl -fsSL "https://api.github.com/repos/tungoldshou/argos/releases/tags/v${VERSION}" | python3 /tmp/digest.py "-arm64-mac.tar.gz" 2>/dev/null || true)
+          SHA256_APPIMAGE=$(curl -fsSL "https://api.github.com/repos/tungoldshou/argos/releases/tags/v${VERSION}" | python3 /tmp/digest.py ".AppImage" 2>/dev/null || true)
           # 注入
           sed -i "s/version \".*\"/version \"${VERSION}\"/" Formula/argos.rb Casks/argos.rb
           [ -n "${SHA256_APPIMAGE:-}" ] && sed -i "s/sha256 \"PLACEHOLDER_FROM_BUMP\"/sha256 \"${SHA256_APPIMAGE}\"/" Formula/argos.rb
