@@ -50,6 +50,9 @@ def _build_parser() -> argparse.ArgumentParser:
     # #10:argos skills 子命令
     from argos_agent.cli import skills as _skills_cli
     _skills_cli.add_subparser(sub)
+    # #12:argos context 子命令
+    from argos_agent.cli import context as _context_cli
+    _context_cli.add_subparser(sub)
     return p
 
 
