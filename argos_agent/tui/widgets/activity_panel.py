@@ -11,6 +11,7 @@ from textual.widgets import Static
 
 from argos_agent.hooks.events import HookFired
 from argos_agent.lsp.events import LspServerEvent, LspDiagnosticEvent
+from argos_agent.skills_runtime.events import SkillRunStart, SkillRunEnd
 
 _PHASE_GLYPH = {"plan": "◇", "act": "✦", "verify": "✦", "report": "◇"}
 
@@ -57,23 +58,32 @@ class ActivityPanel(Vertical):
         # + uri → 最近 count(变化检测 dedup)
         self._lsp_servers: dict[str, str] = {}
         self._lsp_diag_cache: dict[str, int] = {}   # uri → 最近 count
+        # Skill run 状态(spec §2.6 / §2.7):新 idx 10 区段
+        # 存最近 N 条 SkillRunStart / SkillRunEnd,渲染时按 start/end 配对
+        self._skill_runs: deque[SkillRunStart | SkillRunEnd] = deque(maxlen=20)
 
     def compose(self) -> ComposeResult:
         yield _Section("模型", self._model_label)
         yield _Section("任务进度", "(待开始)", )  # id 设下方
         yield _Section("工具", "本轮 0 调用")
         yield _Section("回执(已签名)", "—")
-        yield _Section("Skills", self._skills_summary())
+        yield _Section("Skill Catalog", self._skill_catalog_summary())  # ← 重命名(原 Skills)
         yield _Section("MCP", self._mcp_summary())
         yield _Section("成本 + 缓存", "↑0 ↓0  $0.000\n缓存命中 0 tok  0.0s")
         yield _Section("上下文", "")
         yield _Section("Hook", "(无)")
         yield _Section("LSP", "(无)")
+        yield _Section("Skill", self._skill_summary())  # ← 新增 idx 10(singular,运行时执行)
 
     @staticmethod
     def _skills_summary() -> str:
-        """诚实显示真实可用 skill 数(已接进活 loop:按 goal 召回进系统提示)。
-        读盘失败 → 诚实退回'—',绝不谎报数量。"""
+        """向后兼容:旧名 = 新名(spec §2.6 重命名后原方法保留作 alias)。"""
+        return ActivityPanel._skill_catalog_summary()
+
+    @staticmethod
+    def _skill_catalog_summary() -> str:
+        """'Skill Catalog' 段(idx 4):列按任务召回的 markdown 库技能(skills.py)。
+        与 'Skill' 段(idx 10)区分——后者显示运行时执行的 analysis skill。"""
         try:
             from argos_agent import skills
             enabled = [s for s in skills.load_all() if s.enabled]
@@ -231,9 +241,54 @@ class ActivityPanel(Vertical):
         self._hook_log.clear()
         self._lsp_servers.clear()
         self._lsp_diag_cache.clear()
+        self._skill_runs.clear()
         self._set(1, "(待开始)"); self._set(2, "本轮 0 调用"); self._set(3, "—")
         self._set(8, "(无)"); self._set(self._LSP_IDX, "(无)")
+        self._set(self._SKILL_IDX, "(无)")
 
     def snapshot_text(self) -> str:
         # Textual 8.2.7 的 Static 用 .content 暴露当前正文(随 .update() 刷新),不再有 .renderable。
         return "\n".join(str(s.content) + " " + str(s.border_title) for s in self._sections())
+
+    # ── Skill run(新 idx 10 区段)────────────────────────────────────
+    _SKILL_IDX: int = 10
+
+    def _on_skill_run_start(self, ev: SkillRunStart) -> None:
+        """收到 SkillRunStart → 入 deque + 触发区段刷新。"""
+        self._skill_runs.append(ev)
+        self._refresh_skill_section()
+
+    def _on_skill_run_end(self, ev: SkillRunEnd) -> None:
+        """收到 SkillRunEnd → 入 deque + 触发区段刷新。"""
+        self._skill_runs.append(ev)
+        self._refresh_skill_section()
+
+    def _refresh_skill_section(self) -> None:
+        """刷新 'Skill' 区段(运行时执行):按 start/end 配对渲染。"""
+        # 找 compose() 产出的 _Section("Skill") 节点并 update
+        for s in self.query(_Section):
+            if s.border_title == "Skill":
+                s.update(self._skill_summary())
+                return
+
+    def _skill_summary(self) -> str:
+        """'Skill' 区段(singular)渲染:start + end 配对成行(对位 Hook 区段)."""
+        if not self._skill_runs:
+            return "(无)"
+        # 配对 start/end(简单按出现顺序;实际生产可按 run_id)
+        lines: list[str] = []
+        pending_starts: dict[str, SkillRunStart] = {}
+        for ev in self._skill_runs:
+            if isinstance(ev, SkillRunStart):
+                pending_starts[ev.skill_name] = ev
+                timeout = ev.args.get("timeout", 60) if isinstance(ev.args, dict) else 60
+                lines.append(f"{ev.skill_name}: started (timeout={timeout}s)")
+            else:
+                s = pending_starts.pop(ev.skill_name, None)
+                dur = ev.duration_ms / 1000.0
+                dur_str = f"{dur:.1f}s" if dur >= 1.0 else f"{int(ev.duration_ms)}ms"
+                lines.append(
+                    f"{ev.skill_name}: ended {ev.verdict} ({dur_str}, "
+                    f"{ev.finding_count} finding{'s' if ev.finding_count != 1 else ''})"
+                )
+        return "\n".join(lines[-6:])   # 最多 6 行
