@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import logging
 import os
 from dataclasses import dataclass, field
@@ -155,6 +156,41 @@ class LspManager:
     def server_status(self, name: str) -> ServerStatus | None:
         s = self._servers.get(name)
         return s.status if s else None
+
+    def request_sync(
+        self, server_name: str, method: str, params: dict | None = None,
+        *, timeout: float = _REQUEST_TIMEOUT_S,
+    ) -> dict:
+        """同步调用 request()(spec Task 6:tools 是 sync 闭包)。
+
+        实现:在 worker 线程里跑 fresh event loop,**LspClient 状态在 worker 线程内创建**。
+        多个 tools 并发会跨线程,本期 v1 不支持并发(同 hooks / mcp)。
+
+        如果 server 未起,在 worker 线程内调 start_server(),让 LspClient 与 request
+        共用同一 event loop(否则跨 loop 的 future 等待会卡住)。
+        """
+        def _run() -> dict:
+            return asyncio.run(self._request_sync_impl(server_name, method, params, timeout=timeout))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            fut = ex.submit(_run)
+            return fut.result(timeout=timeout + 5.0)
+
+    async def _request_sync_impl(
+        self, server_name: str, method: str, params: dict | None,
+        *, timeout: float,
+    ) -> dict:
+        # 启 server(若未 Ready)— 在本 loop 内,确保 LspClient.reader 与 request 同 loop
+        s = self._servers.get(server_name)
+        if s is None:
+            return {"error": f"lsp server {server_name!r} not configured"}
+        # disabled 短路:不要 start_server(避免 spawn 命令失败)
+        if s.config.disabled:
+            return {"error": f"lsp server {server_name!r} disabled"}
+        if s.status != ServerStatus.READY:
+            ok = await self.start_server(server_name)
+            if not ok:
+                return {"error": f"lsp server {server_name!r} failed to start"}
+        return await self.request(server_name, method, params, timeout=timeout)
 
     async def request(
         self, server_name: str, method: str, params: dict | None = None,

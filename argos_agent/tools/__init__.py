@@ -33,6 +33,9 @@ ALL_TOOL_NAMES: list[str] = [
     # MCP 外部工具调度入口 —— broker-gated;配了 ~/.argos/mcp.json 才有具体工具可调,
     # 未配时调用诚实报"未配置 MCP"(工具本身始终可调,故计入工具数)。
     "mcp_call",
+    # LSP 工具 —— broker-gated,host 侧 LspManager 派发到对应 language server。
+    "lsp_definition", "lsp_references", "lsp_hover",
+    "lsp_document_symbols", "lsp_workspace_symbols", "lsp_diagnostics",
 ]
 
 __all__ = [
@@ -133,6 +136,25 @@ def _make_gated(broker: Any) -> dict[str, Any]:
         return broker.request(action="mcp_call",
                               args={"server": server, "tool": tool, "arguments": arguments or {}})
 
+    # LSP 工具 —— broker-gated:host 侧 LspManager.request(...)
+    # 走 broker.action="lsp_*" 派发,host broker._execute 调 manager
+    def lsp_definition_gated(file: str, line: int, col: int) -> str:
+        return broker.request(action="lsp_definition",
+                              args={"file": file, "line": line, "col": col})
+    def lsp_references_gated(file: str, line: int, col: int, *, include_declaration: bool = True) -> str:
+        return broker.request(action="lsp_references",
+                              args={"file": file, "line": line, "col": col,
+                                    "include_declaration": include_declaration})
+    def lsp_hover_gated(file: str, line: int, col: int) -> str:
+        return broker.request(action="lsp_hover",
+                              args={"file": file, "line": line, "col": col})
+    def lsp_document_symbols_gated(file: str) -> str:
+        return broker.request(action="lsp_document_symbols", args={"file": file})
+    def lsp_workspace_symbols_gated(query: str) -> str:
+        return broker.request(action="lsp_workspace_symbols", args={"query": query})
+    def lsp_diagnostics_gated(file: str) -> str:
+        return broker.request(action="lsp_diagnostics", args={"file": file})
+
     return {
         "run_command": run_command_gated,
         "web_search": web_search_gated,
@@ -143,6 +165,12 @@ def _make_gated(broker: Any) -> dict[str, Any]:
         "browser_type": browser_type_gated,
         "browser_screenshot": browser_screenshot_gated,
         "mcp_call": mcp_call_gated,
+        "lsp_definition": lsp_definition_gated,
+        "lsp_references": lsp_references_gated,
+        "lsp_hover": lsp_hover_gated,
+        "lsp_document_symbols": lsp_document_symbols_gated,
+        "lsp_workspace_symbols": lsp_workspace_symbols_gated,
+        "lsp_diagnostics": lsp_diagnostics_gated,
     }
 
 

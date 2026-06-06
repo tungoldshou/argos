@@ -168,6 +168,63 @@ class CapabilityBroker:
             if not isinstance(arguments, dict):
                 arguments = {}
             return mgr.call(args.get("server", ""), args.get("tool", ""), arguments), None
+        # LSP 工具派发(spec §2.8):host 侧 LspManager 派发到对应 language server。
+        if action.startswith("lsp_"):
+            from argos_agent import lsp as _lsp
+            from argos_agent.lsp.tools import (
+                lsp_definition_gated as _lsp_def,
+                lsp_references_gated as _lsp_ref,
+                lsp_hover_gated as _lsp_hov,
+                lsp_document_symbols_gated as _lsp_dsym,
+                lsp_workspace_symbols_gated as _lsp_wsym,
+                lsp_diagnostics_gated as _lsp_diag,
+            )
+            mgr = _lsp.get_manager()
+            workspace = self._workspace if self._workspace is not None else Path.cwd()
+            kwargs: dict = {"manager": mgr, "workspace": workspace}
+            if action == "lsp_definition":
+                return _lsp_def(
+                    server_name="python",
+                    file=args.get("file", ""),
+                    line=int(args.get("line", 1)),
+                    col=int(args.get("col", 1)),
+                    **kwargs,
+                ), None
+            if action == "lsp_references":
+                return _lsp_ref(
+                    server_name="python",
+                    file=args.get("file", ""),
+                    line=int(args.get("line", 1)),
+                    col=int(args.get("col", 1)),
+                    include_declaration=bool(args.get("include_declaration", True)),
+                    **kwargs,
+                ), None
+            if action == "lsp_hover":
+                return _lsp_hov(
+                    server_name="python",
+                    file=args.get("file", ""),
+                    line=int(args.get("line", 1)),
+                    col=int(args.get("col", 1)),
+                    **kwargs,
+                ), None
+            if action == "lsp_document_symbols":
+                return _lsp_dsym(
+                    server_name="python",
+                    file=args.get("file", ""),
+                    **kwargs,
+                ), None
+            if action == "lsp_workspace_symbols":
+                return _lsp_wsym(
+                    server_name="python",
+                    query=args.get("query", ""),
+                    **kwargs,
+                ), None
+            if action == "lsp_diagnostics":
+                return _lsp_diag(
+                    server_name="python",
+                    file=args.get("file", ""),
+                    **kwargs,
+                ), None
         # 未知 action 已被 request 顶部挡掉;此处兜底诚实返回。
         return f"错误:动作 {action!r} 暂未实现 host 执行。", None
 
