@@ -26,6 +26,8 @@ EventKind = Literal[
     "plan_update", "workflow_progress", "workflow_proposed", "workflow_done",
     "plan_rendered",
     "hook_fired",
+    "lsp_server_event",
+    "lsp_diagnostic_event",
 ]
 
 
@@ -177,11 +179,19 @@ class PlanRendered:
 from argos_agent.hooks.events import HookFired  # noqa: E402
 
 
+# ── LSP(spec 2026-06-06 §10.1):LspServerEvent / LspDiagnosticEvent 在
+# lsp/events.py 定义(同 hooks 模式:spec 强制 lsp 子模块独立 dataclass,不让
+# tui 反向依赖 lsp 配置 / manager);TUI Event 联合通过 `from argos_agent.lsp.events
+# import ...` 接进来。
+from argos_agent.lsp.events import LspServerEvent, LspDiagnosticEvent  # noqa: E402
+
+
 Event = (
     TokenDelta | CodeAction | CodeResult | FileDiff | ToolReceipt
     | VerifyVerdict | PhaseChange | CostUpdate | ApprovalRequest
     | ApprovalResponse | Escalation | Error | PlanUpdate | WorkflowProgress
     | WorkflowProposed | WorkflowDone | PlanRendered | HookFired
+    | LspServerEvent | LspDiagnosticEvent
 )
 
 # kind 常量 → 类,用于反序列化派发
@@ -192,6 +202,7 @@ _KIND_TO_CLASS: dict[str, type] = {
         VerifyVerdict, PhaseChange, CostUpdate, ApprovalRequest,
         ApprovalResponse, Escalation, Error, PlanUpdate, WorkflowProgress,
         WorkflowProposed, WorkflowDone, PlanRendered, HookFired,
+        LspServerEvent, LspDiagnosticEvent,
     )
 }
 

@@ -18,6 +18,8 @@ ALL_EVENT_KINDS = {
     "plan_update", "workflow_progress", "workflow_proposed", "workflow_done",
     "plan_rendered",  # plan mode spec §2.5:plan 阶段产出 markdown 后 TUI 弹 PlanModal 用
     "hook_fired",  # hooks spec §2.4:HookFired 经 EventBus 走 TUI 活动栏
+    "lsp_server_event",  # lsp spec §10.1:server 生命周期(spawn/ready/crash/disabled)
+    "lsp_diagnostic_event",  # lsp spec §10.1:diagnostics 数据流(publishDiagnostics 推送)
 }
 
 
@@ -170,3 +172,62 @@ def test_hook_fired_serialize_roundtrip():
     assert ev2.success is True
     assert ev2.returncode == 0
     assert ev2.elapsed_ms == 130
+
+
+# ── LSP(spec 2026-06-06 §10.1):LspServerEvent / LspDiagnosticEvent ─────────
+def test_lsp_server_event_in_kind_to_class():
+    """LspServerEvent 注册到 _KIND_TO_CLASS(否则 deserialize 抛 ValueError)。"""
+    from argos_agent.lsp.events import LspServerEvent
+    assert E._KIND_TO_CLASS.get("lsp_server_event") is LspServerEvent
+
+
+def test_lsp_diagnostic_event_in_kind_to_class():
+    """LspDiagnosticEvent 注册到 _KIND_TO_CLASS。"""
+    from argos_agent.lsp.events import LspDiagnosticEvent
+    assert E._KIND_TO_CLASS.get("lsp_diagnostic_event") is LspDiagnosticEvent
+
+
+def test_lsp_server_event_serialize_roundtrip():
+    """LspServerEvent serialize → deserialize → 等价。"""
+    from argos_agent.lsp.events import LspServerEvent
+    ev = LspServerEvent(
+        server_name="python", status="ready", command="pyright-langserver --stdio",
+        exit_code=None, elapsed_ms=820, error=None, cwd="/ws", timestamp_ms=1234567,
+    )
+    blob = E.serialize_event(ev)
+    ev2 = E.deserialize_event(blob)
+    assert isinstance(ev2, LspServerEvent)
+    assert ev2.server_name == "python"
+    assert ev2.status == "ready"
+    assert ev2.command == "pyright-langserver --stdio"
+    assert ev2.elapsed_ms == 820
+    assert ev2.exit_code is None
+    assert ev2.error is None
+    assert ev2.cwd == "/ws"
+    assert ev2.timestamp_ms == 1234567
+
+
+def test_lsp_diagnostic_event_serialize_roundtrip():
+    """LspDiagnosticEvent serialize → deserialize → 等价。"""
+    from argos_agent.lsp.events import LspDiagnosticEvent
+    ev = LspDiagnosticEvent(
+        server_name="python", uri="file:///a.py", count=3,
+        severity_counts={"error": 2, "warning": 1},
+        cached=False, cwd="/ws",
+    )
+    blob = E.serialize_event(ev)
+    ev2 = E.deserialize_event(blob)
+    assert isinstance(ev2, LspDiagnosticEvent)
+    assert ev2.server_name == "python"
+    assert ev2.uri == "file:///a.py"
+    assert ev2.count == 3
+    assert ev2.severity_counts == {"error": 2, "warning": 1}
+    assert ev2.cached is False
+    assert ev2.cwd == "/ws"
+
+
+def test_lsp_event_kinds_in_event_kind_literal():
+    """EventKind Literal 联合含 lsp_server_event / lsp_diagnostic_event。"""
+    args = set(E.EventKind.__args__)
+    assert "lsp_server_event" in args
+    assert "lsp_diagnostic_event" in args
