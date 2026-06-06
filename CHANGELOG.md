@@ -8,6 +8,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **Agent 自我评估 + A/B 对比 (#7)**:让 Argos 跑真实任务题库、量化 pass rate / time / cost,做 model tier A/B 对比(dogfooding 护城河 —— "我敢给跑出来的 A/B 报告证明 verify 门 + 诚实协议让便宜模型不掉链子")。**核心架构**:
+  - **Task corpus**(`~/.argos/eval/corpus/<task_id>/`,每任务一目录):`goal.md` + `verify_cmd` + `category` + `difficulty` + `setup.sh`(可选) + `expected_files`(可选);`corpus.json` 顶层 manifest;**14 种子任务**(bug_fix 5 / refactor 3 / test_write 3 / doc 3,5 类)由 `tests/eval/_seed_corpus.py` 落,不 git 跟踪,用户可改;**人工维护**(LLM 不生任务,防"我测我多聪明"循环)
+  - **EvalRunner**(`eval/runner.py`):接 `WorktreeManager`(复用 `#5b`)+ `loop_factory`(测试桩;真 LLM v1.1)+ `budget_s=600` / `budget_cost_usd=$1`,走 setup → loop → verify → capture → cleanup;5 类 `pass_status`:`passed` / `failed` / `unverifiable` / `setup_failed` / `error`;worktree 终态 finally cleanup(失败静默 log)
+  - **Result JSONL 持久化**(`eval/results.py`):`~/.argos/eval/runs/<YYYY-MM-DD>/<run_id>.jsonl`,每 run 1 文件 1 行(threading.Lock 包裹写,坏行跳过);`list_runs` / `load_run` / `summary(since_days=7)`(per model × per category 算 pass_rate)
+  - **A/B 对比**(`eval/compare.py`):`run_pair(runner, task, *, model_a, model_b)` 跑两遍,落 2 条 JSONL;`generate_report` / `write_report` 写 side-by-side markdown;`write_report_json` 写机读 json(含 `winner_pass` / `winner_cost` 字段);报告存 `~/.argos/eval/reports/ab-<id>-<date>.md`
+  - **`argos eval` CLI 子命令**:`list` / `run <task_id> [--model] [--budget] [--budget-s] [--keep-worktree]` / `compare <task_id> <model_a> <model_b>` / `corpus`;无 key / 无 daemon 都能跑(fake loop 桩路径)
+  - **TUI `/eval` slash**:`/eval`(列最近 20 run + 7d pass rate)/ `/eval run <task_id>`(走 config active model,sync 跑)/ `/eval compare <a> <b>`(a/b 形如 `<task_id>:<model>`,markdown 报告渲到 transcript,> 200 行截断);COMMAND_HELP 加 `eval` 段
+  - **诚实防线**(核心,沿用 verify 门 + 篡改检测 + runtime):`passed` = verify_cmd 退出 0(不信 LLM 自我报告);`cost_usd` 来自 API 返 `usage`(非估算);project_mode 篡改检测触发 → `unverifiable`;任何 run 出错(setup/LLM/verify 报)→ 落 JSONL 标 `failed` + 详细 error;**无 verify_cmd → `unverifiable`**,绝不蒙混 `passed`
+  - **Worktree 隔离 + 失败兜底**:复用 `#5b` `WorktreeManager`,每 run 独立 worktree;非 git repo → temp dir(标 `isolation_fallback: "temp"`);失败/异常/finally 都 cleanup,失败静默 log 不掩盖
+  - **0 新外部依赖**(stdlib only:json / subprocess / threading / shutil)+ **+86 测试**(8 文件:`test_eval_corpus` 14 / `test_eval_runner` 18 / `test_eval_results` 15 / `test_eval_compare` 15 / `test_eval_cli` 9 / `test_eval_tui` 12 / `test_eval_e2e` 5);不做(留 v1.1):在线 leaderboard / 跨项目 eval / 沙箱外 network 真跑 / CI 自动 fail-on-drop / 统计显著性检验 / `eval record` replay 模式 / Eval 自检题(`Argos 跑 /security-review 自己输出` 之类)
 - **多 run tabs + 多 TUI 互斥 + worktree-per-run + cost tracking (#5b)**:在 #5a 长跑 daemon 之上加并发多 run。**1 daemon 同时跑最多 5 个 run,TUI 顶部 tab 条切换 active,worktree 自动隔离,每 run 累计 cost,多 TUI 互斥**:
   - **RunRegistry**(`daemon/registry.py`,新):`run_id → RunEntry` 内存注册表 + `asyncio.Semaphore(5)` + `max_history=100` 缩 cap;字段含 worktree_path / tokens_in / tokens_out / cost_usd / focus_session_id
   - **多 run 并发 dispatch**:`POST /runs` 满 5 个 → `503 busy: max_concurrent_runs_reached (max=5, active=5)`(直接拒,不排队);owner-only

@@ -267,6 +267,7 @@ Slash commands live in the TUI. Tab completion is built in.
 | `/simplify` | Three passes: token-shingle duplicate detection, function-complexity hotspots, dead-code heuristics. Read-only. |
 | `/permissions` | Inspect or change the current approval level. Hard rules are always shown. |
 | `/runs` | List persisted runs. `/runs {id} resume\|cancel\|info` acts on one. |
+| `/eval` | Self-eval harness. `/eval` lists recent runs + 7d pass rate. `/eval run <task_id>` runs a corpus task. `/eval compare <a> <b>` runs an A/B (md report into transcript). CLI twin: `argos eval list \| run \| compare \| corpus`. |
 | `/model` | List configured profiles and switch `active` (takes effect on next launch). |
 | `/help`, `/tools`, `/skills`, `/mcp` | Discovery: what can this thing actually do right now? |
 
