@@ -5,12 +5,15 @@ from argos_agent.context.analyzer import (
     ContextBucket,
     analyze,
 )
+from argos_agent.context.threshold import LastCompactedAt, _should_compact
 from argos_agent.context.tokens import token_estimate
 
 __all__ = [
     "ContextAnalyzer",
     "ContextBreakdown",
     "ContextBucket",
+    "LastCompactedAt",
+    "_should_compact",
     "analyze",
     "token_estimate",
 ]
