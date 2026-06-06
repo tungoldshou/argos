@@ -153,3 +153,29 @@ PyInstaller 打成**单个 arm64 binary**(`packaging/build_arm64.sh` → `dist/a
 - `/hooks reload` — 重读 `~/.argos/hooks.json`
 
 **⚠️ 安全警示**:hook = 用户脚本,与 agent **同权限**运行(不进 Seatbelt 沙箱);装第三方 hook 前请**审计源码**。PreToolUse 退非 0 = 阻塞工具调用;反喂消息经 agent 看到。
+
+### LSP(语言服务器集成)
+
+Argos agent 可调 6 个真语言服务器原语:`lsp_definition` / `lsp_references` / `lsp_hover` / `lsp_document_symbols` / `lsp_workspace_symbols` / `lsp_diagnostics`,从中大型项目里拿结构化代码情报(symbol 位置 / references / type 错),替代纯文本 grep + 全文读。
+
+**配置**:`~/.argos/lsp.json`(`lsp.json` 不存在 → 走 built-in 默认单 python server;`pyright-langserver` 未装 → 该 server 自动 disabled + log 一行):
+
+```json
+{
+  "version": 1,
+  "servers": {
+    "python": {"command": ["pyright-langserver", "--stdio"], "filetypes": [".py", ".pyi"]},
+    "rust":   {"command": ["rust-analyzer"], "filetypes": [".rs"],
+               "init_options": {"cargo": {"allFeatures": true}}},
+    "typescript": {"command": ["typescript-language-server", "--stdio"], "filetypes": [".ts", ".tsx"]}
+  }
+}
+```
+
+**安装示例**: `pip install pyright` / `brew install rust-analyzer` / `npm i -g typescript-language-server typescript`
+
+**命令**:
+- `/lsp` — 列出当前生效 servers(状态 / filetype / diagnostics 计数)
+- `/lsp reload` — 重读 `~/.argos/lsp.json`;不影响正在跑的 run(下个 `lsp_*` 起新规则)
+
+**⚠️ 安全警示**:**LSP server 跑在沙箱(Sandbox)外,以你的账户权限运行**。`command` 数组直接 spawn 子进程;若装"看起来像 language server"实为木马的二进制,会跑用户全权限代码。**只配你审计过二进制的 command** —— 装第三方 LSP server 前请检查来源/源码。Argos 启动时 stderr 会显一行 `⚠ LSP server '<name>' running: <command>` 告警。
