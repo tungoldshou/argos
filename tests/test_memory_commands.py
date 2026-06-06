@@ -162,3 +162,54 @@ def test_remember_not_in_command_help():
     assert "memory" not in tui_cmd.COMMAND_HELP
     assert "remember" not in tui_cmd.COMMAND_HELP
     assert "forget" not in tui_cmd.COMMAND_HELP
+
+
+# ── /memory view ─────────────────────────────────────────────────────────────
+def test_view_all_lists_all_tiers(mem_root):
+    mem_auto.remember("user pref: tabs")
+    text = mem_auto.view_all()
+    assert "[User memories]" in text
+    assert "user pref: tabs" in text
+    assert "[Skill memories]" in text
+
+
+def test_view_all_marks_empty_tier(mem_root):
+    text = mem_auto.view_all()
+    # user / skill 空时标 (空)
+    assert "(空)" in text
+
+
+def test_view_all_includes_project_when_pid_given(mem_root, tmp_path):
+    pid = mem_auto.project_id_for(tmp_path)
+    mem_auto.capture_event("undo", project_id=pid, reason="test reason")
+    text = mem_auto.view_all(project_id=pid)
+    assert "[Project memories]" in text
+    assert "undo" in text.lower()
+
+
+def test_view_all_includes_session_when_sid_given(mem_root):
+    e = mem_auto.remember("session memo")
+    assert e is not None
+    text = mem_auto.view_all(session_id="abc")
+    assert "[Session memories]" in text
+    # 空 session tier → (空)
+    assert "(空)" in text
+
+
+def test_memory_command_renders_to_transcript(mem_root):
+    """TUI _memory_cmd 调 view_all 推到 transcript(只测函数,不动 widget)。"""
+    from argos_agent.memory.auto import view_all
+    text = view_all()
+    assert "memories" in text
+
+
+def test_memory_command_not_in_command_help():
+    """D16: /memory 不在 COMMAND_HELP。"""
+    assert "memory" not in tui_cmd.COMMAND_HELP
+
+
+def test_memory_command_known_in_parse_slash():
+    """D16: parse_slash 仍识别 /memory 为 known。"""
+    cmd = tui_cmd.parse_slash("/memory")
+    assert cmd is not None
+    assert cmd.known is True
