@@ -179,3 +179,16 @@ Argos agent 可调 6 个真语言服务器原语:`lsp_definition` / `lsp_referen
 - `/lsp reload` — 重读 `~/.argos/lsp.json`;不影响正在跑的 run(下个 `lsp_*` 起新规则)
 
 **⚠️ 安全警示**:**LSP server 跑在沙箱(Sandbox)外,以你的账户权限运行**。`command` 数组直接 spawn 子进程;若装"看起来像 language server"实为木马的二进制,会跑用户全权限代码。**只配你审计过二进制的 command** —— 装第三方 LSP server 前请检查来源/源码。Argos 启动时 stderr 会显一行 `⚠ LSP server '<name>' running: <command>` 告警。
+
+### Skills(自检原语 3 件套)
+
+Argos 提供 3 个 on-demand 自检 slash —— 用户中途一键复跑,**不复用 agent 自己写的代码**:
+- `/verify` —— 显式跑 `Verifier.verify`(D9/D13:用户路径,不走 agent 的 `propose_verify`);无 `verify_cmd` 配置时 verdict=`n_a` 并引导配
+- `/security-review` —— 3 pass:secrets(9 regex 含 `sk-ant-`)/ 依赖漏洞(shell out to `npm`/`pip-audit`/`cargo-audit`)/ 危险 API(Python + JS/TS `eval`/`child_process`/`innerHTML`);缺审计工具必报 error(D5 防假绿)
+- `/simplify` —— 3 pass:token shingle 重复块 / 函数体复杂度(> 15 分支 warning)/ 死代码启发;默认 top-10 截断
+
+**⚠️ 安全警示**:
+- `pip-audit` / `cargo-audit` **需用户自装**;缺 → 报 error severity(D5 假绿护栏),不静默跳
+- `.env` / `.env.*` / `secrets.toml` / `*.pem` / `*.key` **跳过不扫**(user-controlled 秘密存储,误报多)
+- 测试代码 `eval` / `exec` **降级 info**(避免误报测试 fixture)
+- 这些 skill **只报不修**;改不改由你拍板(同 `/lsp` 模式)
