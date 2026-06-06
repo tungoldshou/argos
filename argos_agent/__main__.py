@@ -41,6 +41,9 @@ def _build_parser() -> argparse.ArgumentParser:
     # #7:argos eval 子命令
     from argos_agent.cli import eval as _eval_cli
     _eval_cli.add_subparser(sub)
+    # #10:argos skills 子命令
+    from argos_agent.cli import skills as _skills_cli
+    _skills_cli.add_subparser(sub)
     return p
 
 
