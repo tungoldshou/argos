@@ -113,6 +113,111 @@ async def _emit_event(event: Any) -> None:
             log.debug("LSP event emit failed: %s", e)
 
 
+# ── 模块级单例后台 loop(Task 7 重构,option b)──────────────────────
+# 旧实现:request_sync() 每次新建 ThreadPoolExecutor + fresh event loop。
+#   问题:LspClient 内部 Future 跨 loop 无法 await(每个 lsp_* 调都重起 server)。
+# 新实现:模块级一个 long-lived background thread + event loop,所有 request_sync
+#   通过 asyncio.run_coroutine_threadsafe 提交到该 loop。
+#   LspClient / LspManager 状态在长寿命 loop 内,跨调用持久化 — 同一个 server
+#   进程只起一次,readers 不停。
+
+_LSP_LOOP: asyncio.AbstractEventLoop | None = None
+_LSP_LOOP_THREAD: Any = None
+_LSP_STARTED: bool = False
+_LSP_SHUTTING_DOWN: bool = False
+
+
+def _ensure_lsp_loop_started() -> None:
+    """惰性起单例后台 loop(daemon 线程,主进程退出会带走)。
+
+    反复调 idempotent(单例)。"""
+    global _LSP_LOOP, _LSP_LOOP_THREAD, _LSP_STARTED
+    if _LSP_STARTED and _LSP_LOOP is not None:
+        return
+    import threading
+
+    ready = threading.Event()
+    _LSP_LOOP = None  # 由后台线程在 run() 内赋值
+
+    def _run() -> None:
+        global _LSP_LOOP
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        _LSP_LOOP = loop
+        ready.set()
+        try:
+            loop.run_forever()
+        finally:
+            try:
+                loop.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+    t = threading.Thread(target=_run, name="argos-lsp-loop", daemon=True)
+    t.start()
+    _LSP_LOOP_THREAD = t
+    # 等后台 loop 准备好
+    ready.wait(timeout=2.0)
+    _LSP_STARTED = True
+
+
+def request_sync_via_loop(coro_factory, *, timeout: float = 5.0):
+    """把协程工厂提交到单例后台 loop,同步等结果。
+
+    接受工厂(coro_factory: Callable[[], Coroutine])而非裸 coroutine,
+    避免"coroutine 在外层 loop 创建、跨 loop 提交"的常见错误。
+    """
+    _ensure_lsp_loop_started()
+    if _LSP_LOOP is None:
+        raise RuntimeError("LSP background loop not initialized")
+    if _LSP_SHUTTING_DOWN:
+        return {"error": "lsp system shutting down"}
+    fut = asyncio.run_coroutine_threadsafe(coro_factory(), _LSP_LOOP)
+    try:
+        return fut.result(timeout=timeout)
+    except concurrent.futures.TimeoutError as e:
+        return {"error": f"lsp timeout after {timeout}s"}
+    except Exception as e:  # noqa: BLE001
+        return {"error": f"lsp protocol error: {e}"}
+
+
+def sync_file_sync(mgr: "LspManager", path: str, content: str, *,
+                   timeout: float = 5.0) -> None:
+    """host loop 触发位:在后台 LSP loop 跑 `mgr.sync_file(path, content)`。
+
+    best-effort:失败仅 debug log,不抛 — 阻断 sandbox.exec_code 的成功路径。"""
+    _ensure_lsp_loop_started()
+    if _LSP_LOOP is None:
+        return
+    if _LSP_SHUTTING_DOWN:
+        return
+    fut = asyncio.run_coroutine_threadsafe(
+        mgr.sync_file(path, content), _LSP_LOOP,
+    )
+    try:
+        fut.result(timeout=timeout)
+    except Exception as e:  # noqa: BLE001
+        log.debug("LSP sync_file failed: %s", e)
+
+
+def shutdown_lsp_loop() -> None:
+    """优雅关闭后台 loop(测试用 / 进程退出)。"""
+    global _LSP_LOOP, _LSP_LOOP_THREAD, _LSP_STARTED, _LSP_SHUTTING_DOWN
+    _LSP_SHUTTING_DOWN = True
+    if _LSP_LOOP is None:
+        return
+    try:
+        _LSP_LOOP.call_soon_threadsafe(_LSP_LOOP.stop)
+    except Exception:  # noqa: BLE001
+        pass
+    if _LSP_LOOP_THREAD is not None:
+        _LSP_LOOP_THREAD.join(timeout=2.0)
+    _LSP_LOOP = None
+    _LSP_LOOP_THREAD = None
+    _LSP_STARTED = False
+    _LSP_SHUTTING_DOWN = False
+
+
 # ── LspManager 主类 ────────────────────────────────────────────────
 
 class LspManager:
@@ -163,17 +268,13 @@ class LspManager:
     ) -> dict:
         """同步调用 request()(spec Task 6:tools 是 sync 闭包)。
 
-        实现:在 worker 线程里跑 fresh event loop,**LspClient 状态在 worker 线程内创建**。
-        多个 tools 并发会跨线程,本期 v1 不支持并发(同 hooks / mcp)。
-
-        如果 server 未起,在 worker 线程内调 start_server(),让 LspClient 与 request
-        共用同一 event loop(否则跨 loop 的 future 等待会卡住)。
+        Task 7 重构(plan §CRITICAL):用**模块级单例后台 loop**(option b),
+        跨调用 LspClient / readers 状态持久化。不再每次 fresh ThreadPoolExecutor + 新 loop。
         """
-        def _run() -> dict:
-            return asyncio.run(self._request_sync_impl(server_name, method, params, timeout=timeout))
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-            fut = ex.submit(_run)
-            return fut.result(timeout=timeout + 5.0)
+        return request_sync_via_loop(
+            lambda: self._request_sync_impl(server_name, method, params, timeout=timeout),
+            timeout=timeout + 5.0,
+        )
 
     async def _request_sync_impl(
         self, server_name: str, method: str, params: dict | None,

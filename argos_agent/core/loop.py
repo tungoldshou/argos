@@ -655,6 +655,40 @@ class AgentLoop:
                 # 用于"改了代码却没声明验证"的一次性催促,纯读/问答任务不触发。
                 if "write_file(" in code or "edit_file(" in code:
                     made_changes = True
+                # ── LSP didChange 触发点(spec §2.8)─────────────────────
+                # 沙箱内 tools/files.py 一行不动;host loop 在 sandbox.exec_code
+                # **成功后**(result.ok)解析 code 块抽 write_file/edit_file → 调
+                # lsp_manager.sync_file_sync(走单例后台 loop,best-effort 失败不抛)。
+                if result.ok:
+                    try:
+                        from argos_agent import lsp as _lsp
+                        from argos_agent.lsp.trigger import (
+                            extract_file_writes, extract_file_paths,
+                        )
+                        _lsp_mgr = _lsp.get_manager()
+                        if _lsp_mgr is not None:
+                            # 写过的 path:用 model 抽的 content(若 write_file 抓得)
+                            written: dict[str, str] = {
+                                p: c for p, c in extract_file_writes(code)
+                            }
+                            # edit_file 后:用 workspace 实际最新内容(覆盖 model 抽)
+                            for rel_path in extract_file_paths(code):
+                                if rel_path in written:
+                                    continue
+                                abs_p = self._workspace / rel_path
+                                if abs_p.exists():
+                                    try:
+                                        written[rel_path] = abs_p.read_text(
+                                            encoding="utf-8", errors="replace",
+                                        )
+                                    except OSError:  # noqa: PERF203
+                                        pass
+                            from argos_agent.lsp.manager import sync_file_sync
+                            for rel_path, content in written.items():
+                                abs_p = self._workspace / rel_path
+                                sync_file_sync(_lsp_mgr, str(abs_p), content, timeout=3.0)
+                    except Exception as _lsp_exc:  # noqa: BLE001
+                        log.debug("LSP trigger skipped: %s", _lsp_exc)
                 yield CodeResult(
                     step=step, stdout=result.stdout,
                     value_repr=result.value_repr, exc=result.exc, ok=result.ok,
