@@ -29,7 +29,7 @@ from urllib.parse import parse_qs, urlsplit
 from argos_agent.daemon.manager import RunManager
 from argos_agent.daemon.protocol import (
     CODE_BAD_REQUEST, CODE_BUSY, CODE_INTERNAL, CODE_INVALID_TRANSITION,
-    CODE_MISSING_SESSION, CODE_NOT_FOUND, HEADER_SESSION,
+    CODE_MISSING_SESSION, CODE_NOT_FOUND, CODE_SESSION_READONLY, HEADER_SESSION,
 )
 from argos_agent.daemon.sessions import SessionRegistry
 
@@ -219,6 +219,20 @@ class DaemonHTTPServer:
         await self._sessions.heartbeat(sid)
         return sid
 
+    async def _require_owner(self, writer, headers) -> str | None:
+        """#5b §7.2:owner 才放行写端点;observer / unknown → 403 session_readonly。"""
+        sid = await self._require_session(writer, headers)
+        if sid is None:
+            return None
+        rec = self._sessions.get(sid)
+        if rec is None or rec.role != "owner":
+            await self._send_error(
+                writer, 403, CODE_SESSION_READONLY,
+                "session is read-only observer (not owner);write operations require owner",
+            )
+            return None
+        return sid
+
     # ── Handlers ─────────────────────────────────────────────────────
 
     async def _handle_health(self, writer, headers):
@@ -246,8 +260,11 @@ class DaemonHTTPServer:
         })
 
     async def _handle_delete_session(self, writer, sid):
-        await self._sessions.remove(sid)
-        await self._send_json(writer, 204, {"ok": True})
+        # #5b §7.2 DELETE /sessions/{id} 也要 owner(防 observer 主动退出 hijack role);
+        # 但 spec 同时允许 owner 退出触发 promote。最直觉:任何人能删自己 sid;上层调用
+        # 用 sid 鉴权(不带 session header)。这里用 sid 直接鉴权,owner 退出自动 promote。
+        new_owner = await self._sessions.promote_oldest_observer_after_remove(sid)
+        await self._send_json(writer, 204, {"ok": True, "promoted_to": new_owner})
 
     async def _handle_list_runs(self, writer, headers, query):
         if (sid := await self._require_session(writer, headers)) is None:
@@ -268,7 +285,7 @@ class DaemonHTTPServer:
         await self._send_json(writer, 200, runs)
 
     async def _handle_create_run(self, writer, headers, body):
-        if (sid := await self._require_session(writer, headers)) is None:
+        if (sid := await self._require_owner(writer, headers)) is None:
             return
         try:
             data = json.loads(body.decode("utf-8") or "{}")
@@ -347,7 +364,7 @@ class DaemonHTTPServer:
         await self._send_json(writer, 200, body)
 
     async def _handle_pause(self, writer, headers, run_id):
-        if (sid := await self._require_session(writer, headers)) is None:
+        if (sid := await self._require_owner(writer, headers)) is None:
             return
         ok = await self._manager.request_pause(run_id)
         if not ok:
@@ -356,7 +373,7 @@ class DaemonHTTPServer:
         await self._send_json(writer, 202, {"state": "pause_requested"})
 
     async def _handle_resume(self, writer, headers, run_id):
-        if (sid := await self._require_session(writer, headers)) is None:
+        if (sid := await self._require_owner(writer, headers)) is None:
             return
         ok = await self._manager.request_resume(run_id)
         if not ok:
@@ -365,7 +382,7 @@ class DaemonHTTPServer:
         await self._send_json(writer, 202, {"state": "resume_requested"})
 
     async def _handle_cancel(self, writer, headers, run_id):
-        if (sid := await self._require_session(writer, headers)) is None:
+        if (sid := await self._require_owner(writer, headers)) is None:
             return
         ok = await self._manager.request_cancel(run_id)
         if not ok:
@@ -376,8 +393,8 @@ class DaemonHTTPServer:
     async def _handle_focus(self, writer, headers, run_id):
         """#5b POST /runs/{id}/focus:TUI 告诉 daemon "此 run 是我的 active 焦点"。
 
-        暂不限制 owner/observer(T3 补 _require_owner)。"""
-        if (sid := await self._require_session(writer, headers)) is None:
+        owner-only(spec §7.2 权限矩阵)。"""
+        if (sid := await self._require_owner(writer, headers)) is None:
             return
         if self._registry.get(run_id) is None:
             return await self._send_error(writer, 404, CODE_NOT_FOUND, "run not found")
@@ -388,7 +405,7 @@ class DaemonHTTPServer:
         })
 
     async def _handle_approval(self, writer, headers, run_id, call_id, body):
-        if (sid := await self._require_session(writer, headers)) is None:
+        if (sid := await self._require_owner(writer, headers)) is None:
             return
         try:
             data = json.loads(body.decode("utf-8") or "{}")

@@ -77,15 +77,22 @@ async def test_focus_missing_session_returns_400(focus_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_multiple_focus_calls_last_wins(focus_server, tmp_path: Path):
+    """owner(sid1)先后 focus 两次 → 最后一次胜出。"""
     srv, _, reg = focus_server
-    sid1 = await _create_session(srv.socket_path)
-    sid2 = await _create_session(srv.socket_path)
+    sid1 = await _create_session(srv.socket_path)   # owner
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",
                                  session_id=sid1, body={"goal": "x"})
     rid = json.loads(raw.decode("utf-8"))["run_id"]
+    # owner 第一次 focus
     await _req(srv.socket_path, "POST", f"/runs/{rid}/focus", session_id=sid1)
     assert reg.get(rid).focus_session_id == sid1
-    await _req(srv.socket_path, "POST", f"/runs/{rid}/focus", session_id=sid2)
+    # 新 session(变 owner 自动 promote 后)再次 focus
+    sid2 = await _create_session(srv.socket_path)
+    # sid1 退 → sid2 promote
+    await _req(srv.socket_path, "DELETE", f"/sessions/{sid1}")
+    status, _, _ = await _req(srv.socket_path, "POST", f"/runs/{rid}/focus",
+                               session_id=sid2)
+    assert status == 200
     assert reg.get(rid).focus_session_id == sid2
 
 
