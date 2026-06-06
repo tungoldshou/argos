@@ -8,6 +8,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **Per-task model routing + effort (#11)**:让"主用便宜模型 + 关键任务切强模型 + 看得见切到哪里花了多少"成为**可配置 + 可观察 + 可治理**的一等公民,而不是"接 N 个 model 卖花活"。**核心架构**:
+  - **8 类别任务分类**(`TaskCategory` 枚举,纯启发式 0 LLM 调用):`file_edit` / `refactor` / `test_write` / `verify` / `plan` / `long_run`(step ≥ 20)/ `auto_capture` / `simple_read`;从 `(tool_call, code_block, phase, step)` 4 元组短路判定,异常兜底 `simple_read`(spec D9)
+  - **三层路由 config**(`~/.argos/config.json` 加 `routing` 段,缺则 safe default 零破坏):`{ default: "<profile>", by_category: {...}, by_tool: {...}, tier_force_confirm: ["<profile>"] }`;**tier 名 fail-closed**(`set_category` 拼写错 → `ConfigError` 拒装,防悄悄退化)
+  - **`RoutingResolver.resolve()` 3 层优先级**:by_tool > by_category > default,命中层标 `source` 字段供 `/routing` 视图显示
+  - **`ModelRouter` 多 ModelClient 池**(`routing/router.py`):**懒构造** + `deque(maxlen=10)` history(本 run 内 `/routing` 读,跑完即失)+ `tier_force_confirm` 联动;`AgentLoop` 注入 `router` kw-only 参数(默认 None 走原路径,既有 1507 测试 0 破坏)
+  - **`--effort=low|medium|high` CLI**(契约 §11;spec §8):拆 preset 填既有 `LoopConfig.max_steps` + `approval_level`,**不**引入新 `LoopConfig` 字段(spec D6)——low=8 步+AUTO;medium=40+CONFIRM;high=80+CONFIRM
+  - **`CostUpdate.tier_name` 字段**(spec §15.2 可见性防线):每步成本归属具体 profile(默认空串保旧事件兼容);`ActivityPanel.on_cost` 收 `tier_name` 后附 `[xxx]` 3 字母短标签
+  - **TUI `/routing` + `/routing set <cat> <tier>` 命令**:`ArgosApp._routing_cmd` 列 routing config + 最近 10 步决策;`/routing set` 调 `set_category` 原子写 `config.json`;无 router 注入 → 友好提示(诚实)
+  - **Strong tier 强制 CONFIRM**(spec §15.3 纵深防线):`tier_force_confirm` 默认 `["strong"]`,AgentLoop 拿到 strong 决策即 `_approval_level_override = CONFIRM`,即使 `--yolo` 启动仍弹 CONFIRM
+  - **0 新外部依赖**(stdlib only:json / re / enum / dataclasses / collections.deque / pathlib / os.replace);+58 测试(6 文件:`test_routing_categorizer` 12 / `test_routing_config` 9 / `test_routing_resolver` 7 / `test_routing_router` 10 / `test_routing_loop_integration` 10 / `test_routing_e2e` 5 / `test_tui_routing` 10);新文件 `argos_agent/routing/`(5 模块:__init__ / categorizer / config / resolver / router / effort);spec 在 `docs/superpowers/specs/2026-06-07-per-task-routing-design.md`,plan 在 `docs/superpowers/plans/2026-06-07-per-task-routing.md`;**不**改 `ModelClient` 既有方法 / `LoopConfig` 既有字段 / `core/loop.py` 流程(spec §21 锁)
 - **Skill 生态 curator (#10)**:让用户**安全地**发现/装/卸/测/被推荐社区 skill,5 道防线治理"装了就跑"风险(不 marketplace,但也不黑盒)。**核心架构**:
   - **Curated index**(`https://raw.githubusercontent.com/tungoldshou/argos-skills-index/main/index.json`,只读):每条 `{name, version, author, sha256, description, skill_md_url, compatibility, capabilities, size_bytes}`;本地缓存 `~/.argos/skills/index.json` 原子写
   - **Install 流程**(`argos skills install <name>` 或 /skills install 提示):**5 道防线**① sha256 下载后**重算**,与 index 不一致 → 拒装 ② size drift > 20% → 警告 ③ capability 声明 (`read/write/execute/network` 4 个) 缺则拒装 ④ 装后强制 `enabled: false`(user review gate,沿用 verify 门灵魂)⑤ builtin 3 名 (`verify`/`security-review`/`simplify`) 硬拒 install/remove,基础信任根不可破

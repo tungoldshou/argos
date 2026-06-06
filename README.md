@@ -308,8 +308,33 @@ uv run argos self-update      # check GitHub for new version, notify only
 uv run argos --with-daemon    # opt into the long-running run daemon
 uv run argos --project <path> # confine to a specific project directory
 uv run argos --model <name>   # use a specific config profile for this run
+uv run argos --effort=low|medium|high   # task effort tier (default: medium)
 uv run argos --resume         # reattach to the last session
 ```
+
+## Per-task model routing (#11)
+
+Different tasks → different models. Configure in `~/.argos/config.json`:
+
+```json
+{
+  "models": {
+    "cheap":   { "protocol": "anthropic", "base_url": "...", "model": "Haiku",   "api_key_env": "K" },
+    "default": { "protocol": "anthropic", "base_url": "...", "model": "Sonnet",  "api_key_env": "K" },
+    "strong":  { "protocol": "anthropic", "base_url": "...", "model": "Opus",    "api_key_env": "K" }
+  },
+  "active": "default",
+  "routing": {
+    "default": "default",
+    "by_category": { "file_edit": "cheap", "verify": "strong" },
+    "by_tool":     { "run_command": "cheap" },
+    "tier_force_confirm": ["strong"]
+  }
+}
+```
+
+TUI: `/routing` to see last 10 calls; `/routing set verify strong` to update.
+See [docs/per-task-routing.md](docs/per-task-routing.md) for the full reference.
 
 ---
 
