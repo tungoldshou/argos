@@ -22,6 +22,7 @@ ALL_EVENT_KINDS = {
     "lsp_diagnostic_event",  # lsp spec §10.1:diagnostics 数据流(publishDiagnostics 推送)
     "skill_run_start",  # skills spec §2.6:on-demand skill 开始
     "skill_run_end",  # skills spec §2.6:on-demand skill 结束
+    "compacted",  # #12 Context 可视化:主动压缩事件(spec §4.3 / D10 扩展字面量)
 }
 
 

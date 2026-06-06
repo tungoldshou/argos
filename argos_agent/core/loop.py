@@ -233,6 +233,9 @@ class LoopConfig:
     recall: bool = True              # W3:store 支持 recall 时是否注入召回的 untrusted 段
     # approval_level 默认 ApprovalLevel.CONFIRM(契约 §9 锁#6)。
     approval_level: Any = field(default_factory=lambda: _DEFAULT_APPROVAL_LEVEL)
+    # #12 Context 可视化:主动压缩阈值(0-1;0 = 不主动压,只走既有 error 应急路径;
+    # spec §9.5 锁 default=0.8,旧 config.json 缺字段不破)。
+    compact_threshold: float = 0.8
 
 
 class AgentLoop:
@@ -308,6 +311,12 @@ class AgentLoop:
         # tier_name 字段(spec §15.2 可见性防线)。router=None 走原路径(零破坏既有 1507 测试)。
         self._router = router
         self._current_tier: str = config.model_tier
+        # #12 Context 可视化(spec §9.2):主动压缩状态。
+        # _last_compact_used:压前 used,用于 5% buffer 幂等(D9)。
+        # _messages_override:压后 reload 的 messages 列表,while 顶部取一次后清空(D16)。
+        from argos_agent.context.threshold import LastCompactedAt as _LCA
+        self._last_compact_used: _LCA | None = None
+        self._messages_override: list[dict] | None = None
 
     # ── 只读访问(Phase 6 装配/e2e 核验用;构造参数即这些,属性化是最小暴露)──────────
     @property
@@ -443,6 +452,61 @@ class AgentLoop:
             "· 沙箱命令 /retry 重发本会话最后一条 user 消息(忙时先 Esc)\n"
         )
 
+    async def _maybe_proactive_compact(self, session_id: str, step: int) -> AsyncIterator["Event"]:
+        """#12 Context 可视化:主动压缩(spec §9.2)— 每步顶部 1 行 yield,条件不满足
+        空生成器,既不崩也不假装压过(D12 锁)。
+
+        流程:
+          1) 读 model.last_usage(input+cache_read+cache_creation)= used
+          2) 调 threshold._should_compact(...) 判定
+          3) True → store.compact_messages + reload messages + 记 _last_compact_used
+                    + yield CompactedEvent(before, after, reduction_pct, triggered_by="proactive")
+          4) False → 空生成器
+        """
+        from argos_agent.context.threshold import _should_compact, LastCompactedAt as _LCA
+        # threshold 字段可能不存在(老 LoopConfig 构造点);getattr 兜底
+        threshold = float(getattr(self._cfg, "compact_threshold", 0.8) or 0.0)
+        if threshold <= 0:
+            return
+        # 读 used(API 真值;last_usage 不存在 → 0,自然不超阈值)
+        usage = getattr(self._model, "last_usage", None) or {}
+        used = (int(usage.get("input_tokens") or 0)
+                + int(usage.get("cache_read") or 0)
+                + int(usage.get("cache_creation") or 0))
+        # window:model.tier.context_window;fallback 200_000
+        try:
+            window = int(self._model.tier.context_window or 0) or 200_000
+        except Exception:  # noqa: BLE001 — model 缺 tier/context_window 兜底
+            window = 200_000
+        # 判定(spec §8 短路)
+        if not _should_compact(
+            used=used, window=window, threshold=threshold,
+            phase="act",   # while 在 act 阶段;verify/plan 阶段不在此处
+            compaction_enabled=bool(getattr(self._cfg, "compaction", True)),
+            already_compacted_at=self._last_compact_used,
+            last_verdict_fail_count=self._fail_count,
+        ):
+            return
+        # 写盘失败不崩(下轮再试)
+        if not hasattr(self._store, "compact_messages"):
+            return
+        pre_used = used
+        try:
+            self._store.compact_messages(session_id, keep_recent=5)  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            return
+        new_messages = self._store.get_messages(session_id) if hasattr(self._store, "get_messages") else []  # type: ignore[attr-defined]
+        # 估压缩后 token(chars4;reload 后 store 不知 API 真 input;此处只给活动栏参考)
+        new_total = sum(max(1, len(m.get("content") or "") // 4) for m in new_messages)
+        self._messages_override = new_messages
+        self._last_compact_used = _LCA(used=pre_used)
+        from argos_agent.tui.events import CompactedEvent
+        yield CompactedEvent(
+            before=pre_used, after=new_total,
+            reduction_pct=max(0.0, (pre_used - new_total) / max(1, pre_used)),
+            triggered_by="proactive", session_id=session_id,
+        )
+
     def _build_system(self, goal: str) -> str:
         """系统提示三段接线(顺序锁死,spec §12.1):
           · 安全段 = HONESTY_SYSTEM + 结构化任务契约(命中时注入我们自己的可信 checklist,
@@ -573,6 +637,15 @@ class AgentLoop:
         compactions = 0           # 上下文压缩次数上限,防压缩仍溢出时无限重试。
         text = ""                 # 在 while 外初始化:max_steps=0 等边界下收尾仍能安全 text.strip()
         while step < self._cfg.max_steps:
+            # #12 Context 可视化(spec §9.3 / D16):主动压缩检查——每步顶部 1 行,
+            # 阈值满足 → 调 store.compact_messages + reload messages + yield CompactedEvent。
+            # 条件不满足 → 空生成器(零字节 yield),既有 while 流程零修改。
+            async for ev in self._maybe_proactive_compact(session_id, step):
+                yield ev
+            # 消费压后 reload 的 messages 列表(本步仅一次;之后清空,fallback 走既有 get_messages 路径)
+            if self._messages_override is not None:
+                messages = self._messages_override
+                self._messages_override = None
             # #11 per-task routing(spec §10):每步按 (tool, code, phase) 选 tier;router
             # 不存在时静默用既有 self._model(零破坏默认路径)。text 还没拿到,先按
             # 上一轮 code 抽;首轮 text=="" → primary_tool=None → 用 default 兜底。

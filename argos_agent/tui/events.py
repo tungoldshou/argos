@@ -31,6 +31,7 @@ EventKind = Literal[
     "lsp_diagnostic_event",
     "skill_run_start",   # ← 新增
     "skill_run_end",     # ← 新增
+    "compacted",         # ← #12 新增(spec D10 扩展字面量;deserialize_event 未知 kind 走 pass)
 ]
 
 
@@ -164,6 +165,21 @@ class WorkflowProposed:
     description: str
     preview: str                     # render_preview(spec) —— 人类可读的工作流编排预览
     call_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class CompactedEvent:
+    """#12 Context 可视化:主动压缩事件(spec §4.3 / §9.4)。
+    主动压 + error 应急压 共享事件类型,triggered_by 区分:
+      · "proactive":阈值触发(本期新增)
+      · "error":API 报 context_length_exceeded 触发(既有路径,本期不动)
+    既有 1507 测试 0 破坏(replay 路径下 deserialize_event 走未知 kind 兜底 pass)。"""
+    kind = "compacted"
+    before: int
+    after: int
+    reduction_pct: float             # (before-after)/before,钳到 0-1
+    triggered_by: str                # "proactive" | "error"
+    session_id: str = ""             # 留 trace;空串保旧事件兼容
 
 
 @dataclass(frozen=True, slots=True)
