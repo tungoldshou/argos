@@ -25,16 +25,33 @@ class Verdict:
 
     canonical 归属:types.py(契约 §6.1 指定)。
     verify_gate.py 重新导出此类以保持旧 import 路径(from argos_agent.core.verify_gate import Verdict)。
+
+    self_verified 字段(任务:为无 verify_cmd 任务自动造测试):
+      False (默认) = 用户级 verify;passed 等同于"强验证通过"
+      True         = "自验证(较弱)":由系统按 reviewer 角色 + canary 守卫
+                     生成的测试通过。verdict 仍是 'passed',但调用方(UI/report/统计)
+                     必须读 self_verified 区分"强 / 弱",绝不让 self_verified=True 的 passed
+                     与用户 verify 的 passed 混为一谈。
     """
     status: VerdictStatus
     detail: str
     verify_cmd: str | None
     attempts: int
     tampered: list[str] = field(default_factory=list)
+    self_verified: bool = False
 
     @staticmethod
     def passed(detail: str, verify_cmd: str | None, attempts: int) -> "Verdict":
         return Verdict(status="passed", detail=detail, verify_cmd=verify_cmd, attempts=attempts)
+
+    @staticmethod
+    def passed_self(detail: str, verify_cmd: str | None, attempts: int) -> "Verdict":
+        """自验证通过(canary 守卫 + 白名单 + 真跑都过了)。调用方必须看 self_verified=True
+        来区别于用户级 passed,绝不在 UI/汇报里冒充强验证。"""
+        return Verdict(
+            status="passed", detail=detail, verify_cmd=verify_cmd,
+            attempts=attempts, self_verified=True,
+        )
 
     @staticmethod
     def failed(detail: str, verify_cmd: str | None, attempts: int) -> "Verdict":

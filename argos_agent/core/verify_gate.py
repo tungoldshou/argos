@@ -29,42 +29,69 @@ from argos_agent.tools import ALLOWED_CMDS
 from argos_agent.core.types import Verdict  # noqa: F401
 
 
+# self-test feature flag(任务:opt-in 默认关闭,避免 verifier 行为隐性变化)。
+# 设 env var `ARGOS_SELF_TEST=1` 开启;不设 / 设 0 = 关闭,verifier 行为 100% 与之前一致。
+def _self_test_enabled() -> bool:
+    return os.environ.get("ARGOS_SELF_TEST", "").strip().lower() in ("1", "true", "yes")
+
+
 class Verifier:
     """称'完成'必过 verify_cmd；三态裁决；篡改优先；超时降级(契约 §6 Verifier)。
 
     canonical 签名(契约 §9 锁#1):
       verify(self, verify_cmd: str | None, *, attempts: int = 1) -> Verdict
     篡改检测与 VERIFY_DIR 隔离由本类内部经 runtime 解决，不接受外部 workspace/verify_dir/tampered。
+
+    self-test 旁路(任务):verify_cmd is None + ARGOS_SELF_TEST=1 开启时,
+    TestGenerator 会拿 goal 走 reviewer 角色的 LLM 提议一个候选测试;经
+    canary(空 ws 上必非 0)+ 白名单 + detect_tampering 守卫后,真跑;真过了
+    → Verdict.passed_self(detail, verify_cmd, attempts)(self_verified=True);
+    任一守卫败 → Verdict.unverifiable。**绝不**在没有守卫的情况下把 None
+    任务当 passed。
     """
 
-    def __init__(self, *, max_rounds: int = 3, inline_timeout: float = 60.0) -> None:
+    def __init__(
+        self, *, max_rounds: int = 3, inline_timeout: float = 60.0,
+        test_generator: "object | None" = None, goal: str | None = None,
+    ) -> None:
         self.max_rounds = max_rounds
         # inline_timeout: 内联快路径上限。真实 pytest 启动 2-5s，默认给 60s 容忍；
         # 调用方可调小做"分级"(超过 → 降级 unverifiable，而非伪 passed)。
         self.inline_timeout = inline_timeout
+        # self-test 注入点:默认 None(走默认 proposer,目前 None → 永不提议,保留接口);
+        # 真模式可注入 reviewer LLM proposer。goal 是任务目标(给 proposer 看)。
+        self._test_generator = test_generator
+        self._goal = goal
 
     def verify(self, verify_cmd: str | None, *, attempts: int = 1) -> Verdict:
         """返回三态 Verdict(passed/failed/unverifiable)。
 
         优先级：篡改检测 > 命令执行 > 无命令。
         · 篡改非空 → unverifiable(spec §12.5 — 绝不蒙混)。
-        · 无 verify_cmd → unverifiable(HONESTY CORRECTION：没有机检命令真的跑过，就绝不
+        · 无 verify_cmd → unverifiable(HONESTY CORRECTION:没有机检命令真的跑过，就绝不
           声称 passed —— 违反 HONESTY_SYSTEM 规则 1。无测任务能否完成由 Harness 据
-          "verify_cmd is None" 判定为诚实非阻塞完成，不在此处当 passed 蒙混)。
-        · verify_cmd 在白名单 → 跑命令；通过 → passed，失败 → failed，超时 → unverifiable。
-        · verify_cmd 不在白名单 → failed(明确拒绝，不静默跳过)。
+          "verify_cmd is None" 判定为诚实非阻塞完成,不在此处当 passed 蒙混)。
+          例外(任务):ARGOS_SELF_TEST 开启 + 注入了 test_generator → 走 self-test 旁路
+          (详见 _try_self_test);任一守卫败 → 仍返 unverifiable,绝不假装通过。
+        · verify_cmd 在白名单 → 跑命令;通过 → passed,失败 → failed,超时 → unverifiable。
+        · verify_cmd 不在白名单 → failed(明确拒绝,不静默跳过)。
         """
-        # 篡改优先(防贿赂测谎仪)：先查受保护文件，非空 → 直接 unverifiable。
+        # 篡改优先(防贿赂测谎仪):先查受保护文件,非空 → 直接 unverifiable。
         tampered = runtime.detect_tampering()
         if tampered:
             return Verdict.unverifiable(
-                detail=f"验证依赖的受保护文件被改动：{', '.join(tampered)} —— 通过不可信。",
+                detail=f"验证依赖的受保护文件被改动:{', '.join(tampered)} —— 通过不可信。",
                 tampered=tampered, attempts=attempts,
             )
 
-        # 无可机检命令 → 没有任何验证命令真的跑过 → 诚实判 unverifiable(绝不当 passed)。
-        # Harness.run_verify_gate 见 verify_cmd is None 时把它当"诚实非阻塞完成"放行(不 bounce)。
+        # 无 verify_cmd:无 self-test 旁路 → 仍走诚实 unverifiable(HONESTY 规则 1)。
         if not verify_cmd:
+            # self-test 旁路:opt-in + 注入 generator → 试造测试。
+            if _self_test_enabled() and self._test_generator is not None:
+                verdict = self._try_self_test(attempts=attempts)
+                if verdict is not None:
+                    return verdict
+            # 关闭 / 没 generator / 旁路失败 → 诚实 unverifiable。
             return Verdict.unverifiable(
                 detail="(无 verify_cmd，未做机检验证)", tampered=[], attempts=attempts,
             )
@@ -75,6 +102,46 @@ class Verifier:
         if ok:
             return Verdict.passed(detail=detail, verify_cmd=verify_cmd, attempts=attempts)
         return Verdict.failed(detail=detail, verify_cmd=verify_cmd, attempts=attempts)
+
+    def _try_self_test(self, *, attempts: int) -> Verdict | None:
+        """self-test 旁路:goal + workspace 经 TestGenerator 提议 + canary 守卫。
+
+        返回:Verdict(若整套走通且 self-test 真跑了且通过了)或 None(caller 回退 unverifiable)。
+
+        铁律(模块级 + 调用方层):
+          · 任一守卫(propose / 白名单 / canary / 还原 / 真跑)失败 → 返 None,绝不假 passed。
+          · 真跑过 → Verdict.passed_self(self_verified=True)。调用方(UI/report/统计)必须
+            按 self_verified 区分"强 / 弱",不让 self_verified=True 冒充用户级 passed。
+        """
+        from argos_agent.verify.self_test import TestGenerator
+        ctx = runtime.current()
+        workspace = ctx.workspace
+        if workspace is None:
+            return None
+        gen: TestGenerator = self._test_generator  # type: ignore[assignment]
+        proposal = gen.propose_and_validate(
+            goal=self._goal or "(no goal provided)", workspace=workspace,
+        )
+        if proposal is None:
+            return None
+        # 真跑生成出的 verify_cmd(走原有 _run_verify,白名单 + verify_dir 隔离全保留)
+        ok, detail, timed_out = self._run_verify(proposal.cmd)
+        if timed_out:
+            return Verdict.unverifiable(
+                detail=f"[self_verified timeout] {detail}", tampered=[], attempts=attempts,
+            )
+        if ok:
+            return Verdict.passed_self(
+                detail=(
+                    f"[self_verified] 较弱:测试由系统按 reviewer 角色 + canary 守卫自动生成"
+                    f"(空 workspace 必非 0 验过);用户级 verify 不在场。{detail}"
+                ),
+                verify_cmd=proposal.cmd, attempts=attempts,
+            )
+        return Verdict.failed(
+            detail=f"[self_verified failed] 自造测试在真 workspace 未通过:{detail}",
+            verify_cmd=proposal.cmd, attempts=attempts,
+        )
 
     def _run_verify(self, cmd: str) -> tuple[bool, str, bool]:
         """跑验证命令，返回 (是否通过, 细节, 是否超时)。退出码是 ground truth。"""
