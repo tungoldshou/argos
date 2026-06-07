@@ -26,7 +26,8 @@ class ScriptedModelClient:
         self._idx += 1
         return self._scripts[i]
 
-    async def stream(self, messages: list[dict], *, system: str) -> AsyncIterator[str]:
+    async def stream(self, messages: list[dict], *, system: str,
+                     system_dynamic: str | None = None) -> AsyncIterator[str]:
         text = self._next()
         # 模拟流式:逐字符吐(loop 侧拼回完整文本,行为与真 ModelClient 一致)。
         for ch in text:

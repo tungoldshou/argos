@@ -14,7 +14,7 @@ class _OverflowThenOkModel:
     def __init__(self) -> None:
         self.calls = 0
 
-    async def stream(self, messages, *, system):
+    async def stream(self, messages, *, system, system_dynamic=None):
         self.calls += 1
         if self.calls == 1:
             raise RuntimeError("context_length_exceeded: too many tokens")

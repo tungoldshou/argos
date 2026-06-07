@@ -21,8 +21,14 @@ def test_tool_signatures_block_contains_read_file_signature():
 
 
 def test_build_system_calls_tool_signatures_block():
-    """_build_system 应调 _tool_signatures_block 并把它的内容拼到系统提示里。"""
+    """_build_system 应调 _tool_signatures_block 并把它的内容拼到系统提示里。
+
+    任务:loop 把 system 拆 (stable, dynamic) 透传 — 工具签名块属稳定段,
+    实际在 _build_system_pair 内调用,_build_system 是其薄包装。检查时同时看两者。
+    """
     src = inspect.getsource(AgentLoop._build_system)
+    pair_src = inspect.getsource(AgentLoop._build_system_pair)
     # 不强制要求字符串字面量匹配(实现可能用 compose_system 等),
-    # 只要 _build_system 源码里引用了 _tool_signatures_block 即可
-    assert "_tool_signatures_block" in src or "tool_signatures_block" in src
+    # 只要源码里任一方法引用了 _tool_signatures_block 即可
+    assert ("_tool_signatures_block" in src or "tool_signatures_block" in src
+            or "_tool_signatures_block" in pair_src or "tool_signatures_block" in pair_src)

@@ -217,7 +217,7 @@ from argos_agent.setup_wizard import deep_probe
 
 class _ScriptModel:
     def __init__(self, scripts): self._s, self._i = scripts, 0
-    async def stream(self, messages, *, system):
+    async def stream(self, messages, *, system, system_dynamic=None):
         t = self._s[min(self._i, len(self._s) - 1)]; self._i += 1
         for ch in t: yield ch
 

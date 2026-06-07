@@ -167,7 +167,7 @@ def test_e2e_run_emits_cost_update_tier_name():
             self.last_usage = {"input_tokens": 1, "output_tokens": 1,
                                "cache_read": 0, "cache_creation": 0}
 
-        async def stream(self, messages, *, system):
+        async def stream(self, messages, *, system, system_dynamic=None):
             yield "```python\n"
             yield "edit_file('a.py', 'old', 'new', all_occurrences=False)\n"
             yield "```\n"

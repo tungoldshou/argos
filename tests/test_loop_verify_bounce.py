@@ -13,7 +13,7 @@ from argos_agent.tui.events import Escalation, EventBus, PhaseChange, VerifyVerd
 class FakeModel:
     def __init__(self):
         self.calls = 0
-    async def stream(self, messages, *, system):
+    async def stream(self, messages, *, system, system_dynamic=None):
         self.calls += 1
         # 每次都"宣布完成"(无代码块)→ 触发 verify;验证总失败 → 反复 bounce。
         for ch in "我觉得完成了。":
@@ -49,7 +49,7 @@ class NonConformingPassedVerifier:
 
 class CompletingModel:
     """每次 stream 均返回无代码块文本("宣布完成")。"""
-    async def stream(self, messages, *, system):
+    async def stream(self, messages, *, system, system_dynamic=None):
         for ch in "任务完成了。":
             yield ch
 

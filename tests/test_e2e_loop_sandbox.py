@@ -34,7 +34,7 @@ class ScriptModel:
         self._s = scripts
         self._i = 0
 
-    async def stream(self, messages, *, system):
+    async def stream(self, messages, *, system, system_dynamic=None):
         text = self._s[min(self._i, len(self._s) - 1)]
         self._i += 1
         for ch in text:

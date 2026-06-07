@@ -11,7 +11,7 @@ class _EchoModel:
     """把它【看到的 messages(role+content)】记录下来,便于断言历史是否带入。
     输出一句可辨识的 assistant 回答,用于验证 assistant 回复也跨轮带回(非单边历史)。"""
     def __init__(self): self.seen = []
-    async def stream(self, messages, *, system):
+    async def stream(self, messages, *, system, system_dynamic=None):
         self.seen.append([(m["role"], m["content"]) for m in messages])
         for ch in "我已处理本轮请求。": yield ch
 
@@ -48,7 +48,7 @@ async def test_second_run_sees_first_turn_history(tmp_path):
 
 class _EmptyFinalModel:
     """最终段输出纯空白(模型用空 turn 宣布完成)——复现"空 assistant 答复"路径。"""
-    async def stream(self, messages, *, system):
+    async def stream(self, messages, *, system, system_dynamic=None):
         for ch in "   ":   # 纯空白,strip 后为空
             yield ch
 

@@ -47,7 +47,7 @@ class _ScriptedModel:
         self._i = 0
         self.last_usage: dict = {"input_tokens": 10, "output_tokens": 5}
 
-    async def stream(self, messages, *, system):
+    async def stream(self, messages, *, system, system_dynamic=None):
         text = self._scripts[min(self._i, len(self._scripts) - 1)]
         self._i += 1
         for ch in text:

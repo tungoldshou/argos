@@ -118,15 +118,19 @@ class ModelClient:
         self.last_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0,
                                            "cache_read": 0, "cache_creation": 0}
 
-    def _payload(self, messages: list[dict], system: str) -> dict[str, Any]:
+    def _payload(self, messages: list[dict], system: str,
+                 system_dynamic: str | None = None) -> dict[str, Any]:
         # 委托协议(保留方法名:test_payload_normalizes_messages 仍调它)。
-        return self._proto.payload(messages, system=system, tier=self.tier)
+        return self._proto.payload(
+            messages, system=system, tier=self.tier, system_dynamic=system_dynamic,
+        )
 
     def _capture_usage(self, obj: dict[str, Any]) -> None:
         # 委托协议(保留方法名:test_capture_usage_reads_cache_tokens 仍调它)。
         self._proto.capture_usage(obj, self.last_usage)
 
-    async def stream(self, messages: list[dict], *, system: str) -> AsyncIterator[str]:
+    async def stream(self, messages: list[dict], *, system: str,
+                     system_dynamic: str | None = None) -> AsyncIterator[str]:
         cred = self.pool.least_used()
         self.pool.mark_used(cred.key)  # 立即更新 last_used,确保 least_used 轮换(Phase 4 #1)
         headers = self._proto.headers(cred.key)
@@ -135,7 +139,7 @@ class ModelClient:
         self.last_usage = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0, "cache_creation": 0}
         async with httpx.AsyncClient(transport=self._transport, timeout=300.0) as client:
             async with client.stream("POST", url, headers=headers,
-                                     json=self._payload(messages, system)) as resp:
+                                     json=self._payload(messages, system, system_dynamic)) as resp:
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
                     line = line.strip()
@@ -160,6 +164,8 @@ class ModelClient:
                     if text:
                         yield text
 
-    async def complete(self, messages: list[dict], *, system: str) -> str:
-        parts = [c async for c in self.stream(messages, system=system)]
+    async def complete(self, messages: list[dict], *, system: str,
+                       system_dynamic: str | None = None) -> str:
+        parts = [c async for c in self.stream(messages, system=system,
+                                              system_dynamic=system_dynamic)]
         return "".join(parts)

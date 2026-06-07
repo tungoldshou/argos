@@ -36,7 +36,7 @@ class _RecordingFakeModel(FakeModel):
         super().__init__(scripts)
         self.calls: list[list[dict]] = []
 
-    async def stream(self, messages, *, system):
+    async def stream(self, messages, *, system, system_dynamic=None):
         self.calls.append(list(messages))
         text = self._scripts[min(self._i, len(self._scripts) - 1)]
         self._i += 1

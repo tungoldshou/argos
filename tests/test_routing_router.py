@@ -17,7 +17,7 @@ class _FakeModel:
         self.last_usage = {"input_tokens": 0, "output_tokens": 0,
                            "cache_read": 0, "cache_creation": 0}
 
-    async def stream(self, messages, *, system):
+    async def stream(self, messages, *, system, system_dynamic=None):
         self.stream_calls += 1
         if False:
             yield ""

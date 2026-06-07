@@ -26,7 +26,8 @@ class Protocol(_TypingProtocol):
     name: str
     def endpoint(self, base_url: str) -> str: ...
     def headers(self, key: str) -> dict[str, str]: ...
-    def payload(self, messages: list[dict], *, system: str, tier: Any) -> dict[str, Any]: ...
+    def payload(self, messages: list[dict], *, system: str, tier: Any,
+                system_dynamic: str | None = ...) -> dict[str, Any]: ...
     def text_delta(self, sse_obj: dict[str, Any]) -> str: ...
     def capture_usage(self, sse_obj: dict[str, Any], last_usage: dict[str, int]) -> None: ...
     def is_done(self, sse_obj: dict[str, Any]) -> bool: ...
@@ -44,15 +45,30 @@ class AnthropicProtocol:
         return {"x-api-key": key, "anthropic-version": "2023-06-01",
                 "content-type": "application/json"}
 
-    def payload(self, messages: list[dict], *, system: str, tier: Any) -> dict[str, Any]:
+    def payload(self, messages: list[dict], *, system: str, tier: Any,
+                system_dynamic: str | None = None) -> dict[str, Any]:
         # prompt caching(显式 opt-in):system 作带 cache_control 的内容块。系统提示是最大、
         # 最稳、且每个 CodeAct 步都原样重发的前缀 → 缓存它,同一 run 内第二步起全命中,
         # 这才是多步 run 真正的省钱点(对齐"让便宜模型可及")。低于端点最小可缓存长度时
         # Anthropic 静默忽略 cache_control(无害);不支持的兼容代理至多忽略该字段。
+        #
+        # 拆分语义(任务:并行子 agent 共用稳定前缀):当 caller 把"稳定段"与"动态段"分开
+        # 传来(system / system_dynamic),把 system 拆成 2 个 text block —— 第一块含
+        # cache_control 断点(只缓存稳定段),第二块不带(动态段每步变化,不污染前缀)。
+        # system_dynamic 为空 / None → 走原单 block 路径(向后兼容,既有 caller 不破)。
+        if system_dynamic:
+            system_blocks: list[dict[str, Any]] = [
+                {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}},
+                {"type": "text", "text": system_dynamic},
+            ]
+        else:
+            system_blocks = [
+                {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}},
+            ]
         return {
             "model": tier.model,
             "max_tokens": tier.max_tokens,
-            "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+            "system": system_blocks,
             "messages": _coalesce_consecutive_roles(messages),
             "stream": True,
         }
@@ -100,8 +116,16 @@ class OpenAIProtocol:
     def headers(self, key: str) -> dict[str, str]:
         return {"Authorization": f"Bearer {key}", "content-type": "application/json"}
 
-    def payload(self, messages: list[dict], *, system: str, tier: Any) -> dict[str, Any]:
-        msgs: list[dict] = [{"role": "system", "content": system}]
+    def payload(self, messages: list[dict], *, system: str, tier: Any,
+                system_dynamic: str | None = None) -> dict[str, Any]:
+        # OpenAI / OpenRouter / Ollama / LM Studio / vLLM / DeepSeek 走【自动前缀缓存】,
+        # 无显式 cache_control 字段。把 stable + dynamic 合并为单条 system 消息,让自动
+        # 缓存命中稳定前缀部分(若后端支持)。无 system_dynamic 时,行为与改造前一致。
+        if system_dynamic:
+            system_content = f"{system}\n\n{system_dynamic}"
+        else:
+            system_content = system
+        msgs: list[dict] = [{"role": "system", "content": system_content}]
         msgs.extend(_coalesce_consecutive_roles(messages))
         return {
             "model": tier.model,

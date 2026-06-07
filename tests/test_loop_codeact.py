@@ -24,7 +24,7 @@ class FakeModel:
         self._scripts = scripts
         self._i = 0
 
-    async def stream(self, messages, *, system):
+    async def stream(self, messages, *, system, system_dynamic=None):
         text = self._scripts[min(self._i, len(self._scripts) - 1)]
         self._i += 1
         for ch in text:

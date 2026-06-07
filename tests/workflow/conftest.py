@@ -87,7 +87,7 @@ def counting_model_factory():
             outer = self
             class _M:
                 tier = ModelTier(name="worker", model="c", base_url="memory://", max_tokens=64)
-                async def stream(self, messages, *, system):
+                async def stream(self, messages, *, system, system_dynamic=None):
                     outer._active += 1
                     outer.peak_concurrency = max(outer.peak_concurrency, outer._active)
                     await asyncio.sleep(0.05)
@@ -107,7 +107,7 @@ def slow_model_factory():
         class _Slow:
             tier = ModelTier(name="worker", model="slow", base_url="memory://", max_tokens=64)
 
-            async def stream(self, messages, *, system):
+            async def stream(self, messages, *, system, system_dynamic=None):
                 await asyncio.sleep(30)   # 卡在这,等取消
                 yield "永远到不了"
         return _Slow()
@@ -120,7 +120,7 @@ def failing_model_factory():
         from argos_agent.core.models import ModelTier
         tier = ModelTier(name="worker", model="boom", base_url="memory://", max_tokens=64)
 
-        async def stream(self, messages, *, system):
+        async def stream(self, messages, *, system, system_dynamic=None):
             raise RuntimeError("boom")
             yield  # 让它是 async generator
 

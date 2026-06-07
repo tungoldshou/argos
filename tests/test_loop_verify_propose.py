@@ -55,7 +55,7 @@ def test_propose_verify_rejects_trivial_noop_commands():
 class _RecModel:
     """记录每次 stream 收到的 messages(用于断言催促被回灌);按脚本逐段出 text。"""
     def __init__(self, scripts): self._s = scripts; self._i = 0; self.seen = []
-    async def stream(self, messages, *, system):
+    async def stream(self, messages, *, system, system_dynamic=None):
         self.seen.append([m.get("content", "") for m in messages])
         t = self._s[min(self._i, len(self._s) - 1)]; self._i += 1
         for ch in t:
