@@ -1,5 +1,10 @@
 """HookFired 事件 dataclass(投到 EventBus,供 TUI 活动栏渲染)。
 
+事件约定(任务:6 个 events.py 一致性):
+- 复用 `argos_agent.tui.events.EventBus`(全局唯一总线;本模块不重新定义)
+- 每个事件 dataclass 含 `kind` 类属性(类名 snake_case;EventBus 路由 + replay 依赖)
+- `kind` 不参与 dataclass 字段;`asdict()` 不序列化它
+
 不持久化(spec §2.4:只为活动栏实时显示;重放不还原 hook trace)。
 TUI 走 `isinstance(ev, HookFired)` 派发。"""
 from __future__ import annotations

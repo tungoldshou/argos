@@ -4,16 +4,25 @@
   · AST 限制(smolagents)+ OS 沙箱(Seatbelt)+ broker 边界 —— 纵深三层。
   · 子进程持久 Python 命名空间,变量跨 exec_code 存活。
   · broker-gated 工具在子进程内发 broker_call,本类把它转给注入的 broker_handler(host 侧)。
+
+任务:补 Linux 后端(linux.py 的 BwrapExecutor / UnshareExecutor)——
+- `LinuxExecutor` 是 BwrapExecutor 的别名(优先 bwrap,运行时降级 unshare 仍走 BwrapExecutor 实例);
+- `select_backend()` 在本模块也导出(懒导入 linux 防循环);
+- 既有 `SeatbeltExecutor` 行为完全不变,1 处新增 4 行让 caller 也能一站式选平台后端。
 """
 from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from . import seatbelt
 from .backend import ExecResult
+
+if TYPE_CHECKING:
+    from .linux import BwrapExecutor, UnshareExecutor
 
 # broker_call 处理器签名:(action, args) -> 灌回沙箱的值(任意可 JSON 序列化)。
 BrokerHandler = Callable[[str, dict[str, Any]], Any]
@@ -104,3 +113,39 @@ class SeatbeltExecutor:
             return self._proc.stderr.read()[-2000:]
         except Exception:  # noqa: BLE001
             return ""
+
+
+# ── Linux 后端别名(任务:caller 可一站式从 executor 选平台后端)──
+# 懒导入:linux 模块有 shutil.which + import seatbelt,循环风险用懒加载防住。
+_LinuxBackend: Any = None
+
+
+def _get_linux_backend():
+    global _LinuxBackend
+    if _LinuxBackend is None:
+        from . import linux as _linux
+        # BwrapExecutor 优先(unshare 退化 BwrapExecutor 实例内部自处理;
+        # 想强 unshare 用 linux.UnshareExecutor)
+        _LinuxBackend = _linux.BwrapExecutor
+    return _LinuxBackend
+
+
+def LinuxExecutor(broker_handler=None):  # type: ignore[no-redef]
+    """BwrapExecutor 的薄包装:实例化时若 bwrap 不可用,内部会退到 unshare。
+
+    macOS 上 import 它仍能拿到类,但实际跑会 fail(Popen 找不到 bwrap);
+    caller 应当按平台调 select_backend() 选合适后端,这里仅作"知道 Linux 后端在哪"的入口。
+    """
+    return _get_linux_backend()(broker_handler=broker_handler)
+
+
+def select_backend():
+    """按平台 + 工具可用性选后端类。懒转 linux.select_backend()。
+
+    macOS → SeatbeltExecutor;Linux + bwrap → BwrapExecutor;Linux + 仅 unshare → UnshareExecutor;
+    其他/都无 → RuntimeError。
+    """
+    if sys.platform == "darwin":
+        return SeatbeltExecutor
+    from .linux import select_backend as _linux_select
+    return _linux_select()
