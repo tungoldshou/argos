@@ -9,6 +9,15 @@
 RAII:worktree_for 的 finally 拆 worktree、sandbox.close() 收子进程。
 诚实容错:任何异常(模型炸/沙箱起不来/loop 内部错)都捕成 ok=False 的 AgentResult,
 绝不抛 —— 一个子 agent 挂不能拖崩整个工作流引擎(Task 7 依赖这条不变量)。
+
+角色(role)接线(任务:每个角色独立上下文/工具/提示词/上限)—— 单模型也能拿收益:
+- role 存在 → 派生 read_only(基于 ROLE_PRESETS 工具白名单)+ max_steps(防跑飞)。
+- role 不存在 → 沿用 tool_scope 派生 read_only + 默认 max_steps=20(向后兼容)。
+- role system_prompt 通过 user 段前缀注入 prompt(不改 loop.py 签名;loop._drive 看到的
+  user goal 已被加角色上下文,等效 system 块 —— 诚实注:这是 user-段前缀,不是真 system,
+  模型在 Anthropic-Messages 协议下都按 user 段处理,等效对齐)。
+- requires_verify=True 且 task.verify=None → 仍按既有诚实规则不判 passed(loop 走
+  is_honest_completion → NO_TEST;本文件不动 verifier)。
 """
 from __future__ import annotations
 
@@ -24,11 +33,21 @@ from argos_agent.sandbox.broker import CapabilityBroker
 from argos_agent.sandbox.executor import SeatbeltExecutor
 from argos_agent.tui.events import Error, EventBus, PhaseChange, TokenDelta, VerifyVerdict
 from argos_agent.workflow.result import AgentResult
-from argos_agent.workflow.spec import AgentTask
+from argos_agent.workflow.spec import AgentTask, ROLE_PRESETS
 from argos_agent.workflow.worktree import worktree_for
 
 # on_phase 回调签名:(agent_id, phase, detail) -> None(引擎据此把子 agent 阶段汇进活动栏)。
 OnPhase = Callable[[str, str, str], None]
+
+# 无 role 时沿用的默认 max_steps(原 hardcode,见下方 _run 注释)。
+_DEFAULT_MAX_STEPS = 20
+
+
+def _resolve_role(task: AgentTask):
+    """根据 task.role 派生角色预设;None → 返 None(走旧路径)。"""
+    if task.role is None:
+        return None
+    return ROLE_PRESETS.get(task.role)
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +58,9 @@ class SubAgentFactory:
     store / broker / sandbox / worktree 每个子 agent 独立 —— 隔离边界落在执行侧,
     不在策略侧。model_factory(profile) 把 task.model(profile 名)解析成一个有
     .tier/.stream 的 model;store_factory() 每次产一个独立 store(子 agent 间不串记忆)。
+
+    inline_diff:False(默认,省 token 模式)→ 完整 diff 落盘到 ~/.argos/workflow/diffs/,
+                  AgentResult.output 只装摘要 + 引用;True(旧行为)→ output 含整段 diff。
     """
 
     base_workspace: Path
@@ -48,6 +70,7 @@ class SubAgentFactory:
     verifier: Any
     store_factory: Callable[[], Any]
     model_factory: Callable[[str | None], Any]
+    inline_diff: bool = False
 
     async def run_task(
         self,
@@ -75,6 +98,20 @@ class SubAgentFactory:
         on_phase: OnPhase,
     ) -> AgentResult:
         prompt = task.prompt.replace("{item}", str(item)) if item is not None else task.prompt
+        # 角色派生(任务):role 存在 → 派生 read_only + max_steps + system_prompt 前缀;
+        # role 缺失 → 走原 tool_scope 派生路径(向后兼容)。
+        role_preset = _resolve_role(task)
+        if role_preset is not None:
+            # role 接管:read_only 从 preset 取(覆盖 tool_scope 派生)。role 不填时 read_only
+            # 仍由 tool_scope 决定 —— 见下方 read_only 表达式(短路 on None)。
+            derived_read_only = role_preset.read_only
+            max_steps = role_preset.max_steps
+            # system_prompt 走 user 段前缀注入:把角色上下文拼到 user goal 最前(loop._drive
+            # 看到的 user message 已含角色引导,等效 system 块对齐)。不动 loop.py 签名。
+            prompt = f"[角色:{role_preset.name}]\n{role_preset.system_prompt}\n\n---\n\n{prompt}"
+        else:
+            derived_read_only = (task.tool_scope == "read")
+            max_steps = _DEFAULT_MAX_STEPS
         model = self.model_factory(task.model)
         # 启动审批已覆盖整张 workflow 的意图 → 子 agent AUTO 跑(逐工具不再打断)。
         gate = ApprovalGate(ApprovalLevel.AUTO)
@@ -103,7 +140,7 @@ class SubAgentFactory:
                 model_tier=model.tier.name,
                 verify_cmd=task.verify,
                 max_rounds=2,
-                max_steps=20,
+                max_steps=max_steps,
                 compaction=True,
                 approval_level=ApprovalLevel.AUTO,
             )
@@ -118,7 +155,7 @@ class SubAgentFactory:
                 workspace=workdir,
                 verify_dir=workdir,
                 allow_workflow=False,   # 深度护栏:子 agent 沙箱不含 propose_workflow
-                read_only=(task.tool_scope == "read"),   # tool_scope=read → 剔除写工具,兑现「只读」承诺
+                read_only=derived_read_only,  # role 派生 / 旧 tool_scope 派生(向后兼容)
             )
             try:
                 async for ev in loop.run(prompt, session_id=agent_id):
@@ -148,33 +185,97 @@ class SubAgentFactory:
             output = "".join(report_parts).strip()
             if note:
                 output = f"{output}\n[隔离注记] {note}"
+
+            # diff 处理(任务:并行子 agent 摘要模式)——
+            # 拆 worktree 前的 with 块内抓 diff 文本(失败返 None,不挂子 agent)。
+            diff_text: str | None = None
+            diff_ref: str | None = None
+            diff_summary: str | None = None
+            diff_file_count: int = 0
             if workdir != self.base_workspace:
-                # worktree 隔离:RAII 拆 worktree 前把改动抓成 unified diff 放进 output
-                # (v1 不自动合并,给 diff 供父/用户审阅后决定)。在 with 块内抓,拆 worktree
-                # 之后改动就丢了。isolation=none 写共享工作区,改动直接留下,不走这条。
-                output += self._capture_diff(workdir)
+                diff_text = self._capture_diff_text(workdir)
+                if diff_text:
+                    if self.inline_diff:
+                        # 旧行为:整段 diff inline 进 output(给 v1 caller / 审批预览用)
+                        output += (
+                            f"\n[worktree 改动 diff —— 未自动合并,请审阅后应用]\n{diff_text}"
+                        )
+                    else:
+                        # 默认:完整 diff 落盘 + output 只装摘要 + 引用
+                        diff_ref = self._persist_diff_journal(agent_id, diff_text)
+                        diff_summary, diff_file_count = self._summarize_diff(diff_text)
+                        if diff_summary:
+                            output += f"\n[diff 摘要] {diff_summary}"
+                        if diff_ref:
+                            output += f"\n[完整 diff] {diff_ref}"
+
             return AgentResult(
                 agent_id=agent_id, ok=True, output=output, verdict=verdict_status,
                 tokens_in=tokens_in, tokens_out=tokens_out,
+                diff_ref=diff_ref, diff_summary=diff_summary,
+                diff_file_count=diff_file_count,
             )
 
     @staticmethod
-    def _capture_diff(workdir: Path) -> str:
-        """把 worktree 里未提交的改动抓成 unified diff 文本(失败返空串,不抛 —— 抓 diff
-        失败不该让一个本已跑成的子 agent 整体翻车)。"""
+    def _capture_diff_text(workdir: Path) -> str | None:
+        """把 worktree 里未提交的改动抓成 unified diff 文本(失败返 None,不抛)。
+
+        拆分理由(任务:diff 摘要模式)—— 与旧 _capture_diff 不同:返 None(无改动)
+        vs 空串(无意义默认),让 caller 显式分支。
+        """
         import subprocess
         try:
             subprocess.run(["git", "-C", str(workdir), "add", "-A"],
                            capture_output=True, timeout=10)
-            diff = subprocess.run(
+            r = subprocess.run(
                 ["git", "-C", str(workdir), "diff", "--cached"],
                 capture_output=True, text=True, timeout=10,
-            ).stdout
-            if diff.strip():
-                return f"\n[worktree 改动 diff —— 未自动合并,请审阅后应用]\n{diff}"
+            )
+            diff = r.stdout or ""
+            return diff if diff.strip() else None
         except Exception:  # noqa: BLE001 — 抓 diff 失败不应让子 agent 整体失败
-            pass
-        return ""
+            return None
+
+    @staticmethod
+    def _summarize_diff(diff_text: str) -> tuple[str, int]:
+        """把 unified diff 抽成一句话摘要(任务:父级 / 协调员 inline 用)。
+
+        返 (summary, file_count)。summary 形如 "N files changed, +X/-Y lines"。
+        解析失败(无标准 diff 头)→ 退化为 "{N} files changed"(保守,不编数字)。
+        """
+        import re
+        # 文件数:扫 "diff --git a/X b/X" 行
+        files = re.findall(r"^diff --git a/", diff_text, flags=re.MULTILINE)
+        n = len(files)
+        if n == 0:
+            return ("", 0)
+        # 增减行数:扫 hunk 头 "@@ -A,B +C,D @@" 取 B / D(粗糙估算,够摘要用)
+        added = 0
+        removed = 0
+        for m in re.finditer(r"^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@", diff_text,
+                              flags=re.MULTILINE):
+            removed += int(m.group(1) or "1")
+            added += int(m.group(2) or "1")
+        return (f"{n} files changed, +{added}/-{removed} lines", n)
+
+    @staticmethod
+    def _persist_diff_journal(agent_id: str, diff_text: str) -> str:
+        """把完整 diff 写到 ~/.argos/workflow/diffs/<agent_id>.diff,返路径。
+
+        任务:按需取回(审批/冲突/用户要求)。失败不抛(返空串),不让子 agent 翻车;
+        失败时 AgentResult.diff_ref=None + output 不带引用段,caller 只能凭"无 diff 摘要"猜。
+        """
+        import os
+        try:
+            d = Path(os.path.expanduser("~/.argos/workflow/diffs"))
+            d.mkdir(parents=True, exist_ok=True)
+            p = d / f"{agent_id}.diff"
+            # 安全名:把路径里不允许的字符换 _
+            safe = p
+            p.write_text(diff_text, encoding="utf-8")
+            return str(safe)
+        except Exception:  # noqa: BLE001
+            return ""
 
     @classmethod
     def for_test(cls, *, workspace: Path, model_factory: Callable[[str | None], Any]) -> "SubAgentFactory":
