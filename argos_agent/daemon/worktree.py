@@ -12,17 +12,15 @@
 from __future__ import annotations
 
 import logging
-import os
-import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 
+from argos_agent import git_worktree as gw
+from argos_agent.git_worktree import WorktreeError  # re-export:保持既有 import 路径不变
+
 log = logging.getLogger(__name__)
 
-
-class WorktreeError(Exception):
-    """Worktree 创建失败(daemon 5xx 透出)。"""
+__all__ = ["WorktreeError", "WorktreeManager"]
 
 
 class WorktreeManager:
@@ -37,10 +35,7 @@ class WorktreeManager:
         return self._base
 
     def is_git_repo(self, workspace: str) -> bool:
-        try:
-            return (Path(workspace) / ".git").exists()
-        except OSError:
-            return False
+        return gw.is_git_repo(workspace)
 
     def create(self, *, run_id: str, workspace: str) -> str:
         """为 run 创建隔离工作目录;返回路径字符串。
@@ -50,21 +45,9 @@ class WorktreeManager:
         3. git 不可用 + workspace 是 git repo → WorktreeError
         """
         path = self._base / run_id
-        if self.is_git_repo(workspace) and shutil.which("git"):
-            try:
-                subprocess.run(
-                    ["git", "worktree", "add", "-b", f"argos/{run_id}", str(path), "HEAD"],
-                    cwd=workspace, check=True, capture_output=True, text=True, timeout=10,
-                )
-                return str(path)
-            except subprocess.CalledProcessError as e:
-                raise WorktreeError(
-                    f"git worktree add failed: {e.stderr.strip() or e.stdout.strip()}"
-                ) from e
-            except FileNotFoundError as e:
-                raise WorktreeError("git not in PATH") from e
-            except subprocess.TimeoutExpired as e:
-                raise WorktreeError(f"git worktree add timeout: {e}") from e
+        if gw.is_git_repo(workspace) and gw.git_available():
+            gw.add_worktree(repo=workspace, path=path, branch=f"argos/{run_id}", ref="HEAD")
+            return str(path)
         # Fallback: temp dir(base 内)
         try:
             temp = Path(tempfile.mkdtemp(prefix=f"argos-{run_id}-", dir=str(self._base)))
@@ -87,20 +70,8 @@ class WorktreeManager:
             if p.is_dir() and p.name.startswith(f"argos-{run_id}-"):
                 candidates.append(p)
         for path in candidates:
-            if not path.exists():
-                continue
             try:
-                # 若是 git worktree,试着 git worktree remove
-                if (path / ".git").exists() and shutil.which("git"):
-                    try:
-                        subprocess.run(
-                            ["git", "worktree", "remove", "--force", str(path)],
-                            check=False, capture_output=True, text=True, timeout=10,
-                        )
-                    except Exception as e:  # noqa: BLE001
-                        log.debug("worktree: git worktree remove failed for %s: %s", run_id, e)
-                # 兜底:直接 rm
-                shutil.rmtree(path, ignore_errors=True)
+                gw.remove_worktree(path)
             except Exception as e:  # noqa: BLE001
                 log.warning("worktree cleanup failed for %s: %s", run_id, e)
 

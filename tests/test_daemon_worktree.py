@@ -83,16 +83,17 @@ def test_create_fails_when_git_missing(monkeypatch, tmp_path: Path):
     # 强 is_git_repo 走自定义路径
     mgr = WorktreeManager(base_dir=tmp_path / "wt")
     # monkeypatch subprocess.run 在 worktree 路径上抛 FileNotFoundError
-    import argos_agent.daemon.worktree as wmod
+    # (底层 git 调用现统一在 git_worktree;在那里注入,才真正走 git-missing 路径)
+    import argos_agent.git_worktree as gwmod
 
-    original_run = wmod.subprocess.run
+    original_run = gwmod.subprocess.run
 
     def fake_run(*args, **kwargs):
         if args and args[0] and args[0][0] == "git":
             raise FileNotFoundError("git not in PATH")
         return original_run(*args, **kwargs)
 
-    monkeypatch.setattr(wmod.subprocess, "run", fake_run)
+    monkeypatch.setattr(gwmod.subprocess, "run", fake_run)
     with pytest.raises(WorktreeError):
         mgr.create(run_id="a" * 12, workspace=str(tmp_path / "fake-git"))
 
