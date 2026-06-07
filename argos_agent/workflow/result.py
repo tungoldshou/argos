@@ -15,6 +15,13 @@ class AgentResult:
     error: str | None = None
     tokens_in: int = 0
     tokens_out: int = 0
+    # 任务:并行子 agent diff 摘要模式(默认 inline_diff=False)——
+    # 完整 diff 落盘到 diff_ref(路径),output 不再含整段 diff;diff_summary 是
+    # "N files changed, +X/-Y" 一句话摘要;diff_file_count 是改动文件数。
+    # inline_diff=True 旧路径下三个字段全 None/0(diff 已 inline 在 output)。
+    diff_ref: str | None = None
+    diff_summary: str | None = None
+    diff_file_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
