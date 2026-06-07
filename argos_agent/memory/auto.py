@@ -118,16 +118,17 @@ def _read_jsonl(path: Path) -> list[MemoryEntry]:
 
 
 def _append_jsonl(path: Path, entry: MemoryEntry) -> None:
-    """追加一条记忆(JSONL),parent dirs 自动建。失败静默(spec §10)。"""
+    """追加一条记忆(JSONL),parent dirs 自动建。失败静默(spec §10)。
+
+    任务:抽 jsonl_log.append_line(目录自动建 + IO 静默),锁仍在助手外层。
+    tuple → list 的 evidence 转换 + 字段构造仍在本函数(jsonl_log 是通用助手,
+    不理解 MemoryEntry dataclass)。
+    """
     with _write_lock:
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            d = asdict(entry)
-            d["evidence"] = list(entry.evidence)  # tuple → list(JSON 友好)
-            with path.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(d, ensure_ascii=False) + "\n")
-        except OSError:
-            pass  # 磁盘满/权限 — 静默,记忆是 nice-to-have
+        d = asdict(entry)
+        d["evidence"] = list(entry.evidence)  # tuple → list(JSON 友好)
+        from argos_agent import jsonl_log
+        jsonl_log.append_line(path, d)
 
 
 # ── 检索 / 排序(spec §8)──────────────────────────────────────────────────────

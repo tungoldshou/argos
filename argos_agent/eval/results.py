@@ -11,6 +11,9 @@
 D2:JSONL(沿用 #5a)
 D10:cost 字段精度 = float(spec §12 D10)
 D20:用户态数据目录(同 #5a / #5b / #9 一致)
+
+任务:append() 调 jsonl_log.append_line(IO 静默) + threading 锁(仍在助手外层);
+list/load/summary 走原 read_text 解析,模式不抽(各模块读路径不同)。
 """
 from __future__ import annotations
 
@@ -21,6 +24,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from argos_agent import jsonl_log
 from argos_agent.eval.runner import EvalResult
 
 _RUNS_DIR = Path.home() / ".argos" / "eval" / "runs"
@@ -37,20 +41,16 @@ def _date_str(ts: float) -> str:
 
 
 def append(result: EvalResult, *, base: Path | None = None) -> None:
-    """追加 1 条结果。线程安全;IO 错误静默(不阻塞主流程)。"""
+    """追加 1 条结果。线程安全;IO 错误静默(不阻塞主流程)。
+
+    任务:抽 jsonl_log.append_line(目录自动建 + IO 静默),锁仍在助手外层包
+    (jsonl_log 是无锁助手,跨进程/线程安全由 caller 保证)。
+    """
     d = _runs_dir(base) / _date_str(result.finished_at)
-    try:
-        d.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        return
     p = d / f"{result.run_id}.jsonl"
     line = result.to_json() + "\n"
     with _WRITE_LOCK:
-        try:
-            with p.open("a", encoding="utf-8") as fh:
-                fh.write(line)
-        except OSError:
-            pass
+        jsonl_log.append_line(p, line)
 
 
 def list_runs(

@@ -1,12 +1,18 @@
-"""AuditLog:append-only JSONL,30 天滚动清理,IO 失败 continue(spec §2.7)。"""
+"""AuditLog:append-only JSONL,30 天滚动清理,IO 失败 continue(spec §2.7)。
+
+任务:抽 jsonl_log 共享 best-effort 写入样板 —— `log()` 调 `jsonl_log.append_line`,
+`cleanup_old_logs` 调 `jsonl_log.cleanup_files_by_name_date`。audit 专属的字段构造
+(row schema) + `AuditLog` dataclass + 单例(get_audit_log) 留在本文件。
+"""
 from __future__ import annotations
 
-import json
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
+
+from argos_agent import jsonl_log
 
 _log = logging.getLogger("argos.permissions.audit")
 
@@ -21,12 +27,6 @@ def _file_for_date(d: datetime) -> Path:
 @dataclass
 class AuditLog:
     session_id: str
-
-    def _ensure_dir(self) -> None:
-        try:
-            AUDIT_DIR.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            _log.warning("permissions audit: 创建目录失败 %s:%s", AUDIT_DIR, e)
 
     def log(
         self,
@@ -53,37 +53,16 @@ class AuditLog:
             "secret_pattern": secret_pattern,
             "risk": risk,
         }
-        self._ensure_dir()
-        try:
-            f = _file_for_date(datetime.now())
-            with f.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-        except OSError as e:
-            _log.warning("permissions audit: append 失败:%s", e)
+        # 任务:抽 jsonl_log 助手 —— IO 失败 best-effort log warning 不抛,
+        # 行为与原 _ensure_dir + try/except 等价。
+        jsonl_log.append_line(_file_for_date(datetime.now()), row, logger=_log)
 
     def cleanup_old_logs(self, *, days: int = RETAIN_DAYS) -> int:
         """启动时跑一次;超过 days 天的 jsonl 文件删除(D7 锁)。"""
-        if not AUDIT_DIR.exists():
-            return 0
-        cutoff = datetime.now() - timedelta(days=days)
-        removed = 0
-        try:
-            for f in AUDIT_DIR.glob("approvals-*.jsonl"):
-                # 解析文件名日期
-                try:
-                    date_str = f.stem.replace("approvals-", "")
-                    file_date = datetime.strptime(date_str, "%Y-%m-%d")
-                except ValueError:
-                    continue
-                if file_date < cutoff:
-                    try:
-                        f.unlink()
-                        removed += 1
-                    except OSError as e:
-                        _log.warning("permissions audit: cleanup %s 失败:%s", f, e)
-        except OSError as e:
-            _log.warning("permissions audit: cleanup 扫描失败:%s", e)
-        return removed
+        return jsonl_log.cleanup_files_by_name_date(
+            AUDIT_DIR, "approvals-*.jsonl",
+            prefix="approvals-", days=days, logger=_log,
+        )
 
 
 # 模块级单例
