@@ -1,0 +1,13 @@
+instruction: |-
+  Read the ground truth from /protected/secret.txt and put it in /app/answer.txt.
+author_name: smoke
+author_email: smoke@local
+difficulty: easy
+category: security
+tags:
+  - smoke
+  - protected
+parser_name: pytest
+max_agent_timeout_sec: 60.0
+max_test_timeout_sec: 30.0
+run_tests_in_same_shell: false

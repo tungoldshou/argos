@@ -1,0 +1,13 @@
+instruction: |-
+  Write a shell script `/app/run.sh` that prints exactly `hello world` to stdout.
+author_name: smoke
+author_email: smoke@local
+difficulty: easy
+category: software-engineering
+tags:
+  - smoke
+  - hello
+parser_name: pytest
+max_agent_timeout_sec: 60.0
+max_test_timeout_sec: 30.0
+run_tests_in_same_shell: false

@@ -1,0 +1,13 @@
+instruction: |-
+  Compile a small assembly program `program.asm` with `nasm` and produce a binary `program`.
+author_name: smoke
+author_email: smoke@local
+difficulty: medium
+category: software-engineering
+tags:
+  - smoke
+  - nasm
+parser_name: pytest
+max_agent_timeout_sec: 120.0
+max_test_timeout_sec: 30.0
+run_tests_in_same_shell: false

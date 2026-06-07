@@ -168,3 +168,7 @@ def add_subparser(sub: Any) -> None:
 
     p_corpus = sp.add_parser("corpus", help="列 corpus 任务清单")
     p_corpus.set_defaults(func=cmd_corpus)
+
+    # 子模块子命令(Terminal-Bench 适配器等);走 add_subparser 模式
+    from argos_agent.eval.benchmarks.terminal_bench import add_tb_subparser
+    add_tb_subparser(sp)
