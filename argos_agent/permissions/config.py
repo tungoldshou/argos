@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final, Mapping, Sequence
 
+from argos_agent import config_base
 from argos_agent.permissions.schema import VALID_LEVELS
 
 _log = logging.getLogger("argos.permissions")
@@ -68,6 +69,9 @@ class PermissionsConfig:
     allow: tuple[RuleEntry, ...] = ()
     deny: tuple[RuleEntry, ...] = ()
     ask: tuple[RuleEntry, ...] = ()
+    # 预授权 map(rule_name → bool):autonomy 用它把 soft_ask 等"次危险"规则降级到 GREEN。
+    # 硬规则 deny 不可被预授权降级(产品护城河,见 autonomy.classify)。
+    preauth: Mapping[str, bool] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.default_level is not None and self.default_level not in VALID_LEVELS:
@@ -135,16 +139,19 @@ def _safe_rule_entries(arr: Sequence[dict]) -> tuple[RuleEntry, ...]:
 
 def load(path: Path | None = None) -> PermissionsConfig:
     """加载 permissions.json。
-    缺文件 → empty()(D20);JSON 坏 / 校验失败 → PermissionsConfigError(spec D11 不部分加载)。"""
+    缺文件 → empty()(D20);JSON 坏 / 校验失败 → PermissionsConfigError(spec D11 不部分加载)。
+
+    任务:JSON 读 + 解析走 config_base.read_json_file(OSError 行为保持"显式抛");
+    permissions 专属的 default_level / tools / preauth 校验留在本函数。
+    """
     p = path or CONFIG_PATH
-    if not p.exists():
+    data = config_base.read_json_file(p, ErrorCls=PermissionsConfigError)
+    if data is None:
         return PermissionsConfig.empty()
-    try:
-        raw = json.loads(p.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        raise PermissionsConfigError(f"permissions.json JSON 解析失败: {e}") from e
-    if not isinstance(raw, dict):
-        raise PermissionsConfigError("permissions.json 必须是 JSON object")
+    raw = data
+    # 注:历史 permissions 错误消息带 "permissions.json" 前缀(如 "JSON 解析失败: ...");
+    # 助手生成的 "不是合法 JSON: ..." 消息未带前缀 —— 测试断言 match="JSON" 是 substring,
+    # 两条消息都过。读者若想保持原消息,可在 wrapper 里重抛。
     version = raw.get("version")
     if version != 1:
         raise PermissionsConfigError(
@@ -169,6 +176,17 @@ def load(path: Path | None = None) -> PermissionsConfig:
     allow = _safe_rule_entries(raw.get("allow") or [])
     deny = _safe_rule_entries(raw.get("deny") or [])
     ask = _safe_rule_entries(raw.get("ask") or [])
+    # preauth:rule_name → bool。坏值(非 bool / 非 str key)→ log warning 跳过(不破整体加载)。
+    preauth_raw = raw.get("preauth") or {}
+    preauth_clean: dict[str, bool] = {}
+    if isinstance(preauth_raw, dict):
+        for k, v in preauth_raw.items():
+            if isinstance(k, str) and isinstance(v, bool):
+                preauth_clean[k] = v
+            else:
+                _log.warning(
+                    "permissions: skip preauth entry (invalid) key=%r value=%r", k, v,
+                )
     return PermissionsConfig(
         version=1,
         default_level=default_level,
@@ -176,6 +194,7 @@ def load(path: Path | None = None) -> PermissionsConfig:
         allow=allow,
         deny=deny,
         ask=ask,
+        preauth=preauth_clean,
     )
 
 
