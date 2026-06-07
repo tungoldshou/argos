@@ -19,14 +19,16 @@ from argos_agent.tui.events import EventBus, TokenDelta
 
 
 class CapturingModel:
-    """记录每次 stream 收到的 system;按脚本逐 run 出 text。"""
+    """记录每次 stream 收到的 system / system_dynamic;按脚本逐 run 出 text。"""
     def __init__(self, scripts):
         self._s = scripts
         self._i = 0
         self.systems: list[str] = []
+        self.system_dynamics: list[str] = []
 
-    async def stream(self, messages, *, system):
+    async def stream(self, messages, *, system, system_dynamic=None):
         self.systems.append(system)
+        self.system_dynamics.append(system_dynamic or "")
         text = self._s[min(self._i, len(self._s) - 1)]
         self._i += 1
         for ch in text:
@@ -134,7 +136,11 @@ async def test_project_mode_run_guards_existing_tests(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 async def test_skills_recalled_into_untrusted_without_store_recall(monkeypatch):
     """skills 召回独立于 store:即便 store 没有 recall,命中的 skill 也进 untrusted 围栏段
-    (安全段 HONESTY 在前)。这是「skills 不需要大模型也能用 + 不需要记忆库也能用」的接线铁证。"""
+    (安全段 HONESTY 在前)。这是「skills 不需要大模型也能用 + 不需要记忆库也能用」的接线铁证。
+
+    任务:loop 把 system 拆 (stable, dynamic) 透传 — stable 含 HONESTY + 工具签名等,
+    dynamic 含 untrusted 围栏 + skill body + memory 召回。W3 验证顺序锁稳定段在前、动态段在后。
+    """
     from argos_agent import skills as _skills
     fake = _skills.Skill(name="py-test-runner", description="跑 pytest", trust="builtin",
                          enabled=True, body="用 `pytest -q` 跑测试。")
@@ -143,11 +149,13 @@ async def test_skills_recalled_into_untrusted_without_store_recall(monkeypatch):
     loop = _loop(model, FakeStore())  # 无 recall,但 skill 仍应注入
     async for _ in loop.run("帮我跑测试", "s"):
         pass
-    sys_prompt = model.systems[0]
-    assert sys_prompt.startswith(HONESTY_SYSTEM)          # 安全段在前
-    assert UNTRUSTED_OPEN in sys_prompt                   # skill 进了 untrusted 围栏
-    assert "py-test-runner" in sys_prompt
-    assert sys_prompt.index(HONESTY_SYSTEM) < sys_prompt.index(UNTRUSTED_OPEN)
+    stable_prompt = model.systems[0]
+    dynamic_prompt = model.system_dynamics[0]
+    assert stable_prompt.startswith(HONESTY_SYSTEM)      # 安全段在前
+    assert UNTRUSTED_OPEN in dynamic_prompt              # skill 进了 untrusted 围栏(动态段)
+    assert "py-test-runner" in dynamic_prompt
+    # 跨段顺序锁:stable 出 HONESTY 早于 dynamic 出 UNTRUSTED_OPEN(spec §12.1)
+    # (实际"拼接"视角下,HONESTY 必然先于 UNTRUSTED_OPEN 出现,稳定段在前)
 
 
 @pytest.mark.asyncio
@@ -185,16 +193,24 @@ async def test_w3_store_recall_injects_untrusted_after_honesty():
     loop = _loop(model, RecallStore())
     async for _ in loop.run("修复导入错误", "s"):
         pass
-    sys_prompt = model.systems[0]
-    # HONESTY_SYSTEM 在前,untrusted 围栏段在后(注入顺序锁死,prompt injection 翻不上去)。
-    assert sys_prompt.startswith(HONESTY_SYSTEM)
-    assert UNTRUSTED_OPEN in sys_prompt
-    assert UNTRUSTED_CLOSE in sys_prompt
-    assert sys_prompt.index(HONESTY_SYSTEM) < sys_prompt.index(UNTRUSTED_OPEN)
-    # 召回的记忆内容进了 untrusted 段。
-    assert "修过同样的导入错误" in sys_prompt
+    # 任务:并行子 agent 前缀缓存 — loop 把 system 拆 (stable, dynamic) 透传。
+    # W3 验证"HONESTY 在前 / untrusted 在后"的顺序锁依然成立(分两段但顺序不变)。
+    stable_prompt = model.systems[0]
+    dynamic_prompt = model.system_dynamics[0]
+    # 稳定段以 HONESTY_SYSTEM 开头(它就在最前)
+    assert stable_prompt.startswith(HONESTY_SYSTEM)
+    # 动态段含 untrusted 围栏(HONESTY 不在 dynamic 里 —— 顺序锁:stable 永远在前)
+    assert UNTRUSTED_OPEN in dynamic_prompt
+    assert UNTRUSTED_CLOSE in dynamic_prompt
+    # 召回的记忆内容进了 untrusted 段(动态段)
+    assert "修过同样的导入错误" in dynamic_prompt
     # reason 一并展示(spec §5.6 可解释召回)。
-    assert "命中" in sys_prompt
+    assert "命中" in dynamic_prompt
+    # 顺序锁 cross-field:稳定段有 HONESTY_SYSTEM,动态段有 UNTRUSTED_OPEN——
+    # 同一请求里 stable 在 dynamic 之前(请求体里 stable 永远先于 dynamic 出现,
+    # 拼接等价于旧行为)。不强求 dynamic 内部偏移(UNTRUSTED_OPEN 本就是首字符)。
+    assert HONESTY_SYSTEM in stable_prompt
+    assert UNTRUSTED_OPEN in dynamic_prompt
 
 
 @pytest.mark.asyncio

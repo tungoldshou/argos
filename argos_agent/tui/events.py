@@ -32,6 +32,7 @@ EventKind = Literal[
     "skill_run_start",   # ← 新增
     "skill_run_end",     # ← 新增
     "compacted",         # ← #12 新增(spec D10 扩展字面量;deserialize_event 未知 kind 走 pass)
+    "pruned",            # ← context rot 修剪事件(spec 2026-06-07)
 ]
 
 
@@ -183,6 +184,20 @@ class CompactedEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class PrunedEvent:
+    """context rot 持续相关性修剪事件(spec 2026-06-07)。
+    在触发整体压缩之前就持续做的、优先于压缩的轻量折叠——折叠过期工具输出/被取代的旧计划/
+    死路错误,核心原样保留。让 TUI 的 context 可视化能看到"修剪发生了"(区别于整体压缩)。"""
+    kind = "pruned"
+    before: int                      # 修剪前估算 token
+    after: int                       # 修剪后估算 token
+    removed: int                     # 折叠的消息条数
+    reduction_pct: float             # (before-after)/before,钳到 0-1
+    aggressiveness: float            # 本次修剪激进度(LoopConfig.prune_aggressiveness)
+    session_id: str = ""             # 留 trace;空串保旧事件兼容
+
+
+@dataclass(frozen=True, slots=True)
 class WorkflowDone:
     kind = "workflow_done"
     # 工作流引擎跑完:综合结论 + 诚实注记(cap 截断/部分失败/表决结果等)。
@@ -227,6 +242,7 @@ Event = (
     | WorkflowProposed | WorkflowDone | PlanRendered | HookFired
     | LspServerEvent | LspDiagnosticEvent
     | SkillRunStart | SkillRunEnd   # ← 新增
+    | CompactedEvent | PrunedEvent  # ← context rot(spec 2026-06-07)
 )
 
 # kind 常量 → 类,用于反序列化派发
@@ -239,6 +255,7 @@ _KIND_TO_CLASS: dict[str, type] = {
         WorkflowProposed, WorkflowDone, PlanRendered, HookFired,
         LspServerEvent, LspDiagnosticEvent,
         SkillRunStart, SkillRunEnd,   # ← 新增
+        CompactedEvent, PrunedEvent,  # ← context rot(spec 2026-06-07):可正确反序列化
     )
 }
 

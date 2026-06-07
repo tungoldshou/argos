@@ -234,8 +234,12 @@ class LoopConfig:
     # approval_level 默认 ApprovalLevel.CONFIRM(契约 §9 锁#6)。
     approval_level: Any = field(default_factory=lambda: _DEFAULT_APPROVAL_LEVEL)
     # #12 Context 可视化:主动压缩阈值(0-1;0 = 不主动压,只走既有 error 应急路径;
-    # spec §9.5 锁 default=0.8,旧 config.json 缺字段不破)。
+    # spec §9.5 锁 default=0.8,旧 config.json 缺字段不破)。整体压缩=高水位安全网,
+    # safe_compact_threshold 钳制其绝不在 50% 以下触发(spec 2026-06-07 治 context rot)。
     compact_threshold: float = 0.8
+    # context rot 持续相关性修剪激进度(0=不修剪;0<a<0.66 折叠过期工具输出;
+    # a>=0.66 另折叠被取代旧计划/死路错误)。优先修剪而非整体压缩(spec 2026-06-07)。
+    prune_aggressiveness: float = 0.5
 
 
 class AgentLoop:
@@ -317,6 +321,14 @@ class AgentLoop:
         from argos_agent.context.threshold import LastCompactedAt as _LCA
         self._last_compact_used: _LCA | None = None
         self._messages_override: list[dict] | None = None
+        # context rot 三层防线(spec 2026-06-07):
+        # _compacted:本 run 是否发生过(有损)整体压缩;_reverified_since_compact:压缩之后
+        # 是否真重跑过 verify。压缩后必须重验才认 passed(trust_passed_after_compaction 兜底)。
+        self._compacted: bool = False
+        self._reverified_since_compact: bool = True
+        self._current_goal: str = ""    # 本轮任务目标(不可丢核心;run 起始写入,压缩后用于核心锚)
+        self._user_goal: str = ""      # run() 起始写入,供收尾 capture_event("run_success") 记 goal;
+                                         # 修过 bug:之前从未赋值,run_success 落库 goal 恒空,污染召回。
 
     # ── 只读访问(Phase 6 装配/e2e 核验用;构造参数即这些,属性化是最小暴露)──────────
     @property
@@ -463,9 +475,12 @@ class AgentLoop:
                     + yield CompactedEvent(before, after, reduction_pct, triggered_by="proactive")
           4) False → 空生成器
         """
-        from argos_agent.context.threshold import _should_compact, LastCompactedAt as _LCA
-        # threshold 字段可能不存在(老 LoopConfig 构造点);getattr 兜底
-        threshold = float(getattr(self._cfg, "compact_threshold", 0.8) or 0.0)
+        from argos_agent.context.threshold import (
+            _should_compact, LastCompactedAt as _LCA, safe_compact_threshold,
+        )
+        # threshold 字段可能不存在(老 LoopConfig 构造点);getattr 兜底。
+        # safe_compact_threshold:整体压缩=高水位安全网,绝不在 50% 以下触发有损提前压。
+        threshold = safe_compact_threshold(float(getattr(self._cfg, "compact_threshold", 0.8) or 0.0))
         if threshold <= 0:
             return
         # 读 used(API 真值;last_usage 不存在 → 0,自然不超阈值)
@@ -496,10 +511,15 @@ class AgentLoop:
         except Exception:  # noqa: BLE001
             return
         new_messages = self._store.get_messages(session_id) if hasattr(self._store, "get_messages") else []  # type: ignore[attr-defined]
+        # 不可丢核心:整体压缩可能把任务目标折进摘要 → 重新钉回(verify_cmd 是实例字段,天然不丢)。
+        new_messages = self._anchor_core_messages(new_messages, self._current_goal)
         # 估压缩后 token(chars4;reload 后 store 不知 API 真 input;此处只给活动栏参考)
         new_total = sum(max(1, len(m.get("content") or "") // 4) for m in new_messages)
         self._messages_override = new_messages
         self._last_compact_used = _LCA(used=pre_used)
+        # 压缩=有损:标记发生过压缩 + 压缩后尚未重验(passed 需重跑 verify 才可信)。
+        self._compacted = True
+        self._reverified_since_compact = False
         from argos_agent.tui.events import CompactedEvent
         yield CompactedEvent(
             before=pre_used, after=new_total,
@@ -507,13 +527,74 @@ class AgentLoop:
             triggered_by="proactive", session_id=session_id,
         )
 
+    def _anchor_core_messages(self, messages: list[dict], goal: str) -> list[dict]:
+        """不可丢核心:确保任务目标【原样】在场。整体压缩/修剪可能把目标折进摘要里 ——
+        若目标文本已不在 messages 中,则重新钉在最前(标注为核心锚)。verify_cmd 是实例
+        字段,本就不入 messages,天然不丢,无需在此处理。绝不抛(坏输入返回原样)。"""
+        if not goal:
+            return messages
+        try:
+            if any((m.get("content") or "") == goal for m in messages):
+                return messages
+            return [{"role": "user", "content": goal}] + list(messages)
+        except Exception:  # noqa: BLE001 — 核心锚是兜底,异常也绝不崩 run
+            return messages
+
+    def _maybe_prune(self, messages: list[dict], session_id: str = "") -> tuple[list[dict], "PrunedEvent | None"]:
+        """持续相关性修剪(spec 2026-06-07)——在整体压缩之前就一直做、优先于压缩。
+        折叠过期工具输出/被取代旧计划/死路错误,核心(目标+最近N+verify_cmd)原样保留。
+        纯启发式、不依赖模型/store;无可折叠时返回原样 + None(零事件,不刷屏)。"""
+        aggressiveness = float(getattr(self._cfg, "prune_aggressiveness", 0.5) or 0.0)
+        if aggressiveness <= 0 or not messages:
+            return messages, None
+        try:
+            from argos_agent.context.prune import CoreKeep, prune_messages
+            core = CoreKeep(recent_turns=6, verify_cmd=self._verify_cmd)
+            result = prune_messages(messages, core=core, aggressiveness=aggressiveness)
+        except Exception:  # noqa: BLE001 — 修剪是优化项,失败就不修剪(优雅降级)
+            return messages, None
+        if result.removed <= 0:
+            return messages, None
+        from argos_agent.context.tokens import token_estimate
+        before = sum(token_estimate(m.get("content") or "")[0] for m in messages)
+        after = before - result.removed_tokens
+        from argos_agent.tui.events import PrunedEvent
+        ev = PrunedEvent(
+            before=before, after=after, removed=result.removed,
+            reduction_pct=max(0.0, result.removed_tokens / max(1, before)),
+            aggressiveness=aggressiveness, session_id=session_id,
+        )
+        return result.messages, ev
+
     def _build_system(self, goal: str) -> str:
         """系统提示三段接线(顺序锁死,spec §12.1):
           · 安全段 = HONESTY_SYSTEM + 结构化任务契约(命中时注入我们自己的可信 checklist,
             便宜模型对齐形式约定的护城河;非结构化任务不注入)。
           · untrusted 段 = 召回的 skills(社区/导入,围栏隔离防注入) + 任务记忆。
         skills 召回零模型兜底、不依赖 store;memory 召回需 store.recall。任一失败都诚实降级
-        (不假装召回发生过),绝不让 run 崩。"""
+        (不假装召回发生过),绝不让 run 崩。
+
+        本方法返单字符串(向后兼容,既有 caller / 测试用);调用方若想接 Anthropic
+        cache_control 断点(任务:并行子 agent 共用稳定前缀),用 _build_system_pair 拿
+        (stable, dynamic) 对传给 ModelClient.stream(system=stable, system_dynamic=dynamic)。
+        """
+        stable, dynamic = self._build_system_pair(goal)
+        if not dynamic:
+            return stable
+        return compose_system(stable, untrusted=dynamic)
+
+    def _build_system_pair(self, goal: str) -> tuple[str, str]:
+        """返 (stable, dynamic) 对(任务:Anthropic cache_control 拆段打稳定前缀)。
+
+        stable = HONESTY + env + memory_context + tool_signatures + contract + mcp_summary
+                 (无 recall;每步原样重发,适合 cache_control 缓存)
+        dynamic = skill bodies + memory lines(有 recall;每步变化,污染前缀 → 不缓存)
+
+        拆分语义(任务):stable 永远在 dynamic 之前(spec §12.1 顺序锁)。caller 据此
+        把 stable 走 ModelClient.stream(system=...)、dynamic 走 system_dynamic=...,
+        Anthropic 据此给 stable text block 打 cache_control.ephemeral,parallel 子 agent
+        共享同一稳定前缀 → 第二步起 cache_read 命中,价钱降约 10x(spec §4 / 任务设计点)。
+        """
         # ── 安全段:运行环境块(cwd/OS/日期前置,免得模型现场探目录)+ 结构化工程任务契约 ──
         # spec §2.3.3:_tool_signatures_block 跟 _env_context 同位置(HONESTY 之后、untrusted 之前)
         safe = (
@@ -551,7 +632,7 @@ class AgentLoop:
             pass
 
         if not self._cfg.recall:
-            return safe
+            return (safe, "")
 
         # ── untrusted 段:skills(独立于 store,零模型兜底) + memory(需 store.recall)──
         skill_bodies: list[str] = []
@@ -574,8 +655,8 @@ class AgentLoop:
             except Exception:  # noqa: BLE001
                 memory_lines = []
 
-        untrusted = format_untrusted(skill_bodies=skill_bodies, memory_lines=memory_lines)
-        return compose_system(safe, untrusted=untrusted)
+        dynamic = format_untrusted(skill_bodies=skill_bodies, memory_lines=memory_lines)
+        return (safe, dynamic)
 
     async def _drive(self, goal: str, session_id: str) -> AsyncIterator["Event"]:
         """四阶段驱动(不可跳):plan → act(CodeAct 循环) → verify(门禁) → report。"""
@@ -613,8 +694,16 @@ class AgentLoop:
             messages = []
         messages.append({"role": "user", "content": goal})
         self._store.append_message(session_id, role="user", content=goal)
+        self._current_goal = goal   # 不可丢核心:压缩后核心锚据此把目标钉回(spec 2026-06-07)
+        self._user_goal = goal      # 收尾 capture_event("run_success") 要记的 goal;修过 bug:之前从未赋值 → 永远空串
         # W3:系统提示在 run 起始算一次(召回的 untrusted 段在安全段之后)。
-        system = self._build_system(goal)
+        # 任务:并行子 agent 共用稳定前缀 → 拆 (stable, dynamic) 对,Anthropic 据此给
+        # stable text block 打 cache_control.ephemeral;plan 模式仍走单字符串 system
+        # (plan 不重复 stream,缓存收益小;_run_plan_phase_loop 拿 system 串用)。
+        system_stable, system_dynamic = self._build_system_pair(goal)
+        system = system_stable if not system_dynamic else compose_system(
+            system_stable, untrusted=system_dynamic,
+        )
 
         # Plan mode spec §2.5:plan 模式 → plan 子循环(可多轮 keep_planning/refine)。
         # 退出条件:approve_start / approve_accept_edits。子循环里:流式模型一次 → 拼 markdown
@@ -637,6 +726,11 @@ class AgentLoop:
         compactions = 0           # 上下文压缩次数上限,防压缩仍溢出时无限重试。
         text = ""                 # 在 while 外初始化:max_steps=0 等边界下收尾仍能安全 text.strip()
         while step < self._cfg.max_steps:
+            # context rot 第二层(spec 2026-06-07):持续相关性修剪,优先于整体压缩 ——
+            # 每步顶部先折叠过期工具输出/被取代旧计划/死路错误(核心原样保留),再判要不要整体压。
+            messages, _prune_ev = self._maybe_prune(messages, session_id)
+            if _prune_ev is not None:
+                yield _prune_ev
             # #12 Context 可视化(spec §9.3 / D16):主动压缩检查——每步顶部 1 行,
             # 阈值满足 → 调 store.compact_messages + reload messages + yield CompactedEvent。
             # 条件不满足 → 空生成器(零字节 yield),既有 while 流程零修改。
@@ -674,7 +768,8 @@ class AgentLoop:
             scrubber = StreamingContextScrubber()
             text = ""
             try:
-                async for delta in self._model.stream(messages, system=system):
+                async for delta in self._model.stream(messages, system=system_stable,
+                                                        system_dynamic=system_dynamic):
                     text += delta
                     clean = scrubber.feed(delta)
                     if clean:
@@ -687,6 +782,10 @@ class AgentLoop:
                     compactions += 1
                     self._store.compact_messages(session_id, keep_recent=5)   # type: ignore[attr-defined]
                     messages = self._store.get_messages(session_id)           # 重载压缩后线程(含本轮 goal)
+                    messages = self._anchor_core_messages(messages, self._current_goal)  # 不可丢核心
+                    # 压缩=有损:标记发生过 + 压缩后尚未重验(passed 需重跑 verify 才可信)。
+                    self._compacted = True
+                    self._reverified_since_compact = False
                     continue   # 重试本 step(不 step+=1)
                 raise
             tail = scrubber.flush()
@@ -914,6 +1013,56 @@ class AgentLoop:
                 self._verify_cmd, attempt=self._fail_count + 1
             )
             last_verdict = verdict
+            # 压缩后的诚实兜底:这一刻真重跑过 verify(退出码为准)→ 标记已重验,
+            # passed 才可信(trust_passed_after_compaction)。无论结局如何都置位:重验确实发生了。
+            self._reverified_since_compact = True
+            # autonomy 升级(任务):verdict=unverifiable + 有声明 verify_cmd → 不假装通过,
+            # 走 ApprovalGate 问人(防 agent 篡改评判它的测试或 verifier 超时降级时蒙混)。
+            # 关键护城河:unverifiable + 有声明 = 必须升级;verifier.py 已 fail-closed,
+            # 不会返 passed,这里只是把 unverifiable 显式升级为 ask(避免悄悄 bounce 误判)。
+            if verdict.status == "unverifiable" and self._verify_cmd is not None:
+                try:
+                    from argos_agent.permissions.autonomy import (
+                        AutonomyPolicy, on_unverifiable_completion,
+                    )
+                    from argos_agent.permissions.config import get_config as _pc_get
+                    _autonomy = on_unverifiable_completion(
+                        verify_cmd=self._verify_cmd, verdict=verdict,
+                        policy=AutonomyPolicy.from_permissions_config(_pc_get()),
+                    )
+                except Exception:  # noqa: BLE001 — autonomy 模块出错不阻断 run
+                    _autonomy = None
+                if _autonomy is not None:
+                    zone, reason = _autonomy
+                    if zone.value == "red" and self._broker is not None:
+                        try:
+                            desc = f"verify 不可信,需人确认:{reason}"
+                            decision = await self._broker.gate.request(
+                                "autonomy_unverifiable", {"verify_cmd": self._verify_cmd},
+                                description=desc, risk="high", timeout=120.0,
+                            )
+                            if not decision.approved:
+                                # 用户拒绝升级 → 走既有 bounce/escalate 路径(不假装完成)
+                                self._fail_count += 1
+                                if self._fail_count > self._cfg.max_rounds:
+                                    escalated = True
+                                    break
+                                bounce = (
+                                    f"[Argos 验证门] 验证 `{self._verify_cmd}` 不可信,"
+                                    f"用户拒绝继续: {verdict.detail}。请修复后再试。"
+                                )
+                                messages.append({"role": "user", "content": bounce})
+                                step += 1
+                                continue
+                            # 用户批准继续 → 收尾(降级为 unverifiable 完成,标 NO_TEST)
+                            report_note = (
+                                f"verify 不可信({verdict.status}),用户已确认继续"
+                            )
+                            if self._compacted:
+                                report_note += ";上下文经过压缩(有损)"
+                            break
+                        except Exception:  # noqa: BLE001 — gate 异常不阻断 run
+                            pass
             for ev in self._hbus.drain():
                 yield ev
 
@@ -936,11 +1085,23 @@ class AgentLoop:
 
             # Defense-in-depth(Phase 4 #3):verify_cmd is None 时绝不以 passed 收尾 ——
             # 非规范 verifier 可能对无测任务返回 passed;必须走诚实完成路径标 NO_TEST_LABEL。
-            if verdict.status == "passed" and self._verify_cmd is not None:
+            # context rot 兜底(spec 2026-06-07):发生过(有损)压缩且压缩后没真重验过 → passed
+            # 不可信,不在此 break(正常流程 run_verify_gate 刚跑过 → reverified=True,这是防御)。
+            from argos_agent.core.honesty import trust_passed_after_compaction
+            if (verdict.status == "passed" and self._verify_cmd is not None
+                    and trust_passed_after_compaction(
+                        compacted=self._compacted,
+                        reverified=self._reverified_since_compact)):
+                if self._compacted:
+                    report_note = "上下文经过压缩(有损),已重跑验证确认通过"
                 break                        # 通过 → 收尾
             if self._harness.is_honest_completion(verdict, verify_cmd=self._verify_cmd):
                 # HONESTY CORRECTION:无测任务的诚实非阻塞完成 —— 收尾,report 标"未机检验证"。
+                # 若发生过(有损)压缩且无可机检命令 → 诚实加注:记忆有损且无法机检确认进度,
+                # 仍判 unverifiable(NO_TEST),绝不假装 passed(spec 2026-06-07)。
                 report_note = "未机检验证 (no test command)"
+                if self._compacted:
+                    report_note += "；上下文经过压缩(有损),无机检命令可重验确认进度"
                 break
             # 到这里:failed,或配了 cmd 却 unverifiable(篡改/超时)→ 真问题 → bounce/escalate。
             self._fail_count += 1

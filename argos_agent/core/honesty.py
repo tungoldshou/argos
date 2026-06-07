@@ -127,6 +127,20 @@ def format_untrusted(skill_bodies: list[str], memory_lines: list[str]) -> str:
     return "\n".join(parts)
 
 
+def trust_passed_after_compaction(*, compacted: bool, reverified: bool) -> bool:
+    """压缩后的 passed 是否可信(context rot 三层防线第 3 层兜底,spec 2026-06-07)。
+
+    整体压缩是有损的;一旦发生过压缩(`compacted`),agent 不许凭压缩后的(有损)记忆就
+    声称完成 —— 必须在压缩之后真重跑过 verify(`reverified`)才认 passed。没重验过 →
+    不可信(返回 False),交由调用方走三态 `unverifiable` / 重验,绝不假装 passed。
+
+    · 没发生过压缩 → 恒可信(True),既有行为零变化。
+    · 发生过压缩且压缩后重验过 → 可信(True)。
+    · 发生过压缩但压缩后没重验 → 不可信(False)。
+    """
+    return (not compacted) or reverified
+
+
 def compose_system(safe_system: str, untrusted: str = "") -> str:
     """锁死注入顺序：安全段(HONESTY + verify/approval/契约)永远在 untrusted 之前。
     untrusted 为空 → 只返安全段(不加围栏)。
@@ -137,6 +151,22 @@ def compose_system(safe_system: str, untrusted: str = "") -> str:
     if not untrusted:
         return safe_system
     return safe_system + "\n\n" + untrusted
+
+
+def compose_system_pair(safe_system: str, untrusted: str) -> tuple[str, str]:
+    """把系统提示显式拆成(稳定, 动态)对(任务:并行子 agent 共用稳定前缀打 cache 缓存)。
+
+    稳定段 = 无 recall(safe 段全在 stable:HONESTY + env + memory_context + tool_signatures
+                      + 契约 + MCP 摘要 —— 这些每步都原样重发)。
+    动态段 = 有 recall(skill bodies + memory lines —— 每步变化)。
+
+    拆分语义(spec §12.1 顺序锁):safe 永远在 untrusted 之前。本函数不重组内容,只
+    显式化"哪段进 cache 断点"——Anthropic 协议据此给 stable 块打 cache_control,
+    OpenAI 自动前缀缓存命中 stable(无需标记)。
+
+    返回 (stable, dynamic):untrusted 空 → dynamic 为空串(协议层判"无动态段"走单 block)。
+    """
+    return (safe_system, untrusted)
 
 
 class StreamingContextScrubber:

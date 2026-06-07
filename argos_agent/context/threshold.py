@@ -23,6 +23,22 @@ class LastCompactedAt:
 # 5% buffer(spec D9 留余量,防刚压完又涨一点点就再压)。
 _BUFFER_RATIO: float = 0.05
 
+# 整体压缩(有损一锅端)的阈值下限:绝不在 50% 以下主动整体压 —— 提前压是有损的,
+# 会把还要用的细节(报错/文件内容/决定)总结没了,反而加重 context rot(spec 2026-06-07)。
+PRECOMPACT_FLOOR: float = 0.5
+
+
+def safe_compact_threshold(raw: float) -> float:
+    """钳制主动整体压缩阈值,防误配成有损提前压。
+
+    · raw <= 0      → 0.0(0 = 关闭主动压,保留既有语义,不强行开启)
+    · 0 < raw < 0.5 → 0.5(抬到下限:绝不在 50% 以下整体压)
+    · raw >= 0.5    → 原样
+    """
+    if raw <= 0:
+        return 0.0
+    return max(raw, PRECOMPACT_FLOOR)
+
 
 def _should_compact(
     *,
