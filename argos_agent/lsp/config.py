@@ -2,17 +2,17 @@
 
 - `LspServerConfig` / `LspConfig` 全部 frozen dataclass(immutability)。
 - `command` 走 tuple 替代 list(避免 list 不可哈希 + frozen 友好)。
-- `load()` 手写最小校验(避免引入 jsonschema 依赖);坏配置 → `LspConfigError`。
+- `load()` 走 config_base.read_json_file 抽样板;坏配置 → `LspConfigError`。
 - 模块级 `_config` 单例;`get_config()` 惰性加载,`reload_config()` 重新读盘。
 """
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
+from argos_agent import config_base
 from argos_agent.lsp.schema import SERVER_NAME_PATTERN
 
 
@@ -138,6 +138,9 @@ def _parse_server_config(name: str, raw: dict) -> LspServerConfig:
 def load(path: Path | None = None) -> LspConfig:
     """加载 + 校验 ~/.argos/lsp.json。文件不存在 / 不可读 → 返 BUILTIN_DEFAULT_CONFIG。
 
+    任务:走 config_base.read_json_file 抽 JSON 读 + 解析样板;
+    lsp 专属的"缺文件返 BUILTIN_DEFAULT_CONFIG"仍由本函数决定(不让助手层拍板)。
+
     Args:
         path: 显式路径(测试用);None 时读 LSP_CONFIG_PATH。
 
@@ -148,17 +151,13 @@ def load(path: Path | None = None) -> LspConfig:
         LspConfigError: JSON 坏字 / 字段类型错 / version 不匹配 / server name 非法。
     """
     p = path or LSP_CONFIG_PATH
-    try:
-        text = p.read_text(encoding="utf-8")
-    except (FileNotFoundError, OSError):
+    # lsp 旧行为:连 OSError(PermissionError 等)也吞,回 BUILTIN_DEFAULT(spec §2.2 / §3)。
+    data = config_base.read_json_file(
+        p, ErrorCls=LspConfigError, on_os_error="silent",
+    )
+    if data is None:
         # 不存在 / 不可读 → 走 built-in 默认(spec §2.2 / §3)
         return BUILTIN_DEFAULT_CONFIG
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as e:
-        raise LspConfigError(f"{p} 不是合法 JSON: {e}") from e
-    if not isinstance(data, dict):
-        raise LspConfigError("lsp.json 顶层必须是 object")
     if "version" not in data:
         raise LspConfigError("lsp.json 缺 'version' 字段")
     if data["version"] != 1:
@@ -176,3 +175,29 @@ def load(path: Path | None = None) -> LspConfig:
             raise LspConfigError(str(e)) from e
         servers[name] = _parse_server_config(name, raw)
     return LspConfig(version=1, servers=servers)
+
+
+# ── 单例缓存(spec §2.2 / §3 / D11)────────────────────────────────────
+_config: LspConfig | None = None
+
+
+def get_config() -> LspConfig:
+    """惰性加载 + 单例缓存。坏配置 → 透传 LspConfigError(不静默 fallback)。"""
+    global _config
+    if _config is None:
+        _config = load()
+    return _config
+
+
+def reload_config(path: Path | None = None) -> LspConfig:
+    """重新读盘;坏配置 → 保旧 + 抛(spec D11)。"""
+    global _config
+    new = load(path)
+    _config = new
+    return _config
+
+
+def _reset_config() -> None:
+    """测试用:清单例缓存。"""
+    global _config
+    _config = None

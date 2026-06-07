@@ -2,6 +2,10 @@
 
 从 ~/.argos/config.json 的 routing 段读/写。tier 名 fail-closed:拼写错 / 不在
 config.models 里 → ConfigError 拒绝(spec D17 防假绿)。
+
+任务:routing 模式跟 lsp/hooks/permissions 不同(无单例缓存 + 无 empty + set_category 后
+重读),不强行套单例助手;仅抽 JSON 读取样板(走 config_base.read_json_file,失败返 None
+让 caller 决定"routing 段缺则 safe default")。
 """
 from __future__ import annotations
 
@@ -11,6 +15,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from argos_agent import config_base
 from argos_agent.config import ConfigError
 from argos_agent.routing.categorizer import TaskCategory
 
@@ -31,12 +36,18 @@ def load_routing(config_dir: Path) -> RoutingConfig:
     """从 config_dir/config.json 读 routing 段;缺则 safe default(零破坏 spec D17)。"""
     config_dir = Path(config_dir).expanduser()
     cfile = config_dir / "config.json"
-    if not cfile.exists():
-        return RoutingConfig()
+    # 任务:JSON 读取走 config_base.read_json_file(OSError 走 silent —— routing 段
+    # 不存在就 safe default,与原行为一致)。抛 ConfigError 时带原 "config.json 解析失败"
+    # 前缀(历史消息格式,测试断言 match="config.json 解析失败" 不破)。
     try:
-        raw = json.loads(cfile.read_text())
-    except json.JSONDecodeError as e:
-        raise ConfigError(f"config.json 解析失败:{e}") from e
+        raw = config_base.read_json_file(cfile, ErrorCls=ConfigError, on_os_error="silent")
+    except ConfigError as e:
+        # 重抛带原消息前缀(测试/用户文案不变)
+        if "不是合法 JSON" in str(e):
+            raise ConfigError(f"config.json 解析失败:{str(e).split(':', 1)[-1].strip()}") from None
+        raise
+    if raw is None:
+        return RoutingConfig()
     routing = raw.get("routing")
     if not isinstance(routing, dict):
         return RoutingConfig()
@@ -65,13 +76,16 @@ def load_routing(config_dir: Path) -> RoutingConfig:
 
 def _validate_tier(tier: str, config_dir: Path) -> None:
     """tier 名必须在 config.models 里(fail-closed spec D17 防拼写退化)。"""
+    config_dir = Path(config_dir).expanduser()
     cfile = config_dir / "config.json"
-    if not cfile.exists():
-        return
     try:
-        raw = json.loads(cfile.read_text())
-    except json.JSONDecodeError as e:
-        raise ConfigError(f"config.json 解析失败:{e}") from e
+        raw = config_base.read_json_file(cfile, ErrorCls=ConfigError, on_os_error="silent")
+    except ConfigError as e:
+        if "不是合法 JSON" in str(e):
+            raise ConfigError(f"config.json 解析失败:{str(e).split(':', 1)[-1].strip()}") from None
+        raise
+    if raw is None:
+        return
     models = raw.get("models") or {}
     if tier not in models:
         raise ConfigError(
@@ -85,7 +99,12 @@ def set_category(config_dir: Path, category: TaskCategory, tier: str) -> Routing
     cfile = config_dir / "config.json"
     if not cfile.exists():
         raise ConfigError(f"无 {cfile},无法 set_category")
-    raw = json.loads(cfile.read_text())
+    # set_category 必须读到完整 raw(要保留其他段),不走 read_json_file 助手(助手只返顶层 dict,
+    # set_category 需要 raw 全段保留 + 原子写),但 parse error 处理复用助手模式。
+    try:
+        raw = json.loads(cfile.read_text())
+    except json.JSONDecodeError as e:
+        raise ConfigError(f"config.json 解析失败:{e}") from e
     routing = dict(raw.get("routing") or {})
     by_category = dict(routing.get("by_category") or {})
     by_category[category.value] = tier

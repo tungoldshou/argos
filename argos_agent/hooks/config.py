@@ -2,17 +2,17 @@
 
 - `HookHandler` / `HookMatcherEntry` / `HooksConfig` 全部 frozen dataclass
   (immutability CRITICAL,CLAUDE.md 灵魂)。
-- `load()` 手写最小校验(避免引入 jsonschema 依赖);坏配置 → `HooksConfigError`。
-- 模块级 `_config: HooksConfig | None` 单例;`get_config()` 惰性加载,
-  `reload_config()` 重新读盘(坏配置 → 保旧 + 报错,spec §3 / D11)。
+- `load()` 走 config_base.read_json_file 抽样板(任务);坏配置 → `HooksConfigError`。
+- 模块级 `_config: HooksConfig | None` 单例在 `hooks/__init__.py`(load_or_empty 包 try/except
+  静默回 empty,reload 坏配置保旧+抛;与本模块 load() 行为正交)。
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
+from argos_agent import config_base
 from argos_agent.hooks.schema import KNOWN_EVENTS, VALID_HANDLER_TYPES
 
 
@@ -107,6 +107,9 @@ def _parse_entry(raw: dict) -> HookMatcherEntry:
 def load(path: Path | None = None) -> HooksConfig:
     """加载 + 校验 ~/.argos/hooks.json。文件不存在 → empty()(spec §3)。
 
+    任务:JSON 读 + 解析走 config_base.read_json_file(OSError 行为保持原"显式抛"语义)。
+    hooks 专属的"未知 event 名 / matcher ReDoS 校验"留在本函数(领域校验不抽)。
+
     Args:
         path: 显式路径(测试用);None 时读 HOOKS_CONFIG_PATH。
 
@@ -117,18 +120,10 @@ def load(path: Path | None = None) -> HooksConfig:
         HooksConfigError: JSON 坏字 / 字段类型错 / version 不匹配 / 未知 event。
     """
     p = path or HOOKS_CONFIG_PATH
-    if not p.exists():
+    data = config_base.read_json_file(p, ErrorCls=HooksConfigError)
+    if data is None:
+        # 文件不存在 → 走 empty()(spec §3)
         return HooksConfig.empty()
-    try:
-        text = p.read_text(encoding="utf-8")
-    except OSError as e:
-        raise HooksConfigError(f"读 {p} 失败: {e}") from e
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as e:
-        raise HooksConfigError(f"{p} 不是合法 JSON: {e}") from e
-    if not isinstance(data, dict):
-        raise HooksConfigError("hooks.json 顶层必须是 object")
     if "version" not in data:
         raise HooksConfigError("hooks.json 缺 'version' 字段")
     if data["version"] != 1:
