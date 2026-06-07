@@ -161,6 +161,9 @@ class RunWorker:
                     self._manager.mark_cancelled(self.run_id)
                 else:
                     self._manager.mark_completed(self.run_id)
+            # learning hook(任务):收尾处异步触发,passed → distill+promote,失败 → reflection。
+            # 后台非阻塞 + try/except 兜底:不阻断主任务,失败诚实降级(spec 2026-06-07 任务)。
+            await self._maybe_run_learning_hook(entry)
         except asyncio.CancelledError:
             # from-state 动态读:可能是 paused / running / pending
             cur = self._manager.index.get(self.run_id)
@@ -205,3 +208,45 @@ class RunWorker:
                     log.warning("worker: registry cleanup failed: %s", e)
         except Exception as e:  # noqa: BLE001
             log.warning("worker: post_terminal_cleanup failed for %s: %s", self.run_id, e)
+
+    async def _maybe_run_learning_hook(self, entry) -> None:
+        """收尾后异步跑 learning hook(任务:从 verified 轨迹提炼技能)。
+
+        - 读 store 最后一条 verify_verdict 拿 verdict_status(决定 passed vs failed 分支)
+        - passed → on_run_completed(verdict_status="passed", ...) → distill + promote
+        - failed/cancelled/无 verdict → 走 reflection 路径
+        - 任何异常 → log warning,不抛(主任务已收尾,绝不让 learning 拖挂)
+        """
+        try:
+            from argos_agent.learning.hook import on_run_completed
+            import os
+            from pathlib import Path
+
+            verdict_status = "failed"
+            verify_cmd: str | None = None
+            try:
+                events = list(self._manager.store.replay(self.run_id))
+                for ev in events:
+                    if isinstance(ev, dict) and ev.get("kind") == "verify_verdict":
+                        v = ev.get("verdict") or {}
+                        if isinstance(v, dict):
+                            verdict_status = v.get("status", verdict_status) or verdict_status
+                            verify_cmd = v.get("verify_cmd") or verify_cmd
+            except Exception:  # noqa: BLE001
+                pass
+
+            store_dir = self._manager.store.runs_dir()
+            skills_root = Path(os.path.expanduser("~/.argos/skills"))
+
+            await on_run_completed(
+                run_id=self.run_id,
+                store_dir=store_dir,
+                goal=getattr(entry, "goal", "") or "",
+                verify_cmd=verify_cmd,
+                verdict_status=verdict_status,
+                skills_root=skills_root,
+                runner_factory=None,   # worker 不持有 EvalRunner;hook 跳过 promote 仅产候选
+                tasks=[],              # 同上
+            )
+        except Exception as e:  # noqa: BLE001 — learning 路径必须不挂主任务
+            log.warning("worker: learning hook failed for %s: %s", self.run_id, e)
