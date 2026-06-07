@@ -1,5 +1,63 @@
 """pytest 全局夹具。"""
+from __future__ import annotations
+
+import shutil
+import sys
+
 import pytest
+
+from argos_agent.sandbox import executor as _executor_mod
+from argos_agent.sandbox.linux import _AVAILABLE_BACKEND as _LINUX_BACKEND
+
+
+def current_sandbox_backend() -> str | None:
+    """返回当前平台可用的沙箱后端名;都没有则 None(不假装有)。
+
+    - darwin + /usr/bin/sandbox-exec 在 → "seatbelt"
+    - linux + bwrap 在 → "bwrap"
+    - linux + 仅 unshare 在 → "unshare"
+    - 其他或工具不在 → None
+    """
+    if sys.platform == "darwin":
+        if shutil.which("sandbox-exec") or _executor_mod.SeatbeltExecutor is not None:
+            # macOS 上 sandbox-exec 总是系统自带;Seatbelt 仍可用
+            return "seatbelt"
+        return None
+    if sys.platform == "linux":
+        return _LINUX_BACKEND  # bwrap / unshare / None
+    return None
+
+
+def require_sandbox_backend() -> str:
+    """返回当前沙箱后端名;无后端则 pytest.skip 并说明原因(供 fixture / test 入口用)。"""
+    backend = current_sandbox_backend()
+    if backend is None:
+        platform = sys.platform
+        if platform == "linux":
+            reason = (
+                "无可用 Linux 沙箱后端(bwrap / unshare 都不在 PATH);"
+                "装 bwrap 或 unshare 后重试,或在该 CI 上跑"
+            )
+        elif platform == "darwin":
+            reason = "macOS 上 /usr/bin/sandbox-exec 不在(罕见)"
+        else:
+            reason = f"Argos 沙箱暂不支持 {platform!r}"
+        pytest.skip(reason)
+    return backend
+
+
+@pytest.fixture
+def requires_sandbox() -> str:
+    """共享守卫 fixture:无沙箱后端时自动 skip(并把后端名递给测试方便断言)。
+
+    用法:
+        def test_x(requires_sandbox):
+            backend = requires_sandbox
+            ...真跑...
+
+    纯单元测试(presets/config/prune/jsonl)不要装这个 fixture —— 它们不真开沙箱。
+    """
+    return require_sandbox_backend()
 
 
 @pytest.fixture(autouse=True)

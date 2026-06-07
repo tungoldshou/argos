@@ -30,7 +30,7 @@ from typing import Any
 from argos_agent.approval import ApprovalGate, ApprovalLevel
 from argos_agent.core.loop import AgentLoop, LoopConfig
 from argos_agent.sandbox.broker import CapabilityBroker
-from argos_agent.sandbox.executor import SeatbeltExecutor
+from argos_agent.sandbox.executor import select_backend
 from argos_agent.tui.events import Error, EventBus, PhaseChange, TokenDelta, VerifyVerdict
 from argos_agent.workflow.result import AgentResult
 from argos_agent.workflow.spec import AgentTask, ROLE_PRESETS
@@ -135,7 +135,11 @@ class SubAgentFactory:
                 value, _exit = broker._execute(action, args)
                 return value
 
-            sandbox = SeatbeltExecutor(broker_handler=_bridge)
+            # 平台感知:macOS → Seatbelt,Linux → bwrap(unshare 退化)。在没沙箱后端的
+            # 平台(罕见,常见 CI Linux 镜像 bwrap 也不在)抛 RuntimeError,被 run_task 的
+            # try/except 收成 ok=False 的 AgentResult —— 测试若想跑真沙箱,应套 requires_sandbox 守卫。
+            sandbox_cls = select_backend()
+            sandbox = sandbox_cls(broker_handler=_bridge)
             cfg = LoopConfig(
                 model_tier=model.tier.name,
                 verify_cmd=task.verify,

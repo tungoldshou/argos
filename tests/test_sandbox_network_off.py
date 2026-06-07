@@ -1,20 +1,18 @@
 """Phase 3 铁证:沙箱内网络系统级 OFF(非 smolagents AST 限制)。
-故意授权 socket import 让 AST 放行,断言【真连外网】被 OS 挡。"""
+故意授权 socket import 让 AST 放行,断言【真连外网】被 OS 挡。
+跑在有沙箱后端的平台(macOS Seatbelt / Linux bwrap/unshare);无后端时干净 skip。"""
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
 
-from argos_agent.sandbox.executor import SeatbeltExecutor
-
-pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="Seatbelt 仅 macOS")
+from argos_agent.sandbox.executor import select_backend
 
 
 @pytest.fixture
-def ex(tmp_path: Path):
-    e = SeatbeltExecutor()
+def ex(tmp_path: Path, requires_sandbox):
+    e = select_backend()()
     e.spawn(workspace=tmp_path, namespace={"__authorized_imports__": ["socket"]})
     yield e
     e.close()

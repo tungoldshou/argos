@@ -1,20 +1,18 @@
-"""Phase 3:SeatbeltExecutor 经真子进程跑代码,命名空间持久 + 三态捕获。
-本测试真起 sandbox-exec 子进程(macOS only)。"""
+"""Phase 3:沙箱后端经真子进程跑代码,命名空间持久 + 三态捕获。
+本测试真起沙箱后端子进程(macOS Seatbelt / Linux bwrap→unshare)。
+无后端的平台干净 skip,不假装跑过。"""
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
 
-from argos_agent.sandbox.executor import SeatbeltExecutor
-
-pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="Seatbelt 仅 macOS")
+from argos_agent.sandbox.executor import select_backend
 
 
 @pytest.fixture
-def ex(tmp_path: Path):
-    e = SeatbeltExecutor()
+def ex(tmp_path: Path, requires_sandbox):
+    e = select_backend()()
     e.spawn(workspace=tmp_path, namespace={})
     yield e
     e.close()

@@ -40,7 +40,7 @@ def _make_git_worktree_with_changes(tmp_path: Path, *, n_files: int = 1,
 # ── 验收 a: 默认模式 AgentResult 不含整段 diff、含摘要+verdict+引用 ──
 @pytest.mark.asyncio
 async def test_default_mode_omits_full_diff_from_output(
-    tmp_path, scripted_model_factory,
+    tmp_path, scripted_model_factory, requires_sandbox,
 ):
     """inline_diff=False(默认)→ output 不含 'diff --git' 字面,含摘要+verdict+引用。"""
     from argos_agent.workflow.subagent import SubAgentFactory as _SAF
@@ -90,7 +90,7 @@ async def test_default_mode_omits_full_diff_from_output(
 
 # ── 验收 b: 按引用能取回完整 diff ──────────────────────────
 @pytest.mark.asyncio
-async def test_diff_ref_recovers_full_diff(tmp_path, scripted_model_factory):
+async def test_diff_ref_recovers_full_diff(tmp_path, scripted_model_factory, requires_sandbox):
     """diff_ref 路径读出来的文本以 'diff --git' 开头(完整 diff 可取回)。"""
     import argos_agent.workflow.subagent as _sa_mod
     base = tmp_path / "base2"
@@ -119,7 +119,7 @@ async def test_diff_ref_recovers_full_diff(tmp_path, scripted_model_factory):
 # ── 验收 c: 多子 agent 并行时父级上下文不再线性膨胀 ────────
 @pytest.mark.asyncio
 async def test_parallel_agents_output_bounded_not_linear_in_diff_size(
-    tmp_path, scripted_model_factory,
+    tmp_path, scripted_model_factory, requires_sandbox,
 ):
     """3 个子 agent 各 5KB diff → output 总长 << 15KB(默认模式)。"""
     import argos_agent.workflow.subagent as _sa_mod
@@ -153,7 +153,7 @@ async def test_parallel_agents_output_bounded_not_linear_in_diff_size(
 # ── 验收 d: 开关切回全文模式行为如旧 ────────────────────
 @pytest.mark.asyncio
 async def test_inline_diff_true_keeps_legacy_behavior(
-    tmp_path, scripted_model_factory,
+    tmp_path, scripted_model_factory, requires_sandbox,
 ):
     """inline_diff=True → output 含 'diff --git'(旧行为),diff_ref/diff_summary 留空。"""
     import argos_agent.workflow.subagent as _sa_mod
@@ -201,7 +201,7 @@ async def test_inline_diff_true_keeps_legacy_behavior(
 
 # ── 边界:worktree 无改动 ──────────────────────────────────
 @pytest.mark.asyncio
-async def test_no_changes_leaves_diff_fields_empty(tmp_path, scripted_model_factory):
+async def test_no_changes_leaves_diff_fields_empty(tmp_path, scripted_model_factory, requires_sandbox):
     """worktree 没改动 → diff_ref=None, diff_file_count=0, output 不变(无摘要段)。"""
     import argos_agent.workflow.subagent as _sa_mod
     base = tmp_path / "base5"

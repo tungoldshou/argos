@@ -17,7 +17,7 @@ from argos_agent.core.verify_gate import Verifier
 from argos_agent.memory.store import ArgosStore
 from argos_agent.sandbox.broker import CapabilityBroker
 from argos_agent.sandbox.egress import EgressPolicy
-from argos_agent.sandbox.executor import SeatbeltExecutor
+from argos_agent.sandbox.executor import select_backend
 from argos_agent.tools.receipts import ReceiptSigner
 from argos_agent.tui.events import EventBus
 
@@ -45,10 +45,13 @@ def in_project(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def build_real_loop(store, in_project):
+def build_real_loop(store, in_project, requires_sandbox):
     """工厂:给定脚本 + verify_cmd + approval_level → 真栈 AgentLoop(只换 model 为脚本替身)。
 
     沙箱不预 spawn:loop.run() 在开头 spawn、finally close(loop.py)。teardown 兜底 close(幂等)。
+
+    requires_sandbox 依赖:无沙箱后端的平台(mac 缺 sandbox-exec、Linux 缺 bwrap/unshare)
+    直接 skip,绝不 mock 把沙箱测试假跑过。
     """
     created: list = []
 
@@ -65,7 +68,8 @@ def build_real_loop(store, in_project):
             value, _exit = broker._execute(action, args)
             return value
 
-        sandbox = SeatbeltExecutor(broker_handler=broker_handler)
+        # 平台感知:macOS → Seatbelt,Linux → bwrap/unshare。
+        sandbox = select_backend()(broker_handler=broker_handler)
         model = ScriptedModelClient(scripts)
         verifier = Verifier(max_rounds=max_rounds)
         cfg = LoopConfig(model_tier="worker", verify_cmd=verify_cmd, max_rounds=max_rounds,

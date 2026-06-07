@@ -1,20 +1,18 @@
-"""Phase 3 铁证:FS 牢笼由 OS Seatbelt 真实生效(非 smolagents AST 限制)。
-故意授权 os import 让 AST 放行,断言【写越界】被 OS 挡、【写 workspace 内】成功。"""
+"""Phase 3 铁证:FS 牢笼由 OS 沙箱真实生效(非 smolagents AST 限制)。
+故意授权 os import 让 AST 放行,断言【写越界】被 OS 挡、【写 workspace 内】成功。
+跑在有沙箱后端的平台(macOS Seatbelt / Linux bwrap/unshare);无后端时干净 skip。"""
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
 
-from argos_agent.sandbox.executor import SeatbeltExecutor
-
-pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="Seatbelt 仅 macOS")
+from argos_agent.sandbox.executor import select_backend
 
 
 @pytest.fixture
-def ex(tmp_path: Path):
-    e = SeatbeltExecutor()
+def ex(tmp_path: Path, requires_sandbox):
+    e = select_backend()()
     # 授权 os/pathlib 让 AST 不挡;边界改由 OS 沙箱负责。
     e.spawn(workspace=tmp_path, namespace={"__authorized_imports__": ["os", "pathlib"]})
     yield e

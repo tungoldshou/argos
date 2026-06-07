@@ -38,7 +38,7 @@ def _writer_factory(filenames):
 
 
 @pytest.mark.asyncio
-async def test_fanout_full_scope_shared_workspace_writes_persist(tmp_path):
+async def test_fanout_full_scope_shared_workspace_writes_persist(tmp_path, requires_sandbox):
     # isolation=none:并行子 agent 写不重叠文件 → 直接落共享工作区。
     spec = parse_spec({"name": "build", "description": "并行写两文件", "stages": [
         {"id": "w", "op": "fan_out", "over": ["x", "y"], "cap": 2,
@@ -53,7 +53,7 @@ async def test_fanout_full_scope_shared_workspace_writes_persist(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_fanout_worktree_captures_diff(tmp_path):
+async def test_fanout_worktree_captures_diff(tmp_path, requires_sandbox):
     # isolation=worktree:子 agent 在隔离 worktree 写,改动以 diff 回到结果(拆 worktree 不丢)。
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     (tmp_path / "seed.txt").write_text("seed")

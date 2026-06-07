@@ -1,17 +1,17 @@
-"""Phase 3 铁证:真 AgentLoop + 真 SeatbeltExecutor + 真 CapabilityBroker(macOS only)。
+"""Phase 3 铁证:真 AgentLoop + 真沙箱后端 + 真 CapabilityBroker。
 
-FakeModel 出脚本代码,但代码在真 Seatbelt 沙箱里跑;broker-gated 工具经 broker RPC 往返;
-沙箱内 write_file 真落盘 workspace 内。
+FakeModel 出脚本代码,但代码在真沙箱里跑(macOS Seatbelt / Linux bwrap/unshare);
+broker-gated 工具经 broker RPC 往返;沙箱内 write_file 真落盘 workspace 内。
 
 铁证三要素:
   ① CodeAct 循环投 CodeAction + CodeResult 事件(真 loop 运行)。
-  ② write_file 代码在真 Seatbelt sandbox-exec 子进程内执行。
+  ② write_file 代码在真沙箱后端子进程内执行。
   ③ 文件真落盘到 tmp_path(OS 级别的 workspace 内写入,非 mock)。
+无沙箱后端的平台干净 skip,不假装跑过。
 """
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 import pytest
@@ -21,11 +21,9 @@ from argos_agent.core.loop import AgentLoop, LoopConfig
 from argos_agent.core.verify_gate import Verdict, Verifier
 from argos_agent.sandbox.broker import CapabilityBroker
 from argos_agent.sandbox.egress import EgressPolicy
-from argos_agent.sandbox.executor import SeatbeltExecutor
+from argos_agent.sandbox.executor import select_backend
 from argos_agent.tools.receipts import ReceiptSigner
 from argos_agent.tui.events import CodeResult, EventBus, PhaseChange
-
-pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="Seatbelt 仅 macOS")
 
 
 class ScriptModel:
@@ -54,8 +52,8 @@ class MemStore:
 
 
 @pytest.mark.asyncio
-async def test_codeact_writes_file_in_real_sandbox(tmp_path):
-    """铁证:真 AgentLoop 驱动真 SeatbeltExecutor,沙箱内 write_file 真落盘 workspace。"""
+async def test_codeact_writes_file_in_real_sandbox(tmp_path, requires_sandbox):
+    """铁证:真 AgentLoop 驱动真沙箱后端,沙箱内 write_file 真落盘 workspace。"""
     # 注入 ARGOS_WORKSPACE → 子进程 files.py 模块级 WORKSPACE 解析到 tmp_path。
     os.environ["ARGOS_WORKSPACE"] = str(tmp_path)
 
@@ -64,12 +62,12 @@ async def test_codeact_writes_file_in_real_sandbox(tmp_path):
     signer = ReceiptSigner(key=b"test-e2e-key")
     broker = CapabilityBroker(gate=gate, egress=egress, signer=signer)
 
-    # SeatbeltExecutor 同步 broker_handler 桥:AUTO gate 直接 _execute(不走 async await)。
+    # 同步 broker_handler 桥:AUTO gate 直接 _execute(不走 async await)。
     def broker_handler(action, args):
         value, exit_code = broker._execute(action, args)
         return value
 
-    ex = SeatbeltExecutor(broker_handler=broker_handler)
+    ex = select_backend()(broker_handler=broker_handler)
 
     # 脚本:第一轮含 write_file 代码块,第二轮宣布完成。
     scripts = [
