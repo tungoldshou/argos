@@ -5,6 +5,7 @@
 # local env (dev keys — never commit)
 .env.local
 .env*.local
+CLAUDE.md
 
 # codegraph index
 .codegraph
