@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 # 合法 op 集合
-_OPS = {"fan_out", "pipeline", "panel", "loop_until", "synthesize"}
+_OPS = {"fan_out", "pipeline", "panel", "loop_until", "synthesize", "best_of_n"}
 # 合法 tool_scope 枚举
 _SCOPES = {"read", "full"}
 # 合法 isolation 枚举
@@ -23,6 +23,9 @@ _ROLES = ("explorer", "planner", "coder", "reviewer")
 _MAX_CAP = 16
 # 单 workflow 最大 stage 数
 _MAX_STAGES = 12
+# best_of_n 候选数范围(下限 1,上限同 _MAX_CAP,默认 3)
+_BEST_OF_N_DEFAULT = 3
+_BEST_OF_N_MAX = _MAX_CAP
 
 
 class WorkflowSpecError(ValueError):
@@ -154,6 +157,9 @@ class Stage:
     target: int | None = None
     max_dry_rounds: int = 2
     cap: int = 4
+    # best_of_n 专用:同任务并行 N 个候选(N 个独立 worktree + 独立跑),选最好。
+    # 仅 op == 'best_of_n' 时生效;其它 op 忽略。其他 op 视 n 为 None。
+    n: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,6 +263,18 @@ def parse_spec(raw: dict) -> WorkflowSpec:
                 f"panel threshold({threshold})不可大于 voters({voters})"
             )
         cap = min(int(sr.get("cap", 4)), _MAX_CAP)
+        # best_of_n:取 n(默认 3,夹在 1.._BEST_OF_N_MAX 之间)
+        if op == "best_of_n":
+            try:
+                n = int(sr.get("n", _BEST_OF_N_DEFAULT))
+            except (TypeError, ValueError):
+                raise WorkflowSpecError(
+                    f"stage「{sid}」best_of_n 的 n 非法:{sr.get('n')!r}"
+                )
+            n = max(1, min(n, _BEST_OF_N_MAX))
+            n_val: int | None = n
+        else:
+            n_val = None
         stages.append(
             Stage(
                 id=sid,
@@ -268,6 +286,7 @@ def parse_spec(raw: dict) -> WorkflowSpec:
                 target=sr.get("target"),
                 max_dry_rounds=int(sr.get("max_dry_rounds", 2)),
                 cap=max(1, cap),
+                n=n_val,
             )
         )
         seen_ids.add(sid)

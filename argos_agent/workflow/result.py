@@ -28,6 +28,9 @@ class AgentResult:
 class StageResult:
     stage_id: str
     results: tuple[AgentResult, ...]
+    # best_of_n 专用:同任务 N 个候选的"全本"。results 里只装 winner(通过的或最佳非通过),
+    # 这里装全部,供人看"另外几个都跑了啥"。其它 op 时为空 tuple(向后兼容)。
+    candidates: tuple[AgentResult, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +47,8 @@ def _agent_count(stage: Stage) -> int:
     """根据 op 类型推断本阶段将起几个子 agent。"""
     if stage.op == "panel":
         return stage.voters
+    if stage.op == "best_of_n":
+        return max(1, stage.n or 3)
     if stage.op in ("fan_out", "pipeline"):
         n = len(stage.over) if isinstance(stage.over, tuple) else 1
         return max(1, n)

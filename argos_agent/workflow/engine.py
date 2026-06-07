@@ -66,6 +66,8 @@ class WorkflowEngine:
             return await self._run_panel(stage, prior, notes)
         if stage.op == "loop_until":
             return await self._run_loop_until(stage, prior, notes)
+        if stage.op == "best_of_n":
+            return await self._run_best_of_n(stage, prior, notes)
         return await self._run_fan_out(stage, prior, notes)
 
     async def _run_one(self, stage: Stage, task: AgentTask, idx_label, item) -> AgentResult:
@@ -191,6 +193,119 @@ class WorkflowEngine:
     def _is_yes(output: object) -> bool:
         """panel 赞成票判定:output 含约定标记即记一票(确定,不靠 NLP)。"""
         return _VOTE_YES in str(output)
+
+    async def _run_best_of_n(self, stage: Stage, prior, notes) -> StageResult:
+        """best_of_n:同任务并行 N 个候选,各自 worktree + 各自跑,选第一个 passed 的。
+
+        选择规则(诚实,deterministic):
+          · 任一候选 verdict == 'passed' → winner = 第一个 passed
+            (完成顺序由 gather 收齐时由底层调度,异步顺序不保证;tie-break:
+             改文件数 diff_file_count 升序,再 ties 时取下标小者 — 仍 deterministic)
+          · 全部未 passed → winner = "最不坏"的一个:
+              ok=True (跑成功了,只是 verify 没让过) 优先于 ok=False
+              然后 verdict='unverifiable' 优先于 'failed'(诚实区分:测不了 ≠ 没过)
+              再按 diff_file_count 升序
+            但 stage.results 里的 winner 仍标 ok=False,verdict = 'failed' 或
+            'unverifiable'(取所有候选里"最差"的;都 failed 取 failed;都 unverifiable
+            取 unverifiable;mixed → unverifiable 优先被如实标,因含"不可判"成分)
+            防止"无 passed 时假装成功":若全 unverifiable → stage.verdict=unverifiable;
+            否则 stage.verdict=failed。
+        复用:
+          · SubAgentFactory.run_task → 各自独立 worktree + 各自真 verify(不 mock)
+          · diff 摘要模式(SubAgentFactory.inline_diff 默认 False)→ 不撑爆父上下文
+          · 进度事件经 EventBus 走 _emit;每个候选 act/done
+        拒绝"用 mock 把沙箱测试假跑过":候选数 N 必须真跑真 verify(本方法不替 caller
+        决定 N 是不是 0/1 — spec 解析已夹到 ≥ 1,夹后仍真跑)。
+        """
+        n = max(1, stage.n or 3)
+        task = stage.agent[0] if isinstance(stage.agent, tuple) else stage.agent
+        sem = asyncio.Semaphore(stage.cap)
+
+        async def _candidate(idx: int) -> AgentResult:
+            async with sem:
+                return await self._run_one(stage, task, f"c{idx}", None)
+
+        # gather 让 N 真并发;asyncio 不保证完成顺序,下面 _pick_winner 用确定 tie-break
+        results: tuple[AgentResult, ...] = tuple(
+            await asyncio.gather(*[_candidate(i) for i in range(n)])
+        )
+        winner, stage_verdict, all_passed = self._pick_best_of_n_winner(results)
+        # notes:如实记录 best_of_n 跑了几个、几个 passed、winner 选了哪个
+        passed_n = sum(1 for r in results if r.verdict == "passed")
+        notes.append(
+            f"best_of_n「{stage.id}」N={n} 跑了 {n} 个候选,"
+            f"passed={passed_n} → winner={winner.agent_id}"
+            f"({'passed' if all_passed else stage_verdict})"
+        )
+        return StageResult(
+            stage_id=stage.id,
+            results=(winner,),
+            candidates=results,
+        )
+
+    @staticmethod
+    def _pick_best_of_n_winner(
+        results: tuple[AgentResult, ...],
+    ) -> tuple[AgentResult, str, bool]:
+        """从 N 个候选里挑 winner + 派生 stage verdict。返 (winner, stage_verdict, all_passed)。
+
+        stage_verdict 取值:
+          · 'passed'    至少 1 个 passed → 已 OK,winner 即 passed 那个
+          · 'failed'    全 failed
+          · 'unverifiable' 全 unverifiable
+          · 'failed'    mixed(unverifiable + failed) → 用 failed(更"坏"的如实标)
+        winner 在全非 passed 时的偏好:
+          ok=True 优先(跑通了的,只是 verify 没让过)> ok=False
+          verdict='unverifiable' 优于 'failed'(因 unverifiable 含义是"测不了",诚实
+            不等于"答案错";人看到 unverifiable 知道可能是测试本身有毛病而非模型差)
+          再按 diff_file_count 升序(改动小优先)
+          再按下标升序(完全 tie 时确定,即便不期望发生)
+        """
+        if not results:
+            # 防御性:N 解析时已夹 ≥ 1,但保险
+            return (
+                AgentResult(agent_id="best_of_n#empty", ok=False, output="",
+                            verdict="failed", error="no candidates"),
+                "failed", False,
+            )
+        passed = [r for r in results if r.verdict == "passed"]
+        if passed:
+            # tie-break:diff 越小越好;同 diff 时按下标(用 enumerate 原始位置)
+            indexed = list(enumerate(passed))
+            indexed.sort(key=lambda ir: (ir[1].diff_file_count, ir[0]))
+            return indexed[0][1], "passed", True
+        # 全非 passed:挑最不坏
+        ranked = sorted(
+            enumerate(results),
+            key=lambda ir: (
+                0 if ir[1].ok else 1,                          # ok=True 优先
+                0 if ir[1].verdict == "unverifiable" else 1,   # unverifiable 优于 failed
+                ir[1].diff_file_count,                          # 改动小优先
+                ir[0],                                          # 同分按下标
+            ),
+        )
+        winner = ranked[0][1]
+        # 派 stage verdict:有任一 unverifiable → unverifiable(因"测不了"更诚实);
+        # 否则全 failed
+        any_unverifiable = any(r.verdict == "unverifiable" for r in results)
+        stage_verdict = "unverifiable" if any_unverifiable else "failed"
+        # 强制把 winner 校到 stage_verdict(便于调用方只看 winner 也知道汇总态);
+        # 无 passed 时 **必然** ok=False —— 哪怕原候选 ok=True("跑通但 verify 没过"也不能
+        # 假装 passed)。这是 best_of_n 诚实铁律。
+        if winner.verdict != stage_verdict or winner.ok:
+            winner = AgentResult(
+                agent_id=winner.agent_id,
+                ok=False,                    # 关键:无 passed 时 winner 一定 ok=False
+                output=winner.output,
+                verdict=stage_verdict,
+                error=winner.error,
+                tokens_in=winner.tokens_in,
+                tokens_out=winner.tokens_out,
+                diff_ref=winner.diff_ref,
+                diff_summary=winner.diff_summary,
+                diff_file_count=winner.diff_file_count,
+            )
+        return winner, stage_verdict, False
 
     @staticmethod
     def _note_failures(stage: Stage, results, notes) -> None:
