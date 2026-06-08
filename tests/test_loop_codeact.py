@@ -244,3 +244,35 @@ async def test_no_action_bounces_not_completes():
         if isinstance(ev, CodeAction):
             actions.append(ev)
     assert len(actions) >= 1, "应在第二段真执行代码,而非首段纯文字就收尾"
+
+
+@pytest.mark.asyncio
+async def test_max_steps_exhaustion_still_walks_phase_gate():
+    """回归(2026-06-09):max_steps 耗尽、模型从未说'完成'时,while 自然退出落到
+    enter_phase('report')。harness 此时仍停在 act(idx=1)→ 跳到 report(idx=3)曾
+    触发 ValueError('阶段不可跳'),被 best_of_n 1/3 候选踩中。
+
+    修法:while 后补一次惰性 enter_phase('verify') 让 phase_idx 推进到 2,再 report 不跳。
+    本测试断言:不抛 ValueError,且 verify/report 阶段都被投出。
+    """
+    # 模型死循环:有代码块但永远不说完成(只有一个脚本,FakeModel 在末位反复发同一段)。
+    # max_steps=2 强制 while 在第二次循环后退出。
+    model = FakeModel(["```python\nwrite_file('a','b')\n```"])
+    from argos_agent.tui.events import EventBus
+    loop = AgentLoop(
+        store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(),
+        broker=None, model=model, verifier=FakeVerifier(),
+        config=LoopConfig(verify_cmd=None, max_steps=2),
+    )
+    phases: list[str] = []
+    try:
+        async for ev in loop.run("g", "s"):
+            if isinstance(ev, PhaseChange):
+                phases.append(ev.phase)
+    except ValueError as e:
+        pytest.fail(f"harness 阶段门在 max_steps 耗尽时炸了:{e}")
+    # 必含 verify 与 report(无论是否真做了 verify),且 verify 在 report 之前。
+    assert "verify" in phases, f"补齐后 verify 必须被投出,实际 phases={phases}"
+    assert phases[-1] == "report", f"最后一阶段必须是 report,实际 phases={phases}"
+    assert phases.index("verify") < phases.index("report"), \
+        f"verify 必须在 report 之前,实际 phases={phases}"
