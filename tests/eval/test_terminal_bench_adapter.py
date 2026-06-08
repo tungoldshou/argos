@@ -77,8 +77,10 @@ def test_to_eval_task_writes_goal_verify_setup(tmp_path):
     assert isinstance(task, EvalTask)
     assert task.id == "tb_echo_hello"
     assert "Write a shell script" in task.goal
-    # verify_cmd:单行 bash -c '...'
-    assert task.verify_cmd.startswith("bash -c ")
+    # verify_cmd:单行 python -c '...' 包 bash(白名单首 token = python)。
+    # 历史:之前是 `bash -c '...'` 首 token = bash → verify_gate 拒,N=1 必 0%。
+    # 修后首 token 必须落在 ALLOWED_CMDS 内,适配器不再 wrap bash。
+    assert task.verify_cmd.startswith("python -c ")
     # $TEST_DIR 已被替换为 workdir 绝对路径
     assert "$TEST_DIR" not in task.verify_cmd
     # setup_cmd(Dockerfile RUN 行拼成 bash 脚本)非空;具体行内容由 RUN 决定
@@ -122,11 +124,13 @@ def test_classify_marks_python_base_as_supported():
 
 
 def test_classify_marks_custom_t_bench_image_unsupported():
-    """FROM ghcr.io/laude-institute/t-bench/... → unsupported_custom_image(不拉容器)。"""
+    """FROM ghcr.io/laude-institute/t-bench/... → 无 Docker 时判 unsupported_custom_image_no_docker
+    (修后:有 Docker 改判 supported_in_docker;测试显式传 docker_available=False
+    模拟"没 Docker"场景)。"""
     parsed = tb.load_tb_task(SMOKE_DIR / "tb_compile_asm")
-    cls = tb.classify(parsed)
+    cls = tb.classify(parsed, docker_available=False)
     assert cls.supported is False
-    assert cls.kind == "unsupported_custom_image"
+    assert "custom" in cls.kind or "docker" in cls.kind.lower()
     assert "container image" in cls.reason.lower()
 
 
@@ -164,12 +168,14 @@ def _make_runner(tmp_path, *, verdict, detail="", steps=1):
 
 
 def test_run_subset_picks_supported_and_skips_unsupported(tmp_path):
-    """3 个 smoke 任务:1 supported,2 unsupported(自定义 image + protected)→ pass@1 跑 1 条。"""
+    """3 个 smoke 任务:1 supported,2 unsupported(自定义 image + protected)→ pass@1 跑 1 条。
+    显式 docker_available=False:让 tb_compile_asm 走老 unsupported 路径(测试"无 Docker"行为)。"""
     runner = _make_runner(tmp_path, verdict=PASS_PASSED, detail="1 passed")
     workdir = tmp_path / "corpus"
     report = tb.run_subset(
         [SMOKE_DIR / "tb_echo_hello", SMOKE_DIR / "tb_compile_asm", SMOKE_DIR / "tb_hidden_state"],
         runner=runner, model_tier="default", workdir=workdir, persist=False,
+        docker_available=False,
     )
     # 计数
     assert report.total_seen == 3
@@ -179,7 +185,7 @@ def test_run_subset_picks_supported_and_skips_unsupported(tmp_path):
     # pass@1 = 1 / 1(只算 supported 的)
     assert report.pass_at_1 == 1.0
     # 跳过原因分桶
-    assert report.unsupported_reasons.get("unsupported_custom_image") == 1
+    assert report.unsupported_reasons.get("unsupported_custom_image_no_docker") == 1
     assert report.unsupported_reasons.get("unsupported_protected_path") == 1
     # per-task 状态:2 跳 + 1 pass
     statuses = {tid: st for tid, (st, _) in report.per_task_status.items()}
@@ -189,13 +195,15 @@ def test_run_subset_picks_supported_and_skips_unsupported(tmp_path):
 
 
 def test_run_subset_does_not_let_skipped_drag_pass_at_1(tmp_path):
-    """5 个 unsupported + 1 failed → pass@1 = 0/1 = 0.0,不是 0/6。"""
+    """5 个 unsupported + 1 failed → pass@1 = 0/1 = 0.0,不是 0/6。
+    docker_available=False 模拟"无 Docker"场景。"""
     runner = _make_runner(tmp_path, verdict=PASS_FAILED, detail="1 failed")
     workdir = tmp_path / "corpus"
     # 6 个 unsupported(tb_compile_asm)+ 1 个真跑;不重复传同一 dir,直接传 unsupported
     subset = [SMOKE_DIR / "tb_compile_asm"] * 5 + [SMOKE_DIR / "tb_echo_hello"]
     report = tb.run_subset(
         subset, runner=runner, model_tier="default", workdir=workdir, persist=False,
+        docker_available=False,
     )
     assert report.total_seen == 6
     assert report.supported == 1
@@ -227,12 +235,14 @@ def test_run_subset_persists_jsonl_for_supported(tmp_path):
 
 
 def test_run_subset_does_not_persist_for_skipped(tmp_path):
-    """skipped 任务不应落 JSONL(否则统计里会出现一堆跳过的尾巴)。"""
+    """skipped 任务不应落 JSONL(否则统计里会出现一堆跳过的尾巴)。
+    docker_available=False 让 tb_compile_asm 走老 skip 路径。"""
     runner = _make_runner(tmp_path, verdict=PASS_PASSED)
     workdir = tmp_path / "corpus"
     tb.run_subset(
         [SMOKE_DIR / "tb_compile_asm"],
         runner=runner, model_tier="default", workdir=workdir, persist=True,
+        docker_available=False,
     )
     runs_dir = runner.base_dir / "runs"
     if runs_dir.exists():

@@ -19,8 +19,11 @@ Terminal-Bench 是 Laude Institute 维护的「terminal-only agent」公开 benc
        · tests/ 引用 /protected/ 等容器内路径(本适配器不建该路径)
   3. to_eval_task(tb, *, workdir) → 把 TB 任务落成 corpus.EvalTask 文件树
        goal.md ← instruction
-       verify_cmd ← 包了 "cd <workdir> && pip install -q pytest && pytest tests/..." 的单行
+       verify_cmd ← 包了 "python -c "..." bash -c "<脚本>"" 的 verify_cmd
+         (首 token=python 落在白名单,见 _build_verify_cmd 注释)
        setup.sh ← 提取 Dockerfile 的 RUN 行,转 bash(去掉 FROM/COPY 等容器专属指令)
+       tests/ ← 源任务的 tests/ 整个复制(为 A2 真 TB 任务铺路:run-tests.sh
+         直接调 tests/...;原适配器不复制 → 真 TB 任务全因找不到 tests 假 fail)
   4. run_subset(dirs, *, runner, model_tier) → 跑一组;返 TBBatchReport
        (passed/failed/error/setup_failed/skipped 计数 + pass@1 + 跳过原因清单)
   5. CLI 入口:cmd_tb(args) — 跑一个子集并打 pass@1
@@ -29,6 +32,9 @@ Terminal-Bench 是 Laude Institute 维护的「terminal-only agent」公开 benc
   · 不在没跑沙箱时把"unsupported" 记成 pass / fail(直接 skipped,不计入分母)
   · 不为变绿而 mock 沙箱 / verify
   · 不嵌套 TB 的 Docker harness;只复用本仓的 EvalRunner + 三态 Verifier
+  · verify_cmd 构造保证首 token 落在 ALLOWED_CMDS(python / pytest / ...);
+    不动 ALLOWED_CMDS / 三态 / 篡改检测(那些是 verify_gate 的护城河,
+    适配器只做翻译)
 """
 from __future__ import annotations
 
@@ -242,21 +248,37 @@ class TBClassification:
                 # | "unsupported_protected_path" | "unsupported_no_setup"
 
 
-def classify(tb: TBTask) -> TBClassification:
+def classify(tb: TBTask, *, docker_available: bool | None = None) -> TBClassification:
     """按规则把 TB 任务分 supported / unsupported。
+
+    docker_available:None → 自动探(docker info 跑得通?);True/False → 显式给定。
+    测试要造"无 docker"场景时显式 False。
 
     决策顺序(命中即返):
       1. 有 docker-compose 但无 Dockerfile?罕见,标 unsupported_compose。
-      2. FROM 是 t-bench 自家镜像(ghcr.io/laude-institute/...)→ unsupported_custom_image。
-      3. 任务目录有 /protected/ 目录(测试会调 /protected/... 路径)→ unsupported_protected_path。
-      4. 既没 Dockerfile 也没 RUN 行(无 setup)→ unsupported_no_setup(本适配器没东西能跑)。
-      5. 否则 supported。
+      2. FROM 是 t-bench 自家镜像(ghcr.io/laude-institute/...):
+         a. docker 可用 → supported_in_docker(本适配器支持在容器里真跑)
+         b. docker 不可用 → unsupported_custom_image_no_docker(诚实:要容器但没容器)
+      3. 任务目录有 /protected/ 目录 → unsupported_protected_path(本适配器不模拟容器内 /protected)
+      4. 既没 Dockerfile 也没 RUN 行 → unsupported_no_setup
+      5. 否则 supported(本机 python:3.12 / ubuntu 等镜像直接用)
+
+    关键修订(任务:让真 TB 任务能被跑):
+      之前 FROM ghcr.io/... 一律 unsupported_custom_image,真 TB 任务全被 skip。
+      修后:Docker 可用 → supported_in_docker(适配器会在容器里真跑);不可用才 skip。
     """
     if tb.has_compose and not tb.has_dockerfile:
         return TBClassification(False, "needs docker-compose orchestration (v1 adapter does not nest TB's harness)", "unsupported_compose")
     from_line = (tb.dockerfile_lines[0] if tb.dockerfile_lines else "").strip()
     if from_line and _CUSTOM_IMAGE_BASE.match(from_line):
-        return TBClassification(False, f"needs custom container image: {from_line}", "unsupported_custom_image")
+        ok = _docker_ok() if docker_available is None else docker_available
+        if ok:
+            return TBClassification(True, "supported (in docker)", "supported_in_docker")
+        return TBClassification(
+            False,
+            f"needs custom container image: {from_line} (docker not available in this env)",
+            "unsupported_custom_image_no_docker",
+        )
     if tb.has_protected:
         return TBClassification(False, "tests reference /protected/* path (container-internal)", "unsupported_protected_path")
     if not tb.has_dockerfile and not tb.dockerfile_runs:
@@ -264,14 +286,31 @@ def classify(tb: TBTask) -> TBClassification:
     return TBClassification(True, "supported", "supported")
 
 
+def _docker_ok() -> bool:
+    """docker 在 PATH 且 daemon 跑得通?—— classify 默认探这个。失败不抛,返 False。"""
+    import shutil
+    import subprocess
+    if shutil.which("docker") is None:
+        return False
+    try:
+        r = subprocess.run(
+            ["docker", "info"], capture_output=True, text=True, timeout=5,
+        )
+        return r.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+
+
 # ── 转 EvalTask ────────────────────────────────────────────────────
 
 
 def to_eval_task(tb: TBTask, *, workdir: Path) -> EvalTask:
-    """把 TBTask 落成 corpus.EvalTask 的目录结构(<workdir>/<id>/{goal.md,verify_cmd,setup.sh,...})。
+    """把 TBTask 落成 corpus.EvalTask 的目录结构(<workdir>/<id>/{goal.md,verify_cmd,setup.sh,tests/})。
 
     workdir 是 TB 这批任务的"corpus 根"—— caller 一次创建一个,里面是多个 TB 任务的 EvalTask 子目录。
     """
+    import shutil
+
     task_dir = workdir / tb.task_id
     task_dir.mkdir(parents=True, exist_ok=True)
     # goal
@@ -280,8 +319,17 @@ def to_eval_task(tb: TBTask, *, workdir: Path) -> EvalTask:
     cat = _map_category(tb.category)
     (task_dir / "category").write_text(cat + "\n", encoding="utf-8")
     (task_dir / "difficulty").write_text((tb.difficulty or "medium") + "\n", encoding="utf-8")
-    # verify_cmd:把 run-tests.sh 包成单行,退出码 0 = pass;
-    # 用 `bash -c '...'` 跑(setup.sh 已先装 pytest),并设 cwd = task_dir(worktree 写入的位置)。
+    # tests/:真 TB 任务的 run-tests.sh 通常 `pytest tests/test_outputs.py` 假设 tests/ 已存在。
+    # 适配器之前不复制 → 真 TB 任务全因找不到 tests 假 fail(任务:tests/-in-worktree 摩擦)。
+    # 修:把源任务的 tests/ 整个复制到落盘 task_dir 下。无则跳过(自包含的 fixture 仍可工作)。
+    src_tests = tb.source_dir / "tests"
+    if src_tests.is_dir():
+        dst_tests = task_dir / "tests"
+        if dst_tests.exists():
+            shutil.rmtree(dst_tests, ignore_errors=True)
+        shutil.copytree(src_tests, dst_tests)
+    # verify_cmd:run-tests.sh 整条内联到 verify_cmd(不落盘),首 token 落 ALLOWED_CMDS。
+    # 见 _build_verify_cmd 详细注释。
     verify_cmd = _build_verify_cmd(tb, workdir=task_dir)
     (task_dir / "verify_cmd").write_text(verify_cmd + "\n", encoding="utf-8")
     # setup.sh:把 Dockerfile RUN 行去 FROM/COPY/容器指令,转成纯 bash
@@ -339,19 +387,102 @@ def _build_setup_script(tb: TBTask) -> str:
     return "\n".join(lines)
 
 
-def _build_verify_cmd(tb: TBTask, *, workdir: Path) -> str:
-    """把 run-tests.sh 装到一行 bash -c,跑前先切到 task.working_dir。
+def _build_docker_verify_cmd(tb: TBTask, *, workdir: Path) -> str:
+    """对 supported_in_docker 任务,产 verify_cmd:python 包一层,内联 import +
+    调用 TBContainerExecutor,verify 退出码 = 容器内 run-tests.sh 退出码。
 
-    run-tests.sh 形如:`pip install pytest==8.4.1\\npytest $TEST_DIR/test_outputs.py -rA`。
-    本适配器下没有 $TEST_DIR 环境变量,改成 tests/test_outputs.py 相对路径(把 $TEST_DIR
-    替换为 workdir 字符串)。
+    关键 insight:verify 在子 agent 的 worktree 内跑(verify_dir = worktree 路径)。
+    agent 写的文件已经在 worktree 里。**不**需要单独的 mirror —— 直接 mount
+    worktree 到 /app,容器看到 agent 的产出。
+
+    修(任务:worktree 持久化):之前 verify 用一个提前建好的 mirror(base_dir/agent_workspace/
+    <task>/),但 mirror 在 worktree 拆掉后才有内容;verify 跑在 worktree 拆掉之前,
+    mirror 是空的 → 容器看不到 agent 产出。修后:
+      · mirror_dir 参数被忽略(legacy 兼容,留个 noop)
+      · verify 在 runtime 拿 verify_dir(worktree 路径)直接 mount
+
+    为什么内联(不落盘 .py 文件再调):
+      · verify 在子 agent 的 per-worktree 跑(cwd 不可预测),落盘的脚本在工作树里
+        不存在(同 v1 上一版的摩擦)。
+      · 内联让 verify_cmd 自身就含完整逻辑,跨 worktree 复用仍正确。
+
+    退出码语义(同 verify_gate 行为):
+      0 → Verifier 视为 passed
+      非 0 → Verifier 视为 failed
+      -1 / setup_failed → Verifier 视为 unverifiable(Executor 失败)
+
+    必须首 token = python(白名单内);内联 shlex.quote 包两层,跟 _build_verify_cmd 同款。
     """
+    from .terminal_bench_docker import TBContainerExecutor  # 延迟 import 防循环
+
+    py_inner = (
+        "import sys;"
+        "from argos_agent.eval.benchmarks.terminal_bench_docker import TBContainerExecutor;"
+        # 关键:verify 在子 agent 的 worktree 内跑(verify_dir=worktree 路径)。
+        # agent 写的文件已经在 worktree 里 —— 直接 mount worktree 到 /app,容器看到
+        # agent 产出。不需要单独的 mirror。
+        "from argos_agent import runtime;"
+        "ctx = runtime.current();"
+        "worktree = str(ctx.verify_dir);"  # 实际是 subagent 的 worktree
+        # 也拿 source_dir 给 executor 读 tests/ + run-tests.sh(也在 worktree 里,
+        # 因为 SubAgentFactory 创建 worktree 时继承 base workspace 内容,bridge base
+        # 也有 TB 任务。但镜像式拿更稳)
+        f" source_dir = {repr(str(tb.source_dir))};"
+        " import os;"
+        # TB 任务几乎都需联网装 pytest/uv/pip。设 ARGOS_TB_DOCKER_NETWORK=1
+        " os.environ.setdefault('ARGOS_TB_DOCKER_NETWORK', '1');"
+        " from pathlib import Path;"
+        f" src = Path(source_dir);"
+        f" wt = Path(worktree);"
+        " from argos_agent.eval.benchmarks.terminal_bench import load_tb_task;"
+        f" tb = load_tb_task(src);"
+        " exec_ = TBContainerExecutor(timeout=240);"
+        # 关键:task_dir 用 worktree(不是 source_dir,也不是 mirror)—— worktree
+        # 是 agent 写文件的地方,容器 mount 它 /app 才能看到
+        " rc = exec_.verify_in_container(tb, task_dir=wt);"
+        " sys.exit(0 if rc.exit_code == 0 else (2 if rc.setup_failed else 1))"
+    )
+    return f"python -c {shlex.quote(py_inner)}"
+
+
+def _build_verify_cmd(tb: TBTask, *, workdir: Path) -> str:
+    """把 run-tests.sh 内容内联到 verify_cmd,经 `python -c` + bash -c 执行。
+
+    关键不变量:verify_cmd 经 shlex.split 后首 token 必须落在 ALLOWED_CMDS。**不得**
+    wrap `bash -c '...'`(bash 不在白名单 → verify_gate.py:153 返 failed,
+    "验证命令不在白名单",此即上一轮 N=1 必 0% 的真凶)。
+
+    实现:
+      整条 verify_cmd 形如:
+        python -c "<inline-py>" bash -c "<inner-script>"
+      shlex.split 后:
+        ['python', '-c', '<inline-py>', 'bash', '-c', '<inner-script>']
+      首 token = python(白名单)→ 通过。python 收到 -c + inline-py,跑 subprocess.call
+      调 bash -c 内联脚本。bash 是 python 的子进程,不踩白名单。
+
+    内联(不落盘)的原因:verify 在 per-subagent worktree 跑(cwd = worktree 绝对路径),
+    若脚本落盘到 corpus workdir 或桥接 temp dir,该路径在 worktree 内不存在 → 找不到
+    .run-tests.sh → 假 fail(上一版 v1 的 bug)。内联让 verify_cmd 自身就含完整脚本,跨
+    worktree 复用仍正确。
+
+    shlex.quote 对含 ' 的串(heredoc delimiter `<<'PYEOF'`)用 '"'"' 转义,shlex.split
+    完美 round-trip(测试过)。最长边 = TB run-tests.sh 通常 < 1KB,远低于 ARG_MAX。
+
+    `$TEST_DIR` 替换:TB 仓 run-tests.sh 多用 `$TEST_DIR` 指代任务工作区;适配器
+    没有这个 env,直接替换为 workdir 路径。verify 在 worktree cwd 跑,tool 写文件也
+    落 worktree cwd,workdir 路径正好对上。
+    """
+    # 1. 多行用 && 拼成单行(bash 能跑);$TEST_DIR 替换
     inner = tb.run_tests_sh.replace("\n", " && ")
-    # 把 $TEST_DIR / ${TEST_DIR} 替换为本任务的 workdir 路径
     test_dir = str(workdir)
     inner = inner.replace("${TEST_DIR}", test_dir).replace("$TEST_DIR", test_dir)
-    # shlex.quote 整个 inner 再塞进 bash -c
-    return f"bash -c {shlex.quote(inner)}"
+    # 2. python 包一层 subprocess 调 bash -c(首 token=python,过白名单)
+    py_inner = (
+        "import subprocess, sys;"
+        " sys.exit(subprocess.call(['bash', '-c', sys.argv[1]]))"
+    )
+    # 3. shlex.quote 套两层:外层 quote python 内联脚本 + 内联 bash 脚本
+    return f"python -c {shlex.quote(py_inner)} bash -c {shlex.quote(inner)}"
 
 
 # ── 跑一批 + 报告 ──────────────────────────────────────────────
@@ -402,12 +533,15 @@ def run_subset(
     model_tier: str,
     workdir: Path,
     persist: bool = True,
+    docker_available: bool | None = None,
 ) -> TBBatchReport:
     """跑一组 TB 任务目录;不支持的如实跳过(不计 pass / fail)。
 
     runner:已有 EvalRunner 实例(caller 注入 loop_factory + worktree)
     workdir:本次 batch 的 corpus 根(里面是 <task_id>/ 子目录)
     persist:是否落 JSONL(测试可关)
+    docker_available:None → 自动探;True/False → 显式给定(测试用)。
+      没传 → 用 classify() 的自动探(检测 docker info 跑不跑得通)。
     """
     workdir.mkdir(parents=True, exist_ok=True)
     supported_count = 0
@@ -418,8 +552,16 @@ def run_subset(
     per_task: dict[str, tuple[str, str]] = {}
 
     for d in task_dirs:
-        cls = _classify_tb_dir(d)
-        tb = load_tb_task(d)
+        tb_loaded = load_tb_task(d)
+        if tb_loaded is None:
+            cls = TBClassification(
+                False,
+                "task.yaml/instruction/run-tests.sh missing or unparsable",
+                "unsupported_no_setup",
+            )
+        else:
+            cls = classify(tb_loaded, docker_available=docker_available)
+        tb = tb_loaded
         if tb is None:
             unsupported_count += 1
             reasons[cls.kind] = reasons.get(cls.kind, 0) + 1

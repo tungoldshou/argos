@@ -100,3 +100,57 @@ def test_build_namespace_includes_all_tools():
     # 所有 7 个工具都在
     for name in tools.ALL_TOOL_NAMES:
         assert name in ns, f"{name} missing from build_namespace"
+
+
+# ── /app/ 路径翻译(适配 TB 任务:容器内 /app = 宿主 worktree 根) ──
+
+
+def test_write_file_strips_app_prefix_for_tb_compat(tmp_path, monkeypatch):
+    """write_file('/app/hello.txt', ...) → 写到 <worktree>/hello.txt(等价于 /app/hello.txt 在容器内)。
+
+    这是 TB 任务的"必须"——所有 TB task.yaml 用 /app/... 路径;agent 调 write_file
+    不知道宿主 worktree 在哪,只认知 /app。适配器把 /app/... 翻译成 worktree 相对路径。
+    """
+    from argos_agent import runtime
+    from argos_agent.tools import files as ftools
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "existing.txt").write_text("x")
+    ctx = runtime.RunContext(workspace=ws, verify_dir=ws, project_mode=True)
+    token = runtime.set_context(ctx)
+    try:
+        # 1) /app/foo 应写到 ws/foo
+        result = ftools.write_file("/app/hello.txt", "Hello, world!\n")
+        assert "已写入" in result, result
+        assert (ws / "hello.txt").read_text() == "Hello, world!\n"
+        # 2) 绝对路径非 /app 前缀 → 仍拒
+        result = ftools.write_file("/etc/passwd", "x")
+        assert "越出" in result or "错误" in result, result
+        # 3) 相对路径原样工作
+        ftools.write_file("rel.txt", "r")
+        assert (ws / "rel.txt").read_text() == "r"
+        # 4) read_file 同样处理 /app/
+        ftools.write_file("/app/data.txt", "d")
+        content = ftools.read_file("/app/data.txt")
+        assert "d" in content, content
+    finally:
+        runtime.reset(token)
+
+
+def test_safe_path_rejects_traversal_but_allows_app_prefix(tmp_path, monkeypatch):
+    """_safe_path:工作区遍历仍拒(/app/ 之外的绝对路径);/app/ 视为相对。"""
+    from argos_agent.tools import files as ftools
+    from argos_agent import runtime
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    ctx = runtime.RunContext(workspace=ws, verify_dir=ws, project_mode=True)
+    token = runtime.set_context(ctx)
+    try:
+        # /app/... → ws/... 允许
+        assert ftools._safe_path("/app/foo") == ws / "foo"
+        # ../../../etc/passwd → 仍拒
+        assert ftools._safe_path("../../../etc/passwd") is None
+        # /etc/passwd → 仍拒(workspace 之外)
+        assert ftools._safe_path("/etc/passwd") is None
+    finally:
+        runtime.reset(token)

@@ -26,9 +26,26 @@ def _ws() -> Path:
 
 
 def _safe_path(rel: str) -> Path | None:
+    """把传入的 path 解析为 workspace 内的安全路径,越界返 None。
+
+    路径约定(适配 TB 任务):TB 任务 agent 看到的"工作区"是容器内 /app(worktree 在
+    host),agent 用 `/app/...` 写文件是**预期**的。适配器把 /app/... 视作 worktree 根
+    下的相对路径(`/app/foo` → `<ws>/foo`),让 agent 不用知道底层 worktree 在 host
+    的实际位置。
+
+    安全:仅翻译 `/app/` 前缀(不是任何前导 `/`)。`/etc/passwd` 这类仍是工作区
+    之外的越界,仍拒。`../../../etc/...` 走相对路径解析后越界,也仍拒。
+    """
     ws = _ws()
     ws.mkdir(parents=True, exist_ok=True)
-    p = (ws / rel).resolve()
+    # 仅翻译 /app/ 前缀(适配器契约:agent 在容器里看到的工作区是 /app)。
+    if rel == "/app":
+        norm = ""  # /app → ws 根
+    elif rel.startswith("/app/"):
+        norm = rel[len("/app/"):]  # 剥 /app/ 前缀
+    else:
+        norm = rel  # 其他路径原样(后续 _ws / norm + relative_to 仍做越界检查)
+    p = (ws / norm).resolve()
     try:
         p.relative_to(ws)
     except ValueError:

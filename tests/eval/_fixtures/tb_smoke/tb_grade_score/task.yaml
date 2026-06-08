@@ -1,0 +1,13 @@
+instruction: |-
+  Write a Python function `grade(score)` in /app/solution.py that returns "A" for score>=90, "B" for 80-89, "C" for 70-79, "D" for 60-69, else "F".
+author_name: smoke
+author_email: smoke@local
+difficulty: medium
+category: software-engineering
+tags:
+  - smoke
+  - python
+parser_name: pytest
+max_agent_timeout_sec: 90.0
+max_test_timeout_sec: 30.0
+run_tests_in_same_shell: false

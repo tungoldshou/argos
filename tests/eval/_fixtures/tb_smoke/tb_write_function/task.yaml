@@ -1,0 +1,14 @@
+instruction: |-
+  Write a Python function in /app/solution.py that returns the sum of two integers.
+  The function must be named `add(a, b)` and return a + b.
+author_name: smoke
+author_email: smoke@local
+difficulty: easy
+category: software-engineering
+tags:
+  - smoke
+  - python
+parser_name: pytest
+max_agent_timeout_sec: 60.0
+max_test_timeout_sec: 30.0
+run_tests_in_same_shell: false

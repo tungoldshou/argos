@@ -61,6 +61,10 @@ class SubAgentFactory:
 
     inline_diff:False(默认,省 token 模式)→ 完整 diff 落盘到 ~/.argos/workflow/diffs/,
                   AgentResult.output 只装摘要 + 引用;True(旧行为)→ output 含整段 diff。
+
+    output_mirror:Path | None → 任务:worktree 拆掉前把工作树内容拷到该目录(给后续
+                    docker verify 用;不做 = agent 产出在 verify 跑时已经丢了)。
+                    缺省 None = 旧行为,不动。
     """
 
     base_workspace: Path
@@ -71,6 +75,7 @@ class SubAgentFactory:
     store_factory: Callable[[], Any]
     model_factory: Callable[[str | None], Any]
     inline_diff: bool = False
+    output_mirror: Path | None = None
 
     async def run_task(
         self,
@@ -213,6 +218,18 @@ class SubAgentFactory:
                         if diff_ref:
                             output += f"\n[完整 diff] {diff_ref}"
 
+            # output_mirror(任务:让 agent 产出能到 docker verify 看的目录)——
+            # 拆 worktree 前把整个 worktree 拷到 self.output_mirror。
+            # _mirror_worktree 用 git diff/ls-files 拿改动文件列表(仅复制变更);无
+            # git(worktree 退化为 base)则 copytree(全拷)。失败不抛:mirror 不可用就让
+            # AgentResult 没收尾,verify 拿不到也得是 setup_failed,绝不假装成功。
+            if self.output_mirror is not None:
+                try:
+                    self.output_mirror.mkdir(parents=True, exist_ok=True)
+                    self._mirror_worktree(workdir, self.output_mirror)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("[subagent] output_mirror 失败 %s: %s", agent_id, e)
+
             return AgentResult(
                 agent_id=agent_id, ok=True, output=output, verdict=verdict_status,
                 tokens_in=tokens_in, tokens_out=tokens_out,
@@ -261,6 +278,59 @@ class SubAgentFactory:
             removed += int(m.group(1) or "1")
             added += int(m.group(2) or "1")
         return (f"{n} files changed, +{added}/-{removed} lines", n)
+
+    @staticmethod
+    def _mirror_worktree(src: Path, dst: Path) -> None:
+        """把 src 里 git 视为"新/改"的文件拷到 dst(逐文件,不 copytree)。
+
+        关键:用 `git status --porcelain` 一次拿所有变化(tracked 改 + 未 tracked 新),
+        比 `git diff HEAD` + `ls-files --others` 两步合并可靠:不依赖 HEAD 存在(无 commit
+        时 `git diff HEAD` 直接 fatal),且不会漏 .gitignore 里的文件。
+
+        没 git / 异常 → 退 copytree(忽略 .git 链,避免拉整个对象库)。
+        """
+        import shutil
+        import subprocess
+
+        try:
+            r = subprocess.run(
+                ["git", "-C", str(src), "status", "--porcelain", "--untracked-files=all"],
+                capture_output=True, text=True, timeout=10,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            shutil.copytree(src, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git"))
+            return
+
+        files: set[str] = set()
+        for line in (r.stdout or "").splitlines():
+            line = line.rstrip()
+            if not line:
+                continue
+            # porcelain 格式:XY <path>(X=index, Y=worktree);关心 Y != ' ' 的条目
+            # 简化:取第一字符后的路径(" M foo" / "?? foo" / "R  old -> new" / "A  foo")
+            if len(line) < 4:
+                continue
+            status = line[:2]
+            path = line[3:]
+            # rename: "R  old -> new" → 取 new
+            if " -> " in path:
+                path = path.split(" -> ", 1)[1]
+            # 不要 .git 链(虽 porcelain 不列 .git,defense in depth)
+            if path.startswith(".git") or "/.git/" in path:
+                continue
+            # untracked/deleted/modified 都拷(deleted 实际不存在文件会跳过)
+            if status.strip() in ("M", "A", "??", "R", "C"):
+                files.add(path)
+        for rel in files:
+            s = src / rel
+            d = dst / rel
+            if not s.is_file():
+                continue
+            d.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copy2(s, d)
+            except OSError:
+                continue
 
     @staticmethod
     def _persist_diff_journal(agent_id: str, diff_text: str) -> str:
