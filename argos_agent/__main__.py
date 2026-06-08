@@ -68,7 +68,7 @@ class _SelftestModel:
         self._i += 1
         return t
 
-    async def stream(self, messages, *, system):
+    async def stream(self, messages, *, system, system_dynamic=None):
         for ch in self._next():
             yield ch
 

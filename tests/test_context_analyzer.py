@@ -144,11 +144,13 @@ def test_analyze_window_from_model():
 def test_analyze_pct_calculation():
     """pct = total / window;0-1 之间。"""
     loop = _loop(sys_text="x" * 4000, tool_text="y" * 1000, window=200_000)
-    # system=1000, memory=4(空 4 tier 各 min 1), tools=250, messages=0
-    # → total=1254, pct=0.00627
     b = analyze(loop, store=loop.store, workspace=Path("."))
     assert 0.0 <= b.pct <= 1.0
-    assert abs(b.pct - 1254 / 200_000) < 1e-6
+    # 守公式:pct 就是 total / window(memory 桶细节随 auto/store 实现漂,
+    # 硬编码 1254 在 4-tier 各 min 1 那版贴切,后续 tier 名 / entry 计数变了就废;
+    # 改守【关系】而非【绝对数】,把硬编码路径挪到 test_analyze_health_property 风格)。
+    assert abs(b.pct - b.total / b.window) < 1e-9, \
+        f"pct={b.pct} 应等于 total/window={b.total}/{b.window}"
 
 
 def test_analyze_health_property():
