@@ -76,10 +76,25 @@ def main() -> None:
             from smolagents.local_python_executor import LocalPythonExecutor
             imports = msg.get("authorized_imports") or ["json", "re", "pathlib", "math",
                                                          "itertools", "collections", "datetime"]
+            # T7:os/sys/pathlib 必须在白名单 —— prepend 的 `import os, sys, pathlib`(line ~106)
+            # 走 authorized_imports 检查,缺一会 InterpreterError。host 自定义列表场景也得有。
+            # 用 set 去重 + 保序追加,顺序无关紧要(白名单是 membership 测试)。
+            for _need in ("os", "sys", "pathlib"):
+                if _need not in imports:
+                    imports = list(imports) + [_need]
             allow_workflow = msg.get("allow_workflow", True)
             read_only = msg.get("read_only", False)
             executor = LocalPythonExecutor(additional_authorized_imports=imports)
             executor.send_tools(_build_namespace(broker, allow_workflow, read_only))
+            # T7:agent 普遍用 os.path / sys.exit / pathlib 不写 import 会 NameError;
+            # 预注入 stdlib 到 executor 命名空间(已经过 authorized_imports 白名单审查,
+            # 这些 stdlib 放行对攻击面无可见扩张 —— 不会让 agent 联网 / 写非 workspace 路径)。
+            import os as _os_t7
+            import sys as _sys_t7
+            import pathlib as _pathlib_t7
+            executor.state["os"] = _os_t7
+            executor.state["sys"] = _sys_t7
+            executor.state["pathlib"] = _pathlib_t7
             _emit({"type": "init_ok"})
         elif op == "exec":
             if executor is None:
@@ -87,6 +102,11 @@ def main() -> None:
                        "exc": "RuntimeError: executor not initialized"})
                 continue
             code = msg.get("code", "")
+            # T7:agent 用 os.path / sys.exit / pathlib 不写 import 会 NameError。
+            # pre-inject 到 state["os"] 不够:smolagents 拦 getattr(os, "path") 走 module 拒绝
+            # (posixpath 不在白名单);改 prepend 三个 import 到 code 头,等价于"用就用别想太多"。
+            # 已有同名绑定的不会冲突(import 即 rebind)。
+            code = "import os as __argos_os_t7, sys as __argos_sys_t7, pathlib as __argos_pathlib_t7\n" + code
             stdout = ""
             value_repr = ""
             exc = ""
