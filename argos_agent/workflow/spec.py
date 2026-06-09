@@ -160,6 +160,10 @@ class Stage:
     # best_of_n 专用:同任务并行 N 个候选(N 个独立 worktree + 独立跑),选最好。
     # 仅 op == 'best_of_n' 时生效;其它 op 忽略。其他 op 视 n 为 None。
     n: int | None = None
+    # best_of_n 专用:候选 i 启动前 sleep(idx * stagger_s),错峰开打防止 N 候选同帧撞
+    # 上游 QPS 限流(agnes-flash / M3 等严 QPS 模型,N=3 cap=4 默认时 3 同帧打会全 429)。
+    # 仅 op == 'best_of_n' 时生效。默认 0.5s 够用(3 候选全启动 ~1s,远小于人类等待阈值)。
+    stagger_s: float = 0.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -287,6 +291,7 @@ def parse_spec(raw: dict) -> WorkflowSpec:
                 max_dry_rounds=int(sr.get("max_dry_rounds", 2)),
                 cap=max(1, cap),
                 n=n_val,
+                stagger_s=max(0.0, float(sr.get("stagger_s", 0.5))),
             )
         )
         seen_ids.add(sid)

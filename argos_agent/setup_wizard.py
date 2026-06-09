@@ -239,103 +239,117 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
     from argos_agent import config as C
     cdir = config_dir or Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos"))
     names = list(PRESETS)
-    while True:
-        # provider 选择:真终端用 ↑↓ 方向键,非 TTY(测试/管道)回退编号输入(保持可测)。
-        try:
-            pidx = _arrow_select(names, title="选择 provider:", writer=writer)
-        except _NotATTY:
-            writer("可选 provider 预设:")
-            for i, n in enumerate(names, 1):
-                writer(f"  {i}. {n}")
-            choice = (reader("选编号:") or "").strip()
+    # 非 TTY 友好兜底(2026-06-09):管道/CI 跑 setup 时 input() 抛 EOFError,以前裸 traceback
+    # 退出,用户完全不知道"setup 需要真终端"或"可以手工写 config"。接住 → 打友好提示 → return。
+    try:
+        while True:
+            # provider 选择:真终端用 ↑↓ 方向键,非 TTY(测试/管道)回退编号输入(保持可测)。
             try:
-                pidx = int(choice) - 1
-                if not (0 <= pidx < len(names)):
-                    raise ValueError
-            except ValueError:
-                writer("无效编号,重来。")
+                pidx = _arrow_select(names, title="选择 provider:", writer=writer)
+            except _NotATTY:
+                writer("可选 provider 预设:")
+                for i, n in enumerate(names, 1):
+                    writer(f"  {i}. {n}")
+                choice = (reader("选编号:") or "").strip()
+                try:
+                    pidx = int(choice) - 1
+                    if not (0 <= pidx < len(names)):
+                        raise ValueError
+                except ValueError:
+                    writer("无效编号,重来。")
+                    continue
+            preset = PRESETS[names[pidx]]
+            # 「自定义」预设 protocol/base_url 为空 → 向用户询问(spec §6.1 表格「(问)」)
+            protocol = preset["protocol"] or (reader("协议 (anthropic/openai):") or "openai").strip()
+            base_url = preset["base_url"] or (reader("base_url:") or "").strip()
+            default_model = preset["model"]
+            model = (reader(f"模型 id [{default_model}]:") or default_model).strip()
+            # key 方式:paste 或 env
+            way = (reader("API key 方式:粘贴(paste) / 用已有环境变量(env):") or "paste").strip()
+            if way == "env":
+                api_key = None
+                api_key_env = (reader("环境变量名:") or "").strip()
+                derive_env = False
+            else:
+                api_key = (reader("粘贴 API key:") or "").strip()
+                api_key_env = ""        # paste 路径:env 名延后由【唯一 profile 名】派生
+                derive_env = True       # (避免同 model 不同 key 的两 profile 撞同名 env 互相覆盖)
+            max_tokens = _ask_int(reader, writer, "max_tokens [4096]:", 4096)
+            ctx = _ask_int(reader, writer, "context_window [200000]:", 200000)
+            price_in = _ask_float_or_none(reader, writer, "价格 in (USD/1M, 留空跳过):")
+            price_out = (_ask_float_or_none(reader, writer, "价格 out (USD/1M, 留空跳过):")
+                         if price_in is not None else None)
+            # 记忆向量语义召回:复用本 provider 的 /embeddings(需一个 embedding 模型名)。
+            # 仅 OpenAI 协议有 /embeddings;Anthropic 端没有 → 不问,记忆走 FTS5 关键词。
+            embedding_model = ""
+            if protocol == "openai":
+                embedding_model = (reader(
+                    "embedding 模型(留空=记忆走关键词,不额外调模型;如 text-embedding-3-small):"
+                ) or "").strip()
+            else:
+                writer("(此 provider 是 Anthropic 端,无 embeddings;记忆走关键词召回)")
+            # 连通+格式探针(必做)
+            writer("正在连通测试…")
+            res = await probe_connection(protocol=protocol, base_url=base_url, model=model,
+                                         api_key=api_key)
+            writer(f"[{res.rating}] {res.message}")
+            if not res.connected:
+                again = (reader("连不上,重配这个模型?(Y/n):") or "y").strip().lower()
+                if again != "n":
+                    continue
+            # 可选深度探针(默认跳过)
+            if (reader("要顺手深测一下吗?(真跑 write+verify, ~10-30s) [y/N]:") or "n").strip().lower() == "y":
+                writer("正在深度探针(真跑 write+verify)…")
+                dres = await deep_probe(protocol=protocol, base_url=base_url, model=model, api_key=api_key)
+                writer(f"深测结果 [{dres.rating}] {dres.message}")
+            # profile 命名:向用户提问,默认用 model id;重名追加序号(spec §6.1 step 5)
+            cfg_existing = _read_config(cdir)
+            existing_models = cfg_existing.get("models", {})
+            default_name = model.lower().replace(" ", "-") if model else "custom"
+            raw_name = (reader(f"给这个模型起个名 [{default_name}]:") or default_name).strip() or default_name
+            name = raw_name
+            idx = 2
+            while name in existing_models:
+                name = f"{raw_name}-{idx}"
+                idx += 1
+            # paste 路径:env 名由唯一 profile 名派生(此时 name 已去重),杜绝同 model 撞名覆盖。
+            if derive_env:
+                api_key_env = f"{name.upper().replace('-', '_').replace('/', '_')}_KEY"
+            # 是否设为当前默认:首个模型自动设;已有模型时默认【不】改 active(重跑 setup 加模型不静默劫持)。
+            if existing_models:
+                make_active = (reader("设为当前默认模型?(y/N):") or "n").strip().lower() == "y"
+            else:
+                make_active = True
+            if not res.connected and make_active:
+                # 诚实:把明知连不通的模型设为当前 active 时不静默(spec §10 验收②的诚实兜底)。
+                writer("⚠️ 此模型连通测试未通过,仍按你的选择设为当前模型——下次使用前请确认它可用。")
+            try:
+                write_profile(config_dir=cdir, name=name, protocol=protocol, base_url=base_url,
+                              model=model, api_key=api_key, api_key_env=api_key_env,
+                              max_tokens=max_tokens, context_window=ctx,
+                              price_in=price_in, price_out=price_out,
+                              embedding_model=embedding_model, set_active=make_active)
+            except C.ConfigError as e:
+                # fail-closed:配置不合法绝不假成功,也不顶掉原 active;让用户重配这个模型。
+                writer(f"保存失败(配置不合法):{e} —— 请重新配置这个模型。")
                 continue
-        preset = PRESETS[names[pidx]]
-        # 「自定义」预设 protocol/base_url 为空 → 向用户询问(spec §6.1 表格「(问)」)
-        protocol = preset["protocol"] or (reader("协议 (anthropic/openai):") or "openai").strip()
-        base_url = preset["base_url"] or (reader("base_url:") or "").strip()
-        default_model = preset["model"]
-        model = (reader(f"模型 id [{default_model}]:") or default_model).strip()
-        # key 方式:paste 或 env
-        way = (reader("API key 方式:粘贴(paste) / 用已有环境变量(env):") or "paste").strip()
-        if way == "env":
-            api_key = None
-            api_key_env = (reader("环境变量名:") or "").strip()
-            derive_env = False
-        else:
-            api_key = (reader("粘贴 API key:") or "").strip()
-            api_key_env = ""        # paste 路径:env 名延后由【唯一 profile 名】派生
-            derive_env = True       # (避免同 model 不同 key 的两 profile 撞同名 env 互相覆盖)
-        max_tokens = _ask_int(reader, writer, "max_tokens [4096]:", 4096)
-        ctx = _ask_int(reader, writer, "context_window [200000]:", 200000)
-        price_in = _ask_float_or_none(reader, writer, "价格 in (USD/1M, 留空跳过):")
-        price_out = (_ask_float_or_none(reader, writer, "价格 out (USD/1M, 留空跳过):")
-                     if price_in is not None else None)
-        # 记忆向量语义召回:复用本 provider 的 /embeddings(需一个 embedding 模型名)。
-        # 仅 OpenAI 协议有 /embeddings;Anthropic 端没有 → 不问,记忆走 FTS5 关键词。
-        embedding_model = ""
-        if protocol == "openai":
-            embedding_model = (reader(
-                "embedding 模型(留空=记忆走关键词,不额外调模型;如 text-embedding-3-small):"
-            ) or "").strip()
-        else:
-            writer("(此 provider 是 Anthropic 端,无 embeddings;记忆走关键词召回)")
-        # 连通+格式探针(必做)
-        writer("正在连通测试…")
-        res = await probe_connection(protocol=protocol, base_url=base_url, model=model,
-                                     api_key=api_key)
-        writer(f"[{res.rating}] {res.message}")
-        if not res.connected:
-            again = (reader("连不上,重配这个模型?(Y/n):") or "y").strip().lower()
-            if again != "n":
-                continue
-        # 可选深度探针(默认跳过)
-        if (reader("要顺手深测一下吗?(真跑 write+verify, ~10-30s) [y/N]:") or "n").strip().lower() == "y":
-            writer("正在深度探针(真跑 write+verify)…")
-            dres = await deep_probe(protocol=protocol, base_url=base_url, model=model, api_key=api_key)
-            writer(f"深测结果 [{dres.rating}] {dres.message}")
-        # profile 命名:向用户提问,默认用 model id;重名追加序号(spec §6.1 step 5)
-        cfg_existing = _read_config(cdir)
-        existing_models = cfg_existing.get("models", {})
-        default_name = model.lower().replace(" ", "-") if model else "custom"
-        raw_name = (reader(f"给这个模型起个名 [{default_name}]:") or default_name).strip() or default_name
-        name = raw_name
-        idx = 2
-        while name in existing_models:
-            name = f"{raw_name}-{idx}"
-            idx += 1
-        # paste 路径:env 名由唯一 profile 名派生(此时 name 已去重),杜绝同 model 撞名覆盖。
-        if derive_env:
-            api_key_env = f"{name.upper().replace('-', '_').replace('/', '_')}_KEY"
-        # 是否设为当前默认:首个模型自动设;已有模型时默认【不】改 active(重跑 setup 加模型不静默劫持)。
-        if existing_models:
-            make_active = (reader("设为当前默认模型?(y/N):") or "n").strip().lower() == "y"
-        else:
-            make_active = True
-        if not res.connected and make_active:
-            # 诚实:把明知连不通的模型设为当前 active 时不静默(spec §10 验收②的诚实兜底)。
-            writer("⚠️ 此模型连通测试未通过,仍按你的选择设为当前模型——下次使用前请确认它可用。")
-        try:
-            write_profile(config_dir=cdir, name=name, protocol=protocol, base_url=base_url,
-                          model=model, api_key=api_key, api_key_env=api_key_env,
-                          max_tokens=max_tokens, context_window=ctx,
-                          price_in=price_in, price_out=price_out,
-                          embedding_model=embedding_model, set_active=make_active)
-        except C.ConfigError as e:
-            # fail-closed:配置不合法绝不假成功,也不顶掉原 active;让用户重配这个模型。
-            writer(f"保存失败(配置不合法):{e} —— 请重新配置这个模型。")
-            continue
-        writer(f"已保存 '{name}'{'并设为当前模型' if make_active else '(未改当前默认模型)'}。")
-        if api_key:
-            writer("注意:API key 以明文存于 ~/.argos/.env(权限 0600),不加密。")
-        if (reader("再配一个模型?(y/N):") or "n").strip().lower() != "y":
-            break
-    writer("setup 完成。运行 `argos` 即用当前模型。")
+            writer(f"已保存 '{name}'{'并设为当前模型' if make_active else '(未改当前默认模型)'}。")
+            if api_key:
+                writer("注意:API key 以明文存于 ~/.argos/.env(权限 0600),不加密。")
+            if (reader("再配一个模型?(y/N):") or "n").strip().lower() != "y":
+                break
+            writer("setup 完成。运行 `argos` 即用当前模型。")
+    except EOFError:
+        # 非 TTY(管道 / CI)兜底:input() 抛 EOFError 时给一条清楚出路(不裸 traceback)。
+        # 关键:真用户来用会卡在这,必须显式告诉他"setup 需真终端"+"可以手工写 config"。
+        writer(
+            "\n⚠ 检测到 stdin 关闭(`argos setup` 需交互终端)。\n"
+            "  • 在真终端直接跑:`argos setup`(或 `uv run argos setup`)\n"
+            "  • 非交互场景(脚本/CI)手工写两份文件:\n"
+            "      ~/.argos/config.json   ← provider / model / base_url 声明\n"
+            "      ~/.argos/.env          ← API key(权限 0600)\n"
+            "    文件 schema 见 `argos setup --help` 或 docs/setup-wizard.md"
+        )
 
 
 # ── 深度探针(spec §6.3) ──────────────────────────────────────────────────────────

@@ -219,9 +219,15 @@ class WorkflowEngine:
         """
         n = max(1, stage.n or 3)
         task = stage.agent[0] if isinstance(stage.agent, tuple) else stage.agent
-        sem = asyncio.Semaphore(stage.cap)
+        # 限并发 + 错峰:M3 / agnes-flash 等严 QPS 模型,N 候选同帧打 API 会全 429(2026-06-09
+        # 实测:N=3 cap=4 默认时 3 候选全 429)。effective_cap = min(n, stage.cap) 让 cap 真正生效
+        # 而不是被 n 撑爆;stagger 让候选 i 在 idx * stagger_s 之后才争 sem,不平摊同帧。
+        effective_cap = max(1, min(n, stage.cap))
+        sem = asyncio.Semaphore(effective_cap)
 
         async def _candidate(idx: int) -> AgentResult:
+            if stage.stagger_s > 0:
+                await asyncio.sleep(idx * stage.stagger_s)
             async with sem:
                 return await self._run_one(stage, task, f"c{idx}", None)
 

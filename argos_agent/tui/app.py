@@ -15,6 +15,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Footer, Header
 
+from argos_agent import config
 from argos_agent.approval import ApprovalGate, ApprovalLevel
 from argos_agent.core.snapshot import SNAPSHOT_ROOT, RunSnapshot
 from argos_agent.tui.commands import SlashCommand, match_commands, parse_slash
@@ -200,8 +201,13 @@ class ArgosApp(App):
         self.theme = "argos-night"
         self.query_one("#prompt", PromptArea).focus()
         tier = self._display_tier()
+        # has_key 必须真查 config.active_key(),不能只信 demo 开关(2026-06-09 修复假阳:
+        # demo=False + 没配 key 此前显 `✳ LIVE` 撒了谎,跑起来 401)
         self.query_one("#transcript", Transcript).mount(
-            StartupSplash(model_label=tier.model, tier=tier.name, live=not self._demo)
+            StartupSplash(
+                model_label=tier.model, tier=tier.name,
+                live=not self._demo, has_key=bool(config.active_key()),
+            )
         )
         # 启动时根据 _plan_mode 状态把指示器对齐(默认 False;若 /plan 已触发过则 True)。
         self._set_plan_mode_indicators()

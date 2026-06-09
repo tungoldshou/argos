@@ -23,8 +23,19 @@ _LOGO = r"""
 _PLAN_PREFIX = "[plan mode] "
 
 
-def _compose_text(*, model_label: str, live: bool, plan_mode: bool) -> str:
-    mode = "✳ LIVE" if live else "⚠ DEMO 演示"
+def _compose_text(*, model_label: str, live: bool, plan_mode: bool,
+                   has_key: bool = True) -> str:
+    # 三态徽标(2026-06-09 修复假阳):live demo 模式显 DEMO 演示;live 但无 key 显
+    # `⚠ 未配 key` + 指引(关键诚实底线:绝不在无 key 时撒 `✳ LIVE` 的谎);有 key 才显 LIVE。
+    if not live:
+        mode = "⚠ DEMO 演示"
+        key_hint = ""
+    elif not has_key:
+        mode = "⚠ 未配 key"
+        key_hint = "\n     跑 /setup 配模型 + key,或设置对应 env var"
+    else:
+        mode = "✳ LIVE"
+        key_hint = ""
     prefix = _PLAN_PREFIX if plan_mode else ""
     return prefix + (
         _LOGO
@@ -33,7 +44,8 @@ def _compose_text(*, model_label: str, live: bool, plan_mode: bool) -> str:
         + "\n                   ARGOS\n"
         + f"\n     终端超级智能体 · v{_VERSION}\n\n"
         + f"     模型 {model_label} · {mode}\n"
-        + "     输入目标开始,或输入 / 看命令  ·  ^C 退出"
+        + key_hint
+        + "\n     输入目标开始,或输入 / 看命令  ·  ^C 退出"
     )
 
 
@@ -46,12 +58,14 @@ class StartupSplash(Static):
     # watch_ 触发重渲(前缀 + 切色)。text 字段保留便于 renderable_text / 测试断言。
     plan_mode: reactive[bool] = reactive(False)
 
-    def __init__(self, *, model_label: str, tier: str, live: bool) -> None:
+    def __init__(self, *, model_label: str, tier: str, live: bool,
+                 has_key: bool = True) -> None:
         self._model_label = model_label
         self._tier = tier
         self._live = live
+        self._has_key = has_key
         self._text = _compose_text(
-            model_label=model_label, live=live, plan_mode=False,
+            model_label=model_label, live=live, plan_mode=False, has_key=has_key,
         )
         super().__init__(self._text)
 
@@ -70,7 +84,7 @@ class StartupSplash(Static):
     def _refresh(self) -> None:  # type: ignore[no-redef]
         text = _compose_text(
             model_label=self._model_label, live=self._live,
-            plan_mode=self.plan_mode,
+            plan_mode=self.plan_mode, has_key=self._has_key,
         )
         if getattr(self, "_bad_config", None):
             # reason 串首部含 'permissions' → 'permissions 已禁用'(spec 2026-06-06 §2.6);
