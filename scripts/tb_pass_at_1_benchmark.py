@@ -166,8 +166,12 @@ def main() -> int:
 
     print(f"[bench] model = {comps['tier'].name} / {comps['tier'].model} @ {comps['tier'].base_url}")
     if args.tb_source:
-        # 真 TB 路径:取 tb_source 下 4 个简单的子目录(hello-world + 类似)
-        target_names = ["hello-world", "csv-to-parquet", "fix-permissions", "broken-python"]
+        # 真 TB 路径:取 tb_source 下 6 个简单的子目录(hello-world + 类似,简单任务跑得
+        # 快 + 模型容错高,适合拿稳多 task Δ 数据;任务越多越接近真实)。
+        target_names = [
+            "hello-world", "csv-to-parquet", "fix-permissions", "broken-python",
+            "count-call-stack", "processing-pipeline",
+        ]
         if args.only:
             target_names = [args.only]
         task_dirs = [args.tb_source / n for n in target_names if (args.tb_source / n).is_dir()]
