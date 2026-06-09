@@ -164,6 +164,11 @@ class Stage:
     # 上游 QPS 限流(agnes-flash / M3 等严 QPS 模型,N=3 cap=4 默认时 3 同帧打会全 429)。
     # 仅 op == 'best_of_n' 时生效。默认 0.5s 够用(3 候选全启动 ~1s,远小于人类等待阈值)。
     stagger_s: float = 0.5
+    # best_of_n 专用:单个候选总执行时间上限(秒)。超过即被取消 + 标 verdict='unverifiable'
+    # + error 含 'timeout'。防 M3/严 QPS 模型偶尔 stream 不返(不是 429/5xx,就是没响应)
+    # 把整 bench 拖死。默认 1800s(30 min):够 agent loop + docker 首次装包 + verify docker run
+    # 600s + 余量;真 hang 30+ 分钟时不会让真用户等一晚上。仅 op == 'best_of_n' 时生效。
+    per_candidate_timeout_s: float = 1800.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -292,6 +297,7 @@ def parse_spec(raw: dict) -> WorkflowSpec:
                 cap=max(1, cap),
                 n=n_val,
                 stagger_s=max(0.0, float(sr.get("stagger_s", 0.5))),
+                per_candidate_timeout_s=max(0.1, float(sr.get("per_candidate_timeout_s", 1800.0))),
             )
         )
         seen_ids.add(sid)

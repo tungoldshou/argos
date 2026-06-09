@@ -224,12 +224,34 @@ class WorkflowEngine:
         # 而不是被 n 撑爆;stagger 让候选 i 在 idx * stagger_s 之后才争 sem,不平摊同帧。
         effective_cap = max(1, min(n, stage.cap))
         sem = asyncio.Semaphore(effective_cap)
+        # per-candidate timeout:防单个候选 hang 死(模型 stream 不返)拖垮整 bench(2026-06-09
+        # 真用户场景:M3 限流时 stream 偶尔无响应,asyncio.gather 等永远,bench 跑不完)。
+        # 超时 → 候选标 verdict='unverifiable' + error 含 'timeout',其它候选照常。
+        per_candidate_timeout_s = getattr(stage, "per_candidate_timeout_s", 1800.0)
 
         async def _candidate(idx: int) -> AgentResult:
             if stage.stagger_s > 0:
                 await asyncio.sleep(idx * stage.stagger_s)
             async with sem:
-                return await self._run_one(stage, task, f"c{idx}", None)
+                try:
+                    return await asyncio.wait_for(
+                        self._run_one(stage, task, f"c{idx}", None),
+                        timeout=per_candidate_timeout_s,
+                    )
+                except asyncio.TimeoutError:
+                    # 候选未在 timeout 内返:不让它拖死整 stage。标 unverifiable
+                    # (winner 选择时与 'failed' 同档处理,不会冒充 passed)。
+                    return AgentResult(
+                        agent_id=f"{stage.id}#c{idx}",
+                        ok=False,
+                        output="",
+                        verdict="unverifiable",
+                        error=(
+                            f"per_candidate_timeout: 候选 c{idx} 超过 "
+                            f"{per_candidate_timeout_s}s 未完成,被取消"
+                        ),
+                        diff_file_count=0,
+                    )
 
         # gather 让 N 真并发;asyncio 不保证完成顺序,下面 _pick_winner 用确定 tie-break
         results: tuple[AgentResult, ...] = tuple(
