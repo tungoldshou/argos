@@ -276,3 +276,66 @@ async def test_max_steps_exhaustion_still_walks_phase_gate():
     assert phases[-1] == "report", f"最后一阶段必须是 report,实际 phases={phases}"
     assert phases.index("verify") < phases.index("report"), \
         f"verify 必须在 report 之前,实际 phases={phases}"
+
+
+@pytest.mark.asyncio
+async def test_max_steps_bailout_runs_verify_not_just_phase_change():
+    """回归(2026-06-09):max_steps 耗尽时,补齐段不仅投 PhaseChange("verify"),
+    还必须真跑 run_verify_gate 投出 VerifyVerdict。
+
+    之前 bug:补齐只 enter_phase("verify"),不 run_verify_gate → last_verdict=None →
+    bridge 的 winner.verdict=None → bench 把任务记为 failed(0% pass@1)。
+    真 TB 任务 csv-to-parquet 跑 N=1 1/1 候选就是这么被错算的(模型 40 步耗尽,
+    实际产物是 csv→parquet 真写出来了,应有机会通过 verify,但旧逻辑直接 bail 不验)。
+
+    修法:补齐段复用正常 verify 路径(enter_phase + run_verify_gate + last_verdict=...)。
+    本测试断言:有 verify_cmd 时,VerifyVerdict 事件必须被投出,status="passed"。
+    """
+    from argos_agent.tui.events import EventBus
+    # 模型死循环写代码但永远不说完成;verify_cmd 配了 → 真应该跑 verify。
+    model = FakeModel(["```python\nwrite_file('a','b')\n```"])
+    loop = AgentLoop(
+        store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(),
+        broker=None, model=model, verifier=FakeVerifier(),
+        config=LoopConfig(verify_cmd="echo ok", max_steps=2),
+    )
+    verdicts: list[VerifyVerdict] = []
+    async for ev in loop.run("g", "s"):
+        if isinstance(ev, VerifyVerdict):
+            verdicts.append(ev)
+    assert len(verdicts) == 1, (
+        f"max_steps bailout 必须真跑一次 verify(投 1 个 VerifyVerdict),"
+        f"实际 verdicts={verdicts}"
+    )
+    assert verdicts[0].verdict.status == "passed", (
+        f"FakeVerifier 恒返 passed,bailout 后仍应得 passed,实际 status="
+        f"{verdicts[0].verdict.status}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_max_steps_bailout_without_verify_cmd_honest_completion():
+    """回归(2026-06-09):max_steps 耗尽 + verify_cmd=None 时,bailout 后跑 verify
+    仍要触发诚实完成(unverifiable + is_honest_completion=True → 报告 NO_TEST)。
+
+    模型没改代码 / 没声明 verify:不算失败,只是"无测任务" → 收尾诚实标 NO_TEST。
+    """
+    from argos_agent.tui.events import EventBus
+    model = FakeModel(["```python\nwrite_file('a','b')\n```"])
+    loop = AgentLoop(
+        store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(),
+        broker=None, model=model, verifier=FakeVerifier(),
+        config=LoopConfig(verify_cmd=None, max_steps=2),
+    )
+    verdicts: list[VerifyVerdict] = []
+    async for ev in loop.run("g", "s"):
+        if isinstance(ev, VerifyVerdict):
+            verdicts.append(ev)
+    assert len(verdicts) == 1, (
+        f"无 verify_cmd 时 bailout 仍要投 1 个 VerifyVerdict(unverifiable),"
+        f"实际 verdicts={verdicts}"
+    )
+    # FakeVerifier 没配 verify_cmd 也返 passed → 但 Harness.is_honest_completion
+    # 只判 verify_cmd is None + unverifiable。这里 FakeVerifier 没区分是 FakeVerifier
+    # 的弱点(它把 None 也当 passed)—— 我们只断言"事件被投出"。
+    # 真实 Verifier 在 verify_cmd=None 时返 unverifiable,见 test_loop_runs_code_and_emits_events。

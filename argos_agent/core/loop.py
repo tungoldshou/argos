@@ -1137,16 +1137,36 @@ class AgentLoop:
             messages.append({"role": "user", "content": bounce})
             step += 1
 
-        # ── 阶段门补齐 ──
-        # bug 修复(2026-06-09,subagent best_of_n 踩中):while 自然退出(max_steps 耗尽)
-        # 时,代码直接落到下方 enter_phase("report"),但 harness 还在 act(idx=1)→ 跳到
-        # report(idx=3)触发"阶段不可跳"。补一次惰性 enter_phase("verify"):让 harness 状态
-        # 对齐 phase 流转(只投 PhaseChange,不再 run_verify_gate;无任务真跑出来)。
-        # 实际通过 verify → break 出去的路径已经在 1027 行 enter 过 verify,不会重复。
+        # ── 阶段门补齐 + 真跑 verify(bailout 路径) ──
+        # 历史 bug(2026-06-09,#1):while 自然退出(max_steps 耗尽)时,代码落到下方
+        # enter_phase("report") → harness 还在 act(idx=1) → 跳到 report(idx=3) 触发
+        # "阶段不可跳" ValueError。被 best_of_n 1/3 候选踩中。
+        # 历史 bug(2026-06-09,#2,本修):只 enter_phase("verify") 不跑 verify_gate
+        # → last_verdict=None → bridge winner.verdict=None → bench 把任务记为
+        # failed(0% pass@1)。但 max_steps 耗尽≠"啥也没产出",模型可能真写了代码、装了
+        # 包、产物可验 —— 必须复用真 verify 路径让 verifier 决定结局:
+        #   · passed → last_verdict=passed(诚实反映产物真过了)
+        #   · failed → last_verdict=failed(报告如实标"未通过",不假装通过)
+        #   · unverifiable+verify_cmd=None → is_honest_completion(NO_TEST 收尾)
+        #   · unverifiable+verify_cmd=... → last_verdict=unverifiable(报告如实标)
+        # 不走 run_verify_gate 的 autonomy/escalation 侧路:已 bailout,无下一步可走,
+        # 不再升级(没意义)也不再 bounce(会死循环)—— 只取 verdict 真值。
         from argos_agent.core.harness import PHASE_ORDER
         if self._harness._phase_idx < PHASE_ORDER.index("verify"):
             async for ev in self._enter_phase("verify"):
                 yield ev
+            # 真跑一次 verify(同 run_verify_gate 的核心三行:验 + emit + 返 verdict),
+            # 但省略 autonomy/escalation 侧路(已 bailout,无后续可走)。
+            from argos_agent.tui.events import VerifyVerdict as _VV
+            _bailout_verdict = self._harness.verifier.verify(
+                self._verify_cmd, attempts=self._fail_count + 1,
+            )
+            await self._harness.bus.emit(_VV(verdict=_bailout_verdict))
+            for ev in self._hbus.drain():
+                yield ev
+            last_verdict = _bailout_verdict
+            # 跟正常 verify 路径一致:发生过 verify → 标记已重验(兜底压缩后用)。
+            self._reverified_since_compact = True
 
         # 跨轮上下文:把本轮【最终 assistant 回答】持久化(get_messages 跨轮还原时带回)。
         # 否则历史只剩单边 user goal、agent 记不住自己上轮答了啥 → "好的/继续"接不上。
