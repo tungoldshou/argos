@@ -88,14 +88,19 @@ def _build_components(workspace: Path):
 
 
 def _n_candidate_spec(*, n: int, model_tier: str) -> dict:
-    """构造 1-stage best_of_n spec:同任务 N 个候选(独立 worktree),各自 verify。"""
+    """构造 1-stage best_of_n spec:同任务 N 个候选(独立 worktree),各自 verify。
+
+    cap=1:单 key + 严 QPS 模型(agnes-flash / M3 实测)必须串行候选,并发 3 路必撞 429。
+    多 key 用户可显式传 cap=N 走并行;demo 默认保守 = 1 拿稳结果。
+    """
     return {
         "name": f"fib-demo-N{n}",
-        "description": f"best_of_n 自包含 demo:写 fib(N={n}, model={model_tier})",
+        "description": f"best_of_n 自包含 demo:写 fib(N={n}, model={model_tier}, cap=1 单 key 串行)",
         "stages": [{
             "id": "best",
             "op": "best_of_n",
             "n": n,
+            "cap": 1,  # 单 key 串行;多 key 可改 cap=N 走并行
             "agent": {
                 "prompt": TASK_GOAL,
                 "tool_scope": "full",
