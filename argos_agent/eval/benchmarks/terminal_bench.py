@@ -436,7 +436,7 @@ def _build_docker_verify_cmd(tb: TBTask, *, workdir: Path) -> str:
         f" wt = Path(worktree);"
         " from argos_agent.eval.benchmarks.terminal_bench import load_tb_task;"
         f" tb = load_tb_task(src);"
-        " exec_ = TBContainerExecutor(timeout=240);"
+        " exec_ = TBContainerExecutor(timeout=600);  # 修(2026-06-09):240s 装包就超时,见 terminal_bench_docker._DEFAULT_VERIFY_TIMEOUT"
         # 关键:task_dir 用 worktree(不是 source_dir,也不是 mirror)—— worktree
         # 是 agent 写文件的地方,容器 mount 它 /app 才能看到
         " rc = exec_.verify_in_container(tb, task_dir=wt);"

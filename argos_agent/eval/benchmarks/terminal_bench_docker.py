@@ -49,8 +49,11 @@ from argos_agent.eval.benchmarks.terminal_bench import TBTask
 
 log = logging.getLogger(__name__)
 
-# 默认超时:对应 TB 任务 max_test_timeout_sec 200s。Argos 这边保险点给 240s。
-_DEFAULT_VERIFY_TIMEOUT = 240.0
+# 默认超时:TB 任务 max_test_timeout_sec 200s + 容器首跑要 apt install + uv pip install
+# (实测 csv-to-parquet 装 pytest+pandas+pyarrow ≈ 280s),给 600s 安全边界。
+# 修(2026-06-09):之前 240s 太临界,真 TB 任务首次 apt/uv 装包就超时 → setup_failed →
+# bridge 当成 failed(其实是 setup 问题不是测试问题),数据失真。
+_DEFAULT_VERIFY_TIMEOUT = 600.0
 
 
 @dataclass(frozen=True, slots=True)
