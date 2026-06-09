@@ -5,6 +5,7 @@ ModelClient 经协议适配器直连端点(httpx),stream() 出 text 增量(剥 t
 绝不靠模型自报 confidence —— 该决策在 recovery/harness,ModelClient 本身不做切换判断。"""
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from dataclasses import dataclass
@@ -131,15 +132,72 @@ class ModelClient:
 
     async def stream(self, messages: list[dict], *, system: str,
                      system_dynamic: str | None = None) -> AsyncIterator[str]:
-        cred = self.pool.least_used()
-        self.pool.mark_used(cred.key)  # 立即更新 last_used,确保 least_used 轮换(Phase 4 #1)
+        """每个 attempt 重新选 key + 重新发请求(M3 / agnes-flash 限流真用户必踩)。
+        429 / 401-transient → mark_exhausted + 退避 + 重新 least_used + 重试。
+        401 + is_terminal_401 → mark_terminal + 抛(同 key 必再 401,无意义重试)。
+        5xx → 退避 + 重试(不污染 key)。
+        max_attempts=3 后抛最后一次(不撒谎、不死循环、不假装成功)。"""
+        from argos_agent.core import recovery  # 局部 import,避免循环 + 测试 monkeypatch 路径稳定
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            cred = self.pool.least_used()
+            self.pool.mark_used(cred.key)  # 立即更新 last_used,确保 least_used 轮换(Phase 4 #1)
+            # 本次 stream 的 usage 清零;边流边抓 usage 帧。
+            self.last_usage = {"input_tokens": 0, "output_tokens": 0,
+                               "cache_read": 0, "cache_creation": 0}
+            try:
+                async for delta in self._stream_one_attempt(
+                    cred, messages, system, system_dynamic,
+                ):
+                    yield delta
+                return  # 成功,不再 retry
+            except httpx.HTTPStatusError as e:
+                status = e.response.status_code
+                body = e.response.text or ""
+                # 401 + is_terminal_401 → 永久剔除同 key,直接抛(同 key 必再 401,无意义重试;
+                # 其它 key 也会 401,只是浪费 QPS)
+                if status == 401 and CredentialPool.is_terminal_401(401, body):
+                    try:
+                        self.pool.mark_terminal(cred.key)
+                    except RuntimeError as rexc:
+                        # mark_terminal 删完最后 key 主动抛 RuntimeError("无可用 key");
+                        # 链回 401 + body 让 probe/UI 仍能看到 status code,而不是只剩空池告警
+                        raise RuntimeError(
+                            f"HTTP 401 (terminal): {body[:100]} | {rexc}"
+                        ) from e
+                    raise
+                # 5xx → 重试(不 mark_exhausted:服务端问题,污染 key 无用)
+                if status in (500, 502, 503, 504):
+                    if attempt < max_attempts - 1:
+                        await asyncio.sleep(recovery.jittered_backoff(attempt))
+                        continue
+                    raise
+                # 429 / 401-transient → mark_exhausted + 重新 least_used
+                if status == 429 or (status == 401
+                                      and not CredentialPool.is_terminal_401(401, body)):
+                    ttl = self._retry_after_ttl(e.response) or 5.0
+                    self.pool.mark_exhausted(cred.key, ttl_s=ttl)
+                    if attempt < max_attempts - 1:
+                        await asyncio.sleep(recovery.jittered_backoff(attempt))
+                        continue
+                    raise
+                # 其它 4xx(400/403/404)→ 原行为,直接抛(语义性错误,重试无用)
+                raise
+
+    async def _stream_one_attempt(
+        self, cred: Credential, messages: list[dict], system: str,
+        system_dynamic: str | None,
+    ) -> AsyncIterator[str]:
+        """单次 stream 尝试:2xx → yield deltas;非 2xx → raise_for_status 抛 HTTPStatusError。
+        错误响应先把 body aread 满(让 e.response.text 在重试决策时可读)。"""
         headers = self._proto.headers(cred.key)
         url = self._proto.endpoint(self.tier.base_url)
-        # 本次 stream 的 usage 清零;边流边抓 usage 帧。
-        self.last_usage = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0, "cache_creation": 0}
         async with httpx.AsyncClient(transport=self._transport, timeout=300.0) as client:
             async with client.stream("POST", url, headers=headers,
                                      json=self._payload(messages, system, system_dynamic)) as resp:
+                if resp.status_code >= 400:
+                    # 错误响应 body 较小,先 aread 满,raise_for_status 抛后 e.response.text 可读
+                    await resp.aread()
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
                     line = line.strip()
@@ -163,6 +221,16 @@ class ModelClient:
                     text = self._proto.text_delta(obj)
                     if text:
                         yield text
+
+    def _retry_after_ttl(self, response: httpx.Response) -> float | None:
+        """HTTP Retry-After 头(数字秒格式)→ TTL 秒。缺/解析失败 → None(调用方用默认 5s)。"""
+        ra = response.headers.get("retry-after")
+        if not ra:
+            return None
+        try:
+            return max(0.0, float(ra))
+        except ValueError:
+            return None
 
     async def complete(self, messages: list[dict], *, system: str,
                        system_dynamic: str | None = None) -> str:
