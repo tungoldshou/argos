@@ -1,14 +1,15 @@
-"""Phase 5 审批:ApprovalGate 4 级 respond(契约 §6.3,canonical 接口)+ ApprovalModal 键盘 1-4。"""
+"""Phase 5 审批:ApprovalGate 4 级 respond(契约 §6.3,canonical 接口)+ InlineChoice 流内审批
+(TUI v2:1=once 2=session 3=always 4=deny,↑↓+Enter 与数字双通道,Esc=deny)。"""
 from __future__ import annotations
 
 import asyncio
 
 import pytest
-from textual.app import App
+from textual.app import App, ComposeResult
 
 from argos_agent.approval import ApprovalGate, ApprovalLevel, Decision
 from argos_agent.tui.events import ApprovalRequest
-from argos_agent.tui.widgets.approval_modal import ApprovalModal
+from argos_agent.tui.widgets.inline_choice import InlineChoice
 
 
 def test_gate_level_default_and_set():
@@ -51,55 +52,99 @@ async def test_gate_request_then_respond_session_resolves():
     assert dec.approved is True and dec.kind == "session"
 
 
-class _ModalHost(App):
-    def __init__(self) -> None:
+_TOOL_OPTIONS = [
+    ("once", "本次允许"), ("session", "本会话允许"),
+    ("always", "总是允许"), ("deny", "拒绝"),
+]
+
+
+class _ChoiceHost(App):
+    """挂一个工具审批 InlineChoice 的临时宿主(对位旧 _ModalHost)。"""
+
+    def __init__(self, req: ApprovalRequest) -> None:
         super().__init__()
+        self._req = req
         self.result: str | None = None
 
-    async def open(self, req: ApprovalRequest) -> None:
-        def _cb(decision: str | None) -> None:
-            self.result = decision
-        await self.push_screen(ApprovalModal(req), _cb)
+    def compose(self) -> ComposeResult:
+        yield InlineChoice(
+            title=f"审批请求 [{self._req.risk}]",
+            body=self._req.description,
+            options=list(_TOOL_OPTIONS),
+            on_decide=self._decide,
+            escape_value="deny",
+            risk=self._req.risk,
+        )
+
+    def _decide(self, value: str, _feedback: str) -> None:
+        self.result = value
 
 
 @pytest.mark.asyncio
-async def test_modal_key_2_returns_once():
+async def test_choice_key_1_returns_once():
     req = ApprovalRequest(
         call_id="abc123", action="run_command",
         args={"command": "pytest -q"}, description="执行命令 pytest -q", risk="medium",
     )
-    app = _ModalHost()
+    app = _ChoiceHost(req)
     async with app.run_test() as pilot:
-        await app.open(req)
         await pilot.pause()
-        await pilot.press("2")   # 2 = once
+        await pilot.press("1")   # TUI v2:1 = once(安全向前走排第一)
         await pilot.pause()
         assert app.result == "once"
 
 
 @pytest.mark.asyncio
-async def test_modal_key_1_returns_deny():
+async def test_choice_key_4_returns_deny():
     req = ApprovalRequest(
         call_id="abc123", action="git_push", args={}, description="git push", risk="high",
     )
-    app = _ModalHost()
+    app = _ChoiceHost(req)
     async with app.run_test() as pilot:
-        await app.open(req)
         await pilot.pause()
-        await pilot.press("1")   # 1 = deny
+        await pilot.press("4")   # TUI v2:4 = deny
         await pilot.pause()
         assert app.result == "deny"
 
 
 @pytest.mark.asyncio
-async def test_modal_key_4_returns_always():
+async def test_choice_key_3_returns_always():
     req = ApprovalRequest(
         call_id="abc123", action="web_search", args={"query": "x"}, description="web_search x", risk="low",
     )
-    app = _ModalHost()
+    app = _ChoiceHost(req)
     async with app.run_test() as pilot:
-        await app.open(req)
         await pilot.pause()
-        await pilot.press("4")   # 4 = always
+        await pilot.press("3")   # TUI v2:3 = always
         await pilot.pause()
         assert app.result == "always"
+
+
+@pytest.mark.asyncio
+async def test_choice_escape_returns_deny():
+    """Esc = 安全默认拒绝(fail-closed)。"""
+    req = ApprovalRequest(
+        call_id="abc123", action="git_push", args={}, description="git push", risk="high",
+    )
+    app = _ChoiceHost(req)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.result == "deny"
+
+
+@pytest.mark.asyncio
+async def test_choice_arrow_down_enter_returns_session():
+    """↑↓ + Enter 通道:↓ 一次选中第 2 项(session)。"""
+    req = ApprovalRequest(
+        call_id="abc123", action="run_command",
+        args={"command": "ls"}, description="ls", risk="low",
+    )
+    app = _ChoiceHost(req)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("down")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.result == "session"

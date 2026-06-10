@@ -81,6 +81,46 @@ async def test_slash_menu_shows_and_tab_completes():
 
 
 @pytest.mark.asyncio
+async def test_slash_menu_arrow_selects_and_enter_runs_selected():
+    """TUI v2 §6.1:菜单可见时 ↑↓ 移动 ▸ 选中项,Enter 执行选中命令(不再只能首项)。"""
+    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        menu = app.query_one("#slash-menu", SlashMenu)
+        await pilot.press("/")
+        await pilot.pause()
+        assert menu.display is True
+        first = menu.selected()
+        await pilot.press("down")
+        await pilot.pause()
+        second = menu.selected()
+        assert first is not None and second is not None and second != first
+        await pilot.press("enter")     # 执行选中(第二项 = tools)
+        await pilot.pause()
+        log = app.query_one("#transcript")
+        assert "工具" in log.rendered_text or second in log.rendered_text
+        assert menu.display is False
+
+
+@pytest.mark.asyncio
+async def test_slash_menu_tab_completes_arrow_selected():
+    """↓ 改选后 Tab 补全的是选中项,不是首项。"""
+    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        prompt = app.query_one("#prompt", PromptArea)
+        menu = app.query_one("#slash-menu", SlashMenu)
+        await pilot.press("/")
+        await pilot.pause()
+        await pilot.press("down")
+        await pilot.pause()
+        sel = menu.selected()
+        await pilot.press("tab")
+        await pilot.pause()
+        assert prompt.text == f"/{sel} "
+
+
+@pytest.mark.asyncio
 async def test_slash_menu_hides_for_non_slash():
     app = ArgosApp(loop_factory=lambda: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:

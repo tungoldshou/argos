@@ -1,15 +1,26 @@
-"""StatusBar:always-on 状态条(spec §4.1/§4.6 差异化核心)。
+"""StatusBar:always-on 状态条(TUI v2 spec §6.2)。
 
-⏵ phase:verify · ⚙3 actions · ↑12.4k↓3.1k tok · 💰$0.013 · ⏱4.2s · Mode:act
+◇ plan · ⚙3 · ↑12.4k ↓3.1k · $0.013 · 4.2s · ctx 34%        Esc打断 · \\↵换行 · ^C退出
 诚实:数字全来自 phase_change/cost_update 事件;无事件时显零态,不预填假数。
-Mode 段在 plan mode 期间显 [plan mode] 前缀 + 改色(spec §2.4)。
+daemon run badges(⏵/⏸/⏹)只在 daemon 模式(set_run_summary 喂过数据)渲染——
+非 daemon 不再显示 ⏵0/⏸0/⏹0 噪声。键提示右对齐(替代 stock Footer)。
 """
 from __future__ import annotations
 
+from rich.text import Text
 from textual.reactive import reactive
 from textual.widgets import Static
 
 from argos_agent.core.types import Phase
+
+_PHASE_GLYPH = {"plan": "◇", "act": "✦", "verify": "✦", "report": "◇", "idle": "·"}
+# 与 glow.phase_color 同源的固定色(Rich style 无法引用 Textual CSS 变量)
+_PHASE_STYLE = {
+    "plan": "#7AA2F7", "act": "#E0AF68", "verify": "#73DACA", "report": "#A9B1D6",
+}
+_MUTED = "#565F89"
+_ERROR = "#F7768E"
+_HINTS = "Esc 打断 · \\↵ 换行 · ^C 退出"
 
 
 def _k(n: int) -> str:
@@ -20,9 +31,6 @@ def _k(n: int) -> str:
 
 
 class StatusBar(Static):
-    # dock 底部、$panel 填充贯穿、整条 $text-muted 朴素文本(点分隔;成本明细在右侧活动栏)。
-    # Mode 段在 plan mode 期间切到 $primary(冷靛蓝),其他时段 $text-muted。
-    # #12 Context 可视化:>80% 时加 .ctx-warn 红点(最小装饰,无文字)。
     DEFAULT_CSS = """
     StatusBar { dock: bottom; height: 1; background: $panel; color: $text-muted; padding: 0 1; }
     StatusBar.-plan-mode { color: $primary; }
@@ -36,42 +44,48 @@ class StatusBar(Static):
     cost_usd: reactive[float | None] = reactive(0.0)
     elapsed_s: reactive[float] = reactive(0.0)
     plan_mode: reactive[bool] = reactive(False)
-    # #12 上下文压力(0-1,>0.8 红点;0 = 未知 / 关掉)
+    # #12 上下文压力(0-1,>0.8 红色加粗;0 = 未知 / 关掉)
     ctx_pct: reactive[float] = reactive(0.0)
 
     def __init__(self, **kwargs) -> None:
-        # markup=False:状态栏含模型名等动态串,统一关 markup 解析(防任意文本里的 `[...]` 崩)。
+        # render() 自绘(Rich Text 分段着色 + 右对齐键提示),不走 markup 解析(防崩)。
         super().__init__("", markup=False, **kwargs)
 
     @property
     def render_text(self) -> str:
+        """左侧数据段纯文本(/status 回显与测试断言的单一真源)。"""
         cost = "$(N/A)" if self.cost_usd is None else f"${self.cost_usd:.3f}"
-        mode_str = "plan" if self.plan_mode else "act"
-        # run 计数 badges(daemon 模式,默认 0/0/0)
-        run_badges = self.render_count_badges(self._run_summary)
-        return (
-            f"⏵ phase:{self.phase} · ⚙{self.actions} actions · "
-            f"↑{_k(self.tokens_in)}↓{_k(self.tokens_out)} tok · "
-            f"💰{cost} · ⏱{self.elapsed_s:.1f}s · Mode:{mode_str}  {run_badges}"
-        )
+        glyph = _PHASE_GLYPH.get(self.phase, "·")
+        parts = [
+            f"{glyph} {self.phase}",
+            f"⚙{self.actions}",
+            f"↑{_k(self.tokens_in)} ↓{_k(self.tokens_out)}",
+            cost,
+            f"{self.elapsed_s:.1f}s",
+        ]
+        if self.ctx_pct > 0:
+            parts.append(f"ctx {round(self.ctx_pct * 100)}%")
+        if self.plan_mode:
+            parts.append("[plan mode]")
+        badges = self.render_count_badges(self._run_summary)
+        if badges:
+            parts.append(badges)
+        return " · ".join(parts)
 
-    # ── Run 计数 badges(spec §2.5 d 段)────────────────────────────
-    # ⏵N active / ⏸N paused / ⏹N history
-    # 由 app.on_run_state_changed 推(daemon 模式;legacy 模式给空元组)
+    # ── Run 计数 badges(daemon 模式才渲染)────────────────────────────
     _run_summary: list[tuple[str, str]] = []
 
     def set_run_summary(self, runs: list[tuple[str, str]]) -> None:
-        """runs: [(run_id, state), ...]"""
+        """runs: [(run_id, state), ...];空列表 = 非 daemon,徽标整段消失(去噪)。"""
         self._run_summary = list(runs)
         self._refresh()
 
     def render_count_badges(self, runs: list[tuple[str, str]]) -> str:
-        """run 列表 → 紧凑 count badges:`⏵1 / ⏸0 / ⏹3`。
+        """run 列表 → 紧凑 count badges:`⏵1 / ⏸0 / ⏹3`;无 run(非 daemon)→ 空串。
 
-        active = running;paused = paused;history = suspended+completed+failed+cancelled。
-        单 TUI 模式:始终显示 0/0/0 表示"无 daemon"(诚实)。"""
+        active = running;paused = paused;history = suspended+completed+failed+cancelled。"""
         if not runs:
-            return "⏵0 / ⏸0 / ⏹0"
+            return ""
         active = sum(1 for _, s in runs if s == "running")
         paused = sum(1 for _, s in runs if s == "paused")
         history = sum(1 for _, s in runs
@@ -89,23 +103,35 @@ class StatusBar(Static):
         self.elapsed_s = elapsed_s
 
     def set_plan_mode(self, active: bool) -> None:
-        """host 切 plan mode 时调:改文案 Mode 段 + 切色。"""
+        """host 切 plan mode 时调:加 [plan mode] 段 + 切色。"""
         self.plan_mode = bool(active)
 
     def update_ctx_pressure(self, pct: float) -> None:
-        """#12 Context 可视化(spec §10.4 + D8):>80% 加 .ctx-warn class;不显文字,只切色。
-        pct=0(无数据)→ 移除。"""
+        """#12 Context 可视化:>80% 时整条切 .ctx-warn 红色加粗;pct=0(无数据)→ 移除。"""
         self.ctx_pct = max(0.0, min(1.0, float(pct or 0.0)))
 
-    def _refresh(self) -> None:
-        self.update(self.render_text)
-        self.set_class(self.plan_mode, "-plan-mode")
-        # ctx_warn 在 render_text 末位追加点(spec §10.4 最小装饰)
+    def render(self) -> Text:
+        left = Text(self.render_text)
+        glyph = _PHASE_GLYPH.get(self.phase, "·")
+        style = _PHASE_STYLE.get(self.phase)
+        if style and left.plain.startswith(glyph):
+            left.stylize(style, 0, len(glyph))
         if self.ctx_pct >= 0.8:
-            self.update(self.render_text + "  ●")
+            # 红点保留在 ctx 段尾部之外的视觉强化由 .ctx-warn class 承担
+            pass
+        width = self.size.width or 0
+        hints = Text(_HINTS, style=_MUTED)
+        pad = width - left.cell_len - hints.cell_len - 2
+        if pad >= 1:
+            return Text.assemble(left, " " * pad, hints)
+        return left
+
+    def _refresh(self) -> None:
+        self.refresh()
+        self.set_class(self.plan_mode, "-plan-mode")
         self.set_class(self.ctx_pct >= 0.8, "-ctx-warn")
 
-    # P2-2:每个 reactive 字段一个独立 watch_ 方法(不用别名赌注)。
+    # 每个 reactive 字段一个独立 watch_ 方法(不用别名赌注)。
     def watch_phase(self, value: str) -> None:
         self._refresh()
 
@@ -125,4 +151,7 @@ class StatusBar(Static):
         self._refresh()
 
     def watch_plan_mode(self, value: bool) -> None:  # noqa: ARG002
+        self._refresh()
+
+    def watch_ctx_pct(self, value: float) -> None:  # noqa: ARG002
         self._refresh()

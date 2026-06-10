@@ -1,19 +1,21 @@
-"""Argos TUI 主屏(spec §4.1)。
+"""Argos TUI 主屏(TUI v2 spec 2026-06-10)。
 
-布局:Header(含 YOLO 徽标) + Transcript(主对话) + ActivityPanel(右侧活动栏) + StatusBar(always-on) + Input。
+布局:TopBar(自绘 1 行,含模式徽标) + Transcript(主对话) + ActivityPanel(右栏智能切)
++ PromptArea + StatusBar(含键提示)。无 stock Header/Footer。
 事件桥:start_run 起一个 EventBus + 注入的 loop,Worker async-for 消费 Event 并更新 widget(契约 §1/§3)。
 slash:输入以 / 开头走 commands.parse_slash 分发;否则当 goal 起一轮 run。
-审批:loop 投 ApprovalRequest → push ApprovalModal → 回调里 gate.respond(契约 §6.3)。
+审批:loop 投 ApprovalRequest → Transcript 流内 mount InlineChoice → 回调里 gate.respond(契约 §6.3);
+同屏最多一个活动 InlineChoice,其余 FIFO 排队。
 """
 from __future__ import annotations
 
 import uuid
+from collections import deque
 from collections.abc import Callable
 from pathlib import Path
 
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal
-from textual.widgets import Footer, Header
 
 from argos_agent import config
 from argos_agent.approval import ApprovalGate, ApprovalLevel
@@ -43,21 +45,29 @@ from argos_agent.tui.events import (
 from argos_agent.tui.fakeloop import FakeLoop
 from argos_agent.tui.theme import ARGOS_NIGHT
 from argos_agent.tui.widgets.activity_panel import ActivityPanel
-from argos_agent.tui.widgets.approval_modal import ApprovalModal
-from argos_agent.tui.widgets.plan_modal import PlanDecision, PlanModal
 from argos_agent.tui.widgets.code_action import CodeActionBlock
 from argos_agent.tui.widgets.diff_view import DiffView
+from argos_agent.tui.widgets.inline_choice import InlineChoice, format_approval_title
 from argos_agent.tui.widgets.prompt import PromptArea, SlashMenu
 from argos_agent.tui.widgets.splash import StartupSplash
 from argos_agent.tui.widgets.status_bar import StatusBar
 from argos_agent.tui.widgets.tab_strip import TabActivated, TabStrip
 from argos_agent.tui.widgets.thinking import ThinkingIndicator
+from argos_agent.tui.widgets.top_bar import TopBar
 from argos_agent.tui.widgets.transcript import Transcript
 from argos_agent.tui.widgets.verdict_badge import VerdictBadge
-from argos_agent.tui.widgets.workflow_approval_modal import WorkflowApprovalModal
 from argos_agent.tui.widgets.workflow_panel import WorkflowPanel
 
 _BASE_SUBTITLE = "终端超级智能体"
+
+
+def _app_version() -> str:
+    """TopBar 显示用版本(单一来源 importlib.metadata,与 splash 同口径)。"""
+    try:
+        from importlib.metadata import version
+        return version("argos")
+    except Exception:  # noqa: BLE001
+        return "0.x"
 
 
 class ArgosApp(App):
@@ -97,6 +107,7 @@ class ArgosApp(App):
         ("ctrl+c", "quit", "退出"),
         ("escape", "interrupt", "打断"),
         ("ctrl+b", "background", "后台"),
+        ("ctrl+o", "cycle_panel", "右栏视图"),   # TUI v2:智能切手动 pin/循环
         # #5b T7:tab 切换(放在 Ctrl+1..5 子绑定,tab_strip widget 自己处理)
     ]
 
@@ -154,6 +165,10 @@ class ArgosApp(App):
         self._daemon_session_id: str | None = None
         self._daemon_run_id: str | None = None   # 当前 run 在 daemon 里的 run_id
         self._last_esc_time: float = 0.0          # 双 Esc 检测(1.5s 内第二次 = cancel)
+        # TUI v2 行内审批队列:同屏最多一个活动 InlineChoice,其余 FIFO 排队
+        #(并发 ApprovalRequest 不互踩;前一个决策落定后再 mount 下一个)。
+        self._choice_active = False
+        self._choice_queue: deque[Callable[[], InlineChoice]] = deque()
         self.sub_title = self._compose_subtitle()
 
     @staticmethod
@@ -179,19 +194,36 @@ class ArgosApp(App):
             parts.append("· ⏻ YOLO(Auto)")
         return "  ".join(parts)
 
+    def _refresh_topbar(self) -> None:
+        """状态变化(plan/YOLO/DEMO/key)→ TopBar 徽标对齐(诚实:全部来自真实状态)。"""
+        try:
+            self.query_one("#top-bar", TopBar).set_state(
+                plan_mode=self._plan_mode, yolo=self._yolo,
+                demo=self._demo, has_key=bool(config.active_key()),
+            )
+        except Exception:  # noqa: BLE001 — 未 mount(测试直构)时静默,数据已在字段里
+            pass
+
+    def action_cycle_panel(self) -> None:
+        """Ctrl+O:右栏视图循环(auto → idle → plan → act → verify → auto)。"""
+        try:
+            self.query_one("#activity", ActivityPanel).cycle_view()
+        except Exception:  # noqa: BLE001 — 窄屏隐藏/测试场景:无副作用
+            pass
+
     def compose(self) -> ComposeResult:
-        yield Header()
+        # TUI v2:自绘 TopBar 替代 stock Header(键提示并入 StatusBar,无 Footer)。
+        tier = self._display_tier()
+        yield TopBar(version=_app_version(), model_label=tier.model, id="top-bar")
         # #5b 多 run tabs:顶部 tab 条(隐藏当 daemon 未启用时)
         yield TabStrip(id="tab-strip")
         with Horizontal():
             yield Transcript(id="transcript")
-            tier = self._display_tier()
             yield ActivityPanel(id="activity", model_label=tier.model, tier=tier.name)
         yield StatusBar(id="status-bar")
         # slash 菜单(默认隐藏)叠在输入框上方:打 / 时列出命令;PromptArea 是多行输入(Enter 提交)。
         yield SlashMenu(id="slash-menu")
         yield PromptArea(placeholder="› 输入目标,或 / 开始命令", id="prompt")
-        yield Footer()
 
     def on_mount(self) -> None:
         """启动即把焦点放到输入框。否则 Textual 默认聚焦第一个可聚焦 widget。Transcript 已
@@ -199,6 +231,7 @@ class ArgosApp(App):
         排在 Input 之前抢走按键、用户在输入框打不了字(汉字/ASCII 都进不去)。与 AUTO_FOCUS 双保险。"""
         self.register_theme(ARGOS_NIGHT)
         self.theme = "argos-night"
+        self._refresh_topbar()
         self.query_one("#prompt", PromptArea).focus()
         tier = self._display_tier()
         # has_key 必须真查 config.active_key(),不能只信 demo 开关(2026-06-09 修复假阳:
@@ -299,6 +332,7 @@ class ArgosApp(App):
         except Exception:  # noqa: BLE001 — 测试中或在 on_mount 前调,status_bar 还没 mount,静默
             pass
         self.sub_title = self._compose_subtitle()
+        self._refresh_topbar()
         if self._plan_mode and not self._run_active:
             # idle 切 plan mode 时把边框也换到 plan 基色(不呼吸 —— run 期间再由 _glow_start 接管)
             self._set_border(glow.phase_color("plan"))
@@ -423,7 +457,8 @@ class ArgosApp(App):
             self.gate.set_level(ApprovalLevel.AUTO)
             self._yolo = True
             self.sub_title = self._compose_subtitle()
-            await log.append_line("已切换到 Auto(YOLO)——放手执行,头部显示 ⏻ YOLO 标记。")
+            self._refresh_topbar()
+            await log.append_line("已切换到 Auto(YOLO)——放手执行,顶栏显示 ⏻ YOLO 标记。")
         elif cmd.name == "model":
             from argos_agent import config as _cfg
             arg = cmd.arg  # SlashCommand.arg 已是 parse_slash 拆出的参数部分
@@ -1345,6 +1380,11 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             self._run_active = False
             self._produce_worker = None
             self._glow_stop()
+            try:
+                # 智能切:run 收尾右栏回 idle 视图(verdict/成本仍常驻可见)
+                self.query_one("#activity", ActivityPanel).on_run_end()
+            except Exception:  # noqa: BLE001 — 测试直构无 activity,静默
+                pass
             if self._interrupted:
                 # Esc 打断收尾:落一行明确告知(诚实——已停在当前步,不假装完成)。
                 await log.append_line("⎋ 已打断当前任务。", kind="system")
@@ -1385,7 +1425,12 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 badge = VerdictBadge(id="verdict-badge")
                 await log.mount_block(badge)
             badge.show(ev.verdict)
-            self._set_border(glow.verdict_color(ev.verdict.status))
+            ap.on_verdict(ev.verdict)   # 右栏 Verdict 区段(verify/idle 视图)同步
+            # E4 防火墙:self_verified=True 的 passed 用 warning 橙而非 success 绿
+            self._set_border(glow.verdict_color_self_aware(
+                ev.verdict.status,
+                self_verified=bool(getattr(ev.verdict, "self_verified", False)),
+            ))
             if ev.verdict.status in ("failed", "unverifiable"):
                 self._terminal_glow = True     # 锁定告警色,后续 report 阶段色不得覆盖
         elif isinstance(ev, CostUpdate):
@@ -1533,59 +1578,105 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         except Exception:  # noqa: BLE001
             pass
 
+    # ── TUI v2 行内选择:FIFO 队列(同屏最多一个活动 InlineChoice)──────────
+    async def _enqueue_choice(self, factory: Callable[[], InlineChoice]) -> None:
+        self._choice_queue.append(factory)
+        if not self._choice_active:
+            await self._mount_next_choice()
+
+    async def _mount_next_choice(self) -> None:
+        if not self._choice_queue:
+            self._choice_active = False
+            return
+        self._choice_active = True
+        widget = self._choice_queue.popleft()()
+        await self.query_one("#transcript", Transcript).mount_block(widget)
+
+    def _choice_done(self) -> None:
+        """InlineChoice 决策落定 → 解锁并 mount 队列里的下一个(若有)。"""
+        self._choice_active = False
+        if self._choice_queue:
+            self.run_worker(self._mount_next_choice(), exclusive=False)
+
     async def _handle_workflow_proposed(self, ev: WorkflowProposed) -> None:
         """工作流提议:① mount 进度树面板(存引用,后续 Progress/Done 据它刷新);
-        ② 非 AUTO 档弹审批模态显 preview,回调 gate.respond(call_id, decision) 放行 loop 的 await。
-        AUTO 档下 loop 侧 gate.request 已自动放行、不真等 respond,故只 mount 面板、不弹模态
-        (弹了也无 respond 对象,且 always 会多余)。"""
+        ② 非 AUTO 档在流内 mount InlineChoice 显 preview,回调 gate.respond 放行 loop 的 await。
+        AUTO 档下 loop 侧 gate.request 已自动放行、不真等 respond,故只 mount 面板、不渲染选择
+        (渲染了也无 respond 对象,且 always 会多余)。"""
         log = self.query_one("#transcript", Transcript)
         panel = WorkflowPanel(name=ev.name)
         self._workflow_panel = panel
         await log.mount_block(panel)
         if self.gate.level is ApprovalLevel.AUTO:
-            return  # loop 侧已自放行,不再弹模态
+            return  # loop 侧已自放行,不再渲染选择
 
         call_id = ev.call_id
 
-        def _cb(decision: str | None) -> None:
-            d = decision or "deny"
-            self.gate.respond(call_id, d)  # type: ignore[arg-type]
+        def _decide(value: str, _feedback: str) -> None:
+            self.gate.respond(call_id, value)  # type: ignore[arg-type]
             self.run_worker(
-                log.append_line(f"工作流审批:{ev.name} → {d}"),
+                log.append_line(f"工作流审批:{ev.name} → {value}"),
                 exclusive=False,
             )
+            self._choice_done()
 
-        await self.push_screen(WorkflowApprovalModal(ev.preview), _cb)
+        await self._enqueue_choice(lambda: InlineChoice(
+            title="⚙ 工作流审批 — 将起多个子 agent 编排执行",
+            body=ev.preview,
+            options=[("once", "本次批准"), ("always", "总是批准"), ("deny", "拒绝")],
+            on_decide=_decide,
+            escape_value="deny",   # fail-closed:不明确批准即不放行
+            risk="medium",
+        ))
 
     async def _handle_approval(self, req: ApprovalRequest) -> None:
-        """Auto 档不弹窗直接 always;否则弹 ApprovalModal,回调里 respond。"""
+        """Auto 档不渲染直接 always;否则流内 mount InlineChoice(契约 §6.3),回调里 respond。"""
         if self.gate.level is ApprovalLevel.AUTO:
             self.gate.respond(req.call_id, "always")
             return
 
-        def _cb(decision: str | None) -> None:
-            d = decision or "deny"
-            self.gate.respond(req.call_id, d)  # type: ignore[arg-type]
+        body_lines = [req.description, f"动作: {req.action} · 参数: {req.args}"]
+        # Smart approval 副标题(D6 锁):secret 命中显 "did you mean to commit this?" 提示
+        if getattr(req, "secret_pattern", None):
+            body_lines.append("⚠ Possible secret pattern matched: did you mean to commit this?")
+
+        def _decide(value: str, _feedback: str) -> None:
+            self.gate.respond(req.call_id, value)  # type: ignore[arg-type]
             # append_line 是 async,回调是同步的 → 包成 worker 落行。
             self.run_worker(
                 self.query_one("#transcript", Transcript).append_line(
-                    f"审批结果:{req.action} → {d}"
+                    f"审批结果:{req.action} → {value}"
                 ),
                 exclusive=False,
             )
+            self._choice_done()
 
-        await self.push_screen(ApprovalModal(req), _cb)
+        await self._enqueue_choice(lambda: InlineChoice(
+            title=format_approval_title(
+                risk=req.risk, trigger=getattr(req, "trigger", "") or "",
+            ),
+            body="\n".join(body_lines),
+            options=[
+                ("once", "本次允许"), ("session", "本会话允许"),
+                ("always", "总是允许"), ("deny", "拒绝"),
+            ],
+            on_decide=_decide,
+            escape_value="deny",   # Esc = 安全默认拒绝
+            risk=req.risk,
+        ))
 
     async def _handle_plan_rendered(self, ev: "PlanRendered") -> None:
-        """Plan mode spec §2.5:PlanRendered 事件 → 推 PlanModal(4 选项审批)→ 决策回传 loop。
+        """Plan mode spec §2.5:PlanRendered 事件 → 流内 InlineChoice(4 选项)→ 决策回传 loop。
 
         流程:
-          1. AUTO 档(YOLO)直接按 approve_start 落决策 + 唤醒 loop(不弹窗)
-          2. CONFIRM/PROPOSE 档 → push_screen(PlanModal) 等用户选 1/2/3/4
-          3. modal 回调里 ExitPlanMode(loop, action, feedback);唤醒 loop 的 await 由
+          1. AUTO 档(YOLO)直接按 approve_start 落决策 + 唤醒 loop(不渲染)
+          2. CONFIRM/PROPOSE 档 → 流内 InlineChoice 等用户选 1/2/3/4;
+             refine 就地展开反馈输入(TUI v2:不再返回空 feedback)
+          3. 回调里 ExitPlanMode(loop, action, feedback);唤醒 loop 的 await 由
              ExitPlanMode 自己负责(校验通过 → 自动 set event),TUI 不再手动 set。
              (历史教训:之前 TUI 在 ExitPlanMode 失败后仍 set event,导致 Refine 校验失败
              时被静默兜底成 Approve;现在 ExitPlanMode 原子完成,失败时不 set,无此洞。)
+          无 escape_value:plan 决策没有"安全默认",用户没拍就让 loop 继续挂(诚实)。
         """
         from argos_agent.core.plan_mode import ExitPlanMode
         loop = self._current_loop
@@ -1593,21 +1684,33 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             return  # run 已结束(并发事件兜底)
 
         if self.gate.level is ApprovalLevel.AUTO:
-            # YOLO:不弹窗,直接 approve_start 走完(spec §2.5 等价于按 1)
+            # YOLO:不渲染,直接 approve_start 走完(spec §2.5 等价于按 1)
             ExitPlanMode(loop, "approve_start")
             return
 
-        def _cb(decision: PlanDecision | None) -> None:
-            if decision is None:
-                return  # Esc 退屏:不写决策,让 loop 继续挂(诚实:用户没拍就不放)
-            ExitPlanMode(loop, decision.action, decision.feedback)
+        def _decide(value: str, feedback: str) -> None:
+            ExitPlanMode(loop, value, feedback if value == "refine" else None)
             # ExitPlanMode 内部已 set event(校验失败时不动,避免 Refine→Approve 兜底)。
-            # 落一行告知用户(append_line 是 async,回调是同步的 → 包成 worker)
             self.run_worker(
                 self.query_one("#transcript", Transcript).append_line(
-                    f"Plan 决策:{decision.action}", kind="system"
+                    f"Plan 决策:{value}", kind="system"
                 ),
                 exclusive=False,
             )
+            self._choice_done()
 
-        await self.push_screen(PlanModal(plan_md=ev.plan_md), _cb)
+        await self._enqueue_choice(lambda: InlineChoice(
+            title="📋 Plan 审批",
+            body=ev.plan_md,
+            options=[
+                ("approve_start", "Approve and start"),
+                ("approve_accept_edits", "Approve and accept edits"),
+                ("keep_planning", "Keep planning"),
+                ("refine", "Refine with feedback"),
+            ],
+            on_decide=_decide,
+            escape_value=None,
+            needs_input={"refine"},
+            input_placeholder="补充对 plan 的反馈,Enter 提交,Esc 返回",
+            risk="low",
+        ))

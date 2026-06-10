@@ -24,6 +24,15 @@ def verdict_color(status: str) -> Color:
     return {"passed": SUCCESS, "failed": ERROR, "unverifiable": WARNING}.get(status, IDLE_BORDER)
 
 
+def verdict_color_self_aware(status: str, self_verified: bool = False) -> Color:
+    """E4 防火墙:self_verified=True 的 passed 降级为 WARNING(暖橙),
+    绝不冒充 SUCCESS 绿色(用户级 verify 才有资格绿)。
+    """
+    if status == "passed" and self_verified:
+        return WARNING
+    return verdict_color(status)
+
+
 def breathe(color: Color, t: float) -> Color:
     """t∈[0,1] 正弦相位 → 在 color 与略暗之间插值(呼吸)。"""
     import math

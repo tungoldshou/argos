@@ -20,5 +20,8 @@ ARGOS_NIGHT = Theme(
     dark=True,
     variables={
         "text-muted": "#565F89",   # user 回显/次要/分隔线/折叠提示
+        # TUI v2:输入光标对齐唯一强调色(块光标橙底深字,不再用默认反白)
+        "block-cursor-foreground": "#16161E",
+        "block-cursor-background": "#E0AF68",
     },
 )

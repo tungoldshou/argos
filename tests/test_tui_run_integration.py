@@ -29,13 +29,11 @@ def test_status_bar_count_badges_active_paused_history():
 
 
 def test_status_bar_count_badges_empty():
-    """空列表 → 0/0/0。"""
+    """TUI v2 去噪:空列表(非 daemon)→ 整段消失,不再显 ⏵0/⏸0/⏹0 噪声。"""
     from argos_agent.tui.widgets.status_bar import StatusBar
     bar = StatusBar()
-    text = bar.render_count_badges([])
-    assert "⏵0" in text
-    assert "⏸0" in text
-    assert "⏹0" in text
+    assert bar.render_count_badges([]) == ""
+    assert "⏵" not in bar.render_text
 
 
 def test_status_bar_set_run_summary_renders_in_text():

@@ -40,9 +40,12 @@ async def test_workflow_proposed_pushes_modal_under_confirm():
         await app._apply_event(WorkflowProposed(name="x", description="d",
             preview="预览内容 [VOTE]", call_id="c2"))
         await pilot.pause()
-        # CONFIRM 档应弹出审批模态(screen 栈多了一层)
-        assert any("Modal" in type(s).__name__ or "Approval" in type(s).__name__
-                   for s in app.screen_stack)
+        # TUI v2:CONFIRM 档在流内渲染 InlineChoice(不再 push 居中模态)
+        from argos_agent.tui.widgets.inline_choice import InlineChoice
+        choices = list(app.query(InlineChoice))
+        assert choices, "CONFIRM 档应在流内渲染工作流审批 InlineChoice"
+        body = str(choices[0].query_one("#ic-body").render())
+        assert "预览内容 [VOTE]" in body          # 含方括号的 preview 不崩(markup=False)
 
 
 @pytest.mark.asyncio
@@ -82,8 +85,8 @@ async def test_workflow_confirm_callback_responds_on_shared_gate():
         await app._apply_event(WorkflowProposed(name="x", description="d",
             preview="预览", call_id="c4"))
         await pilot.pause()
-        # 模态批准(数字 4=always),回调应 gate.respond("c4", ...) → 唤醒 future。
-        await pilot.press("4")
+        # 流内批准(TUI v2 键位:2=always),回调应 gate.respond("c4", ...) → 唤醒 future。
+        await pilot.press("2")
         await pilot.pause()
         assert fut.done(), "审批回调应在共享 gate 上 respond,放行 loop 的 await"
         assert fut.result().approved is True

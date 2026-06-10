@@ -1,5 +1,15 @@
-"""右侧诚实活动栏(spec §ActivityPanel)。区块:模型/任务进度/工具/回执/Skills/MCP/成本+缓存/Hook/LSP。
-诚实铁律:每块只反映真实数据;Skills/MCP/LSP 无真实内容时显示诚实空态('未加载'/'0 已连接'/'(无)')。"""
+"""右侧诚实活动栏(TUI v2 spec §5:智能切视图)。
+
+数据层不变:每块只反映真实数据;Skills/MCP/LSP 无真实内容时显示诚实空态
+('未加载'/'0 已连接'/'(无)')。渲染层改为 4 视图按阶段自动切换(用户拍板"智能切"):
+  idle   → 模型 / Run / Skill Catalog / MCP / 上轮 Verdict
+  plan   → 任务进度(TODO 或 4 阶段计时)
+  act    → 任务进度 / 工具 / 回执 / Hook / LSP / Skill / Approval
+  verify → 任务进度 / Approval / Verdict
+成本+缓存 与 上下文 两块所有视图常驻(钱与上下文任何时刻可见)。
+实现:全部 _Section 常驻 DOM,按视图切 display —— snapshot_text() 聚合全部数据
+(不只当前视图),/cost 回显与测试断言不受视图切换影响。Ctrl+O(app 绑定)cycle_view 手动 pin。
+"""
 from __future__ import annotations
 
 import time
@@ -15,10 +25,13 @@ from argos_agent.skills_runtime.events import SkillRunStart, SkillRunEnd
 
 _PHASE_GLYPH = {"plan": "◇", "act": "✦", "verify": "✦", "report": "◇"}
 
+# 视图顺序(cycle_view 循环序);"auto" 不在列表里,是模式而非视图。
+_VIEWS = ("idle", "plan", "act", "verify")
+
 
 class _Section(Static):
     # 每块自带"格子"观感:顶部 $text-muted 分隔线(可见,非近黑 $panel) + 嵌在线上的橙色粗体
-    # 标题 + 块间留 1 行空白。此前各块紧贴、分隔线用近黑 $panel 看不见 → 用户体感"全挤一起"。
+    # 标题 + 块间留 1 行空白。
     DEFAULT_CSS = """
     _Section {
         height: auto;
@@ -38,12 +51,38 @@ class _Section(Static):
 
 
 class ActivityPanel(Vertical):
-    # overflow-y: auto → 内容超出可视高度时自动出竖向滚动条(滚轮+拖拽都恢复可用);
-    # 此前继承 Vertical 默认 overflow-y: hidden,区块超高即被裁且完全滚不动。
-    # border-title-color 在 _Section 显式给 $foreground(亮白)——默认是透明(alpha=0)看不见。
+    # overflow-y: auto → 内容超出可视高度时自动出竖向滚动条。
     DEFAULT_CSS = """
-    ActivityPanel { width: 34; border-left: solid $panel; padding: 1 0 0 0; overflow-y: auto; scrollbar-size-vertical: 1; }
+    ActivityPanel { width: 32; border-left: solid $panel; padding: 1 0 0 0; overflow-y: auto; scrollbar-size-vertical: 1; }
+    ActivityPanel #view-header { color: $text-muted; padding: 0 1; margin: 0 0 1 0; }
     """
+
+    # ── 区段索引(compose 顺序的单一真源)───────────────────────────
+    _MODEL_IDX = 0
+    _PROGRESS_IDX = 1
+    _TOOLS_IDX = 2
+    _RECEIPT_IDX = 3
+    _RUN_IDX = 4
+    _CATALOG_IDX = 5
+    _MCP_IDX = 6
+    _HOOK_IDX = 7
+    _LSP_IDX = 8
+    _SKILL_IDX = 9
+    _APPROVAL_IDX = 10
+    _VERDICT_IDX = 11
+    _COST_IDX = 12      # 常驻 footer
+    _CTX_IDX = 13       # 常驻 footer
+
+    # 视图 → 可见区段(footer 两块所有视图常驻,单列于 _FOOTER)
+    _VIEW_SECTIONS: dict[str, frozenset[int]] = {
+        "idle": frozenset({_MODEL_IDX, _RUN_IDX, _CATALOG_IDX, _MCP_IDX, _VERDICT_IDX}),
+        "plan": frozenset({_PROGRESS_IDX}),
+        "act": frozenset({_PROGRESS_IDX, _TOOLS_IDX, _RECEIPT_IDX, _HOOK_IDX,
+                          _LSP_IDX, _SKILL_IDX, _APPROVAL_IDX}),
+        "verify": frozenset({_PROGRESS_IDX, _APPROVAL_IDX, _VERDICT_IDX}),
+    }
+    _FOOTER: frozenset[int] = frozenset({_COST_IDX, _CTX_IDX})
+
     def __init__(self, *, model_label: str = "—", tier: str = "—", **kwargs) -> None:
         super().__init__(**kwargs)
         self._model_label = model_label
@@ -54,34 +93,86 @@ class ActivityPanel(Vertical):
         self._receipts: list[str] = []
         self._todos: list[dict] = []   # 真 TODO 拆解(update_plan);非空时"任务进度"区改渲染它
         self._hook_log: deque[HookFired] = deque(maxlen=50)   # spec §2.4 最多 50
-        # LSP 状态(spec 2026-06-06 §2.7):server_name → 最新 status(spawn/ready/crash/disabled)
-        # + uri → 最近 count(变化检测 dedup)
         self._lsp_servers: dict[str, str] = {}
         self._lsp_diag_cache: dict[str, int] = {}   # uri → 最近 count
-        # Skill run 状态(spec §2.6 / §2.7):新 idx 10 区段
-        # 存最近 N 条 SkillRunStart / SkillRunEnd,渲染时按 start/end 配对
         self._skill_runs: deque[SkillRunStart | SkillRunEnd] = deque(maxlen=20)
-        # Approval 段(spec 2026-06-06 §2.6 Smart approval):3 类决策计数器 + 最近 N 条 log。
-        # log 元素 = (action, decision_str, trigger);decision_str ∈ {approved, denied, asked}。
-        # 显示口径对齐用户体感:approved=ok(自动放过)/ denied=deny(硬规则或用户拒)/ asked=ask(弹窗)。
+        # Approval 段:3 类决策计数器 + 最近 N 条 log。
         self._approval_count: dict[str, int] = {"ok": 0, "ask": 0, "deny": 0}
         self._approval_log: deque[tuple[str, str, str]] = deque(maxlen=10)
+        # ── 智能切状态(TUI v2)─────────────────────────────────
+        self._view: str = "idle"          # 当前视图
+        self._pinned: bool = False        # True = 用户 Ctrl+O 手动钉住,phase 不再自动切
 
     def compose(self) -> ComposeResult:
+        yield Static(self._header_text(), id="view-header", markup=False)
         yield _Section("模型", self._model_label)
-        yield _Section("任务进度", "(待开始)", )  # id 设下方
+        yield _Section("任务进度", "(待开始)")
         yield _Section("工具", "本轮 0 调用")
         yield _Section("回执(已签名)", "—")
-        yield _Section("Run", "(无)")   # ← 新增 idx 4:daemon 模式 run 概览
-        yield _Section("Skill Catalog", self._skill_catalog_summary())  # ← 重命名(原 Skills)
+        yield _Section("Run", "(无)")
+        yield _Section("Skill Catalog", self._skill_catalog_summary())
         yield _Section("MCP", self._mcp_summary())
-        yield _Section("成本 + 缓存", "↑0 ↓0  $0.000\n缓存命中 0 tok  0.0s")
-        yield _Section("上下文", "")
         yield _Section("Hook", "(无)")
         yield _Section("LSP", "(无)")
-        yield _Section("Skill", self._skill_summary())  # ← 新增 idx 10(singular,运行时执行)
-        yield _Section("Approval", "(无)")  # ← Smart approval(spec 2026-06-06 §2.6):3 类决策计数器 + 最近 log
+        yield _Section("Skill", self._skill_summary())
+        yield _Section("Approval", "(无)")
+        yield _Section("Verdict", "(无)")
+        yield _Section("成本 + 缓存", "↑0 ↓0  $0.000\n缓存命中 0 tok  0.0s")
+        yield _Section("上下文", "")
 
+    def on_mount(self) -> None:
+        self._apply_view()
+
+    # ── 智能切(TUI v2 spec §5)─────────────────────────────────────
+    def _header_text(self) -> str:
+        pin = " ⚲" if self._pinned else ""
+        return f"── {self._view}{pin} ──"
+
+    def _apply_view(self) -> None:
+        """按当前视图切区段可见性(数据照常更新,只动 display)。"""
+        visible = self._VIEW_SECTIONS.get(self._view, frozenset()) | self._FOOTER
+        for i, sec in enumerate(self._sections()):
+            sec.display = i in visible
+        try:
+            self.query_one("#view-header", Static).update(self._header_text())
+        except Exception:  # noqa: BLE001 — 未 mount(测试直构)时静默
+            pass
+
+    def set_view(self, view: str, *, pinned: bool | None = None) -> None:
+        if view not in _VIEWS:
+            return  # 诚实:未知视图不假装切换
+        self._view = view
+        if pinned is not None:
+            self._pinned = pinned
+        self._apply_view()
+
+    def cycle_view(self) -> str:
+        """Ctrl+O:auto → idle → plan → act → verify → auto。返回当前模式(显示用)。"""
+        if not self._pinned:
+            self._pinned = True
+            self.set_view(_VIEWS[0])
+            return _VIEWS[0]
+        idx = _VIEWS.index(self._view) if self._view in _VIEWS else 0
+        if idx + 1 < len(_VIEWS):
+            self.set_view(_VIEWS[idx + 1])
+            return _VIEWS[idx + 1]
+        self._pinned = False           # 走完一圈回 auto
+        self._apply_view()
+        return "auto"
+
+    def _auto_view(self, phase: str) -> None:
+        if self._pinned:
+            return
+        view = {"plan": "plan", "act": "act", "verify": "verify", "report": "verify"}.get(phase)
+        if view:
+            self.set_view(view)
+
+    def on_run_end(self) -> None:
+        """run 收尾:auto 模式回 idle 视图(verdict/成本仍可见)。"""
+        if not self._pinned:
+            self.set_view("idle")
+
+    # ── 数据摘要(诚实空态)──────────────────────────────────────────
     @staticmethod
     def _skills_summary() -> str:
         """向后兼容:旧名 = 新名(spec §2.6 重命名后原方法保留作 alias)。"""
@@ -89,8 +180,7 @@ class ActivityPanel(Vertical):
 
     @staticmethod
     def _skill_catalog_summary() -> str:
-        """'Skill Catalog' 段(idx 4):列按任务召回的 markdown 库技能(skills.py)。
-        与 'Skill' 段(idx 10)区分——后者显示运行时执行的 analysis skill。"""
+        """'Skill Catalog' 段:列按任务召回的 markdown 库技能(skills.py)。"""
         try:
             from argos_agent import skills
             enabled = [s for s in skills.load_all() if s.enabled]
@@ -124,13 +214,13 @@ class ActivityPanel(Vertical):
     def _set(self, idx: int, body: str) -> None:
         self._sections()[idx].update(body)
 
-    # ── 事件入口(app._apply_event 调) ──────────────────────────────
+    # ── 事件入口(app._apply_event 调;签名全部保持)───────────────────
     def _render_progress(self) -> None:
-        """"任务进度"区(idx 1):有真 TODO 拆解时渲染 todo,否则退回 4 阶段计时。"""
+        """"任务进度"区:有真 TODO 拆解时渲染 todo,否则退回 4 阶段计时。"""
         if self._todos:
-            self._set(1, self._render_todos())
+            self._set(self._PROGRESS_IDX, self._render_todos())
         else:
-            self._set(1, self._render_phases())
+            self._set(self._PROGRESS_IDX, self._render_phases())
 
     def _render_phases(self) -> str:
         lines = []
@@ -148,7 +238,6 @@ class ActivityPanel(Vertical):
             if status == "completed":
                 lines.append(f" ✅ {t.get('content', '')}")
             elif status == "in_progress":
-                # 进行中显 activeForm(无则退回 content)。
                 lines.append(f" 🔧 {t.get('activeForm') or t.get('content', '')}")
             else:
                 lines.append(f" ⬜ {t.get('content', '')}")
@@ -162,47 +251,53 @@ class ActivityPanel(Vertical):
         self._phase_start = now
         self._phases.append((phase, 0.0, "▶"))
         self._render_progress()
+        self._auto_view(phase)   # 智能切:阶段驱动视图
 
     def on_plan(self, todos: list[dict]) -> None:
-        """真 TODO 拆解(update_plan)到达 →"任务进度"区改渲染子任务进度(替代 4 阶段计时)。"""
+        """真 TODO 拆解(update_plan)到达 →"任务进度"区改渲染子任务进度。"""
         self._todos = list(todos or [])
         self._render_progress()
 
     def on_receipt(self, action: str) -> None:
         self._tool_counts[action] = self._tool_counts.get(action, 0) + 1
         tools = "\n".join(f"  {a} ×{n}" for a, n in self._tool_counts.items())
-        self._set(2, f"本轮调用:\n{tools}" if tools else "本轮 0 调用")
+        self._set(self._TOOLS_IDX, f"本轮调用:\n{tools}" if tools else "本轮 0 调用")
         self._receipts.append(action)
-        self._set(3, "\n".join(f"🧾 {a}" for a in self._receipts[-6:]))
+        self._set(self._RECEIPT_IDX, "\n".join(f"🧾 {a}" for a in self._receipts[-6:]))
 
     def on_cost(self, *, tokens_in: int, tokens_out: int, cost_usd: float | None,
                 elapsed_s: float, cache_read: int = 0, tier_name: str = "") -> None:
         cost = "$(N/A)" if cost_usd is None else f"${cost_usd:.3f}"
-        # #11 per-task routing:每步成本归属具体 profile(3 字母短标签 + 颜色,spec D15)
+        # #11 per-task routing:每步成本归属具体 profile(3 字母短标签,spec D15)
         tier_tag = ""
         if tier_name:
             short = tier_name[:3]
             tier_tag = f" [{short}]"
-        self._set(7, f"↑{tokens_in} ↓{tokens_out}{tier_tag}  {cost}\n"
-                     f"缓存命中 {cache_read} tok  {elapsed_s:.1f}s")
+        self._set(self._COST_IDX, f"↑{tokens_in} ↓{tokens_out}{tier_tag}  {cost}\n"
+                                  f"缓存命中 {cache_read} tok  {elapsed_s:.1f}s")
 
     def on_context(self, *, used: int, window: int) -> None:
-        """上下文窗口用量(当前窗口输入侧 token / 上限)。10 格进度条 + 百分比 +
-        #12 badge `[ctx N/M X%]`(spec §10.3);口径对齐 Claude Code:used 是【当前窗口
-        占用】(input+cache),非会话累计成本。"""
+        """上下文窗口用量。10 格进度条 + 百分比 + badge `[ctx N/M X%]`(spec §10.3);
+        口径对齐 Claude Code:used 是【当前窗口占用】(input+cache),非会话累计成本。"""
         pct = 0 if not window else round(used * 100 / window)
         filled = min(10, max(0, round(pct / 10)))
         bar = "▓" * filled + "░" * (10 - filled)
         win = f"{window // 1000}k" if window else "?"
-        # #12 显式 [ctx N/M X%] badge(用户可一眼读数字 + 单位,不再混 cost/累计)
         badge = f"[ctx {used:,}/{window:,} {pct}%]"
-        self._set(8, f"{self._model_label} · {win}\n{bar} {pct}%\n{badge}")
+        self._set(self._CTX_IDX, f"{self._model_label} · {win}\n{bar} {pct}%\n{badge}")
+
+    def on_verdict(self, verdict) -> None:
+        """VerifyVerdict 到达 → 'Verdict' 区段(verify/idle 视图可见)。
+        三态铁律:status 原样显示;self-verified 显式标注,绝不冒充用户级 verify。"""
+        cmd = getattr(verdict, "verify_cmd", None) or "—"
+        detail = getattr(verdict, "detail", "") or ""
+        status = getattr(verdict, "status", "?")
+        tag = " (self-verified)" if getattr(verdict, "self_verified", False) else ""
+        self._set(self._VERDICT_IDX, f"{status}{tag}\n{cmd}\n{detail}".strip())
 
     def on_hook_fired(self, ev: HookFired) -> None:
-        """单条 hook 触发结果(activity panel "Hook" 区段)。
-        3 态:ok(dim) / fail(red 标记) / timeout(red 标记)。"""
+        """单条 hook 触发结果。3 态:ok(dim) / fail(red 标记) / timeout(red 标记)。"""
         self._hook_log.append(ev)
-        # 渲染最近 5 条(避免区段超高);每条:event + command + 状态 + 耗时
         lines = []
         for h in list(self._hook_log)[-5:]:
             cmd_short = h.command.split()[0] if h.command else "?"
@@ -215,15 +310,11 @@ class ActivityPanel(Vertical):
             else:
                 tag = f"fail (exit {h.returncode}, {h.elapsed_ms}ms)"
             lines.append(f" {h.event_name}:{cmd_short} {tag}")
-        self._set(9, "\n".join(lines) if lines else "(无)")
+        self._set(self._HOOK_IDX, "\n".join(lines) if lines else "(无)")
 
     # ── LSP(spec §2.7):4 态 + 变化检测 dedup ─────────────────────────
-    # LSP 段 idx = 10(在 Hook 段后,见 compose 顺序)
-    _LSP_IDX: int = 10
-
     def on_lsp_server_event(self, ev: LspServerEvent) -> None:
-        """单条 LSP server 生命周期事件(活动栏 "LSP" 区段)。
-        4 态:spawn / ready / crash / disabled(各显一行,带 elapsed_ms)。"""
+        """单条 LSP server 生命周期事件。4 态:spawn / ready / crash / disabled。"""
         self._lsp_servers[ev.server_name] = ev.status
         lines: list[str] = []
         for name, status in self._lsp_servers.items():
@@ -257,24 +348,21 @@ class ActivityPanel(Vertical):
         self._lsp_servers.clear()
         self._lsp_diag_cache.clear()
         self._skill_runs.clear()
-        # Smart approval(spec 2026-06-06 §2.6):新 run 起点重置 3 类计数器 + log。
         self._approval_count = {"ok": 0, "ask": 0, "deny": 0}
         self._approval_log.clear()
-        self._set(1, "(待开始)"); self._set(2, "本轮 0 调用"); self._set(3, "—")
-        self._set(9, "(无)"); self._set(self._LSP_IDX, "(无)")
+        self._set(self._PROGRESS_IDX, "(待开始)")
+        self._set(self._TOOLS_IDX, "本轮 0 调用")
+        self._set(self._RECEIPT_IDX, "—")
+        self._set(self._HOOK_IDX, "(无)")
+        self._set(self._LSP_IDX, "(无)")
         self._set(self._SKILL_IDX, "(无)")
         self._set(self._RUN_IDX, "(无)")
         self._set(self._APPROVAL_IDX, "(无)")
+        self._set(self._VERDICT_IDX, "(无)")
 
     # ── Run 段(spec §2.6 b/c 段)──────────────────────────────────
-    _RUN_IDX: int = 4   # 任务进度后,Skill Catalog 前
-
     def on_run_summary(self, *, active: int, paused: int, suspended: int, history: int) -> None:
-        """渲染 'Run' 区段:⏵N active / ⏸N paused / ⏹N history。
-
-        active = running;paused = paused;
-        history = suspended + completed + failed + cancelled;
-        走 state count → 不存 id 列表(本期单 TUI 限定)。"""
+        """渲染 'Run' 区段:⏵N active / ⏸N paused / ⏹N history。"""
         if active == 0 and paused == 0 and suspended == 0 and history == 0:
             self._set(self._RUN_IDX, "(无)")
         else:
@@ -284,25 +372,19 @@ class ActivityPanel(Vertical):
             )
 
     def snapshot_text(self) -> str:
-        # Textual 8.2.7 的 Static 用 .content 暴露当前正文(随 .update() 刷新),不再有 .renderable。
+        # 聚合【全部】区段(含当前视图隐藏的)——/cost 回显与测试断言不受视图切换影响。
         return "\n".join(str(s.content) + " " + str(s.border_title) for s in self._sections())
 
-    # ── Skill run(新 idx 11 区段)────────────────────────────────────
-    _SKILL_IDX: int = 11
-
+    # ── Skill run 区段────────────────────────────────────────────
     def _on_skill_run_start(self, ev: SkillRunStart) -> None:
-        """收到 SkillRunStart → 入 deque + 触发区段刷新。"""
         self._skill_runs.append(ev)
         self._refresh_skill_section()
 
     def _on_skill_run_end(self, ev: SkillRunEnd) -> None:
-        """收到 SkillRunEnd → 入 deque + 触发区段刷新。"""
         self._skill_runs.append(ev)
         self._refresh_skill_section()
 
     def _refresh_skill_section(self) -> None:
-        """刷新 'Skill' 区段(运行时执行):按 start/end 配对渲染。"""
-        # 找 compose() 产出的 _Section("Skill") 节点并 update
         for s in self.query(_Section):
             if s.border_title == "Skill":
                 s.update(self._skill_summary())
@@ -312,7 +394,6 @@ class ActivityPanel(Vertical):
         """'Skill' 区段(singular)渲染:start + end 配对成行(对位 Hook 区段)."""
         if not self._skill_runs:
             return "(无)"
-        # 配对 start/end(简单按出现顺序;实际生产可按 run_id)
         lines: list[str] = []
         pending_starts: dict[str, SkillRunStart] = {}
         for ev in self._skill_runs:
@@ -321,7 +402,7 @@ class ActivityPanel(Vertical):
                 timeout = ev.args.get("timeout", 60) if isinstance(ev.args, dict) else 60
                 lines.append(f"{ev.skill_name}: started (timeout={timeout}s)")
             else:
-                s = pending_starts.pop(ev.skill_name, None)
+                pending_starts.pop(ev.skill_name, None)
                 dur = ev.duration_ms / 1000.0
                 dur_str = f"{dur:.1f}s" if dur >= 1.0 else f"{int(ev.duration_ms)}ms"
                 lines.append(
@@ -330,15 +411,11 @@ class ActivityPanel(Vertical):
                 )
         return "\n".join(lines[-6:])   # 最多 6 行
 
-    # ── Approval 段(Smart approval,spec 2026-06-06 §2.6):3 类决策计数 + log ────
-    _APPROVAL_IDX: int = 12
-
+    # ── Approval 段:3 类决策计数 + log ────────────────────────────
     def on_approval_decision(self, *, action: str, decision: str, trigger: str) -> None:
         """收到一次审批结论 → 计数器 +1 + 入 log + 刷新区段。
 
-        decision ∈ {approved, denied, asked};对位 _approval_count 三键 {ok, ask, deny}。
-        trigger = evaluator 贴的标签(hard_rule:X / soft_allow:Y / level:auto 等),
-        log 行据它显示"为什么";只截最近 10 条。"""
+        decision ∈ {approved, denied, asked};对位 _approval_count 三键 {ok, ask, deny}。"""
         bucket = {"approved": "ok", "denied": "deny", "asked": "ask"}.get(decision)
         if bucket is None:
             return  # 非法值忽略(诚实:坏数据不假装计入)
@@ -347,7 +424,7 @@ class ActivityPanel(Vertical):
         self._refresh_approval_section()
 
     def _refresh_approval_section(self) -> None:
-        """刷新 'Approval' 区段:首行计数器 + 最近 5 条 log(action  decision  trigger)。"""
+        """刷新 'Approval' 区段:首行计数器 + 最近 5 条 log。"""
         try:
             self._set(self._APPROVAL_IDX, self._approval_summary())
         except (IndexError, Exception):

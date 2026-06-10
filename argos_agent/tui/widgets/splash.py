@@ -1,4 +1,4 @@
-"""启动 logo 画面(spec §启动画面)。ASCII ARGOS + 模型档 + 诚实模式徽标 + 版本 + 提示。
+"""启动 logo 画面(TUI v2 spec §3.3:紧凑化)。ASCII ARGOS + 两行信息 + 坏配置 banner。
 plan mode 时标题前缀 [plan mode] + 切色(spec §2.4),set_plan_mode() 切换。"""
 from __future__ import annotations
 
@@ -42,16 +42,15 @@ def _compose_text(*, model_label: str, live: bool, plan_mode: bool,
         # ASCII art 是块字符,不含可检索的字面 "ARGOS" —— 补一行字面 wordmark,
         # 既让 renderable_text 含 "ARGOS"(测试断言/可访问性文本),又作品牌行。
         + "\n                   ARGOS\n"
-        + f"\n     终端超级智能体 · v{_VERSION}\n\n"
-        + f"     模型 {model_label} · {mode}\n"
+        + f"\n     终端超级智能体 · v{_VERSION} · 模型 {model_label} · {mode}"
         + key_hint
-        + "\n     输入目标开始,或输入 / 看命令  ·  ^C 退出"
+        + "\n     输入目标开始 · / 命令 · Esc 打断 · ^C 退出"
     )
 
 
 class StartupSplash(Static):
     DEFAULT_CSS = """
-    StartupSplash { content-align: center middle; height: auto; padding: 2 0; color: $accent; }
+    StartupSplash { content-align: center middle; height: auto; padding: 1 0; color: $accent; }
     StartupSplash.-plan-mode { color: $primary; }
     """
     # plan_mode:实时反映当前 plan mode 状态。set_plan_mode() 是 host 侧切换入口,

@@ -7,7 +7,7 @@
      决策 / 4 分支逻辑,只换 model 输出)
   2. 触发 /plan slash → app.handle_input("/plan") → 真 EnterPlanMode(loop) 切 mode
   3. 跑一轮 run → app.handle_input("读 a.py") → 真 AgentLoop 产 PlanRendered
-  4. TUI 收 PlanRendered 推 PlanModal → pilot 断言 modal 在 screen stack
+  4. TUI 收 PlanRendered 流内 mount InlineChoice → pilot 断言 modal 在 screen stack
   5. 按数字键 1 (Approve and start) → 回调里 ExitPlanMode(loop) + set event 唤醒
   6. loop 跳出 plan 子循环 → 走 act 阶段 → 投事件流(PhaseChange(act) + CodeAction 等)
   7. 断言:modal 已收 + EnterPlanMode/ExitPlanMode 都被调 + 事件流含 plan→act→verify→report
@@ -36,7 +36,7 @@ from argos_agent.tui.events import (
     PlanRendered, PlanUpdate, TokenDelta, VerifyVerdict,
 )
 from argos_agent.tui.fakeloop import FakeLoop
-from argos_agent.tui.widgets.plan_modal import PlanModal
+from argos_agent.tui.widgets.inline_choice import InlineChoice
 
 
 # ── 替身:脚本化模型 + 沙箱 + 验证器(不连真 LLM / 真沙箱执行) ──
@@ -171,7 +171,7 @@ async def test_e2e_plan_to_approve_to_completion(e2e_loop_factory, tmp_path):
 
 @pytest.mark.asyncio
 async def test_e2e_plan_modal_pushed_on_screen_and_dismissed_on_key_1(e2e_loop_factory, tmp_path):
-    """Pilot e2e:app 启 + 收 PlanRendered → PlanModal 在 screen stack → 按 1 收掉 + 决策传回。
+    """Pilot e2e:app 启 + 收 PlanRendered → InlineChoice 挂进流内 → 按 1 收掉 + 决策传回。
 
     不跑真 AgentLoop(避免 seatbelt 跑),改用一个 mini loop 直接 emit PlanRendered + 后续 act 事件,
     测 TUI 那侧的 modal 弹 + 数字键回传。
@@ -207,13 +207,13 @@ async def test_e2e_plan_modal_pushed_on_screen_and_dismissed_on_key_1(e2e_loop_f
         await pilot.pause()
         app._plan_mode = True   # 同步指示器
         app.handle_input("读 a.py")  # 走 run_worker 起 run(不 await)
-        # 等 PlanModal 真的 push 上 stack
+        # 等 InlineChoice 真的挂进流内
         for _ in range(50):
             await pilot.pause()
-            if any(isinstance(s, PlanModal) for s in app.screen_stack):
+            if bool(app.query(InlineChoice)):
                 break
-        assert any(isinstance(s, PlanModal) for s in app.screen_stack), (
-            f"PlanRendered 后 PlanModal 应在 screen stack,实际 {app.screen_stack}"
+        assert bool(app.query(InlineChoice)), (
+            f"PlanRendered 后 InlineChoice 应挂在流内,实际 {app.query(InlineChoice)}"
         )
         # 按 1 (Approve and start)
         await pilot.press("1")

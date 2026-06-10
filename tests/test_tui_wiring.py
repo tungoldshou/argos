@@ -90,7 +90,8 @@ async def test_slash_status_and_cost_write_to_transcript():
         app.handle_input("/cost")
         await pilot.pause()
         log = app.query_one("#transcript")
-        assert "phase:" in log.rendered_text
+        # TUI v2 状态栏去噪:/status 回显含阶段名(idle)与 token 计数,不再有 "phase:" 前缀
+        assert "idle" in log.rendered_text and "⚙" in log.rendered_text
         assert "成本" in log.rendered_text or "$" in log.rendered_text
 
 

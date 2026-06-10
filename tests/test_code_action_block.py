@@ -17,10 +17,11 @@ async def test_header_uses_glyph_not_ascii_box():
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
-        # border_title 用 ⏺ 字形 + step,不再手画 ┌ code-action
-        assert "⏺" in str(app.block.border_title)
-        assert "2" in str(app.block.border_title)
-        assert "┌" not in str(app.block.border_title)
+        # TUI v2 扁平块:⏺ 字形 + step 在 #header Static(无边框盒,无 border_title)
+        header = str(app.block.query_one("#header").render())
+        assert "⏺" in header
+        assert "2" in header
+        assert "┌" not in header
 
 
 @pytest.mark.asyncio

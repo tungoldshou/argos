@@ -31,9 +31,10 @@ async def test_code_action_block_shows_code_and_collapsed_output():
     app = _Host(block)
     async with app.run_test() as pilot:
         await pilot.pause()
-        # ⏺ header + step(spec §widget 改造:不再手画 ASCII box)
-        assert "⏺" in str(block.border_title)
-        assert "0" in str(block.border_title)
+        # TUI v2 扁平块:⏺ header Static + step(无边框盒,无 border_title)
+        header = str(block.query_one("#header").render())
+        assert "⏺" in header
+        assert "0" in header
         block.set_result(stdout="1 match", value_repr="['foo.py']", exc="", ok=True)
         await pilot.pause()
         assert block.ok is True
@@ -76,15 +77,16 @@ async def test_verdict_badge_three_states():
         badge.show(Verdict.passed(detail="12 passed (0.8s)", verify_cmd="pytest", attempts=1))
         await pilot.pause()
         assert badge.status == "passed"
-        assert "✅" in badge.render_text and "pytest" in badge.render_text
+        # TUI v2 扁平行:▌ + 文字标签(三态文案分明,色相由 verdict-* class 钉死)
+        assert "verify passed" in badge.render_text and "pytest" in badge.render_text
 
         badge.show(Verdict.failed(detail="1 failed", verify_cmd="pytest", attempts=2))
         await pilot.pause()
-        assert badge.status == "failed" and "❌" in badge.render_text
+        assert badge.status == "failed" and "verify FAILED" in badge.render_text
 
         badge.show(Verdict.unverifiable(detail="tampered", tampered=["t.py"], attempts=2))
         await pilot.pause()
-        assert badge.status == "unverifiable" and "⚠️" in badge.render_text
+        assert badge.status == "unverifiable" and "无法验证" in badge.render_text
 
 from argos_agent.tui.widgets.status_bar import StatusBar
 
@@ -95,7 +97,8 @@ async def test_status_bar_always_on_fields():
     app = _Host(bar)
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert "phase:" in bar.render_text
+        # TUI v2 去噪:不再有 "phase:" 前缀,改为 字形+阶段名(◇/✦/·)
+        assert "idle" in bar.render_text
         assert "$0" in bar.render_text
         bar.set_phase("verify", actions=3)
         bar.set_cost(tokens_in=12400, tokens_out=3100, cost_usd=0.013, elapsed_s=4.2)
