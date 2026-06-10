@@ -59,7 +59,14 @@ async def run(args: dict, ctx: AnalysisSkillContext) -> AnalysisSkillResult:
     if v.status == "passed":
         verdict = "passed"
         findings: tuple[Finding, ...] = ()
-        summary = f"/verify · <1ms · passed\nverify_cmd: {actual_cmd}"
+        # E4 防火墙:summary 显式标 self_verified,绝不冒充用户级 passed
+        if getattr(v, "self_verified", False):
+            summary = (
+                f"/verify · <1ms · self_verified (较弱:系统自造测试;非用户级 verify)\n"
+                f"verify_cmd: {actual_cmd}"
+            )
+        else:
+            summary = f"/verify · <1ms · passed\nverify_cmd: {actual_cmd}"
     elif v.status == "failed":
         verdict = "failed"
         findings = (Finding(

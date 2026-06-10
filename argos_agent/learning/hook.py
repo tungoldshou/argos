@@ -13,6 +13,7 @@
       goal=...,
       verify_cmd=...,
       verdict_status="passed" | "failed" | "unverifiable",
+      self_verified=bool,           # E4 防火墙:True 时绝不进 distill/promote
       skills_root=~/.argos/skills,
       runner_factory=lambda: ...,
       tasks=[...],
@@ -70,17 +71,21 @@ async def on_run_completed(
     goal: str,
     verify_cmd: str | None,
     verdict_status: str,
+    self_verified: bool = False,
     skills_root: Path,
     runner_factory: Callable[[], Any] | None = None,
     tasks: list | None = None,
 ) -> None:
     """daemon worker 收尾处调用。异步,无返回值,失败诚实降级。
 
-    决策:
-    - verdict_status="passed" → distill + promotion_gate
-    - 其他 → reflection(失败教训存 memory)
+    决策(E4 防火墙):
+    - status=="passed" 且 **非** self_verified → distill + promotion_gate(用户级)
+    - status=="passed" 且 self_verified=True     → 走 reflection 降级
+      (reward-hacking 防火墙:绝不让"自验证通过"触发技能蒸馏/晋升)
+    - 其他状态 → reflection(失败教训存 memory)
     """
-    if verdict_status == "passed":
+    is_user_pass = (verdict_status == "passed") and not self_verified
+    if is_user_pass:
         await _on_passed(
             run_id=run_id, store_dir=store_dir,
             goal=goal, verify_cmd=verify_cmd,
@@ -88,10 +93,12 @@ async def on_run_completed(
             runner_factory=runner_factory, tasks=tasks or [],
         )
     else:
+        # 含 status==passed 但 self_verified=True(防火墙)与所有非 passed
         await _on_failed(
             run_id=run_id, store_dir=store_dir,
             goal=goal, verify_cmd=verify_cmd,
             verdict_status=verdict_status,
+            self_verified=self_verified,
             skills_root=skills_root,
         )
 
@@ -139,15 +146,20 @@ async def _on_passed(
 async def _on_failed(
     *,
     run_id: str, store_dir: Path, goal: str, verify_cmd: str | None,
-    verdict_status: str, skills_root: Path,
+    verdict_status: str,
+    self_verified: bool = False,
+    skills_root: Path,
 ) -> None:
-    """失败 / 不可验证路径:写 reflection,**不**调 distill,不写 skills/。"""
+    """失败 / 不可验证 / **self_verified 降级** 路径:写 reflection,
+    **不**调 distill,不写 skills/。
+    """
     try:
         from argos_agent.learning.reflection import reflect_failure
         reflect_failure(
             run_id=run_id, store_dir=Path(store_dir),
             goal=goal, verify_cmd=verify_cmd,
             verdict_status=verdict_status,
+            self_verified=self_verified,
             skills_root=skills_root,
         )
     except Exception as e:  # noqa: BLE001

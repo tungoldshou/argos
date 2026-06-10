@@ -224,6 +224,10 @@ class RunWorker:
 
             verdict_status = "failed"
             verify_cmd: str | None = None
+            # E4 防火墙:必须把 verdict.self_verified 也透传到 hook,否则 hook 看不到
+            # 防火墙信号,会把 self_verified=True 的 passed 误判为用户级通过,触发
+            # distill/promote(reward-hacking 死亡螺旋)。默认 False 安全(行为不变)。
+            self_verified: bool = False
             try:
                 events = list(self._manager.store.replay(self.run_id))
                 for ev in events:
@@ -232,6 +236,7 @@ class RunWorker:
                         if isinstance(v, dict):
                             verdict_status = v.get("status", verdict_status) or verdict_status
                             verify_cmd = v.get("verify_cmd") or verify_cmd
+                            self_verified = bool(v.get("self_verified", False))
             except Exception:  # noqa: BLE001
                 pass
 
@@ -244,6 +249,7 @@ class RunWorker:
                 goal=getattr(entry, "goal", "") or "",
                 verify_cmd=verify_cmd,
                 verdict_status=verdict_status,
+                self_verified=self_verified,
                 skills_root=skills_root,
                 runner_factory=None,   # worker 不持有 EvalRunner;hook 跳过 promote 仅产候选
                 tasks=[],              # 同上

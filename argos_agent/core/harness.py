@@ -97,9 +97,15 @@ class Harness:
         if self.is_honest_completion(verdict, verify_cmd=verify_cmd):
             return verdict
 
-        # 真问题:failed,或配了 cmd 却 unverifiable(篡改/超时)。
-        is_real_problem = verdict.status == "failed" or (
-            verdict.status == "unverifiable" and verify_cmd is not None
+        # 真问题:failed,或配了 cmd 却 unverifiable(篡改/超时),或自验证通过(非用户级)。
+        # E4 防火墙:self_verified=True 的 passed 状态字面是 "passed",但**不是**用户级
+        # verify —— system 按 reviewer + canary 守卫自造测试,代理可能"自欺"成绿。必须
+        # 当作真问题 bounce/escalate(否则 C1 修 loop 也没用,harness 默默放行,Escalation
+        # 事件不发,上层误以为通过)。
+        is_real_problem = (
+            verdict.status == "failed"
+            or (verdict.status == "unverifiable" and verify_cmd is not None)
+            or (verdict.status == "passed" and getattr(verdict, "self_verified", False))
         )
         if is_real_problem:
             self._last_failure = verdict.detail

@@ -1107,14 +1107,20 @@ class AgentLoop:
             # 非规范 verifier 可能对无测任务返回 passed;必须走诚实完成路径标 NO_TEST_LABEL。
             # context rot 兜底(spec 2026-06-07):发生过(有损)压缩且压缩后没真重验过 → passed
             # 不可信,不在此 break(正常流程 run_verify_gate 刚跑过 → reverified=True,这是防御)。
+            # E4 防火墙:必须用 is_user_verified 判,绝不能仅看 status=="passed" —— 自验证
+            # 通过(系统按 reviewer + canary 守卫自造测试)status 也 "passed",但不是用户级
+            # verify;若此 break 放它过,下游 run_success memory 会污染 + worker 透传给
+            # learning hook 触发 distill/promote(reward-hacking)。落到下方 harness fallback
+            # 路径走 unverifiable / bounce 才是真问题信号,而不是被"自验证"遮蔽。
             from argos_agent.core.honesty import trust_passed_after_compaction
-            if (verdict.status == "passed" and self._verify_cmd is not None
+            if (getattr(verdict, "is_user_verified", False)
+                    and self._verify_cmd is not None
                     and trust_passed_after_compaction(
                         compacted=self._compacted,
                         reverified=self._reverified_since_compact)):
                 if self._compacted:
                     report_note = "上下文经过压缩(有损),已重跑验证确认通过"
-                break                        # 通过 → 收尾
+                break                        # 通过 → 收尾(用户级)
             if self._harness.is_honest_completion(verdict, verify_cmd=self._verify_cmd):
                 # HONESTY CORRECTION:无测任务的诚实非阻塞完成 —— 收尾,report 标"未机检验证"。
                 # 若发生过(有损)压缩且无可机检命令 → 诚实加注:记忆有损且无法机检确认进度,
@@ -1187,8 +1193,13 @@ class AgentLoop:
                     reason="max_rounds_exceeded",
                     user_reply="escalated",
                 )
-            elif not report_note and step >= 5:
-                # run_success:passed 且 ≥5 步 → 记 goal + key_cmd
+            elif (not report_note and step >= 5
+                  and last_verdict is not None
+                  and getattr(last_verdict, "is_user_verified", False)):
+                # run_success:用户级 passed 且 ≥5 步 → 记 goal + key_cmd
+                # E4 防火墙:必须 is_user_verified 判,自验证通过绝不写 run_success —— 否则
+                # 跨会话 memory graph 会被 reward-hacked 成功污染,后续 reflection / distill
+                # 据此学"成功模式",放大自验证的死亡螺旋。
                 _mem_auto.capture_event(
                     "run_success",
                     project_id=_pid(self._workspace),
@@ -1223,8 +1234,15 @@ class AgentLoop:
             done = "⚠️ 未能在限定轮内通过验证,已如实上报(见上方升级提示)。\n"
         elif report_note:
             done = f"✅ 完成。{report_note}\n"   # 无测任务:诚实标"未机检验证 (no test command)"
-        elif last_verdict is not None and getattr(last_verdict, "status", None) == "passed":
+        elif last_verdict is not None and getattr(last_verdict, "is_user_verified", False):
+            # E4 防火墙:必须用 is_user_verified 判,绝不能仅看 status=="passed" —
+            # self_verified=True 的 passed 是系统自造测试"弱通过",与用户级 verify 同字会骗用户。
             done = "✅ 完成,验证通过(测试/检查全绿)。\n"
+        elif (last_verdict is not None
+              and getattr(last_verdict, "status", None) == "passed"
+              and getattr(last_verdict, "self_verified", False)):
+            # 自验证"较弱"通过(系统按 reviewer + canary 守卫自造测试),显式标 weaker,绝不冒充强验证
+            done = "🟡 完成,自验证通过(系统自造测试;非用户级 verify)。\n"
         elif last_verdict is not None and getattr(last_verdict, "status", None) != "passed":
             done = "⚠️ 本轮结束:验证未通过/不可信(详见上)。\n"
         else:

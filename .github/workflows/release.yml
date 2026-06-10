@@ -11,8 +11,15 @@ permissions:
   contents: write
 
 jobs:
+  # E2 发布门禁:tag 触发后先跑全量测试,失败则所有 build-* 与 release job 全部 skip,
+  # 资产不打、release 不创建 → bump-homebrew / bump-winget 也不会被 release.published 触发。
+  test:
+    name: CI gate (full test suite, Linux + bwrap)
+    uses: ./.github/workflows/ci.yml
+
   build-macos:
     name: Build macOS arm64
+    needs: test
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -45,6 +52,7 @@ jobs:
 
   build-linux:
     name: Build Linux (AppImage/.deb/.rpm)
+    needs: test
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -71,6 +79,7 @@ jobs:
 
   build-windows:
     name: Build Windows (.exe/.msi)
+    needs: test
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -93,7 +102,7 @@ jobs:
 
   release:
     name: Create GitHub release
-    needs: [build-macos, build-linux, build-windows]
+    needs: [test, build-macos, build-linux, build-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Download all build artifacts

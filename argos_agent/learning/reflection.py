@@ -15,6 +15,7 @@ def reflect_failure(
     goal: str,
     verify_cmd: str | None,
     verdict_status: str,
+    self_verified: bool = False,    # E4 防火墙元数据;self_verified=True 时记录到 reflection 标签
     skills_root: Path | None = None,  # 显式声明,接住但**不写**(防误用)
 ) -> None:
     """把失败 run 的关键信息写进 memory(复用 memory.auto.capture_event)。
@@ -47,6 +48,7 @@ def reflect_failure(
             goal=(goal or "")[:120],
             verify_cmd=(verify_cmd or "")[:120] if verify_cmd else None,
             verdict=verdict_status,
+            self_verified=bool(self_verified),  # E4 防火墙:留痕,统计可分"自验证降级"
             last_exc_snippet=snippet or None,
         )
     except Exception:  # noqa: BLE001 — memory 写失败不阻断(诚实降级)

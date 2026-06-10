@@ -1,0 +1,39 @@
+name: CI
+# spec:E1 已让沙箱测试在 Linux 上能跑(bwrap 在就真跑、不在就干净 skip);
+# 装 bwrap 让 CI 不退化成全 skip。E2 gate:本 workflow 同时作为 reusable workflow 被
+# release.yml / publish.yml 调,做发布前门禁(CI 不绿就不打 tag 资产 / 不发 PyPI)。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+# 同一分支新 push 自动取消旧 run,省 CI 分钟;workflow_call 触发的不限(避免误杀 release gate)
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Full test suite (Linux + bwrap sandbox)
+    runs-on: ubuntu-latest
+    # E1 守卫:requires_sandbox fixture 在 linux 上要 bwrap 或 unshare。
+    # apt 包 bubblewrap 即提供 /usr/bin/bwrap(无它则 conftest 走 pytest.skip,沙箱真测
+    # 全没跑,CI 退化为"Linux 上假装全过"——违反诚实协议)。
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+      - name: Install bubblewrap (enables real sandbox tests on Linux)
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Run full test suite
+        # 全量 `uv run pytest -q` —— pyproject 里 addopts 强制 --cov=argos_agent
+        # --cov-fail-under=80,所以这是覆盖门 + 沙箱真跑的统一验证。
+        run: uv run pytest -q

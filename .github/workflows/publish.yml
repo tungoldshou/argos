@@ -9,8 +9,14 @@ on:
   workflow_dispatch:
 
 jobs:
+  # E2 发布门禁:tag 触发后先跑全量测试,失败则 build 与 pypi 都 skip,不发 PyPI。
+  test:
+    name: CI gate (full test suite, Linux + bwrap)
+    uses: ./.github/workflows/ci.yml
+
   build:
     name: Build distributions
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +40,7 @@ jobs:
 
   pypi:
     name: Publish to PyPI
-    needs: build
+    needs: [test, build]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:

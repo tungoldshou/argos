@@ -43,6 +43,7 @@ import logging
 import re
 import shlex
 import subprocess
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -58,6 +59,7 @@ from argos_agent.eval.runner import (
     PASS_PASSED,
     PASS_SETUP_FAILED,
 )
+from argos_agent.tui.sync_output import sync_batch
 
 log = logging.getLogger(__name__)
 
@@ -641,7 +643,9 @@ def _smoke_subset_dir() -> Path:
 def cmd_tb(args: argparse.Namespace) -> int:
     """`argos eval tb --subset <paths|smoke> --model <tier>` —— 跑一个 TB 子集。
 
-    注意:不传 --subset 时不打全量,直接提示;smoke 跑本仓库自带的 fixture(确定性能跑通)。"""
+    注意:不传 --subset 时不打全量,直接提示;smoke 跑本仓库自带的 fixture(确定性能跑通)。
+    --sync-output / --no-sync-output:控制报告块是否被 DECSET 2026 同步输出协议包住(A/B 对比)。
+    """
     from argos_agent.cli.eval import _make_runner
     base = Path.home() / ".argos" / "eval"
     runner = _make_runner(base=base, keep_worktree=args.keep_worktree)
@@ -649,15 +653,27 @@ def cmd_tb(args: argparse.Namespace) -> int:
     runner._budget_s = args.budget_s
     subset = _resolve_subset_arg(getattr(args, "subset", "") or "smoke")
     if not subset:
-        print("[eval tb] 未指定 --subset;请传 'smoke' 跑内置 fixture,或逗号分隔 TB 任务目录。", file=__import__("sys").stderr)
+        print("[eval tb] 未指定 --subset;请传 'smoke' 跑内置 fixture,或逗号分隔 TB 任务目录。", file=sys.stderr)
         return 2
     for d in subset:
         if not d.exists():
-            print(f"[eval tb] 路径不存在:{d}", file=__import__("sys").stderr)
+            print(f"[eval tb] 路径不存在:{d}", file=sys.stderr)
             return 2
     workdir = base / "tb_corpus"
     report = run_subset(subset, runner=runner, model_tier=args.model, workdir=workdir)
-    # 打印报告
+    # sync_output=None → 现场交给 sync_batch probe;True/False → 显式覆盖。
+    # A/B 对比时显式 --sync-output / --no-sync-output 跑两次,肉眼可见 batch 块的渲染差异。
+    sync_enabled: bool | None = getattr(args, "sync_output", None)
+    with sync_batch(sys.stdout, enabled=sync_enabled):
+        _print_tb_report(report)
+    return 0
+
+
+def _print_tb_report(report: TBBatchReport) -> None:
+    """打印 TB 跑批报告 —— 被 cmd_tb 在 sync_batch 上下文里调用。
+
+    故意独立成函数:可单测(RED 覆盖 sync_batch 包裹关系)。
+    """
     print(f"[eval tb] seen={report.total_seen}  supported={report.supported}  "
           f"skipped={report.skipped}")
     if report.unsupported_reasons:
@@ -671,7 +687,6 @@ def cmd_tb(args: argparse.Namespace) -> int:
         if status == "skipped":
             line += f"  — {why}"
         print(line)
-    return 0
 
 
 def add_tb_subparser(sub: Any) -> None:
@@ -687,5 +702,17 @@ def add_tb_subparser(sub: Any) -> None:
     p_tb.add_argument("--keep-worktree", action="store_true", help="调试:不删 worktree")
     p_tb.add_argument(
         "--format", choices=("text", "json"), default="text", help="报告格式",
+    )
+    # 同步输出三档:auto(默认)/on/off。auto 让 sync_batch 现场 probe 终端支持度。
+    sync_grp = p_tb.add_mutually_exclusive_group()
+    sync_grp.add_argument(
+        "--sync-output", dest="sync_output", action="store_const",
+        const=True, default=None,
+        help="报告块用 DECSET 2026 包住(适合真 TTY;非 TTY 自动 no-op)",
+    )
+    sync_grp.add_argument(
+        "--no-sync-output", dest="sync_output", action="store_const",
+        const=False,
+        help="显式关同步输出(A/B 对比用)",
     )
     p_tb.set_defaults(func=cmd_tb)

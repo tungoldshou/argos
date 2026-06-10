@@ -36,10 +36,10 @@ def test_workflow_yaml_valid():
     assert "ubuntu" in job.get("runs-on", ""), (
         f"release job 应在 ubuntu-latest(免 macos minutes);实际 {job.get('runs-on')}"
     )
-    # release job 必依赖 3 build
+    # release job 必依赖 3 build(E2:允许额外 needs: test CI 闸门)
     needs = job.get("needs", [])
-    assert set(needs) == {"build-macos", "build-linux", "build-windows"}, (
-        f"release job needs 必须是 3 build;实际 {needs}"
+    assert {"build-macos", "build-linux", "build-windows"} <= set(needs), (
+        f"release job needs 缺 3 build 之一;实际 {needs}"
     )
 
 

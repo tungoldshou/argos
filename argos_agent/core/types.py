@@ -53,6 +53,16 @@ class Verdict:
             attempts=attempts, self_verified=True,
         )
 
+    @property
+    def is_user_verified(self) -> bool:
+        """用户级 verify 通过 = status==passed 且 self_verified==False。
+
+        防火墙单一信源:任何"用户级 passed / 可晋升 / 可对外宣称"判断,必须走本属性,
+        **绝不**直接判 status==passed。self_verified=True 的 passed 是系统按 reviewer
+        角色 + canary 守卫自造的"较弱通过",绝不能与用户级 verify 混为一谈。
+        """
+        return self.status == "passed" and not self.self_verified
+
     @staticmethod
     def failed(detail: str, verify_cmd: str | None, attempts: int) -> "Verdict":
         return Verdict(status="failed", detail=detail, verify_cmd=verify_cmd, attempts=attempts)
