@@ -119,6 +119,31 @@ class ApprovalGate:
     def set_level(self, level: ApprovalLevel) -> None:
         self.level = level
 
+    def set_trust_level(self, trust: "Any") -> None:
+        """将 TrustLevel 映射到 ApprovalLevel 并写入 gate（Trust Dial 接线入口）。
+
+        接受 TrustLevel 枚举实例。映射规则来自 trust_dial.to_approval_semantics()：
+          L0_EVERY_STEP      → CONFIRM（ask_readonly=True：只读也问，由 evaluator 软规则实现）
+          L1_DANGEROUS_ONLY  → CONFIRM（仅高风险问；默认行为）
+          L2_IRREVERSIBLE_ONLY → CONFIRM（不可逆才问；P2 manifest reversible 就位前退化 L1）
+          L3_SESSION_TRUSTED → ACCEPT_EDITS（同类批过后本会话放行）
+          L4_AUTONOMOUS      → AUTO（全自治；TUI 显红灯）
+
+        HARD RULES 在任何档位继续生效（由 evaluator hard 层强制；不经此方法绕过）。
+        L2 reversible_check 依赖 P2 能力 manifest reversible 字段；P2 未完成前退化 L1 行为，
+        已在 to_approval_semantics 文档中诚实标注，本方法不作额外处理（保守方向）。
+        """
+        from argos_agent.permissions.trust_dial import to_approval_semantics
+        sem = to_approval_semantics(trust)
+        al_str = sem["approval_level"]
+        self.set_level(ApprovalLevel(al_str))
+        # L0 ask_readonly 语义：存下标志，evaluator 可据此放宽"只读也问"过滤。
+        # 当前 evaluator 路径无此字段 → 保守存储，不影响现有行为。
+        self._ask_readonly: bool = bool(sem.get("ask_readonly", False))
+        # 存原始档位供 /trust status 精确回读(反向映射 ApprovalLevel→TrustLevel 有损:
+        # L0/L1/L2 都落在 CONFIRM,status 会把 L2 误报成 L1 —— 对用户撒谎,不允许)。
+        self._trust_level = trust
+
     def set_workspace(self, workspace: str | None) -> None:
         """Smart approval(spec 2026-06-06 §2.3 / D14):host 启动时把当前 workspace 注入
         gate,evaluator 据此跑 workspace 边界 check(workspace 内写文件不算系统路径)。"""

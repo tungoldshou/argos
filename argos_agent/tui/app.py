@@ -33,6 +33,7 @@ from argos_agent.tui.events import (
     Event,
     EventBus,
     FileDiff,
+    IntentConfirmRequest,  # ← P4 §7
     MemoryRecallEvent,
     PhaseChange,
     PlanDecisionRequest,
@@ -188,6 +189,8 @@ class ArgosApp(App):
         # v6 P3b §4:当前 plan 决策的 call_id(PlanDecisionRequest 事件到达时设置)。
         # _handle_plan_rendered 据此路由 respond_plan_decision / POST plan_decision。
         self._current_plan_call_id: str | None = None
+        # P4 §7:当前意图确认的 call_id(IntentConfirmRequest 事件到达时设置)。
+        self._current_intent_call_id: str | None = None
         self.sub_title = self._compose_subtitle()
 
     @staticmethod
@@ -537,11 +540,20 @@ class ArgosApp(App):
             await log.append_line(f"未知命令 /{cmd.name}")
             return
         if cmd.name == "yolo":
-            self.gate.set_level(ApprovalLevel.AUTO)
+            # /yolo 是 /trust l4 的别名（保留命令，直接生效；提示新用法）。
+            # 与 /trust l4 不同：/yolo 不弹升档确认（历史合约；用户明确输入即表示确认）。
+            self.gate.set_trust_level(
+                __import__("argos_agent.permissions.trust_dial", fromlist=["TrustLevel"]).TrustLevel.L4_AUTONOMOUS
+            )
             self._yolo = True
             self.sub_title = self._compose_subtitle()
             self._refresh_topbar()
-            await log.append_line("已切换到 Auto(YOLO)——放手执行,顶栏显示 ⏻ YOLO 标记。")
+            await log.append_line(
+                "已切换到 L4_AUTONOMOUS（全自治/YOLO）——顶栏显示 ⏻ YOLO 标记。"
+                " 提示：新用法为 /trust l4。",
+            )
+        elif cmd.name == "trust":
+            await self._trust_cmd(log, (cmd.arg or "").strip().lower())
         elif cmd.name == "model":
             from argos_agent import config as _cfg
             arg = cmd.arg  # SlashCommand.arg 已是 parse_slash 拆出的参数部分
@@ -655,6 +667,126 @@ class ArgosApp(App):
                 f"如要继续,可 /retry 重发上一条 goal,或输入新 goal。",
                 kind="done",
             )
+
+    async def _trust_cmd(self, log, arg: str) -> None:
+        """/trust [l0|l1|l2|l3|l4|status]:Trust Dial 拨盘操作。
+
+        无参数或 status → 显示当前档位 + 五档人话说明。
+        /trust l0-l4 → 切换档位;升档必须先渲染 escalation_warning 并经 InlineChoice 确认。
+        降档直接生效（收紧权限，无需确认）。
+        /yolo 是 /trust l4 的别名（旧兼容命令，提示新用法）。
+        """
+        from argos_agent.permissions.trust_dial import (
+            TrustLevel, escalation_warning, to_approval_semantics,
+        )
+
+        # 计算当前 TrustLevel（从 gate.level 反查）
+        _level_to_trust: dict[ApprovalLevel, TrustLevel] = {
+            ApprovalLevel.CONFIRM:      TrustLevel.L1_DANGEROUS_ONLY,
+            ApprovalLevel.ACCEPT_EDITS: TrustLevel.L3_SESSION_TRUSTED,
+            ApprovalLevel.AUTO:         TrustLevel.L4_AUTONOMOUS,
+            ApprovalLevel.OBSERVE:      TrustLevel.L0_EVERY_STEP,
+            ApprovalLevel.PROPOSE:      TrustLevel.L0_EVERY_STEP,  # PROPOSE 退化 L0
+        }
+        current_trust = _level_to_trust.get(self.gate.level, TrustLevel.L1_DANGEROUS_ONLY)
+        # 若 gate 有 _ask_readonly=True 则更精确地判定为 L0
+        if getattr(self.gate, "_ask_readonly", False):
+            current_trust = TrustLevel.L0_EVERY_STEP
+        # set_trust_level 存的原始档位优先(反向映射有损:L2 会被误报成 L1 —— 不许对用户失真)
+        stored = getattr(self.gate, "_trust_level", None)
+        if isinstance(stored, TrustLevel):
+            current_trust = stored
+
+        # 无参数或 status → 显示状态
+        if not arg or arg in ("status", "s"):
+            lines = [
+                f"当前信任档位：{current_trust.name}（{current_trust.label_human}）",
+                current_trust.description,
+            ]
+            # 诚实标注:L0/L2 细粒度语义(只读也问/仅不可逆问)待 evaluator 接线,
+            # 当前按保守 CONFIRM 执行 —— 只会多问,不会少问。
+            if current_trust in (TrustLevel.L0_EVERY_STEP, TrustLevel.L2_IRREVERSIBLE_ONLY):
+                lines.append("（注：本档细粒度语义接线中，当前按保守 CONFIRM 执行——只会多问，不会少问）")
+            lines += [
+                "",
+                "可用档位：",
+            ]
+            for lvl in TrustLevel:
+                marker = " ← 当前" if lvl is current_trust else ""
+                lines.append(f"  /trust {lvl.name.split('_')[0].lower()}  {lvl.label_human}{marker}")
+            await log.append_line("\n".join(lines), kind="system")
+            return
+
+        # 解析目标档位
+        _arg_map: dict[str, TrustLevel] = {
+            "l0": TrustLevel.L0_EVERY_STEP,
+            "l1": TrustLevel.L1_DANGEROUS_ONLY,
+            "l2": TrustLevel.L2_IRREVERSIBLE_ONLY,
+            "l3": TrustLevel.L3_SESSION_TRUSTED,
+            "l4": TrustLevel.L4_AUTONOMOUS,
+        }
+        target_trust = _arg_map.get(arg)
+        if target_trust is None:
+            await log.append_line(
+                f"未知档位 '{arg}'。用法：/trust [l0|l1|l2|l3|l4|status]",
+                kind="system",
+            )
+            return
+
+        # 同档位：无需操作
+        if target_trust is current_trust:
+            await log.append_line(
+                f"当前已是 {target_trust.name}（{target_trust.label_human}），无需切换。",
+                kind="system",
+            )
+            return
+
+        # 降档：直接生效（收紧权限，无需确认）
+        if int(target_trust) < int(current_trust):
+            self.gate.set_trust_level(target_trust)
+            self._yolo = (target_trust is TrustLevel.L4_AUTONOMOUS)
+            self.sub_title = self._compose_subtitle()
+            self._refresh_topbar()
+            await log.append_line(
+                f"已切换到 {target_trust.name}（{target_trust.label_human}）。",
+                kind="done",
+            )
+            return
+
+        # 升档：必须展示警示并等用户 InlineChoice 确认
+        warning_text = escalation_warning(current_trust, target_trust)
+        target_name = target_trust.name
+        target_label = target_trust.label_human
+
+        def _on_trust_confirm(value: str, _feedback: str) -> None:
+            if value == "confirm":
+                self.gate.set_trust_level(target_trust)
+                self._yolo = (target_trust is TrustLevel.L4_AUTONOMOUS)
+                self.sub_title = self._compose_subtitle()
+                self._refresh_topbar()
+                self.run_worker(
+                    log.append_line(
+                        f"已升级到 {target_name}（{target_label}）。"
+                        + (" TUI 顶栏显示 ⏻ 红色警示灯。" if target_trust is TrustLevel.L4_AUTONOMOUS else ""),
+                        kind="done",
+                    ),
+                    exclusive=False,
+                )
+            else:
+                self.run_worker(
+                    log.append_line("已取消升档操作，保持当前档位。", kind="system"),
+                    exclusive=False,
+                )
+            self._choice_done()
+
+        await self._enqueue_choice(lambda: InlineChoice(
+            title=f"升档确认 — 切换到 {target_label}",
+            body=warning_text,
+            options=[("confirm", "确认升档"), ("cancel", "取消，保持当前档位")],
+            on_decide=_on_trust_confirm,
+            escape_value="cancel",  # fail-closed：Esc = 取消
+            risk="high" if target_trust is TrustLevel.L4_AUTONOMOUS else "medium",
+        ))
 
     async def _ledger_cmd(self, log) -> None:
         """/ledger:列出当前 run 的行为账本(人话条目 + 撤销状态着色)。
@@ -1469,6 +1601,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             await sp.remove()
         self._step_blocks = {}  # 每轮独立,杜绝跨轮 step 串台。
         self._current_plan_call_id = None  # 每轮清 plan call_id(不跨轮泄漏)。
+        self._current_intent_call_id = None  # P4 §7:每轮清 intent call_id(不跨轮泄漏)。
         self.query_one("#activity", ActivityPanel).reset_run()  # 每轮起手清活动栏(进度/工具/回执)。
         # UserPromptSubmit hook fire(spec §2.5:TUI 端触发,不在 loop 内)
         try:
@@ -1755,6 +1888,11 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             # inline 路径:loop.respond_plan_decision(call_id,...) 唤醒 loop。
             # daemon 路径:POST /plan_decision(call_id 由此携带,不再需要 ExitPlanMode)。
             self._current_plan_call_id = ev.call_id
+        elif isinstance(ev, IntentConfirmRequest):
+            # P4 §7:意图确认请求 — 复用 InlineChoice 渲染,确认/取消两项。
+            # call_id 记录到 _current_intent_call_id;_handle_intent_confirm 据此路由。
+            self._current_intent_call_id = ev.call_id
+            await self._handle_intent_confirm(ev)
         elif isinstance(ev, MemoryRecallEvent):
             # v6 §4 ACP:loop 投记忆召回事件,TUI 据此渲染"记忆召回 N 条"行。
             # 替换原来 _announce_memory_recall 对 loop._store 的直接访问(store 穿透修)。
@@ -2103,3 +2241,85 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         except Exception as e:  # noqa: BLE001
             import logging as _log
             _log.getLogger(__name__).warning("daemon plan_decision POST failed: %s", e)
+
+    async def _handle_intent_confirm(self, ev: "IntentConfirmRequest") -> None:
+        """P4 §7 意图确认:复用 InlineChoice 渲染(确认/取消两项)。
+
+        inline 模式 → loop.respond_intent_confirm(call_id, confirmed)
+        daemon 模式 → POST /runs/{id}/intent_confirm
+
+        fail-closed:Esc 或队列超时 = 取消(confirmed=False)。
+        YOLO(AUTO)模式 → 直接确认,不弹 UI。
+        """
+        loop = self._current_loop
+
+        # YOLO:直接确认,不渲染
+        if self.gate.level is ApprovalLevel.AUTO:
+            call_id = ev.call_id
+            if self._with_daemon and self._daemon_client and self._daemon_session_id and self._daemon_run_id:
+                self.run_worker(
+                    self._daemon_intent_confirm_post(call_id, confirmed=True),
+                    exclusive=False,
+                )
+            elif loop is not None and hasattr(loop, "respond_intent_confirm"):
+                loop.respond_intent_confirm(call_id, True)
+            return
+
+        _is_daemon = (
+            self._with_daemon
+            and self._daemon_client is not None
+            and self._daemon_session_id is not None
+            and self._daemon_run_id is not None
+        )
+
+        def _decide(value: str, _feedback: str) -> None:
+            confirmed = (value == "confirmed")
+            call_id = getattr(self, "_current_intent_call_id", None) or ev.call_id
+            if _is_daemon:
+                self.run_worker(
+                    self._daemon_intent_confirm_post(call_id, confirmed=confirmed),
+                    exclusive=False,
+                )
+            elif loop is not None and hasattr(loop, "respond_intent_confirm"):
+                loop.respond_intent_confirm(call_id, confirmed)
+            self.run_worker(
+                self.query_one("#transcript", Transcript).append_line(
+                    f"意图确认:{'已确认' if confirmed else '已取消'}",
+                    kind="system",
+                ),
+                exclusive=False,
+            )
+            self._choice_done()
+
+        # 正文 = confirmation_text;风险标签额外显示
+        body_parts = [ev.confirmation_text]
+        if ev.risk_flags:
+            body_parts.append(f"\n风险标签: {', '.join(ev.risk_flags)}")
+        body_text = "\n".join(body_parts)
+
+        await self._enqueue_choice(lambda: InlineChoice(
+            title="意图确认 — 请确认 Argos 对你的请求的理解",
+            body=body_text,
+            options=[("confirmed", "确认,继续执行"), ("cancel", "取消")],
+            on_decide=_decide,
+            escape_value="cancel",   # fail-closed:Esc = 取消
+            risk="medium" if ev.risk_flags else "low",
+        ))
+
+    async def _daemon_intent_confirm_post(self, call_id: str, *, confirmed: bool, revised_goal: str | None = None) -> None:
+        """daemon 路径意图确认:POST /runs/{id}/intent_confirm。fail-soft(失败仅 log)。"""
+        if not self._daemon_client or not self._daemon_session_id or not self._daemon_run_id:
+            return
+        try:
+            body: dict = {"call_id": call_id, "confirmed": confirmed}
+            if revised_goal:
+                body["revised_goal"] = revised_goal
+            await self._daemon_client._request(
+                "POST",
+                f"/runs/{self._daemon_run_id}/intent_confirm",
+                session_id=self._daemon_session_id,
+                body=body,
+            )
+        except Exception as e:  # noqa: BLE001
+            import logging as _log
+            _log.getLogger(__name__).warning("daemon intent_confirm POST failed: %s", e)

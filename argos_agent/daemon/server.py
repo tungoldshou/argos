@@ -230,6 +230,9 @@ class DaemonHTTPServer:
                 if method == "POST" and "/plan_decision" in rest:
                     rid = rest.split("/plan_decision")[0]
                     return await self._handle_plan_decision(writer, headers, rid, body)
+                if method == "POST" and "/intent_confirm" in rest:
+                    rid = rest.split("/intent_confirm")[0]
+                    return await self._handle_intent_confirm(writer, headers, rid, body)
                 if method == "GET" and rest.endswith("/ledger"):
                     rid = rest[:-len("/ledger")]
                     return await self._handle_get_ledger(writer, headers, rid)
@@ -409,6 +412,28 @@ class DaemonHTTPServer:
             except Exception as _snap_err:  # noqa: BLE001
                 log.warning("server: run 起点快照失败(undo 将不可用): %s", _snap_err)
 
+        # P4 Trust Dial:per-run trust_level 参数(可选,默认沿用现有 approval_level 语义)。
+        # trust_level 取枚举名字符串(如 "L1_DANGEROUS_ONLY")或 None(不传 → 不覆盖 approval_level)。
+        # 传入时通过 gate.set_trust_level(TrustLevel[name]) 写入;枚举名非法 → 诚实降级(警告+忽略)。
+        _trust_level_str = data.get("trust_level")
+
+        def _apply_trust_to_gate(gate: "Any") -> None:
+            """将 trust_level 字符串写入 gate;非法值静默降级(fail-safe)。"""
+            if not _trust_level_str:
+                return
+            try:
+                from argos_agent.permissions.trust_dial import TrustLevel
+                tl = TrustLevel[_trust_level_str]  # KeyError = 枚举名非法
+                gate.set_trust_level(tl)
+            except KeyError:
+                log.warning(
+                    "server: create_run trust_level=%r 不是有效 TrustLevel 枚举名,"
+                    " 忽略并沿用默认 approval_level 语义。",
+                    _trust_level_str,
+                )
+            except Exception as _te:  # noqa: BLE001
+                log.warning("server: trust_level 应用失败,诚实降级: %s", _te)
+
         if self._components is not None:
             # per-run 隔离栈:并发 run 各自独立 sandbox/gate/broker
             effective_ws_path = (
@@ -420,6 +445,7 @@ class DaemonHTTPServer:
                 workspace=effective_ws_path,
                 session_id=f"run-{run_id}",
             )
+            _apply_trust_to_gate(run_stack.gate)
             worker = RunWorker(
                 run_id=run_id,
                 manager=self._manager,
@@ -438,6 +464,15 @@ class DaemonHTTPServer:
         elif callable(self._loop_factory):
             # 向后兼容路径:共享 sandbox/gate/broker(loop_factory 注入)
             run_loop_factory = self._make_run_loop_factory(effective_ws_str)
+            # 向后兼容路径的 gate 是全局共享 gate;trust_level 写入全局 gate(告警)
+            if self._gate is not None:
+                if _trust_level_str:
+                    log.warning(
+                        "create_run: trust_level=%s 写入【全局共享】gate(向后兼容路径),"
+                        "将影响共享该 gate 的所有并发 run;per-run 隔离请走 components 路径",
+                        _trust_level_str,
+                    )
+                _apply_trust_to_gate(self._gate)
 
             worker = RunWorker(
                 run_id=run_id,
@@ -730,6 +765,88 @@ class DaemonHTTPServer:
         await self._send_json(writer, 200, {
             "call_id": call_id,
             "action": action,
+            "state": "applied",
+        })
+
+    async def _handle_intent_confirm(self, writer, headers, run_id, body):
+        """POST /runs/{id}/intent_confirm — P4 §7 daemon 路径回传意图确认决策。
+
+        与 /plan_decision 同构:
+          body: {"call_id": "12hex", "confirmed": true, "revised_goal": null}
+          confirmed=true  → loop 继续(使用 card.goal 或 revised_goal)
+          confirmed=false → loop 诚实取消(fail-closed)
+
+        fail-closed(铁律):
+          · run/worker 不存在 → 404
+          · call_id 不在注册表 → 409
+          · body 缺 confirmed 字段 → 400
+          · respond_intent_confirm 路由失败 → 409
+        """
+        if (sid := await self._require_owner(writer, headers)) is None:
+            return
+
+        worker = self._workers.get(run_id)
+        if worker is None:
+            if self._manager.get_run(run_id) is None:
+                return await self._send_error(
+                    writer, 404, CODE_NOT_FOUND, f"run {run_id!r} not found",
+                )
+            return await self._send_error(
+                writer, 404, CODE_NOT_FOUND,
+                f"run {run_id!r} has no active worker (already completed or never started)",
+            )
+
+        try:
+            payload = json.loads(body) if body else {}
+        except Exception:
+            return await self._send_error(writer, 400, CODE_BAD_REQUEST, "invalid JSON body")
+
+        call_id = payload.get("call_id", "")
+        if not call_id:
+            return await self._send_error(writer, 400, CODE_BAD_REQUEST, "missing call_id")
+        if "confirmed" not in payload:
+            return await self._send_error(writer, 400, CODE_BAD_REQUEST, "missing confirmed field")
+        confirmed = bool(payload["confirmed"])
+        revised_goal = payload.get("revised_goal") or None
+
+        # 取 loop
+        loop = getattr(worker, "_loop", None) or getattr(worker, "loop", None)
+        if loop is None or not hasattr(loop, "respond_intent_confirm"):
+            return await self._send_error(
+                writer, 409, "loop_not_available",
+                f"loop for run {run_id!r} is not available or not running",
+            )
+
+        # call_id 必须在 _intent_confirm_registry 中
+        if call_id not in getattr(loop, "_intent_confirm_registry", {}):
+            return await self._send_error(
+                writer, 409, "unknown_call_id",
+                f"call_id {call_id!r} is not pending in run {run_id!r} "
+                "(may have timed out or already resolved)",
+            )
+
+        ok = loop.respond_intent_confirm(call_id, confirmed, revised_goal)
+        if not ok:
+            return await self._send_error(
+                writer, 409, "intent_confirm_failed",
+                f"respond_intent_confirm failed for call_id {call_id!r} in run {run_id!r}",
+            )
+
+        # fanout intent_confirm 事件(审计可见性)
+        ic_ev = {
+            "kind": "intent_confirm_response",
+            "call_id": call_id,
+            "confirmed": confirmed,
+            "revised_goal": revised_goal,
+            "run_id": run_id,
+            "ts": time.time(),
+        }
+        self._manager.store.append(run_id, ic_ev)
+        await self._manager.fanout(run_id, ic_ev)
+
+        await self._send_json(writer, 200, {
+            "call_id": call_id,
+            "confirmed": confirmed,
             "state": "applied",
         })
 

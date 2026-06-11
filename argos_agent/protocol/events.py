@@ -41,6 +41,8 @@ EventKind = Literal[
     "compacted",         # ← #12 新增(spec D10 扩展字面量;deserialize_event 未知 kind 走 pass)
     "pruned",            # ← context rot 修剪事件(spec 2026-06-07)
     "ledger_entry",      # ← P3b 新增(§6 行为账本:每条 ToolReceipt 沉淀为可读账本条目)
+    "intent_confirm_request",   # ← P4 新增(§7 意图引擎:确认挂起请求)
+    "intent_confirm_response",  # ← P4 新增(§7 意图引擎:用户确认/取消响应)
 ]
 
 
@@ -244,6 +246,40 @@ class PlanRendered:
 
 
 @dataclass(frozen=True, slots=True)
+class IntentConfirmRequest:
+    """P4 §7 意图引擎:确认请求事件(与 PlanDecisionRequest 同构)。
+
+    loop.run() 在 IntentEngine.parse() 返回 confirmation_required=True 时投出此事件,
+    挂起等用户通过 TUI/daemon 响应。
+    超时 fail-closed:取消本次 run,诚实投 Error 事件(不擅自执行不确定意图)。
+
+    call_id:12 hex,与 IntentConfirmResponse.call_id 对应。
+    confirmation_text:IntentEngine.render_confirmation() 产出的人话文本(含风险标签)。
+    risk_flags:IntentCard.risk_flags 元组,供 TUI 渲染风险标签。
+    card_json:IntentCard 的 asdict() 序列化,供 daemon 路径独立消费。
+    """
+    kind = "intent_confirm_request"
+    call_id: str                        # 12 hex,与 IntentConfirmResponse 对应
+    confirmation_text: str              # IntentEngine.render_confirmation() 产出
+    risk_flags: tuple[str, ...]         # IntentCard.risk_flags
+    card_json: dict                     # IntentCard asdict() 序列化
+
+
+@dataclass(frozen=True, slots=True)
+class IntentConfirmResponse:
+    """P4 §7 意图引擎:用户确认/取消响应(Command 类型,客户端→内核)。
+
+    confirmed=True  → loop 用 card.goal 作为 effective_goal 继续。
+    confirmed=False → loop 诚实收尾(不执行)。
+    revised_goal:用户可选修改 goal 后再确认(None = 沿用 card.goal)。
+    """
+    kind = "intent_confirm_response"
+    call_id: str
+    confirmed: bool
+    revised_goal: str | None = None     # 用户可选修改 goal 后再确认
+
+
+@dataclass(frozen=True, slots=True)
 class PlanDecisionRequest:
     """v6 §4 ACP:plan 决策请求事件——去掉 TUI 对 loop 实例的直接引用。
 
@@ -301,6 +337,7 @@ Event = (
     | SkillRunStart | SkillRunEnd   # ← 新增
     | CompactedEvent | PrunedEvent  # ← context rot(spec 2026-06-07)
     | LedgerEntryEvent              # ← P3b 新增(§6 行为账本)
+    | IntentConfirmRequest | IntentConfirmResponse  # ← P4 新增(§7 意图引擎)
 )
 
 # kind 常量 → 类,用于反序列化派发
@@ -317,6 +354,7 @@ _KIND_TO_CLASS: dict[str, type] = {
         SkillRunStart, SkillRunEnd,   # ← 新增
         CompactedEvent, PrunedEvent,  # ← context rot(spec 2026-06-07):可正确反序列化
         LedgerEntryEvent,             # ← P3b 新增(§6 行为账本)
+        IntentConfirmRequest, IntentConfirmResponse,  # ← P4 新增(§7 意图引擎)
     )
 }
 
@@ -368,6 +406,9 @@ def deserialize_event(blob: str) -> "Event":
     elif kind == "workflow_done" and isinstance(data.get("notes"), list):
         # JSON 不分 tuple/list:WorkflowDone.notes 声明为 tuple,还原回 tuple 保持精确相等。
         data["notes"] = tuple(data["notes"])
+    elif kind == "intent_confirm_request" and isinstance(data.get("risk_flags"), list):
+        # IntentConfirmRequest.risk_flags 声明为 tuple[str,...],JSON 序列化为 list,还原。
+        data["risk_flags"] = tuple(data["risk_flags"])
     return cls(**data)
 
 

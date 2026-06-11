@@ -8,7 +8,8 @@ from argos_agent.tui.commands import SlashCommand, parse_slash, COMMAND_NAMES
 
 def test_known_commands_listed():
     assert set(COMMAND_NAMES) == {
-        "yolo", "undo", "clear", "retry", "status", "model", "resume", "cost",
+        "yolo", "trust",  # trust = 信任拨盘(P4 阶段3);yolo = /trust l4 别名(保留)
+        "undo", "clear", "retry", "status", "model", "resume", "cost",
         "help", "tools", "skills", "mcp", "plan", "hooks",
         "lsp",  # 2026-06-06:列出 / 重载 LSP 配置(/lsp, /lsp reload)
         "permissions",  # 2026-06-06:Smart approval — 列出 / 重载 permissions 配置(/permissions, /permissions reload)
