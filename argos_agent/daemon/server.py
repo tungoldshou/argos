@@ -89,6 +89,9 @@ class DaemonHTTPServer:
         self._gate = gate
         self._server: asyncio.base_events.Server | None = None
         self._started_at: float = 0.0
+        # P3 跨进程审批路由表:run_id → RunWorker
+        # server 通过此表把 POST /runs/{id}/approval 路由到该 run 的 DaemonApprovalGate。
+        self._workers: dict[str, "RunWorker"] = {}
 
     @property
     def registry(self):
@@ -377,6 +380,9 @@ class DaemonHTTPServer:
         # components 路径(优先):per-run 独享 sandbox/gate/broker — 并发安全
         # loop_factory 路径(向后兼容):共享组件,仅适合单 run 场景
         effective_ws_str = wt_path or (workspace if workspace else None)
+        from argos_agent.daemon.worker import RunWorker
+        # P3:approval_timeout_s 可由 create_run body 携带(默认 60s)。
+        approval_timeout_s = float(data.get("approval_timeout_s", 60.0))
         if self._components is not None:
             # per-run 隔离栈:并发 run 各自独立 sandbox/gate/broker
             effective_ws_path = (
@@ -388,7 +394,6 @@ class DaemonHTTPServer:
                 workspace=effective_ws_path,
                 session_id=f"run-{run_id}",
             )
-            from argos_agent.daemon.worker import RunWorker
             worker = RunWorker(
                 run_id=run_id,
                 manager=self._manager,
@@ -397,13 +402,15 @@ class DaemonHTTPServer:
                 worktree=self._worktree,
                 gate=run_stack.gate,
                 run_stack_close=run_stack.close,
+                approval_timeout_s=approval_timeout_s,
             )
+            # P3:注册 worker 到路由表,供审批路由使用
+            self._workers[run_id] = worker
             asyncio.create_task(worker.run(), name=f"run-{run_id}")
         elif callable(self._loop_factory):
             # 向后兼容路径:共享 sandbox/gate/broker(loop_factory 注入)
             run_loop_factory = self._make_run_loop_factory(effective_ws_str)
 
-            from argos_agent.daemon.worker import RunWorker
             worker = RunWorker(
                 run_id=run_id,
                 manager=self._manager,
@@ -411,7 +418,10 @@ class DaemonHTTPServer:
                 registry=self._registry,
                 worktree=self._worktree,
                 gate=self._gate,
+                approval_timeout_s=approval_timeout_s,
             )
+            # P3:注册 worker 到路由表
+            self._workers[run_id] = worker
             asyncio.create_task(worker.run(), name=f"run-{run_id}")
 
         await self._send_json(writer, 201, {"run_id": run_id})
@@ -508,25 +518,89 @@ class DaemonHTTPServer:
         })
 
     async def _handle_approval(self, writer, headers, run_id, call_id, body):
+        """P3 跨进程审批响应入口。
+
+        decision 接受 DecisionKind: deny|once|session|always。
+        路由语义:
+          1. 查路由表找 run_id 对应的 RunWorker。
+          2. 通过 worker.gate.respond(call_id, decision) 立即 resolve 挂起的 Future。
+          3. fanout approval_response 事件到 SSE(审计可见性:多客户端同步看到谁批了什么)。
+
+        错误语义(fail-closed):
+          · run_id 未知 → 404
+          · call_id 不在该 run gate 的 pending 集合 → 409
+          · decision 不合法 → 400
+          · 任何路径都不自动放行
+        """
         if (sid := await self._require_owner(writer, headers)) is None:
             return
         try:
             data = json.loads(body.decode("utf-8") or "{}")
         except json.JSONDecodeError:
             return await self._send_error(writer, 400, CODE_BAD_REQUEST, "invalid JSON body")
+
         decision = data.get("decision")
-        if decision not in ("approve", "deny"):
-            return await self._send_error(writer, 400, CODE_BAD_REQUEST,
-                                          "decision must be 'approve' or 'deny'")
-        # 投 SSE 事件给 worker
-        await self._manager.fanout(run_id, {
+        valid_decisions = ("deny", "once", "session", "always")
+        if decision not in valid_decisions:
+            return await self._send_error(
+                writer, 400, CODE_BAD_REQUEST,
+                f"decision must be one of {valid_decisions}",
+            )
+
+        # 查路由表
+        worker = self._workers.get(run_id)
+        if worker is None:
+            # run 存在但不在 worker 表(已结束/无法跑):特殊 404
+            if self._manager.get_run(run_id) is None:
+                return await self._send_error(writer, 404, CODE_NOT_FOUND,
+                                              f"run {run_id!r} not found")
+            return await self._send_error(writer, 404, CODE_NOT_FOUND,
+                                          f"run {run_id!r} has no active worker "
+                                          "(already completed or never started)")
+
+        # 路由到 gate
+        gate = worker.gate
+        if gate is None:
+            return await self._send_error(
+                writer, 409, "no_approval_gate",
+                f"run {run_id!r} has no approval gate (FakeLoop / no-gate path)",
+            )
+
+        # call_id 必须在该 run gate 的 pending 集合中
+        from argos_agent.daemon.worker import DaemonApprovalGate
+        if isinstance(gate, DaemonApprovalGate) and not gate.has_pending_call(call_id):
+            return await self._send_error(
+                writer, 409, "unknown_call_id",
+                f"call_id {call_id!r} is not pending in run {run_id!r} "
+                "(already resolved, timed out, or wrong run)",
+            )
+
+        # resolve 挂起 Future(立即唤醒 run)
+        resolved = gate.respond(call_id, decision)
+        if not resolved:
+            # respond 返 False = pending 中途被清除(超时 race),诚实报 409
+            return await self._send_error(
+                writer, 409, "call_id_already_resolved",
+                f"call_id {call_id!r} was already resolved (timeout race) in run {run_id!r}",
+            )
+
+        # fanout + 持久化 approval_response 事件(审计可见性 + 可回放)
+        approval_ev = {
             "kind": "approval_response",
             "call_id": call_id,
             "decision": decision,
+            "run_id": run_id,
             "ts": time.time(),
-        })
+        }
+        # 持久化到 JSONL store(供 replay 和审计)
+        self._manager.store.append(run_id, approval_ev)
+        # SSE 扇出(多客户端同步看到谁批了什么)
+        await self._manager.fanout(run_id, approval_ev)
+
         await self._send_json(writer, 200, {
-            "call_id": call_id, "decision": decision, "state": "applied",
+            "call_id": call_id,
+            "decision": decision,
+            "state": "applied",
         })
 
     # ── SSE ──────────────────────────────────────────────────────────

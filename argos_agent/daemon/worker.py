@@ -70,20 +70,24 @@ def _to_event_dict(ev: Any) -> dict:
 # ── daemon 审批 fail-closed 包装 ────────────────────────────────────────
 
 class DaemonApprovalGate:
-    """包装真 ApprovalGate,在 daemon 上下文为无交互审批请求加 timeout fail-closed。
+    """包装真 ApprovalGate,实现 P3 跨进程审批通道。
 
-    P3 前过渡:daemon 跑的 run 若触发 ApprovalRequest,60s 无响应则自动 deny,
-    并投诚实 error 事件("daemon 模式暂无交互审批,已按 fail-closed 拒绝,P3 接通跨进程审批")。
-    不许自动放行(护城河铁律)。
+    设计:
+    · request() 挂起时将 call_id 登记在 _pending_call_ids 集合,
+      外部可经 respond(call_id, kind) 立即 resolve —— 这是 P3 跨进程审批的核心路由点。
+    · respond() 直接转发到内层 ApprovalGate.respond(),该方法 resolve 对应 Future。
+    · 无人响应满 timeout_s → deny + 投诚实 error 事件落 SSE(fail-closed,铁律不自动放行)。
+    · timeout_s 可经 create_run 参数 approval_timeout_s 配置(默认 60s)。
     """
 
-    # 和真 ApprovalGate 相同接口的最小子集
     def __init__(self, real_gate: Any, *, timeout_s: float = 60.0,
                  run_id: str = "", manager: "RunManager | None" = None) -> None:
         self._gate = real_gate
         self._timeout_s = timeout_s
         self._run_id = run_id
         self._manager = manager
+        # 当前挂起等待外部响应的 call_id 集合(供 server 路由查找用)
+        self._pending_call_ids: set[str] = set()
         # 透传常用属性
         self.level = real_gate.level
 
@@ -103,47 +107,105 @@ class DaemonApprovalGate:
     def pending(self) -> list:
         return self._gate.pending()
 
+    def has_pending_call(self, call_id: str) -> bool:
+        """call_id 是否在本 run 的挂起审批中(供 server 路由鉴别)。"""
+        return call_id in self._pending_call_ids
+
     async def request(self, action: str, args: dict, *, description: str,
                       risk: Any, timeout: float = 60.0,
                       call_id: str | None = None) -> Any:
-        """timeout fail-closed:超时 → deny + 投诚实 error 事件。"""
+        """P3 跨进程审批主路:挂起等外部 respond 或超时 fail-closed。
+
+        挂起期间 call_id 登记在 _pending_call_ids;外部调 respond() 立即 resolve;
+        满 timeout_s 仍无响应 → deny + 诚实 error 事件(护城河:不自动放行)。
+        """
+        import uuid as _uuid
+        if call_id is None:
+            call_id = _uuid.uuid4().hex[:12]
+        import time as _time
+        from argos_agent.approval import Decision as _Decision
+        # effective_timeout:DaemonApprovalGate 自己的超时上限
         effective_timeout = min(timeout, self._timeout_s)
+        self._pending_call_ids.add(call_id)
         try:
-            return await asyncio.wait_for(
-                self._gate.request(
-                    action, args, description=description, risk=risk,
-                    timeout=effective_timeout, call_id=call_id,
-                ),
-                timeout=effective_timeout + 1.0,  # 给内部超时留 1s 余量
+            # 步骤1:启动内层 gate.request() 协程并让它运行到挂起点
+            # (内层在 await asyncio.wait_for(fut, ...) 前同步登记 _pending[call_id])
+            # asyncio.sleep(0) 让协程运行到挂起点,保证后续 respond() 能找到该 call_id。
+            inner_coro = self._gate.request(
+                action, args, description=description, risk=risk,
+                # 传极大超时给内层:由我们外层来控制超时,避免内层抢先 deny 导致 error 事件丢失
+                timeout=effective_timeout * 2,
+                call_id=call_id,
             )
-        except asyncio.TimeoutError:
-            msg = (
-                f"daemon 模式暂无交互审批(action={action!r}),已按 fail-closed 拒绝。"
-                "P3 阶段将接通跨进程审批通道。"
-            )
-            log.warning("DaemonApprovalGate: timeout fail-closed for run %s: %s", self._run_id, msg)
-            # 投诚实 error 事件到 SSE
+            inner_task = asyncio.ensure_future(inner_coro)
+            await asyncio.sleep(0)  # 让内层跑到 _pending[call_id] 注册点
+
+            # 步骤2:内层已注册 _pending,安全投 SSE 扇出
             if self._manager is not None:
                 try:
                     await self._manager.fanout(self._run_id, {
-                        "kind": "error",
-                        "message": msg,
-                        "chain": ["ApprovalTimeout", f"action={action!r}"],
+                        "kind": "approval_request",
+                        "call_id": call_id,
+                        "action": action,
+                        "args": args,
+                        "description": description,
+                        "risk": str(risk) if not isinstance(risk, str) else risk,
+                        "run_id": self._run_id,
+                        "ts": _time.time(),
                     })
-                except Exception:  # noqa: BLE001
+                except Exception:  # noqa: BLE001 — 扇出失败不阻塞审批主路
                     pass
-            # 返回 deny 决定(不自动放行)
-            from argos_agent.approval import Decision
-            return Decision(kind="deny", reason=msg)
 
-    # 透传审批响应(供 P3 后路径兼容)
-    async def respond(self, call_id: str, kind: Any) -> None:
-        await self._gate.respond(call_id, kind)
+            # 步骤3:等内层 task 完成,用 effective_timeout 控制超时
+            try:
+                return await asyncio.wait_for(
+                    asyncio.shield(inner_task),
+                    timeout=effective_timeout,
+                )
+            except asyncio.TimeoutError:
+                inner_task.cancel()
+                try:
+                    await inner_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+                # 清理内层 _pending 残留
+                self._gate.deny(call_id)
+                # 超时 fail-closed:投诚实 error 事件(持久化 + SSE)
+                msg = (
+                    f"审批超时(action={action!r},run={self._run_id!r},"
+                    f"call_id={call_id!r}),已按 fail-closed 拒绝。"
+                )
+                log.warning("DaemonApprovalGate timeout fail-closed: %s", msg)
+                if self._manager is not None:
+                    try:
+                        error_ev = {
+                            "kind": "error",
+                            "message": msg,
+                            "chain": ["ApprovalTimeout", f"action={action!r}",
+                                      f"call_id={call_id!r}"],
+                        }
+                        self._manager.store.append(self._run_id, error_ev)
+                        await self._manager.fanout(self._run_id, error_ev)
+                    except Exception:  # noqa: BLE001
+                        pass
+                return _Decision(kind="deny", reason=msg)
+        finally:
+            self._pending_call_ids.discard(call_id)
+
+    def respond(self, call_id: str, kind: Any) -> bool:
+        """P3 审批响应入口:外部(server)将 call_id + kind 路由到此处即立即 resolve。
+
+        返回 True = 成功 resolve;False = call_id 未知(已超时/不存在)。
+        内层 ApprovalGate.respond() 处理 Future resolve + session 缓存语义。
+        """
+        return self._gate.respond(call_id, kind)
 
     def approve(self, call_id: str) -> None:
+        """backward-compat。"""
         self._gate.approve(call_id)
 
     def deny(self, call_id: str) -> None:
+        """backward-compat。"""
         self._gate.deny(call_id)
 
 
@@ -170,7 +232,7 @@ class RunWorker:
 
     def __init__(self, *, run_id: str, manager: RunManager, loop_factory,
                  registry=None, worktree=None, gate=None,
-                 run_stack_close=None):
+                 run_stack_close=None, approval_timeout_s: float = 60.0):
         self.run_id = run_id
         self._manager = manager
         self._loop_factory = loop_factory
@@ -188,6 +250,8 @@ class RunWorker:
         # daemon 路径包 DaemonApprovalGate 超时 fail-closed。
         # None = FakeLoop 测试路径,不涉及审批。
         self._gate = gate
+        # P3:跨进程审批超时(可通过 create_run approval_timeout_s 参数配置)。
+        self._approval_timeout_s = approval_timeout_s
         # per-run 清理钩子:RunStack.close() —— 关闭沙箱子进程,不留孤儿。
         # None = 向后兼容路径(loop_factory),不由 worker 负责 sandbox 清理。
         self._run_stack_close = run_stack_close
@@ -200,6 +264,15 @@ class RunWorker:
     @property
     def current_step(self) -> int:
         return self._step_count
+
+    @property
+    def gate(self) -> "DaemonApprovalGate | None":
+        """P3:返回本 run 当前的 DaemonApprovalGate(或 None 若无审批门禁)。
+        server 经此属性把 approval_response 路由到正确 run 的 gate.respond()。
+        注意:run() 启动后 self._gate 才被替换为 DaemonApprovalGate;
+        启动前返回原始 gate 对象(None 或真 gate)。
+        """
+        return self._gate  # type: ignore[return-value]
 
     async def run(self) -> None:
         """worker 入口:running → 完成/失败/取消 之一。
@@ -224,14 +297,20 @@ class RunWorker:
         _rt_ctx = _runtime.RunContext(workspace=_ws_path, verify_dir=_ws_path)
         _rt_token = _runtime.set_context(_rt_ctx)
         try:
-            # DaemonApprovalGate 包装:真 gate 存在时加 timeout fail-closed(护城河铁律:不自动放行)。
-            if self._gate is not None:
+            # DaemonApprovalGate 包装:真 gate 存在且尚未包装时加 timeout fail-closed。
+            # P3:timeout_s 来自 create_run approval_timeout_s 参数(默认 60s),支持可配。
+            # 已是 DaemonApprovalGate(测试预包装路径)则跳过,避免双重包装。
+            if self._gate is not None and not isinstance(self._gate, DaemonApprovalGate):
                 self._gate.set_workspace(entry.workspace or "")
                 self._gate.set_session_id(f"run-{self.run_id}")
                 self._gate = DaemonApprovalGate(
-                    self._gate, timeout_s=60.0,
+                    self._gate, timeout_s=self._approval_timeout_s,
                     run_id=self.run_id, manager=self._manager,
                 )
+            elif self._gate is not None:
+                # 已包装:只更新 workspace/session(不再重建)
+                self._gate.set_workspace(entry.workspace or "")
+                self._gate.set_session_id(f"run-{self.run_id}")
             # 1. mark_running
             self._manager.mark_running(self.run_id)
             if self._registry is not None:

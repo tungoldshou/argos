@@ -259,25 +259,38 @@ async def test_unknown_route_returns_404(server):
 
 
 @pytest.mark.asyncio
-async def test_approval_endpoint_fanout(server):
-    """POST /runs/{id}/approval/{call_id} → 200 + SSE event 投到 subscriber。"""
+async def test_approval_endpoint_no_worker_returns_404(server):
+    """POST /runs/{id}/approval/{call_id}: run 存在但无 active worker → 404。
+
+    P3 升级后 approval 要求 run 有注册 worker(服务器路由表)。
+    无 worker 路径(create_run 无 loop_factory)→ 404 + 诚实错误消息。
+    """
     srv, mgr = server
     sid = await _create_session(srv.socket_path)
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",
                                  session_id=sid, body={"goal": "x"})
     rid = json.loads(raw.decode("utf-8"))["run_id"]
-    q = mgr.subscribe(rid)
+    # 无 worker 注册(server fixture 不带 loop_factory)→ 应 404
     status, _, raw = await _req(srv.socket_path, "POST",
                                  f"/runs/{rid}/approval/abc123456789",
-                                 session_id=sid, body={"decision": "approve"})
-    assert status == 200
+                                 session_id=sid, body={"decision": "once"})
+    assert status == 404
     body = json.loads(raw.decode("utf-8"))
-    assert body["state"] == "applied"
-    # SSE 事件
-    ev = q.get_nowait()
-    assert ev["kind"] == "approval_response"
-    assert ev["call_id"] == "abc123456789"
-    assert ev["decision"] == "approve"
+    assert "worker" in body.get("error", "").lower() or body.get("code") == "not_found"
+
+
+@pytest.mark.asyncio
+async def test_approval_endpoint_invalid_decision(server):
+    """POST /runs/{id}/approval: decision 不合法 → 400。"""
+    srv, mgr = server
+    sid = await _create_session(srv.socket_path)
+    status, _, raw = await _req(srv.socket_path, "POST", "/runs",
+                                 session_id=sid, body={"goal": "x"})
+    rid = json.loads(raw.decode("utf-8"))["run_id"]
+    status, _, raw = await _req(srv.socket_path, "POST",
+                                 f"/runs/{rid}/approval/abc123456789",
+                                 session_id=sid, body={"decision": "approve"})  # 旧值,已不合法
+    assert status == 400
 
 
 # ── list_runs state filter ─────────────────────────────────────────────
