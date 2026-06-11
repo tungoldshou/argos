@@ -134,6 +134,8 @@ def test_broker_routes_mcp_call(monkeypatch):
 
     monkeypatch.setattr("argos_agent.mcp_native.get_manager", lambda: FakeMgr())
     broker = object.__new__(CapabilityBroker)
+    broker._mcp_manager = None        # 无注入 → fallback 到 monkeypatched get_manager
+    broker._browser_controller = None  # 无注入 → 此测试不走 browser_*
     val, _exit = broker._execute("mcp_call", {"server": "s", "tool": "t", "arguments": {"a": 1}})
     assert val == "MCP RESULT"
     assert captured["args"] == ("s", "t", {"a": 1})
@@ -149,6 +151,8 @@ def test_broker_mcp_call_coerces_non_dict_arguments(monkeypatch):
 
     monkeypatch.setattr("argos_agent.mcp_native.get_manager", lambda: FakeMgr())
     broker = object.__new__(CapabilityBroker)
+    broker._mcp_manager = None        # 无注入 → fallback 到 monkeypatched get_manager
+    broker._browser_controller = None  # 无注入 → 此测试不走 browser_*
     # arguments 不是 dict(模型瞎传)→ 强制成 {},不崩。
     val, _ = broker._execute("mcp_call", {"server": "s", "tool": "t", "arguments": "oops"})
     assert val == "args={}"

@@ -53,25 +53,35 @@ class RunContext:
     guarded: dict[str, str] = field(default_factory=dict)
     # 受保护目录快照(dir 相对路径 -> {file 相对路径 -> sha256}),用于抓"新增/删除文件"。
     guarded_dirs: dict[str, dict[str, str]] = field(default_factory=dict)
+    # plan mode 状态 —— per-run(取代模块级 _plan_mode_active,并发 run 互不干扰)。
+    # EnterPlanMode / ExitPlanMode 同时写 loop.mode(TUI 可读)和此字段(沙箱工具 dispatcher 读)。
+    plan_mode: bool = False
 
 
-# 默认沙盒上下文(安全兜底)。生产路径每个 run 都会 set_context,这个 default 只在
-# 测试/headless 单跑工具时兜底(此时同一时刻只有一个上下文,共享 default 无并发风险)。
-# ⚠️ 不变量:default 是【共享可变单例】(RunContext.guarded/guarded_dirs 是 dict)。
-#   绝不可在【未 set_context】的情况下调 guard_files()——那会 mutate 这个共享 default,
-#   同进程下一次未 set_context 的 detect_tampering() 会读到过期指纹而误报篡改。
-#   guard_files/detect_tampering 只在 set_context 之后(server run 路径)调用,此约束才成立。
-_DEFAULT_CTX = RunContext(workspace=_DEFAULT_WS.resolve(), verify_dir=_DEFAULT_VERIFY.resolve())
-_current_var: contextvars.ContextVar[RunContext] = contextvars.ContextVar(
-    "argos_run_context", default=_DEFAULT_CTX,
+# contextvar 默认值设为 None;get_current() 在未 set_context 时惰性返回新副本,
+# 杜绝并发 run 通过共享可变 default 互相污染 guarded/guarded_dirs 状态。
+# 旧的 _DEFAULT_CTX 共享单例已废弃(原 docstring 自己警告过 mutation 风险)。
+_current_var: contextvars.ContextVar[RunContext | None] = contextvars.ContextVar(
+    "argos_run_context", default=None,
 )
 
 
+def _make_default_ctx() -> RunContext:
+    """每次调用返回新的兜底上下文副本 —— 独立 guarded dict,绝不共享可变状态。"""
+    return RunContext(workspace=_DEFAULT_WS.resolve(), verify_dir=_DEFAULT_VERIFY.resolve())
+
+
 def current() -> RunContext:
-    return _current_var.get()
+    ctx = _current_var.get()
+    if ctx is None:
+        # 写回 contextvar,确保同一协程后续调用(guard_files → detect_tampering)
+        # 拿到同一个对象而不是每次新副本(minior 修:防篡改指纹丢失路径)。
+        ctx = _make_default_ctx()
+        _current_var.set(ctx)
+    return ctx
 
 
-def set_context(ctx: RunContext) -> contextvars.Token:
+def set_context(ctx: RunContext) -> "contextvars.Token[RunContext | None]":
     """设本上下文(必须在 create_task(pump) 之前调,ContextVar 在建任务那刻被复制进子任务)。"""
     return _current_var.set(ctx)
 

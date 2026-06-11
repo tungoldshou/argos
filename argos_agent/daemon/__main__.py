@@ -53,13 +53,40 @@ async def _serve(args: argparse.Namespace) -> int:
         print(f"[daemon] {e}", file=sys.stderr)
         return 1
 
+    # P1 通电:装配真实组件 + loop_factory ──────────────────────────────
+    # 无 worker key → loop_factory=_NO_KEY 哨兵,daemon 仍能启动;create_run 明确拒绝并说明原因。
+    from argos_agent.daemon.server import _NO_KEY
+    loop_factory = _NO_KEY  # 默认无 key 状态
+    components = None
+    try:
+        from argos_agent.app_factory import build_components, build_loop_factory
+        components = build_components()
+        loop_factory = build_loop_factory(components)
+        log.info("daemon: AgentLoop factory 装配完成(model=%s)", components.config.model_tier)
+    except RuntimeError as e:
+        # 诚实降级:无 key → daemon 起得来,但 create_run 会明确拒绝(_NO_KEY 哨兵)
+        print(f"[daemon] 警告:无法装配 AgentLoop({e});daemon 以无 key 模式启动,create_run 将拒绝。",
+              file=sys.stderr)
+        log.warning("daemon: loop_factory 装配失败: %s", e)
+    except Exception as e:  # noqa: BLE001
+        print(f"[daemon] 警告:装配异常({e});daemon 以无 key 模式启动。", file=sys.stderr)
+        log.warning("daemon: loop_factory 装配异常: %s", e)
+
     manager = RunManager(runs_dir=runs_dir, index_path=index_path)
     # 启动恢复
     recovered = manager.recover()
     if recovered:
         log.info("daemon: recovered %d runs: %s", len(recovered), recovered)
 
-    server = DaemonHTTPServer(manager=manager, socket_path=socket_path)
+    server = DaemonHTTPServer(
+        manager=manager,
+        socket_path=socket_path,
+        # components 路径(优先):per-run 独享 sandbox/gate/broker,并发不串台。
+        # 无 components(装配失败)时退回 loop_factory=_NO_KEY 哨兵诚实拒绝。
+        components=components,
+        loop_factory=loop_factory,
+        gate=components.gate if components is not None else None,
+    )
     await server.start()
 
     # 写 PID
@@ -84,6 +111,12 @@ async def _serve(args: argparse.Namespace) -> int:
     finally:
         await graceful_shutdown(manager, server, socket_path)
         remove_pid(pid_path)
+        # 清理 AppComponents(关闭 sandbox/store/browser/mcp 子进程)
+        if components is not None:
+            try:
+                components.close()
+            except Exception as e:  # noqa: BLE001
+                log.warning("daemon: components.close() failed: %s", e)
     return 0
 
 

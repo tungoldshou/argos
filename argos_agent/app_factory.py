@@ -3,6 +3,10 @@
 build_components():一次性建 store/sandbox/broker/model/verifier(持久,跨多轮 run 复用)。
 build_loop_factory(c):产 Callable[[], AgentLoop] —— 每轮 run 新建 EventBus(一条事件流),
                       共享其余组件;真 AgentLoop 替换 Phase 5 的 FakeLoop。
+build_run_stack(c):per-run 隔离栈 —— 每次 daemon 分配一个 run 时调用,产全新
+                   SeatbeltExecutor + ApprovalGate + CapabilityBroker,避免并发 run 共享单例
+                   (run2 spawn 顶掉 run1 子进程 / gate.set_workspace 竞态)。
+                   RunStack.close() 在 run 终态时清理沙箱子进程,不留孤儿。
 诚实(灵魂):无 worker key → 抛 RuntimeError(入口捕获落 demo 态,不假装能跑)。
 
 接线要点(对齐 canonical,非计划正文的过时名):
@@ -19,14 +23,19 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 from argos_agent import config
 from argos_agent.approval import ApprovalGate, ApprovalLevel
+from argos_agent.browser import BrowserController
 from argos_agent.core.loop import AgentLoop, LoopConfig
 from argos_agent.core.models import CredentialPool, ModelClient
 from argos_agent.core.verify_gate import Verifier
 from argos_agent.memory.store import ArgosStore
+from argos_agent.mcp_native import McpManager
+from argos_agent.permissions.audit import AuditLog
+from argos_agent.permissions.config import PermissionsConfig, get_config as _permissions_get_config
 from argos_agent.sandbox.broker import CapabilityBroker
 from argos_agent.sandbox.egress import EgressPolicy
 from argos_agent.sandbox.executor import SeatbeltExecutor
@@ -50,6 +59,29 @@ def _host_of(url: str) -> set[str]:
     return {h} if h else set()
 
 
+@dataclass
+class RunStack:
+    """per-run 隔离组件栈:每个 daemon run 独享一套 sandbox/gate/broker。
+
+    共享(从 AppComponents 拿):store, model, verifier, router, config,
+    workflow_engine_factory, mcp_manager, browser_controller,
+    permissions_config, audit_log(append-only,条目按 session_id 区分)。
+    独占(本 run 私有):sandbox, gate, broker, loop_factory。
+    close():关闭沙箱子进程,run 终态 finally 必须调(不留孤儿)。
+    """
+    sandbox: SeatbeltExecutor
+    gate: ApprovalGate
+    broker: CapabilityBroker
+    loop_factory: "Callable[[], AgentLoop]"
+
+    def close(self) -> None:
+        """关闭沙箱子进程;gate/broker 无资源需释放。"""
+        try:
+            self.sandbox.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 @dataclass(frozen=True, slots=True)
 class AppComponents:
     store: ArgosStore
@@ -63,22 +95,128 @@ class AppComponents:
     workflow_engine_factory: Callable[[], object]
     # #11 per-task routing:多个 ModelClient + RoutingConfig 注入 AgentLoop;None = 走原路径。
     router: ModelRouter | None = None
+    # per-session MCP 管理器与浏览器控制器(生命周期随 AppComponents;close() 负责清理)。
+    # None = 未使用(测试 / headless 路径跳过实例化)。
+    mcp_manager: McpManager | None = None
+    browser_controller: BrowserController | None = None
+    # per-session permissions 实例(为多 run 并发铺路;broker/gate/evaluator 走注入路径)。
+    permissions_config: PermissionsConfig | None = None
+    audit_log: AuditLog | None = None
 
     def close(self) -> None:
         self.sandbox.close()
         self.store.close()
-        # 收掉浏览器单例(若本会话用过计算机控制),不残留 chromium 子进程。
-        try:
-            from argos_agent import browser
-            browser.shutdown()
-        except Exception:  # noqa: BLE001 — 清理失败不应阻断关闭
-            pass
-        # 收掉 MCP 单例(关掉所有 stdio server 子进程)。
-        try:
-            from argos_agent import mcp_native
-            mcp_native.shutdown()
-        except Exception:  # noqa: BLE001
-            pass
+        # 收掉浏览器控制器(若本会话用过计算机控制),不残留 chromium 子进程。
+        if self.browser_controller is not None:
+            try:
+                self.browser_controller.close()
+            except Exception:  # noqa: BLE001
+                pass
+        # 收掉 MCP 管理器(关掉所有 stdio server 子进程)。
+        if self.mcp_manager is not None:
+            try:
+                self.mcp_manager.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+
+def _make_gate_broker_sandbox(
+    *,
+    approval_level: ApprovalLevel,
+    perm_config: "Any",
+    perm_audit: "Any",
+    egress: "EgressPolicy",
+    signer: "ReceiptSigner",
+    workspace: Path,
+    mcp_manager: "Any | None" = None,
+    browser_controller: "Any | None" = None,
+) -> "tuple[ApprovalGate, CapabilityBroker, SeatbeltExecutor]":
+    """私有 helper:构造一组独立的 gate + broker + sandbox。
+
+    build_components 和 build_run_stack 共用,避免两处复制逻辑漂移。
+    每次调用返回全新实例 —— caller 负责生命周期(close sandbox)。
+    """
+    gate = ApprovalGate(approval_level, permissions_config=perm_config, audit_log=perm_audit)
+    # broker 一次构造,包含全部依赖(mcp/browser 随即传入,消除两步补注)。
+    # workspace 传给 broker:host 侧 run_command 与沙箱子进程 write_file 用同一个 ws,
+    # 杜绝 --project 模式下两者分叉(run_command 落默认 workspace、write_file 落项目目录)。
+    broker = CapabilityBroker(
+        gate=gate, egress=egress, signer=signer, workspace=workspace,
+        mcp_manager=mcp_manager, browser_controller=browser_controller,
+    )
+    # 同步 broker_handler 桥走 broker._execute(裸执行):exec_code 阻塞等 broker_reply,
+    # 无法 await gate,故绕过 request() 的 egress 校验/交互审批/Receipt。真正的硬边界是
+    # Seatbelt(网络系统级 OFF、写限 workspace),egress 白名单这道第二防线在同步桥路径上
+    # 不生效(既有限制,非本功能引入)。非 AUTO 档的交互式审批同样受此限,留 v1.1。
+    def broker_handler(action: str, args: dict) -> object:
+        value, _exit = broker._execute(action, args)
+        return value
+
+    # 沙箱由 loop.run() 自己 spawn/close(每轮一个子进程),此处只构造,不预 spawn。
+    sandbox = SeatbeltExecutor(broker_handler=broker_handler)
+    return gate, broker, sandbox
+
+
+def build_run_stack(
+    c: "AppComponents",
+    *,
+    workspace: Path | None = None,
+    session_id: str = "",
+) -> RunStack:
+    """per-run 隔离栈:每次 daemon 分配一个新 run 时调用。
+
+    返回 RunStack,内含全新 SeatbeltExecutor + ApprovalGate + CapabilityBroker
+    以及一个绑定该栈的 loop_factory。
+    共享:store, model, verifier, router, config, workflow_engine_factory,
+          mcp_manager, browser_controller, permissions_config, audit_log。
+    调用者在 run 终态 finally 里必须调 RunStack.close() 释放沙箱子进程。
+    """
+    ws = workspace if workspace is not None else c.workspace
+
+    # per-run 审计日志:复用 c 的 permissions_config;audit_log 是 append-only,
+    # 条目按 session_id 区分 —— 共享同一文件,用 session_id 区分归属。
+    from argos_agent.permissions.audit import AuditLog
+    perm_audit_run = AuditLog(session_id=session_id)
+
+    # per-run egress / signer:和 build_components 用相同签名 key(进程级常量),
+    # egress 从 c.config.model_tier 恢复 llm_hosts。
+    from argos_agent import config as _cfg
+    try:
+        tier = _cfg.tier_for(c.config.model_tier)
+        llm_hosts = _host_of(tier.base_url)
+    except Exception:  # noqa: BLE001 — 未知 tier 退空集
+        llm_hosts = set()
+    egress = EgressPolicy(
+        llm_hosts=llm_hosts,
+        search_hosts=set(_SEARCH_HOSTS),
+        mcp_hosts=set(),
+    )
+    signer = ReceiptSigner(key=_HOST_SIGNING_KEY)
+
+    gate, broker, sandbox = _make_gate_broker_sandbox(
+        approval_level=c.config.approval_level,
+        perm_config=c.permissions_config,
+        perm_audit=perm_audit_run,
+        egress=egress, signer=signer, workspace=ws,
+        # per-run 栈不独占 mcp/browser —— 这两个是进程级共享资源;
+        # broker 只需引用,不拥有生命周期(AppComponents.close 统一清理)。
+        mcp_manager=c.mcp_manager,
+        browser_controller=c.browser_controller,
+    )
+    if session_id:
+        gate.set_session_id(session_id)
+
+    def _loop_factory() -> "AgentLoop":
+        return AgentLoop(
+            store=c.store, bus=EventBus(), sandbox=sandbox,
+            broker=broker, model=c.model, verifier=c.verifier, config=c.config,
+            workspace=ws, verify_dir=ws,
+            workflow_engine_factory=c.workflow_engine_factory,
+            router=c.router,
+            mcp_manager=c.mcp_manager,
+        )
+
+    return RunStack(sandbox=sandbox, gate=gate, broker=broker, loop_factory=_loop_factory)
 
 
 def build_components(
@@ -96,8 +234,9 @@ def build_components(
         os.environ.get("ARGOS_WORKSPACE", Path.home() / ".argos" / "workspace")
     ).resolve()
     ws.mkdir(parents=True, exist_ok=True)
-    # 沙箱子进程 files.py 模块级 WORKSPACE 读这个 env —— 必须在 spawn 前设好,文件才落对地方。
-    os.environ["ARGOS_WORKSPACE"] = str(ws)
+    # ARGOS_WORKSPACE 全局副作用已去除:executor.spawn() 按 run 注入 child_env(见 executor.py:48),
+    # 沙箱子进程只从自己的 env 读 WORKSPACE,不依赖父进程 os.environ 全局写。
+    # 注意:runtime.py 的 _DEFAULT_WS 仍在模块加载时从 env 读一次(进程启动前设好即可,无并发问题)。
 
     # 记忆向量召回:复用 active profile 的 provider embeddings(配了 embedding_model 才有);
     # 未配 / 非 openai / 无 key → active_embedder 返 None → 记忆诚实走 FTS5 关键词,不调模型。
@@ -118,35 +257,35 @@ def build_components(
     pool = CredentialPool([key])
     model = ModelClient(tier=tier, pool=pool)
 
-    gate = ApprovalGate(approval_level)
+    # per-session permissions 实例:独立于模块级单例,并发 run 不共享 config 状态。
+    perm_config = _permissions_get_config()   # 加载(惰性,首次读文件);后续 reload 会更新模块级但不影响已建实例
+    perm_audit = AuditLog(session_id="")      # session_id 由 gate.set_session_id 后补
+
     egress = EgressPolicy(
         llm_hosts=_host_of(tier.base_url),
         search_hosts=set(_SEARCH_HOSTS),
         mcp_hosts=set(),
     )
     signer = ReceiptSigner(key=_HOST_SIGNING_KEY)
-    # workspace 传给 broker:host 侧 run_command 与沙箱子进程 write_file 用同一个 ws,
-    # 杜绝 --project 模式下两者分叉(run_command 落默认 workspace、write_file 落项目目录)。
-    broker = CapabilityBroker(gate=gate, egress=egress, signer=signer, workspace=ws)
-
-    # 同步 broker_handler 桥走 broker._execute(裸执行):exec_code 阻塞等 broker_reply,
-    # 无法 await gate,故绕过 request() 的 egress 校验/交互审批/Receipt。真正的硬边界是
-    # Seatbelt(网络系统级 OFF、写限 workspace),egress 白名单这道第二防线在同步桥路径上
-    # 不生效(既有限制,非本功能引入)。非 AUTO 档的交互式审批同样受此限,留 v1.1。
-    def broker_handler(action: str, args: dict) -> object:
-        value, _exit = broker._execute(action, args)
-        return value
-
-    # 沙箱由 loop.run() 自己 spawn/close(每轮一个子进程),此处只构造,不预 spawn。
-    sandbox = SeatbeltExecutor(broker_handler=broker_handler)
-
-    # MCP 后台预热:配了 ~/.argos/mcp.json 时,在后台线程连 stdio server(不阻塞 TUI 启动 /
-    # 首轮响应)。默认零预配 → 秒回无 server。_build_system 用非阻塞的 tools_summary 读已就绪工具。
+    # per-session MCP 管理器(生命周期随 AppComponents):
+    # 构造实例 + 后台预热(不阻塞 TUI 启动 / 首轮响应)。默认零预配 → 秒回无 server。
+    mcp_mgr = McpManager()
     try:
-        from argos_agent import mcp_native
-        mcp_native.get_manager().start_warming()
+        mcp_mgr.start_warming()
     except Exception:  # noqa: BLE001 — 预热失败不应阻断启动
         pass
+
+    # BrowserController 实例:懒启动,close() 由 AppComponents.close() 负责清理;
+    # 此处只构造(不真正 launch chromium),broker._execute 首次 browser_* 调用时才 start()。
+    browser_ctrl = BrowserController()
+
+    # per-session permissions 实例(已在上面构造好):gate/broker 共用
+    gate, broker, sandbox = _make_gate_broker_sandbox(
+        approval_level=approval_level,
+        perm_config=perm_config, perm_audit=perm_audit,
+        egress=egress, signer=signer, workspace=ws,
+        mcp_manager=mcp_mgr, browser_controller=browser_ctrl,
+    )
 
     verifier = Verifier(max_rounds=max_rounds)
 
@@ -203,6 +342,10 @@ def build_components(
         sandbox=sandbox, gate=gate, config=loop_config, workspace=ws,
         workflow_engine_factory=_workflow_engine_factory,
         router=router,
+        mcp_manager=mcp_mgr,
+        browser_controller=browser_ctrl,
+        permissions_config=perm_config,
+        audit_log=perm_audit,
     )
 
 
@@ -214,6 +357,7 @@ def build_loop_factory(c: AppComponents) -> Callable[[], AgentLoop]:
             broker=c.broker, model=c.model, verifier=c.verifier, config=c.config,
             workspace=c.workspace, verify_dir=c.workspace,
             workflow_engine_factory=c.workflow_engine_factory,
-            router=c.router,    # #11 per-task routing 透传(spec §10)
+            router=c.router,          # #11 per-task routing 透传(spec §10)
+            mcp_manager=c.mcp_manager,  # per-session McpManager 注入(P1 去全局)
         )
     return factory

@@ -21,18 +21,29 @@ PlanExitAction = Literal["approve_start", "approve_accept_edits", "keep_planning
 _VALID_ACTIONS = ("approve_start", "approve_accept_edits", "keep_planning", "refine")
 
 
-_plan_mode_active: bool = False  # 模块级 plan mode 状态(MVP 简化)
-
-
 def set_plan_mode(active: bool) -> None:
-    """设置模块级 plan mode 状态(由 EnterPlanMode / ExitPlanMode 调用)。"""
-    global _plan_mode_active
-    _plan_mode_active = active
+    """写当前 run 的 RunContext.plan_mode(per-run 隔离,并发不串台)。
+
+    原模块级 bool 已替换为 per-run contextvars.ContextVar 字段。
+    EnterPlanMode / ExitPlanMode 调本函数;旧测试/TUI 直调仍有效。
+    实现:取出当前上下文,修改 plan_mode,再写回 contextvar(保证后续 current() 拿到同一对象)。
+    """
+    from argos_agent import runtime as _rt
+    ctx = _rt._current_var.get()
+    if ctx is None:
+        # 未 set_context(测试/headless 路径):构造一个新 default 并持久化到 contextvar。
+        ctx = _rt._make_default_ctx()
+        _rt._current_var.set(ctx)
+    ctx.plan_mode = active
 
 
 def is_plan_mode() -> bool:
-    """返回当前 plan mode 状态(供沙箱工具 dispatcher 守卫)。"""
-    return _plan_mode_active
+    """读当前 run 的 plan mode 状态(供沙箱工具 dispatcher 守卫)。
+
+    从 contextvars.ContextVar 当前上下文取值 —— per-run 隔离,并发不串台。
+    """
+    from argos_agent import runtime as _rt
+    return _rt.current().plan_mode
 
 
 @dataclass(frozen=True)
@@ -62,7 +73,7 @@ def EnterPlanMode(loop) -> str:
     if getattr(loop, "mode", "act") == "plan":
         return "已在 plan mode。"
     loop.mode = "plan"
-    set_plan_mode(True)  # 模块级标记(供沙箱工具 dispatcher 守卫)
+    set_plan_mode(True)  # 写 per-run RunContext.plan_mode(供沙箱工具 dispatcher 守卫)
     # emit PhaseChange 事件(给前端,标题/边缘光变色)
     if hasattr(loop, "_emit_phase"):
         loop._emit_phase("plan")
@@ -97,7 +108,7 @@ def ExitPlanMode(loop, action: str, feedback: str | None = None) -> str:
     except ValueError as e:
         return f"错误:{e}"
     loop.mode = "act"
-    set_plan_mode(False)  # 模块级清掉
+    set_plan_mode(False)  # 清 per-run RunContext.plan_mode
     loop._plan_decision = decision
     # 主动唤醒 loop 的 await(无 event 属性 = 非 loop 路径,例如单测 stub,跳过)。
     ev = getattr(loop, "_plan_decision_event", None)

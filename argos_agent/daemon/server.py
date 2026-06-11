@@ -26,6 +26,7 @@ import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from argos_agent.app_factory import build_run_stack
 from argos_agent.daemon.manager import RunManager
 from argos_agent.daemon.protocol import (
     CODE_BAD_REQUEST, CODE_BUSY, CODE_INTERNAL, CODE_INVALID_TRANSITION,
@@ -43,12 +44,30 @@ _HTTP_REASONS = {
 }
 
 
+# 哨兵常量:__main__.py 在无 key 时传此值 → create_run 明确拒绝(诚实语义)。
+# loop_factory=None(老测试路径/向后兼容)= 只创建元数据不 spawn worker,不拒绝。
+_NO_KEY = object()
+
+
 class DaemonHTTPServer:
     """Unix socket HTTP server,async。"""
 
     def __init__(self, *, manager: RunManager, socket_path: Path,
                  session_timeout_s: float = 30.0,
-                 registry=None, worktree=None):
+                 registry=None, worktree=None,
+                 loop_factory=None, gate=None,
+                 components=None):
+        """loop_factory / components 二选一(components 优先走 per-run stack 路径)。
+
+        None(默认) = 向后兼容:create_run 创建元数据但不 spawn worker(测试/无 loop 场景)。
+        _NO_KEY 哨兵 = 无 key 诚实模式:create_run 明确拒绝并说明原因(不假装能跑)。
+                      由 daemon/__main__.py 在装配失败时显式传入。
+        callable   = 向后兼容:create_run 创建元数据 + spawn RunWorker(共享 sandbox/gate/broker)。
+        components = AppComponents 实例:create_run 走 build_run_stack,每 run 独享一套
+                     sandbox/gate/broker(并发不串台)。loop_factory 参数在此路径下被忽略。
+        gate       = 向后兼容:仅当 loop_factory=callable(无 components)时有意义;
+                     RunWorker 包 DaemonApprovalGate 实现 timeout fail-closed。
+        """
         self._manager = manager
         self._socket_path = Path(socket_path)
         self._sessions = SessionRegistry(heartbeat_timeout_s=session_timeout_s)
@@ -61,6 +80,13 @@ class DaemonHTTPServer:
             worktree = WorktreeManager()
         self._registry = registry
         self._worktree = worktree
+        # per-run 栈路径:components 存在时优先(并发安全)
+        self._components = components
+        # 向后兼容:loop_factory 路径(共享 sandbox/gate/broker — 单 run 场景/测试)
+        # components 存在时 loop_factory 忽略,但保留以不破坏老测试构造签名。
+        self._loop_factory = loop_factory
+        # 真 ApprovalGate(向后兼容 loop_factory 路径);components 路径下每 run 有自己的 gate。
+        self._gate = gate
         self._server: asyncio.base_events.Server | None = None
         self._started_at: float = 0.0
 
@@ -294,6 +320,15 @@ class DaemonHTTPServer:
         goal = data.get("goal")
         if not goal or not isinstance(goal, str):
             return await self._send_error(writer, 400, CODE_BAD_REQUEST, "missing goal")
+        # P1 通电:无 key 诚实拒绝(在分配 slot/run 之前检查,不留垃圾元数据)
+        # _NO_KEY 哨兵:daemon 启动时明确检测到无 key → 拒绝并说明原因
+        if self._loop_factory is _NO_KEY:
+            return await self._send_error(
+                writer, 503, "no_worker_key",
+                "daemon 未配置 API key,无法执行 run。"
+                "请运行 `argos setup` 配置模型 key 后重启 daemon。",
+            )
+
         # #5b 并发满 → 503(spec §5.2)
         if not self._registry.has_capacity():
             return await self._send_error(
@@ -337,7 +372,75 @@ class DaemonHTTPServer:
         await self._registry.register(
             run_id=run_id, goal=goal, workspace=workspace, worktree_path=wt_path,
         )
+
+        # P1 通电:spawn RunWorker 协程
+        # components 路径(优先):per-run 独享 sandbox/gate/broker — 并发安全
+        # loop_factory 路径(向后兼容):共享组件,仅适合单 run 场景
+        effective_ws_str = wt_path or (workspace if workspace else None)
+        if self._components is not None:
+            # per-run 隔离栈:并发 run 各自独立 sandbox/gate/broker
+            effective_ws_path = (
+                Path(effective_ws_str).expanduser().resolve()
+                if effective_ws_str else None
+            )
+            run_stack = build_run_stack(
+                self._components,
+                workspace=effective_ws_path,
+                session_id=f"run-{run_id}",
+            )
+            from argos_agent.daemon.worker import RunWorker
+            worker = RunWorker(
+                run_id=run_id,
+                manager=self._manager,
+                loop_factory=run_stack.loop_factory,
+                registry=self._registry,
+                worktree=self._worktree,
+                gate=run_stack.gate,
+                run_stack_close=run_stack.close,
+            )
+            asyncio.create_task(worker.run(), name=f"run-{run_id}")
+        elif callable(self._loop_factory):
+            # 向后兼容路径:共享 sandbox/gate/broker(loop_factory 注入)
+            run_loop_factory = self._make_run_loop_factory(effective_ws_str)
+
+            from argos_agent.daemon.worker import RunWorker
+            worker = RunWorker(
+                run_id=run_id,
+                manager=self._manager,
+                loop_factory=run_loop_factory,
+                registry=self._registry,
+                worktree=self._worktree,
+                gate=self._gate,
+            )
+            asyncio.create_task(worker.run(), name=f"run-{run_id}")
+
         await self._send_json(writer, 201, {"run_id": run_id})
+
+    def _make_run_loop_factory(self, workspace: str | None):
+        """返回 per-run loop_factory:在 base loop_factory 基础上用指定 workspace 覆盖。
+
+        base loop_factory 已通过 app_factory.build_loop_factory() 装配好所有共享组件;
+        per-run workspace 参数化让多 run 并发不共享 workspace 状态。
+        """
+        from pathlib import Path
+
+        base_factory = self._loop_factory
+
+        if not workspace:
+            # 无指定 workspace:直接用 base factory(workspace 用 AppComponents 默认值)
+            return base_factory
+
+        ws_path = Path(workspace).expanduser().resolve()
+        ws_path.mkdir(parents=True, exist_ok=True)
+
+        def _run_specific_factory():
+            loop = base_factory()
+            # 覆盖 per-run workspace(AgentLoop._workspace / _verify_dir 是实例属性)
+            loop._workspace = ws_path
+            loop._verify_dir = ws_path
+            return loop
+
+        return _run_specific_factory
 
     async def _handle_get_run(self, writer, headers, run_id):
         if (sid := await self._require_session(writer, headers)) is None:

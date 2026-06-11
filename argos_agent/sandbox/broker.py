@@ -49,7 +49,8 @@ class BrokerResult:
 
 class CapabilityBroker:
     def __init__(self, *, gate: ApprovalGate, egress: EgressPolicy,
-                 signer: ReceiptSigner, workspace: Path | None = None) -> None:
+                 signer: ReceiptSigner, workspace: Path | None = None,
+                 mcp_manager: Any = None, browser_controller: Any = None) -> None:
         self._gate = gate
         self._egress = egress
         self._signer = signer
@@ -58,6 +59,10 @@ class CapabilityBroker:
         # → 脚本读不到刚写的文件(workspace 分叉 bug)。None 时回退 shell 自己的 _ws() 解析。
         self._workspace = workspace
         self.last_receipt: Receipt | None = None   # loop 读它投 ToolReceipt 事件
+        # per-session MCP/browser 实例(从 AppComponents 注入);None = fallback 到模块级单例
+        # (向后兼容测试/headless 路径,为 P2 registry 铺路)。
+        self._mcp_manager = mcp_manager
+        self._browser_controller = browser_controller
 
     async def request(self, action: str, args: dict[str, Any]) -> Any:
         """返回灌回沙箱的值(成功=工具串;拒绝=拒绝串)。副作用:签 Receipt 存 last_receipt。
@@ -145,11 +150,14 @@ class CapabilityBroker:
             return _web.web_search(args.get("query", ""), int(args.get("limit", 5))), None
         if action == "web_extract":
             return _web.web_extract(args.get("url", "")), None
-        # 计算机控制(浏览器):走进程内单例 BrowserController(独占线程跑 sync Playwright,
-        # 绕开 asyncio loop 线程冲突);懒启动、无 chromium 时返回诚实错误串。
+        # 计算机控制(浏览器):走注入的 BrowserController(或模块级单例 fallback);
+        # 独占线程跑 sync Playwright,绕开 asyncio loop 线程冲突;懒启动。
         if action.startswith("browser_"):
-            from argos_agent import browser as _browser
-            ctrl = _browser.get_controller()
+            if self._browser_controller is not None:
+                ctrl = self._browser_controller
+            else:
+                from argos_agent import browser as _browser
+                ctrl = _browser.get_controller()
             if action == "browser_navigate":
                 return ctrl.navigate(args.get("url", "")), None
             if action == "browser_snapshot":
@@ -160,10 +168,14 @@ class CapabilityBroker:
                 return ctrl.type_text(args.get("selector", ""), args.get("text", "")), None
             if action == "browser_screenshot":
                 return ctrl.screenshot(args.get("path", "screenshot.png")), None
-        # MCP 外部工具:转给进程内 McpManager(懒连 ~/.argos/mcp.json 的 stdio server)。
+        # MCP 外部工具:转给注入的 McpManager(或模块级单例 fallback);
+        # 懒连 ~/.argos/mcp.json 的 stdio server。
         if action == "mcp_call":
-            from argos_agent import mcp_native
-            mgr = mcp_native.get_manager()
+            if self._mcp_manager is not None:
+                mgr = self._mcp_manager
+            else:
+                from argos_agent import mcp_native
+                mgr = mcp_native.get_manager()
             arguments = args.get("arguments")
             if not isinstance(arguments, dict):
                 arguments = {}

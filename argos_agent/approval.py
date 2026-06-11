@@ -93,7 +93,13 @@ class ApprovalGate:
     ask 仍走原弹窗等用户。set_workspace 让 evaluator 拿到 workspace 边界(workspace 内文件
     不走系统路径 deny)。"""
 
-    def __init__(self, level: ApprovalLevel = ApprovalLevel.CONFIRM) -> None:
+    def __init__(
+        self,
+        level: ApprovalLevel = ApprovalLevel.CONFIRM,
+        *,
+        permissions_config: "Any | None" = None,
+        audit_log: "Any | None" = None,
+    ) -> None:
         self.level = level
         self._pending: dict[str, _Pending] = {}
         self._session_approvals: dict[str, _SessionApproval] = {}
@@ -105,6 +111,10 @@ class ApprovalGate:
         # 决策回调(TUI ActivityPanel 接入):接 (action, decision_str, trigger)。
         # 默认空 lambda(headless / 测试无 UI)→ 不抛。
         self._decision_listener: Callable[[str, str, str], None] | None = None
+        # per-session 注入实例(为多 run 并发铺路):由 build_components 传入;
+        # None = fallback 到模块级单例(向后兼容测试/headless 路径)。
+        self._permissions_config: Any | None = permissions_config
+        self._audit_log: Any | None = audit_log
 
     def set_level(self, level: ApprovalLevel) -> None:
         self.level = level
@@ -211,10 +221,11 @@ class ApprovalGate:
 
     # ── Smart approval 内部 helper(spec 2026-06-06 §2.6) ──────────────
     def _evaluate(self, action: str, args: dict[str, Any]) -> "DecisionMeta | None":
-        """跑 evaluator;模块出错(import / config 坏)→ 返 None 退回 legacy 语义。"""
+        """跑 evaluator;模块出错(import / config 坏)→ 返 None 退回 legacy 语义。
+        优先使用注入的 permissions_config(per-session);无注入则 fallback 到模块级单例。"""
         try:
             from argos_agent.permissions import evaluate, get_config
-            cfg = get_config()
+            cfg = self._permissions_config if self._permissions_config is not None else get_config()
             return evaluate(
                 action, args, gate_level=self.level, config=cfg,
                 workspace=self._workspace,
@@ -226,10 +237,14 @@ class ApprovalGate:
         self, *, action: str, args: dict[str, Any], decision: str, trigger: str,
         by: str, risk: str, secret_pattern: str | None = None,
     ) -> None:
-        """写 AuditLog;模块出错(权限 / IO / import)→ 静默(spec §2.7 锁不抛)。"""
+        """写 AuditLog;模块出错(权限 / IO / import)→ 静默(spec §2.7 锁不抛)。
+        优先使用注入的 audit_log(per-session);无注入则 fallback 到模块级单例。"""
         try:
-            from argos_agent.permissions import get_audit_log
-            log = get_audit_log()
+            if self._audit_log is not None:
+                log = self._audit_log
+            else:
+                from argos_agent.permissions import get_audit_log
+                log = get_audit_log()
             # session_id 通过 set_session_id 注入;未注入则落空串(诚实)
             log.session_id = self._session_id or log.session_id
             args_str = json.dumps(args, ensure_ascii=False, sort_keys=True)

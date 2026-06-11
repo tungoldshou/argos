@@ -150,6 +150,8 @@ def test_broker_execute_routes_browser_actions(monkeypatch):
 
     # 直接测 _execute 的路由(它是 request 的内部裸执行;此处只验 action→controller 映射)。
     broker = object.__new__(CapabilityBroker)
+    broker._mcp_manager = None        # 无注入 → fallback 到模块级单例(但此测试不走 mcp_call)
+    broker._browser_controller = None  # 无注入 → fallback 到 monkeypatched get_controller
     assert broker._execute("browser_navigate", {"url": "https://x.com"})[0] == "NAV ok"
     assert broker._execute("browser_snapshot", {"max_chars": 50})[0] == "SNAP ok"
     assert broker._execute("browser_click", {"selector": "#b"})[0] == "CLICK ok"

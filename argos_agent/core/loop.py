@@ -263,6 +263,7 @@ class AgentLoop:
         read_only: bool = False,
         workflow_engine_factory: Callable[[], object] | None = None,
         router: Any = None,    # #11 per-task routing(契约 §11):ModelRouter | None
+        mcp_manager: Any = None,  # per-session McpManager 实例(AppComponents 注入;None=模块级单例 fallback)
     ) -> None:
         self._store = store
         self._bus = bus
@@ -275,6 +276,7 @@ class AgentLoop:
         self._verify_dir = verify_dir or Path.home() / ".argos" / "verify"
         self._allow_workflow = allow_workflow  # 子 agent spawn 时传 False,深度护栏去 propose_workflow
         self._read_only = read_only  # tool_scope=read 时传 True,剔除写工具兑现「只读」承诺
+        self._mcp_manager = mcp_manager  # per-session MCP 管理器(None=fallback 到模块级单例)
         # 工作流引擎工厂:None=未接入(诚实回错,不崩 run);非 None=act 段抓到 propose_workflow 后
         # 在异步态校验+审批+异步跑引擎+结果回灌(每次提议 new 一个引擎,RAII 不复用状态)。
         self._workflow_engine_factory = workflow_engine_factory
@@ -635,9 +637,14 @@ class AgentLoop:
             pass
 
         # ── 安全段:可用 MCP 工具清单(配了 ~/.argos/mcp.json 才注入;默认零预配 → 空,不注入)──
+        # 优先用注入的 per-session McpManager;无注入则 fallback 到模块级单例(向后兼容)。
         try:
-            from argos_agent import mcp_native
-            mcp_summary = mcp_native.get_manager().tools_summary()
+            if self._mcp_manager is not None:
+                _mcp_mgr = self._mcp_manager
+            else:
+                from argos_agent import mcp_native
+                _mcp_mgr = mcp_native.get_manager()
+            mcp_summary = _mcp_mgr.tools_summary()
             if mcp_summary:
                 safe = safe + "\n\n" + mcp_summary
         except Exception:  # noqa: BLE001 — MCP 连接/读取失败诚实降级为无 MCP
