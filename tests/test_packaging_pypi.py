@@ -215,6 +215,10 @@ def test_pip_install_wheel_and_run_argos_version():
             ["uv", "pip", "install", "--python", str(py), str(whl[0])],
             capture_output=True, text=True, timeout=300,
         )
+        # 网络不可达(pypi 拉依赖超时)是环境问题不是产品 bug —— 诚实 skip 而非假红。
+        # 只豁免 fetch 超时;其余任何安装失败(依赖解析/元数据/wheel 损坏)仍必须红。
+        if r.returncode != 0 and "Failed to fetch" in r.stderr and "timed out" in r.stderr:
+            pytest.skip(f"pypi 不可达(本地网络/代理环境),跳过端到端安装:{r.stderr.splitlines()[-1]}")
         assert r.returncode == 0, f"uv pip install 失败;stderr={r.stderr}"
         # argos --version
         r2 = subprocess.run(
