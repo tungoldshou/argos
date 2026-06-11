@@ -36,8 +36,9 @@ def test_title_level_confirm():
 
 
 def test_title_secret():
+    # v3 spec §4.7:secret 命中格式 = "◓ 审批请求 [risk] · ⚠︎ 命中密钥模式 X"(非旧 v2 [secret: X] 标签)
     t = format_approval_title(risk="high", trigger="secret:AWS access key")
-    assert "[secret: AWS access key]" in t
+    assert "⚠︎" in t and "命中密钥模式" in t and "AWS access key" in t
 
 
 def test_title_soft_allow_not_shown():
@@ -70,7 +71,8 @@ async def test_app_renders_inline_choice_with_secret_subtitle():
         c = choices[0]
         title = str(c.query_one("#ic-title").render())
         body = str(c.query_one("#ic-body").render())
-        assert "[secret: AWS access key]" in title
+        # v3 spec §4.7:secret 命中标题格式 = "· ⚠︎ 命中密钥模式 X"(非旧 v2 [secret: X] 标签)
+        assert "⚠︎" in title and "命中密钥模式" in title and "AWS access key" in title
         assert "did you mean to commit" in body
         # 清理:按 4 拒绝收掉(决策回 gate;respond 无 pending 返 False 不碍)
         await pilot.press("4")

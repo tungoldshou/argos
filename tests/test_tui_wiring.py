@@ -5,8 +5,9 @@ from __future__ import annotations
 import pytest
 
 from argos_agent.approval import ApprovalLevel
+from argos_agent.core.types import Verdict
 from argos_agent.tui.app import ArgosApp
-from argos_agent.tui.events import PhaseChange, TokenDelta
+from argos_agent.tui.events import PhaseChange, TokenDelta, VerifyVerdict
 from argos_agent.tui.fakeloop import FakeLoop, FailingFakeLoop
 from argos_agent.tui.widgets.code_action import CodeActionBlock
 from argos_agent.tui.widgets.diff_view import DiffView
@@ -90,8 +91,8 @@ async def test_slash_status_and_cost_write_to_transcript():
         app.handle_input("/cost")
         await pilot.pause()
         log = app.query_one("#transcript")
-        # TUI v2 状态栏去噪:/status 回显含阶段名(idle)与 token 计数,不再有 "phase:" 前缀
-        assert "idle" in log.rendered_text and "⚙" in log.rendered_text
+        # TUI v3 状态眼:/status 回显含阶段名(idle)与动作计数("动作N",⚙ 字形已处决,spec §4.9)
+        assert "idle" in log.rendered_text and "动作" in log.rendered_text
         assert "成本" in log.rendered_text or "$" in log.rendered_text
 
 
@@ -119,8 +120,8 @@ async def test_loop_exception_degrades_to_error_not_crash():
         await app.workers.wait_for_complete()
         await pilot.pause()
         log = app.query_one("#transcript")
-        # 异常被容纳成 ❌ 错误 行(含异常链),而非 WorkerFailed 击穿 app。
-        assert "❌ 错误" in log.rendered_text
+        # 异常被容纳成 ◉ 错误 行(含异常链,v3 字形),而非 WorkerFailed 击穿 app。
+        assert "◉ 错误" in log.rendered_text
         assert "模型 502" in log.rendered_text
         assert "RuntimeError" in log.rendered_text
 
@@ -302,3 +303,204 @@ async def test_resume_honest_when_no_history(tmp_path):
         await pilot.pause()
         assert "没有可恢复" in log.rendered_text
     store.close()
+
+
+# ── P9 新接线(TUI v3 spec §8):Compacted/Pruned 分支 · StatusBar 优先级 · 记忆召回 ─────
+
+
+@pytest.mark.asyncio
+async def test_compacted_event_writes_transcript_line_and_panel():
+    """spec §8.1:CompactedEvent → transcript faint 系统行(↯/◌ 压缩 -N% · A→B)+ 右栏上下文区。"""
+    from argos_agent.tui.events import CompactedEvent
+    script = [
+        PhaseChange(phase="act", actions=1),
+        CompactedEvent(before=12, after=4, reduction_pct=0.22, triggered_by="proactive"),
+    ]
+    app = ArgosApp(loop_factory=lambda: FakeLoop(script=script))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await app.start_run("压缩任务")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        text = app.query_one("#transcript").rendered_text
+        # 0-1 分数 → 百分比;诚实显真实条数,不预填
+        assert "压缩" in text and "-22%" in text and "12→4" in text
+
+
+@pytest.mark.asyncio
+async def test_pruned_event_writes_transcript_line():
+    """spec §8.1:PrunedEvent → transcript faint 系统行(◌ 已修剪 N 条)。"""
+    from argos_agent.tui.events import PrunedEvent
+    script = [
+        PhaseChange(phase="act", actions=1),
+        PrunedEvent(before=80, after=60, removed=5, reduction_pct=0.25, aggressiveness=0.5),
+    ]
+    app = ArgosApp(loop_factory=lambda: FakeLoop(script=script))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await app.start_run("修剪任务")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        text = app.query_one("#transcript").rendered_text
+        assert "修剪" in text and "5 条" in text
+
+
+@pytest.mark.asyncio
+async def test_status_bar_blocked_on_approval_card_then_cleared():
+    """spec §8.4 优先级铁律:审批卡 mount → StatusBar set_blocked(True)(左眼 ◓ + "审批挂起");
+    决策落定后 set_blocked(False)。用户阻塞态永远赢(即便引擎在跑)。"""
+    from argos_agent.tui.events import ApprovalRequest
+    from argos_agent.tui.widgets.inline_choice import InlineChoice
+    script = [
+        PhaseChange(phase="verify", actions=2),   # 引擎在 verify,但用户阻塞应赢
+        ApprovalRequest(
+            call_id="c1", action="run_command", args={"cmd": "git push"},
+            description="soft rule: ask git push", risk="medium", trigger="soft rule",
+        ),
+    ]
+    app = ArgosApp(loop_factory=lambda: FakeLoop(script=script))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.run_worker(app.start_run("要审批的任务"), exclusive=False)
+        # 等审批卡 mount(loop 在投 ApprovalRequest 后挂起等 respond)
+        for _ in range(40):
+            await pilot.pause()
+            if list(app.query(InlineChoice)):
+                break
+        bar = app.query_one("#status-bar", StatusBar)
+        assert bar._blocked is True, "审批卡活动时 StatusBar 应进 blocked 态"
+        # 优先级铁律:即便 phase==verify,左眼显 ◓ + "审批挂起"
+        assert bar.render_text.startswith("◓"), "用户阻塞态左眼应为 ◓(优先级最高)"
+        assert "审批挂起" in bar.render_text
+        # 用户决策 → respond + 解除挂起
+        choice = list(app.query(InlineChoice))[0]
+        choice._finish("deny", "")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert bar._blocked is False, "决策落定后 StatusBar 应解除 blocked 态"
+
+
+@pytest.mark.asyncio
+async def test_status_bar_alert_locked_on_failed_verdict_not_overwritten_by_report():
+    """陷阱2(spec §8.4):failed verdict → set_alert(True) 告警锁色;后续 report 阶段
+    眼随阶段但整条仍锁 -alert(阶段色/眼不得覆盖告警)。"""
+    script = [
+        PhaseChange(phase="verify", actions=2),
+        VerifyVerdict(verdict=Verdict.failed(detail="1 failed", verify_cmd="pytest", attempts=3)),
+        PhaseChange(phase="report", actions=2),   # 陷阱2:report 不得抹掉告警
+        TokenDelta(text="诚实上报失败。\n"),
+    ]
+    app = ArgosApp(loop_factory=lambda: FakeLoop(script=script))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await app.start_run("会失败的验证")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        bar = app.query_one("#status-bar", StatusBar)
+        assert app._terminal_glow is True, "failed verdict 应锁定 _terminal_glow"
+        assert bar._alert is True, "陷阱2:report 阶段后告警锁色不得被清(StatusBar -alert 仍在)"
+        assert bar.has_class("-alert"), "告警态 CSS 类 -alert 应在"
+
+
+@pytest.mark.asyncio
+async def test_status_bar_alert_cleared_on_new_run():
+    """spec §8.4:新 run(_glow_start)解锁告警色——上一轮 failed 的 -alert 不泄漏到下一轮。"""
+    fail_script = [
+        VerifyVerdict(verdict=Verdict.failed(detail="x", verify_cmd="pytest", attempts=1)),
+    ]
+    ok_script = [
+        PhaseChange(phase="plan", actions=0),
+        VerifyVerdict(verdict=Verdict.passed(detail="ok", verify_cmd="pytest", attempts=1)),
+    ]
+    scripts = iter([fail_script, ok_script])
+    app = ArgosApp(loop_factory=lambda: FakeLoop(script=next(scripts)))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await app.start_run("第一轮失败")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        bar = app.query_one("#status-bar", StatusBar)
+        assert bar._alert is True
+        # 第二轮:_glow_start 应清告警
+        await app.start_run("第二轮成功")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert app._terminal_glow is False, "新 run 应解锁告警"
+        assert bar._alert is False, "新 run 后 StatusBar -alert 应清"
+
+
+@pytest.mark.asyncio
+async def test_memory_recall_line_shown_with_real_store_hits(tmp_path):
+    """spec §8.3:真 store 真召回到记录 → transcript faint 行 "◌ 记忆召回 N 条";
+    诚实:计数取自真实 recall 返回条数,绝不编造。"""
+    class _RecallRec:
+        goal = "上次也改过 auth"
+        verdict = "passed"
+
+    class _StoreWithRecall:
+        def recall(self, goal):
+            return [(_RecallRec(), "similar goal")]
+
+    class _LoopWithRecallStore:
+        def __init__(self):
+            self._store = _StoreWithRecall()
+        async def run(self, goal, session_id):
+            yield PhaseChange(phase="plan", actions=0)
+
+    app = ArgosApp(loop_factory=lambda: _LoopWithRecallStore(), demo=False)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await app.start_run("改 auth.py")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        text = app.query_one("#transcript").rendered_text
+        assert "记忆召回 1 条" in text, "真召回到 1 条应如实显示"
+
+
+@pytest.mark.asyncio
+async def test_memory_recall_silent_when_no_store():
+    """spec §8.3 诚实边界:demo/FakeLoop 无 store → 不显召回行(没召回别假装召回)。"""
+    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await app.start_run("普通任务")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        text = app.query_one("#transcript").rendered_text
+        assert "记忆召回" not in text, "无 store 不得谎报召回"
+
+
+# ── Issue A 回归:_apply_event(PhaseChange) 必须驱动 ap._view ─────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_apply_event_phase_change_drives_activity_panel_view():
+    """回归(Issue A):_apply_event(PhaseChange(act)) 必须把 ap._view 切到 'act'。
+
+    根因:start_run 的 finally 块调 on_run_end() → set_view('idle'),截图时右栏已回 idle。
+    修复:截图脚本改用 _apply_event 直接投事件(不走 start_run),这里验证接线正确。
+    断言:事件到达 → ap._view 更新;on_run_end 未调用 → 视图不回退。
+    """
+    from argos_agent.tui.widgets.activity_panel import ActivityPanel
+
+    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#activity", ActivityPanel)
+        assert ap._view == "idle", "初始视图应为 idle"
+
+        # 直接投 PhaseChange(act) — 不走 start_run
+        await app._apply_event(PhaseChange(phase="act", actions=1))
+        await pilot.pause()
+        assert ap._view == "act", (
+            "_apply_event(PhaseChange(act)) 应把 ap._view 切到 'act';"
+            " 若仍为 idle 说明 app._apply_event → ap.on_phase 接线断了"
+        )
+
+        # 继续投 PhaseChange(verify),视图应跟随
+        await app._apply_event(PhaseChange(phase="verify", actions=2))
+        await pilot.pause()
+        assert ap._view == "verify", "_apply_event(PhaseChange(verify)) 应把视图切到 'verify'"
+
+        # on_run_end 未被调用,视图不应回退
+        assert ap._view != "idle", "未调 on_run_end,视图不应回退到 idle"

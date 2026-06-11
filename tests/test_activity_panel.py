@@ -1,10 +1,20 @@
 import pytest
 from textual.app import App, ComposeResult
 from argos_agent.tui.widgets.activity_panel import ActivityPanel
+from argos_agent.tui.theme import ARGOS_NIGHT
 from argos_agent.core.types import ModelTierName  # noqa
 
 
 class _H(App):
+    """最小测试宿主:注入 ARGOS_NIGHT tokens 以便 DEFAULT_CSS 中 $token 可解析。"""
+
+    def get_theme_variable_defaults(self) -> dict[str, str]:
+        """把 ARGOS_NIGHT.variables 作为 CSS token 兜底注入。"""
+        defaults = super().get_theme_variable_defaults()
+        if ARGOS_NIGHT.variables:
+            defaults.update(ARGOS_NIGHT.variables)
+        return defaults
+
     def compose(self) -> ComposeResult:
         yield ActivityPanel(id="ap", model_label="MiniMax-M3", tier="worker")
 
@@ -104,7 +114,7 @@ async def test_panel_is_scrollable():
 @pytest.mark.asyncio
 async def test_section_title_not_transparent():
     """修复:区块标题此前 border-title-color 落到透明默认(alpha=0)完全看不见;
-    须为不透明可读色($foreground)。"""
+    须为不透明可读色($eye-soft)。"""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -125,6 +135,155 @@ async def test_in_progress_phase_shows_ellipsis_not_zero():
         sec = str(ap._sections()[1].content)  # 任务进度区
         assert "0.0s" not in sec, "进行中阶段不应显 0.0s"
         assert "…" in sec, "进行中阶段应显占位 …"
+
+
+# ── v3 视觉更新:字形词典断言 ─────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_phase_glyphs_v3():
+    """v3 字形词典:plan=◔ act=◉ verify=❂ report=◕(spec §3.1)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.on_phase("plan", 0)
+        ap.on_phase("act", 1)
+        ap.on_phase("verify", 2)
+        ap.on_phase("report", 3)
+        snap = ap.snapshot_text()
+        # 新字形应出现
+        assert "◔" in snap, "plan 阶段应用 ◔ 字形(v3 §3.1)"
+        assert "◉" in snap, "act 阶段应用 ◉ 字形(v3 §3.1)"
+        assert "❂" in snap, "verify 阶段应用 ❂ 字形(v3 §3.1)"
+        assert "◕" in snap, "report 阶段应用 ◕ 字形(v3 §3.1)"
+        # 被处决字形不应出现
+        assert "✦" not in snap, "✦ 已被处决(v3),不应出现"
+        assert "◇" not in snap, "◇ 已被处决(v3),不应出现"
+
+
+@pytest.mark.asyncio
+async def test_empty_state_uses_lenticular_glyph():
+    """空态一律用 ◌ + $ink-faint(spec §4.8);被处决字形不出现。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        # reset 后,多个区段应显 ◌ 空态
+        ap.reset_run()
+        await pilot.pause()
+        snap = ap.snapshot_text()
+        assert "◌" in snap, "空态应用 ◌ 字形(v3 §3.1 空态/未配置)"
+
+
+@pytest.mark.asyncio
+async def test_width_is_34():
+    """v3 宽度 32→34(裁决:容纳四列对齐网格,spec §4.8)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        # DEFAULT_CSS width:34
+        assert "34" in ap.DEFAULT_CSS, "v3 ActivityPanel width 应为 34"
+
+
+@pytest.mark.asyncio
+async def test_no_border_left_uses_background_for_separation():
+    """v3 用背景色差分栏,不画竖线:DEFAULT_CSS 不含 border-left(spec §4.8 b)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        assert "border-left" not in ap.DEFAULT_CSS, \
+            "v3 ActivityPanel 应用背景色差分栏,不用 border-left"
+
+
+@pytest.mark.asyncio
+async def test_cache_sparkline_in_cost_section():
+    """on_cost(cache_read>0) → snapshot_text 含 sparkline 字符(▁▂▃▄▅▆▇,spec §4.8 a)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        for i in range(5):
+            ap.on_cost(tokens_in=1000 * (i + 1), tokens_out=300, cost_usd=0.01,
+                       elapsed_s=1.0, cache_read=2000 * (i + 1))
+        await pilot.pause()
+        snap = ap.snapshot_text()
+        # sparkline 字符之一应出现
+        sparkline_chars = "▁▂▃▄▅▆▇█"
+        assert any(c in snap for c in sparkline_chars), \
+            f"on_cost(cache_read>0) 应产出 sparkline,实际 {snap!r}"
+
+
+@pytest.mark.asyncio
+async def test_compacted_event_new_method():
+    """on_compacted 是纯新增方法,调用后 snapshot_text 含 ↯ 压缩行(spec §4.8 c)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        # 方法必须存在
+        assert hasattr(ap, "on_compacted"), "ActivityPanel 必须有 on_compacted 方法"
+        ap.on_compacted(before=12, after=4, reduction_pct=22.0)
+        await pilot.pause()
+        snap = ap.snapshot_text()
+        assert "↯" in snap, "on_compacted 后 snapshot_text 应含 ↯ 压缩符"
+        assert "22" in snap, "压缩百分比应显示"
+
+
+@pytest.mark.asyncio
+async def test_pruned_event_new_method():
+    """on_pruned 是纯新增方法,调用后 snapshot_text 含修剪信息(spec §4.8 c)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        assert hasattr(ap, "on_pruned"), "ActivityPanel 必须有 on_pruned 方法"
+        ap.on_pruned(before=10, after=7, removed=3)
+        await pilot.pause()
+        snap = ap.snapshot_text()
+        assert "3" in snap, "on_pruned 后 snapshot_text 应含被移除条数"
+
+
+@pytest.mark.asyncio
+async def test_memory_recall_new_method():
+    """on_memory_recall 是纯新增方法,调用后 Run 区段含召回信息(spec §4.8 c)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        assert hasattr(ap, "on_memory_recall"), "ActivityPanel 必须有 on_memory_recall 方法"
+        ap.on_memory_recall(hits=5)
+        await pilot.pause()
+        snap = ap.snapshot_text()
+        assert "5" in snap, "on_memory_recall 后 snapshot_text 应含召回条数"
+
+
+@pytest.mark.asyncio
+async def test_receipt_no_emoji():
+    """v3:回执区段不得包含处决 emoji(🧾 等),改用纯文字(spec §3.3)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.on_receipt("read_file")
+        await pilot.pause()
+        snap = ap.snapshot_text()
+        assert "🧾" not in snap, "v3 回执区段不得用 🧾 emoji(已处决)"
+        assert "read_file" in snap, "工具名仍应显示"
+
+
+@pytest.mark.asyncio
+async def test_verdict_empty_state_uses_lenticular():
+    """idle/verify 视图 Verdict 区段空态显 ◌ (无)(spec §4.8 诚实空态)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.reset_run()
+        await pilot.pause()
+        snap = ap.snapshot_text()
+        assert "◌" in snap, "Verdict 空态应显 ◌ (无)"
 
 
 # ── Hooks(spec §2.4):ActivityPanel 'Hook' 区段 + 3 态渲染 + deque 50 ───────────
@@ -340,4 +499,3 @@ async def test_activity_panel_reset_run_clears_lsp_log():
         assert ap._lsp_diag_cache
         ap.reset_run()
         assert ap._lsp_diag_cache == {}
-

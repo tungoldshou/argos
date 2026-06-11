@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from textual.color import Color
 
-IDLE_BORDER = Color(60, 60, 70)        # #3c3c46 中性灰(idle 灭)
+IDLE_BORDER = Color(46, 49, 66)        # #2E3142 = $hairline-lit(idle 灭,v3 token 对齐)
 SUCCESS = Color(158, 206, 106)         # $success
 WARNING = Color(224, 175, 104)         # $warning 暖橙
 ERROR = Color(247, 118, 142)           # $error

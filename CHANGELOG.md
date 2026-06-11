@@ -8,6 +8,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **TUI v3「黑曜石之眼」(Obsidian Eye) 全面重设计**:**视觉系统从 27 行 theme 升级为完整 design token 体系,百眼母题成为贯穿全系统的状态语言**。设计过程:3 个 opus 设计方向(瞭望塔仪表/黑曜石极简/百眼签名)并行探索 → 3 镜头评审(美学/Textual 可实现性/产品灵魂)→ 裁决综合 = **B 底盘 + C 签名 + A 仪表**。**核心架构**:
+  - **Design tokens**(`tui/theme.py` 27→100+ 行):背景 4 层纵深(`$abyss/$well/$stream/$raise`)+ 墨色 5 阶亮度阶梯(`$ink-bright→$ink-ghost`,纵深引擎)+ 发丝线 2 档 + 金系 3 档(`$eye-soft/$eye/$eye-glow`)+ 语义色(`$pass/$pass-weak/$fail/$unverif/$cyan`);**金橙分家**:chrome 注意力金 #D9A85C 与 unverifiable 橙 #FF9E64 拉开,YOLO 徽标改红(危险态);主题注册名 `argos-night` 不变
+  - **眼睛状态机**(百眼母题,全 EAW=N 实测安全字形):`◌`未睁/空态 `◓`等审批 `◔`plan `◉`act `❂`verify `◕`report/done `◍`格纹瞳(self-verified 专用);**v2 emoji 全部处决**(🟢⏳→⏵⏸⏹+眼系),⚠ 强制 VS15 文本形 `⚠︎`,根治宽度对齐灾难
+  - **VerdictBadge 四态四重冗余**(诚实核心):passed `◉`绿 / failed `◉`红+detail / unverifiable `◔`橙+"无法验证"三重冗余 / **self-verified `◍`去饱和绿+强制"⤷ 非用户级 verify,未晋级"注解行**(E4 防火墙可视化);verdict 正文带 verify_cmd/attempts/detail
+  - **StatusBar 状态眼 + 渲染优先级状态机**:最左永远一只眼;用户阻塞(◓审批挂起)> 告警锁色(failed/error 红、unverifiable/escalation 橙——三态语义纯度)> 阶段眼;`set_blocked/set_alert(kind)` 新公开 API
+  - **ActivityPanel 34 列仪表盘**:四列对齐网格(标签8·读数7·条11·尾注6)+ 上下文四桶八分块水位 + cache 青色 sparkline(冷=省钱)+ compaction/pruned 行;空态一律 `◌` 绝不预填
+  - **新接线**:`CompactedEvent`/`PrunedEvent` 进 TUI(压缩可见)、记忆召回提示行、审批卡决策后自毁为 `◕ 审批 <action> → <decision>` 一行叙事、睁眼仪式启动(无 key 永远停在 `◌` 不睁眼=启动诚实)
+  - **施工方式**:9 个文件不相交施工包(P1 theme 地基→P2-P8 七包并行→P9 app.py 接线+跨切测试清扫),sonnet 施工/opus 接线与对抗终审/haiku 跑测试;终审 6 项字形违规全数修复;设计 spec 986 行(`docs/superpowers/specs/2026-06-11-argos-tui-v3-design.md`),产品总设计 v6(`2026-06-11-argos-v6-complete-product-design.md`)
 - **打包 C 阶段 — PyPI + Linux/Windows + 全包管理 (#13)**:**让"用啥系统都能装上、升级快、可信源"成为可能**,从 B 阶段(macOS arm64 单 .app + curl install.sh)扩到 6 个 OS 通道。**核心架构**:
   - **PyPI 发布通电**(`pyproject.toml` 扩展 + `.github/workflows/publish.yml` 新):`license` (MIT)/ `authors`/`keywords`/`classifiers`/`urls` 字段补齐(spec D1/D9/D14);`[project.scripts]` 加 `argospkg = "argos_agent.cli.pkg:main"` 走打包工具 dispatcher(spec D8);sdist 显式 include `README/LICENSE/CHANGELOG/packaging/VERSION/Info.plist/argos.spec`(spec D10);OIDC Trusted Publishing 主推 + `PYPI_API_TOKEN` token fallback(spec D6);`uv build` 出 wheel + sdist,`uv venv` + `uv pip install ./dist/*.whl` 端到端铁证
   - **`argospkg` dispatcher**(`argos_agent/cli/pkg.py` 新,`#13` 唯一新加业务文件):`info` 印 pyproject + packaging/VERSION + git tag;`check` 验 self + `argos_agent.__main__` import;`manifest` 预演 winget manifest;**0 改** `__main__.py` 主 `argos` 启动路径

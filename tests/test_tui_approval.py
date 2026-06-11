@@ -9,6 +9,7 @@ from textual.app import App, ComposeResult
 
 from argos_agent.approval import ApprovalGate, ApprovalLevel, Decision
 from argos_agent.tui.events import ApprovalRequest
+from argos_agent.tui.theme import ARGOS_NIGHT
 from argos_agent.tui.widgets.inline_choice import InlineChoice
 
 
@@ -59,12 +60,23 @@ _TOOL_OPTIONS = [
 
 
 class _ChoiceHost(App):
-    """挂一个工具审批 InlineChoice 的临时宿主(对位旧 _ModalHost)。"""
+    """挂一个工具审批 InlineChoice 的临时宿主(对位旧 _ModalHost)。
+
+    注入 argos-night token:InlineChoice DEFAULT_CSS 引用 $raise/$unverif 等 v3 token,
+    需在 CSS 解析前(即 get_theme_variable_defaults)注入才能解析。
+    """
 
     def __init__(self, req: ApprovalRequest) -> None:
         super().__init__()
         self._req = req
         self.result: str | None = None
+
+    def get_theme_variable_defaults(self) -> dict[str, str]:
+        """把 ARGOS_NIGHT variables 作为 CSS token 兜底注入。"""
+        defaults = super().get_theme_variable_defaults()
+        if ARGOS_NIGHT.variables:
+            defaults.update(ARGOS_NIGHT.variables)
+        return defaults
 
     def compose(self) -> ComposeResult:
         yield InlineChoice(

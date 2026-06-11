@@ -1,13 +1,28 @@
 # tests/test_code_action_block.py
 import pytest
 from textual.app import App, ComposeResult
+from argos_agent.tui.theme import ARGOS_NIGHT
 from argos_agent.tui.widgets.code_action import CodeActionBlock
 
 
 class _H(App):
+    """最小测试宿主：注入 argos-night token 以便 DEFAULT_CSS 中 $token 在 CSS 解析阶段可用。
+
+    get_theme_variable_defaults() 在 DEFAULT_CSS 首次解析前运行，
+    是让自定义 $token 在测试环境中可用的唯一手段。
+    """
+
+    def get_theme_variable_defaults(self) -> dict[str, str]:
+        """把 ARGOS_NIGHT.variables 作为 CSS token 兜底注入。"""
+        defaults = super().get_theme_variable_defaults()
+        if ARGOS_NIGHT.variables:
+            defaults.update(ARGOS_NIGHT.variables)
+        return defaults
+
     def __init__(self):
         super().__init__()
         self.block = CodeActionBlock(code="write_file('a','b')", step=2)
+
     def compose(self) -> ComposeResult:
         yield self.block
 

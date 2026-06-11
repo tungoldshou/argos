@@ -20,8 +20,11 @@ from textual import events
 from textual.message import Message
 from textual.widgets import Static, TextArea
 
-_ACCENT = "#E0AF68"
-_MUTED = "#565F89"
+# Rich Text 层无法引用 CSS $token 名,直接用 hex 值(与 theme.py 对应 token 保持同步)
+_EYE        = "#D9A85C"   # $eye:▸ 选中光标 / 选中项名
+_INK_DIM    = "#7E869C"   # $ink-dim:说明文字
+_INK_FAINT  = "#525A73"   # $ink-faint:键提示行
+_INK_BRIGHT = "#ECEEF5"   # $ink-bright:选中项名 bold
 
 
 class PromptArea(TextArea):
@@ -35,7 +38,7 @@ class PromptArea(TextArea):
             super().__init__()
 
     DEFAULT_CSS = """
-    PromptArea { height: auto; max-height: 8; }
+    PromptArea { height: auto; max-height: 8; background: $well; }
     """
 
     def __init__(self, **kwargs) -> None:
@@ -102,8 +105,13 @@ class SlashMenu(Static):
     SlashMenu {
         display: none;
         height: auto; max-height: 10;
-        margin: 0 1; padding: 0 1;
-        background: $surface; border: round $primary;
+        margin: 0 2; padding: 0 1;
+        background: $raise; border: round $hairline-lit;
+    }
+    SlashMenu .menu-selected {
+        background: $raise-2;
+        color: $ink-bright;
+        text-style: bold;
     }
     """
 
@@ -142,14 +150,23 @@ class SlashMenu(Static):
         self.display = True
 
     def _render_items(self) -> None:
+        """渲染 slash 菜单条目。
+
+        选中行:▸ $eye bold + 名 $ink-bright bold;其余:无前缀 + 名 $ink-dim。
+        说明文字 $ink-dim;键提示行 $ink-faint。
+        """
         t = Text()
         for i, (name, desc) in enumerate(self._matches):
             cur = i == self._cursor
-            t.append("▸ " if cur else "  ", style=f"bold {_ACCENT}")
-            t.append(f"/{name:<16}", style=f"bold {_ACCENT}" if cur else None)
-            t.append(f" {desc}", style=_MUTED)
+            if cur:
+                t.append("▸ ", style=f"bold {_EYE}")
+                t.append(f"/{name:<16}", style=f"bold {_INK_BRIGHT}")
+            else:
+                t.append("  ", style=None)
+                t.append(f"/{name:<16}", style=_INK_DIM)
+            t.append(f" {desc}", style=_INK_DIM)
             t.append("\n")
-        t.append("  ↑↓ 选择 · ↹ 补全 · ↵ 执行", style=_MUTED)
+        t.append("  ↑↓ 选择 · ↹ 补全 · ↵ 执行", style=_INK_FAINT)
         self.update(t)
 
     def hide(self) -> None:

@@ -5,6 +5,7 @@ import pytest
 from textual.app import App, ComposeResult
 
 from argos_agent.core.types import Verdict
+from argos_agent.tui.theme import ARGOS_NIGHT
 from argos_agent.tui.widgets.code_action import CodeActionBlock
 from argos_agent.tui.widgets.diff_view import DiffView
 from argos_agent.tui.widgets.verdict_badge import VerdictBadge
@@ -16,6 +17,13 @@ class _Host(App):
     def __init__(self, widget) -> None:
         super().__init__()
         self._w = widget
+
+    def get_theme_variable_defaults(self) -> dict[str, str]:
+        # v3 黑曜石 token($raise/$ink-ghost/$pass-weak/$hairline-lit 等)须在 DEFAULT_CSS
+        # 解析阶段即可解析,否则 widget DEFAULT_CSS 抛 UnresolvedVariableError。register_theme
+        # 在 on_mount 太晚(compose 时 CSS 已解析),故在变量默认值层注入(与 test_status_bar.py
+        # 等成熟测试同模式)。
+        return ARGOS_NIGHT.variables
 
     def compose(self) -> ComposeResult:
         yield self._w
@@ -62,10 +70,10 @@ async def test_diff_view_renders_added_removed_counts():
     app = _Host(dv)
     async with app.run_test() as pilot:
         await pilot.pause()
-        # ⏺ header + path + +N/−M 计数(spec §widget 改造:不再手画 ┌ ASCII box)
-        assert "⏺" in str(dv.border_title)
-        assert "auth.py" in str(dv.border_title)
-        assert "+3" in str(dv.border_subtitle) and "-1" in str(dv.border_subtitle)
+        # TUI v3(spec §4.5):border_title 纯文字 "Edit · {path}"(⏺ 前缀去掉,仅左缘一线),
+        # border_subtitle 减号用 U+2212(−,真数学减号),非 ASCII '-'。
+        assert str(dv.border_title) == "Edit · auth.py"
+        assert "+3" in str(dv.border_subtitle) and "−1" in str(dv.border_subtitle)
 
 
 @pytest.mark.asyncio
@@ -97,7 +105,7 @@ async def test_status_bar_always_on_fields():
     app = _Host(bar)
     async with app.run_test() as pilot:
         await pilot.pause()
-        # TUI v2 去噪:不再有 "phase:" 前缀,改为 字形+阶段名(◇/✦/·)
+        # TUI v3 状态眼:阶段眼字形 + 阶段名(◌idle),动作计数走 "动作N" 文字(⚙ 处决,spec §4.9)
         assert "idle" in bar.render_text
         assert "$0" in bar.render_text
         bar.set_phase("verify", actions=3)
@@ -105,7 +113,7 @@ async def test_status_bar_always_on_fields():
         await pilot.pause()
         t = bar.render_text
         assert "verify" in t
-        assert "⚙3" in t
+        assert "动作3" in t
         assert "12.4k" in t and "3.1k" in t
         assert "$0.013" in t
         assert "4.2s" in t

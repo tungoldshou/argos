@@ -1,6 +1,6 @@
 """WorkflowPanel:Dynamic Workflows 实时进度树(Task 12)。
 
-挂进 transcript:标题行「⚙ 工作流:<name>」+ 每个子 agent 一行「<agent_id> <phase>」。
+挂进 transcript:标题行「工作流:<name>」+ 每个子 agent 一行「<agent_id> <phase>」。
 update_progress(agent_id, phase, note) 刷新单 agent 阶段;finish(synthesis, notes) 标完成。
 
 诚实铁律:
@@ -22,12 +22,12 @@ _PHASE_TEXT = {
     "error": "失败",
 }
 _PHASE_GLYPH = {
-    "plan": "◇",
-    "act": "▶",
-    "verify": "✦",
-    "report": "◇",
-    "done": "✓",
-    "error": "✗",
+    "plan": "◔",
+    "act": "◉",
+    "verify": "❂",
+    "report": "◕",
+    "done": "◕",
+    "error": "◉",
 }
 
 
@@ -79,7 +79,7 @@ class WorkflowPanel(Static):
 
     def _compose_text(self) -> str:
         """组装进度树纯文本。注:方法名避开 Textual Widget._render(覆盖它会让渲染返回 None 崩)。"""
-        head = "⚙ 工作流:" + self._name
+        head = "工作流:" + self._name
         if self._done:
             head += "(完成)"
         lines = [head]

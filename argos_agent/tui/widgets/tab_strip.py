@@ -1,14 +1,15 @@
-"""TUI TabStrip widget(#5b §6)——顶部 tab 条显示多 run 状态。
+"""TUI TabStrip widget(v3 spec §4.x)——顶部 tab 条显示多 run 状态。
 
 特性:
-  · 每个 tab 显示图标 + goal[:24] + cost
+  · 每个 tab 显示状态字形 + goal[:24] + cost
   · 点击 tab → TabActivated(run_id) 消息
   · 键盘 Ctrl+1..5 / Ctrl+Tab / Ctrl+Shift+Tab
-  · active tab 用 $accent 暖橙背景
+  · active tab 用底色块 $raise-2(不用 [reverse])
   · 顺序按 created_at 升序(老 tab 左,新 tab 右)
 
-视觉规范(spec §6.1):
-  🟢 running / 🟡 paused / ⚪ suspended / 🔴 failed / ❌ cancelled / ✓ completed / ⏳ pending
+视觉规范(v3 spec §4.x, emoji 全处决):
+  ◌ pending / ⏵ running / ⏸ paused / ⏹ suspended|cancelled /
+  ◕ completed / ◉ failed($fail 色)
 """
 from __future__ import annotations
 
@@ -18,14 +19,15 @@ from textual.message import Message
 from textual.widgets import Static
 
 
+# v3 spec §4.x: emoji 全处决，改用等宽安全字形(EAW=N)
 _STATE_ICON = {
-    "pending": "⏳",
-    "running": "🟢",
-    "paused": "🟡",
-    "suspended": "⚪",
-    "completed": "✓",
-    "failed": "🔴",
-    "cancelled": "❌",
+    "pending":   "◌",   # 空态/未睁
+    "running":   "⏵",   # 运行控制:播放
+    "paused":    "⏸",   # 运行控制:暂停
+    "suspended": "⏹",   # 运行控制:停止
+    "completed": "◕",   # 阅毕眼
+    "failed":    "◉",   # 注视眼(红,$fail 色)
+    "cancelled": "⏹",   # 运行控制:停止
 }
 
 
@@ -60,13 +62,13 @@ class TabStrip(Static):
     DEFAULT_CSS = """
     TabStrip {
         height: 1;
-        background: $surface;
-        color: $text-muted;
-        padding: 0 1;
+        background: $well;
+        color: $ink-dim;
+        padding: 0 2;
     }
     TabStrip .tab-active {
-        background: $accent;
-        color: $background;
+        background: $raise-2;
+        color: $ink-bright;
         text-style: bold;
     }
     """
@@ -98,7 +100,7 @@ class TabStrip(Static):
             rendered.append({
                 "run_id": t["run_id"],
                 "title": _truncate(t.get("goal", ""), 24),
-                "icon": _STATE_ICON.get(t.get("state", "pending"), "⏳"),
+                "icon": _STATE_ICON.get(t.get("state", "pending"), "◌"),
                 "cost": _format_cost(t.get("cost_usd")),
                 "state": t.get("state", "pending"),
             })
@@ -112,13 +114,21 @@ class TabStrip(Static):
         self.refresh()
 
     def render(self) -> str:
+        """渲染 tab 条为 Rich markup 字符串。
+
+        active tab 用底色块 $raise-2 + $ink-bright bold(v3 spec §4.x 裁决:不用 [reverse])。
+        hex 值与 theme.py 中对应 token 对齐:
+          $raise-2 = #23263A, $ink-bright = #ECEEF5
+        Rich Text 层无法引用 CSS $token 名,直接用 hex。
+        """
         if not self._tabs:
             return "(no runs)"
         parts = []
         for t in self._tabs:
             seg = f"{t['icon']} {t['title']} {t['cost']}"
             if t["run_id"] == self._active:
-                seg = f"[reverse] {seg} [/reverse]"
+                # 底色块: bold + $ink-bright 字 + $raise-2 底;不用 [reverse]
+                seg = f"[bold #ECEEF5 on #23263A] {seg} [/bold #ECEEF5 on #23263A]"
             parts.append(seg)
         return "  ".join(parts)
 
@@ -126,7 +136,7 @@ class TabStrip(Static):
 
     def on_click(self, event) -> None:
         """点击 tab → 找最近 run_id → 派消息。"""
-        x = event.x - 1   # padding 1
+        x = event.x - 2   # padding 2(v3 spec §4.x)
         if x < 0 or not self._tabs:
             return
         # 算每个 tab 的 x 区间

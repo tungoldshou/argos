@@ -1,9 +1,10 @@
-"""TabStrip widget 单元测试(#5b T7 widget 部分)。"""
+"""TabStrip widget 单元测试(v3 spec §4.x)。"""
 from __future__ import annotations
 
 import pytest
 from textual.app import App, ComposeResult
 
+from argos_agent.tui.theme import ARGOS_NIGHT
 from argos_agent.tui.widgets.tab_strip import (
     TabActivated,
     TabStrip,
@@ -46,19 +47,31 @@ def test_truncate_long():
 
 
 def test_state_icon_known_states():
-    assert _STATE_ICON["running"] == "🟢"
-    assert _STATE_ICON["paused"] == "🟡"
-    assert _STATE_ICON["suspended"] == "⚪"
-    assert _STATE_ICON["failed"] == "🔴"
-    assert _STATE_ICON["cancelled"] == "❌"
-    assert _STATE_ICON["completed"] == "✓"
-    assert _STATE_ICON["pending"] == "⏳"
+    # v3 spec §4.x: emoji 全处决，改用等宽安全字形
+    assert _STATE_ICON["running"] == "⏵"
+    assert _STATE_ICON["paused"] == "⏸"
+    assert _STATE_ICON["suspended"] == "⏹"
+    assert _STATE_ICON["failed"] == "◉"
+    assert _STATE_ICON["cancelled"] == "⏹"
+    assert _STATE_ICON["completed"] == "◕"
+    assert _STATE_ICON["pending"] == "◌"
 
 
 # ── widget 行为(用 App 包装跑事件)─────────────────────────────────
 
 
 class _TabApp(App):
+    """测试用 App:注册 argos-night 主题,确保 v3 CSS token($well/$ink-dim/$raise-2 等)可解析。
+
+    主题必须在 compose(DOM 构建)之前注册——Textual 事件顺序 Compose→Load→Mount,
+    widget DEFAULT_CSS 在 compose 时解析。在 __init__ 中注册与主 App 保持一致。
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_theme(ARGOS_NIGHT)
+        self.theme = "argos-night"
+
     def compose(self) -> ComposeResult:
         yield TabStrip(id="tabs")
 
@@ -85,7 +98,7 @@ async def test_tab_strip_renders_5_tabs():
         out = strip.render()
         assert "goal-0" in out
         assert "goal-4" in out
-        assert "🟢" in out
+        assert "⏵" in out
 
 
 @pytest.mark.asyncio
@@ -99,9 +112,11 @@ async def test_tab_strip_renders_with_active_highlight():
         ]
         strip.update_tabs(tabs, active="b" * 12)
         out = strip.render()
-        # active tab 应用 [reverse] 包裹
-        assert "[reverse]" in out
+        # v3 spec §4.x: active tab 用底色块(不用 [reverse]);内容仍在输出中
+        assert "[reverse]" not in out
         assert "beta" in out
+        # active tab 有高亮标记(bold on $raise-2)
+        assert "bold" in out.lower() or "#23263A" in out or "on #" in out
 
 
 @pytest.mark.asyncio
@@ -120,7 +135,8 @@ async def test_tab_strip_icon_for_each_state():
         ]
         strip.update_tabs(tabs)
         out = strip.render()
-        for icon in ["🟢", "🟡", "⚪", "🔴", "❌", "✓", "⏳"]:
+        # v3 spec §4.x: 所有状态字符均为等宽安全字形，无 emoji
+        for icon in ["⏵", "⏸", "⏹", "◉", "◕", "◌"]:
             assert icon in out
 
 

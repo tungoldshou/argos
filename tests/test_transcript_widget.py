@@ -1,12 +1,26 @@
 # tests/test_transcript_widget.py
+"""Transcript widget 测试:行为契约(不动语义) + v3 视觉断言。
+
+v3 更新点:
+  - 系统行前缀:◕(done)、◉(error)、⚠︎(escalation)、◌(system/faint)
+  - 回合分隔字符:╌ (U+254C 半虚线)
+  - UserMessage._render_markup is False 契约保持
+"""
 import pytest
 from textual.app import App, ComposeResult
+from argos_agent.tui.theme import ARGOS_NIGHT
 from argos_agent.tui.widgets.transcript import (
     Transcript, UserMessage, AssistantMessage, SystemLine,
 )
 
 
 class _Harness(App):
+    def __init__(self) -> None:
+        super().__init__()
+        # v3 token($ink-dim/$fail/$pass 等)须在 compose 之前注册
+        self.register_theme(ARGOS_NIGHT)
+        self.theme = "argos-night"
+
     def compose(self) -> ComposeResult:
         yield Transcript(id="t")
 
@@ -55,11 +69,36 @@ async def test_append_line_mounts_system_line():
     app = _Harness()
     async with app.run_test() as pilot:
         t = app.query_one("#t", Transcript)
-        await t.append_line("❌ 错误:boom", kind="error")
+        await t.append_line("◉ 错误:boom", kind="error")
         await pilot.pause()
         lines = list(app.query(SystemLine))
         assert len(lines) == 1
         assert "boom" in t.rendered_text
+
+
+@pytest.mark.asyncio
+async def test_system_line_prefixes_v3():
+    """v3 视觉断言:系统行前缀字形正确(◕/◉/⚠︎/◌)。"""
+    app = _Harness()
+    async with app.run_test() as pilot:
+        t = app.query_one("#t", Transcript)
+        await t.append_line("◕ run 完成 · 1.0s", kind="done")
+        await t.append_line("◉ 模型连接中断:timeout", kind="error")
+        await t.append_line("⚠︎ 连续 3 次 verify 失败", kind="escalation")
+        await t.append_line("◌ 已压缩 -38%", kind="system")
+        await pilot.pause()
+        text = t.rendered_text
+        assert "◕" in text,  "done 行应含 ◕ 阅毕眼"
+        assert "◉" in text,  "error 行应含 ◉ 红瞳"
+        assert "⚠︎" in text, "escalation 行应含 ⚠︎ (VS15)"
+        assert "◌" in text,  "system/faint 行应含 ◌ 空态"
+
+
+@pytest.mark.asyncio
+async def test_user_message_markup_false():
+    """契约5:UserMessage._render_markup is False。"""
+    msg = UserMessage("list[int] dict[str,Any] [/invalid-tag]")
+    assert msg._render_markup is False, "UserMessage 必须关 Rich markup 防注入崩溃"
 
 
 @pytest.mark.asyncio

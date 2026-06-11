@@ -1,16 +1,42 @@
 # tests/test_status_bar.py
+"""StatusBar v3「黑曜石之眼」测试套件。
+
+覆盖：
+- 阶段眼字符映射（◔plan / ◉act / ❂verify / ◕report / ◌idle）
+- set_blocked(True) → ◓开头 + 含"审批挂起"，即便 phase=verify
+- set_alert(True) → CSS 类 -alert 加持
+- ctx≥80% → -ctx-warn；ctx≥95% → -ctx-crit
+- 不变 API 兼容（行为契约）
+"""
 import pytest
 from textual.app import App, ComposeResult
+
+from argos_agent.tui.theme import ARGOS_NIGHT
 from argos_agent.tui.widgets.status_bar import StatusBar
 
 
 class _H(App):
+    """最小测试宿主：注入 argos-night token 以便 DEFAULT_CSS 中 $token 名能在 CSS 解析阶段解析。
+
+    override get_theme_variable_defaults() 是在 CSS 解析前就让 $token 可用的唯一手段——
+    register_theme + self.theme 发生在 on_mount，晚于 DEFAULT_CSS 首次解析。
+    """
+
+    def get_theme_variable_defaults(self) -> dict[str, str]:
+        """把 ARGOS_NIGHT variables 作为 CSS token 兜底注入。"""
+        defaults = super().get_theme_variable_defaults()
+        if ARGOS_NIGHT.variables:
+            defaults.update(ARGOS_NIGHT.variables)
+        return defaults
+
     def compose(self) -> ComposeResult:
         yield StatusBar(id="sb")
 
 
+# ── 旧兼容（不变 API）────────────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_status_bar_shows_phase_actions_elapsed():
+    """不变 API：set_phase / set_cost → render_text 含阶段/动作/耗时。"""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -20,3 +46,243 @@ async def test_status_bar_shows_phase_actions_elapsed():
         await pilot.pause()
         t = sb.render_text
         assert "verify" in t and "3" in t and "4.2" in t
+
+
+# ── 阶段眼字符映射（v3 §4.9 + §8.4）────────────────────────────────
+@pytest.mark.asyncio
+async def test_phase_eye_plan():
+    """plan 阶段 → 眼字形 ◔。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.set_phase("plan", 0)
+        await pilot.pause()
+        assert sb.render_text.startswith("◔"), f"期望 ◔ 开头，实际：{sb.render_text!r}"
+
+
+@pytest.mark.asyncio
+async def test_phase_eye_act():
+    """act 阶段 → 眼字形 ◉。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.set_phase("act", 2)
+        await pilot.pause()
+        assert sb.render_text.startswith("◉"), f"期望 ◉ 开头，实际：{sb.render_text!r}"
+
+
+@pytest.mark.asyncio
+async def test_phase_eye_verify():
+    """verify 阶段 → 眼字形 ❂。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.set_phase("verify", 5)
+        await pilot.pause()
+        assert sb.render_text.startswith("❂"), f"期望 ❂ 开头，实际：{sb.render_text!r}"
+
+
+@pytest.mark.asyncio
+async def test_phase_eye_report():
+    """report 阶段 → 眼字形 ◕。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.set_phase("report", 1)
+        await pilot.pause()
+        assert sb.render_text.startswith("◕"), f"期望 ◕ 开头，实际：{sb.render_text!r}"
+
+
+@pytest.mark.asyncio
+async def test_phase_eye_idle():
+    """idle 阶段 → 眼字形 ◌。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        # 默认即 idle
+        await pilot.pause()
+        assert sb.render_text.startswith("◌"), f"期望 ◌ 开头，实际：{sb.render_text!r}"
+
+
+# ── 优先级状态机（v3 §8.4 裁决铁律）────────────────────────────────
+@pytest.mark.asyncio
+async def test_set_blocked_overrides_verify_phase():
+    """用户阻塞态优先级最高：phase=verify 但 set_blocked(True) → ◓ 开头 + 含"审批挂起"。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.set_phase("verify", 5)
+        sb.set_blocked(True)
+        await pilot.pause()
+        t = sb.render_text
+        assert t.startswith("◓"), f"blocked 时期望 ◓ 开头，实际：{t!r}"
+        assert "审批挂起" in t, f"blocked 时期望含'审批挂起'，实际：{t!r}"
+
+
+@pytest.mark.asyncio
+async def test_set_blocked_false_restores_phase():
+    """set_blocked(False) → 恢复阶段眼（◉ act）。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.set_phase("act", 2)
+        sb.set_blocked(True)
+        sb.set_blocked(False)
+        await pilot.pause()
+        t = sb.render_text
+        assert t.startswith("◉"), f"blocked=False 后期望 ◉ 开头，实际：{t!r}"
+
+
+@pytest.mark.asyncio
+async def test_set_alert_adds_css_class():
+    """set_alert(True) → widget 上有 -alert CSS 类。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.set_phase("verify", 5)
+        sb.set_alert(True)
+        await pilot.pause()
+        assert sb.has_class("-alert"), "set_alert(True) 后期望 CSS 类 -alert"
+
+
+@pytest.mark.asyncio
+async def test_set_alert_false_removes_css_class():
+    """set_alert(False) → 移除 -alert CSS 类。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.set_alert(True)
+        sb.set_alert(False)
+        await pilot.pause()
+        assert not sb.has_class("-alert"), "set_alert(False) 后期望无 -alert 类"
+
+
+@pytest.mark.asyncio
+async def test_alert_does_not_override_phase_eye_glyph():
+    """告警锁色时眼仍随阶段（字形不变为 ◓），整条锁红靠 CSS。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.set_phase("act", 3)
+        sb.set_alert(True)
+        await pilot.pause()
+        t = sb.render_text
+        # alert 时眼仍随阶段（◉），不是 ◓（◓ 只属于 blocked）
+        assert t.startswith("◉"), f"alert 时阶段眼应保持 ◉，实际：{t!r}"
+
+
+@pytest.mark.asyncio
+async def test_blocked_beats_alert():
+    """blocked > alert 优先级：两者同时 True → ◓。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.set_phase("verify", 5)
+        sb.set_alert(True)
+        sb.set_blocked(True)
+        await pilot.pause()
+        t = sb.render_text
+        assert t.startswith("◓"), f"blocked+alert 时期望 ◓ 优先，实际：{t!r}"
+
+
+# ── ctx 压力 CSS 类（v3 §4.9 d）──────────────────────────────────
+@pytest.mark.asyncio
+async def test_ctx_warn_at_80_percent():
+    """ctx≥80% → CSS 类 -ctx-warn。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.update_ctx_pressure(0.80)
+        await pilot.pause()
+        assert sb.has_class("-ctx-warn"), "ctx=80% 期望 -ctx-warn"
+        assert not sb.has_class("-ctx-crit"), "ctx=80% 不应有 -ctx-crit"
+
+
+@pytest.mark.asyncio
+async def test_ctx_crit_at_95_percent():
+    """ctx≥95% → CSS 类 -ctx-crit（且不保留 -ctx-warn）。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.update_ctx_pressure(0.95)
+        await pilot.pause()
+        assert sb.has_class("-ctx-crit"), "ctx=95% 期望 -ctx-crit"
+
+
+@pytest.mark.asyncio
+async def test_ctx_below_80_no_warn():
+    """ctx<80% → 无 -ctx-warn / -ctx-crit。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.update_ctx_pressure(0.5)
+        await pilot.pause()
+        assert not sb.has_class("-ctx-warn"), "ctx=50% 不应有 -ctx-warn"
+        assert not sb.has_class("-ctx-crit"), "ctx=50% 不应有 -ctx-crit"
+
+
+# ── 窄屏降级（v3 §7.2）───────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_narrow_mode_includes_cost_and_ctx():
+    """<80 列降级模式：render_text 仍含阶段、成本、ctx%（不含键提示区但那是 render() 层）。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.set_phase("act", 3)
+        sb.set_cost(tokens_in=12400, tokens_out=3100, cost_usd=0.013, elapsed_s=4.2)
+        sb.update_ctx_pressure(0.34)
+        await pilot.pause()
+        t = sb.render_text
+        assert "act" in t
+        assert "$0.013" in t
+        assert "ctx 34%" in t
+
+
+# ── 动作计数文字（v3 §4.9 a："动作" 而非 ⚙）──────────────────────
+@pytest.mark.asyncio
+async def test_action_count_label():
+    """动作计数使用"动作N"文字格式（⚙ 已处决，v3 字形铁律）。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.set_phase("act", 7)
+        await pilot.pause()
+        t = sb.render_text
+        assert "动作7" in t, f"期望'动作7'，实际：{t!r}"
+        # ⚙ 是处决字形
+        assert "⚙" not in t, f"⚙ 是处决字形，不应出现：{t!r}"
+
+
+# ── set_blocked / set_alert 签名存在性（公开 API 门禁）──────────────
+def test_public_api_set_blocked_exists():
+    """set_blocked(active: bool) 必须存在（P9 接线要调用）。"""
+    import inspect
+    sig = inspect.signature(StatusBar.set_blocked)
+    params = list(sig.parameters)
+    assert "active" in params, f"set_blocked 缺 active 参数，实际：{params}"
+
+
+def test_public_api_set_alert_exists():
+    """set_alert(kind: str | None) 或 set_alert(active: bool) 必须存在。"""
+    import inspect
+    assert hasattr(StatusBar, "set_alert"), "StatusBar 缺 set_alert 公开方法"
+    sig = inspect.signature(StatusBar.set_alert)
+    params = list(sig.parameters)
+    # 第一个非 self 参数须存在
+    assert len(params) >= 2, f"set_alert 签名参数不足，实际：{params}"

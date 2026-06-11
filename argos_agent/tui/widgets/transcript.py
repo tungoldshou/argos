@@ -31,7 +31,7 @@ def strip_code_fences(text: str) -> str:
 
 class UserMessage(Static):
     DEFAULT_CSS = """
-    UserMessage { color: $text-muted; padding: 0 1; }
+    UserMessage { color: $ink-dim; padding: 0 2; }
     """
     def __init__(self, text: str) -> None:
         # markup=False:用户输入是任意文本,含 `[...]`(列表/正则/类型注解)绝不能被当
@@ -42,11 +42,11 @@ class UserMessage(Static):
 
 class SystemLine(Static):
     DEFAULT_CSS = """
-    SystemLine { padding: 0 1; }
-    SystemLine.sys-error { color: $error; }
-    SystemLine.sys-escalation { color: $warning; }
-    SystemLine.sys-done { color: $success; }
-    SystemLine.sys-system { color: $text-muted; }
+    SystemLine { padding: 0 2; }
+    SystemLine.sys-error { color: $fail; }
+    SystemLine.sys-escalation { color: $unverif; }
+    SystemLine.sys-done { color: $pass; }
+    SystemLine.sys-system { color: $ink-faint; }
     """
     def __init__(self, text: str, *, kind: str = "system") -> None:
         # markup=False:系统/错误/工具行可能含工具输出里的 `[...]`,不可被当 markup 解析(防崩)。
@@ -56,7 +56,7 @@ class SystemLine(Static):
 
 class AssistantMessage(Markdown):
     DEFAULT_CSS = """
-    AssistantMessage { background: transparent; margin: 0 0 1 0; padding: 0 1; }
+    AssistantMessage { background: transparent; margin: 0 0 1 0; padding: 0 2; }
     """
     def __init__(self) -> None:
         super().__init__("")
@@ -69,7 +69,13 @@ class AssistantMessage(Markdown):
 
 
 class Transcript(VerticalScroll):
-    """主对话区。流式 token 进 current AssistantMessage;system/user 行与块作为兄弟挂入。"""
+    """主对话区。流式 token 进 current AssistantMessage;system/user 行与块作为兄弟挂入。
+
+    DEFAULT_CSS 为 Transcript 本身设 $stream 底色(与右栏 $well 靠色差分栏,无需竖线)。
+    """
+    DEFAULT_CSS = """
+    Transcript { background: $stream; }
+    """
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)

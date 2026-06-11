@@ -69,13 +69,13 @@ def test_activity_panel_run_section_text_format():
 
 
 def test_activity_panel_run_section_empty():
-    """全 0 → '(无)'。"""
+    """全 0 → '◌ (无)'(TUI v3:空态一律 ◌ 前缀 + 最弱墨,绝不预填假数据,spec §4.8)。"""
     from argos_agent.tui.widgets.activity_panel import ActivityPanel
     panel = ActivityPanel()
     captured = {}
     panel._set = lambda idx, body: captured.setdefault(idx, body)  # type: ignore[method-assign]
     panel.on_run_summary(active=0, paused=0, suspended=0, history=0)
-    assert captured[4] == "(无)"
+    assert captured[4] == "◌ (无)"
 
 
 # ── tui/commands.py 加 'runs' ───────────────────────────────────────

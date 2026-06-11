@@ -26,6 +26,7 @@ from argos_agent.tui.events import (
     ApprovalResponse,
     CodeAction,
     CodeResult,
+    CompactedEvent,
     CostUpdate,
     Error,
     Escalation,
@@ -35,6 +36,7 @@ from argos_agent.tui.events import (
     PhaseChange,
     PlanRendered,
     PlanUpdate,
+    PrunedEvent,
     TokenDelta,
     ToolReceipt,
     VerifyVerdict,
@@ -73,21 +75,26 @@ def _app_version() -> str:
 class ArgosApp(App):
     TITLE = "Argos"
 
-    # 布局 CSS(spec §4.1:主对话区 + 右侧活动栏)。没有它时 Horizontal 退回 Textual 默认:
+    # 布局 CSS(spec §5 mockup:主对话区 + 右侧活动栏)。没有它时 Horizontal 退回 Textual 默认:
     # 空 Transcript 收缩到 width=1、侧栏撑满整宽 → 对话内容渲染进 1 列宽的 transcript,
     # 用户看到的永远是空屏(事件其实都写进去了,只是不可见)。这里显式分配:transcript 占满
-    # 剩余宽度(1fr);ActivityPanel 的固定窄栏宽度/左描边由其 DEFAULT_CSS 承担。
+    # 剩余宽度(1fr);ActivityPanel 的固定窄栏宽度由其 DEFAULT_CSS 承担。
+    #
+    # 黑曜石纵深(spec §5):Screen 底 $abyss(井底,最外),主流 Transcript $stream(亮一档),
+    # 右栏/输入 $well(暗一档)——分栏靠背景色差,不画竖线(§4.8 裁决)。idle 边框走 $hairline-lit
+    # (run 期间由 _glow_start/_set_border 接管成阶段呼吸色,收尾回 glow.IDLE_BORDER)。
     CSS = """
-    Screen { border: round #3c3c46; }
+    Screen { border: round $hairline-lit; background: $abyss; }
     #transcript {
         width: 1fr;
         height: 1fr;
+        background: $stream;
     }
     #activity {
         height: 1fr;
         display: block;
     }
-    #prompt { border: tall $primary; }
+    #prompt { border: tall $eye-soft; }
     ArgosApp.-narrow #activity { display: none; }
     """
 
@@ -116,6 +123,12 @@ class ArgosApp(App):
         gate: ApprovalGate | None = None,
     ) -> None:
         super().__init__()
+        # 主题必须在 compose(DOM 构建)之前注册并激活——Textual 8.x 的事件顺序是
+        # Compose(line 3432) → Load(line 3477) → Mount；widget DEFAULT_CSS 在 compose
+        # 时解析，若此时 argos-night 未注册，$abyss/$ink-faint 等 v3 token 将
+        # UnresolvedVariableError 导致 compose 崩溃、on_mount 永远跑不到。
+        self.register_theme(ARGOS_NIGHT)
+        self.theme = "argos-night"
         # 模型不绑定、无档位:活动栏显示的真实模型名取自 config.active_tier()(当前 active profile)。
         # loop_factory() 返回一个有 async run(goal, session_id) -> AsyncIterator[Event] 的对象。
         # 默认 FakeLoop(Phase 6 真 AgentLoop 落地后由入口注入真实工厂)。
@@ -229,13 +242,11 @@ class ArgosApp(App):
         """启动即把焦点放到输入框。否则 Textual 默认聚焦第一个可聚焦 widget。Transcript 已
         can_focus=False(不抢焦点),但仍显式 focus 输入框作双保险,杜绝任何可聚焦兄弟
         排在 Input 之前抢走按键、用户在输入框打不了字(汉字/ASCII 都进不去)。与 AUTO_FOCUS 双保险。"""
-        self.register_theme(ARGOS_NIGHT)
-        self.theme = "argos-night"
         self._refresh_topbar()
         self.query_one("#prompt", PromptArea).focus()
         tier = self._display_tier()
         # has_key 必须真查 config.active_key(),不能只信 demo 开关(2026-06-09 修复假阳:
-        # demo=False + 没配 key 此前显 `✳ LIVE` 撒了谎,跑起来 401)
+        # demo=False + 没配 key 此前显 LIVE 撒了谎,跑起来 401)
         self.query_one("#transcript", Transcript).mount(
             StartupSplash(
                 model_label=tier.model, tier=tier.name,
@@ -292,9 +303,22 @@ class ArgosApp(App):
     def _set_border(self, color) -> None:
         self.screen.styles.border = ("round", color)
 
+    def _set_terminal_glow(self, active: bool, *, kind: str = "fail") -> None:
+        """边框告警锁色 + StatusBar 告警态联动(spec §8.4 / 陷阱2)。
+
+        `_terminal_glow` 与 StatusBar `-alert` 同源:failed/unverifiable/escalation/error 置 True,
+        新 run / plan 解锁置 False。StatusBar 锁色后阶段眼仍随 phase,整条锁语义色——
+        kind="fail" 红(failed/error),kind="warn" 橙(unverifiable/escalation)。阶段色不得覆盖。
+        StatusBar 未 mount(测试直构)时静默(陷阱1 模式)。"""
+        self._terminal_glow = active
+        try:
+            self.query_one("#status-bar", StatusBar).set_alert(active, kind=kind)
+        except Exception:  # noqa: BLE001 — 未 mount / 测试场景:状态已在 _terminal_glow 字段里
+            pass
+
     def _glow_start(self) -> None:
         from argos_agent.tui import glow
-        self._terminal_glow = False           # 新一轮:解锁告警色
+        self._set_terminal_glow(False)        # 新一轮:解锁告警色(边框 + StatusBar -alert)
         self._glow_phase = 0.0
         self._glow_base = glow.phase_color("plan")
         self._set_border(self._glow_base)
@@ -364,7 +388,7 @@ class ArgosApp(App):
             try:
                 log_widget = self.query_one(Transcript)
                 await log_widget.append_line(
-                    f"⚠️ focus 失败({run_id[:8]}…):{e}", kind="error",
+                    f"⚠︎ focus 失败({run_id[:8]}…):{e}", kind="error",
                 )
             except Exception:  # noqa: BLE001
                 pass
@@ -438,7 +462,7 @@ class ArgosApp(App):
                     # 单会话编码 agent:一轮未完不并发起新轮(否则 step 块串台/漏渲染)。
                     self.run_worker(
                         self.query_one("#transcript", Transcript).append_line(
-                            "⏳ 当前任务进行中,请等它结束再起新任务。"
+                            "› 当前任务进行中,请等它结束再起新任务。"
                         ),
                         exclusive=False,
                     )
@@ -792,13 +816,13 @@ class ArgosApp(App):
             import time as _time
             from argos_agent.tui.widgets.tab_strip import _format_cost
             _ICON = {
-                "pending": "⏳", "running": "🟢", "paused": "🟡",
-                "suspended": "⚪", "completed": "✓",
-                "failed": "🔴", "cancelled": "❌",
+                "pending": "◌", "running": "◉", "paused": "◔",
+                "suspended": "◌", "completed": "◕",
+                "failed": "◉", "cancelled": "◌",
             }
             lines = ["Run 列表(#5b 扩展:cost / worktree):"]
             for r in runs:
-                icon = _ICON.get(r.get("state", "pending"), "⏳")
+                icon = _ICON.get(r.get("state", "pending"), "◌")
                 age = int(_time.time() - r.get("created_at", 0))
                 cost = _format_cost(r.get("cost_usd"))
                 wt = r.get("worktree_path") or ""
@@ -836,7 +860,7 @@ class ArgosApp(App):
                 err = str(e)
                 if "session_readonly" in err or "403" in err:
                     await log.append_line(
-                        "🔒 READ-ONLY 观察者不能 focus(只有 owner TUI 能切 active)。",
+                        "READ-ONLY 观察者不能 focus(只有 owner TUI 能切 active)。",
                         kind="error",
                     )
                 else:
@@ -1344,10 +1368,14 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         self._current_loop = loop
         log = self.query_one("#transcript", Transcript)
         await log.user_line(goal)  # 回显用户目标进对话流(› 行),否则对话看着单边(Task 14)。
+        # 记忆召回提示行(spec §8.3 机会点⑤):loop 会在系统提示里注入 store.recall(goal)。
+        # 诚实:只有真 store 真召回到记录时才显"◌ 记忆召回 N 条";demo/无 store/0 命中均不喧宾
+        #(绝不预填/编造命中数——honesty invariant)。host 侧 best-effort 镜像一次 recall 取真实计数。
+        await self._announce_memory_recall(log, loop, goal)
         if self._demo:
             # 诚实:演示模式每轮起手就声明以下全是脚本假数据,绝不冒充真实执行/验证。
             await log.append_line(
-                "⚠️ 演示模式:以下为脚本化假数据,非真实执行/验证(真 AgentLoop 待 Phase 6 接入)。"
+                "⚠︎ 演示模式:以下为脚本化假数据,非真实执行/验证(真 AgentLoop 待 Phase 6 接入)。"
             )
         else:
             # 真模式即时回执:M3 plan 阶段推理要数秒,这期间若 transcript 全空,用户会以为
@@ -1390,6 +1418,31 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 await log.append_line("⎋ 已打断当前任务。", kind="system")
                 self._interrupted = False
 
+    async def _announce_memory_recall(self, log, loop: object, goal: str) -> None:
+        """记忆召回提示(spec §8.3 机会点⑤):run 起手镜像 loop 的 store.recall(goal) 取真实命中数。
+
+        诚实边界:
+          · 无 store / store 无 recall 能力(demo/FakeLoop)→ 不显行(没召回就别假装召回)。
+          · recall 抛错 → 静默吞(不阻断 run,也不谎报命中)。
+          · hits==0 → 不显行(0 命中不喧宾);hits>0 → transcript faint 行 + 右栏 Run 区段。
+        计数取自真实 recall 返回的记录条数,绝不预填/编造(honesty invariant)。
+        """
+        store = getattr(loop, "_store", None) or getattr(loop, "store", None)
+        if store is None or not hasattr(store, "recall"):
+            return
+        try:
+            hits = list(store.recall(goal))  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 — 召回失败不阻断 run,也不谎报
+            return
+        n = len(hits)
+        if n <= 0:
+            return
+        await log.append_line(f"◌ 记忆召回 {n} 条", kind="system")
+        try:
+            self.query_one("#activity", ActivityPanel).on_memory_recall(n)
+        except Exception:  # noqa: BLE001 — 未 mount / 窄屏:静默(陷阱1 模式)
+            pass
+
     async def _apply_event(self, ev: Event) -> None:
         """把一个契约 §1 Event 反映到对应 widget(一份事件三用的 UI 出口)。"""
         from argos_agent.tui import glow
@@ -1404,6 +1457,10 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             log.finalize_response()
             bar.set_phase(ev.phase, ev.actions)
             ap.on_phase(ev.phase, ev.actions)
+            # spec §8.4:新 plan 周期 = 全新一轮,解锁告警色(StatusBar -alert + 边框)。
+            # 仅 plan 清——report/act/verify 绝不清(陷阱2:失败裁决的告警不被后续阶段抹掉)。
+            if ev.phase == "plan" and self._terminal_glow:
+                self._set_terminal_glow(False)
             if not self._terminal_glow:        # 终态告警色锁定时阶段色不得覆盖(红/琥珀不被 report 抹掉)
                 self._glow_base = glow.phase_color(ev.phase)  # 呼吸基色随阶段切换
                 self._set_border(self._glow_base)
@@ -1432,7 +1489,10 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 self_verified=bool(getattr(ev.verdict, "self_verified", False)),
             ))
             if ev.verdict.status in ("failed", "unverifiable"):
-                self._terminal_glow = True     # 锁定告警色,后续 report 阶段色不得覆盖
+                # 锁定告警色(边框 + StatusBar -alert),后续 report 阶段色/眼不得覆盖(陷阱2)
+                # unverifiable 锁橙(真相不确定)而非红——三态语义纯度
+                self._set_terminal_glow(
+                    True, kind="warn" if ev.verdict.status == "unverifiable" else "fail")
         elif isinstance(ev, CostUpdate):
             bar.set_cost(
                 tokens_in=ev.tokens_in, tokens_out=ev.tokens_out,
@@ -1451,6 +1511,23 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         elif isinstance(ev, PlanUpdate):
             # 真 TODO 拆解 → 活动栏"任务进度"区改渲染子任务进度(Task 12)。
             ap.on_plan(ev.todos)
+        elif isinstance(ev, CompactedEvent):
+            # context rot 主动压缩(spec §8.1 机会点①):右栏上下文区追加 ↯ 压缩行 + transcript faint 系统行。
+            # on_compacted 是 ActivityPanel 纯新增方法(陷阱1 except 模式由 query_one 外层保护)。
+            try:
+                ap.on_compacted(ev.before, ev.after, ev.reduction_pct)
+            except Exception:  # noqa: BLE001 — 渲染失败不阻断 run
+                pass
+            pct = round(ev.reduction_pct * 100) if ev.reduction_pct <= 1 else round(ev.reduction_pct)
+            await log.append_line(
+                f"◌ 已压缩 -{pct}% · {ev.before}→{ev.after} 条", kind="system")
+        elif isinstance(ev, PrunedEvent):
+            # context rot 相关性修剪(spec §8.1 机会点①):右栏 + transcript faint 系统行。
+            try:
+                ap.on_pruned(ev.before, ev.after, ev.removed)
+            except Exception:  # noqa: BLE001
+                pass
+            await log.append_line(f"◌ 已修剪 {ev.removed} 条", kind="system")
         elif isinstance(ev, WorkflowProposed):
             await self._handle_workflow_proposed(ev)
         elif isinstance(ev, WorkflowProgress):
@@ -1462,7 +1539,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 self._workflow_panel.finish(ev.synthesis, ev.notes)
             # 汇总落对话流(synthesis 可能含 `[...]`,append_line 走 SystemLine 已 markup=False,安全)。
             await log.append_line(
-                f"⚙ 工作流「{ev.name}」完成:{ev.synthesis}", kind="done")
+                f"◕ 工作流「{ev.name}」完成:{ev.synthesis}", kind="done")
         elif isinstance(ev, ToolReceipt):
             # 回执进活动栏面板的"回执"区 + 工具计数,不再进 transcript(Task 10)。
             ap.on_receipt(ev.receipt.action)
@@ -1475,14 +1552,14 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         elif isinstance(ev, ApprovalResponse):
             await log.append_line(f"审批结果:{ev.call_id} → {ev.decision}")
         elif isinstance(ev, Escalation):
-            await log.append_line(f"⚠️ 卡住({ev.attempts} 轮):{ev.reason} — 最后失败:{ev.last_failure}", kind="escalation")
+            await log.append_line(f"⚠︎ 卡住({ev.attempts} 轮):{ev.reason} — 最后失败:{ev.last_failure}", kind="escalation")
             self._set_border(glow.ERROR)
-            self._terminal_glow = True
+            self._set_terminal_glow(True, kind="warn")   # escalation 锁橙(诚实喊人≠失败)(陷阱2)
         elif isinstance(ev, Error):
             chain = (" ← " + " ← ".join(ev.chain)) if ev.chain else ""
-            await log.append_line(f"❌ 错误:{ev.message}{chain}", kind="error")
+            await log.append_line(f"◉ 错误:{ev.message}{chain}", kind="error")
             self._set_border(glow.ERROR)
-            self._terminal_glow = True
+            self._set_terminal_glow(True)   # 告警锁色 + StatusBar -alert(陷阱2)
 
     def action_interrupt(self) -> None:
         """Esc:打断当前 run(daemon 模式 = step-boundary pause,legacy = 整 run kill)。
@@ -1570,7 +1647,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             log_widget = self.query_one("#transcript", Transcript)
             self.run_worker(
                 log_widget.append_line(
-                    f"⏸ Run {self._daemon_run_id} 后台化(suspended)。可 /resume {self._daemon_run_id} 续。",
+                    f"› Run {self._daemon_run_id} 后台化(suspended)。可 /resume {self._daemon_run_id} 续。",
                     kind="system",
                 ),
                 exclusive=False,
@@ -1579,6 +1656,16 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             pass
 
     # ── TUI v2 行内选择:FIFO 队列(同屏最多一个活动 InlineChoice)──────────
+    def _set_blocked_status(self, active: bool) -> None:
+        """StatusBar 审批挂起态(spec §8.4 优先级铁律:用户阻塞 > 告警锁色 > 阶段眼)。
+
+        任何 InlineChoice(工具/工作流/plan 审批)活动时置 True → 左眼强制 ◓ 金 + "审批挂起"段,
+        即便引擎仍在 verify(右栏照常显 ❂)。队列全清后置 False。StatusBar 未 mount 时静默(陷阱1)。"""
+        try:
+            self.query_one("#status-bar", StatusBar).set_blocked(active)
+        except Exception:  # noqa: BLE001 — 测试直构/未 mount:无副作用
+            pass
+
     async def _enqueue_choice(self, factory: Callable[[], InlineChoice]) -> None:
         self._choice_queue.append(factory)
         if not self._choice_active:
@@ -1587,8 +1674,10 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
     async def _mount_next_choice(self) -> None:
         if not self._choice_queue:
             self._choice_active = False
+            self._set_blocked_status(False)   # 队列空 = 无待审批 → 解除挂起态
             return
         self._choice_active = True
+        self._set_blocked_status(True)        # 审批卡到达 → StatusBar 左眼 ◓ 审批挂起(优先级最高)
         widget = self._choice_queue.popleft()()
         await self.query_one("#transcript", Transcript).mount_block(widget)
 
@@ -1597,6 +1686,8 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         self._choice_active = False
         if self._choice_queue:
             self.run_worker(self._mount_next_choice(), exclusive=False)
+        else:
+            self._set_blocked_status(False)   # 最后一个决策落定 → 解除审批挂起态
 
     async def _handle_workflow_proposed(self, ev: WorkflowProposed) -> None:
         """工作流提议:① mount 进度树面板(存引用,后续 Progress/Done 据它刷新);
@@ -1621,7 +1712,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             self._choice_done()
 
         await self._enqueue_choice(lambda: InlineChoice(
-            title="⚙ 工作流审批 — 将起多个子 agent 编排执行",
+            title="工作流审批 — 将起多个子 agent 编排执行",
             body=ev.preview,
             options=[("once", "本次批准"), ("always", "总是批准"), ("deny", "拒绝")],
             on_decide=_decide,
@@ -1638,7 +1729,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         body_lines = [req.description, f"动作: {req.action} · 参数: {req.args}"]
         # Smart approval 副标题(D6 锁):secret 命中显 "did you mean to commit this?" 提示
         if getattr(req, "secret_pattern", None):
-            body_lines.append("⚠ Possible secret pattern matched: did you mean to commit this?")
+            body_lines.append("⚠︎ Possible secret pattern matched: did you mean to commit this?")
 
         def _decide(value: str, _feedback: str) -> None:
             self.gate.respond(req.call_id, value)  # type: ignore[arg-type]
@@ -1700,7 +1791,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             self._choice_done()
 
         await self._enqueue_choice(lambda: InlineChoice(
-            title="📋 Plan 审批",
+            title="Plan 审批",
             body=ev.plan_md,
             options=[
                 ("approve_start", "Approve and start"),

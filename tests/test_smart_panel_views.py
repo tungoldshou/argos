@@ -6,9 +6,19 @@ import pytest
 from textual.app import App, ComposeResult
 
 from argos_agent.tui.widgets.activity_panel import ActivityPanel
+from argos_agent.tui.theme import ARGOS_NIGHT
 
 
 class _H(App):
+    """最小测试宿主:注入 ARGOS_NIGHT tokens 以便 DEFAULT_CSS 中 $token 可解析。"""
+
+    def get_theme_variable_defaults(self) -> dict[str, str]:
+        """把 ARGOS_NIGHT.variables 作为 CSS token 兜底注入。"""
+        defaults = super().get_theme_variable_defaults()
+        if ARGOS_NIGHT.variables:
+            defaults.update(ARGOS_NIGHT.variables)
+        return defaults
+
     def compose(self) -> ComposeResult:
         yield ActivityPanel(id="ap", model_label="M3", tier="t")
 

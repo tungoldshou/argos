@@ -23,7 +23,8 @@ from argos_agent.hooks.events import HookFired
 from argos_agent.lsp.events import LspServerEvent, LspDiagnosticEvent
 from argos_agent.skills_runtime.events import SkillRunStart, SkillRunEnd
 
-_PHASE_GLYPH = {"plan": "◇", "act": "✦", "verify": "✦", "report": "◇"}
+# v3 字形词典(spec §3.1):plan=◔ act=◉ verify=❂ report=◕
+_PHASE_GLYPH = {"plan": "◔", "act": "◉", "verify": "❂", "report": "◕"}
 
 # 视图顺序(cycle_view 循环序);"auto" 不在列表里,是模式而非视图。
 _VIEWS = ("idle", "plan", "act", "verify")
@@ -37,8 +38,8 @@ class _Section(Static):
         height: auto;
         padding: 0 1;
         margin: 0 0 1 0;
-        border-top: solid $foreground-darken-3;
-        border-title-color: $accent;
+        border-top: solid $hairline;
+        border-title-color: $eye-soft;
         border-title-style: bold;
         border-title-align: left;
     }
@@ -53,8 +54,8 @@ class _Section(Static):
 class ActivityPanel(Vertical):
     # overflow-y: auto → 内容超出可视高度时自动出竖向滚动条。
     DEFAULT_CSS = """
-    ActivityPanel { width: 32; border-left: solid $panel; padding: 1 0 0 0; overflow-y: auto; scrollbar-size-vertical: 1; }
-    ActivityPanel #view-header { color: $text-muted; padding: 0 1; margin: 0 0 1 0; }
+    ActivityPanel { width: 34; background: $well; padding: 1 0 0 0; overflow-y: auto; scrollbar-size-vertical: 1; }
+    ActivityPanel #view-header { color: $eye-soft; text-style: bold; padding: 0 1; margin: 0 0 1 0; }
     """
 
     # ── 区段索引(compose 顺序的单一真源)───────────────────────────
@@ -99,6 +100,10 @@ class ActivityPanel(Vertical):
         # Approval 段:3 类决策计数器 + 最近 N 条 log。
         self._approval_count: dict[str, int] = {"ok": 0, "ask": 0, "deny": 0}
         self._approval_log: deque[tuple[str, str, str]] = deque(maxlen=10)
+        # 缓存 sparkline 历史(最近 8 次 cache_read 值)
+        self._cache_history: deque[int] = deque(maxlen=8)
+        # 压缩/修剪 信息(上下文区追加行)
+        self._compaction_line: str = ""
         # ── 智能切状态(TUI v2)─────────────────────────────────
         self._view: str = "idle"          # 当前视图
         self._pinned: bool = False        # True = 用户 Ctrl+O 手动钉住,phase 不再自动切
@@ -108,15 +113,15 @@ class ActivityPanel(Vertical):
         yield _Section("模型", self._model_label)
         yield _Section("任务进度", "(待开始)")
         yield _Section("工具", "本轮 0 调用")
-        yield _Section("回执(已签名)", "—")
-        yield _Section("Run", "(无)")
+        yield _Section("回执(已签名)", "◌ (无)")
+        yield _Section("Run", "◌ (无)")
         yield _Section("Skill Catalog", self._skill_catalog_summary())
         yield _Section("MCP", self._mcp_summary())
-        yield _Section("Hook", "(无)")
-        yield _Section("LSP", "(无)")
+        yield _Section("Hook", "◌ (无)")
+        yield _Section("LSP", "◌ (无)")
         yield _Section("Skill", self._skill_summary())
-        yield _Section("Approval", "(无)")
-        yield _Section("Verdict", "(无)")
+        yield _Section("Approval", "◌ (无)")
+        yield _Section("Verdict", "◌ (无)")
         yield _Section("成本 + 缓存", "↑0 ↓0  $0.000\n缓存命中 0 tok  0.0s")
         yield _Section("上下文", "")
 
@@ -125,7 +130,8 @@ class ActivityPanel(Vertical):
 
     # ── 智能切(TUI v2 spec §5)─────────────────────────────────────
     def _header_text(self) -> str:
-        pin = " ⚲" if self._pinned else ""
+        # v3 spec §4.8:pinned 标记用 * 而非 emoji
+        pin = " *" if self._pinned else ""
         return f"── {self._view}{pin} ──"
 
     def _apply_view(self) -> None:
@@ -225,22 +231,23 @@ class ActivityPanel(Vertical):
     def _render_phases(self) -> str:
         lines = []
         for p, e, s in self._phases:
-            # 进行中(▶,elapsed 还是 0.0)显 …;完成且无耗时显 —;否则显真实耗时。
-            elapsed = "…" if s == "▶" else (f"{e:.1f}s" if e else "—")
-            lines.append(f" {_PHASE_GLYPH.get(p, '◇')} {p:<7} {elapsed:>5} {s}")
+            # 进行中(›,elapsed 还是 0.0)显 …;完成且无耗时显 —;否则显真实耗时。
+            elapsed = "…" if s == "›" else (f"{e:.1f}s" if e else "—")
+            lines.append(f" {_PHASE_GLYPH.get(p, '◌')} {p:<7} {elapsed:>5} {s}")
         return "\n".join(lines) if lines else "(待开始)"
 
     def _render_todos(self) -> str:
+        # v3:emoji 已处决,改用字形词典字符(spec §3.3)
         done = sum(1 for t in self._todos if t.get("status") == "completed")
         lines = [f"进度 {done}/{len(self._todos)}"]
         for t in self._todos:
             status = t.get("status", "pending")
             if status == "completed":
-                lines.append(f" ✅ {t.get('content', '')}")
+                lines.append(f" ◕ {t.get('content', '')}")
             elif status == "in_progress":
-                lines.append(f" 🔧 {t.get('activeForm') or t.get('content', '')}")
+                lines.append(f" ◉ {t.get('activeForm') or t.get('content', '')}")
             else:
-                lines.append(f" ⬜ {t.get('content', '')}")
+                lines.append(f" ◌ {t.get('content', '')}")
         return "\n".join(lines)
 
     def on_phase(self, phase: str, actions: int) -> None:
@@ -249,7 +256,7 @@ class ActivityPanel(Vertical):
             p, _, _ = self._phases[-1]
             self._phases[-1] = (p, max(0.0, now - self._phase_start), "✓")
         self._phase_start = now
-        self._phases.append((phase, 0.0, "▶"))
+        self._phases.append((phase, 0.0, "›"))
         self._render_progress()
         self._auto_view(phase)   # 智能切:阶段驱动视图
 
@@ -263,7 +270,18 @@ class ActivityPanel(Vertical):
         tools = "\n".join(f"  {a} ×{n}" for a, n in self._tool_counts.items())
         self._set(self._TOOLS_IDX, f"本轮调用:\n{tools}" if tools else "本轮 0 调用")
         self._receipts.append(action)
-        self._set(self._RECEIPT_IDX, "\n".join(f"🧾 {a}" for a in self._receipts[-6:]))
+        # v3:回执区段不用收据 emoji(已处决),改纯文字 + 空间符
+        self._set(self._RECEIPT_IDX, "\n".join(f"  {a}" for a in self._receipts[-6:]))
+
+    # ── 缓存 sparkline 辅助(spec §4.8 a 机会点④)─────────────────────────
+    @staticmethod
+    def _build_sparkline(values: list[int]) -> str:
+        """将整数序列映射到 ▁▂▃▄▅▆▇ 字符。非空序列返回 sparkline 字串,空序列返回 ''。"""
+        if not values:
+            return ""
+        _SPARK = "▁▂▃▄▅▆▇"
+        max_v = max(values) or 1
+        return "".join(_SPARK[min(6, int(v * 6 / max_v))] for v in values)
 
     def on_cost(self, *, tokens_in: int, tokens_out: int, cost_usd: float | None,
                 elapsed_s: float, cache_read: int = 0, tier_name: str = "") -> None:
@@ -273,8 +291,14 @@ class ActivityPanel(Vertical):
         if tier_name:
             short = tier_name[:3]
             tier_tag = f" [{short}]"
+        # 缓存 sparkline(机会点④):记录本次 cache_read 进历史,渲染 ▁▂▃▄▅▆▇
+        self._cache_history.append(cache_read)
+        spark = self._build_sparkline(list(self._cache_history))
+        cache_line = f"缓存命中 {cache_read} tok  {elapsed_s:.1f}s"
+        if spark:
+            cache_line += f"\ncache {spark} {cache_read}"
         self._set(self._COST_IDX, f"↑{tokens_in} ↓{tokens_out}{tier_tag}  {cost}\n"
-                                  f"缓存命中 {cache_read} tok  {elapsed_s:.1f}s")
+                                  f"{cache_line}")
 
     def on_context(self, *, used: int, window: int) -> None:
         """上下文窗口用量。10 格进度条 + 百分比 + badge `[ctx N/M X%]`(spec §10.3);
@@ -284,7 +308,11 @@ class ActivityPanel(Vertical):
         bar = "▓" * filled + "░" * (10 - filled)
         win = f"{window // 1000}k" if window else "?"
         badge = f"[ctx {used:,}/{window:,} {pct}%]"
-        self._set(self._CTX_IDX, f"{self._model_label} · {win}\n{bar} {pct}%\n{badge}")
+        body = f"{self._model_label} · {win}\n{bar} {pct}%\n{badge}"
+        # 若有压缩/修剪行,追加(spec §4.8 a 机会点①)
+        if self._compaction_line:
+            body += f"\n{self._compaction_line}"
+        self._set(self._CTX_IDX, body)
 
     def on_verdict(self, verdict) -> None:
         """VerifyVerdict 到达 → 'Verdict' 区段(verify/idle 视图可见)。
@@ -350,21 +378,24 @@ class ActivityPanel(Vertical):
         self._skill_runs.clear()
         self._approval_count = {"ok": 0, "ask": 0, "deny": 0}
         self._approval_log.clear()
+        self._cache_history.clear()
+        self._compaction_line = ""
+        # v3 空态:一律 ◌ (无) + $ink-faint(spec §4.8)
         self._set(self._PROGRESS_IDX, "(待开始)")
         self._set(self._TOOLS_IDX, "本轮 0 调用")
-        self._set(self._RECEIPT_IDX, "—")
-        self._set(self._HOOK_IDX, "(无)")
-        self._set(self._LSP_IDX, "(无)")
-        self._set(self._SKILL_IDX, "(无)")
-        self._set(self._RUN_IDX, "(无)")
-        self._set(self._APPROVAL_IDX, "(无)")
-        self._set(self._VERDICT_IDX, "(无)")
+        self._set(self._RECEIPT_IDX, "◌ (无)")
+        self._set(self._HOOK_IDX, "◌ (无)")
+        self._set(self._LSP_IDX, "◌ (无)")
+        self._set(self._SKILL_IDX, "◌ (无)")
+        self._set(self._RUN_IDX, "◌ (无)")
+        self._set(self._APPROVAL_IDX, "◌ (无)")
+        self._set(self._VERDICT_IDX, "◌ (无)")
 
     # ── Run 段(spec §2.6 b/c 段)──────────────────────────────────
     def on_run_summary(self, *, active: int, paused: int, suspended: int, history: int) -> None:
         """渲染 'Run' 区段:⏵N active / ⏸N paused / ⏹N history。"""
         if active == 0 and paused == 0 and suspended == 0 and history == 0:
-            self._set(self._RUN_IDX, "(无)")
+            self._set(self._RUN_IDX, "◌ (无)")
         else:
             self._set(
                 self._RUN_IDX,
@@ -433,7 +464,7 @@ class ActivityPanel(Vertical):
 
     def _approval_summary(self) -> str:
         if not self._approval_log and not any(self._approval_count.values()):
-            return "(无)"
+            return "◌ (无)"
         ok = self._approval_count.get("ok", 0)
         ask = self._approval_count.get("ask", 0)
         deny = self._approval_count.get("deny", 0)
@@ -445,3 +476,48 @@ class ActivityPanel(Vertical):
             mark = {"approved": "✓", "denied": "✗", "asked": "?"}.get(decision, "·")
             lines.append(f" {mark} {action}  {trigger}")
         return "\n".join(lines)
+
+    # ── 纯新增方法(spec §4.8 c):on_compacted / on_pruned / on_memory_recall ────
+    def on_compacted(self, before: int, after: int, reduction_pct: float) -> None:
+        """压缩事件(CompactedEvent):上下文区追加 ↯ 压缩行(spec §4.8 a 机会点①)。
+
+        签名:on_compacted(before, after, reduction_pct) — P9 接线约定。
+        """
+        self._compaction_line = f"↯ 已压缩 -{reduction_pct:.0f}% · {before}→{after} 条"
+        # 若上下文区已有内容,立即刷新;否则等下次 on_context 调用时追加。
+        try:
+            secs = self._sections()
+            if secs and len(secs) > self._CTX_IDX:
+                old = str(secs[self._CTX_IDX].content)
+                # 替换或追加 ↯ 行
+                lines = [l for l in old.splitlines() if not l.startswith("↯")]
+                lines.append(self._compaction_line)
+                self._set(self._CTX_IDX, "\n".join(lines))
+        except Exception:  # noqa: BLE001
+            pass  # 未 mount 时静默
+
+    def on_pruned(self, before: int, after: int, removed: int) -> None:
+        """修剪事件(PrunedEvent):上下文区追加修剪行(spec §4.8 a 机会点①)。
+
+        签名:on_pruned(before, after, removed) — P9 接线约定。
+        """
+        self._compaction_line = f"↯ 已修剪 {removed} 条 · {before}→{after}"
+        try:
+            secs = self._sections()
+            if secs and len(secs) > self._CTX_IDX:
+                old = str(secs[self._CTX_IDX].content)
+                lines = [l for l in old.splitlines() if not l.startswith("↯")]
+                lines.append(self._compaction_line)
+                self._set(self._CTX_IDX, "\n".join(lines))
+        except Exception:  # noqa: BLE001
+            pass
+
+    def on_memory_recall(self, hits: int) -> None:
+        """记忆召回提示(spec §4.8 a 机会点⑤):Run 区段显 ◌ 召回 N 条。
+
+        签名:on_memory_recall(hits) — P9 接线约定。
+        """
+        if hits > 0:
+            self._set(self._RUN_IDX, f"◌ 召回 {hits} 条")
+        else:
+            self._set(self._RUN_IDX, "◌ (无)")
