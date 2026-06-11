@@ -26,6 +26,7 @@ ALL_EVENT_KINDS = {
     "pruned",  # context rot spec 2026-06-07:第二层 _maybe_prune 每步顶部折叠过期工具输出/被取代旧计划
     "plan_decision_request",  # v6 §4 ACP:plan 决策请求事件(去 TUI 对 loop 直接引用)
     "memory_recall",          # v6 §4 ACP:记忆召回结果事件(修 store 穿透)
+    "ledger_entry",           # P3b §6 行为账本:每条 ToolReceipt 沉淀为可读账本条目
 }
 
 

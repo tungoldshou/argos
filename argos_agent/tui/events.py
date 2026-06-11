@@ -31,6 +31,7 @@ from argos_agent.protocol.events import (  # noqa: F401
     PlanRendered,
     PlanDecisionRequest,
     MemoryRecallEvent,
+    LedgerEntryEvent,      # ← P3b 新增(§6 行为账本)
     Event,
     EventBus,
     _KIND_TO_CLASS,

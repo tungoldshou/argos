@@ -57,7 +57,7 @@ class DaemonHTTPServer:
                  session_timeout_s: float = 30.0,
                  registry=None, worktree=None,
                  loop_factory=None, gate=None,
-                 components=None):
+                 components=None, ledger_store=None):
         """loop_factory / components 二选一(components 优先走 per-run stack 路径)。
 
         None(默认) = 向后兼容:create_run 创建元数据但不 spawn worker(测试/无 loop 场景)。
@@ -93,6 +93,8 @@ class DaemonHTTPServer:
         # P3 跨进程审批路由表:run_id → RunWorker
         # server 通过此表把 POST /runs/{id}/approval 路由到该 run 的 DaemonApprovalGate。
         self._workers: dict[str, "RunWorker"] = {}
+        # P3b §6 行为账本存储(可选,None = 无账本功能)
+        self._ledger_store = ledger_store
 
     @property
     def registry(self):
@@ -228,6 +230,12 @@ class DaemonHTTPServer:
                 if method == "POST" and "/plan_decision" in rest:
                     rid = rest.split("/plan_decision")[0]
                     return await self._handle_plan_decision(writer, headers, rid, body)
+                if method == "GET" and rest.endswith("/ledger"):
+                    rid = rest[:-len("/ledger")]
+                    return await self._handle_get_ledger(writer, headers, rid)
+                if method == "POST" and rest.endswith("/undo"):
+                    rid = rest[:-len("/undo")]
+                    return await self._handle_undo(writer, headers, rid, body)
                 if method == "GET":
                     return await self._handle_get_run(writer, headers, rest)
                 return await self._send_error(writer, 404, CODE_NOT_FOUND,
@@ -387,6 +395,20 @@ class DaemonHTTPServer:
         from argos_agent.daemon.worker import RunWorker
         # P3:approval_timeout_s 可由 create_run body 携带(默认 60s)。
         approval_timeout_s = float(data.get("approval_timeout_s", 60.0))
+
+        # P3b §6:run 起点快照(undo_token 来源)。
+        # workspace 存在时拍快照;失败 fail-soft(snapshot=None → undo 诚实报 no_snapshot)。
+        run_snapshot = None
+        if effective_ws_str:
+            try:
+                from argos_agent.core.snapshot import RunSnapshot, SNAPSHOT_ROOT
+                _ws_snap = Path(effective_ws_str).expanduser().resolve()
+                if _ws_snap.exists():
+                    _snap_path = SNAPSHOT_ROOT / f"run-{run_id}.tar"
+                    run_snapshot = RunSnapshot.take(_ws_snap, _snap_path)
+            except Exception as _snap_err:  # noqa: BLE001
+                log.warning("server: run 起点快照失败(undo 将不可用): %s", _snap_err)
+
         if self._components is not None:
             # per-run 隔离栈:并发 run 各自独立 sandbox/gate/broker
             effective_ws_path = (
@@ -407,6 +429,8 @@ class DaemonHTTPServer:
                 gate=run_stack.gate,
                 run_stack_close=run_stack.close,
                 approval_timeout_s=approval_timeout_s,
+                ledger_store=self._ledger_store,
+                snapshot=run_snapshot,
             )
             # P3:注册 worker 到路由表,供审批路由使用
             self._workers[run_id] = worker
@@ -423,6 +447,8 @@ class DaemonHTTPServer:
                 worktree=self._worktree,
                 gate=self._gate,
                 approval_timeout_s=approval_timeout_s,
+                ledger_store=self._ledger_store,
+                snapshot=run_snapshot,
             )
             # P3:注册 worker 到路由表
             self._workers[run_id] = worker
@@ -705,6 +731,151 @@ class DaemonHTTPServer:
             "call_id": call_id,
             "action": action,
             "state": "applied",
+        })
+
+    # ── P3b Ledger endpoints ─────────────────────────────────────────
+
+    async def _handle_get_ledger(self, writer, headers, run_id):
+        """GET /runs/{id}/ledger — 回放账本(人话条目列表)。
+
+        权限:session(只读观察者也能看账本)。
+        返回:{"run_id": ..., "entries": [{...LedgerEntry.to_dict()...}, ...]}
+        """
+        if await self._require_session(writer, headers) is None:
+            return
+        if self._manager.get_run(run_id) is None:
+            return await self._send_error(writer, 404, CODE_NOT_FOUND, "run not found")
+
+        ledger_store = getattr(self, "_ledger_store", None)
+        if ledger_store is None:
+            # 无账本存储:返空列表(向后兼容,无账本不报错)
+            return await self._send_json(writer, 200, {"run_id": run_id, "entries": []})
+
+        try:
+            entries = ledger_store.replay(run_id)
+            await self._send_json(writer, 200, {
+                "run_id": run_id,
+                "entries": [e.to_dict() for e in entries],
+            })
+        except Exception as e:  # noqa: BLE001
+            log.exception("ledger replay error for %s: %s", run_id, e)
+            await self._send_error(writer, 500, CODE_INTERNAL, str(e))
+
+    async def _handle_undo(self, writer, headers, run_id, body):
+        """POST /runs/{id}/undo — run 级还原(快照还原 + 账本标记)。
+
+        语义(诚实三态铁律):
+          · run 不存在                          → 404
+          · 无账本 / 无 reversible=yes 条目      → 409 "nothing_to_undo"
+          · 账本已有 undo_done 标记              → 409 "already_undone"
+          · 无快照 / 快照不存在                  → 409 "no_snapshot"
+          · 还原成功                             → 200
+          · 不可逆动作的条目不受影响(诚实)
+
+        权限:owner-only(undo 是高风险写动作,走 gate fail-closed)。
+        """
+        if await self._require_owner(writer, headers) is None:
+            return
+
+        if self._manager.get_run(run_id) is None:
+            return await self._send_error(writer, 404, CODE_NOT_FOUND, "run not found")
+
+        ledger_store = getattr(self, "_ledger_store", None)
+        if ledger_store is None:
+            return await self._send_error(
+                writer, 409, "nothing_to_undo",
+                "此 run 无行为账本(ledger 未启用或 run 无副作用动作)",
+            )
+
+        # 已撤销检查
+        if ledger_store.is_undo_done(run_id):
+            return await self._send_error(
+                writer, 409, "already_undone",
+                "此 run 已执行过 undo,不可重复撤销",
+            )
+
+        # 有无 reversible=yes 条目
+        entries = ledger_store.replay(run_id)
+        available = [e for e in entries if e.undo_state == "available"]
+        if not available:
+            return await self._send_error(
+                writer, 409, "nothing_to_undo",
+                "此 run 无可撤销的操作(所有操作均不可逆或已无效)",
+            )
+
+        # 找 undo_token(run 级快照路径)
+        undo_token: str | None = None
+        for e in available:
+            if e.undo_token:
+                undo_token = e.undo_token
+                break
+
+        if not undo_token:
+            return await self._send_error(
+                writer, 409, "no_snapshot",
+                "无可用快照(run 起点快照不存在或路径丢失),无法执行文件系统还原",
+            )
+
+        from pathlib import Path as _Path
+        snap_path = _Path(undo_token)
+        if not snap_path.exists():
+            return await self._send_error(
+                writer, 409, "no_snapshot",
+                f"快照文件不存在:{snap_path}",
+            )
+
+        # 找 workspace(从 run meta 拿)
+        entry = self._manager.get_run(run_id)
+        workspace_str = getattr(entry, "workspace", "") or ""
+        if not workspace_str:
+            return await self._send_error(
+                writer, 409, "no_workspace",
+                "run 无 workspace 路径,无法执行文件系统还原",
+            )
+
+        workspace = _Path(workspace_str).expanduser().resolve()
+        if not workspace.exists():
+            return await self._send_error(
+                writer, 409, "no_workspace",
+                f"workspace 不存在:{workspace}",
+            )
+
+        # 执行快照还原
+        from argos_agent.core.snapshot import RunSnapshot
+        snapshot = RunSnapshot(tar_path=snap_path)
+        result = snapshot.restore(workspace)
+
+        if result.errors:
+            # 部分失败:标记账本 + 诚实报告(不假装全成功)
+            ledger_store.undo_complete(run_id)
+            error_detail = "; ".join(f"{p}: {e}" for p, e in result.errors[:3])
+            return await self._send_json(writer, 200, {
+                "run_id": run_id,
+                "state": "partial",
+                "restored": len(result.restored),
+                "errors": len(result.errors),
+                "error_detail": error_detail,
+                "note": "部分还原:快照已应用,但部分文件还原失败(见 error_detail)。账本已标记。",
+            })
+
+        # 全量成功
+        ledger_store.undo_complete(run_id)
+
+        # 广播 undo_done 事件(审计可见性)
+        undo_ev = {
+            "kind": "undo_done",
+            "run_id": run_id,
+            "restored": len(result.restored),
+            "ts": time.time(),
+        }
+        self._manager.store.append(run_id, undo_ev)
+        await self._manager.fanout(run_id, undo_ev)
+
+        await self._send_json(writer, 200, {
+            "run_id": run_id,
+            "state": "done",
+            "restored": len(result.restored),
+            "note": "已还原 run 起点的文件改动(注:撤销还原整个 run 的文件改动,粒度为 run 级)。",
         })
 
     # ── SSE ──────────────────────────────────────────────────────────

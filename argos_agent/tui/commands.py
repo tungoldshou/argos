@@ -21,6 +21,7 @@ COMMAND_HELP: dict[str, str] = {
     "clear": "开新会话(清空)",
     "yolo": "放手执行(免审批)",
     "undo": "撤销本轮文件改动(还原到 run 起点)",
+    "ledger": "查看当前 run 的行为账本(人话条目 + 撤销状态)",
     "retry": "重发上一条 user 消息",
     "plan": "进入 plan mode(审批后继续 act)—对齐 CC /plan",
     "hooks": "列出 / 重载 hooks 配置(/hooks, /hooks reload)",

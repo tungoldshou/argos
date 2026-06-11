@@ -40,6 +40,7 @@ EventKind = Literal[
     "skill_run_end",     # ← 新增
     "compacted",         # ← #12 新增(spec D10 扩展字面量;deserialize_event 未知 kind 走 pass)
     "pruned",            # ← context rot 修剪事件(spec 2026-06-07)
+    "ledger_entry",      # ← P3b 新增(§6 行为账本:每条 ToolReceipt 沉淀为可读账本条目)
 ]
 
 
@@ -191,6 +192,25 @@ class CompactedEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class LedgerEntryEvent:
+    """P3b §6 行为账本:每条 ToolReceipt 沉淀后广播的账本条目事件。
+
+    协议 ABI:ts/run_id/seq/action/summary_human/risk/reversible/undo_state
+    反映 LedgerEntry 字段的子集(不含 receipt_sig/undo_token —— 这两字段属内部审计,不广播)。
+    客户端(TUI/桌面)消费此事件驱动账本 UI,无需直接读 JSONL。
+    """
+    kind = "ledger_entry"
+    ts: float
+    run_id: str
+    seq: int
+    action: str
+    summary_human: str
+    risk: str                 # "low" | "medium" | "high"
+    reversible: str           # "yes" | "no" | "unknown"
+    undo_state: str           # "available" | "done" | "impossible"
+
+
+@dataclass(frozen=True, slots=True)
 class PrunedEvent:
     """context rot 持续相关性修剪事件(spec 2026-06-07)。
     在触发整体压缩之前就持续做的、优先于压缩的轻量折叠——折叠过期工具输出/被取代的旧计划/
@@ -280,6 +300,7 @@ Event = (
     | LspServerEvent | LspDiagnosticEvent
     | SkillRunStart | SkillRunEnd   # ← 新增
     | CompactedEvent | PrunedEvent  # ← context rot(spec 2026-06-07)
+    | LedgerEntryEvent              # ← P3b 新增(§6 行为账本)
 )
 
 # kind 常量 → 类,用于反序列化派发
@@ -295,6 +316,7 @@ _KIND_TO_CLASS: dict[str, type] = {
         LspServerEvent, LspDiagnosticEvent,
         SkillRunStart, SkillRunEnd,   # ← 新增
         CompactedEvent, PrunedEvent,  # ← context rot(spec 2026-06-07):可正确反序列化
+        LedgerEntryEvent,             # ← P3b 新增(§6 行为账本)
     )
 }
 

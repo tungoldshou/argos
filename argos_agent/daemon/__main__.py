@@ -78,6 +78,10 @@ async def _serve(args: argparse.Namespace) -> int:
     if recovered:
         log.info("daemon: recovered %d runs: %s", len(recovered), recovered)
 
+    # P3b §6 行为账本存储(全局单例,所有 run 共享同一个目录)
+    from argos_agent.ledger.store import LedgerStore
+    ledger_store = LedgerStore()
+
     server = DaemonHTTPServer(
         manager=manager,
         socket_path=socket_path,
@@ -86,6 +90,7 @@ async def _serve(args: argparse.Namespace) -> int:
         components=components,
         loop_factory=loop_factory,
         gate=components.gate if components is not None else None,
+        ledger_store=ledger_store,
     )
     await server.start()
 

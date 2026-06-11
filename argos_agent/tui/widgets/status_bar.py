@@ -83,6 +83,9 @@ class StatusBar(Static):
         self._alert: bool   = False   # 告警锁色（_terminal_glow 联动）
         self._alert_kind: str = "fail"  # 告警语义:fail=红(failed/error) / warn=橙(unverifiable/escalation)
         self._run_summary: list[tuple[str, str]] = []
+        # v6 P3b §2：内核模式标注（诚实：绝不假装）。
+        # "argosd" = 走 daemon 协议；"inline" = 单进程直跑；"" = 未初始化（DEMO 等）。
+        self._kernel_mode: str = ""
 
     # ── 优先级状态机（§8.4）─────────────────────────────────────────────────
     def _phase_eye(self) -> str:
@@ -159,6 +162,9 @@ class StatusBar(Static):
 
         if self.plan_mode:
             parts.append("[plan mode]")
+        # v6 P3b §2 诚实标注：argosd=走协议;inline=单进程 fallback;""=不显示
+        if self._kernel_mode:
+            parts.append(self._kernel_mode)
         badges = self.render_count_badges(self._run_summary)
         if badges:
             parts.append(badges)
@@ -206,6 +212,17 @@ class StatusBar(Static):
     def set_plan_mode(self, active: bool) -> None:
         """host 切 plan mode 时调：加 [plan mode] 段 + 切色。"""
         self.plan_mode = bool(active)
+
+    def set_kernel_mode(self, mode: str) -> None:
+        """v6 P3b §2：诚实标注内核模式。
+
+        mode="argosd"  → 走 daemon 协议（argosd 进程）
+        mode="inline"  → 单进程直跑（fallback）
+        mode=""        → 未知 / DEMO（不显示段）
+        诚实铁律：只传真实状态，绝不把 inline 标注为 argosd。
+        """
+        self._kernel_mode = mode
+        self._refresh()
 
     def update_ctx_pressure(self, pct: float) -> None:
         """Context 可视化：≥80% 整条切 -ctx-warn，≥95% 切 -ctx-crit；pct=0 → 移除。"""

@@ -167,14 +167,15 @@ class ArgosApp(App):
         self._workspace: Path = Path.home() / ".argos" / "workspace"
         self._run_seq: int = 0
         self._snapshot: "RunSnapshot | None" = None
-        # ── Daemon 模式状态(spec 2026-06-06 §2.6/2.7)────────────────
-        # with_daemon=True 启用 daemon 模式:
-        #   · DaemonClient 走 Unix socket(本机 ~/.argos/daemon.sock)
-        #   · Esc = step-boundary pause(POST /pause)而非直接 kill
-        #   · 双 Esc(<1.5s) = cancel
-        #   · Ctrl+B = 后台化(POST /suspend)
-        #   · 启动时扫 suspended run,弹 inline modal 让用户选
-        # 默认 False(legacy TUI-only 行为,沿用旧 Esc=cancel)。
+        # ── Daemon 模式状态(v6 P3b §2)────────────────────────────────
+        # _kernel_mode 枚举:
+        #   ""        = 未初始化(DEMO / on_mount 前)
+        #   "inline"  = 单进程直跑(daemon 不可达,inline fallback)
+        #   "argosd"  = 走 daemon 协议(argosd 进程;事件经 DaemonEventSource)
+        # 诚实铁律:只改写真实状态,绝不把 inline 标注为 argosd。
+        self._kernel_mode: str = ""
+        # _with_daemon:True = 已通过模式探测确认 daemon 可用,走协议路径。
+        # 历史遗留字段保留(命令/条件判断大量依赖),P3b 中由 _kernel_mode 覆盖语义。
         self._with_daemon: bool = False
         self._daemon_client = None     # type: ignore[var-annotated]
         self._daemon_session_id: str | None = None
@@ -184,6 +185,9 @@ class ArgosApp(App):
         #(并发 ApprovalRequest 不互踩;前一个决策落定后再 mount 下一个)。
         self._choice_active = False
         self._choice_queue: deque[Callable[[], InlineChoice]] = deque()
+        # v6 P3b §4:当前 plan 决策的 call_id(PlanDecisionRequest 事件到达时设置)。
+        # _handle_plan_rendered 据此路由 respond_plan_decision / POST plan_decision。
+        self._current_plan_call_id: str | None = None
         self.sub_title = self._compose_subtitle()
 
     @staticmethod
@@ -298,6 +302,59 @@ class ArgosApp(App):
         # workspace 注入(诚实:_workspace 是 host 启动时计算好的工作目录;evaluator 据此跑边界)
         try:
             self.gate.set_workspace(str(self._workspace))
+        except Exception:  # noqa: BLE001
+            pass
+        # v6 P3b §2:daemon 模式探测 + 拉起(后台 worker,探测期间 TUI 正常可用)。
+        # 诚实:探测结果决定 _kernel_mode 标注,绝不在确认前假装已连通。
+        if not self._demo:
+            self.run_worker(self._setup_daemon_mode(), exclusive=False)
+
+    async def _setup_daemon_mode(self) -> None:
+        """v6 P3b §2:启动时探测 daemon socket → 尝试拉起 → 确定模式标注 + 创建 session。
+
+        成功 → _kernel_mode="argosd", _with_daemon=True, _daemon_client/session_id 就绪。
+        失败 → _kernel_mode="inline", _with_daemon=False(inline fallback,诚实标注)。
+        Demo 模式跳过(demo=True 时不调本方法)。
+        """
+        import os
+        from argos_agent.tui.daemon_spawn import probe_or_spawn
+        from argos_agent.daemon.client import DaemonClient
+
+        socket_path = Path(os.environ.get("ARGOS_DAEMON_SOCKET", "~/.argos/daemon.sock")).expanduser()
+
+        ready = await probe_or_spawn(socket_path)
+        if not ready:
+            # inline fallback 模式
+            self._kernel_mode = "inline"
+            self._with_daemon = False
+            try:
+                self.query_one("#status-bar", StatusBar).set_kernel_mode("inline(单进程)")
+            except Exception:  # noqa: BLE001
+                pass
+            return
+
+        # daemon 就绪:创建 session
+        client = DaemonClient(socket_path)
+        try:
+            sid = await client.create_session()
+        except Exception as e:  # noqa: BLE001
+            # 创建 session 失败:退到 inline(诚实)
+            import logging as _log
+            _log.getLogger(__name__).warning("daemon session create failed: %s", e)
+            self._kernel_mode = "inline"
+            self._with_daemon = False
+            try:
+                self.query_one("#status-bar", StatusBar).set_kernel_mode("inline(单进程)")
+            except Exception:  # noqa: BLE001
+                pass
+            return
+
+        self._daemon_client = client
+        self._daemon_session_id = sid
+        self._kernel_mode = "argosd"
+        self._with_daemon = True
+        try:
+            self.query_one("#status-bar", StatusBar).set_kernel_mode("argosd")
         except Exception:  # noqa: BLE001
             pass
 
@@ -535,6 +592,8 @@ class ArgosApp(App):
             await self._show_mcp(log)
         elif cmd.name == "undo":
             await self._undo(log)
+        elif cmd.name == "ledger":
+            await self._ledger_cmd(log)
         elif cmd.name == "retry":
             await self._retry(log)
         elif cmd.name == "plan":
@@ -596,6 +655,62 @@ class ArgosApp(App):
                 f"如要继续,可 /retry 重发上一条 goal,或输入新 goal。",
                 kind="done",
             )
+
+    async def _ledger_cmd(self, log) -> None:
+        """/ledger:列出当前 run 的行为账本(人话条目 + 撤销状态着色)。
+
+        来源优先级:
+          1. 若存在 _ledger_store(daemon 路径注入),直接从 store 读当前 run 账本。
+          2. 否则诚实提示"当前会话无账本"(demo/inline 路径无账本记录)。
+        复用 transcript 渲染,不加新 widget。
+        撤销状态着色:available=绿,done=灰,impossible=红。
+        """
+        ledger_store = getattr(self, "_ledger_store", None)
+        run_id = getattr(self, "_daemon_run_id", None) or getattr(self, "_run_id", None)
+
+        if ledger_store is None or run_id is None:
+            await log.append_line(
+                "当前会话无行为账本(账本仅在 daemon 模式下可用,或本轮 run 尚未产生副作用动作)。",
+                kind="system",
+            )
+            return
+
+        try:
+            entries = ledger_store.replay(run_id)
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(f"账本读取失败:{e}", kind="error")
+            return
+
+        if not entries:
+            await log.append_line(
+                f"run {run_id} 尚无账本记录(本轮 run 未产生副作用动作)。",
+                kind="system",
+            )
+            return
+
+        # 过滤掉 undo_done 哨兵条目(action=undo_done 是内部标记,不对用户显示)
+        visible = [e for e in entries if e.action != "undo_done"]
+        if not visible:
+            await log.append_line(
+                f"run {run_id} 账本:所有动作均已撤销。",
+                kind="system",
+            )
+            return
+
+        lines = [f"行为账本 · run {run_id} · 共 {len(visible)} 条"]
+        for e in visible:
+            # 撤销状态标记
+            if e.undo_state == "available":
+                state_mark = "[可撤]"
+            elif e.undo_state == "done":
+                state_mark = "[已撤]"
+            else:
+                state_mark = "[不可撤]"
+            # 风险标记
+            risk_mark = {"low": "", "medium": "[!]", "high": "[!!]"}.get(e.risk, "")
+            lines.append(f"  {e.seq:>3}. {state_mark}{risk_mark} {e.summary_human}")
+
+        await log.append_line("\n".join(lines), kind="system")
 
     async def _retry(self, log) -> None:
         """/retry:重发本 session 最后一条 user 消息。busy / 空 / 无 store 诚实报。
@@ -1353,6 +1468,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         for sp in self.query(StartupSplash):
             await sp.remove()
         self._step_blocks = {}  # 每轮独立,杜绝跨轮 step 串台。
+        self._current_plan_call_id = None  # 每轮清 plan call_id(不跨轮泄漏)。
         self.query_one("#activity", ActivityPanel).reset_run()  # 每轮起手清活动栏(进度/工具/回执)。
         # UserPromptSubmit hook fire(spec §2.5:TUI 端触发,不在 loop 内)
         try:
@@ -1377,33 +1493,43 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 )), exclusive=False)
         except Exception:  # noqa: BLE001 — hook 失败不阻断 start_run
             pass
-        bus = EventBus()
-        loop = self._loop_factory()
-        # Plan mode spec §2.5:loop 投 PlanRendered 事件时 _apply_event 回调里要调
-        # ExitPlanMode(loop, ...) + set _plan_decision_event 唤醒 loop 的 await。把本轮
-        # loop 引用挂到 self 上,事件回调闭包外也能拿到(每轮 run 起始重设,无跨轮泄漏)。
-        self._current_loop = loop
         log = self.query_one("#transcript", Transcript)
         await log.user_line(goal)  # 回显用户目标进对话流(› 行),否则对话看着单边(Task 14)。
-        # 记忆召回提示行(spec §8.3 机会点⑤):loop 会在系统提示里注入 store.recall(goal)。
-        # 诚实:只有真 store 真召回到记录时才显"◌ 记忆召回 N 条";demo/无 store/0 命中均不喧宾
-        #(绝不预填/编造命中数——honesty invariant)。host 侧 best-effort 镜像一次 recall 取真实计数。
+
+        # v6 P3b §3:双路 start_run ─────────────────────────────────────────
+        # daemon 模式:POST /runs → DaemonEventSource 喂 EventBus → 现有渲染路径零改动。
+        # inline 模式:直接 loop.run() → 现有路径(向后兼容,不动)。
+        if self._with_daemon and self._daemon_client is not None and self._daemon_session_id:
+            await self._start_run_daemon(goal, log)
+        else:
+            await self._start_run_inline(goal, log)
+
+    async def _start_run_inline(self, goal: str, log) -> None:
+        """inline 路径(单进程直跑):保持原有语义,支持 FakeLoop + AgentLoop。
+
+        plan_decision 走 loop.respond_plan_decision(call_id, action, feedback)——
+        彻底去掉 TUI 对 ExitPlanMode 等 loop 内部对象的直接引用(设计 §4 刀2收口)。
+        _handle_plan_rendered 已统一经 loop.respond_plan_decision 回传决策。
+        """
+        bus = EventBus()
+        loop = self._loop_factory()
+        # Plan mode:把本轮 loop 引用挂到 self;_handle_plan_rendered 经 respond_plan_decision 回传。
+        self._current_loop = loop
+
+        # 记忆召回提示行
         await self._announce_memory_recall(log, loop, goal)
         if self._demo:
-            # 诚实:演示模式每轮起手就声明以下全是脚本假数据,绝不冒充真实执行/验证。
             await log.append_line(
                 "⚠︎ 演示模式:以下为脚本化假数据,非真实执行/验证(真 AgentLoop 待 Phase 6 接入)。"
             )
         else:
-            # 真模式即时回执:M3 plan 阶段推理要数秒,这期间若 transcript 全空,用户会以为
-            # "回车没反应"。先落一行"思考中",让用户确认目标已收到、agent 正在跑。
             await log.show_thinking("已收到目标,思考中…")
 
         async def _produce() -> None:
             try:
                 async for ev in loop.run(goal, session_id=self._session_id):
                     await bus.emit(ev)
-            except Exception as e:  # noqa: BLE001 — loop 任何异常都降级为 Error 事件,绝不让 TUI 崩溃
+            except Exception as e:  # noqa: BLE001 — loop 任何异常降级为 Error 事件
                 chain: list[str] = []
                 cur: BaseException | None = e
                 while cur is not None and len(chain) < 4:
@@ -1419,19 +1545,93 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             async for ev in bus:
                 await self._apply_event(ev)
         finally:
-            # 兜底落定:append_token 把流式尾段滞留 current 气泡,只在 PhaseChange/append_line 落定。
-            # 一轮结束时强制落定残余,杜绝"模型最后一句没换行 → 永远不计入 rendered_text"的隐形吞字。
             log.finalize_response()
             self._run_active = False
             self._produce_worker = None
             self._glow_stop()
             try:
-                # 智能切:run 收尾右栏回 idle 视图(verdict/成本仍常驻可见)
                 self.query_one("#activity", ActivityPanel).on_run_end()
-            except Exception:  # noqa: BLE001 — 测试直构无 activity,静默
+            except Exception:  # noqa: BLE001
                 pass
             if self._interrupted:
-                # Esc 打断收尾:落一行明确告知(诚实——已停在当前步,不假装完成)。
+                await log.append_line("⎋ 已打断当前任务。", kind="system")
+                self._interrupted = False
+
+    async def _start_run_daemon(self, goal: str, log) -> None:
+        """daemon 路径(v6 P3b §3):POST /runs → DaemonEventSource 喂 EventBus。
+
+        · Esc = POST cancel(已在 action_interrupt 处理)
+        · Ctrl+B 后台化 = 断开 SSE 订阅即可(run 本来就在 daemon)
+        · 审批决策:_handle_approval 走 POST /approval/{call_id}
+        · plan 决策:_handle_plan_rendered 走 POST /plan_decision
+        · 断线重连:DaemonEventSource 内置指数退避(最多 3 次)
+        · 断连超阈值 → DaemonEventSource yield Error 事件,TUI 渲染后停止
+        """
+        from argos_agent.tui.daemon_source import DaemonEventSource
+        assert self._daemon_client is not None
+        assert self._daemon_session_id is not None
+
+        # 创建 run
+        try:
+            run_id = await self._daemon_client.create_run(
+                self._daemon_session_id,
+                goal=goal,
+                workspace=str(self._workspace),
+                approval_level="confirm",
+            )
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(f"◉ daemon create_run 失败:{e}", kind="error")
+            self._run_active = False
+            self._glow_stop()
+            return
+
+        self._daemon_run_id = run_id
+
+        # 刷新 TabStrip
+        self._refresh_tab_strip()
+
+        await log.show_thinking("已收到目标,思考中…")
+
+        # DaemonEventSource:SSE → typed Event 流
+        socket_path = self._daemon_client.socket_path
+        source = DaemonEventSource(
+            socket_path, run_id, self._daemon_session_id,
+        )
+        bus = EventBus()
+
+        async def _produce() -> None:
+            try:
+                async for ev in source.stream():
+                    await bus.emit(ev)
+            except asyncio.CancelledError:
+                source.stop()
+                raise
+            except Exception as e:  # noqa: BLE001
+                chain: list[str] = []
+                cur: BaseException | None = e
+                while cur is not None and len(chain) < 4:
+                    chain.append(f"{type(cur).__name__}: {cur}")
+                    cur = cur.__cause__ or cur.__context__
+                await bus.emit(Error(message=str(e), chain=chain))
+            finally:
+                await bus.close()
+
+        self._interrupted = False
+        self._produce_worker = self.run_worker(_produce(), exclusive=False)
+        try:
+            async for ev in bus:
+                await self._apply_event(ev)
+        finally:
+            log.finalize_response()
+            self._run_active = False
+            self._produce_worker = None
+            self._daemon_run_id = None
+            self._glow_stop()
+            try:
+                self.query_one("#activity", ActivityPanel).on_run_end()
+            except Exception:  # noqa: BLE001
+                pass
+            if self._interrupted:
                 await log.append_line("⎋ 已打断当前任务。", kind="system")
                 self._interrupted = False
 
@@ -1550,10 +1750,11 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             # 写回 loop._plan_decision + set event 唤醒 loop 的 await(见 _handle_plan_rendered)。
             await self._handle_plan_rendered(ev)
         elif isinstance(ev, PlanDecisionRequest):
-            # v6 §4 ACP:PlanDecisionRequest 是给 daemon 客户端消费的频道事件。
-            # TUI inline 路径已在 PlanRendered 处理(_handle_plan_rendered 经 ExitPlanMode 唤醒);
-            # 此处静默丢弃(避免 TUI 重复弹 modal),但保留 isinstance 分支防止被 isinstance(ev, Error) 接住。
-            pass
+            # v6 P3b §4:PlanDecisionRequest 携带 call_id,供 _handle_plan_rendered 路由。
+            # 先记录 call_id;PlanRendered 紧随其后到达时 _handle_plan_rendered 取用。
+            # inline 路径:loop.respond_plan_decision(call_id,...) 唤醒 loop。
+            # daemon 路径:POST /plan_decision(call_id 由此携带,不再需要 ExitPlanMode)。
+            self._current_plan_call_id = ev.call_id
         elif isinstance(ev, MemoryRecallEvent):
             # v6 §4 ACP:loop 投记忆召回事件,TUI 据此渲染"记忆召回 N 条"行。
             # 替换原来 _announce_memory_recall 对 loop._store 的直接访问(store 穿透修)。
@@ -1736,19 +1937,44 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         ))
 
     async def _handle_approval(self, req: ApprovalRequest) -> None:
-        """Auto 档不渲染直接 always;否则流内 mount InlineChoice(契约 §6.3),回调里 respond。"""
+        """Auto 档不渲染直接 always;否则流内 mount InlineChoice(契约 §6.3),回调里 respond。
+
+        v6 P3b §4:
+          · daemon 模式 → InlineChoice 决定 → POST /runs/{id}/approval/{call_id}
+          · inline 模式 → self.gate.respond(call_id, value)（原路径保留）
+        """
         if self.gate.level is ApprovalLevel.AUTO:
-            self.gate.respond(req.call_id, "always")
+            if self._with_daemon and self._daemon_client and self._daemon_session_id and self._daemon_run_id:
+                # daemon AUTO:直接 POST always(fire-and-forget)
+                self.run_worker(
+                    self._daemon_approval_post(req.call_id, "always"),
+                    exclusive=False,
+                )
+            else:
+                self.gate.respond(req.call_id, "always")
             return
 
         body_lines = [req.description, f"动作: {req.action} · 参数: {req.args}"]
-        # Smart approval 副标题(D6 锁):secret 命中显 "did you mean to commit this?" 提示
         if getattr(req, "secret_pattern", None):
             body_lines.append("⚠︎ Possible secret pattern matched: did you mean to commit this?")
 
+        _is_daemon = (
+            self._with_daemon
+            and self._daemon_client is not None
+            and self._daemon_session_id is not None
+            and self._daemon_run_id is not None
+        )
+
         def _decide(value: str, _feedback: str) -> None:
-            self.gate.respond(req.call_id, value)  # type: ignore[arg-type]
-            # append_line 是 async,回调是同步的 → 包成 worker 落行。
+            if _is_daemon:
+                # daemon 路径:POST approval(async fire-and-forget from sync callback)
+                self.run_worker(
+                    self._daemon_approval_post(req.call_id, value),
+                    exclusive=False,
+                )
+            else:
+                # inline 路径:直接 resolve gate Future
+                self.gate.respond(req.call_id, value)  # type: ignore[arg-type]
             self.run_worker(
                 self.query_one("#transcript", Transcript).append_line(
                     f"审批结果:{req.action} → {value}"
@@ -1767,36 +1993,75 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 ("always", "总是允许"), ("deny", "拒绝"),
             ],
             on_decide=_decide,
-            escape_value="deny",   # Esc = 安全默认拒绝
+            escape_value="deny",
             risk=req.risk,
         ))
+
+    async def _daemon_approval_post(self, call_id: str, decision: str) -> None:
+        """daemon 路径审批:POST /runs/{id}/approval/{call_id}。fail-soft(失败仅 log)。"""
+        if not self._daemon_client or not self._daemon_session_id or not self._daemon_run_id:
+            return
+        try:
+            await self._daemon_client.submit_approval(
+                self._daemon_session_id, self._daemon_run_id, call_id, decision,
+            )
+        except Exception as e:  # noqa: BLE001
+            import logging as _log
+            _log.getLogger(__name__).warning("daemon approval POST failed: %s", e)
 
     async def _handle_plan_rendered(self, ev: "PlanRendered") -> None:
         """Plan mode spec §2.5:PlanRendered 事件 → 流内 InlineChoice(4 选项)→ 决策回传 loop。
 
-        流程:
-          1. AUTO 档(YOLO)直接按 approve_start 落决策 + 唤醒 loop(不渲染)
-          2. CONFIRM/PROPOSE 档 → 流内 InlineChoice 等用户选 1/2/3/4;
-             refine 就地展开反馈输入(TUI v2:不再返回空 feedback)
-          3. 回调里 ExitPlanMode(loop, action, feedback);唤醒 loop 的 await 由
-             ExitPlanMode 自己负责(校验通过 → 自动 set event),TUI 不再手动 set。
-             (历史教训:之前 TUI 在 ExitPlanMode 失败后仍 set event,导致 Refine 校验失败
-             时被静默兜底成 Approve;现在 ExitPlanMode 原子完成,失败时不 set,无此洞。)
-          无 escape_value:plan 决策没有"安全默认",用户没拍就让 loop 继续挂(诚实)。
+        v6 P3b §4 统一路由:
+          · daemon 模式 → POST /runs/{id}/plan_decision（call_id 来自 PlanDecisionRequest）
+          · inline 模式 → loop.respond_plan_decision(call_id, action, feedback)
+            彻底去掉 TUI 对 ExitPlanMode 的直接引用（设计 §4 刀2 收口）。
+
+        plan_call_id 从 _current_plan_call_id 取（_apply_event 在 PlanDecisionRequest
+        事件到达时设置；inline loop 须同时投 PlanRendered + PlanDecisionRequest 才能走此路）。
+        无 call_id 时退到仅 inline loop.respond_plan_decision（向后兼容 FakeLoop 无 call_id）。
         """
-        from argos_agent.core.plan_mode import ExitPlanMode
         loop = self._current_loop
-        if loop is None:
-            return  # run 已结束(并发事件兜底)
 
         if self.gate.level is ApprovalLevel.AUTO:
-            # YOLO:不渲染,直接 approve_start 走完(spec §2.5 等价于按 1)
-            ExitPlanMode(loop, "approve_start")
+            # YOLO:不渲染，直接 approve_start
+            call_id = getattr(self, "_current_plan_call_id", None)
+            if self._with_daemon and self._daemon_client and self._daemon_session_id and self._daemon_run_id and call_id:
+                self.run_worker(
+                    self._daemon_plan_decision_post(call_id, "approve_start"),
+                    exclusive=False,
+                )
+            elif loop is not None and hasattr(loop, "respond_plan_decision") and call_id:
+                loop.respond_plan_decision(call_id, "approve_start", None)
+            elif loop is not None:
+                # 向后兼容:FakeLoop / 旧 loop 无 call_id → ExitPlanMode
+                from argos_agent.core.plan_mode import ExitPlanMode
+                ExitPlanMode(loop, "approve_start")
             return
 
+        if loop is None and not (self._with_daemon and self._daemon_run_id):
+            return  # run 已结束
+
+        _is_daemon = (
+            self._with_daemon
+            and self._daemon_client is not None
+            and self._daemon_session_id is not None
+            and self._daemon_run_id is not None
+        )
+
         def _decide(value: str, feedback: str) -> None:
-            ExitPlanMode(loop, value, feedback if value == "refine" else None)
-            # ExitPlanMode 内部已 set event(校验失败时不动,避免 Refine→Approve 兜底)。
+            call_id = getattr(self, "_current_plan_call_id", None)
+            if _is_daemon and call_id:
+                self.run_worker(
+                    self._daemon_plan_decision_post(call_id, value, feedback if value == "refine" else None),
+                    exclusive=False,
+                )
+            elif loop is not None and hasattr(loop, "respond_plan_decision") and call_id:
+                loop.respond_plan_decision(call_id, value, feedback if value == "refine" else None)
+            elif loop is not None:
+                # 向后兼容(FakeLoop / 旧 loop 无 call_id)
+                from argos_agent.core.plan_mode import ExitPlanMode
+                ExitPlanMode(loop, value, feedback if value == "refine" else None)
             self.run_worker(
                 self.query_one("#transcript", Transcript).append_line(
                     f"Plan 决策:{value}", kind="system"
@@ -1820,3 +2085,21 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             input_placeholder="补充对 plan 的反馈,Enter 提交,Esc 返回",
             risk="low",
         ))
+
+    async def _daemon_plan_decision_post(self, call_id: str, action: str, feedback: str | None = None) -> None:
+        """daemon 路径 plan 决策:POST /runs/{id}/plan_decision。fail-soft(失败仅 log)。"""
+        if not self._daemon_client or not self._daemon_session_id or not self._daemon_run_id:
+            return
+        try:
+            body = {"call_id": call_id, "action": action}
+            if feedback:
+                body["feedback"] = feedback
+            await self._daemon_client._request(
+                "POST",
+                f"/runs/{self._daemon_run_id}/plan_decision",
+                session_id=self._daemon_session_id,
+                body=body,
+            )
+        except Exception as e:  # noqa: BLE001
+            import logging as _log
+            _log.getLogger(__name__).warning("daemon plan_decision POST failed: %s", e)

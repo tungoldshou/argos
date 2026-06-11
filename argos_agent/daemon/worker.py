@@ -232,7 +232,8 @@ class RunWorker:
 
     def __init__(self, *, run_id: str, manager: RunManager, loop_factory,
                  registry=None, worktree=None, gate=None,
-                 run_stack_close=None, approval_timeout_s: float = 60.0):
+                 run_stack_close=None, approval_timeout_s: float = 60.0,
+                 ledger_store=None, snapshot=None):
         self.run_id = run_id
         self._manager = manager
         self._loop_factory = loop_factory
@@ -255,6 +256,11 @@ class RunWorker:
         # per-run 清理钩子:RunStack.close() —— 关闭沙箱子进程,不留孤儿。
         # None = 向后兼容路径(loop_factory),不由 worker 负责 sandbox 清理。
         self._run_stack_close = run_stack_close
+        # P3b §6 行为账本:LedgerStore + run 起点快照(undo_token)
+        # None = 向后兼容路径(测试/FakeLoop),不落账本。
+        self._ledger_store = ledger_store
+        self._snapshot = snapshot         # RunSnapshot | None(run 起点快照,undo_token 来源)
+        self._ledger_seq = 0              # 本 run 账本条目顺序号(从 1 起)
         # P1 typed event 桥:兼容 dataclass(AgentLoop)和 dict(FakeLoop)两种形态
 
     @property
@@ -380,6 +386,9 @@ class RunWorker:
                 self._manager.store.append(self.run_id, ev_dict)
                 self._manager.index.upsert(self.run_id, last_event_seq=self._event_seq)
                 await self._manager.fanout(self.run_id, ev_dict)
+                # P3b §6 行为账本:ToolReceipt 事件 → LedgerEntry 落盘 + 广播
+                if ev_kind == "tool_receipt" and self._ledger_store is not None:
+                    await self._maybe_append_ledger(ev_dict)
             # 5. 完成(若非终态)
             cur = self._manager.index.get(self.run_id)
             if cur is not None and cur.state not in ("completed", "failed", "cancelled"):
@@ -416,6 +425,81 @@ class RunWorker:
                     log.warning("worker: run_stack_close failed for %s: %s", self.run_id, _e)
             # #5b 终态收尾:release slot + worktree cleanup + registry cleanup
             await self._post_terminal_cleanup()
+
+    async def _maybe_append_ledger(self, ev_dict: dict) -> None:
+        """P3b §6:从 tool_receipt 事件 dict 构建 LedgerEntry 并落盘 + 广播 LedgerEntryEvent。
+
+        fail-soft:任何错误 log warning + 不抛(账本丢失不阻断主流程)。
+        """
+        try:
+            from argos_agent.ledger.builder import build_entry
+            from argos_agent.protocol.events import LedgerEntryEvent
+
+            # receipt 可能是 dict(序列化后)或 Receipt dataclass
+            receipt_data = ev_dict.get("receipt") or {}
+            if not isinstance(receipt_data, dict):
+                # 已是 dataclass:转 dict
+                import dataclasses as _dc
+                receipt_data = _dc.asdict(receipt_data)  # type: ignore[arg-type]
+
+            if not receipt_data.get("action"):
+                return  # 无效 receipt,跳过
+
+            # 构建最小 receipt-like 对象(鸭子类型:build_entry 只读 .action/.ts/.sig)
+            class _FakeReceipt:
+                def __init__(self, d: dict) -> None:
+                    self.action = str(d.get("action", ""))
+                    self.ts = float(d.get("ts", 0.0))
+                    self.sig = str(d.get("sig", ""))
+
+            fake_receipt = _FakeReceipt(receipt_data)
+
+            # undo_token = run 起点快照 tar 路径(str);无快照 → None
+            undo_token: str | None = None
+            if self._snapshot is not None:
+                try:
+                    snap_path = self._snapshot.tar_path
+                    if snap_path.exists():
+                        undo_token = str(snap_path)
+                except Exception:  # noqa: BLE001
+                    pass
+
+            self._ledger_seq += 1
+            entry = build_entry(
+                receipt=fake_receipt,
+                run_id=self.run_id,
+                seq=self._ledger_seq,
+                args={},           # v1:args 不随 receipt 广播,用空 dict 生成保守人话
+                undo_token=undo_token,
+            )
+            # 落盘
+            self._ledger_store.append(entry)  # type: ignore[union-attr]
+
+            # 广播 LedgerEntryEvent(SSE 扇出)
+            le_ev = LedgerEntryEvent(
+                ts=entry.ts,
+                run_id=entry.run_id,
+                seq=entry.seq,
+                action=entry.action,
+                summary_human=entry.summary_human,
+                risk=entry.risk,
+                reversible=entry.reversible,
+                undo_state=entry.undo_state,
+            )
+            from argos_agent.protocol.events import serialize_event
+            import json as _json
+            parsed = _json.loads(serialize_event(le_ev))
+            le_dict = {"kind": parsed["kind"]}
+            le_dict.update(parsed.get("data", {}))
+            # ledger 事件从主事件计数器领号(与所有 SSE 事件同一单调序列):
+            # 偏移方案(event_seq + ledger_seq)会与后续常规事件撞号,照样破坏 since=N 游标。
+            self._event_seq += 1
+            le_dict["_seq"] = self._event_seq
+            self._manager.index.upsert(self.run_id, last_event_seq=self._event_seq)
+            self._manager.store.append(self.run_id, le_dict)
+            await self._manager.fanout(self.run_id, le_dict)
+        except Exception as e:  # noqa: BLE001 — 账本路径必须不挂主任务
+            log.warning("worker: ledger append failed for %s: %s", self.run_id, e)
 
     async def _post_terminal_cleanup(self) -> None:
         """终态后清理:registry.slot 释放 + worktree + registry 缩 cap。
