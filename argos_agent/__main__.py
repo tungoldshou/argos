@@ -95,7 +95,8 @@ def _run_selftest() -> int:
     from argos_agent.sandbox.egress import EgressPolicy
     from argos_agent.sandbox.executor import SeatbeltExecutor
     from argos_agent.tools.receipts import ReceiptSigner
-    from argos_agent.tui.events import EventBus, VerifyVerdict
+    from argos_agent.protocol.events import VerifyVerdict
+    from argos_agent.protocol.events import EventBus
 
     with tempfile.TemporaryDirectory() as td:
         proj = Path(td) / "proj"

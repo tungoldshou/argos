@@ -1,7 +1,7 @@
 """Daemon 专属 3 个事件 dataclass(spec §10.1)。
 
 事件约定(任务:6 个 events.py 一致性):
-- 复用 `argos_agent.tui.events.EventBus`(全局唯一总线;本模块不重新定义)
+- 复用 `argos_agent.protocol.events.EventBus`(全局唯一总线;本模块不重新定义)
 - 每个事件 dataclass 含 `kind` 类属性(类名 snake_case;EventBus 路由 + replay 依赖)
 - `kind` 不参与 dataclass 字段;`asdict()` 不序列化它
 - 注:daemon 主路径走 SSE store(`/daemon/store.py`)而非 TUI EventBus;本 dataclass

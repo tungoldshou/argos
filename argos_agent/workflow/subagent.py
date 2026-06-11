@@ -31,7 +31,8 @@ from argos_agent.approval import ApprovalGate, ApprovalLevel
 from argos_agent.core.loop import AgentLoop, LoopConfig
 from argos_agent.sandbox.broker import CapabilityBroker
 from argos_agent.sandbox.executor import select_backend
-from argos_agent.tui.events import Error, EventBus, PhaseChange, TokenDelta, VerifyVerdict
+from argos_agent.protocol.events import Error, PhaseChange, TokenDelta, VerifyVerdict
+from argos_agent.protocol.events import EventBus
 from argos_agent.workflow.result import AgentResult
 from argos_agent.workflow.spec import AgentTask, ROLE_PRESETS
 from argos_agent.workflow.worktree import worktree_for

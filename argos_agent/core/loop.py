@@ -46,10 +46,11 @@ from argos_agent.core.honesty import (
 )
 from argos_agent.core.plan_mode import PlanExitDecision, PlanRenderer
 from argos_agent.core.types import ModelTierName
-from argos_agent.tui.events import (
-    CodeAction, CodeResult, CostUpdate, Error, Event, EventBus, PhaseChange,
+from argos_agent.protocol.events import (
+    CodeAction, CodeResult, CostUpdate, Error, Event, PhaseChange,
     PlanRendered, PlanUpdate, TokenDelta, ToolReceipt,
 )
+from argos_agent.protocol.events import EventBus
 from argos_agent import hooks as _hooks
 from argos_agent.hooks.payload import (
     build_post_payload, build_pre_payload, build_session_start_payload,
@@ -531,7 +532,7 @@ class AgentLoop:
         # 压缩=有损:标记发生过压缩 + 压缩后尚未重验(passed 需重跑 verify 才可信)。
         self._compacted = True
         self._reverified_since_compact = False
-        from argos_agent.tui.events import CompactedEvent
+        from argos_agent.protocol.events import CompactedEvent
         yield CompactedEvent(
             before=pre_used, after=new_total,
             reduction_pct=max(0.0, (pre_used - new_total) / max(1, pre_used)),
@@ -569,7 +570,7 @@ class AgentLoop:
         from argos_agent.context.tokens import token_estimate
         before = sum(token_estimate(m.get("content") or "")[0] for m in messages)
         after = before - result.removed_tokens
-        from argos_agent.tui.events import PrunedEvent
+        from argos_agent.protocol.events import PrunedEvent
         ev = PrunedEvent(
             before=before, after=after, removed=result.removed,
             reduction_pct=max(0.0, result.removed_tokens / max(1, before)),
@@ -1163,7 +1164,7 @@ class AgentLoop:
                 yield ev
             # 真跑一次 verify(同 run_verify_gate 的核心三行:验 + emit + 返 verdict),
             # 但省略 autonomy/escalation 侧路(已 bailout,无后续可走)。
-            from argos_agent.tui.events import VerifyVerdict as _VV
+            from argos_agent.protocol.events import VerifyVerdict as _VV
             _bailout_verdict = self._harness.verifier.verify(
                 self._verify_cmd, attempts=self._fail_count + 1,
             )
@@ -1271,7 +1272,7 @@ class AgentLoop:
     async def _run_workflow(self, raw_spec: dict, messages: list) -> "AsyncIterator[Event]":
         """校验 spec → WorkflowProposed(预览)→ 审批(await gate,异步态不死锁)→ 引擎异步跑 →
         WorkflowDone → 结果作 feedback 回灌 parent。校验失败/被拒/无引擎 → 诚实回错,不崩 run。"""
-        from argos_agent.tui.events import WorkflowProposed, WorkflowDone
+        from argos_agent.protocol.events import WorkflowProposed, WorkflowDone
         from argos_agent.workflow.result import render_preview
         from argos_agent.workflow.spec import WorkflowSpecError, parse_spec
         import uuid as _uuid

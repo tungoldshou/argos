@@ -19,7 +19,8 @@ from __future__ import annotations
 from argos_agent.core.types import Phase, Verdict
 from argos_agent.core.verify_gate import Verifier
 from argos_agent.tools.receipts import Receipt, ReceiptSigner
-from argos_agent.tui.events import EventBus, PhaseChange, VerifyVerdict, Escalation
+from argos_agent.protocol.events import PhaseChange, VerifyVerdict, Escalation
+from argos_agent.protocol.events import EventBus
 
 # 阶段顺序不可跳(spec §3.3 L3:plan→act→verify→report)。
 PHASE_ORDER: list[str] = ["plan", "act", "verify", "report"]

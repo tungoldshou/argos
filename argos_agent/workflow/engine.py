@@ -10,7 +10,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from pathlib import Path
 
-from argos_agent.tui.events import WorkflowProgress
+from argos_agent.protocol.events import WorkflowProgress
 from argos_agent.workflow.result import AgentResult, StageResult, WorkflowResult
 from argos_agent.workflow.spec import AgentTask, Stage, WorkflowSpec
 from argos_agent.workflow.subagent import SubAgentFactory

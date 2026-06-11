@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Literal
 from argos_agent.core.types import VerdictStatus, Phase
 
 if TYPE_CHECKING:
-    from argos_agent.tui.events import Event
+    from argos_agent.protocol.events import Event
     from argos_agent.memory.embedding import Embedder
 
 SCHEMA_VERSION = 1
@@ -293,7 +293,7 @@ class ArgosStore:
 
     # ── events(event sourcing,契约 §2 / spec §12.6)──────────────────────
     def append_event(self, session_id: str, event: "Event") -> None:
-        from argos_agent.tui.events import serialize_event, event_kind
+        from argos_agent.protocol.events import serialize_event, event_kind
         self._write(
             "INSERT INTO events(session_id, kind, blob, ts) VALUES (?,?,?,?)",
             (session_id, event_kind(event), serialize_event(event), time.time()),
@@ -301,7 +301,7 @@ class ArgosStore:
 
     def replay(self, session_id: str) -> "ReplayState":
         """重放 events 重建状态(/resume,spec §5.8)。session 不存在 → KeyError。"""
-        from argos_agent.tui.events import deserialize_event, event_kind
+        from argos_agent.protocol.events import deserialize_event, event_kind
         session = self.get_session(session_id)
         if session is None:
             raise KeyError(f"session not found: {session_id}")

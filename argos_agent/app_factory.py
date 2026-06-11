@@ -31,7 +31,7 @@ from argos_agent.sandbox.broker import CapabilityBroker
 from argos_agent.sandbox.egress import EgressPolicy
 from argos_agent.sandbox.executor import SeatbeltExecutor
 from argos_agent.tools.receipts import ReceiptSigner
-from argos_agent.tui.events import EventBus
+from argos_agent.protocol.events import EventBus
 
 # #11 per-task routing
 from argos_agent.routing.config import load_routing

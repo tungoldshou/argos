@@ -93,7 +93,7 @@
 
 ## 4. ACP 协议（Argos Client Protocol）
 
-- **Envelope**：`{v, kind, id, ts, session, run, data}`；黄金 JSON 快照测试防漂移。
+- **Envelope**：`{v, seq, kind, id, ts, session, run, data}`（seq 单调递增，供客户端检测丢帧/乱序）；黄金 JSON 快照测试防漂移。
 - **三类帧**：Event（内核→客户端广播；现有 Event union 升格，serialize/deserialize 已存在且有测试）、
   Command（客户端→内核：create_run/cancel/pause/resume/approval_response/plan_decision/setup_apply…）、
   RPC（幂等查询：list_runs/context_snapshot/capabilities/health）。

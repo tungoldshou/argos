@@ -371,7 +371,8 @@ async def deep_probe(*, protocol: str, base_url: str, model: str, api_key: str |
     from argos_agent.sandbox.egress import EgressPolicy
     from argos_agent.sandbox.executor import SeatbeltExecutor
     from argos_agent.tools.receipts import ReceiptSigner
-    from argos_agent.tui.events import EventBus, VerifyVerdict
+    from argos_agent.protocol.events import VerifyVerdict
+    from argos_agent.protocol.events import EventBus
 
     tier = ModelTier(name="probe", model=model, base_url=base_url, max_tokens=1024,
                      context_window=8192, protocol=protocol)

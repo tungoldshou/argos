@@ -1,7 +1,7 @@
 """事件一致性验收(任务:全局 EventBus 唯一,事件基类/约定一致)。
 
 约束:
-- tui/events.EventBus 是【全局唯一】总线(契约 §1)
+- protocol/events.EventBus 是【全局唯一】总线(契约 §1;v6 P0 由 tui/ 搬入协议层)
 - 5 个领域 events.py(permissions/daemon/hooks/lsp/skills_runtime)只定义事件 dataclass,
   不重复实现 EventBus
 - 所有事件 dataclass 有 `kind` 类属性(类名 snake_case,用于 EventBus 路由与 replay)
@@ -48,13 +48,15 @@ def test_only_one_eventbus_class_in_whole_argos_agent():
             for node in ast.walk(tree):
                 if isinstance(node, ast.ClassDef) and node.name == "EventBus":
                     found.append((p, node.lineno, node.name))
-    # 全局应该只有 tui.events.EventBus 一个
+    # 全局应该只有 protocol.events.EventBus 一个(v6 P0:总线是内核基础设施,搬入协议层)
     assert len(found) == 1, f"期望 1 个 EventBus,实得 {len(found)}:{found}"
-    assert found[0][0].endswith("/tui/events.py"), f"EventBus 必须在 tui/events.py,实得 {found[0][0]}"
+    assert found[0][0].endswith("/protocol/events.py"), (
+        f"EventBus 必须在 protocol/events.py,实得 {found[0][0]}"
+    )
 
 
 def test_eventbus_is_in_tui_events_module():
-    """EventBus 直接从 tui.events 可 import,且是运行时类(可实例化)。"""
+    """EventBus 经 tui.events shim 仍可 import(兼容保证),且是运行时类(可实例化)。"""
     assert hasattr(tui_events, "EventBus")
     assert inspect.isclass(EventBus)
     bus = EventBus()
