@@ -14,6 +14,7 @@
   POST /runs/{id}/resume
   POST /runs/{id}/cancel
   POST /runs/{id}/approval/{call_id}
+  POST /runs/{id}/plan_decision
 
 注:#5a 单 TUI 限定 → 所有 session 都 write-capable(无 read-only 降级)。
 """
@@ -224,6 +225,9 @@ class DaemonHTTPServer:
                 if method == "POST" and "/approval/" in rest:
                     rid, call_id = rest.split("/approval/", 1)
                     return await self._handle_approval(writer, headers, rid, call_id, body)
+                if method == "POST" and "/plan_decision" in rest:
+                    rid = rest.split("/plan_decision")[0]
+                    return await self._handle_plan_decision(writer, headers, rid, body)
                 if method == "GET":
                     return await self._handle_get_run(writer, headers, rest)
                 return await self._send_error(writer, 404, CODE_NOT_FOUND,
@@ -600,6 +604,106 @@ class DaemonHTTPServer:
         await self._send_json(writer, 200, {
             "call_id": call_id,
             "decision": decision,
+            "state": "applied",
+        })
+
+    async def _handle_plan_decision(self, writer, headers, run_id, body):
+        """POST /runs/{id}/plan_decision — daemon 路径回传 plan 决策。
+
+        v6 §4 ACP PlanDecisionRequest:与 /approval/{call_id} 同构,但服务 plan 决策
+        而非工具审批。调用方提供 JSON body:
+          {"call_id": "12hex", "action": "approve_start", "feedback": "..."}
+        action 必须是 PlanExitDecision._VALID_ACTIONS 之一。
+
+        fail-closed(铁律):
+          · run 不存在 → 404
+          · call_id 不在注册表(超时 race / 非法 id) → 409
+          · action 非法 / refine 无 feedback → 400
+          · respond_plan_decision 校验失败 → 400
+          · 一切异常 → 500(不静默;让调用方知道)
+        """
+        # plan_decision 是等价于审批的控制变更(approve_start 会让 run 越过 plan 闸继续),
+        # 与 approval/resume/cancel/focus 等控制端点一致,必须 owner-only。
+        if (sid := await self._require_owner(writer, headers)) is None:
+            return
+        # 用 _workers 表找 RunWorker(而非 manager.get_run 的 RunEntry)
+        worker = self._workers.get(run_id)
+        if worker is None:
+            # run 存在于 manager 但无 active worker(已完成/从未启动)
+            if self._manager.get_run(run_id) is None:
+                return await self._send_error(
+                    writer, 404, CODE_NOT_FOUND, f"run {run_id!r} not found",
+                )
+            return await self._send_error(
+                writer, 404, CODE_NOT_FOUND,
+                f"run {run_id!r} has no active worker (already completed or never started)",
+            )
+
+        # 解析 body
+        try:
+            payload = json.loads(body) if body else {}
+        except Exception:
+            return await self._send_error(writer, 400, CODE_BAD_REQUEST, "invalid JSON body")
+
+        call_id = payload.get("call_id", "")
+        action = payload.get("action", "")
+        feedback = payload.get("feedback") or None
+
+        if not call_id:
+            return await self._send_error(writer, 400, CODE_BAD_REQUEST, "missing call_id")
+        if not action:
+            return await self._send_error(writer, 400, CODE_BAD_REQUEST, "missing action")
+
+        # 取 loop(per-run RunWorker 持有)
+        loop = getattr(worker, "_loop", None) or getattr(worker, "loop", None)
+        if loop is None or not hasattr(loop, "respond_plan_decision"):
+            return await self._send_error(
+                writer, 409, "loop_not_available",
+                f"loop for run {run_id!r} is not available or not running",
+            )
+
+        # call_id 必须在 _plan_call_registry 中
+        if call_id not in getattr(loop, "_plan_call_registry", {}):
+            return await self._send_error(
+                writer, 409, "unknown_call_id",
+                f"call_id {call_id!r} is not pending in run {run_id!r} "
+                "(may have timed out or already resolved)",
+            )
+
+        # 路由决策到 loop(等价于 ExitPlanMode;fail-closed 校验在 respond_plan_decision 内)。
+        # respond_plan_decision 返回 False 有两类原因:
+        #   a. 动作非法 / refine 无 feedback → 400(客户端输入错误)
+        #   b. loop.mode 已翻回 act(本轮已解决/竞态) → 409(状态冲突,非输入错误)
+        # 区分方式:直接调 ExitPlanMode 检查 loop.mode 来判断(respond_plan_decision 内已调)。
+        ok = loop.respond_plan_decision(call_id, action, feedback)
+        if not ok:
+            # 检查是否竞态(loop 已退出 plan mode)
+            current_mode = getattr(loop, "mode", "act")
+            if current_mode != "plan":
+                return await self._send_error(
+                    writer, 409, CODE_INVALID_TRANSITION,
+                    f"plan_decision rejected: loop is no longer in plan mode "
+                    f"(current mode: {current_mode!r}; already resolved or raced)",
+                )
+            return await self._send_error(
+                writer, 400, CODE_BAD_REQUEST,
+                f"plan_decision rejected: invalid action {action!r} or missing feedback for refine",
+            )
+
+        # fanout plan_decision 事件(审计可见性)
+        plan_ev = {
+            "kind": "plan_decision_response",
+            "call_id": call_id,
+            "action": action,
+            "run_id": run_id,
+            "ts": time.time(),
+        }
+        self._manager.store.append(run_id, plan_ev)
+        await self._manager.fanout(run_id, plan_ev)
+
+        await self._send_json(writer, 200, {
+            "call_id": call_id,
+            "action": action,
             "state": "applied",
         })
 

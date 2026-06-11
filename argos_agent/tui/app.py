@@ -33,7 +33,9 @@ from argos_agent.tui.events import (
     Event,
     EventBus,
     FileDiff,
+    MemoryRecallEvent,
     PhaseChange,
+    PlanDecisionRequest,
     PlanRendered,
     PlanUpdate,
     PrunedEvent,
@@ -1434,29 +1436,12 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 self._interrupted = False
 
     async def _announce_memory_recall(self, log, loop: object, goal: str) -> None:
-        """记忆召回提示(spec §8.3 机会点⑤):run 起手镜像 loop 的 store.recall(goal) 取真实命中数。
+        """記憶召回提示(spec §8.3 機會點⑤):v6 §4 ACP 後此方法已無操作。
 
-        诚实边界:
-          · 无 store / store 无 recall 能力(demo/FakeLoop)→ 不显行(没召回就别假装召回)。
-          · recall 抛错 → 静默吞(不阻断 run,也不谎报命中)。
-          · hits==0 → 不显行(0 命中不喧宾);hits>0 → transcript faint 行 + 右栏 Run 区段。
-        计数取自真实 recall 返回的记录条数,绝不预填/编造(honesty invariant)。
+        v6 P2:loop 在 run() 起始投 MemoryRecallEvent,TUI 在 _apply_event 消費渲染;
+        TUI 不再主動訪問 loop._store(store 穿透修)。
+        保留空方法避免移除觸發 call site 的 AttributeError。
         """
-        store = getattr(loop, "_store", None) or getattr(loop, "store", None)
-        if store is None or not hasattr(store, "recall"):
-            return
-        try:
-            hits = list(store.recall(goal))  # type: ignore[attr-defined]
-        except Exception:  # noqa: BLE001 — 召回失败不阻断 run,也不谎报
-            return
-        n = len(hits)
-        if n <= 0:
-            return
-        await log.append_line(f"◌ 记忆召回 {n} 条", kind="system")
-        try:
-            self.query_one("#activity", ActivityPanel).on_memory_recall(n)
-        except Exception:  # noqa: BLE001 — 未 mount / 窄屏:静默(陷阱1 模式)
-            pass
 
     async def _apply_event(self, ev: Event) -> None:
         """把一个契约 §1 Event 反映到对应 widget(一份事件三用的 UI 出口)。"""
@@ -1564,6 +1549,21 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             # Plan mode spec §2.5:loop 投 PlanRendered → TUI 推 PlanModal + 回调里把用户决策
             # 写回 loop._plan_decision + set event 唤醒 loop 的 await(见 _handle_plan_rendered)。
             await self._handle_plan_rendered(ev)
+        elif isinstance(ev, PlanDecisionRequest):
+            # v6 §4 ACP:PlanDecisionRequest 是给 daemon 客户端消费的频道事件。
+            # TUI inline 路径已在 PlanRendered 处理(_handle_plan_rendered 经 ExitPlanMode 唤醒);
+            # 此处静默丢弃(避免 TUI 重复弹 modal),但保留 isinstance 分支防止被 isinstance(ev, Error) 接住。
+            pass
+        elif isinstance(ev, MemoryRecallEvent):
+            # v6 §4 ACP:loop 投记忆召回事件,TUI 据此渲染"记忆召回 N 条"行。
+            # 替换原来 _announce_memory_recall 对 loop._store 的直接访问(store 穿透修)。
+            n = len(ev.hits)
+            if n > 0:
+                await log.append_line(f"◌ 记忆召回 {n} 条", kind="system")
+                try:
+                    ap.on_memory_recall(n)
+                except Exception:  # noqa: BLE001 — 未 mount / 窄屏:静默
+                    pass
         elif isinstance(ev, ApprovalResponse):
             await log.append_line(f"审批结果:{ev.call_id} → {ev.decision}")
         elif isinstance(ev, Escalation):

@@ -489,3 +489,462 @@ async def test_concurrent_runs_approval_isolation(tmp_path: Path):
                 pass
         await srv.stop()
         manager.close()
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# P3 plan_decision 路径测试
+#
+# FakePlanLoop 直接管理 _plan_call_registry + _plan_decision_event,
+# 模拟 AgentLoop._plan_phase_round 的 call_id 注册行为,供 respond_plan_decision 使用。
+# RunWorker 的 loop_factory 返回此实例;server 通过 worker._loop 找到它。
+# ══════════════════════════════════════════════════════════════════════════
+
+class FakePlanLoop:
+    """模拟 AgentLoop plan 决策挂起路径的 fake loop。
+
+    · run() 流式产出一个 token_delta + 注册一个 call_id 到 _plan_call_registry
+    · 然后挂起等待 respond_plan_decision(call_id, action) 被调用
+    · 收到后产出结果事件并完成
+    """
+
+    def __init__(self, *, call_id: str | None = None, decision_timeout_s: float = 30.0):
+        _call_id = call_id or uuid.uuid4().hex[:12]
+        # 模拟 AgentLoop 中的字段(respond_plan_decision + server 直接访问这些属性)
+        self._plan_decision_event: asyncio.Event = asyncio.Event()
+        self._plan_decision: Any = None
+        self._plan_call_registry: dict[str, asyncio.Event] = {}
+        self.mode: str = "plan"  # 在 plan 阶段挂起时处于 plan mode
+        self.call_id = _call_id
+        self._decision_timeout_s = decision_timeout_s
+        self.decision_received: Any = None  # 供测试读取
+
+    def respond_plan_decision(self, call_id: str, action: str,
+                              feedback: str | None = None) -> bool:
+        """与 AgentLoop.respond_plan_decision 同签名。"""
+        if call_id not in self._plan_call_registry:
+            return False
+        from argos_agent.core.plan_mode import ExitPlanMode
+        result = ExitPlanMode(self, action, feedback)
+        if result.startswith("错误:"):
+            return False
+        self._plan_call_registry.pop(call_id, None)
+        return True
+
+    async def run(self, goal: str, session_id: str) -> AsyncIterator[dict]:
+        """模拟 run 阶段:注册 call_id → 挂起等决策 → 产出结果。"""
+        yield {"kind": "token_delta", "text": "generating plan..."}
+
+        # 注册 call_id(模拟 _plan_phase_round 的行为)
+        self._plan_call_registry[self.call_id] = self._plan_decision_event
+
+        # 挂起等待决策
+        try:
+            await asyncio.wait_for(
+                self._plan_decision_event.wait(),
+                timeout=self._decision_timeout_s,
+            )
+        except asyncio.TimeoutError:
+            yield {"kind": "error", "message": "plan_decision 超时", "chain": []}
+            return
+
+        self.decision_received = self._plan_decision
+
+        yield {
+            "kind": "plan_decision_applied",
+            "action": self._plan_decision.action if self._plan_decision else "unknown",
+        }
+        yield {"kind": "verify_verdict",
+               "verdict": {"status": "passed", "reason": "plan fake done"}}
+
+
+class FakePlanLoopFactory:
+    def __init__(self, loop: FakePlanLoop):
+        self._loop = loop
+
+    def __call__(self) -> FakePlanLoop:
+        return self._loop
+
+
+# ── plan_decision: 完整正常路径 ────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_plan_decision_full_circuit(tmp_path: Path):
+    """POST /runs/{id}/plan_decision(approve_start) → loop 唤醒 → run 完成。"""
+    socket_path = tmp_path / "s.sock"
+    manager = RunManager(
+        runs_dir=tmp_path / "runs",
+        index_path=tmp_path / "index.json",
+    )
+    fake_loop = FakePlanLoop()
+    run_id = await manager.create_run(goal="test plan decision", workspace=str(tmp_path))
+    worker = RunWorker(
+        run_id=run_id, manager=manager,
+        loop_factory=FakePlanLoopFactory(fake_loop),
+        gate=None,
+    )
+    # 手工将 loop 实例挂上 worker(server 通过 worker._loop 访问)
+    worker._loop = fake_loop
+
+    srv = DaemonHTTPServer(manager=manager, socket_path=socket_path)
+    srv._workers[run_id] = worker
+    await srv.start()
+
+    task = asyncio.create_task(worker.run(), name=f"run-{run_id}")
+    try:
+        sid = await _create_session(socket_path)
+        await _wait_run_state(manager, run_id, "running", timeout=3.0)
+        # 等 loop 注册 call_id
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            if fake_loop.call_id in fake_loop._plan_call_registry:
+                break
+            await asyncio.sleep(0.02)
+        assert fake_loop.call_id in fake_loop._plan_call_registry, (
+            "FakePlanLoop 未注册 call_id"
+        )
+
+        # POST plan_decision(approve_start)
+        status, raw = await _raw_req(
+            socket_path,
+            "POST", f"/runs/{run_id}/plan_decision",
+            session_id=sid,
+            body={"call_id": fake_loop.call_id, "action": "approve_start"},
+        )
+        assert status == 200, f"预期 200,实际 {status}: {raw.decode()}"
+        resp = json.loads(raw.decode())
+        assert resp["action"] == "approve_start"
+        assert resp["state"] == "applied"
+
+        # run 应完成
+        await _wait_run_state(manager, run_id, "completed", timeout=5.0)
+
+        # decision 正确传达
+        assert fake_loop.decision_received is not None
+        assert fake_loop.decision_received.action == "approve_start"
+
+    finally:
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+        await srv.stop()
+        manager.close()
+
+
+# ── plan_decision: 404 run 不存在 ─────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_plan_decision_unknown_run_404(tmp_path: Path):
+    """POST /runs/nonexistent/plan_decision → 404。"""
+    socket_path = tmp_path / "s.sock"
+    manager = RunManager(
+        runs_dir=tmp_path / "runs",
+        index_path=tmp_path / "index.json",
+    )
+    srv = DaemonHTTPServer(manager=manager, socket_path=socket_path)
+    await srv.start()
+    try:
+        sid = await _create_session(socket_path)
+        status, raw = await _raw_req(
+            socket_path,
+            "POST", "/runs/nonexistent_run/plan_decision",
+            session_id=sid,
+            body={"call_id": "abc123", "action": "approve_start"},
+        )
+        assert status == 404, f"预期 404,实际 {status}: {raw.decode()}"
+    finally:
+        await srv.stop()
+        manager.close()
+
+
+# ── plan_decision: 409 无 loop ────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_plan_decision_no_loop_409(tmp_path: Path):
+    """run 存在但 worker._loop 为 None → 409。"""
+    socket_path = tmp_path / "s.sock"
+    manager = RunManager(
+        runs_dir=tmp_path / "runs",
+        index_path=tmp_path / "index.json",
+    )
+    run_id = await manager.create_run(goal="no loop run", workspace=str(tmp_path))
+
+    # 构造 worker 但不设 _loop
+    class NoLoopWorker:
+        """最小 worker 存根:无 _loop 属性。"""
+        state = "running"
+        _loop = None
+
+    srv = DaemonHTTPServer(manager=manager, socket_path=socket_path)
+    srv._workers[run_id] = NoLoopWorker()  # type: ignore[assignment]
+    await srv.start()
+    try:
+        sid = await _create_session(socket_path)
+        status, raw = await _raw_req(
+            socket_path,
+            "POST", f"/runs/{run_id}/plan_decision",
+            session_id=sid,
+            body={"call_id": "abc123", "action": "approve_start"},
+        )
+        assert status == 409, f"预期 409,实际 {status}: {raw.decode()}"
+    finally:
+        await srv.stop()
+        manager.close()
+
+
+# ── plan_decision: 409 call_id 不在注册表 ─────────────────────────────
+
+@pytest.mark.asyncio
+async def test_plan_decision_unknown_call_id_409(tmp_path: Path):
+    """call_id 不在 _plan_call_registry → 409。"""
+    socket_path = tmp_path / "s.sock"
+    manager = RunManager(
+        runs_dir=tmp_path / "runs",
+        index_path=tmp_path / "index.json",
+    )
+    fake_loop = FakePlanLoop()
+    # 不注册任何 call_id(registry 为空)
+    run_id = await manager.create_run(goal="unknown call_id", workspace=str(tmp_path))
+    worker = RunWorker(
+        run_id=run_id, manager=manager,
+        loop_factory=FakePlanLoopFactory(fake_loop),
+        gate=None,
+    )
+    worker._loop = fake_loop
+
+    srv = DaemonHTTPServer(manager=manager, socket_path=socket_path)
+    srv._workers[run_id] = worker
+    await srv.start()
+    try:
+        sid = await _create_session(socket_path)
+        status, raw = await _raw_req(
+            socket_path,
+            "POST", f"/runs/{run_id}/plan_decision",
+            session_id=sid,
+            body={"call_id": "deadbeef1234", "action": "approve_start"},
+        )
+        assert status == 409, f"预期 409,实际 {status}: {raw.decode()}"
+    finally:
+        await srv.stop()
+        manager.close()
+
+
+# ── plan_decision: 400 非法 action ────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_plan_decision_invalid_action_400(tmp_path: Path):
+    """action 非法 → 400。"""
+    socket_path = tmp_path / "s.sock"
+    manager = RunManager(
+        runs_dir=tmp_path / "runs",
+        index_path=tmp_path / "index.json",
+    )
+    fake_loop = FakePlanLoop()
+    # 手工注册 call_id,使其通过 call_id 检查
+    fake_loop._plan_call_registry[fake_loop.call_id] = fake_loop._plan_decision_event
+
+    run_id = await manager.create_run(goal="invalid action", workspace=str(tmp_path))
+    worker = RunWorker(
+        run_id=run_id, manager=manager,
+        loop_factory=FakePlanLoopFactory(fake_loop),
+        gate=None,
+    )
+    worker._loop = fake_loop
+
+    srv = DaemonHTTPServer(manager=manager, socket_path=socket_path)
+    srv._workers[run_id] = worker
+    await srv.start()
+    try:
+        sid = await _create_session(socket_path)
+        status, raw = await _raw_req(
+            socket_path,
+            "POST", f"/runs/{run_id}/plan_decision",
+            session_id=sid,
+            body={"call_id": fake_loop.call_id, "action": "invalid_action_xyz"},
+        )
+        assert status == 400, f"预期 400,实际 {status}: {raw.decode()}"
+    finally:
+        await srv.stop()
+        manager.close()
+
+
+# ── plan_decision: 400 refine 无 feedback ─────────────────────────────
+
+@pytest.mark.asyncio
+async def test_plan_decision_refine_missing_feedback_400(tmp_path: Path):
+    """action=refine 但 feedback 缺失 → 400。"""
+    socket_path = tmp_path / "s.sock"
+    manager = RunManager(
+        runs_dir=tmp_path / "runs",
+        index_path=tmp_path / "index.json",
+    )
+    fake_loop = FakePlanLoop()
+    fake_loop._plan_call_registry[fake_loop.call_id] = fake_loop._plan_decision_event
+
+    run_id = await manager.create_run(goal="refine missing feedback", workspace=str(tmp_path))
+    worker = RunWorker(
+        run_id=run_id, manager=manager,
+        loop_factory=FakePlanLoopFactory(fake_loop),
+        gate=None,
+    )
+    worker._loop = fake_loop
+
+    srv = DaemonHTTPServer(manager=manager, socket_path=socket_path)
+    srv._workers[run_id] = worker
+    await srv.start()
+    try:
+        sid = await _create_session(socket_path)
+        # refine 无 feedback 字段
+        status, raw = await _raw_req(
+            socket_path,
+            "POST", f"/runs/{run_id}/plan_decision",
+            session_id=sid,
+            body={"call_id": fake_loop.call_id, "action": "refine"},
+        )
+        assert status == 400, f"预期 400,实际 {status}: {raw.decode()}"
+    finally:
+        await srv.stop()
+        manager.close()
+
+
+# ── plan_decision: 跨 run 隔离 ────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_plan_decision_cross_run_isolation(tmp_path: Path):
+    """run A 的 call_id 发给 run B → 409;各自 call_id 正确路由。"""
+    socket_path = tmp_path / "s.sock"
+    manager = RunManager(
+        runs_dir=tmp_path / "runs",
+        index_path=tmp_path / "index.json",
+    )
+    loop_a = FakePlanLoop(call_id="call_aaaaaa")
+    loop_b = FakePlanLoop(call_id="call_bbbbbb")
+    # 预注册 call_id
+    loop_a._plan_call_registry[loop_a.call_id] = loop_a._plan_decision_event
+    loop_b._plan_call_registry[loop_b.call_id] = loop_b._plan_decision_event
+
+    run_id_a = await manager.create_run(goal="plan run A", workspace=str(tmp_path))
+    run_id_b = await manager.create_run(goal="plan run B", workspace=str(tmp_path))
+
+    worker_a = RunWorker(
+        run_id=run_id_a, manager=manager,
+        loop_factory=FakePlanLoopFactory(loop_a), gate=None,
+    )
+    worker_b = RunWorker(
+        run_id=run_id_b, manager=manager,
+        loop_factory=FakePlanLoopFactory(loop_b), gate=None,
+    )
+    worker_a._loop = loop_a
+    worker_b._loop = loop_b
+
+    srv = DaemonHTTPServer(manager=manager, socket_path=socket_path)
+    srv._workers[run_id_a] = worker_a
+    srv._workers[run_id_b] = worker_b
+    await srv.start()
+
+    task_a = asyncio.create_task(worker_a.run(), name=f"run-{run_id_a}")
+    task_b = asyncio.create_task(worker_b.run(), name=f"run-{run_id_b}")
+    try:
+        sid = await _create_session(socket_path)
+
+        # run A 的 call_id 发给 run B → 409
+        status, raw = await _raw_req(
+            socket_path,
+            "POST", f"/runs/{run_id_b}/plan_decision",
+            session_id=sid,
+            body={"call_id": loop_a.call_id, "action": "approve_start"},
+        )
+        assert status == 409, (
+            f"run B 不应接受 run A 的 call_id,但返回 {status}: {raw.decode()}"
+        )
+
+        # run A 的 call_id 发给 run A → 200
+        status, raw = await _raw_req(
+            socket_path,
+            "POST", f"/runs/{run_id_a}/plan_decision",
+            session_id=sid,
+            body={"call_id": loop_a.call_id, "action": "approve_start"},
+        )
+        assert status == 200, f"run A plan_decision 应成功: {status}: {raw.decode()}"
+
+        # run B 的 call_id 发给 run B → 200
+        status, raw = await _raw_req(
+            socket_path,
+            "POST", f"/runs/{run_id_b}/plan_decision",
+            session_id=sid,
+            body={"call_id": loop_b.call_id, "action": "keep_planning"},
+        )
+        assert status == 200, f"run B plan_decision 应成功: {status}: {raw.decode()}"
+
+        # decision 正确且不串
+        # run A: approve_start
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and loop_a.decision_received is None:
+            await asyncio.sleep(0.02)
+        assert loop_a.decision_received is not None
+        assert loop_a.decision_received.action == "approve_start", (
+            f"run A 应收到 approve_start,实际 {loop_a.decision_received}"
+        )
+
+        # run B: keep_planning(loop_b 的 decision)
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and loop_b.decision_received is None:
+            await asyncio.sleep(0.02)
+        assert loop_b.decision_received is not None
+        assert loop_b.decision_received.action == "keep_planning", (
+            f"run B 应收到 keep_planning,实际 {loop_b.decision_received}"
+        )
+
+    finally:
+        for t in (task_a, task_b):
+            t.cancel()
+            try:
+                await t
+            except (asyncio.CancelledError, Exception):
+                pass
+        await srv.stop()
+        manager.close()
+
+
+# ── plan_decision: observer 会话被拒(owner-only) ─────────────────────
+
+@pytest.mark.asyncio
+async def test_plan_decision_observer_session_rejected(tmp_path: Path):
+    """observer 只读会话尝试 plan_decision → 403(owner-only 校验)。"""
+    socket_path = tmp_path / "s.sock"
+    manager = RunManager(
+        runs_dir=tmp_path / "runs",
+        index_path=tmp_path / "index.json",
+    )
+    fake_loop = FakePlanLoop()
+    fake_loop._plan_call_registry[fake_loop.call_id] = fake_loop._plan_decision_event
+
+    run_id = await manager.create_run(goal="observer rejected", workspace=str(tmp_path))
+    worker = RunWorker(
+        run_id=run_id, manager=manager,
+        loop_factory=FakePlanLoopFactory(fake_loop), gate=None,
+    )
+    worker._loop = fake_loop
+
+    srv = DaemonHTTPServer(manager=manager, socket_path=socket_path)
+    srv._workers[run_id] = worker
+    await srv.start()
+    try:
+        # 第一个 session = owner,第二个 session = observer(sessions.py:role logic)
+        _owner_sid = await _create_session(socket_path)  # noqa: F841 — 占 owner 槽
+        obs_sid = await _create_session(socket_path)     # 第二个 → observer 角色
+
+        # observer 会话发送 plan_decision → 预期 403
+        status, raw = await _raw_req(
+            socket_path,
+            "POST", f"/runs/{run_id}/plan_decision",
+            session_id=obs_sid,
+            body={"call_id": fake_loop.call_id, "action": "approve_start"},
+        )
+        assert status == 403, (
+            f"observer 会话应被拒(403),实际 {status}: {raw.decode()}"
+        )
+    finally:
+        await srv.stop()
+        manager.close()

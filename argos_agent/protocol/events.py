@@ -31,6 +31,8 @@ EventKind = Literal[
     "approval_request", "approval_response", "escalation", "error",
     "plan_update", "workflow_progress", "workflow_proposed", "workflow_done",
     "plan_rendered",
+    "plan_decision_request",  # ← P2 新增(§4 ACP:去 TUI 对 loop 的直接引用)
+    "memory_recall",          # ← P2 新增(§4 ACP:修 store 穿透)
     "hook_fired",
     "lsp_server_event",
     "lsp_diagnostic_event",
@@ -221,6 +223,34 @@ class PlanRendered:
     plan_md: str                     # PlanRenderer.render() 产出的 user-facing markdown
 
 
+@dataclass(frozen=True, slots=True)
+class PlanDecisionRequest:
+    """v6 §4 ACP:plan 决策请求事件——去掉 TUI 对 loop 实例的直接引用。
+
+    机制与 ApprovalRequest 同构:loop 在投 PlanRendered 后同时投此事件,
+    call_id 由调用方按 call_id 路由到对应 asyncio.Event 唤醒 loop;
+    daemon 路径通过 POST /runs/{id}/plan_decision 响应;
+    TUI inline 路径通过 ExitPlanMode(loop, ...) 响应(保持向后兼容)。
+    超时 fail-closed:默认拒绝计划继续(cancel,诚实事件)。
+    """
+    kind = "plan_decision_request"
+    call_id: str                     # 12 hex,与 PlanDecisionResponse.call_id 对应
+    plan_md: str                     # 同 PlanRendered.plan_md(冗余,方便 daemon 路径独立消费)
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryRecallEvent:
+    """v6 §4 ACP:记忆召回结果事件——修 store 穿透(TUI 不再 getattr(loop, '_store') 直访)。
+
+    loop.run() 起始召回记忆后投此事件;TUI 消费此事件渲染"记忆召回 N 条"行,
+    活动栏 on_memory_recall(n) 同样经此事件驱动,不再绕过协议层直访 loop._store。
+    hits 为召回的 goal→verdict 摘要字符串列表(每项对应一条 ArgosStore.recall 命中);
+    空列表 = 无命中(诚实:不显行,不编造计数)。
+    """
+    kind = "memory_recall"
+    hits: list[str] = field(default_factory=list)  # ["goal → verdict（reason）", ...]
+
+
 # ── Hooks(spec 2026-06-06 §2.4):HookFired 在 hooks/events.py 定义(spec 强制在
 #  hooks 子模块独立 dataclass,不让 tui 反向依赖 hooks 配置);TUI Event 联合
 # 通过 `from argos_agent.hooks.events import HookFired` 接进来。───────────────
@@ -244,7 +274,9 @@ Event = (
     TokenDelta | CodeAction | CodeResult | FileDiff | ToolReceipt
     | VerifyVerdict | PhaseChange | CostUpdate | ApprovalRequest
     | ApprovalResponse | Escalation | Error | PlanUpdate | WorkflowProgress
-    | WorkflowProposed | WorkflowDone | PlanRendered | HookFired
+    | WorkflowProposed | WorkflowDone | PlanRendered
+    | PlanDecisionRequest | MemoryRecallEvent  # ← P2 新增(§4 ACP)
+    | HookFired
     | LspServerEvent | LspDiagnosticEvent
     | SkillRunStart | SkillRunEnd   # ← 新增
     | CompactedEvent | PrunedEvent  # ← context rot(spec 2026-06-07)
@@ -257,7 +289,9 @@ _KIND_TO_CLASS: dict[str, type] = {
         TokenDelta, CodeAction, CodeResult, FileDiff, ToolReceipt,
         VerifyVerdict, PhaseChange, CostUpdate, ApprovalRequest,
         ApprovalResponse, Escalation, Error, PlanUpdate, WorkflowProgress,
-        WorkflowProposed, WorkflowDone, PlanRendered, HookFired,
+        WorkflowProposed, WorkflowDone, PlanRendered,
+        PlanDecisionRequest, MemoryRecallEvent,  # ← P2 新增(§4 ACP)
+        HookFired,
         LspServerEvent, LspDiagnosticEvent,
         SkillRunStart, SkillRunEnd,   # ← 新增
         CompactedEvent, PrunedEvent,  # ← context rot(spec 2026-06-07):可正确反序列化

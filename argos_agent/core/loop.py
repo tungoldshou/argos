@@ -48,7 +48,8 @@ from argos_agent.core.plan_mode import PlanExitDecision, PlanRenderer
 from argos_agent.core.types import ModelTierName
 from argos_agent.protocol.events import (
     CodeAction, CodeResult, CostUpdate, Error, Event, PhaseChange,
-    PlanRendered, PlanUpdate, TokenDelta, ToolReceipt,
+    MemoryRecallEvent, PlanDecisionRequest, PlanRendered, PlanUpdate,
+    TokenDelta, ToolReceipt,
 )
 from argos_agent.protocol.events import EventBus
 from argos_agent import hooks as _hooks
@@ -314,6 +315,11 @@ class AgentLoop:
         self._plan_decision_event: asyncio.Event = asyncio.Event()
         self._plan_decision: PlanExitDecision | None = None
         self._approval_level_override: Any = None
+        # v6 §4 ACP PlanDecisionRequest:call_id → asyncio.Event 注册表。
+        # daemon 路径通过 respond_plan_decision(call_id, action, feedback) 唤醒 loop;
+        # TUI inline 路径仍走 ExitPlanMode(loop, ...)→ _plan_decision_event,二路均兼容。
+        # 每次 _plan_phase_round 起手生成新 call_id,超时兜底默认 cancel。
+        self._plan_call_registry: dict[str, asyncio.Event] = {}
         # #11 per-task routing(spec §10;契约 §11):router 不为 None 时每步按
         # (tool, code, phase) 选 tier;_current_tier 跟踪当前步实际 tier,CostUpdate 附
         # tier_name 字段(spec §15.2 可见性防线)。router=None 走原路径(零破坏既有 1507 测试)。
@@ -394,6 +400,30 @@ class AgentLoop:
             self._verify_rejected = cmd   # 供 act 循环回灌一句"这不是验证命令"
             return False
         self._verify_cmd = cmd
+        return True
+
+    def respond_plan_decision(
+        self, call_id: str, action: str, feedback: str | None = None,
+    ) -> bool:
+        """v6 §4 ACP:daemon 路径回传 plan 决策,唤醒挂起的 _run_plan_phase_loop。
+
+        等同于 TUI 路径的 ExitPlanMode(loop, action, feedback):校验 action、写
+        _plan_decision、set _plan_decision_event,同时清除 _plan_call_registry 中的条目。
+
+        返回 True = 成功路由;False = call_id 不在注册表(超时已清理 / 非法 call_id)。
+        超时兜底由 _run_plan_phase_loop 的 wait_for 处理(默认 cancel,诚实事件)。
+
+        fail-closed:校验失败(无效 action / refine 无 feedback)→ 返 False,不唤醒 loop。
+        """
+        if call_id not in self._plan_call_registry:
+            return False
+        from argos_agent.core.plan_mode import ExitPlanMode
+        result = ExitPlanMode(self, action, feedback)
+        # ExitPlanMode 失败(校验不过)→ 不清注册表,返 False 告知调用方。
+        if result.startswith("错误:"):
+            return False
+        # 清注册表条目(ExitPlanMode 已 set _plan_decision_event,loop 会唤醒)。
+        self._plan_call_registry.pop(call_id, None)
         return True
 
     @staticmethod
@@ -723,6 +753,21 @@ class AgentLoop:
         system = system_stable if not system_dynamic else compose_system(
             system_stable, untrusted=system_dynamic,
         )
+
+        # v6 §4 ACP MemoryRecallEvent:run 起始把 store.recall 命中结果通过事件广播,
+        # 消费侧(TUI/daemon client)据此渲染"记忆召回 N 条",不再 getattr(loop,'_store') 穿透。
+        # 诚实:无 store / 无 recall 能力 / 0 命中 → 投空列表事件(hits=[]),消费侧不喧宾。
+        # 召回失败 → 同上,绝不让 recall 错误阻断 run。
+        _recall_hits: list[str] = []
+        if self._cfg.recall and hasattr(self._store, "recall"):
+            try:
+                _recall_hits = [
+                    f"{rec.goal} → {rec.verdict or '?'}（{reason}）"
+                    for rec, reason in self._store.recall(goal)  # type: ignore[attr-defined]
+                ]
+            except Exception:  # noqa: BLE001 — 召回失败诚实降级为空列表
+                _recall_hits = []
+        yield MemoryRecallEvent(hits=_recall_hits)
 
         # Plan mode spec §2.5:plan 模式 → plan 子循环(可多轮 keep_planning/refine)。
         # 退出条件:approve_start / approve_accept_edits。子循环里:流式模型一次 → 拼 markdown
@@ -1315,6 +1360,10 @@ class AgentLoop:
             summary += "\n注记:" + " / ".join(notes)
         messages.append({"role": "user", "content": summary})
 
+    # plan 决策超时(秒)。daemon 客户端断连/不应答时触发,fail-closed 默认取消。
+    # TUI inline 路径响应极快,不受此超时影响(ExitPlanMode 直接 set event)。
+    PLAN_DECISION_TIMEOUT_S: float = 300.0  # 5 分钟等待上限
+
     # ── Plan mode (spec §2.5) ──────────────────────────────────────────
     async def _run_plan_phase_loop(
         self, goal: str, messages: list[dict], system: str,
@@ -1324,17 +1373,43 @@ class AgentLoop:
         退出条件:approve_start / approve_accept_edits(均跳出,后者切 _approval_level_override)。
         子循环条件:keep_planning(同 goal 再来一轮) / refine(feedback 注入 messages 再来一轮)。
         注:PlanUpdate (todos) 也在每个 plan 轮内同步 yield,活动栏进度随 plan 更新。
+
+        fail-closed 语义(spec §6 信任面 + 审批回路铁律):
+        · 超时(daemon 客户端断连/不应答) → 投诚实 Error 事件 + cancel run,不放行计划。
+        · decision is None(不应发生,防御路径) → 同样 cancel,不自动 approve。
         """
         while True:
             async for ev in self._plan_phase_round(goal, messages, system):
                 yield ev
             # 挂起等 TUI 弹 PlanModal 决策 —— ExitPlanMode 会 set event 唤醒。
-            await self._plan_decision_event.wait()
+            # wait_for 超时 → fail-closed:投诚实 Error + 终止循环(不继续 act 阶段)。
+            try:
+                await asyncio.wait_for(
+                    self._plan_decision_event.wait(),
+                    timeout=self.PLAN_DECISION_TIMEOUT_S,
+                )
+            except asyncio.TimeoutError:
+                yield Error(
+                    message=(
+                        f"plan 决策超时({self.PLAN_DECISION_TIMEOUT_S:.0f}s):客户端断连或无响应,"
+                        " run 已取消(fail-closed)。"
+                    ),
+                    chain=["asyncio.TimeoutError: plan_decision_event.wait() timed out"],
+                )
+                # 清注册表(防止残留 call_id 被重复使用)
+                self._plan_call_registry.clear()
+                # 抛出 CancelledError 终止整个 run,由顶层 run() 捕获落盘 Error。
+                raise asyncio.CancelledError("plan_decision_timeout")
             decision = self._plan_decision
             if decision is None:
-                # 边界防御:正常路径 ExitPlanMode 必写 _plan_decision;None 时按 approve 兜底,
-                # 不让 loop 永远挂死(诚实:host 异常应走"默许继续"而非崩 run)。
-                decision = PlanExitDecision(action="approve_start")
+                # 边界防御:正常路径 ExitPlanMode 必写 _plan_decision;None 不应发生。
+                # fail-closed:不自动 approve,投诚实 Error 并取消。
+                yield Error(
+                    message="plan 决策异常:_plan_decision 为 None(内部错误),run 已取消(fail-closed)。",
+                    chain=["AssertionError: _plan_decision is None after event.wait()"],
+                )
+                self._plan_call_registry.clear()
+                raise asyncio.CancelledError("plan_decision_none")
             if decision.action == "approve_start":
                 # 跳出子循环 → _drive 继续走 act 阶段。
                 return
@@ -1412,6 +1487,16 @@ class AgentLoop:
             goal=goal, todos=list(self._todos), tool_calls=[],
         )
         yield PlanRendered(plan_md=plan_md)
+
+        # v6 §4 ACP:同步投 PlanDecisionRequest(与 PlanRendered 同构 call_id 路由)。
+        # daemon 路径经 POST /runs/{id}/plan_decision?call_id=... 回传决策;
+        # TUI inline 路径仍走 ExitPlanMode(loop, ...) 直接设 _plan_decision_event。
+        # 注册 call_id → 当前 _plan_decision_event(本轮 wait 用的那个 Event),
+        # respond_plan_decision 据此唤醒 loop。
+        import secrets as _secrets
+        _call_id = _secrets.token_hex(6)  # 12 hex,与 ApprovalRequest 格式一致
+        self._plan_call_registry[_call_id] = self._plan_decision_event
+        yield PlanDecisionRequest(call_id=_call_id, plan_md=plan_md)
 
     @staticmethod
     def _feedback(result: Any) -> str:

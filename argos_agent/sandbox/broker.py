@@ -97,7 +97,11 @@ class CapabilityBroker:
                 return f"错误:未知/不支持的特权动作 {action!r},拒绝。"
 
         # ① egress 检查(网络类,fail-closed)
-        if action in _NETWORK_ACTIONS:
+        # P2 egress manifest 驱动:当 registry 存在时,网络类动作集 = registry 中声明了
+        # egress_hosts 的能力名(含 "*")∪ 原 _NETWORK_ACTIONS 兜底集合。
+        # 无 registry 时 fallback 原 _NETWORK_ACTIONS(行为零变更)。
+        _network_actions = self._derive_network_actions()
+        if action in _network_actions:
             host = _web.host_for(action, args)
             # web_extract:校验目标 url 的 host;web_search:校验活跃 provider 的出口 host(I3)。
             # 两者都 fail-closed —— host 不在白名单即拒,绝不静默放行。
@@ -125,6 +129,34 @@ class CapabilityBroker:
         )
         # ⑤ 灌回沙箱
         return value
+
+    def _derive_network_actions(self) -> set[str]:
+        """P2 egress manifest 驱动:从 registry 派生需要 egress 检查的动作集合。
+
+        派生规则(spec §5 / 任务验收):
+          cap.egress_hosts 非空(含 "*")的能力名集合 ∪ 原 _NETWORK_ACTIONS 兜底集合。
+          无 registry 时 fallback = 原 _NETWORK_ACTIONS(行为零变更)。
+
+        设计保证:
+          · 内置 web_search / web_extract 在 builtins 里声明了 egress_hosts → 派生集合
+            包含它们(与原集合等价,硬回归测试验证)。
+          · 新注册能力只要在 manifest 里声明 egress_hosts 就自动进 egress 检查,无需改四处。
+          · registry=None 时返回 _NETWORK_ACTIONS(向后兼容;零破坏测试)。
+        """
+        _reg = getattr(self, "_registry", None)
+        if _reg is None:
+            return set(_NETWORK_ACTIONS)
+        try:
+            # 从 registry 收集所有声明了 egress_hosts 的能力名(含 "*" 通配)。
+            registry_egress: set[str] = set()
+            for name in _reg.names():
+                cap = _reg.get(name)
+                if cap.egress_hosts:  # 非空 tuple = 有出网声明
+                    registry_egress.add(name)
+            # ∪ 原硬编码集合(兜底:确保 registry 不完整时核心网络动作仍受 egress 管辖)。
+            return registry_egress | _NETWORK_ACTIONS
+        except Exception:  # noqa: BLE001 — registry 访问失败 fallback 原集合(fail-safe)
+            return set(_NETWORK_ACTIONS)
 
     async def _request_decision(self, action: str, args: dict[str, Any],
                                 level_override: "ApprovalLevel | None",

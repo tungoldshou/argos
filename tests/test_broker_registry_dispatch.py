@@ -440,3 +440,78 @@ def test_build_run_stack_egress_excludes_wildcard(monkeypatch, tmp_path):
             stack.close()
     finally:
         c.close()
+
+
+# ── P2 egress manifest 驱动测试 ───────────────────────────────────────────────
+
+class TestEgressManifestDriven:
+    """_derive_network_actions 从 registry 派生 egress 动作集的正确性。"""
+
+    def test_no_registry_returns_builtin_set(self):
+        """registry=None 时 fallback = 原 _NETWORK_ACTIONS(行为零变更)。"""
+        from argos_agent.sandbox.broker import _NETWORK_ACTIONS
+        broker = _make_broker(registry=None)
+        derived = broker._derive_network_actions()
+        assert derived == set(_NETWORK_ACTIONS), (
+            "registry=None 时 _derive_network_actions 必须返回原 _NETWORK_ACTIONS"
+        )
+
+    def test_builtin_registry_derives_superset_of_original(self):
+        """内置 registry(register_builtins)派生的集合是原 _NETWORK_ACTIONS 的超集。
+
+        web_search / web_extract 在 builtins 中声明了 egress_hosts → 必须出现在派生集合中。
+        此测试固化"派生集合 ⊇ 原集合"的硬回归保证。
+        """
+        from argos_agent.sandbox.broker import _NETWORK_ACTIONS
+        reg = CapabilityRegistry()
+        register_builtins(reg)
+        broker = _make_broker(registry=reg)
+        derived = broker._derive_network_actions()
+        missing = set(_NETWORK_ACTIONS) - derived
+        assert not missing, (
+            f"派生集合缺少原 _NETWORK_ACTIONS 中的动作: {missing}\n"
+            f"派生集合: {derived}  原集合: {_NETWORK_ACTIONS}"
+        )
+
+    def test_custom_egress_cap_enters_derived_set(self):
+        """自定义能力声明 egress_hosts → 自动进派生集合,无需改 _NETWORK_ACTIONS。"""
+        reg = CapabilityRegistry()
+        reg.register(Capability(
+            name="my_api_call",
+            kind="tool",
+            risk="medium",
+            egress_hosts=("api.example.com",),
+        ))
+        broker = _make_broker(registry=reg)
+        derived = broker._derive_network_actions()
+        assert "my_api_call" in derived, (
+            "声明了 egress_hosts 的自定义能力必须进 _derive_network_actions 的结果"
+        )
+
+    def test_no_egress_cap_not_in_derived_set(self):
+        """未声明 egress_hosts 的能力不进派生集合(只含 _NETWORK_ACTIONS 兜底)。"""
+        from argos_agent.sandbox.broker import _NETWORK_ACTIONS
+        reg = CapabilityRegistry()
+        reg.register(Capability(
+            name="local_tool",
+            kind="tool",
+            risk="low",
+            egress_hosts=(),
+        ))
+        broker = _make_broker(registry=reg)
+        derived = broker._derive_network_actions()
+        assert "local_tool" not in derived
+        assert set(_NETWORK_ACTIONS).issubset(derived)
+
+    def test_wildcard_egress_enters_derived_set(self):
+        """egress_hosts=('*',) 通配 → 能力进派生集合(让 broker 走 egress 检查路径)。"""
+        reg = CapabilityRegistry()
+        reg.register(Capability(
+            name="dynamic_web_call",
+            kind="tool",
+            risk="medium",
+            egress_hosts=("*",),
+        ))
+        broker = _make_broker(registry=reg)
+        derived = broker._derive_network_actions()
+        assert "dynamic_web_call" in derived

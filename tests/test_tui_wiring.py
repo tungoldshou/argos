@@ -7,7 +7,7 @@ import pytest
 from argos_agent.approval import ApprovalLevel
 from argos_agent.core.types import Verdict
 from argos_agent.tui.app import ArgosApp
-from argos_agent.tui.events import PhaseChange, TokenDelta, VerifyVerdict
+from argos_agent.tui.events import MemoryRecallEvent, PhaseChange, TokenDelta, VerifyVerdict
 from argos_agent.tui.fakeloop import FakeLoop, FailingFakeLoop
 from argos_agent.tui.widgets.code_action import CodeActionBlock
 from argos_agent.tui.widgets.diff_view import DiffView
@@ -431,23 +431,20 @@ async def test_status_bar_alert_cleared_on_new_run():
 
 @pytest.mark.asyncio
 async def test_memory_recall_line_shown_with_real_store_hits(tmp_path):
-    """spec §8.3:真 store 真召回到记录 → transcript faint 行 "◌ 记忆召回 N 条";
-    诚实:计数取自真实 recall 返回条数,绝不编造。"""
-    class _RecallRec:
-        goal = "上次也改过 auth"
-        verdict = "passed"
+    """spec §8.3 + v6 §4 ACP:loop 投 MemoryRecallEvent(hits=[...]) →
+    TUI _apply_event 渲染 transcript faint 行 "◌ 记忆召回 N 条";
+    诚实:计数取自事件 hits 列表长度,绝不编造。
 
-    class _StoreWithRecall:
-        def recall(self, goal):
-            return [(_RecallRec(), "similar goal")]
-
-    class _LoopWithRecallStore:
-        def __init__(self):
-            self._store = _StoreWithRecall()
+    v6 P2 改:TUI 不再 getattr(loop,'_store') 穿透;
+    loop 经 MemoryRecallEvent 广播召回结果(store 穿透修)。
+    """
+    class _LoopWithRecallEvent:
         async def run(self, goal, session_id):
+            # v6 §4 ACP:loop 在 run() 起始投 MemoryRecallEvent
+            yield MemoryRecallEvent(hits=["上次也改过 auth → passed（similar goal）"])
             yield PhaseChange(phase="plan", actions=0)
 
-    app = ArgosApp(loop_factory=lambda: _LoopWithRecallStore(), demo=False)
+    app = ArgosApp(loop_factory=lambda: _LoopWithRecallEvent(), demo=False)
     async with app.run_test() as pilot:
         await pilot.pause()
         await app.start_run("改 auth.py")

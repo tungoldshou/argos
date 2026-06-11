@@ -24,6 +24,8 @@ ALL_EVENT_KINDS = {
     "skill_run_end",  # skills spec §2.6:on-demand skill 结束
     "compacted",  # #12 Context 可视化:主动压缩事件(spec §4.3 / D10 扩展字面量)
     "pruned",  # context rot spec 2026-06-07:第二层 _maybe_prune 每步顶部折叠过期工具输出/被取代旧计划
+    "plan_decision_request",  # v6 §4 ACP:plan 决策请求事件(去 TUI 对 loop 直接引用)
+    "memory_recall",          # v6 §4 ACP:记忆召回结果事件(修 store 穿透)
 }
 
 

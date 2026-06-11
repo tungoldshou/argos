@@ -282,6 +282,40 @@ def test_plan_rendered_roundtrip():
     assert back.plan_md == "**bold**"
 
 
+# ── PlanDecisionRequest ───────────────────────────────────────────────────────
+
+def test_plan_decision_request_golden():
+    ev = PE.PlanDecisionRequest(call_id="aabbcc112233", plan_md="# Plan\n- step 1")
+    _golden(ev, {"call_id": "aabbcc112233", "plan_md": "# Plan\n- step 1"})
+
+
+def test_plan_decision_request_roundtrip():
+    ev = PE.PlanDecisionRequest(call_id="deadbeef0011", plan_md="**plan**")
+    back = _round(ev)
+    assert back.call_id == ev.call_id and back.plan_md == ev.plan_md
+
+
+# ── MemoryRecallEvent ─────────────────────────────────────────────────────────
+
+def test_memory_recall_golden():
+    hits = ["写测试 → passed（goal 相似度 0.9）", "修 bug → failed（goal 相似度 0.8）"]
+    ev = PE.MemoryRecallEvent(hits=hits)
+    _golden(ev, {"hits": hits})
+
+
+def test_memory_recall_empty_golden():
+    """hits=[] 诚实序列化为空列表(无命中不编造)。"""
+    ev = PE.MemoryRecallEvent()
+    obj = json.loads(PE.serialize_event(ev))
+    assert obj["data"]["hits"] == []
+
+
+def test_memory_recall_roundtrip():
+    ev = PE.MemoryRecallEvent(hits=["goal1 → passed（reason）"])
+    back = _round(ev)
+    assert back.hits == ev.hits
+
+
 # ── CompactedEvent ────────────────────────────────────────────────────────────
 
 def test_compacted_event_golden():

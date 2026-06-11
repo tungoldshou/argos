@@ -29,6 +29,8 @@ from argos_agent.protocol.events import (  # noqa: F401
     PrunedEvent,
     WorkflowDone,
     PlanRendered,
+    PlanDecisionRequest,
+    MemoryRecallEvent,
     Event,
     EventBus,
     _KIND_TO_CLASS,
