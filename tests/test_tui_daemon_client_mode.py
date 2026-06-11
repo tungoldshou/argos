@@ -355,11 +355,13 @@ async def test_protocol_approval_circuit_inline(tmp_path: Path) -> None:
         )
 
         # ── 订阅 SSE,等待 approval_request ──────────────────────────
+        # deadline2=8s:xdist 并行高负载下 worker 调度可能延迟,加大等待窗口。
+        # 语义不变:approval_timeout_s=10s 是真实超时,这里 8s 只是测试轮询上限。
         cli = DaemonClient(socket_path, timeout=8.0)
         seen_events: list[dict] = []
         approval_call_id: str | None = None
 
-        deadline2 = time.monotonic() + 5.0
+        deadline2 = time.monotonic() + 8.0   # 原 5s → 8s,防止并行高负载下错过事件
         async for ev in cli.subscribe_events(run_id, sid):
             seen_events.append(ev)
             if ev.get("kind") == "approval_request":

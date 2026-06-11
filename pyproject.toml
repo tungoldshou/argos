@@ -88,6 +88,7 @@ dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
+    "pytest-xdist>=3.8.0",
 ]
 
 [tool.pytest.ini_options]
@@ -98,7 +99,12 @@ testpaths = ["tests"]
 addopts = "--cov=argos_agent --cov-report=term-missing --cov-fail-under=80"
 markers = [
     "slow: 真进程/真 pyright e2e,默认 skip(uv run pytest -m 'not slow' 跑快测)",
+    "xdist_group: 同组测试串行在同一 worker(用于共享不可隔离资源;组名按资源命名)",
 ]
+# 推荐并行命令:uv run --no-sync pytest -n auto --dist loadgroup
+# --dist loadgroup:同 xdist_group 的测试落同一 worker,其余自动并发。
+# 保留串行调试能力:uv run --no-sync pytest(无 -n)运行单条/子集。
+# 注:addopts 不写 -n auto,保留串行入口。
 
 [tool.coverage.run]
 omit = [

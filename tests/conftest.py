@@ -121,6 +121,23 @@ def _force_numbered_setup_menu(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _reset_skills_registry():
+    """测试隔离:每个测试前后清空 skills_runtime 单例注册表。
+
+    _SKILLS 是模块级 dict,不同测试文件在同一 xdist worker 进程内顺序跑时会互相污染
+    (例如 test_skills_registry 注册 "verify" 后未清除,下一个测试再注册同名 → ValueError)。
+    autouse=True:无需各测试显式调用 _reset_registry()。
+    """
+    try:
+        from argos_agent.skills_runtime import _reset_registry as _rr
+        _rr()
+        yield
+        _rr()
+    except ImportError:
+        yield
+
+
+@pytest.fixture(autouse=True)
 def _neutralize_mcp_singleton(monkeypatch):
     """测试隔离:绝不让 loop._build_system 连真实 ~/.argos/mcp.json 里的 MCP server
     (那会 spawn npx、联网下包、拖慢/污染测试,且让系统提示断言不稳)。把进程内单例的

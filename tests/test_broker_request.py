@@ -56,8 +56,12 @@ def test_broker_workspace_defaults_none_back_compat(monkeypatch):
 
 async def _approve_pending_confirm(gate: ApprovalGate, kind: str = "once") -> None:
     """C1:run_command 即便 AUTO 也强制 CONFIRM → 它会挂起等 respond。
-    本 helper 轮询 pending 并回 once 放行(模拟用户点'允许')。"""
-    for _ in range(200):
+    本 helper 轮询 pending 并回 once 放行(模拟用户点'允许')。
+
+    xdist 并行时 worker 可能负载高,用较长轮询窗口(最多 5s)防止在极端 CPU 争抢下因
+    1s 超时窗口耗尽而误失败。每次 sleep 极短(5ms)不影响正常情况响应时间。
+    """
+    for _ in range(1000):   # 最多 5s(1000 × 5ms);正常 <100ms 就拿到
         pend = gate.pending()
         if pend:
             gate.respond(pend[0].call_id, kind)

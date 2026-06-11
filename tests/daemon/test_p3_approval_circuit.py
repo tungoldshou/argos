@@ -250,6 +250,7 @@ async def test_approval_circuit_full(tmp_path: Path):
 
 # ── b. 错 call_id → 409,run 不受影响 ────────────────────────────────────
 
+@pytest.mark.slow  # approval_timeout_s=3.0:等 3 秒超时 deny —— 真实时钟等待,并行时影响测试速度。
 @pytest.mark.asyncio
 async def test_approval_wrong_call_id_returns_409(tmp_path: Path):
     """错 call_id → 409/404,run 不受影响,最终超时 deny。"""

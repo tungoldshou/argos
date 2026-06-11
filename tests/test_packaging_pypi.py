@@ -191,6 +191,7 @@ def test_uv_build_dry_run_succeeds():
     assert sdist[0].name.startswith("argos_agent-"), f"sdist 名字错:{sdist[0].name}"
 
 
+@pytest.mark.slow  # uv venv + uv pip install:真子进程环境搭建,需数秒 —— 标 slow。
 def test_pip_install_wheel_and_run_argos_version():
     """uv build 出来的 wheel,临时 venv pip install + 跑 argos --version(契约 §4.4 端到端)。
 

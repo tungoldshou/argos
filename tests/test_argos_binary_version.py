@@ -7,9 +7,13 @@ from pathlib import Path
 
 import pytest
 
+# 整模块执行 dist/argos 真二进制 —— 与重建 dist 的 build 测试串行分组(xdist 并行防产物争抢)
+pytestmark = pytest.mark.xdist_group(name="binary-dist")
+
 BINARY = Path(__file__).parent.parent / "dist" / "argos"
 
 
+@pytest.mark.slow  # 真跑 dist/argos 二进制(真子进程),标 slow 跳过不需要 binary 的快速场合。
 @pytest.mark.skipif(
     not (Path(__file__).parent.parent / "dist" / "argos").exists(),
     reason="dist/argos 不存在(本地未 build);先跑 `bash packaging/build_arm64.sh`",
@@ -22,6 +26,7 @@ def test_binary_reports_correct_version():
     assert "0.0.0" not in out, f"binary --version 走 fallback(应为 0.1.0): {out!r}"
 
 
+@pytest.mark.slow  # 真跑 dist/argos 二进制(真子进程),标 slow 跳过不需要 binary 的快速场合。
 @pytest.mark.skipif(
     not (Path(__file__).parent.parent / "dist" / "argos").exists(),
     reason="dist/argos 不存在",

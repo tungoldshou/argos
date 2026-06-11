@@ -86,6 +86,7 @@ def test_homebrew_formula_syntax():
     assert result.returncode == 0, f"ruby -c 失败: {result.stderr}"
 
 
+@pytest.mark.xdist_group(name="binary-dist")  # 读 dist/ 产物,与重建 dist 的 build 测试互斥
 def test_app_bundle_built():
     """build_arm64.sh 后,dist/Argos.app 应存在且结构正确。"""
     import platform
@@ -108,6 +109,8 @@ def test_app_bundle_built():
     )
 
 
+@pytest.mark.slow  # 真跑 packaging/build_arm64.sh,需 2-3 分钟 build —— 标 slow 避免并行时拖慢全套。
+@pytest.mark.xdist_group(name="binary-dist")  # 重建 dist/ —— 必须与执行 dist/argos 的测试串行(并行下会把别人正在跑的二进制换掉)
 def test_build_script_creates_bundle_when_run(tmp_path, monkeypatch):
     """跑 build_arm64.sh 后 dist/Argos.app 应存在。本测试需要 ~2-3 分钟 build,标 slow。"""
     import platform

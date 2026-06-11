@@ -211,13 +211,15 @@ async def test_gate_pending_respond_same_loop_wakeup():
             approval.guarded_call("write", {"path": "a.py"}, lambda: _say_hi(),
                                   description="写入 a.py", risk="low")
         )
-        for _ in range(200):
+        # xdist 并行高负载下 create_task 首次调度可能延迟,扩大轮询窗口到 5s 防虚假失败。
+        # 语义不变:测的是审批挂起+放行,200×10ms=2s 在单机高负载下不够用。
+        for _ in range(500):   # 最多 5s(500 × 10ms);正常 <200ms
             await asyncio.sleep(0.01)
             if gate.pending():
                 break
         assert gate.pending(), "工具应已挂起等待审批"
         assert gate.respond(gate.pending()[0].call_id, "once") is True
-        result = await asyncio.wait_for(task, timeout=2.0)
+        result = await asyncio.wait_for(task, timeout=5.0)  # 同步放宽到 5s
         assert result == "hi"
         assert gate.pending() == []
     finally:

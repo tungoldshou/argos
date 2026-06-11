@@ -34,14 +34,17 @@ async def test_gate_request_then_respond_session_resolves():
     g = ApprovalGate()  # 默认 CONFIRM,会挂起等 respond
 
     async def _caller() -> Decision:
+        # timeout=30s:测的是审批放行语义,不测超时路径 —— 宽松避免 xdist 高负载下
+        # 轮询耗尽 pending 窗口(原 5s)前 request 自己超时把 _pending 弹出。
         return await g.request(
             "run_command", {"command": "pytest"},
-            description="执行命令 pytest", risk="medium", timeout=5.0,
+            description="执行命令 pytest", risk="medium", timeout=30.0,
         )
 
     task = asyncio.create_task(_caller())
-    # 等 pending 出现
-    for _ in range(100):
+    # 等 pending 出现。xdist 并行时 worker 可能有 CPU 争抢,用更大的轮询窗口(最多 20s)。
+    # 关键:request timeout(30s) >> 轮询窗口(20s),保证 pending 项不在轮询期间超时被弹出。
+    for _ in range(2000):   # 最多 20s(2000 × 10ms);正常 <50ms
         await asyncio.sleep(0.01)
         if g.pending():
             break
@@ -49,7 +52,7 @@ async def test_gate_request_then_respond_session_resolves():
     assert len(pend) == 1
     call_id = pend[0].call_id
     assert g.respond(call_id, "session") is True
-    dec = await asyncio.wait_for(task, timeout=2.0)
+    dec = await asyncio.wait_for(task, timeout=5.0)
     assert dec.approved is True and dec.kind == "session"
 
 

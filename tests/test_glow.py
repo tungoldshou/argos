@@ -76,6 +76,13 @@ async def test_passed_verdict_glow_does_not_lock():
         await app._apply_event(VerifyVerdict(
             verdict=Verdict.passed(detail="ok", verify_cmd="pytest", attempts=1)))
         await app._apply_event(PhaseChange(phase="report", actions=2))
+        # 停呼吸计时器:_glow_start 启动一个每 0.1s 改边框色的 set_interval 定时器。
+        # 若 pilot.pause() 耗时超 0.1s(并行高负载下可能),定时器会把 report 阶段色
+        # "呼吸"成略暗的变体,导致颜色比较失败(虚假失败,非逻辑 bug)。
+        # 停计时器后再断言:被测行为是"passed 不锁定 → report 接管",与计时器无关。
+        if app._glow_timer is not None:
+            app._glow_timer.stop()
+            app._glow_timer = None
         await pilot.pause()
         assert tuple(app.screen.styles.border_top[1].rgb) == glow.phase_color("report").rgb, \
             "passed 不锁定,report 阶段色应接管"

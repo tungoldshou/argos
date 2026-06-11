@@ -48,20 +48,26 @@ def test_path_not_found_chat_message(tmp_path):
         errors=("path not found: nope.py",),
         verdict="skipped",
     )
-    from argos_agent.skills_runtime import registry
+    from argos_agent.skills_runtime import registry, _reset_registry
     from argos_agent.skills_runtime.analysis import AnalysisSkill, AnalysisSkillContext
     import asyncio
 
+    # _SKILLS 是模块级单例:同一 xdist worker 进程内其他测试若注册了 "verify" 就会冲突。
+    # 测试前清空 + 测试后还原 —— 不改生产代码,只修隔离缺陷。
+    _reset_registry()
     async def _echo(args, ctx):
         return fake_result
-    registry.register(AnalysisSkill(
-        name="verify", description="x", parameters_schema={}, run=_echo, requires_approval=True,
-    ))
+    try:
+        registry.register(AnalysisSkill(
+            name="verify", description="x", parameters_schema={}, run=_echo, requires_approval=True,
+        ))
 
-    ctx = AnalysisSkillContext(workspace=tmp_path, approval_level="auto", run_id="r1")
-    result = asyncio.run(registry.get("verify").run({"path": "nope.py"}, ctx))
-    assert result.verdict == "skipped"
-    assert "path not found" in result.errors[0]
+        ctx = AnalysisSkillContext(workspace=tmp_path, approval_level="auto", run_id="r1")
+        result = asyncio.run(registry.get("verify").run({"path": "nope.py"}, ctx))
+        assert result.verdict == "skipped"
+        assert "path not found" in result.errors[0]
+    finally:
+        _reset_registry()  # 防止污染同 worker 的后续测试
 
 
 @pytest.mark.asyncio

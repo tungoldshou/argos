@@ -403,6 +403,7 @@ def test_subagent_output_mirror_copies_agent_files(tmp_path, monkeypatch):
     assert (mirror / "sentinel.txt").read_text() == "base MODIFIED\n"
 
 
+@pytest.mark.slow  # 真 Docker 容器构建+运行,耗时 20-30s —— 标 slow,已被 requires_docker 在无 docker 时 skip。
 @requires_docker
 def test_docker_verify_sees_mirror_with_seeded_tests(tmp_path, monkeypatch):
     """端到端:bridge 把 TB 源 tests/ + run-tests.sh seed 进 mirror,子 agent 写

@@ -11,6 +11,7 @@ import pytest
 from argos_agent.core.verify_gate import Verifier
 
 
+@pytest.mark.slow  # 7 次 pytest 子进程采样 P50/P99 —— 真子进程,标 slow。
 def test_verify_latency_baseline_p50_p99(in_project, capsys):
     """跑 N 次轻量 verify,测 P50/P99(记录到 stdout 供 beta 校准,不硬卡绝对值)。"""
     (in_project / "test_fast.py").write_text("def test_fast():\n    assert True\n")
@@ -29,6 +30,7 @@ def test_verify_latency_baseline_p50_p99(in_project, capsys):
     assert p99 < 30.0, f"verify 单次不应超 30s(P99={p99:.3f}s)——超时说明降级失效或环境异常"
 
 
+@pytest.mark.slow  # 跑真 pytest 子进程验证降级 —— 真子进程,标 slow。
 def test_verify_timeout_degrades_not_hangs(in_project):
     """超 inline_timeout 的 verify → 降级(unverifiable),不无限阻塞(契约 §6 分级延迟)。"""
     (in_project / "test_slow.py").write_text("import time\ndef test_slow():\n    time.sleep(2)\n    assert True\n")

@@ -21,6 +21,7 @@ def _git_init(p):
                     "commit", "-qm", "init"], cwd=p, check=True)
 
 
+@pytest.mark.slow  # 需要 asyncio.sleep(2.0) 等子 agent 建好 worktree 后再取消 —— 真实时钟等待。
 @pytest.mark.asyncio
 async def test_cancel_tears_down_worktrees(tmp_path, slow_model_factory):
     _git_init(tmp_path)
