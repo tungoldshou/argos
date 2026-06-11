@@ -12,13 +12,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from argos_agent.approval import ApprovalGate, ApprovalLevel
 from argos_agent.tools import shell as _shell
 from argos_agent.tools import web as _web
 from argos_agent.tools.receipts import Receipt, ReceiptSigner
 from .egress import EgressPolicy
+
+if TYPE_CHECKING:
+    from argos_agent.capability.registry import CapabilityRegistry
 
 # 网络类动作:request 前要查 egress。
 _NETWORK_ACTIONS: set[str] = {"web_search", "web_extract"}
@@ -50,7 +53,8 @@ class BrokerResult:
 class CapabilityBroker:
     def __init__(self, *, gate: ApprovalGate, egress: EgressPolicy,
                  signer: ReceiptSigner, workspace: Path | None = None,
-                 mcp_manager: Any = None, browser_controller: Any = None) -> None:
+                 mcp_manager: Any = None, browser_controller: Any = None,
+                 registry: "CapabilityRegistry | None" = None) -> None:
         self._gate = gate
         self._egress = egress
         self._signer = signer
@@ -60,18 +64,38 @@ class CapabilityBroker:
         self._workspace = workspace
         self.last_receipt: Receipt | None = None   # loop 读它投 ToolReceipt 事件
         # per-session MCP/browser 实例(从 AppComponents 注入);None = fallback 到模块级单例
-        # (向后兼容测试/headless 路径,为 P2 registry 铺路)。
+        # (向后兼容测试/headless 路径)。
         self._mcp_manager = mcp_manager
         self._browser_controller = browser_controller
+        # P2 能力注册表(可选):None = 兼容旧路径,行为完全不变。
+        # 非 None 时:risk 查表优先走 registry.risk_table(),内置 _RISK 作 fallback 兜底;
+        # _execute 前先尝试 registry dispatch;LSP 等仅注册表知晓的能力方可通过 request()。
+        self._registry = registry
 
     async def request(self, action: str, args: dict[str, Any]) -> Any:
         """返回灌回沙箱的值(成功=工具串;拒绝=拒绝串)。副作用:签 Receipt 存 last_receipt。
 
         唯一 gating 入口:egress → approval → host 执行 → 签 Receipt。沙箱侧只能经
         executor 的 broker RPC 走到这里。_execute() 是内部裸执行,绝不可绕开本方法直接调
-        (那会跳过 egress/approval/receipt;见 _execute docstring)。"""
-        if action not in _RISK:
-            return f"错误:未知/不支持的特权动作 {action!r},拒绝。"
+        (那会跳过 egress/approval/receipt;见 _execute docstring)。
+
+        P2 registry 语义:
+        - registry 非 None 时,risk 先查 registry.risk_table(),内置 _RISK 作 fallback 兜底。
+        - action 既不在 registry 也不在内置 _RISK → fail-closed 拒(与旧语义一致)。
+        - action 在 registry 但不在 _RISK → 允许通过(修 LSP 动作被拒 bug)。
+        """
+        # ─── fail-closed:action 必须在 registry 或 _RISK 其中之一 ──────────────
+        # getattr 防御：object.__new__ 绕过 __init__ 的旧测试路径没有 _registry 属性
+        _reg = getattr(self, "_registry", None)
+        if _reg is not None:
+            _registry_risk = _reg.risk_table()
+            if action not in _registry_risk and action not in _RISK:
+                return f"错误:未知/不支持的特权动作 {action!r},拒绝。"
+        else:
+            _registry_risk = {}
+            if action not in _RISK:
+                return f"错误:未知/不支持的特权动作 {action!r},拒绝。"
+
         # ① egress 检查(网络类,fail-closed)
         if action in _NETWORK_ACTIONS:
             host = _web.host_for(action, args)
@@ -86,14 +110,15 @@ class CapabilityBroker:
             if (action in _FORCE_CONFIRM_ACTIONS and self._gate.level is ApprovalLevel.AUTO)
             else None
         )
-        decision = await self._request_decision(action, args, level_override)
+        decision = await self._request_decision(action, args, level_override,
+                                                 registry_risk=_registry_risk)
         if not decision.approved:
             return (
                 f"用户拒绝执行该操作({decision.reason or '未提供原因'})。"
                 f"请尝试其他做法或向用户解释为什么需要它。"
             )
         # ③ host 执行真副作用
-        value, exit_code = self._execute(action, args)
+        value, exit_code = self._execute(action, args, run_ctx=None, _gated=True)
         # ④ 签 Receipt(HMAC,host 侧)
         self.last_receipt = self._signer.sign(
             action=action, args=args, result=value, exit_code=exit_code,
@@ -102,20 +127,27 @@ class CapabilityBroker:
         return value
 
     async def _request_decision(self, action: str, args: dict[str, Any],
-                                level_override: "ApprovalLevel | None"):
+                                level_override: "ApprovalLevel | None",
+                                registry_risk: "dict[str, str] | None" = None):
         """走审批拨盘。level_override 非 None 时临时降级(如 run_command 在 AUTO 档强制 CONFIRM),
-        裁决后恢复原档(避免污染整个 session)。"""
+        裁决后恢复原档(避免污染整个 session)。
+
+        registry_risk:registry.risk_table() 快照(P2);None 或缺失时退回内置 _RISK。
+        优先级:registry_risk[action] > _RISK[action] > "medium" 默认。
+        """
+        _merged = {**_RISK, **(registry_risk or {})}
+        risk_val = _merged.get(action, "medium")
         if level_override is None:
             return await self._gate.request(
                 action, args, description=self._describe(action, args),
-                risk=_RISK.get(action, "medium"),
+                risk=risk_val,
             )
         saved = self._gate.level
         self._gate.set_level(level_override)
         try:
             return await self._gate.request(
                 action, args, description=self._describe(action, args),
-                risk=_RISK.get(action, "medium"),
+                risk=risk_val,
             )
         finally:
             self._gate.set_level(saved)
@@ -140,10 +172,41 @@ class CapabilityBroker:
         self.last_receipt = None
         return rec
 
-    def _execute(self, action: str, args: dict[str, Any]) -> tuple[Any, int | None]:
+    def _execute(self, action: str, args: dict[str, Any],
+                 run_ctx: Any = None, *, _gated: bool = False) -> tuple[Any, int | None]:
         """⚠️ 内部裸执行 —— 仅供 request() 调用。绝不可从外部/测试直接调:
         它跳过 egress 校验、审批裁决与 Receipt 签发,直接产生真副作用。
-        所有 broker-gated 动作必须经 request() 入口(它做完整 gating)。"""
+        所有 broker-gated 动作必须经 request() 入口(它做完整 gating)。
+
+        _gated:keyword-only 哨兵。request() 管线内调用传 True。
+        registry dispatch 分支要求 _gated=True;否则 raise PermissionError(fail-closed,
+        防止同步桥/外部路径绕过 egress/审批/回执直接触发带 dispatch 的注册能力)。
+
+        P2 registry dispatch(优先级最高):
+        - registry.get(action) 存在 且 cap.dispatch 非 None → 调 cap.dispatch(args, run_ctx)。
+          (要求 _gated=True,否则 PermissionError)
+        - registry.get(action) 存在 但 dispatch=None → 走既有 if/elif 内置实现。
+        - action 不在 registry(含 registry=None 情况)→ 走既有 if/elif 内置实现。
+        """
+        # ─── P2:registry dispatch(cap 存在 + dispatch 非 None)────────────────
+        # getattr 防御：object.__new__ 绕过 __init__ 的旧测试路径没有 _registry 属性
+        _registry = getattr(self, "_registry", None)
+        if _registry is not None:
+            try:
+                cap = _registry.get(action)
+                if cap.dispatch is not None:
+                    if not _gated:
+                        raise PermissionError(
+                            f"dispatch 能力 {action!r} 只允许经 broker.request() 管线执行"
+                            "(egress/审批/回执不可旁路)"
+                        )
+                    result = cap.dispatch(args, run_ctx)
+                    return result, None
+                # cap 存在但 dispatch=None → fall through 到既有实现
+            except KeyError:
+                # 不在 registry → fall through 到既有实现
+                pass
+        # ─── 既有 if/elif 内置实现 ──────────────────────────────────────────
         if action == "run_command":
             return _shell.run_command(args.get("command", ""), workspace=self._workspace)
         if action == "web_search":

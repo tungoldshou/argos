@@ -36,6 +36,7 @@ from argos_agent.memory.store import ArgosStore
 from argos_agent.mcp_native import McpManager
 from argos_agent.permissions.audit import AuditLog
 from argos_agent.permissions.config import PermissionsConfig, get_config as _permissions_get_config
+from argos_agent.capability import CapabilityRegistry, register_builtins
 from argos_agent.sandbox.broker import CapabilityBroker
 from argos_agent.sandbox.egress import EgressPolicy
 from argos_agent.sandbox.executor import SeatbeltExecutor
@@ -102,6 +103,8 @@ class AppComponents:
     # per-session permissions 实例(为多 run 并发铺路;broker/gate/evaluator 走注入路径)。
     permissions_config: PermissionsConfig | None = None
     audit_log: AuditLog | None = None
+    # P2 能力注册表:进程级单注册表,broker/run_stack 共享;None = 兼容旧路径。
+    registry: CapabilityRegistry | None = None
 
     def close(self) -> None:
         self.sandbox.close()
@@ -130,19 +133,24 @@ def _make_gate_broker_sandbox(
     workspace: Path,
     mcp_manager: "Any | None" = None,
     browser_controller: "Any | None" = None,
+    registry: "CapabilityRegistry | None" = None,
 ) -> "tuple[ApprovalGate, CapabilityBroker, SeatbeltExecutor]":
     """私有 helper:构造一组独立的 gate + broker + sandbox。
 
     build_components 和 build_run_stack 共用,避免两处复制逻辑漂移。
     每次调用返回全新实例 —— caller 负责生命周期(close sandbox)。
+
+    registry:进程级单注册表(build_components 构造,build_run_stack 共享)。
+    None = 兼容旧路径,行为完全不变。
     """
     gate = ApprovalGate(approval_level, permissions_config=perm_config, audit_log=perm_audit)
-    # broker 一次构造,包含全部依赖(mcp/browser 随即传入,消除两步补注)。
+    # broker 一次构造,包含全部依赖(mcp/browser/registry 随即传入)。
     # workspace 传给 broker:host 侧 run_command 与沙箱子进程 write_file 用同一个 ws,
     # 杜绝 --project 模式下两者分叉(run_command 落默认 workspace、write_file 落项目目录)。
     broker = CapabilityBroker(
         gate=gate, egress=egress, signer=signer, workspace=workspace,
         mcp_manager=mcp_manager, browser_controller=browser_controller,
+        registry=registry,
     )
     # 同步 broker_handler 桥走 broker._execute(裸执行):exec_code 阻塞等 broker_reply,
     # 无法 await gate,故绕过 request() 的 egress 校验/交互审批/Receipt。真正的硬边界是
@@ -191,6 +199,13 @@ def build_run_stack(
         search_hosts=set(_SEARCH_HOSTS),
         mcp_hosts=set(),
     )
+    # P2 fix:per-run egress 从 registry 派生(消灭双真值表)。
+    # registry.egress_hosts() 聚合所有声明出网主机;过滤 "*" 通配(动态 host 由 broker 逐次校验)。
+    # 与 register_builtins 现行行为一致:通配类不进静态白名单。
+    if c.registry is not None:
+        real_hosts = frozenset(h for h in c.registry.egress_hosts() if h != "*")
+        if real_hosts:
+            egress.add_hosts(real_hosts)
     signer = ReceiptSigner(key=_HOST_SIGNING_KEY)
 
     gate, broker, sandbox = _make_gate_broker_sandbox(
@@ -198,10 +213,11 @@ def build_run_stack(
         perm_config=c.permissions_config,
         perm_audit=perm_audit_run,
         egress=egress, signer=signer, workspace=ws,
-        # per-run 栈不独占 mcp/browser —— 这两个是进程级共享资源;
+        # per-run 栈不独占 mcp/browser/registry —— 这些是进程级共享资源;
         # broker 只需引用,不拥有生命周期(AppComponents.close 统一清理)。
         mcp_manager=c.mcp_manager,
         browser_controller=c.browser_controller,
+        registry=c.registry,   # P2:共享进程级注册表(能力声明静态,run 间共享安全)
     )
     if session_id:
         gate.set_session_id(session_id)
@@ -267,6 +283,12 @@ def build_components(
         mcp_hosts=set(),
     )
     signer = ReceiptSigner(key=_HOST_SIGNING_KEY)
+
+    # P2 能力注册表:进程级单注册表,build_components 构造,build_run_stack 共享。
+    # register_builtins 同时热更新 egress（注册网络类能力时补 egress_hosts 白名单）。
+    registry = CapabilityRegistry()
+    register_builtins(registry, egress=egress)
+
     # per-session MCP 管理器(生命周期随 AppComponents):
     # 构造实例 + 后台预热(不阻塞 TUI 启动 / 首轮响应)。默认零预配 → 秒回无 server。
     mcp_mgr = McpManager()
@@ -285,6 +307,7 @@ def build_components(
         perm_config=perm_config, perm_audit=perm_audit,
         egress=egress, signer=signer, workspace=ws,
         mcp_manager=mcp_mgr, browser_controller=browser_ctrl,
+        registry=registry,   # P2:传给 broker
     )
 
     verifier = Verifier(max_rounds=max_rounds)
@@ -346,6 +369,7 @@ def build_components(
         browser_controller=browser_ctrl,
         permissions_config=perm_config,
         audit_log=perm_audit,
+        registry=registry,   # P2 能力注册表(进程级单注册表)
     )
 
 

@@ -768,9 +768,24 @@ class ArgosApp(App):
         await log.append_line("\n".join(lines), kind="system")
 
     async def _show_tools(self, log) -> None:
-        """/tools:列出 agent 可调用的全部工具(诚实:数量 = 真实可调用工具数)。"""
+        """/tools:列出 agent 可调用的全部工具(诚实:数量 = 真实可调用工具数)。
+
+        P3 动态化：names 从 registry.names() 派生（诚实计数）；无 registry 时退静态表。
+        """
         from argos_agent import tools as _tools
-        names = _tools.ALL_TOOL_NAMES
+        # 优先从当前 loop 的 broker._registry 取（P3 动态来源）；无则退静态表。
+        _registry = None
+        _loop = getattr(self, "_current_loop", None)
+        if _loop is not None:
+            _broker = getattr(_loop, "_broker", None) or getattr(_loop, "broker", None)
+            if callable(_broker):   # property
+                try:
+                    _broker = _broker()
+                except Exception:   # noqa: BLE001
+                    _broker = None
+            if _broker is not None:
+                _registry = getattr(_broker, "_registry", None)
+        names = _tools.get_tool_names(_registry)
         groups = [
             ("文件", ["read_file", "write_file", "edit_file", "search_files"]),
             ("命令/验证/计划", ["run_command", "propose_verify", "update_plan"]),

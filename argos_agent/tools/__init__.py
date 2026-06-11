@@ -22,6 +22,9 @@ VERIFY_DIR: Path = Path(os.environ.get("ARGOS_VERIFY_DIR",
                                        Path.home() / ".argos" / "verify")).resolve()
 
 # UI 工具数必须等于此列表实长(spec/CLAUDE:禁 seed "60+ tools" 谎报)。
+# ⚠️  deprecated:直接引用此静态常量已过时。
+#     优先用 get_tool_names(registry) 从 CapabilityRegistry 动态派生(诚实计数来源)。
+#     此常量保留为兼容别名,与 registry 注册结果保持一致(顺序与注册顺序对齐)。
 ALL_TOOL_NAMES: list[str] = [
     "read_file", "write_file", "edit_file", "search_files",
     "run_command", "web_search", "web_extract", "propose_verify",
@@ -38,9 +41,36 @@ ALL_TOOL_NAMES: list[str] = [
     "lsp_document_symbols", "lsp_workspace_symbols", "lsp_diagnostics",
 ]
 
+
+def get_tool_names(
+    registry: "Any | None" = None,
+) -> list[str]:
+    """返回当前可用工具名列表（诚实计数来源）。
+
+    P3 动态化路径：
+    - registry 非 None → 从 registry.names() 派生（权威来源，自动反映注册状态）。
+    - registry=None   → 退回静态 ALL_TOOL_NAMES（兼容无 registry 的测试/headless 路径）。
+
+    用法::
+
+        # TUI /tools 命令（诚实计数）
+        from argos_agent.tools import get_tool_names
+        names = get_tool_names(self._components.registry if self._components else None)
+
+        # hooks/payload 工具名扫描
+        names = get_tool_names()  # headless 路径，退静态表
+    """
+    if registry is not None:
+        try:
+            return list(registry.names())
+        except Exception:   # noqa: BLE001 — 防御性降级，不因 registry 异常崩
+            pass
+    return list(ALL_TOOL_NAMES)
+
 __all__ = [
     "build_namespace", "build_child_namespace",
-    "ALL_TOOL_NAMES", "ALLOWED_CMDS", "GIT_READONLY_SUBCMDS",
+    "ALL_TOOL_NAMES", "get_tool_names",
+    "ALLOWED_CMDS", "GIT_READONLY_SUBCMDS",
     "WORKSPACE", "VERIFY_DIR",
     # workspace 牢笼 helpers(files.py / shell 路径解析共用)
     "_ws", "_vd", "_safe_path",

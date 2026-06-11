@@ -35,3 +35,14 @@ class EgressPolicy:
     def allow(self, host: str) -> None:
         """用户批准后加白(broker 在 approve 网络动作时调用)。"""
         self._user.add(_host_of(host))
+
+    def add_hosts(self, hosts: "set[str] | frozenset[str] | tuple[str, ...]") -> None:
+        """热更新:批量加白出网 host(registry 注册网络类能力时调用,补声明 egress_hosts)。
+
+        fail-closed 方向不变:未声明的 host 仍被 allowed() 拒。
+        重复加白幂等(set.add)。
+        """
+        for h in hosts:
+            normalized = _host_of(h)
+            if normalized:
+                self._base.add(normalized)

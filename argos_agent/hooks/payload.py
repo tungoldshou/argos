@@ -11,12 +11,13 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from argos_agent import tools as _tools  # ALL_TOOL_NAMES
+from argos_agent import tools as _tools  # get_tool_names
 
-# 工具名 → 抽调用 regex(预编译 cache;spec D7 正则而非 AST)
+# 工具名 → 抽调用 regex(预编译 cache;spec D7 正则而非 AST)。
+# P3：从 get_tool_names() 派生（退静态表路径；hooks 是无 registry 的 headless 场景）。
 _TOOL_NAME_PATTERNS: dict[str, re.Pattern[str]] = {
     name: re.compile(rf"\b{re.escape(name)}\(")
-    for name in _tools.ALL_TOOL_NAMES
+    for name in _tools.get_tool_names()
 }
 
 
