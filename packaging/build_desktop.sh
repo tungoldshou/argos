@@ -19,7 +19,7 @@
 #     1. Apple Developer ID 证书
 #     2. codesign --deep --options runtime --sign "Developer ID Application: ..."
 #     3. xcrun notarytool submit ... --wait
-#   详见 docs/desktop.md。
+#   详见 packaging/desktop.md。
 #
 # 版本同步纪律:
 #   版本单源: packaging/VERSION
