@@ -69,12 +69,20 @@ def _rebuild_index(skills_root: Path) -> None:
 
 def promote(
     *,
-    candidate: Any,  # SkillCandidate
-    tasks: list,     # list[EvalTask]
-    runner: Any,     # EvalRunner 或 fake;必有 .run(task, *, model_tier) -> EvalResult
+    candidate: Any,      # SkillCandidate
+    tasks: list,         # list[EvalTask]
+    runner: Any,         # A 侧 runner;必有 .run(task, *, model_tier) -> EvalResult
+    runner_b: Any = None,  # B 侧 runner(None → 与 A 侧共用同一 runner)
     skills_root: Path,
 ) -> PromotionResult:
-    """A/B 评估 + 晋升。绝不抛(失败静默 → promoted=False)。"""
+    """A/B 评估 + 晋升。绝不抛(失败静默 → promoted=False)。
+
+    runner_b 为 None 时 B 侧与 A 侧共用 runner(向后兼容)。
+    落盘前检查同名覆盖:非学习产物(无 source_run 标记)→ 拒绝,学习产物 → 允许覆盖。
+    """
+    import logging as _log
+    log = _log.getLogger(__name__)
+
     name = getattr(candidate, "name", "")
     body = getattr(candidate, "body_markdown", "")
     if not name or not body:
@@ -86,19 +94,38 @@ def promote(
             promoted=False, reason=f"builtin_protected:{name}",
         )
 
-    # 2. A/B 跑(同 model_tier,本函数不感知 hint —— 那是 runner/loop_factory 的事)
+    # 2. 同名覆盖防护(A/B 之前检查,避免无意义计算)
+    skill_md = _skill_md_path_for(skills_root, name)
+    if skill_md.exists():
+        try:
+            existing = skill_md.read_text(encoding="utf-8")
+            is_learned = "source_run:" in existing or "source_runs:" in existing
+        except Exception:  # noqa: BLE001
+            return PromotionResult(
+                promoted=False, reason="name_collision_unreadable",
+            )
+        if not is_learned:
+            # 用户/社区技能,保守拒绝,原文件不动
+            return PromotionResult(
+                promoted=False, reason=f"name_collision:{name}",
+            )
+        # 学习产物(含 source_run 标记)→ 允许覆盖(整合更新)
+        log.info("promote: overwriting existing learned skill %r", name)
+
+    # 3. A/B 跑(同 model_tier,本函数不感知 hint —— 那是 runner/loop_factory 的事)
     a_passed = 0
     b_passed = 0
     a_total = 0
     b_total = 0
     try:
         for task in tasks:
+            rb = runner_b if runner_b is not None else runner
             try:
                 a = runner.run(task, model_tier="default")
             except Exception as e:  # noqa: BLE001
                 a = None
             try:
-                b = runner.run(task, model_tier="default")
+                b = rb.run(task, model_tier="default")
             except Exception as e:  # noqa: BLE001
                 b = None
             a_total += 1
@@ -112,7 +139,7 @@ def promote(
             promoted=False, reason=f"runner_error:{type(e).__name__}",
         )
 
-    # 3. 严格提升才晋升
+    # 3b. 严格提升才晋升
     if b_passed <= a_passed:
         return PromotionResult(
             promoted=False,
@@ -122,7 +149,6 @@ def promote(
         )
 
     # 4. 落盘
-    skill_md = _skill_md_path_for(skills_root, name)
     try:
         _atomic_write_skill(skill_md, body)
     except Exception as e:  # noqa: BLE001

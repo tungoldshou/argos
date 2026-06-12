@@ -175,3 +175,47 @@ def synthesize(
         verify_cmd=unit.sources[0].verify_cmd,
         skill_md_path=Path("unpromoted"),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class HintedRunner:
+    """B 侧 runner:把综合 skill 的叙述+源经验作为 hint 前置到 task.goal。
+
+    promotion_gate 不感知 hint(契约注释言明是 runner 的事);A 侧用裸 runner。
+    """
+    inner: object
+    hint: str
+
+    def run(self, task, *, model_tier: str):
+        import dataclasses
+        hinted = dataclasses.replace(
+            task, goal=f"可参考以下已验证经验:\n{self.hint}\n\n---\n\n{task.goal}")
+        return self.inner.run(hinted, model_tier=model_tier)
+
+
+def build_eval_tasks(unit: DreamUnit) -> tuple[list, list]:
+    """从 unit 源构造 A/B 语料。返回 (tasks, workspace_gone_sources)。
+
+    workspace 不存在或无 verify_cmd 的源进 gone 列表(消费规则:证据永远
+    拿不到 → caller 标记 consumed)。
+    """
+    from pathlib import Path as _Path
+
+    from argos_agent.eval.corpus import EvalTask
+
+    tasks: list = []
+    gone: list[StoredCandidate] = []
+    for s in unit.sources:
+        ws = _Path(s.workspace) if s.workspace else None
+        if ws is None or not ws.exists():
+            gone.append(s)
+            continue
+        if not s.verify_cmd:
+            gone.append(s)
+            continue
+        tasks.append(EvalTask(
+            id=f"dream-{s.source_run[:12]}", category="dream", difficulty="n/a",
+            title=s.goal[:60], goal=s.goal, verify_cmd=s.verify_cmd,
+            setup_cmd=None, expected_files=(), working_dir=ws, corpus_version=0,
+        ))
+    return tasks, gone

@@ -116,3 +116,66 @@ def test_narrative_prompt_contains_goals_and_no_code_request():
     unit = next(u for u in cluster_candidates([a, b]) if len(u.sources) == 2)
     p = narrative_prompt(unit)
     assert "fix login bug" in p and "不要代码" in p
+
+
+# ── Task 6:HintedRunner + build_eval_tasks ──────────────────────
+
+def test_build_eval_tasks_skips_missing_workspace(tmp_path):
+    """workspace 不存在的源进 gone 列表;存在且有 verify_cmd 的构造 EvalTask。"""
+    from argos_agent.learning.dream import build_eval_tasks, DreamUnit
+
+    existing_ws = tmp_path / "ws_real"
+    existing_ws.mkdir()
+
+    s_good = StoredCandidate(
+        name="good", body_markdown="# s", verify_cmd="pytest -q",
+        source_run="run_good_12345678",
+        workspace=str(existing_ws), goal="fix the login bug",
+        path=Path("/dev/null"),
+    )
+    s_missing = StoredCandidate(
+        name="miss", body_markdown="# s", verify_cmd="pytest -q",
+        source_run="run_miss_12345678",
+        workspace="/nonexistent/path/that/doesnt/exist",
+        goal="render svg chart", path=Path("/dev/null"),
+    )
+    unit = DreamUnit(sources=(s_good, s_missing))
+    tasks, gone = build_eval_tasks(unit)
+
+    assert len(tasks) == 1, f"应只有 1 个有效 task,得 {len(tasks)}"
+    assert tasks[0].working_dir == existing_ws
+    assert len(gone) == 1
+    assert gone[0].source_run == "run_miss_12345678"
+
+
+def test_hinted_runner_prepends_hint_to_goal(tmp_path):
+    """HintedRunner.run 应把 hint 前置到 task.goal,inner runner 收到修改后的 goal。"""
+    from argos_agent.learning.dream import HintedRunner
+    from argos_agent.eval.corpus import EvalTask
+
+    captured_goals: list[str] = []
+
+    class _CapturingRunner:
+        def run(self, task, *, model_tier: str):
+            captured_goals.append(task.goal)
+            class _R:
+                pass_status = "passed"
+            return _R()
+
+    inner = _CapturingRunner()
+    hint_text = "经验提示文本:已验证过的修复方式"
+    hinted = HintedRunner(inner=inner, hint=hint_text)
+
+    task = EvalTask(
+        id="t-hint", category="self_check", difficulty="easy",
+        title="hint test", goal="写一个登录修复脚本",
+        verify_cmd="true", setup_cmd=None, expected_files=(),
+        working_dir=tmp_path, corpus_version=1,
+    )
+    hinted.run(task, model_tier="default")
+
+    assert len(captured_goals) == 1
+    g = captured_goals[0]
+    assert g.startswith("可参考以下已验证经验"), f"goal 应以提示语开头,得: {g[:40]!r}"
+    assert hint_text in g, "goal 应含 hint"
+    assert "写一个登录修复脚本" in g, "goal 应保留原 goal"
