@@ -13,7 +13,9 @@
   },
   "scripts": {
     "build": "tsc --noEmit",
-    "test": "node --import=tsx/esm --test test/vectors.test.ts"
+    "test": "node --import=tsx/esm --test test/vectors.test.ts test/sync_drift.test.ts",
+    "sync-to-shell": "node scripts/sync_to_shell.mjs",
+    "check": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",

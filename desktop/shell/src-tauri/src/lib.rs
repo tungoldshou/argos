@@ -41,6 +41,8 @@ pub fn run() {
             commands::acp_list_runs,
             commands::acp_delete_session,
             commands::acp_socket_path,
+            commands::acp_conn_state,
+            commands::acp_spawn_daemon,
         ])
         .run(tauri::generate_context!())
         .expect("error running Argos shell");

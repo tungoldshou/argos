@@ -20,6 +20,7 @@ const KNOWN_KINDS = new Set<string>([
   "compacted", "pruned", "ledger_entry",
   "intent_confirm_request", "intent_confirm_response",
   "proactive_suggestion",
+  "computer_action",
 ]);
 
 /**

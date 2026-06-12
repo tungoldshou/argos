@@ -6,9 +6,8 @@
  *     Never throws, never drops.
  *   - parseEnvelope returns null for structurally invalid JSON or missing v/seq/kind.
  */
+// AUTO-SYNCED from sdk — do not edit; regenerate with: npm run sync-to-shell
 
-// Vendored copy of @argos/sdk/src/parse.ts — do not edit; re-copy from
-// desktop/sdk/src/parse.ts when the SDK has a breaking protocol change.
 import type { Envelope, ParsedEvent, TypedEvent, UnknownEvent } from "./acp-types.js";
 
 const KNOWN_KINDS = new Set<string>([
@@ -22,6 +21,7 @@ const KNOWN_KINDS = new Set<string>([
   "compacted", "pruned", "ledger_entry",
   "intent_confirm_request", "intent_confirm_response",
   "proactive_suggestion",
+  "computer_action",
 ]);
 
 /**

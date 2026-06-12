@@ -5,6 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "sync-from-sdk": "node ../sdk/scripts/sync_to_shell.mjs",
     "check": "tsc --noEmit",
     "build": "tsc --noEmit && echo 'frontend type-check OK (static HTML; no bundler needed for skeleton)'",
     "tauri": "tauri"
