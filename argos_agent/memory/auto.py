@@ -829,11 +829,20 @@ def _memory_context_block(*, workspace: Path,
 
 
 # ── decay / prune / 容量 cap(spec §9)────────────────────────────────────────
+def decayed_confidence(conf: float, days: float) -> float:
+    """公式核:confidence 衰减后值(spec §9.1)。
+
+    公式:conf - 0.01 * days,clamp 下限 0.0。
+    单一来源——所有调用方(含 consolidate)必须委托此函数,禁止手写第二份。
+    """
+    return max(0.0, conf - 0.01 * days)
+
+
 def _decay_confidence(entry: MemoryEntry, *, now: float | None = None) -> MemoryEntry:
     """单条 decay:confidence -= 0.01 * days_since_last_used(spec §9.1)。"""
     t = now if now is not None else time.time()
     days = max(0.0, (t - entry.last_used_at) / 86400.0)
-    new_conf = max(0.0, entry.confidence - 0.01 * days)
+    new_conf = decayed_confidence(entry.confidence, days)
     return MemoryEntry(
         id=entry.id, type=entry.type, scope=entry.scope,
         key=entry.key, value=entry.value, confidence=new_conf,
