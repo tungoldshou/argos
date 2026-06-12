@@ -1,0 +1,347 @@
+[
+  {
+    "kind": "token_delta",
+    "serialized": "{\"kind\": \"token_delta\", \"data\": {\"text\": \"你好\"}}",
+    "expected_data": {
+      "text": "你好"
+    }
+  },
+  {
+    "kind": "code_action",
+    "serialized": "{\"kind\": \"code_action\", \"data\": {\"code\": \"print(1)\", \"step\": 0}}",
+    "expected_data": {
+      "code": "print(1)",
+      "step": 0
+    }
+  },
+  {
+    "kind": "code_result",
+    "serialized": "{\"kind\": \"code_result\", \"data\": {\"step\": 1, \"stdout\": \"ok\\n\", \"value_repr\": \"42\", \"exc\": \"\", \"ok\": true}}",
+    "expected_data": {
+      "step": 1,
+      "stdout": "ok\n",
+      "value_repr": "42",
+      "exc": "",
+      "ok": true
+    }
+  },
+  {
+    "kind": "file_diff",
+    "serialized": "{\"kind\": \"file_diff\", \"data\": {\"path\": \"/a.py\", \"added\": 3, \"removed\": 1, \"unified\": \"@@ -1 +1,3 @@\\n\"}}",
+    "expected_data": {
+      "path": "/a.py",
+      "added": 3,
+      "removed": 1
+    }
+  },
+  {
+    "kind": "phase_change",
+    "serialized": "{\"kind\": \"phase_change\", \"data\": {\"phase\": \"act\", \"actions\": 2}}",
+    "expected_data": {
+      "phase": "act",
+      "actions": 2
+    }
+  },
+  {
+    "kind": "cost_update",
+    "serialized": "{\"kind\": \"cost_update\", \"data\": {\"tokens_in\": 100, \"tokens_out\": 50, \"cost_usd\": 0.001, \"elapsed_s\": 2.5, \"cache_read\": 10, \"context_used\": 200, \"tier_name\": \"sonnet\"}}",
+    "expected_data": {
+      "tokens_in": 100,
+      "tokens_out": 50,
+      "cost_usd": 0.001,
+      "elapsed_s": 2.5,
+      "cache_read": 10,
+      "context_used": 200,
+      "tier_name": "sonnet"
+    }
+  },
+  {
+    "kind": "cost_update",
+    "serialized": "{\"kind\": \"cost_update\", \"data\": {\"tokens_in\": 5, \"tokens_out\": 3, \"cost_usd\": null, \"elapsed_s\": 1.0, \"cache_read\": 0, \"context_used\": 0, \"tier_name\": \"\"}}",
+    "expected_data": {
+      "tokens_in": 5,
+      "tokens_out": 3,
+      "cost_usd": null,
+      "elapsed_s": 1.0
+    }
+  },
+  {
+    "kind": "approval_request",
+    "serialized": "{\"kind\": \"approval_request\", \"data\": {\"call_id\": \"abc123def456\", \"action\": \"run_command\", \"args\": {\"command\": \"rm -rf /tmp/x\"}, \"description\": \"删除临时目录\", \"risk\": \"high\", \"trigger\": \"\", \"secret_pattern\": null}}",
+    "expected_data": {
+      "call_id": "abc123def456",
+      "action": "run_command",
+      "description": "删除临时目录",
+      "risk": "high",
+      "trigger": "",
+      "secret_pattern": null
+    }
+  },
+  {
+    "kind": "approval_response",
+    "serialized": "{\"kind\": \"approval_response\", \"data\": {\"call_id\": \"abc123def456\", \"decision\": \"once\"}}",
+    "expected_data": {
+      "call_id": "abc123def456",
+      "decision": "once"
+    }
+  },
+  {
+    "kind": "escalation",
+    "serialized": "{\"kind\": \"escalation\", \"data\": {\"reason\": \"verify 三次失败\", \"attempts\": 3, \"last_failure\": \"exit 1\"}}",
+    "expected_data": {
+      "reason": "verify 三次失败",
+      "attempts": 3,
+      "last_failure": "exit 1"
+    }
+  },
+  {
+    "kind": "error",
+    "serialized": "{\"kind\": \"error\", \"data\": {\"message\": \"something went wrong\", \"chain\": [\"ValueError: x\", \"RuntimeError: y\"]}}",
+    "expected_data": {
+      "message": "something went wrong",
+      "chain": [
+        "ValueError: x",
+        "RuntimeError: y"
+      ]
+    }
+  },
+  {
+    "kind": "plan_update",
+    "serialized": "{\"kind\": \"plan_update\", \"data\": {\"todos\": [{\"content\": \"写测试\", \"status\": \"pending\"}]}}",
+    "expected_data": {
+      "todos": [
+        {
+          "content": "写测试",
+          "status": "pending"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "workflow_progress",
+    "serialized": "{\"kind\": \"workflow_progress\", \"data\": {\"stage_id\": \"s1\", \"agent_id\": \"s1#0\", \"phase\": \"act\", \"note\": \"运行中\"}}",
+    "expected_data": {
+      "stage_id": "s1",
+      "agent_id": "s1#0",
+      "phase": "act",
+      "note": "运行中"
+    }
+  },
+  {
+    "kind": "workflow_proposed",
+    "serialized": "{\"kind\": \"workflow_proposed\", \"data\": {\"name\": \"审计\", \"description\": \"并行审计\", \"preview\": \"阶段 r: fan_out\", \"call_id\": \"aaaaaaaaaaaa\"}}",
+    "expected_data": {
+      "name": "审计",
+      "description": "并行审计",
+      "call_id": "aaaaaaaaaaaa"
+    }
+  },
+  {
+    "kind": "workflow_done",
+    "serialized": "{\"kind\": \"workflow_done\", \"data\": {\"name\": \"审计\", \"synthesis\": \"结论\", \"notes\": [\"cap 截断\"]}}",
+    "expected_data": {
+      "name": "审计",
+      "synthesis": "结论"
+    }
+  },
+  {
+    "kind": "plan_rendered",
+    "serialized": "{\"kind\": \"plan_rendered\", \"data\": {\"plan_md\": \"# 计划\\n- 步骤 1\"}}",
+    "expected_data": {
+      "plan_md": "# 计划\n- 步骤 1"
+    }
+  },
+  {
+    "kind": "plan_decision_request",
+    "serialized": "{\"kind\": \"plan_decision_request\", \"data\": {\"call_id\": \"aabbcc112233\", \"plan_md\": \"# Plan\\n- step 1\"}}",
+    "expected_data": {
+      "call_id": "aabbcc112233",
+      "plan_md": "# Plan\n- step 1"
+    }
+  },
+  {
+    "kind": "memory_recall",
+    "serialized": "{\"kind\": \"memory_recall\", \"data\": {\"hits\": [\"写测试 → passed（goal 相似度 0.9）\"]}}",
+    "expected_data": {
+      "hits": [
+        "写测试 → passed（goal 相似度 0.9）"
+      ]
+    }
+  },
+  {
+    "kind": "compacted",
+    "serialized": "{\"kind\": \"compacted\", \"data\": {\"before\": 8000, \"after\": 3000, \"reduction_pct\": 0.625, \"triggered_by\": \"proactive\", \"session_id\": \"s1\"}}",
+    "expected_data": {
+      "before": 8000,
+      "after": 3000,
+      "reduction_pct": 0.625,
+      "triggered_by": "proactive",
+      "session_id": "s1"
+    }
+  },
+  {
+    "kind": "pruned",
+    "serialized": "{\"kind\": \"pruned\", \"data\": {\"before\": 5000, \"after\": 4000, \"removed\": 3, \"reduction_pct\": 0.2, \"aggressiveness\": 0.5, \"session_id\": \"sess1\"}}",
+    "expected_data": {
+      "before": 5000,
+      "after": 4000,
+      "removed": 3,
+      "reduction_pct": 0.2,
+      "aggressiveness": 0.5,
+      "session_id": "sess1"
+    }
+  },
+  {
+    "kind": "hook_fired",
+    "serialized": "{\"kind\": \"hook_fired\", \"data\": {\"event_name\": \"PreToolUse\", \"command\": \"echo ok\", \"success\": true, \"returncode\": 0, \"elapsed_ms\": 42, \"timed_out\": false, \"not_found\": false, \"stop_reason\": null, \"error\": null, \"stdout\": \"\"}}",
+    "expected_data": {
+      "event_name": "PreToolUse",
+      "command": "echo ok",
+      "success": true,
+      "returncode": 0,
+      "elapsed_ms": 42
+    }
+  },
+  {
+    "kind": "lsp_server_event",
+    "serialized": "{\"kind\": \"lsp_server_event\", \"data\": {\"server_name\": \"python\", \"status\": \"ready\", \"command\": \"pyright --stdio\", \"exit_code\": null, \"elapsed_ms\": 500, \"error\": null, \"cwd\": \"/ws\", \"timestamp_ms\": 999}}",
+    "expected_data": {
+      "server_name": "python",
+      "status": "ready",
+      "elapsed_ms": 500,
+      "cwd": "/ws"
+    }
+  },
+  {
+    "kind": "lsp_diagnostic_event",
+    "serialized": "{\"kind\": \"lsp_diagnostic_event\", \"data\": {\"server_name\": \"python\", \"uri\": \"file:///a.py\", \"count\": 2, \"severity_counts\": {\"error\": 1, \"warning\": 1}, \"cached\": false, \"cwd\": \"/ws\"}}",
+    "expected_data": {
+      "server_name": "python",
+      "uri": "file:///a.py",
+      "count": 2,
+      "cached": false
+    }
+  },
+  {
+    "kind": "skill_run_start",
+    "serialized": "{\"kind\": \"skill_run_start\", \"data\": {\"skill_name\": \"security-review\", \"args\": {\"path\": \".\"}, \"cwd\": \"/ws\", \"timestamp_ms\": 0}}",
+    "expected_data": {
+      "skill_name": "security-review",
+      "cwd": "/ws"
+    }
+  },
+  {
+    "kind": "skill_run_end",
+    "serialized": "{\"kind\": \"skill_run_end\", \"data\": {\"skill_name\": \"security-review\", \"verdict\": \"passed\", \"duration_ms\": 1234, \"finding_count\": 0, \"error_count\": 0, \"cwd\": \"/ws\", \"timestamp_ms\": 0}}",
+    "expected_data": {
+      "skill_name": "security-review",
+      "verdict": "passed",
+      "duration_ms": 1234,
+      "finding_count": 0,
+      "error_count": 0
+    }
+  },
+  {
+    "kind": "ledger_entry",
+    "serialized": "{\"kind\": \"ledger_entry\", \"data\": {\"ts\": 1700000000.0, \"run_id\": \"run123\", \"seq\": 1, \"action\": \"write_file\", \"summary_human\": \"创建了 README.md\", \"risk\": \"low\", \"reversible\": \"yes\", \"undo_state\": \"available\"}}",
+    "expected_data": {
+      "ts": 1700000000.0,
+      "run_id": "run123",
+      "seq": 1,
+      "action": "write_file",
+      "summary_human": "创建了 README.md",
+      "risk": "low",
+      "reversible": "yes",
+      "undo_state": "available"
+    }
+  },
+  {
+    "kind": "tool_receipt",
+    "serialized": "{\"kind\": \"tool_receipt\", \"data\": {\"receipt\": {\"action\": \"write_file\", \"args_hash\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"result_hash\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"exit_code\": 0, \"ts\": 1700000000.0, \"nonce\": \"cccccccccccccccccccccccccccccccc\", \"sig\": \"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}}}",
+    "expected_data": {
+      "receipt": {
+        "action": "write_file",
+        "args_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "result_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "exit_code": 0,
+        "ts": 1700000000.0,
+        "nonce": "cccccccccccccccccccccccccccccccc",
+        "sig": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      }
+    }
+  },
+  {
+    "kind": "verify_verdict",
+    "serialized": "{\"kind\": \"verify_verdict\", \"data\": {\"verdict\": {\"status\": \"passed\", \"detail\": \"exit 0\", \"verify_cmd\": \"pytest -x tests/\", \"attempts\": 1, \"tampered\": [], \"self_verified\": false}}}",
+    "expected_data": {
+      "verdict": {
+        "status": "passed",
+        "detail": "exit 0",
+        "verify_cmd": "pytest -x tests/",
+        "attempts": 1,
+        "tampered": [],
+        "self_verified": false
+      }
+    }
+  },
+  {
+    "kind": "verify_verdict",
+    "serialized": "{\"kind\": \"verify_verdict\", \"data\": {\"verdict\": {\"status\": \"failed\", \"detail\": \"exit 1\", \"verify_cmd\": \"pytest -x tests/\", \"attempts\": 2, \"tampered\": [], \"self_verified\": false}}}",
+    "expected_data": {
+      "verdict": {
+        "status": "failed",
+        "detail": "exit 1",
+        "verify_cmd": "pytest -x tests/",
+        "attempts": 2,
+        "tampered": [],
+        "self_verified": false
+      }
+    }
+  },
+  {
+    "kind": "verify_verdict",
+    "serialized": "{\"kind\": \"verify_verdict\", \"data\": {\"verdict\": {\"status\": \"unverifiable\", \"detail\": \"trivial cmd rejected\", \"verify_cmd\": null, \"attempts\": 1, \"tampered\": [], \"self_verified\": false}}}",
+    "expected_data": {
+      "verdict": {
+        "status": "unverifiable",
+        "detail": "trivial cmd rejected",
+        "verify_cmd": null,
+        "attempts": 1,
+        "tampered": [],
+        "self_verified": false
+      }
+    }
+  },
+  {
+    "kind": "intent_confirm_request",
+    "serialized": "{\"kind\": \"intent_confirm_request\", \"data\": {\"call_id\": \"aabbcc112233\", \"confirmation_text\": \"我理解你要删除 build 文件夹，对吗？\", \"risk_flags\": [\"irreversible\"], \"card_json\": {\"goal\": \"删除 build 文件夹\", \"risk_flags\": [\"irreversible\"]}}}",
+    "expected_data": {
+      "call_id": "aabbcc112233",
+      "confirmation_text": "我理解你要删除 build 文件夹，对吗？",
+      "risk_flags": [
+        "irreversible"
+      ]
+    }
+  },
+  {
+    "kind": "intent_confirm_response",
+    "serialized": "{\"kind\": \"intent_confirm_response\", \"data\": {\"call_id\": \"aabbcc112233\", \"confirmed\": true, \"revised_goal\": null}}",
+    "expected_data": {
+      "call_id": "aabbcc112233",
+      "confirmed": true,
+      "revised_goal": null
+    }
+  },
+  {
+    "kind": "proactive_suggestion",
+    "serialized": "{\"kind\": \"proactive_suggestion\", \"data\": {\"suggestion_id\": \"abc123def456\", \"order_id\": \"order001\", \"goal\": \"检查昨天的日志\", \"reason_human\": \"定时触发（09:00）：每天早上检查日志\", \"suggested_at\": 1700000000.0, \"requires_confirmation\": true}}",
+    "expected_data": {
+      "suggestion_id": "abc123def456",
+      "order_id": "order001",
+      "goal": "检查昨天的日志",
+      "reason_human": "定时触发（09:00）：每天早上检查日志",
+      "suggested_at": 1700000000.0,
+      "requires_confirmation": true
+    }
+  }
+]
