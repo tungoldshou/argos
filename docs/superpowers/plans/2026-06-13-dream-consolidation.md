@@ -1080,7 +1080,7 @@ rtk git commit -m "feat(learning): A/B 晋升接线 — promote(runner_b) + Hint
 
 操作对象是 4-tier JSONL 目录（`~/.argos/memory/`，测试用 `ARGOS_MEMORY_DIR`/参数注入）。**对 dict 操作，不重构 MemoryEntry**（坏行兼容、解耦）。
 
-**打分单一来源（评审 A1 裁定）**：`argos_agent/memory/auto.py:821` 已有 `_decay_confidence`（公式 `conf - 0.01*days`），consolidate **必须复用它**，绝不写第二份公式（use_count 的"使用回血"发生在召回时更新 `last_used_at`，不在归档打分里重算）。复用方式：把 `_decay_confidence` 提为 auto.py 的公开函数 `decayed_confidence`（原私有名保留为别名，零行为变化），consolidate 导入公开名。先读 auto.py:815-830 确认真实签名再动手。
+**打分单一来源（评审 A1 裁定）**：`argos_agent/memory/auto.py:821` 已有 `_decay_confidence`（公式 `conf - 0.01*days`），consolidate **必须复用它**，绝不写第二份公式（use_count 的"使用回血"发生在召回时更新 `last_used_at`，不在归档打分里重算）。复用方式（复核修正：真实 `_decay_confidence(entry: MemoryEntry, *, now=None) -> MemoryEntry` 收发 MemoryEntry，纯别名不可行）：在 auto.py **提取公式核** `decayed_confidence(conf: float, days: float) -> float`，让 `_decay_confidence` 内部改调它（零行为变化），consolidate 导入公式核。先读 auto.py:815-830 对照真实代码再动手。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -1809,3 +1809,25 @@ rtk git commit -m "docs: Dream 夜间整合 — 特性文档+README+CHANGELOG"
 | plan-design-review | — | 跳过 | — | UI 面仅一条 slash 命令，无视觉变更 |
 
 非阻塞建议处置：embedding 延后已显式记录（CEO#1）；聚类双车道上限（CEO#2，T5 已改）；报告轮转记 TODO（CEO#4）；反思 confidence 0.7 维持（CEO#5，失败教训该粘 50 天是有意的）；衰减公式单一来源（Eng A1，T7 已改）。
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | CLEAR (round 2) | 2 blocking → 均已回修闭环 |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | CLEAR | round 1: 4 blocking + 1 advisory；round 2: 6/6 blocking 闭环核verified，0 new blocking |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | SKIPPED | 仅一条 slash 命令，无视觉变更 |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+**Round 2 闭环核对（逐条带证据）：**
+- B1→`append_line`：jsonl_log.py:31 实名核对一致 ✅
+- B2→narrate async：synthesize 纯函数化 + pipeline `inspect.isawaitable` 分流 + `_build_narrate` async callable + `wait_for(timeout=60)`；models.py:235 `complete(messages, *, system)` 签名匹配 ✅
+- B3→懒初始化锁：`__init__` 置 None，`run()` 内创建，创建与 acquire 间无 await 间隙，单飞不变量成立 ✅
+- B4→事件注册三步：EventKind Literal + `_KIND_TO_CLASS`（仿 :413）+ golden `_round()` 闭环 ✅
+- CEO-B1→`self_verified` 落盘 + `list_unconsumed` 双保险 + spy 测试（monkeypatch 模块属性，hook 调用层可拦截）✅
+- CEO-B2→promote 最小 diff：注释快照与 promotion_gate.py:94-109 实码逐行一致，计数器与外层守卫保留，`a_total/b_total` 断言钉住 ✅
+
+**UNRESOLVED:** 0 blocking。2 条非阻塞备注：① T7 "原私有名保留为别名" 措辞与 `decayed_confidence(conf, days)` 调用形不一致（真实 `_decay_confidence(entry, *, now)` 收 MemoryEntry，需提取公式核为公开函数而非纯别名；TDD 门会硬性纠错，实现时以 T7 代码段的调用形为准）；② spec :76 "每晚最多 3 个整合单元（统一计数）" 未随 T5 双车道上限（最多 3+3）更新，一行措辞修正。
+
+**VERDICT:** ENG CLEARED — approve，可进入实现。
