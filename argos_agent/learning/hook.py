@@ -15,6 +15,8 @@
       verdict_status="passed" | "failed" | "unverifiable",
       self_verified=bool,           # E4 防火墙:True 时绝不进 distill/promote
       skills_root=~/.argos/skills,
+      candidates_root=Path | None,  # 候选落盘区(None=不落盘,兼容旧 caller)
+      workspace=str | None,         # 源 run 的项目目录(A/B 取证用)
       runner_factory=lambda: ...,
       tasks=[...],
   )
@@ -73,6 +75,8 @@ async def on_run_completed(
     verdict_status: str,
     self_verified: bool = False,
     skills_root: Path,
+    candidates_root: Path | None = None,
+    workspace: str | None = None,
     runner_factory: Callable[[], Any] | None = None,
     tasks: list | None = None,
 ) -> None:
@@ -83,6 +87,10 @@ async def on_run_completed(
     - status=="passed" 且 self_verified=True     → 走 reflection 降级
       (reward-hacking 防火墙:绝不让"自验证通过"触发技能蒸馏/晋升)
     - 其他状态 → reflection(失败教训存 memory)
+
+    candidates_root:候选落盘区路径。None = 不落盘(向后兼容);传入时无 runner 的
+      passed run 产物会落盘到此目录,供 Dream 夜间整合使用。
+    workspace:源 run 的项目工作目录,随候选落盘用于 A/B 取证。
     """
     is_user_pass = (verdict_status == "passed") and not self_verified
     if is_user_pass:
@@ -90,6 +98,8 @@ async def on_run_completed(
             run_id=run_id, store_dir=store_dir,
             goal=goal, verify_cmd=verify_cmd,
             skills_root=skills_root,
+            candidates_root=candidates_root,
+            workspace=workspace,
             runner_factory=runner_factory, tasks=tasks or [],
         )
     else:
@@ -106,7 +116,10 @@ async def on_run_completed(
 async def _on_passed(
     *,
     run_id: str, store_dir: Path, goal: str, verify_cmd: str | None,
-    skills_root: Path, runner_factory: Callable[[], Any] | None,
+    skills_root: Path,
+    candidates_root: Path | None,
+    workspace: str | None,
+    runner_factory: Callable[[], Any] | None,
     tasks: list,
 ) -> None:
     """passed 路径:distill → promotion_gate。"""
@@ -129,7 +142,17 @@ async def _on_passed(
         return
 
     if not tasks or runner_factory is None:
-        # 无语料 / 无 runner → 候选已产,但不晋升(诚实:无 A/B 证据不写盘)
+        # 无语料 / 无 runner → 不晋升,但候选落盘进候选区(Dream 夜间整合的材料;
+        # 修复:此前直接丢弃,生产路径学习闭环断电)
+        if candidates_root is not None:
+            try:
+                from argos_agent.learning import candidates as _cands
+                _cands.save_candidate(
+                    cand, root=candidates_root, source_run=run_id,
+                    workspace=workspace, goal=goal,
+                )
+            except Exception as e:  # noqa: BLE001 — 学习路径不挂主任务
+                log.warning("learning: 候选落盘失败 %s: %s", run_id, e)
         return
 
     try:

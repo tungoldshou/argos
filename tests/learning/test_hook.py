@@ -180,3 +180,75 @@ async def test_hook_is_awaitable_and_returns_none(tmp_path):
         tasks=[object()],
     )
     assert result is None
+
+
+# ── Task 3:无 runner 时候选落盘(修复:候选丢弃断电) ─────────────────────────────
+
+
+def test_passed_without_runner_persists_candidate(tmp_path, monkeypatch):
+    """无 runner 时候选必须落盘(修复:当场丢弃)。
+
+    评审 I2:monkeypatch distiller 返回固定候选,解耦 distiller 内部行为
+    (hook 内 `from ... import distiller` 后调模块属性,patch 可拦截)。
+    """
+    store_dir = tmp_path / "runs"
+    store_dir.mkdir()
+    run_id = "abc123def456"
+    # store 文件需存在,内容随意(distill 已被 stub,不读它)
+    (store_dir / f"{run_id}.jsonl").write_text(
+        json.dumps({"kind": "run_meta", "run_id": run_id}), encoding="utf-8")
+
+    from argos_agent.learning import distiller
+    from argos_agent.learning.distiller import SkillCandidate
+
+    monkeypatch.setattr(
+        distiller, "distill_run_to_skill",
+        lambda **kw: SkillCandidate(
+            name="fix-login", body_markdown="# body\n",
+            verify_cmd="pytest -q", skill_md_path=Path("u"),
+        ),
+    )
+
+    from argos_agent.learning.hook import on_run_completed
+    asyncio.run(on_run_completed(
+        run_id=run_id, store_dir=store_dir, goal="say hello",
+        verify_cmd="pytest -q", verdict_status="passed",
+        skills_root=tmp_path / "skills",
+        candidates_root=tmp_path / "candidates",
+        workspace="/tmp/proj",
+        runner_factory=None, tasks=[],
+    ))
+    from argos_agent.learning.candidates import list_unconsumed
+    got = list_unconsumed(tmp_path / "candidates")
+    assert len(got) == 1
+    assert got[0].workspace == "/tmp/proj"
+    assert got[0].verify_cmd == "pytest -q"
+
+
+def test_self_verified_passed_never_calls_save_candidate(tmp_path, monkeypatch):
+    """E4 防火墙(评审 B1 加固):不只断言候选区为空(那会因路由本来就不
+    落盘而平凡通过),用 spy 钉死 save_candidate 在 self_verified 路径上
+    从未被调用 —— 防火墙断在调用层,不是碰巧没产物。"""
+    store_dir = tmp_path / "runs"
+    store_dir.mkdir()
+    run_id = "abc123def456"
+    (store_dir / f"{run_id}.jsonl").write_text(
+        json.dumps({"kind": "code_action", "code": "x=1"}), encoding="utf-8")
+
+    calls: list = []
+    from argos_agent.learning import candidates as cands_mod
+    real_save = cands_mod.save_candidate
+    monkeypatch.setattr(cands_mod, "save_candidate",
+                        lambda *a, **kw: calls.append(kw) or real_save(*a, **kw))
+
+    from argos_agent.learning.hook import on_run_completed
+    asyncio.run(on_run_completed(
+        run_id=run_id, store_dir=store_dir, goal="g",
+        verify_cmd="pytest -q", verdict_status="passed", self_verified=True,
+        skills_root=tmp_path / "skills",
+        candidates_root=tmp_path / "candidates",
+        runner_factory=None, tasks=[],
+    ))
+    assert calls == []                                     # 调用层防线
+    from argos_agent.learning.candidates import list_unconsumed
+    assert list_unconsumed(tmp_path / "candidates") == []  # 产物层防线
