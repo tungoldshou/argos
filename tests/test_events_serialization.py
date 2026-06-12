@@ -30,6 +30,7 @@ ALL_EVENT_KINDS = {
     "intent_confirm_request",   # P4 §7 意图引擎:确认挂起请求
     "intent_confirm_response",  # P4 §7 意图引擎:用户确认/取消响应
     "proactive_suggestion",     # P5b §9 自治面:conductor 主动建议事件
+    "computer_action",          # P6a §10 computer use:OS 级动作执行结果
 }
 
 

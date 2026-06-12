@@ -91,12 +91,15 @@ def test_all_six_gated_tools_dispatch_without_exception(tmp_path):
 
 
 def test_tools_registered_in_all_tool_names():
-    """6 个 lsp_* 工具在 ALL_TOOL_NAMES 中(工具数 15 → 21)。"""
+    """6 个 lsp_* 工具在 ALL_TOOL_NAMES 中;7 个 computer.* 在 ALL_TOOL_NAMES 中(工具数 22 → 29)。"""
     from argos_agent.tools import ALL_TOOL_NAMES
     for name in ("lsp_definition", "lsp_references", "lsp_hover",
                  "lsp_document_symbols", "lsp_workspace_symbols", "lsp_diagnostics"):
         assert name in ALL_TOOL_NAMES
-    assert len(ALL_TOOL_NAMES) == 22
+    for name in ("computer.screenshot", "computer.click", "computer.double_click",
+                 "computer.type_text", "computer.key", "computer.scroll", "computer.open_app"):
+        assert name in ALL_TOOL_NAMES
+    assert len(ALL_TOOL_NAMES) == 29
 
 
 def test_tools_broker_dispatch_lsp_definition():

@@ -615,3 +615,109 @@ class TestCodeTaskNotHijackedBySendWords:
         """修正后纯发送任务红线不松动(双向都钉死)。"""
         strats = generate("send an email to bob", workspace_facts=WorkspaceFacts(has_pytest=True))
         assert len(strats) == 1 and strats[0].level == "L5"
+
+
+# ═══════════════════════════════════════════════════════
+# VLM/截图红线契约测试(P6a §10)
+# ═══════════════════════════════════════════════════════
+
+class TestVlmScreenshotRedline:
+    """P6a §10 VLM/截图红线:任何 VerifyStrategy 候选都不得以 screenshot 为唯一证据产出 cmd。
+
+    规则来源:spec §10 + CLAUDE.md §3:
+      · 截图/VLM 结果永不单独产出 "passed"。
+      · 任何策略的 cmd 字段都不得仅依赖截图命令(screencapture / screenshot / scrot)
+        来给出 passed 判断。
+      · L5 evidence_trail(cmd=None)是唯一合法的"无机检退路"——它诚实声明 unverifiable。
+      · 防未来回归:无论如何修改 generate() 或新增策略类型,此契约测试必须继续通过。
+    """
+
+    # screenshot 命令关键词集合(防未来回归:若新增截图工具也应加入此集合)
+    _SCREENSHOT_CMD_PATTERNS = (
+        "screencapture",
+        "screenshot",
+        "scrot",
+        "import -window",   # ImageMagick 截图
+        "gnome-screenshot",
+    )
+
+    def _has_screenshot_only_cmd(self, strategy: VerifyStrategy) -> bool:
+        """判断该策略是否以截图命令为唯一验证手段(cmd 非 None 且仅含截图)。"""
+        cmd = strategy.cmd
+        if cmd is None:
+            return False  # cmd=None 是 L5 诚实退路,不是截图验证
+        cmd_lower = cmd.lower()
+        # 命令仅含截图指令(不含测试/断言/文件存在等其他验证手段)
+        has_screenshot = any(kw in cmd_lower for kw in self._SCREENSHOT_CMD_PATTERNS)
+        if not has_screenshot:
+            return False
+        # 若同时含有 test/assert/grep/python/pytest/cargo 等,说明是混合命令不算纯截图
+        real_verify_keywords = ("pytest", "cargo", "assert", "grep", "test -f", "python", "node")
+        has_real_verify = any(kw in cmd_lower for kw in real_verify_keywords)
+        return not has_real_verify
+
+    @pytest.mark.parametrize("goal", [
+        "implement a new feature",
+        "fix the login bug",
+        "write tests for auth module",
+        "create a report.json file",
+        "build the project",
+        "send an email",
+        "take a screenshot of the dashboard",
+        "capture the screen and save to png",
+        "screenshot the current state",
+        "",
+        "random gibberish xyz 123",
+    ])
+    def test_no_screenshot_only_cmd_in_any_goal(self, goal: str) -> None:
+        """任何 goal 的策略序列中,均不得出现以截图命令为唯一验证手段的候选。
+
+        这是防未来回归的契约测试:即便将来新增了 VLM/截图相关策略生成逻辑,
+        也绝不允许以"截图成功 = 任务通过"逻辑产生 cmd 型策略。
+        """
+        facts = WorkspaceFacts(
+            has_pytest=True,
+            has_cargo=False,
+            has_package_json=False,
+            has_makefile=False,
+            has_go_mod=False,
+        )
+        strats = generate(goal, workspace_facts=facts)
+        bad = [s for s in strats if self._has_screenshot_only_cmd(s)]
+        assert not bad, (
+            f"goal={goal!r} 产出了以截图为唯一验证手段的策略(VLM 红线违反):\n"
+            + "\n".join(f"  {s}" for s in bad)
+        )
+
+    def test_no_screenshot_only_cmd_with_screenshot_hints(self) -> None:
+        """即便 capability_hints 中含有截图相关 hint,也不得产出截图唯一验证策略。"""
+        facts = WorkspaceFacts()
+        hints = {
+            "screenshot_path": "/tmp/test.png",
+            "dom_url": "http://localhost:3000",
+        }
+        strats = generate(
+            "verify the UI looks correct",
+            workspace_facts=facts,
+            capability_hints=hints,
+        )
+        bad = [s for s in strats if self._has_screenshot_only_cmd(s)]
+        assert not bad, (
+            "capability_hints 含截图路径时仍产出截图唯一验证策略(VLM 红线违反):\n"
+            + "\n".join(f"  {s}" for s in bad)
+        )
+
+    def test_l5_is_always_last_and_cmd_is_none(self) -> None:
+        """L5 退路永远在末位,且 cmd=None(诚实 unverifiable,不是截图验证)。
+
+        这是红线的另一面:L5 不含 cmd 就是诚实说"无法机检",不能被截图 cmd 替换。
+        """
+        for goal in ("take a screenshot", "capture screen", "verify UI visually"):
+            facts = WorkspaceFacts()
+            strats = generate(goal, workspace_facts=facts)
+            last = strats[-1]
+            assert last.level == "L5", f"末位不是 L5:{goal!r}"
+            assert last.cmd is None, (
+                f"L5 退路 cmd 不得为 screenshot 命令(应为 None):{goal!r}, cmd={last.cmd!r}"
+            )
+            assert last.kind == "evidence_trail", f"L5 kind 必须是 evidence_trail:{goal!r}"

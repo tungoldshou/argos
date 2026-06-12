@@ -10,6 +10,7 @@ from argos_agent.permissions.config import PermissionsConfig
 from argos_agent.permissions.hard_rules import (
     HARD_PATH_DENYLIST,
     check_hard_shell,
+    check_computer_hard_rules,
     is_argos_own_env,
     is_env_file,
     is_env_template,
@@ -122,6 +123,24 @@ def evaluate(
         meta = _check_hard_path_write(args, workspace=workspace)
         if meta is not None:
             return meta
+
+    # 1e. Hard rules:computer.* 非开发者域(P6a §10)
+    # type_text 文本命中金融/验证码模式 → 强制 ask(CONFIRM);
+    # open_app  命中支付/银行词表     → 强制 ask(CONFIRM)。
+    # 注意:这里返回 "ask"(而非 "deny")——目的是强制人工确认,不是彻底拒绝。
+    # autonomy 层 + broker 层需把 trigger.startswith("hard_rule:computer_") 视为不可降级。
+    if action.startswith("computer."):
+        computer_rule = check_computer_hard_rules(action, args)
+        if computer_rule is not None:
+            return DecisionMeta(
+                decision="ask",
+                trigger=f"hard_rule:{computer_rule}",
+                rule_name=computer_rule,
+                reason=(
+                    f"计算机控制动作命中非开发者域硬规则 {computer_rule!r} —— "
+                    "此类操作必须人在场确认,Trust Dial 任何档位下均不可降级。"
+                ),
+            )
 
     # 1c. Hard rules:.env 教学样例(永远 allow)→ 无动作,继续
     # 1d. Hard rules:secret pattern(D8 锁 flag-and-ask):write_file/edit_file 看新内容

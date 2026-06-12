@@ -44,6 +44,7 @@ EventKind = Literal[
     "intent_confirm_request",   # ← P4 新增(§7 意图引擎:确认挂起请求)
     "intent_confirm_response",  # ← P4 新增(§7 意图引擎:用户确认/取消响应)
     "proactive_suggestion",     # ← P5b 新增(§9 自治面:conductor 主动建议事件)
+    "computer_action",          # ← P6a 新增(§10 computer use:OS 级动作执行结果)
 ]
 
 
@@ -300,6 +301,38 @@ class ProactiveSuggestionEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class ComputerActionEvent:
+    """P6a §10 computer use:OS 级动作执行结果事件。
+
+    ComputerExecutor 每次执行 ComputerAction 后广播此事件至 EventBus,
+    TUI 活动栏/账本消费它记录操作历史。
+
+    诚实性约定:
+      · text_preview 仅保留 text 字段前 80 字符(防止敏感输入全量进事件流)。
+      · screenshot/VLM 结果永不单独产出 "passed"——本事件仅记录 ok/detail,
+        不含验收判断。
+      · ok=False 时 detail 含人话错误原因(含权限指引),不含原始错误堆栈。
+
+    字段:
+      kind_action   — 动作 kind(screenshot|click|double_click|type_text|key|scroll|open_app)
+      x             — 屏幕 x 坐标(像素),无坐标动作为 None
+      y             — 屏幕 y 坐标(像素),无坐标动作为 None
+      text_preview  — text 字段前 80 字符截断;type_text/key 时有值,其余为 ""
+      ok            — 执行是否成功
+      detail        — 人话说明(成功摘要 / 失败原因+权限指引)
+      artifact_path — 截图 PNG 路径(screenshot 成功时);其余为 None
+    """
+    kind = "computer_action"
+    kind_action: str          # ActionKind 的字符串值
+    x: int | None
+    y: int | None
+    text_preview: str         # text 截断 80 字符,防敏感信息全量进流
+    ok: bool
+    detail: str
+    artifact_path: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class PlanDecisionRequest:
     """v6 §4 ACP:plan 决策请求事件——去掉 TUI 对 loop 实例的直接引用。
 
@@ -359,6 +392,7 @@ Event = (
     | LedgerEntryEvent              # ← P3b 新增(§6 行为账本)
     | IntentConfirmRequest | IntentConfirmResponse  # ← P4 新增(§7 意图引擎)
     | ProactiveSuggestionEvent      # ← P5b 新增(§9 自治面:conductor 主动建议)
+    | ComputerActionEvent           # ← P6a 新增(§10 computer use:OS 级动作执行结果)
 )
 
 # kind 常量 → 类,用于反序列化派发
@@ -377,6 +411,7 @@ _KIND_TO_CLASS: dict[str, type] = {
         LedgerEntryEvent,             # ← P3b 新增(§6 行为账本)
         IntentConfirmRequest, IntentConfirmResponse,  # ← P4 新增(§7 意图引擎)
         ProactiveSuggestionEvent,     # ← P5b 新增(§9 自治面:conductor 主动建议)
+        ComputerActionEvent,          # ← P6a 新增(§10 computer use:OS 级动作执行结果)
     )
 }
 

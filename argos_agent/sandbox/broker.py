@@ -39,6 +39,15 @@ _RISK: dict[str, str] = {
     "browser_type": "medium",
     # MCP 外部工具调用:第三方 server 能力不可预知 → medium,默认走审批。
     "mcp_call": "medium",
+    # OS 级计算机控制:屏幕/鼠标是全局资源,Seatbelt 关不住 → 全部 high。
+    # 静态兜底:即便 registry=None(headless/旧测试路径),computer.* 仍受高风险管辖。
+    "computer.screenshot": "high",
+    "computer.click": "high",
+    "computer.double_click": "high",
+    "computer.type_text": "high",
+    "computer.key": "high",
+    "computer.scroll": "high",
+    "computer.open_app": "high",
 }
 # C1:这些 action 即便在 AUTO(YOLO)档也强制逐个确认 —— 永不静默执行 shell。
 _FORCE_CONFIRM_ACTIONS: set[str] = {"run_command"}
@@ -275,6 +284,27 @@ class CapabilityBroker:
             if not isinstance(arguments, dict):
                 arguments = {}
             return mgr.call(args.get("server", ""), args.get("tool", ""), arguments), None
+        # OS 级计算机控制(P6a §10):经 ComputerExecutor 执行真实系统调用。
+        # 诚实性:屏幕/鼠标是全局资源,Seatbelt 关不住;用"审批+Ledger+high risk"治理。
+        # ARGOS_COMPUTER_USE=1 未设置时 ComputerExecutor 自身返回诚实禁止消息。
+        if action.startswith("computer."):
+            from argos_agent.perception.actions import ComputerAction
+            from argos_agent.perception.executor import ComputerExecutor
+            # 将 broker action 名(如 "computer.click")映射到 ComputerAction.kind
+            kind = action[len("computer."):]   # "click" / "screenshot" / …
+            try:
+                ca = ComputerAction(
+                    kind=kind,  # type: ignore[arg-type]
+                    x=int(args["x"]) if "x" in args else None,
+                    y=int(args["y"]) if "y" in args else None,
+                    text=str(args["text"]) if "text" in args else None,
+                    app=str(args["app"]) if "app" in args else None,
+                )
+            except (ValueError, TypeError) as exc:
+                return f"computer 动作参数校验失败: {exc}", None
+            result = ComputerExecutor().dispatch(ca)
+            # 诚实返回:ok=True → 人话摘要;ok=False → 原因串(含权限指引)
+            return result.detail, (0 if result.ok else 1)
         # LSP 工具派发(spec §2.8):host 侧 LspManager 派发到对应 language server。
         if action.startswith("lsp_"):
             from argos_agent import lsp as _lsp

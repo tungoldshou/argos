@@ -25,7 +25,7 @@ _FS_REVERSIBLE_ACTIONS = frozenset({
     "delete_file", "mkdir", "makedirs",
 })
 
-# 网络/GUI 类动作 = 不可逆(已发出的请求 / 浏览器操作无法整体回滚)
+# 网络/GUI 类动作 = 不可逆(已发出的请求 / 浏览器操作 / OS 级控制无法整体回滚)
 _IRREVERSIBLE_ACTIONS = frozenset({
     "web_fetch", "http_get", "http_post", "fetch", "post",
     "web_search",
@@ -33,6 +33,14 @@ _IRREVERSIBLE_ACTIONS = frozenset({
     "browser_click", "click",
     "browser_fill", "fill", "type",
     "browser_screenshot", "screenshot",
+    # OS 级计算机控制(P6a §10):屏幕/鼠标动作不可撤销 —— 诚实协议,不假装可回滚。
+    "computer.screenshot",
+    "computer.click",
+    "computer.double_click",
+    "computer.type_text",
+    "computer.key",
+    "computer.scroll",
+    "computer.open_app",
 })
 
 

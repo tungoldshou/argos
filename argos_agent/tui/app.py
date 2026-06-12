@@ -27,6 +27,7 @@ from argos_agent.tui.events import (
     CodeAction,
     CodeResult,
     CompactedEvent,
+    ComputerActionEvent,  # ← P6a §10 computer use
     CostUpdate,
     Error,
     Escalation,
@@ -1049,6 +1050,7 @@ class ArgosApp(App):
             ("计算机控制(浏览器)", [n for n in names if n.startswith("browser_")]),
             ("外部工具", ["mcp_call"]),
             ("LSP 语言服务器", [n for n in names if n.startswith("lsp_")]),
+            ("OS 级控制(P6a)", [n for n in names if n.startswith("computer.")]),
             ("编排(工作流)", ["propose_workflow"]),
         ]
         lines = [f"共 {len(names)} 个工具:"]
@@ -1317,6 +1319,60 @@ class ArgosApp(App):
                 f"  （注：确认后在 worktree 隔离下以 L1 信任档运行，守护铁律不可绕过）",
                 kind="system",
             )
+        except Exception:  # noqa: BLE001
+            pass
+
+    # ── TUI ComputerActionEvent 渲染(P6a §10)────────────────────────
+
+    async def _on_computer_action(self, ev: "ComputerActionEvent") -> None:  # type: ignore[name-defined]
+        """ComputerActionEvent 渲染:活动栏/transcript 一行人话。
+
+        渲染原则:
+          · 展示【动作类型】+【关键参数(坐标/截断文本)】+【成功/失败】。
+          · text_preview 已截断 80 字符(敏感输入不全量进事件流,spec §10)。
+          · ok=False 时追加 detail(含权限指引);不展示原始异常栈。
+          · screenshot 成功:不单独产出"验证通过"——只记录存档路径。
+        """
+        from argos_agent.tui.widgets.transcript import Transcript
+        try:
+            log = self.query_one("#transcript", Transcript)
+        except Exception:  # noqa: BLE001 — 未 mount / narrow
+            return
+
+        kind = ev.kind_action
+        ok_mark = "✓" if ev.ok else "✗"
+
+        if kind == "screenshot":
+            if ev.ok:
+                path_hint = f" → {ev.artifact_path}" if ev.artifact_path else ""
+                line = f"[computer] {ok_mark} 截图已保存{path_hint}"
+            else:
+                line = f"[computer] {ok_mark} 截图失败:{ev.detail}"
+        elif kind in ("click", "double_click"):
+            label = "双击" if kind == "double_click" else "点击"
+            coord = f"({ev.x}, {ev.y})" if ev.x is not None and ev.y is not None else "(未知坐标)"
+            line = f"[computer] {ok_mark} {label}了 {coord}" + (f":{ev.detail}" if not ev.ok else "")
+        elif kind == "type_text":
+            preview = ev.text_preview[:40] + ("…" if len(ev.text_preview) > 40 else "") if ev.text_preview else ""
+            if ev.ok:
+                line = f"[computer] {ok_mark} 输入了 {preview!r}" if preview else f"[computer] {ok_mark} 键入文本"
+            else:
+                line = f"[computer] {ok_mark} 键入失败:{ev.detail}"
+        elif kind == "key":
+            preview = ev.text_preview or ""
+            line = f"[computer] {ok_mark} 按键 {preview!r}" + (f":{ev.detail}" if not ev.ok else "")
+        elif kind == "scroll":
+            coord = f"({ev.x}, {ev.y})" if ev.x is not None and ev.y is not None else ""
+            line = f"[computer] {ok_mark} 滚动{coord}" + (f":{ev.detail}" if not ev.ok else "")
+        elif kind == "open_app":
+            app_hint = ev.text_preview or ev.detail
+            line = f"[computer] {ok_mark} 启动应用 {app_hint}" + ("" if ev.ok else f":{ev.detail}")
+        else:
+            line = f"[computer] {ok_mark} {kind}:{ev.detail}"
+
+        kind_str = "system" if ev.ok else "error"
+        try:
+            await log.append_line(line, kind=kind_str)
         except Exception:  # noqa: BLE001
             pass
 
@@ -2072,6 +2128,9 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         elif isinstance(ev, ProactiveSuggestionEvent):
             # P5b §9 自治面:conductor 建议到达 → transcript 只读展示 + 操作提示
             await self._on_proactive_suggestion(ev)
+        elif isinstance(ev, ComputerActionEvent):
+            # P6a §10 computer use:OS 级动作执行结果 → 活动栏一行人话
+            await self._on_computer_action(ev)
         elif isinstance(ev, Escalation):
             await log.append_line(f"⚠︎ 卡住({ev.attempts} 轮):{ev.reason} — 最后失败:{ev.last_failure}", kind="escalation")
             self._set_border(glow.ERROR)

@@ -153,6 +153,71 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             reversible=None,   # 第三方 server 能力不可预知
             visibility="all",
         ),
+        # ── computer use(OS 级控制,P6a §10)──────────────────────────────────
+        # 诚实性约定:屏幕/鼠标是全局资源,Seatbelt 关不住;
+        # 用"审批 + Ledger + high risk + reversible=False"治理,绝不假装隔离。
+        # verify_hint 诚实写:GUI 动作无机检通道,验证走 L5 留痕;
+        #   screenshot 不得单独产出 "passed"(spec §10 VLM 红线)。
+        # computer.* 全部 risk="high" + reversible=False:
+        #   屏幕/鼠标是全局资源,Seatbelt 关不住;用"审批+Ledger+high risk"治理,绝不假装隔离。
+        #   verify_hint 诚实写"GUI 动作无机检通道,验证走 L5 留痕"——
+        #   截图/VLM 永不单独产出 passed(spec §10 红线)。
+        Capability(
+            name="computer.screenshot",
+            kind="computer",
+            risk="high",
+            reversible=False,
+            visibility="all",
+            verify_hint="GUI 动作无机检通道,验证走 L5 留痕;screenshot 永不单独产出 passed",
+        ),
+        Capability(
+            name="computer.click",
+            kind="computer",
+            risk="high",
+            reversible=False,
+            visibility="all",
+            verify_hint="GUI 动作无机检通道,验证走 L5 留痕",
+        ),
+        Capability(
+            name="computer.double_click",
+            kind="computer",
+            risk="high",
+            reversible=False,
+            visibility="all",
+            verify_hint="GUI 动作无机检通道,验证走 L5 留痕",
+        ),
+        Capability(
+            name="computer.type_text",
+            kind="computer",
+            risk="high",
+            reversible=False,
+            visibility="all",
+            verify_hint="GUI 动作无机检通道,验证走 L5 留痕;金融/验证码模式命中强制 CONFIRM",
+        ),
+        Capability(
+            name="computer.key",
+            kind="computer",
+            risk="high",
+            reversible=False,
+            visibility="all",
+            verify_hint="GUI 动作无机检通道,验证走 L5 留痕",
+        ),
+        Capability(
+            name="computer.scroll",
+            kind="computer",
+            risk="high",
+            reversible=False,
+            visibility="all",
+            verify_hint="GUI 动作无机检通道,验证走 L5 留痕",
+        ),
+        Capability(
+            name="computer.open_app",
+            kind="computer",
+            risk="high",
+            reversible=False,
+            visibility="all",
+            verify_hint="GUI 动作无机检通道,验证走 L5 留痕;支付/银行类 app 强制 CONFIRM",
+        ),
     ]
 
     # ── LSP（开发者只读工具;修 bug:lsp_* 在旧 _RISK 中缺席 → broker.request 拒）──

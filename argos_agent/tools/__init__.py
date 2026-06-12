@@ -39,6 +39,10 @@ ALL_TOOL_NAMES: list[str] = [
     # LSP 工具 —— broker-gated,host 侧 LspManager 派发到对应 language server。
     "lsp_definition", "lsp_references", "lsp_hover",
     "lsp_document_symbols", "lsp_workspace_symbols", "lsp_diagnostics",
+    # computer use(P6a §10)—— OS 级控制;屏幕/鼠标是全局资源,Seatbelt 关不住;
+    # 全部 risk=high + reversible=False + hard CONFIRM(四线管辖)。
+    "computer.screenshot", "computer.click", "computer.double_click",
+    "computer.type_text", "computer.key", "computer.scroll", "computer.open_app",
 ]
 
 
@@ -166,6 +170,30 @@ def _make_gated(broker: Any) -> dict[str, Any]:
         return broker.request(action="mcp_call",
                               args={"server": server, "tool": tool, "arguments": arguments or {}})
 
+    # computer use(P6a §10)—— broker-gated:host 侧 ComputerExecutor 执行 OS 级操作。
+    # 全部 risk=high + reversible=False + hard CONFIRM;
+    # Seatbelt 关不住屏幕/鼠标资源,用"审批+Ledger+高 risk"治理。
+    def computer_screenshot_gated() -> str:
+        return broker.request(action="computer.screenshot", args={})
+
+    def computer_click_gated(x: int, y: int) -> str:
+        return broker.request(action="computer.click", args={"x": x, "y": y})
+
+    def computer_double_click_gated(x: int, y: int) -> str:
+        return broker.request(action="computer.double_click", args={"x": x, "y": y})
+
+    def computer_type_text_gated(text: str) -> str:
+        return broker.request(action="computer.type_text", args={"text": text})
+
+    def computer_key_gated(key: str) -> str:
+        return broker.request(action="computer.key", args={"text": key})
+
+    def computer_scroll_gated(x: int, y: int, dy: int = 3) -> str:
+        return broker.request(action="computer.scroll", args={"x": x, "y": y, "text": str(dy)})
+
+    def computer_open_app_gated(app: str) -> str:
+        return broker.request(action="computer.open_app", args={"app": app})
+
     # LSP 工具 —— broker-gated:host 侧 LspManager.request(...)
     # 走 broker.action="lsp_*" 派发,host broker._execute 调 manager
     def lsp_definition_gated(file: str, line: int, col: int) -> str:
@@ -195,6 +223,13 @@ def _make_gated(broker: Any) -> dict[str, Any]:
         "browser_type": browser_type_gated,
         "browser_screenshot": browser_screenshot_gated,
         "mcp_call": mcp_call_gated,
+        "computer.screenshot": computer_screenshot_gated,
+        "computer.click": computer_click_gated,
+        "computer.double_click": computer_double_click_gated,
+        "computer.type_text": computer_type_text_gated,
+        "computer.key": computer_key_gated,
+        "computer.scroll": computer_scroll_gated,
+        "computer.open_app": computer_open_app_gated,
         "lsp_definition": lsp_definition_gated,
         "lsp_references": lsp_references_gated,
         "lsp_hover": lsp_hover_gated,

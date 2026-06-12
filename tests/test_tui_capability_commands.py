@@ -25,15 +25,16 @@ async def test_help_lists_commands():
 
 
 @pytest.mark.asyncio
-async def test_tools_lists_real_22_tools_grouped():
+async def test_tools_lists_real_29_tools_grouped():
     app = ArgosApp(loop_factory=lambda: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         txt = await _dispatch(app, "/tools")
-        assert "22 个工具" in txt                 # 诚实数量(= ALL_TOOL_NAMES 实长)
-        assert "browser_navigate" in txt          # 计算机控制分组真出现
+        assert "29 个工具" in txt                 # 诚实数量(= ALL_TOOL_NAMES 实长)
+        assert "browser_navigate" in txt          # 计算机控制分组真出现(浏览器)
         assert "mcp_call" in txt                   # 外部工具分组真出现
         assert "lsp_definition" in txt             # LSP 工具分组真出现
+        assert "computer.screenshot" in txt        # OS 级控制分组真出现
 
 
 @pytest.mark.asyncio

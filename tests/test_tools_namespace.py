@@ -21,19 +21,24 @@ def test_all_tool_names_exact():
         "mcp_call",
         "lsp_definition", "lsp_references", "lsp_hover",
         "lsp_document_symbols", "lsp_workspace_symbols", "lsp_diagnostics",
+        # P6a §10 computer use
+        "computer.screenshot", "computer.click", "computer.double_click",
+        "computer.type_text", "computer.key", "computer.scroll", "computer.open_app",
     ]
 
 
-def test_all_tool_names_count_is_22():
-    """工具恰好 22 个:10 核心 + 5 计算机控制(浏览器)+ 1 MCP 调度入口 + 6 LSP。
+def test_all_tool_names_count_is_29():
+    """工具恰好 29 个:10 核心 + 5 浏览器 + 1 MCP + 6 LSP + 7 computer use(P6a §10)。
     UI 工具数必须等于真实可调用工具数(禁 seed 谎报);每个名字都真有 namespace 包装可调。"""
-    assert len(tools.ALL_TOOL_NAMES) == 22
-    # 浏览器 + MCP + LSP 工具确实是 broker-gated 可调用(非占位名)。
+    assert len(tools.ALL_TOOL_NAMES) == 29
+    # 浏览器 + MCP + LSP + computer.* 工具确实是 broker-gated 可调用(非占位名)。
     ns = tools.build_child_namespace(broker=_FakeStub())
     for name in ("browser_navigate", "browser_snapshot", "browser_click",
                  "browser_type", "browser_screenshot", "mcp_call",
                  "lsp_definition", "lsp_references", "lsp_hover",
-                 "lsp_document_symbols", "lsp_workspace_symbols", "lsp_diagnostics"):
+                 "lsp_document_symbols", "lsp_workspace_symbols", "lsp_diagnostics",
+                 "computer.screenshot", "computer.click", "computer.double_click",
+                 "computer.type_text", "computer.key", "computer.scroll", "computer.open_app"):
         assert callable(ns[name]), f"{name} 不可调用(谎报)"
 
 
