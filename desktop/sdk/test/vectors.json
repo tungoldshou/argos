@@ -343,5 +343,18 @@
       "suggested_at": 1700000000.0,
       "requires_confirmation": true
     }
+  },
+  {
+    "kind": "computer_action",
+    "serialized": "{\"kind\": \"computer_action\", \"data\": {\"kind_action\": \"click\", \"x\": 100, \"y\": 200, \"text_preview\": \"\", \"ok\": true, \"detail\": \"点击成功\", \"artifact_path\": null}}",
+    "expected_data": {
+      "kind_action": "click",
+      "x": 100,
+      "y": 200,
+      "text_preview": "",
+      "ok": true,
+      "detail": "点击成功",
+      "artifact_path": null
+    }
   }
 ]

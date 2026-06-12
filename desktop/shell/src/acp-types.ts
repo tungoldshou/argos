@@ -10,6 +10,7 @@
  *   - Envelope.seq is monotonically increasing; clients MUST use it to detect
  *     dropped/out-of-order frames.
  */
+// AUTO-SYNCED from sdk — do not edit; regenerate with: npm run sync-to-shell
 
 // ── Primitive aliases ────────────────────────────────────────────────────────
 
@@ -330,6 +331,23 @@ export interface ProactiveSuggestionEventData {
   requires_confirmation: true;
 }
 
+/** protocol/events.py ComputerActionEvent line ~304 (P6a §10 computer use)
+ *
+ * Emitted by ComputerExecutor after each OS-level action execution.
+ * text_preview is truncated to 80 chars to avoid leaking sensitive input.
+ * ok=false means execution failed; detail contains a human-readable reason
+ * (including permission guidance) but NOT the raw stack trace.
+ */
+export interface ComputerActionEventData {
+  kind_action: string;
+  x: number | null;
+  y: number | null;
+  text_preview: string;
+  ok: boolean;
+  detail: string;
+  artifact_path: string | null;
+}
+
 // ── Discriminated union ───────────────────────────────────────────────────────
 
 /**
@@ -366,7 +384,8 @@ export type EventKind =
   | "ledger_entry"
   | "intent_confirm_request"
   | "intent_confirm_response"
-  | "proactive_suggestion";
+  | "proactive_suggestion"
+  | "computer_action";
 
 /** Typed event — discriminated on `kind`. */
 export type TypedEvent =
@@ -399,7 +418,8 @@ export type TypedEvent =
   | ({ kind: "ledger_entry" } & LedgerEntryEventData)
   | ({ kind: "intent_confirm_request" } & IntentConfirmRequestData)
   | ({ kind: "intent_confirm_response" } & IntentConfirmResponseData)
-  | ({ kind: "proactive_suggestion" } & ProactiveSuggestionEventData);
+  | ({ kind: "proactive_suggestion" } & ProactiveSuggestionEventData)
+  | ({ kind: "computer_action" } & ComputerActionEventData);
 
 /** Forward-compatible fallback for unknown event kinds */
 export interface UnknownEvent {
