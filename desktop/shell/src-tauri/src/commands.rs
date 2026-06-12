@@ -5,10 +5,12 @@
 /// root for both the `lib` and `bin` compilation units.
 /// See: https://github.com/tauri-apps/tauri/issues/7534
 
+use std::time::Duration;
 use tauri::State;
+use tokio::time::sleep;
 
 use crate::bridge::{uds_get, uds_post, uds_sse_batch, BridgeError, BridgeResult};
-use crate::state::AppState;
+use crate::state::{AppState, ConnState, resolve_daemon_cmd};
 
 // ── Diagnostic ───────────────────────────────────────────────────────────────
 
@@ -16,6 +18,16 @@ use crate::state::AppState;
 #[tauri::command]
 pub async fn acp_socket_path(state: State<'_, AppState>) -> BridgeResult<String> {
     Ok(state.socket_path.to_string_lossy().to_string())
+}
+
+/// Return the current connection state and detail string.
+/// Shape: { "state": "connected" | "disconnected" | "probing" | "spawning" | "failed",
+///          "detail": "..." }
+#[tauri::command]
+pub async fn acp_conn_state(state: State<'_, AppState>) -> BridgeResult<serde_json::Value> {
+    let cs = state.conn_state.lock().await.clone();
+    let detail = state.conn_detail.lock().await.clone();
+    Ok(serde_json::json!({ "state": cs, "detail": detail }))
 }
 
 // ── Health ────────────────────────────────────────────────────────────────────
@@ -26,6 +38,132 @@ pub async fn acp_socket_path(state: State<'_, AppState>) -> BridgeResult<String>
 pub async fn acp_health(state: State<'_, AppState>) -> BridgeResult<serde_json::Value> {
     let body = uds_get(&state.socket_path, "/health", None).await?;
     serde_json::from_str(&body).map_err(|e| BridgeError::bad_response(e))
+}
+
+// ── Sidecar spawn ─────────────────────────────────────────────────────────────
+
+/// Probe the daemon socket, spawn argosd if unreachable, poll until connected.
+///
+/// State machine:
+///   probing → (reachable) → connected
+///   probing → (unreachable) → spawning → (poll ≤5s) → connected
+///                                                      → failed (+ stderr excerpt)
+///
+/// Idempotent: if already connected, returns immediately.
+/// Window close does NOT kill the daemon — argosd is a persistent kernel process.
+/// The spawned process is detached (no child handle retained after spawn).
+///
+/// # Packaged / PyInstaller sidecar
+/// TODO: detect bundled `argosd` binary next to the app bundle and exec it
+/// instead.  For dev mode, `ARGOS_DAEMON_CMD` / the uv default is used.
+#[tauri::command]
+pub async fn acp_spawn_daemon(state: State<'_, AppState>) -> BridgeResult<serde_json::Value> {
+    // Already connected → fast path.
+    {
+        let cs = state.conn_state.lock().await;
+        if matches!(*cs, ConnState::Connected) {
+            let detail = state.conn_detail.lock().await.clone();
+            return Ok(serde_json::json!({ "state": "connected", "detail": detail }));
+        }
+    }
+
+    // Phase 1: probe
+    *state.conn_state.lock().await = ConnState::Probing;
+    *state.conn_detail.lock().await = String::new();
+
+    if uds_get(&state.socket_path, "/health", None).await.is_ok() {
+        *state.conn_state.lock().await = ConnState::Connected;
+        return Ok(serde_json::json!({ "state": "connected", "detail": "" }));
+    }
+
+    // Phase 2: spawn
+    *state.conn_state.lock().await = ConnState::Spawning;
+
+    let argv = resolve_daemon_cmd();
+    if argv.is_empty() {
+        let msg = "daemon cmd resolved to empty argv".to_string();
+        *state.conn_state.lock().await = ConnState::Failed;
+        *state.conn_detail.lock().await = msg.clone();
+        return Err(BridgeError::daemon_unavailable(msg));
+    }
+
+    // Resolve working directory: one level above the desktop/ dir.
+    // In dev mode the shell is at desktop/shell/src-tauri/; the repo root is
+    // three levels up.  We use the current exe's dir as an anchor only as a
+    // fallback; the real cwd at launch (inherited by the Tauri process) is the
+    // repo root when launched via `cargo tauri dev` from there.
+    // The safest approach: just inherit cwd (which is the repo root in dev mode).
+    let spawn_result = tokio::process::Command::new(&argv[0])
+        .args(&argv[1..])
+        // Detach from Tauri's stdio so the daemon keeps running after window close.
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        // kill_on_drop(false) is the default for tokio::process::Command,
+        // so the daemon outlives the Tauri process (persistent kernel).
+        .spawn();
+
+    let mut child = match spawn_result {
+        Ok(c) => c,
+        Err(e) => {
+            let msg = format!("spawn failed: {e}");
+            *state.conn_state.lock().await = ConnState::Failed;
+            *state.conn_detail.lock().await = msg.clone();
+            return Err(BridgeError::daemon_unavailable(msg));
+        }
+    };
+
+    // Phase 3: poll socket ≤5 s (10 × 500 ms)
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        sleep(Duration::from_millis(500)).await;
+        if uds_get(&state.socket_path, "/health", None).await.is_ok() {
+            *state.conn_state.lock().await = ConnState::Connected;
+            return Ok(serde_json::json!({ "state": "connected", "detail": "" }));
+        }
+        if std::time::Instant::now() >= deadline {
+            break;
+        }
+        // If child exited early, capture stderr for diagnostics.
+        if let Ok(Some(exit)) = child.try_wait() {
+            let stderr_bytes = if let Some(mut se) = child.stderr.take() {
+                use tokio::io::AsyncReadExt;
+                let mut buf = Vec::new();
+                let _ = se.read_to_end(&mut buf).await;
+                buf
+            } else {
+                vec![]
+            };
+            let stderr_str = String::from_utf8_lossy(&stderr_bytes);
+            let detail = format!(
+                "daemon exited early ({}): {}",
+                exit,
+                stderr_str.chars().take(300).collect::<String>()
+            );
+            *state.conn_state.lock().await = ConnState::Failed;
+            *state.conn_detail.lock().await = detail.clone();
+            return Err(BridgeError::daemon_unavailable(detail));
+        }
+    }
+
+    // Timed out — collect stderr excerpt
+    let stderr_bytes = if let Some(mut se) = child.stderr.take() {
+        use tokio::io::AsyncReadExt;
+        let mut buf = Vec::new();
+        // Non-blocking read: give it 200 ms
+        let _ = tokio::time::timeout(Duration::from_millis(200), se.read_to_end(&mut buf)).await;
+        buf
+    } else {
+        vec![]
+    };
+    let stderr_str = String::from_utf8_lossy(&stderr_bytes);
+    let detail = format!(
+        "daemon 拉起失败: socket 5 s 内不可达. stderr: {}",
+        stderr_str.chars().take(300).collect::<String>()
+    );
+    *state.conn_state.lock().await = ConnState::Failed;
+    *state.conn_detail.lock().await = detail.clone();
+    Err(BridgeError::daemon_unavailable(detail))
 }
 
 // ── Session ───────────────────────────────────────────────────────────────────

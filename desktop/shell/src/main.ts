@@ -42,19 +42,24 @@ let lastSeq: number = -1;
 
 // ── Connection state display ──────────────────────────────────────────────────
 
-type ConnState = "disconnected" | "connecting" | "connected" | "error";
+/** Mirrors ConnState enum in state.rs — must stay in sync. */
+type ConnState = "disconnected" | "probing" | "spawning" | "connected" | "failed" | "error";
 
 function setConnState(state: ConnState, detail?: string) {
     const labels: Record<ConnState, string> = {
         disconnected: "Disconnected",
-        connecting: "Connecting…",
+        probing: "Probing…",
+        spawning: "Starting daemon…",
         connected: "Connected",
+        failed: "Daemon failed",
         error: "Error",
     };
     const colors: Record<ConnState, string> = {
         disconnected: "#6b7280", // grey
-        connecting: "#f59e0b",   // amber
+        probing: "#f59e0b",      // amber
+        spawning: "#f59e0b",     // amber — honest intermediate state, not green
         connected: "#22c55e",    // green
+        failed: "#ef4444",       // red — never show connected if spawn failed
         error: "#ef4444",        // red
     };
     statusDot.style.background = colors[state];
@@ -202,29 +207,51 @@ function appendSystemMessage(text: string, cls: "info" | "warn" | "err" = "info"
     eventList.scrollTop = eventList.scrollHeight;
 }
 
-// ── Startup: Hello/Welcome ────────────────────────────────────────────────────
+// ── Startup: probe → (spawn) → Hello/Welcome ─────────────────────────────────
 
 async function initConnection() {
-    setConnState("connecting");
-
-    // Show socket path
+    // Show socket path first (purely informational)
     const socketPath = await invoke<string>("acp_socket_path").catch(() => "unknown");
     socketPathEl.textContent = socketPath;
 
-    // Health check
-    const health = await invoke<{ status?: string }>("acp_health").catch(
-        (e: unknown) => {
-            const msg = e instanceof Error ? e.message : String(e);
-            setConnState("error", "daemon unreachable — " + msg.slice(0, 80));
-            appendSystemMessage(
-                `[error] Cannot reach argosd at ${socketPath}. ` +
-                "Start the daemon first: uv run argos --with-daemon",
-                "err",
-            );
-            return null;
-        },
-    );
-    if (!health) return;
+    setConnState("probing");
+    appendSystemMessage(`[boot] Probing daemon at ${socketPath}…`, "info");
+
+    // acp_spawn_daemon drives the full state machine:
+    //   probing → connected (daemon already up)
+    //   probing → spawning → connected (daemon spawned successfully)
+    //   probing → spawning → failed (spawn or socket-poll timed out)
+    //
+    // We poll conn_state while waiting so the status bar updates honestly.
+    const pollId = setInterval(async () => {
+        try {
+            const cs = await invoke<{ state: string; detail: string }>("acp_conn_state");
+            setConnState(cs.state as ConnState, cs.detail || undefined);
+        } catch {
+            // ignore poll errors
+        }
+    }, 400);
+
+    const spawnResult = await invoke<{ state: string; detail: string }>(
+        "acp_spawn_daemon"
+    ).catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : JSON.stringify(e);
+        return { state: "failed", detail: msg };
+    });
+
+    clearInterval(pollId);
+    setConnState(spawnResult.state as ConnState, spawnResult.detail || undefined);
+
+    if (spawnResult.state !== "connected") {
+        appendSystemMessage(
+            `[error] Daemon not reachable. ${spawnResult.detail || ""}. ` +
+            "Manual start: uv run argos --with-daemon",
+            "err",
+        );
+        return;
+    }
+
+    appendSystemMessage(`[ok] Daemon reachable at ${socketPath}`, "info");
 
     // Create session (Hello → Welcome)
     const session = await invoke<{ session_id?: string }>("acp_create_session").catch(
