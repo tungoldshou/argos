@@ -45,6 +45,8 @@ EventKind = Literal[
     "intent_confirm_response",  # ← P4 新增(§7 意图引擎:用户确认/取消响应)
     "proactive_suggestion",     # ← P5b 新增(§9 自治面:conductor 主动建议事件)
     "computer_action",          # ← P6a 新增(§10 computer use:OS 级动作执行结果)
+    "dream_progress",           # ← Dream 新增(夜间整合进度;daemon → client SSE)
+    "dream_report",             # ← Dream 新增(夜间整合结果汇总,诚实计数)
 ]
 
 
@@ -343,6 +345,38 @@ class ComputerActionEvent:
 
 
 @dataclass(frozen=True, slots=True)
+class DreamProgressEvent:
+    """Dream 夜间整合进度(daemon → client,SSE 推送,_conductor 通道)。
+
+    DreamPipeline 每跨一个阶段广播一次,供 TUI/桌面展示"夜间在干什么"。
+    stage 取值:scan | cluster | synthesize | promote | memory | done。
+    detail 是人话补充(如 "3 units" / promote 的 reason),诚实不编造。
+    """
+    kind = "dream_progress"
+    stage: str        # scan | cluster | synthesize | promote | memory | done
+    detail: str
+    ts: float
+
+
+@dataclass(frozen=True, slots=True)
+class DreamReportEvent:
+    """Dream 整合结果汇总(诚实计数,直接来自 DreamReport)。
+
+    一次 Dream 收尾时广播,字段逐一映射 DreamReport —— 客户端无需读 JSONL
+    即可展示"今晚整合了多少、晋升几个、归档几条记忆"。
+    """
+    kind = "dream_report"
+    units_total: int
+    promoted: int
+    rejected: int
+    skipped: int
+    memory_merged: int
+    memory_archived: int
+    report_path: str
+    ts: float
+
+
+@dataclass(frozen=True, slots=True)
 class PlanDecisionRequest:
     """v6 §4 ACP:plan 决策请求事件——去掉 TUI 对 loop 实例的直接引用。
 
@@ -403,6 +437,7 @@ Event = (
     | IntentConfirmRequest | IntentConfirmResponse  # ← P4 新增(§7 意图引擎)
     | ProactiveSuggestionEvent      # ← P5b 新增(§9 自治面:conductor 主动建议)
     | ComputerActionEvent           # ← P6a 新增(§10 computer use:OS 级动作执行结果)
+    | DreamProgressEvent | DreamReportEvent  # ← Dream 新增(夜间整合进度 + 结果汇总)
 )
 
 # kind 常量 → 类,用于反序列化派发
@@ -422,6 +457,7 @@ _KIND_TO_CLASS: dict[str, type] = {
         IntentConfirmRequest, IntentConfirmResponse,  # ← P4 新增(§7 意图引擎)
         ProactiveSuggestionEvent,     # ← P5b 新增(§9 自治面:conductor 主动建议)
         ComputerActionEvent,          # ← P6a 新增(§10 computer use:OS 级动作执行结果)
+        DreamProgressEvent, DreamReportEvent,  # ← Dream 新增(夜间整合进度 + 结果汇总)
     )
 }
 

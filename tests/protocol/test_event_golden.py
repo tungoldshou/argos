@@ -561,6 +561,47 @@ def test_proactive_suggestion_requires_confirmation_always_true():
     assert obj["data"]["requires_confirmation"] is True
 
 
+# ── DreamProgressEvent ────────────────────────────────────────────────────────
+
+def test_dream_progress_golden():
+    """Dream 夜间整合进度事件黄金测试(ABI 冻结)。"""
+    ev = PE.DreamProgressEvent(stage="cluster", detail="3 units", ts=1700000000.0)
+    _golden(ev, {"stage": "cluster", "detail": "3 units", "ts": 1700000000.0})
+
+
+def test_dream_progress_roundtrip():
+    """DreamProgressEvent 序列化 → 反序列化等值。"""
+    ev = PE.DreamProgressEvent(stage="scan", detail="", ts=1700001234.5)
+    back = _round(ev)
+    assert back.stage == "scan" and back.detail == "" and back.ts == 1700001234.5
+
+
+# ── DreamReportEvent ──────────────────────────────────────────────────────────
+
+def test_dream_report_golden():
+    """Dream 整合结果汇总事件黄金测试(诚实计数,ABI 冻结)。"""
+    ev = PE.DreamReportEvent(
+        units_total=3, promoted=1, rejected=1, skipped=1,
+        memory_merged=2, memory_archived=5,
+        report_path="/home/u/.argos/dreams/2026-06-13.jsonl", ts=1700000000.0,
+    )
+    _golden(ev, {
+        "units_total": 3, "promoted": 1, "rejected": 1, "skipped": 1,
+        "memory_merged": 2, "memory_archived": 5,
+        "report_path": "/home/u/.argos/dreams/2026-06-13.jsonl", "ts": 1700000000.0,
+    })
+
+
+def test_dream_report_roundtrip():
+    """DreamReportEvent 序列化 → 反序列化等值。"""
+    ev = PE.DreamReportEvent(
+        units_total=0, promoted=0, rejected=0, skipped=0,
+        memory_merged=0, memory_archived=0, report_path="", ts=0.0,
+    )
+    back = _round(ev)
+    assert back.units_total == 0 and back.report_path == ""
+
+
 # ── _KIND_TO_CLASS 完整性 ────────────────────────────────────────────────────
 
 def test_all_kinds_in_kind_to_class():

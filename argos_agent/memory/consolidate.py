@@ -36,7 +36,8 @@ def _score(e: dict, now: float) -> float:
         last = float(e.get("last_used_at", e.get("ts", now)))
         days = max(0.0, (now - last) / 86400.0)
         return decayed_confidence(conf, days)
-    except Exception:  # noqa: BLE001 — 算不出分 = 不归档(保守)
+    except Exception as e:  # noqa: BLE001 — 算不出分 = 不归档(保守)
+        log.warning("consolidate: _score 失败,保守不归档: %s", e)
         return 1.0
 
 

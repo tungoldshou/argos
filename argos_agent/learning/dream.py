@@ -10,6 +10,8 @@
 """
 from __future__ import annotations
 
+import asyncio
+import inspect
 import logging
 import re
 from dataclasses import dataclass
@@ -18,6 +20,8 @@ from typing import TYPE_CHECKING
 from argos_agent.learning.candidates import StoredCandidate
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from argos_agent.learning.distiller import SkillCandidate
 
 log = logging.getLogger(__name__)
@@ -191,7 +195,7 @@ class HintedRunner:
 
     def run(self, task, *, model_tier: str):
         import dataclasses
-        truncated = self.hint[:self.max_hint_len]
+        truncated = (self.hint or "")[:self.max_hint_len]  # hint=None 防 TypeError
         hinted = dataclasses.replace(
             task, goal=f"可参考以下已验证经验:\n{truncated}\n\n---\n\n{task.goal}")
         return self.inner.run(hinted, model_tier=model_tier)
@@ -223,3 +227,237 @@ def build_eval_tasks(unit: DreamUnit) -> tuple[list, list]:
             setup_cmd=None, expected_files=(), working_dir=ws, corpus_version=0,
         ))
     return tasks, gone
+
+
+# ── DreamPipeline 编排层(Task 8:含真模型调用、async、IO) ────────────────────
+
+@dataclass(frozen=True, slots=True)
+class DreamReport:
+    """一次 Dream 的诚实结果计数。"""
+    units_total: int = 0
+    promoted: int = 0
+    rejected: int = 0
+    skipped: int = 0
+    memory_merged: int = 0
+    memory_archived: int = 0
+    report_path: str = ""
+
+
+def has_material(candidates_root: "Path", *, min_units: int = 1) -> bool:
+    """材料门:候选区有未消费材料才值得建议(供 conductor_supervisor 过滤)。"""
+    from argos_agent.learning.candidates import list_unconsumed
+    return len(list_unconsumed(candidates_root)) >= min_units
+
+
+class DreamPipeline:
+    """夜间整合编排:scan → cluster → synthesize → promote → memory → report。
+
+    设计纪律:
+    - 纯函数层(cluster/synthesize/narrative)只产数据;本层负责真模型调用、async、IO。
+    - 单飞:同一时刻只允许一次 Dream(防两个 conductor tick 撞车烧 token + 撕扯候选区)。
+    - 诚实计数:promoted/rejected/skipped 严格反映实际处理路径,绝不编造。
+    - 任何单元失败不挂整条管道(单元级 try/except);记忆整理失败降级空报告。
+    - 留宿契约:cluster_candidates 截掉的源不进任何 unit → 自然不被本轮碰过 →
+      仍 unconsumed,下晚 list_unconsumed 重新捞出再聚类(与 dream.py
+      cluster_candidates 的"截取+留宿"注释呼应,本层不额外消费它们)。
+    """
+
+    def __init__(
+        self, *,
+        candidates_root: "Path",
+        skills_root: "Path",
+        memory_dir: "Path",
+        dreams_dir: "Path",
+        runner_factory,                       # (hint: str | None) -> runner
+        narrate=None,                         # (prompt: str) -> str | Awaitable[str]
+        broadcast_fn=None,                    # (payload: dict) -> None
+        max_units: int = DEFAULT_MAX_UNITS,
+    ) -> None:
+        self._candidates_root = candidates_root
+        self._skills_root = skills_root
+        self._memory_dir = memory_dir
+        self._dreams_dir = dreams_dir
+        self._runner_factory = runner_factory
+        self._narrate = narrate
+        self._broadcast_fn = broadcast_fn
+        self._max_units = max_units
+        # 懒初始化锁:__init__ 里建 asyncio.Lock 会绑创建时的事件循环,
+        # 而 run() 可能跑在另一个 asyncio.run() 的新循环里 → 绑错循环会失效。
+        # 推迟到 run() 首次执行时按当前运行循环创建。
+        self._lock: "asyncio.Lock | None" = None
+
+    async def run(self) -> "DreamReport | None":
+        """跑一次完整 Dream。已有 Dream 在跑 → log + 返 None(单飞)。"""
+        import asyncio
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        if self._lock.locked():
+            log.info("dream: 已有整合在跑,跳过本次(单飞)")
+            return None
+        async with self._lock:
+            return await self._run_locked()
+
+    async def _run_locked(self) -> "DreamReport":
+        import time
+
+        from argos_agent.learning.candidates import list_unconsumed
+
+        promoted = rejected = skipped = 0
+
+        self._emit("dream_progress", stage="scan", detail="", ts=time.time())
+        cands = list_unconsumed(self._candidates_root)
+        units = cluster_candidates(cands, max_units=self._max_units)
+        self._emit("dream_progress", stage="cluster",
+                   detail=f"{len(units)} units", ts=time.time())
+
+        for unit in units:
+            try:
+                outcome = await self._process_unit(unit)
+                promoted += outcome[0]
+                rejected += outcome[1]
+                skipped += outcome[2]
+            except Exception as e:  # noqa: BLE001 — 单元失败不挂管道
+                log.warning("dream: 单元处理失败,跳过: %s", e)
+                skipped += 1
+
+        # 记忆整理阶段(失败降级空报告)
+        self._emit("dream_progress", stage="memory", detail="", ts=time.time())
+        try:
+            from argos_agent.memory.consolidate import consolidate
+            mem_report = consolidate(self._memory_dir)
+        except Exception as e:  # noqa: BLE001
+            from argos_agent.memory.consolidate import ConsolidationReport
+            log.warning("dream: 记忆整理失败,降级空报告: %s", e)
+            mem_report = ConsolidationReport()
+
+        report = DreamReport(
+            units_total=len(units),
+            promoted=promoted, rejected=rejected, skipped=skipped,
+            memory_merged=mem_report.merged, memory_archived=mem_report.archived,
+        )
+        ts = time.time()
+        report_path = self._write_report_line(report, ts=ts)
+        report = DreamReport(
+            units_total=report.units_total, promoted=report.promoted,
+            rejected=report.rejected, skipped=report.skipped,
+            memory_merged=report.memory_merged, memory_archived=report.memory_archived,
+            report_path=report_path,
+        )
+        self._emit(
+            "dream_report",
+            units_total=report.units_total, promoted=report.promoted,
+            rejected=report.rejected, skipped=report.skipped,
+            memory_merged=report.memory_merged, memory_archived=report.memory_archived,
+            report_path=report.report_path, ts=ts,
+        )
+        return report
+
+    async def _process_unit(self, unit: "DreamUnit") -> tuple[int, int, int]:
+        """处理单个整合单元。返回 (promoted, rejected, skipped) 增量(各 0/1)。"""
+        import inspect
+
+        from argos_agent.learning.candidates import mark_consumed
+        from argos_agent.learning.promotion_gate import promote
+
+        # ① 叙述层:模型调用在本层(async 友好),失败模板兜底。
+        narrative: "str | None" = None
+        if self._narrate is not None:
+            try:
+                raw = self._narrate(narrative_prompt(unit))
+                narrative = (await raw) if inspect.isawaitable(raw) else raw
+            except Exception as e:  # noqa: BLE001 — 叙述失败不致命,模板兜底
+                log.warning("dream: 叙述生成失败,模板兜底: %s", e)
+                narrative = None
+
+        # ② 综合候选
+        cand = synthesize(unit, narrative=narrative)
+        if cand is None:
+            return (0, 0, 1)
+
+        # ③ 构造 A/B 语料;workspace_gone 源永远拿不到证据 → 标 consumed 防夜夜重复
+        tasks, gone = build_eval_tasks(unit)
+        for s in gone:
+            mark_consumed(s.path, reason="workspace_gone")
+        if not tasks:
+            # 全是 gone 源(本轮无可跑语料);live 源(若有)不消费,下晚重试。
+            return (0, 0, 1)
+
+        # ④ A/B 晋升评估(A=裸 runner,B=带 hint runner)。
+        # promote 是同步 CPU/子进程密集(真 A/B eval 含 verify 子进程)——
+        # 放进线程池跑,避免阻塞 daemon 事件循环(并让单飞锁在 await 点真正生效)。
+        import asyncio
+        res = await asyncio.to_thread(
+            promote,
+            candidate=cand, tasks=tasks,
+            runner=self._runner_factory(None),
+            runner_b=self._runner_factory(cand.body_markdown),
+            skills_root=self._skills_root,
+        )
+
+        # ⑤ 按判决消费 live 源(gone 已消费,不重复)
+        live = [s for s in unit.sources if s not in gone]
+        if res.promoted:
+            for s in live:
+                mark_consumed(s.path, reason="promoted")
+            result = (1, 0, 0)
+        elif res.reason.startswith("no_improvement"):
+            for s in live:
+                mark_consumed(s.path, reason="rejected_ab")
+            result = (0, 1, 0)
+        elif res.reason.startswith("name_collision:"):
+            # 确定性冲突:非学习技能同名 → 消费源防死循环。
+            # name_collision_unreadable(瞬态 I/O 失败)不在此处,留给 else 重试。
+            for s in live:
+                mark_consumed(s.path, reason="name_collision")
+            result = (0, 0, 1)
+        else:
+            # runner_error / name_collision_unreadable / write_failed 等:不消费,下晚重试。
+            result = (0, 0, 1)
+
+        import time
+        self._emit("dream_progress", stage="promote",
+                   detail=res.reason, ts=time.time())
+        return result
+
+    def _write_report_line(self, report: "DreamReport", *, ts: float) -> str:
+        """写报告行到 <dreams_dir>/<YYYY-MM-DD>.jsonl。失败 log + 返 ""。"""
+        from datetime import datetime
+
+        from argos_agent.jsonl_log import append_line
+        try:
+            day = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+            path = self._dreams_dir / f"{day}.jsonl"
+            append_line(path, {
+                "ts": ts,
+                "units_total": report.units_total,
+                "promoted": report.promoted,
+                "rejected": report.rejected,
+                "skipped": report.skipped,
+                "memory_merged": report.memory_merged,
+                "memory_archived": report.memory_archived,
+            })
+            return str(path)
+        except Exception as e:  # noqa: BLE001 — 报告落盘失败不致命
+            log.warning("dream: 报告落盘失败: %s", e)
+            return ""
+
+    def _emit(self, kind: str, **payload) -> None:
+        """广播一条 dream 事件。broadcast_fn 为 None → 直接返;失败 log 不抛。
+
+        async-aware:若 broadcast_fn 是协程函数,调用后返回 coroutine,
+        用 asyncio.get_running_loop().create_task() 调度,确保 T9 daemon 的
+        async fanout 不会被静默垃圾回收(coroutine never awaited)。
+        """
+        if self._broadcast_fn is None:
+            return
+        try:
+            result = self._broadcast_fn({"kind": kind, **payload})
+            if inspect.iscoroutine(result):
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(result)
+                except RuntimeError:
+                    # 无运行中的 event loop(同步调用场景)—— 关闭并同步执行
+                    asyncio.run(result)
+        except Exception as e:  # noqa: BLE001 — 广播失败不挂管道
+            log.warning("dream: 事件广播失败(%s): %s", kind, e)

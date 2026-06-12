@@ -165,3 +165,41 @@ def test_consolidate_skips_corrupt_lines_and_archive_file(tmp_path):
     # archive.jsonl 内容未被改写(仍含原始内容)
     archive_after = archive_path.read_text(encoding="utf-8")
     assert "archive_existing" in archive_after, "archive.jsonl should not be rewritten by consolidate scan"
+
+
+# ── test 4: archive.jsonl 里的陈旧条目不被二次归档/删除(rglob skip 真起作用) ──
+def test_archive_stale_entry_not_re_archived_or_deleted(tmp_path):
+    """archive.jsonl 预置一条 conf=0.7 但 90 天前的陈旧条目(若被扫描会再次触发归档)。
+
+    整理后断言它仍原样在 archive.jsonl、未被二次归档(不会出现重复行)、未被删除 ——
+    证明 consolidate 的 rglob skip(f.name == ARCHIVE_NAME → continue)真在起作用,
+    归档区是只进不出的终态,绝不被反复搅动。
+    """
+    now = time.time()
+    ninety_days_ago = now - 86400 * 90
+    # 这条若被当作普通 tier 扫描,decayed_confidence(0.7, 90) → 0.0 < 0.2 阈值,会被归档
+    stale_archived = _entry(
+        key="already_archived_key",
+        confidence=0.7,
+        ts=ninety_days_ago,
+        last_used_at=ninety_days_ago,
+        use_count=1,
+    )
+
+    mem_dir = tmp_path / "memory"
+    archive_path = mem_dir / ARCHIVE_NAME
+    _write_jsonl(archive_path, [stale_archived])
+
+    # 另起一个普通 tier(给 consolidate 实际有事可做的对象,确保它真的跑了一轮)
+    fresh = _entry(key="fresh_key", confidence=0.9, ts=now, last_used_at=now)
+    _write_jsonl(mem_dir / "user.jsonl", [fresh])
+
+    rep: ConsolidationReport = consolidate(mem_dir, now=now)
+
+    assert rep.errors == 0
+
+    # archive.jsonl 仍恰好 1 行,key 原样在,无重复(没被二次归档),文件未被删
+    assert archive_path.exists(), "archive.jsonl 不该被删除"
+    archived_entries = _read_jsonl(archive_path)
+    assert len(archived_entries) == 1, f"archive 不该被二次归档/扩张: {archived_entries}"
+    assert archived_entries[0]["key"] == "already_archived_key"
