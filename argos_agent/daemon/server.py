@@ -1316,12 +1316,15 @@ class DaemonHTTPServer:
                 await self._send_sse_event(writer, ev)
         except Exception as e:  # noqa: BLE001
             log.warning("SSE replay error for %s: %s", run_id, e)
-        # 订阅新事件
+        # 订阅新事件。keepalive 周期 2s:断连只能在【下一次写】时被发现
+        # (BrokenPipe),15s 周期意味着客户端断开后 server 端最多挂 15s 才感知
+        # —— 每个 SSE 测试 teardown 白等 15s,daemon 资源也多挂 15s。2s 是
+        # 感知延迟与空转写之间的平衡(本地 socket,写开销可忽略)。
         q = self._manager.subscribe(run_id)
         try:
             while True:
                 try:
-                    ev = await asyncio.wait_for(q.get(), timeout=15.0)
+                    ev = await asyncio.wait_for(q.get(), timeout=2.0)
                 except asyncio.TimeoutError:
                     try:
                         writer.write(b": keepalive\n\n")
