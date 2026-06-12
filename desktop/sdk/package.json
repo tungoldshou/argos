@@ -1,0 +1,23 @@
+{
+  "name": "@argos/sdk",
+  "version": "0.1.0",
+  "description": "Argos ACP TypeScript client SDK — zero runtime dependencies",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "node --import=tsx/esm --test test/vectors.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0"
+  }
+}

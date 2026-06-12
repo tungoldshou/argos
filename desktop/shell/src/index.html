@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Argos</title>
+  <style>
+    /* ── Reset + base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2e3148;
+      --text: #e2e8f0;
+      --muted: #6b7280;
+      --green: #22c55e;
+      --red: #ef4444;
+      --amber: #f59e0b;
+      --blue: #3b82f6;
+      --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .logo {
+      font-weight: 700;
+      font-size: 1rem;
+      letter-spacing: 0.05em;
+      color: var(--text);
+    }
+
+    /* connection status */
+    .conn-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    #status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .meta {
+      margin-left: auto;
+      font-size: 0.72rem;
+      color: var(--muted);
+      font-family: var(--font-mono);
+    }
+
+    /* ── Input bar ──────────────────────────────────────────────── */
+    .input-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 16px;
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    #task-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 6px 10px;
+      font-size: 0.9rem;
+      outline: none;
+    }
+
+    #task-input:focus { border-color: var(--blue); }
+    #task-input:disabled { opacity: 0.5; }
+
+    #submit-btn {
+      background: var(--blue);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      padding: 6px 14px;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    #submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #clear-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--muted);
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    #clear-btn:hover { border-color: var(--text); color: var(--text); }
+
+    /* ── Event list ─────────────────────────────────────────────── */
+    #event-list {
+      flex: 1;
+      overflow-y: auto;
+      list-style: none;
+      padding: 8px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    /* system messages */
+    .system-msg {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+      padding: 2px 4px;
+    }
+
+    .system-msg.warn { color: var(--amber); }
+    .system-msg.err  { color: var(--red); }
+    .system-msg.info { color: var(--muted); }
+
+    /* event rows */
+    .event-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 3px 6px;
+      border-radius: 4px;
+      background: var(--surface);
+    }
+
+    .event-row:hover { background: #22273a; }
+
+    .event-row.seq-gap {
+      border-top: 1px dashed var(--amber);
+    }
+
+    .event-seq {
+      color: var(--muted);
+      min-width: 36px;
+      flex-shrink: 0;
+    }
+
+    .event-kind {
+      color: var(--blue);
+      min-width: 120px;
+      flex-shrink: 0;
+    }
+
+    .event-run {
+      color: var(--muted);
+      min-width: 70px;
+      flex-shrink: 0;
+    }
+
+    .event-summary {
+      color: var(--text);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .detail-toggle {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.7rem;
+      flex-shrink: 0;
+    }
+
+    .event-detail {
+      font-size: 0.72rem;
+      color: #9ca3af;
+      white-space: pre-wrap;
+      word-break: break-all;
+      padding: 4px 6px;
+      margin-top: 2px;
+      background: #12151f;
+      border-radius: 4px;
+      flex-basis: 100%;
+    }
+
+    .event-detail.hidden { display: none; }
+
+    /* ── Verdict colouring note ─────────────────────────────────────
+       The JS layer enforces:
+         passed       → green  (#22c55e)
+         failed       → red    (#ef4444)
+         unverifiable → amber  (#f59e0b)  ← NEVER green (protocol invariant)
+    ──────────────────────────────────────────────────────────────── */
+
+    /* ── Footer ─────────────────────────────────────────────────── */
+    footer {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 4px 16px;
+      font-size: 0.7rem;
+      color: var(--muted);
+      display: flex;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="logo">Argos</span>
+    <div class="conn-pill">
+      <span id="status-dot"></span>
+      <span id="status-text">Initializing…</span>
+    </div>
+    <div class="meta">
+      sock: <span id="socket-path">…</span>
+      &nbsp;|&nbsp;
+      session: <span id="session-id">—</span>
+    </div>
+  </header>
+
+  <div class="input-bar">
+    <input
+      id="task-input"
+      type="text"
+      placeholder="Enter a task and press Enter or Run…"
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <button id="submit-btn">Run</button>
+    <button id="clear-btn">Clear</button>
+  </div>
+
+  <ol id="event-list"></ol>
+
+  <footer>
+    <span>P6 walking skeleton — events are raw ACP frames</span>
+    <span>verdict: <span style="color:#22c55e">■</span> passed &nbsp;
+                    <span style="color:#ef4444">■</span> failed &nbsp;
+                    <span style="color:#f59e0b">■</span> unverifiable (never green)</span>
+  </footer>
+
+  <!--
+    NOTE: main.ts is compiled by tsc to dist/main.js.
+    For the walking skeleton we reference the compiled output directly.
+    No bundler (vite/webpack/esbuild) is needed — the HTML loads a single
+    ES module.  In production a bundler should be added.
+  -->
+  <script type="module" src="../dist/main.js"></script>
+</body>
+</html>
