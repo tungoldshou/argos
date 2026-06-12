@@ -99,7 +99,30 @@ def promote(
     if skill_md.exists():
         try:
             existing = skill_md.read_text(encoding="utf-8")
-            is_learned = "source_run:" in existing or "source_runs:" in existing
+            # 只检查 YAML frontmatter 块(首尾 "---" 之间)避免正文示例代码误判。
+            # 提取:按行分割,收集第一个 "---" 到第二个 "---" 之间的行,join 后检查。
+            lines = existing.splitlines()
+            # B2 修复:文件首行不是 "---" → 无 YAML frontmatter,直接视为非学习产物。
+            # 不以首行为准会被 Markdown 水平分割线(---) + 正文 source_run: 内容欺骗。
+            if not lines or lines[0].strip() != "---":
+                is_learned = False
+            else:
+                fm_lines: list[str] = []
+                inside = False
+                fence_count = 0
+                for line in lines:
+                    if line.strip() == "---":
+                        fence_count += 1
+                        if fence_count == 1:
+                            inside = True
+                            continue
+                        else:
+                            inside = False
+                            break
+                    if inside:
+                        fm_lines.append(line)
+                fm = "\n".join(fm_lines)
+                is_learned = "source_run:" in fm or "source_runs:" in fm
         except Exception:  # noqa: BLE001
             return PromotionResult(
                 promoted=False, reason="name_collision_unreadable",

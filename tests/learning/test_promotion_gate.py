@@ -322,3 +322,93 @@ def test_promote_overwrites_learned_skill(tmp_path):
     actual = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     assert "新版综合技能" in actual, "文件应被新候选覆盖"
     assert "旧版综合技能" not in actual, "旧内容应被替换"
+
+
+def test_promote_refuses_overwrite_user_skill_with_source_run_in_body(tmp_path):
+    """【评审 R1 修复】用户技能 frontmatter 无 source_run 但正文含 "source_run:" 字样
+    (例如文档示例代码)时,全文匹配会误判为学习产物并允许覆盖。
+    正确行为:frontmatter 无 source_run → 保守拒绝,原文件不动。
+    """
+    skills_root = tmp_path / "skills"
+    skill_dir = skills_root / "user-doc-skill"
+    skill_dir.mkdir(parents=True)
+    # 用户手写技能:frontmatter 无 source_run,正文含 "source_run:" 字样(文档示例)
+    original_content = (
+        "---\n"
+        "name: user-doc-skill\n"
+        "enabled: true\n"
+        "---\n"
+        "# 用户手写技能\n"
+        "该技能文档中演示 learning 系统的 YAML 格式:\n"
+        "```yaml\n"
+        "source_run: abc123\n"
+        "source_runs: [abc123, def456]\n"
+        "```\n"
+        "以上是示例,本文件本身是用户技能。\n"
+    )
+    (skill_dir / "SKILL.md").write_text(original_content, encoding="utf-8")
+
+    tasks = [_make_task("t1"), _make_task("t2")]
+    # A 全 fail, B 全 pass:若 is_learned 误判为学习产物会允许覆盖并返回 promoted=True
+    cand = _make_candidate("user-doc-skill", body="---\nsource_run: newrun\n---\n# 新body\n")
+
+    result = promotion_gate.promote(
+        candidate=cand, tasks=tasks, runner=_FullFailRunner(),
+        runner_b=_FullPassRunner(),
+        skills_root=skills_root,
+    )
+    assert result.promoted is False, (
+        f"正文含 source_run 但 frontmatter 无标记 → 应保守拒绝,实得 {result}"
+    )
+    assert (result.reason or "").startswith("name_collision"), (
+        f"reason 应以 name_collision 开头,得 {result.reason!r}"
+    )
+    # 原文件内容不变
+    actual = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    assert actual == original_content, "原用户技能文件不应被修改"
+
+
+def test_promote_refuses_overwrite_skill_with_markdown_divider_trick(tmp_path):
+    """【评审 B2 修复】文件不以 '---' 开头但正文含 '---' Markdown 水平分割线,
+    分割线后跟 'source_run:' 字样 → frontmatter 提取器不应误判为学习产物。
+
+    正确行为:文件首行不是 '---' → is_learned=False → 保守拒绝,原文件不动。
+    """
+    skills_root = tmp_path / "skills"
+    skill_dir = skills_root / "markdown-divider-skill"
+    skill_dir.mkdir(parents=True)
+    # 用户技能:无 frontmatter,正文含 --- 分割线 + source_run: 字样
+    original_content = (
+        "# 用户手写技能(无 frontmatter)\n"
+        "这是用户手动编写的技能文件。\n"
+        "\n"
+        "---\n"
+        "source_run: abc123\n"
+        "source_runs: [abc123, def456]\n"
+        "---\n"
+        "\n"
+        "以上是正文里的水平分割线示例,本文件是用户技能。\n"
+    )
+    (skill_dir / "SKILL.md").write_text(original_content, encoding="utf-8")
+
+    tasks = [_make_task("t1")]
+    # A 全 fail, B 全 pass:若 is_learned 误判为 True 会允许覆盖并返回 promoted=True
+    cand = _make_candidate(
+        "markdown-divider-skill",
+        body="---\nsource_run: newrun\n---\n# 新 body\n",
+    )
+
+    result = promotion_gate.promote(
+        candidate=cand, tasks=tasks, runner=_FullFailRunner(),
+        runner_b=_FullPassRunner(),
+        skills_root=skills_root,
+    )
+    assert result.promoted is False, (
+        f"文件不以 '---' 开头,frontmatter 提取不应采用正文分割线 → 应拒绝,实得 {result}"
+    )
+    assert (result.reason or "").startswith("name_collision"), (
+        f"reason 应以 name_collision 开头,得 {result.reason!r}"
+    )
+    # 原文件内容不变
+    actual = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    assert actual == original_content, "原文件内容不应被修改"

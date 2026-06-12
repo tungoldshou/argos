@@ -182,14 +182,18 @@ class HintedRunner:
     """B 侧 runner:把综合 skill 的叙述+源经验作为 hint 前置到 task.goal。
 
     promotion_gate 不感知 hint(契约注释言明是 runner 的事);A 侧用裸 runner。
+    max_hint_len:hint 截断阈值(字符数)。hint 来自 synthesize(),5 源 × distiller
+    可达 10k-50k+ 字符;前置到 task.goal 后 B 侧模型焦点会被稀释,截断防假阴性。
     """
     inner: object
     hint: str
+    max_hint_len: int = 4000
 
     def run(self, task, *, model_tier: str):
         import dataclasses
+        truncated = self.hint[:self.max_hint_len]
         hinted = dataclasses.replace(
-            task, goal=f"可参考以下已验证经验:\n{self.hint}\n\n---\n\n{task.goal}")
+            task, goal=f"可参考以下已验证经验:\n{truncated}\n\n---\n\n{task.goal}")
         return self.inner.run(hinted, model_tier=model_tier)
 
 

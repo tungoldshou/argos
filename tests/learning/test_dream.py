@@ -179,3 +179,58 @@ def test_hinted_runner_prepends_hint_to_goal(tmp_path):
     assert g.startswith("可参考以下已验证经验"), f"goal 应以提示语开头,得: {g[:40]!r}"
     assert hint_text in g, "goal 应含 hint"
     assert "写一个登录修复脚本" in g, "goal 应保留原 goal"
+
+
+def test_hinted_runner_truncates_long_hint(tmp_path):
+    """【评审 B1 修复】hint 超过 max_hint_len 时应被截断,防止 B 侧模型焦点被稀释。
+
+    HintedRunner 应有 max_hint_len: int = 4000 字段;run() 内截断 hint。
+    """
+    from argos_agent.learning.dream import HintedRunner
+    from argos_agent.eval.corpus import EvalTask
+
+    captured_goals: list[str] = []
+
+    class _CapturingRunner:
+        def run(self, task, *, model_tier: str):
+            captured_goals.append(task.goal)
+            class _R:
+                pass_status = "passed"
+            return _R()
+
+    inner = _CapturingRunner()
+    # 构造 > 4000 字符的 hint("经验A " 每单元4字符,1001次=4004字符)
+    long_hint = "经验A " * 1001  # 4004 字符,超过 4000
+    assert len(long_hint) > 4000, "前置条件:long_hint 应超过 4000 字符"
+
+    hinted = HintedRunner(inner=inner, hint=long_hint)
+    # 验证 max_hint_len 字段默认存在且为 4000
+    assert hinted.max_hint_len == 4000, (
+        f"HintedRunner 应有 max_hint_len=4000 字段,实得 {getattr(hinted, 'max_hint_len', '缺失')}"
+    )
+
+    task = EvalTask(
+        id="t-long", category="self_check", difficulty="easy",
+        title="truncate test", goal="完成任务",
+        verify_cmd="true", setup_cmd=None, expected_files=(),
+        working_dir=tmp_path, corpus_version=1,
+    )
+    hinted.run(task, model_tier="default")
+
+    assert len(captured_goals) == 1
+    g = captured_goals[0]
+    # hint 被截断后,goal 分隔符前的内容包含 hint,不应超过 max_hint_len + 提示语开头
+    # 格式: "可参考以下已验证经验:\n{truncated_hint}\n\n---\n\n{original_goal}"
+    separator = "\n\n---\n\n"
+    assert separator in g, "goal 中应含分隔符"
+    prefix, _, original = g.partition(separator)
+    # prefix = "可参考以下已验证经验:\n{truncated_hint}"
+    hint_in_prefix = prefix.split("\n", 1)[1] if "\n" in prefix else prefix
+    assert len(hint_in_prefix) <= 4000, (
+        f"截断后 hint 不应超过 max_hint_len=4000,实得 {len(hint_in_prefix)}"
+    )
+    assert len(hint_in_prefix) < len(long_hint), (
+        f"hint 应被截断,截断后 {len(hint_in_prefix)} < 原始 {len(long_hint)}"
+    )
+    # 原 goal 仍保留
+    assert "完成任务" in g, "原始 goal 应保留在末尾"
