@@ -1,6 +1,7 @@
 """Evaluator 串联 hard → soft → level,带 trigger 标签(spec §2.5, D15 锁)。"""
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, TYPE_CHECKING
@@ -99,11 +100,18 @@ def evaluate(
     gate_level: ApprovalLevel | str,
     config: PermissionsConfig,
     workspace: str | Path | None = None,
+    ask_readonly: bool = False,
+    reversible_lookup: "Callable[[str], bool | None] | None" = None,
 ) -> DecisionMeta:
     """串联 hard → soft deny → soft allow → soft ask → per-tool → default(spec D15 锁)。
 
     - secret 命中不走 soft allow 短路(D8 锁):即便 allow 列表命中具体内容仍 ask。
     - hard rule 命中即返,不被任何软规则覆盖(D5 锁)。
+    - ask_readonly=True(L0 语义):跳过"auto 放行"短路,即便低风险动作也升格为 ask。
+      仅对评估路径末端的"approve"结果改为 ask;hard/soft deny/secret 路径不受影响。
+    - reversible_lookup(L2 语义):Callable[[action], bool|None];True=可逆→放行(audit
+      trigger="trust:L2 可逆放行");False/None=不可逆/未知→ ask(保守)。
+      仅在评估末端无其他 hard/soft 规则命中时才作用;HARD RULES/secret 路径不受影响。
     """
     arg_str = _arg_str(args)
 
@@ -169,12 +177,15 @@ def evaluate(
     if secret_name is None:
         allow_entry = config.match_allow(action, arg_str)
         if allow_entry is not None:
-            return DecisionMeta(
+            soft_allow_meta = DecisionMeta(
                 decision="approve",
                 trigger=f"soft_allow:{allow_entry.matcher}",
                 rule_name=allow_entry.matcher,
                 reason=f"软规则 allow 命中: {allow_entry.matcher}",
             )
+            return _apply_trust_semantics(soft_allow_meta, action=action,
+                                          ask_readonly=ask_readonly,
+                                          reversible_lookup=reversible_lookup)
 
     # 3b. Secret 命中 → ask(D8 锁:在 soft ask 之前,即便 allow 命中也 ask)
     if secret_name is not None:
@@ -199,11 +210,14 @@ def evaluate(
     if action in config.tools:
         lvl = config.tools[action]
         if lvl == "auto":
-            return DecisionMeta(
+            tool_meta = DecisionMeta(
                 decision="approve",
                 trigger=f"tool_level:{action}=auto",
                 reason=f"per-tool {action} = auto",
             )
+            return _apply_trust_semantics(tool_meta, action=action,
+                                          ask_readonly=ask_readonly,
+                                          reversible_lookup=reversible_lookup)
         elif lvl in ("confirm", "accept_edits"):
             return DecisionMeta(
                 decision="ask",
@@ -232,10 +246,84 @@ def evaluate(
         lvl = _gate_level_str(gate_level)
 
     if lvl == "auto":
-        return DecisionMeta(decision="approve", trigger=f"level:{lvl}", reason=f"default {lvl}")
+        base = DecisionMeta(decision="approve", trigger=f"level:{lvl}", reason=f"default {lvl}")
     elif lvl in ("confirm", "propose", "accept_edits"):
-        return DecisionMeta(decision="ask", trigger=f"level:{lvl}", reason=f"default {lvl}")
+        base = DecisionMeta(decision="ask", trigger=f"level:{lvl}", reason=f"default {lvl}")
     elif lvl == "observe":
         return DecisionMeta(decision="deny", trigger=f"level:{lvl}", reason=f"default {lvl}")
     else:
-        return DecisionMeta(decision="ask", trigger=f"level:{lvl}", reason=f"default {lvl}")
+        base = DecisionMeta(decision="ask", trigger=f"level:{lvl}", reason=f"default {lvl}")
+
+    # 仅对"approve"结果应用 L0/L2 后处理(deny 结果绝不被升格/降级)。
+    return _apply_trust_semantics(base, action=action,
+                                  ask_readonly=ask_readonly,
+                                  reversible_lookup=reversible_lookup)
+
+
+def _apply_trust_semantics(
+    meta: DecisionMeta,
+    *,
+    action: str,
+    ask_readonly: bool,
+    reversible_lookup: "Callable[[str], bool | None] | None",
+) -> DecisionMeta:
+    """L0/L2 后处理:仅作用于评估链末端"approve"结果。
+
+    L0(ask_readonly=True):
+      - "approve" → "ask"(trigger="trust:L0 每步确认")。
+      - "ask"/"deny" 不变。
+
+    L2(reversible_lookup 非 None):
+      - 先查 reversible_lookup(action):
+          True   → "approve"(trigger="trust:L2 可逆放行")
+          False/None → "ask"(保守,trigger 保持原值)
+      - 若原结果已是"ask"/"deny"则不降级(L2 只能放行可逆,不强制拦截)。
+      - L2 不升格 deny。
+
+    L0 与 L2 互斥(gate 每次只处于一个语义档位),代码按 ask_readonly 优先。
+    """
+    if meta.decision == "deny":
+        # deny 来自 hard/soft deny;Trust Dial 任何档位都不降级 deny。
+        return meta
+
+    if ask_readonly:
+        # L0:把所有 approve 升格为 ask
+        if meta.decision == "approve":
+            return DecisionMeta(
+                decision="ask",
+                trigger="trust:L0 每步确认",
+                reason="L0 档位:只读操作也需确认",
+            )
+        return meta
+
+    if reversible_lookup is not None:
+        # L2:仅作用于"级别默认"产生的 ask 或 approve(trigger 以 level: 开头)。
+        # soft_ask/soft_allow/tool_level 命中的决策保持原样(这些是显式配置的规则,L2 不覆盖)。
+        # 规则:
+        #   trigger=level:* + reversible=True  → approve(trigger="trust:L2 可逆放行")
+        #   trigger=level:* + reversible=False/None → ask(保守,维持原 trigger)
+        #   trigger 非 level:*(已被软规则命中) → 保持原结果不变
+        is_level_default = meta.trigger.startswith("level:")
+        if not is_level_default:
+            # 软规则/tool_level 命中:L2 不干预
+            return meta
+        try:
+            rev = reversible_lookup(action)
+        except Exception:  # noqa: BLE001 — lookup 出错保守处理
+            rev = None
+        if rev is True:
+            return DecisionMeta(
+                decision="approve",
+                trigger="trust:L2 可逆放行",
+                reason=f"L2 档位:动作 {action!r} 声明为可逆,自动放行",
+            )
+        # False/None → 保守:已有 ask 维持;如果是 approve(level:auto)则升格为 ask
+        if meta.decision == "approve":
+            return DecisionMeta(
+                decision="ask",
+                trigger=f"{meta.trigger}:trust:L2 不可逆/未知保守问",
+                reason=f"L2 档位:动作 {action!r} 不可逆或 reversible 未知,保守确认",
+            )
+        return meta
+
+    return meta

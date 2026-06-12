@@ -301,3 +301,121 @@ async def test_undo_requires_owner(tmp_path: Path, ledger_server):
     assert status == 403
     body = json.loads(raw.decode())
     assert body["code"] == "session_readonly"
+
+
+# ── Minor-1：纯 file: 条目 run 的 SNAPSHOT_ROOT fallback ─────────────────────
+
+@pytest.mark.asyncio
+async def test_undo_file_only_run_finds_snapshot_via_snapshot_root(
+    tmp_path: Path, ledger_server
+):
+    """Minor-1 修正：纯文件编辑 run（账本条目全是 file: 前缀）在 SNAPSHOT_ROOT 存在快照时
+    应 fallback 到约定路径 run-{run_id}.tar，而不是直接返回 no_snapshot。
+
+    步骤：
+      1. 构造一条 undo_token="file:/path/to/file" 的账本条目（纯文件条目，无 run 级 token）。
+      2. 在 SNAPSHOT_ROOT 放一个合法快照 run-{run_id}.tar。
+      3. POST /undo → 应还原成功（200），而非 409 no_snapshot。
+    """
+    from argos_agent.core.snapshot import SNAPSHOT_ROOT
+    import tarfile
+
+    srv, manager, ledger_store = ledger_server
+
+    ws = tmp_path / "ws_file_only"
+    ws.mkdir()
+    target_file = ws / "output.txt"
+    target_file.write_text("original content")
+
+    sid = await _create_session(srv.socket_path)
+    run_id = await _create_run(srv.socket_path, sid, str(ws))
+
+    # 在 SNAPSHOT_ROOT 放约定路径快照（修法里的 fallback 路径）
+    SNAPSHOT_ROOT.mkdir(parents=True, exist_ok=True)
+    snap_path = SNAPSHOT_ROOT / f"run-{run_id}.tar"
+    # 手工建 tar 含 output.txt（RunSnapshot 格式：相对路径）
+    with tarfile.open(snap_path, "w") as tf:
+        tf.add(target_file, arcname="output.txt")
+
+    # 账本条目：undo_token 是 "file:" 前缀（纯文件条目，无 run 级 token）
+    class _FakeReceipt:
+        def __init__(self) -> None:
+            self.action = "write_file"
+            self.ts = 1000.0
+            self.sig = "deadsig0deadsig0"
+
+    entry = build_entry(
+        receipt=_FakeReceipt(),
+        run_id=run_id,
+        seq=1,
+        undo_token=f"file:{str(target_file)}",
+    )
+    assert entry.undo_token is not None
+    assert entry.undo_token.startswith("file:")
+    ledger_store.append(entry)
+
+    # 修改文件内容（模拟 agent 改动）
+    target_file.write_text("modified by agent")
+
+    try:
+        # POST /undo → 应走 SNAPSHOT_ROOT fallback，还原文件
+        status, _, raw = await _req(
+            srv.socket_path, "POST", f"/runs/{run_id}/undo",
+            session_id=sid, body={},
+        )
+        body = json.loads(raw.decode())
+        # 应 200（找到 fallback 快照），不应 409 no_snapshot
+        assert status == 200, (
+            f"纯 file: 条目 run 应 fallback 到 SNAPSHOT_ROOT 快照，期望 200，"
+            f"实际 {status}: {body}"
+        )
+        assert body.get("state") in ("done", "partial"), f"undo state 异常: {body}"
+    finally:
+        # 清理约定路径快照，避免污染其他测试
+        if snap_path.exists():
+            snap_path.unlink()
+
+
+@pytest.mark.asyncio
+async def test_undo_file_only_run_no_snapshot_root_still_returns_no_snapshot(
+    tmp_path: Path, ledger_server
+):
+    """Minor-1 回归：纯 file: 条目 run，SNAPSHOT_ROOT 也没有对应快照 → 仍 409 no_snapshot。"""
+    from argos_agent.core.snapshot import SNAPSHOT_ROOT
+
+    srv, manager, ledger_store = ledger_server
+
+    ws = tmp_path / "ws_no_snap"
+    ws.mkdir()
+    target_file = ws / "data.txt"
+    target_file.write_text("content")
+
+    sid = await _create_session(srv.socket_path)
+    run_id = await _create_run(srv.socket_path, sid, str(ws))
+
+    # 确保 SNAPSHOT_ROOT 里没有此 run 的快照
+    candidate = SNAPSHOT_ROOT / f"run-{run_id}.tar"
+    if candidate.exists():
+        candidate.unlink()
+
+    class _FakeReceipt:
+        def __init__(self) -> None:
+            self.action = "write_file"
+            self.ts = 1000.0
+            self.sig = "deadsig0deadsig0"
+
+    entry = build_entry(
+        receipt=_FakeReceipt(),
+        run_id=run_id,
+        seq=1,
+        undo_token=f"file:{str(target_file)}",
+    )
+    ledger_store.append(entry)
+
+    status, _, raw = await _req(
+        srv.socket_path, "POST", f"/runs/{run_id}/undo",
+        session_id=sid, body={},
+    )
+    body = json.loads(raw.decode())
+    assert status == 409, f"无快照时应 409，实际 {status}: {body}"
+    assert body["code"] == "no_snapshot"

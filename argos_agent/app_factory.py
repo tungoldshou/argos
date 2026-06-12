@@ -227,8 +227,30 @@ def build_run_stack(
     )
     if session_id:
         gate.set_session_id(session_id)
+    # L2 Trust Dial:从 CapabilityRegistry manifest 构造 reversible_lookup 并注入 gate。
+    # 当 gate 处于 L2_IRREVERSIBLE_ONLY 档位时,evaluator 通过此 lookup 决策动作可逆性。
+    # registry 为 None 时 lookup 返回 None(保守退化:L2 所有动作均 ask)。
+    if c.registry is not None:
+        _reg = c.registry
+        def _make_reversible_lookup(reg: "CapabilityRegistry") -> "Callable[[str], bool | None]":
+            def _lookup(action: str) -> "bool | None":
+                try:
+                    return reg.get(action).reversible
+                except KeyError:
+                    return None  # 未注册动作:保守 None
+            return _lookup
+        gate.set_reversible_lookup(_make_reversible_lookup(_reg))
 
     def _loop_factory() -> "AgentLoop":
+        # A2 L3 DOM 探针：BrowserController 已在 AppComponents 实例化；
+        # 构造 DomProber 注入 loop（None=未接入，L3 候选跳过，行为同之前）。
+        _dom_prober = None
+        if c.browser_controller is not None:
+            try:
+                from argos_agent.verify.dom_probe import DomProber
+                _dom_prober = DomProber(c.browser_controller)
+            except Exception:  # noqa: BLE001 — 构造失败不阻断 run
+                pass
         return AgentLoop(
             store=c.store, bus=EventBus(), sandbox=sandbox,
             broker=broker, model=c.model, verifier=c.verifier, config=c.config,
@@ -237,6 +259,7 @@ def build_run_stack(
             router=c.router,
             mcp_manager=c.mcp_manager,
             intent_engine=c.intent_engine,  # P4 §7 意图引擎透传
+            dom_prober=_dom_prober,          # A2 L3 DOM 探针（None=未接入）
         )
 
     return RunStack(sandbox=sandbox, gate=gate, broker=broker, loop_factory=_loop_factory)
@@ -316,6 +339,13 @@ def build_components(
         mcp_manager=mcp_mgr, browser_controller=browser_ctrl,
         registry=registry,   # P2:传给 broker
     )
+    # L2 Trust Dial:从 CapabilityRegistry 构造 reversible_lookup 并注入 gate。
+    def _reversible_lookup_from_registry(action: str) -> "bool | None":
+        try:
+            return registry.get(action).reversible
+        except KeyError:
+            return None
+    gate.set_reversible_lookup(_reversible_lookup_from_registry)
 
     verifier = Verifier(max_rounds=max_rounds)
 
@@ -378,8 +408,9 @@ def build_components(
             pass
 
     # P4 策略生成:从 registry 聚合所有非空 verify_hint 字段 → capability_hints 字典。
-    # generate() 只消费已知键(pytest_cmd / verify_file / dom_selector / dom_url),
-    # 其余能力名静默忽略 —— 所以直接用 {cap_name: verify_hint} 格式无害。
+    # 格式是 {能力名: verify_hint 人话文本}，仅用于 rationale 展示与 generate() 的
+    # pytest_cmd / verify_file 键消费；dom_selector / dom_url / dom_expected_text 这三个
+    # dom 键来自 agent 在代码里调 propose_dom_verify(...)（host 侧解析），不从此处注入。
     _capability_hints: dict[str, str] = {
         cap.name: cap.verify_hint
         for cap in (registry._caps.values() if registry is not None else [])

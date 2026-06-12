@@ -30,7 +30,7 @@ async def test_tools_lists_real_29_tools_grouped():
     async with app.run_test() as pilot:
         await pilot.pause()
         txt = await _dispatch(app, "/tools")
-        assert "29 个工具" in txt                 # 诚实数量(= ALL_TOOL_NAMES 实长)
+        assert "30 个工具" in txt                 # 诚实数量(= ALL_TOOL_NAMES 实长；propose_dom_verify 加入后 30)
         assert "browser_navigate" in txt          # 计算机控制分组真出现(浏览器)
         assert "mcp_call" in txt                   # 外部工具分组真出现
         assert "lsp_definition" in txt             # LSP 工具分组真出现

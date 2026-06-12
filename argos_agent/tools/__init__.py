@@ -28,6 +28,7 @@ VERIFY_DIR: Path = Path(os.environ.get("ARGOS_VERIFY_DIR",
 ALL_TOOL_NAMES: list[str] = [
     "read_file", "write_file", "edit_file", "search_files",
     "run_command", "web_search", "web_extract", "propose_verify",
+    "propose_dom_verify",  # A2 L3 DOM 验证声明（与 propose_verify 同构，结果由 DomProber 判定）
     "update_plan",
     "propose_workflow",
     # 计算机控制(浏览器)—— broker-gated,host 侧 sync Playwright 专线程执行。
@@ -260,6 +261,31 @@ def _propose_verify_pure(command: str) -> str:
     return f"已登记验证命令:{command}(收尾时由 harness 独立运行,以退出码为准)"
 
 
+def _propose_dom_verify_pure(
+    url: str,
+    selector: str = "body",
+    expected_text: str = "",
+) -> str:
+    """声明用 DOM 探针验证网页改动。
+
+    与 propose_verify 同构：沙箱是独立子进程，这里仅给登记回执；host loop 解析 agent
+    输出里的 propose_dom_verify(url=..., selector=..., expected_text=...) 登记 L3 策略，
+    收尾时由 DomProber 在 host 侧独立执行（agent 碰不到），以 found/error 三态为准。
+
+    Args:
+        url:           要验证的页面 URL（必须 http/https）。
+        selector:      CSS 选择器（可选；用于定位目标元素，辅助 expected_text 定位）。
+        expected_text: 页面应包含的文本（强烈推荐）；有 expected_text 时走强证据路径
+                       可产 passed/failed；无 expected_text 时结果最高为 unverifiable。
+    """
+    parts = [f"url={url!r}"]
+    if selector and selector != "body":
+        parts.append(f"selector={selector!r}")
+    if expected_text:
+        parts.append(f"expected_text={expected_text!r}")
+    return f"[已登记 DOM 验证: {', '.join(parts)}（host 侧 DomProber 收尾时断言，以三态为准）]"
+
+
 def _update_plan_pure(todos: list[dict]) -> str:
     """列出/更新任务的子任务清单(真 TODO 拆解,借 Claude Code TodoWrite)。
 
@@ -326,6 +352,7 @@ def _pure() -> dict[str, Any]:
         "edit_file": files.edit_file,
         "search_files": files.search_files,
         "propose_verify": _propose_verify_pure,
+        "propose_dom_verify": _propose_dom_verify_pure,  # A2 L3 DOM 验证桩（登记回执，真执行在 host）
         "update_plan": _update_plan_pure,
         "propose_workflow": _propose_workflow_pure,
     }

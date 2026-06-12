@@ -102,3 +102,79 @@ class RunSnapshot:
         except tarfile.TarError as e:
             result.errors.append(("", f"tar 读取失败:{e}"))
         return result
+
+    def restore_file(self, workspace: Path, rel_path: str) -> RestoreResult:
+        """从快照中提取单个文件到 workspace(文件粒度 undo)。
+
+        语义:
+        - rel_path 在快照中存在 → 覆盖写回 workspace(文件内容逐字节还原)
+        - rel_path 不在快照中(run 中新建) → 删除该文件;结果在 RestoreResult.missing 标注
+          (调用方可据此在响应中说明"此文件是任务中新建的,撤销即删除")
+        - 路径牢笼:rel_path 解析后必须在 workspace 内(防 ../ 逃逸),否则走 errors(fail-closed)
+        - 快照不可读/不存在 → errors(fail-closed)
+
+        Args:
+            workspace: workspace 根目录(绝对路径)
+            rel_path:  相对于 workspace 的路径(如 "src/main.py")
+
+        Returns:
+            RestoreResult —— 不抛异常,调用方按 .errors 判断成败
+        """
+        result = RestoreResult()
+
+        # 路径牢笼:解析后必须在 workspace 内(防 ../ 路径逃逸,fail-closed)
+        try:
+            target = (workspace / rel_path).resolve()
+            workspace_resolved = workspace.resolve()
+            # resolve() 后 target 必须以 workspace 为前缀(含等于自身)
+            target.relative_to(workspace_resolved)
+        except (ValueError, OSError) as e:
+            result.errors.append((rel_path, f"路径牢笼拒绝(../ 逃逸或非法路径):{e}"))
+            return result
+
+        if not self.tar_path.exists():
+            result.errors.append((rel_path, f"快照文件不存在:{self.tar_path}"))
+            return result
+
+        # 规范化 rel_path 以匹配 tar 内 arcname(tar 用 str(rel),POSIX 分隔符)
+        norm_rel = rel_path.replace("\\", "/").lstrip("/")
+
+        try:
+            with tarfile.open(self.tar_path, "r") as tf:
+                # 在 tar 成员中查找匹配项
+                matched: "tarfile.TarInfo | None" = None
+                for m in tf.getmembers():
+                    if m.name == norm_rel and m.isfile():
+                        matched = m
+                        break
+
+                if matched is None:
+                    # 快照中没有该文件 → run 中新建 → 撤销 = 删除
+                    result.missing.append(rel_path)
+                    if target.exists():
+                        try:
+                            target.unlink()
+                        except OSError as e:
+                            result.errors.append((rel_path, f"新建文件删除失败:{e}"))
+                    return result
+
+                # 快照中有 → 覆盖写回
+                if not target.parent.exists():
+                    try:
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                    except OSError as e:
+                        result.errors.append((rel_path, f"创建父目录失败:{e}"))
+                        return result
+                try:
+                    src = tf.extractfile(matched)
+                    if src is None:
+                        result.errors.append((rel_path, "tar extractfile 返回 None"))
+                        return result
+                    with target.open("wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                    result.restored.append(rel_path)
+                except OSError as e:
+                    result.errors.append((rel_path, str(e)))
+        except tarfile.TarError as e:
+            result.errors.append((rel_path, f"tar 读取失败:{e}"))
+        return result

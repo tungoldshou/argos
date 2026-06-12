@@ -133,10 +133,11 @@ def to_approval_semantics(level: TrustLevel) -> dict[str, Any]:
         return {
             **_base,
             "approval_level": _AL_CONFIRM,
-            "description": "不可逆才问：依赖 P2 manifest reversible 字段；可逆操作自动放行",
-            # 显式标记依赖项：集成阶段须确认 capability manifest reversible 字段已就位
+            "description": "不可逆才问：依赖 capability manifest reversible 字段；可逆操作自动放行",
+            # reversible_check=True → gate._evaluate 传入 reversible_lookup。
+            # gate.set_reversible_lookup() 由 app_factory 从 CapabilityRegistry 构造注入；
+            # 未注入时 evaluator 保守退化：所有动作均 ask（fail-closed，不假装放行）。
             "reversible_check": True,
-            "reversible_dependency": "P2 capability manifest reversible field",
             "ask_readonly": False,
         }
 

@@ -105,12 +105,12 @@ class TestToApprovalSemantics:
         sem = self._sem(TrustLevel.L2_IRREVERSIBLE_ONLY)
         assert sem["reversible_check"] is True
 
-    def test_l2_reversible_dependency_mentioned(self):
-        """L2 的 reversible_dependency 字段应明确标注 P2 依赖。"""
+    def test_l2_reversible_check_in_description(self):
+        """L2 的 description 中应提及 reversible 字段依赖（已接线，无需 P2 依赖标注）。"""
         sem = self._sem(TrustLevel.L2_IRREVERSIBLE_ONLY)
-        dep = sem.get("reversible_dependency", "")
-        assert "P2" in dep or "reversible" in dep.lower(), (
-            f"L2 应标注 P2 manifest 依赖，实际: {dep!r}"
+        desc = sem.get("description", "")
+        assert "reversible" in desc.lower(), (
+            f"L2 description 应提及 reversible 字段，实际: {desc!r}"
         )
 
     # ── L3 ──────────────────────────────────────────────────────────────────

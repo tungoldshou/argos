@@ -389,6 +389,9 @@ class RunWorker:
                 # P3b §6 行为账本:ToolReceipt 事件 → LedgerEntry 落盘 + 广播
                 if ev_kind == "tool_receipt" and self._ledger_store is not None:
                     await self._maybe_append_ledger(ev_dict)
+                # A3:FileDiff 事件 → 文件改动账本条目(文件粒度 undo 来源)
+                elif ev_kind == "file_diff" and self._ledger_store is not None:
+                    await self._maybe_append_ledger_for_file_diff(ev_dict)
             # 5. 完成(若非终态)
             cur = self._manager.index.get(self.run_id)
             if cur is not None and cur.state not in ("completed", "failed", "cancelled"):
@@ -500,6 +503,92 @@ class RunWorker:
             await self._manager.fanout(self.run_id, le_dict)
         except Exception as e:  # noqa: BLE001 — 账本路径必须不挂主任务
             log.warning("worker: ledger append failed for %s: %s", self.run_id, e)
+
+    async def _maybe_append_ledger_for_file_diff(self, ev_dict: dict) -> None:
+        """A3:从 file_diff 事件构建文件改动 LedgerEntry 并落盘 + 广播。
+
+        LedgerEntry 字段语义:
+          action        = "file_diff"
+          summary_human = 确定性模板 "修改了 {basename}(+{added}/-{removed})"
+          reversible    = "yes"(有 run 起点快照时)/"unknown"(无快照)
+          undo_token    = "file:{rel_path}"(文件粒度 undo 令牌,含前缀以区分 run 级 undo_token)
+
+        fail-soft:任何错误 log warning + 不抛(账本丢失不阻断主流程)。
+        """
+        try:
+            from argos_agent.ledger.entry import LedgerEntry
+            from argos_agent.protocol.events import LedgerEntryEvent
+            import os
+            import time as _time
+
+            path_str: str = str(ev_dict.get("path", ""))
+            added: int = int(ev_dict.get("added", 0))
+            removed: int = int(ev_dict.get("removed", 0))
+
+            if not path_str:
+                return  # 无路径,跳过
+
+            basename = os.path.basename(path_str) or path_str
+
+            # undo_token = "file:{rel_path}";有快照时 reversible=yes,无快照 unknown
+            undo_token: str | None = None
+            reversible = "unknown"
+            if self._snapshot is not None:
+                try:
+                    snap_path = self._snapshot.tar_path
+                    if snap_path.exists():
+                        undo_token = f"file:{path_str}"
+                        reversible = "yes"
+                except Exception:  # noqa: BLE001
+                    pass
+
+            undo_state = "available" if reversible == "yes" else "impossible"
+            # summary_human:确定性模板
+            if added or removed:
+                summary = f"修改了 {basename}(+{added}/-{removed})"
+            else:
+                summary = f"修改了 {basename}"
+
+            self._ledger_seq += 1
+            entry = LedgerEntry(
+                ts=_time.time(),
+                run_id=self.run_id,
+                seq=self._ledger_seq,
+                action="file_diff",
+                summary_human=summary,
+                risk="low",
+                reversible=reversible,  # type: ignore[arg-type]
+                undo_token=undo_token,
+                receipt_sig="",
+                undo_state=undo_state,  # type: ignore[arg-type]
+            )
+            # 落盘
+            self._ledger_store.append(entry)  # type: ignore[union-attr]
+
+            # 广播 LedgerEntryEvent(SSE 扇出)
+            from argos_agent.protocol.events import serialize_event
+            import json as _json
+            le_ev = LedgerEntryEvent(
+                ts=entry.ts,
+                run_id=entry.run_id,
+                seq=entry.seq,
+                action=entry.action,
+                summary_human=entry.summary_human,
+                risk=entry.risk,
+                reversible=entry.reversible,
+                undo_state=entry.undo_state,
+            )
+            parsed = _json.loads(serialize_event(le_ev))
+            le_dict = {"kind": parsed["kind"]}
+            le_dict.update(parsed.get("data", {}))
+            # 从主事件计数器领号(保 _seq 单调唯一,与 test_ledger_seq_unique 纪律一致)
+            self._event_seq += 1
+            le_dict["_seq"] = self._event_seq
+            self._manager.index.upsert(self.run_id, last_event_seq=self._event_seq)
+            self._manager.store.append(self.run_id, le_dict)
+            await self._manager.fanout(self.run_id, le_dict)
+        except Exception as e:  # noqa: BLE001 — 账本路径必须不挂主任务
+            log.warning("worker: file_diff ledger append failed for %s: %s", self.run_id, e)
 
     async def _post_terminal_cleanup(self) -> None:
         """终态后清理:registry.slot 释放 + worktree + registry 缩 cap。

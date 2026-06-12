@@ -441,7 +441,13 @@ class DaemonHTTPServer:
         _trust_level_str = data.get("trust_level")
 
         def _apply_trust_to_gate(gate: "Any") -> None:
-            """将 trust_level 字符串写入 gate;非法值静默降级(fail-safe)。"""
+            """将 trust_level 字符串写入 gate;非法值静默降级(fail-safe)。
+
+            components 路径:gate 由 build_run_stack 构造,reversible_lookup 已由
+            app_factory 从 CapabilityRegistry 注入;此处只需写 trust_level。
+            legacy loop_factory 路径:共享 gate 无 reversible_lookup 注入,L2 时
+            evaluator 退化保守 ask(fail-closed 方向)。
+            """
             if not _trust_level_str:
                 return
             try:
@@ -908,15 +914,27 @@ class DaemonHTTPServer:
     async def _handle_undo(self, writer, headers, run_id, body):
         """POST /runs/{id}/undo — run 级还原(快照还原 + 账本标记)。
 
-        语义(诚实三态铁律):
-          · run 不存在                          → 404
-          · 无账本 / 无 reversible=yes 条目      → 409 "nothing_to_undo"
-          · 账本已有 undo_done 标记              → 409 "already_undone"
-          · 无快照 / 快照不存在                  → 409 "no_snapshot"
-          · 还原成功                             → 200
+        A3 扩展:body 可携带 entry_seq 字段 → 文件粒度还原(单条账本条目对应的文件)。
+        无 entry_seq → 既有 run 级行为不变(整个 run 快照还原)。
+
+        语义(诚实四分):
+          · run 不存在                               → 404
+          · 无账本                                   → 409 "nothing_to_undo"
+          · entry_seq 指定:
+            - 条目不存在                             → 409 "entry_not_found"
+            - undo_token 不是 "file:" 前缀(非文件条目)→ 409 "not_file_entry"
+            - reversible != yes                      → 409 "not_reversible"
+            - undo_state 已为 done                   → 409 "already_undone"
+            - 无快照 / 快照不存在                    → 409 "no_snapshot"
+            - 还原成功                               → 200
+          · 无 entry_seq(run 级):
+            - 账本已有 undo_done 标记                → 409 "already_undone"
+            - 无 reversible=yes 条目                 → 409 "nothing_to_undo"
+            - 无快照 / 快照不存在                    → 409 "no_snapshot"
+            - 还原成功                               → 200
           · 不可逆动作的条目不受影响(诚实)
 
-        权限:owner-only(undo 是高风险写动作,走 gate fail-closed)。
+        权限:owner-only(_require_owner 鉴权;交互审批门未接,与 run 级既有语义一致)。
         """
         if await self._require_owner(writer, headers) is None:
             return
@@ -930,6 +948,27 @@ class DaemonHTTPServer:
                 writer, 409, "nothing_to_undo",
                 "此 run 无行为账本(ledger 未启用或 run 无副作用动作)",
             )
+
+        # 解析 body(entry_seq 可选)
+        try:
+            body_data = json.loads(body.decode("utf-8") or "{}") if body else {}
+        except json.JSONDecodeError:
+            body_data = {}
+        entry_seq: int | None = body_data.get("entry_seq")
+        if entry_seq is not None:
+            try:
+                entry_seq = int(entry_seq)
+            except (ValueError, TypeError):
+                return await self._send_error(
+                    writer, 400, CODE_BAD_REQUEST,
+                    "entry_seq 必须为整数",
+                )
+
+        # ── A3 分支:文件粒度还原 ─────────────────────────────────────────
+        if entry_seq is not None:
+            return await self._handle_undo_entry(writer, run_id, ledger_store, entry_seq)
+
+        # ── 既有 run 级还原路径(无 entry_seq)────────────────────────────
 
         # 已撤销检查
         if ledger_store.is_undo_done(run_id):
@@ -947,12 +986,23 @@ class DaemonHTTPServer:
                 "此 run 无可撤销的操作(所有操作均不可逆或已无效)",
             )
 
-        # 找 undo_token(run 级快照路径)
+        # 找 undo_token(run 级快照路径:不含 "file:" 前缀的条目)
         undo_token: str | None = None
         for e in available:
-            if e.undo_token:
+            if e.undo_token and not e.undo_token.startswith("file:"):
                 undo_token = e.undo_token
                 break
+
+        # Minor-1 修正:纯文件编辑 run 账本条目全是 "file:" 前缀,扫不到非 file: 的 token。
+        # fallback:按约定路径 SNAPSHOT_ROOT/run-{run_id}.tar 探测快照文件是否存在。
+        if not undo_token:
+            try:
+                from argos_agent.core.snapshot import SNAPSHOT_ROOT as _SNAP_ROOT
+                _snap_candidate = _SNAP_ROOT / f"run-{run_id}.tar"
+                if _snap_candidate.exists():
+                    undo_token = str(_snap_candidate)
+            except Exception:  # noqa: BLE001 — 兜底探测失败不崩，继续走 no_snapshot 路径
+                pass
 
         if not undo_token:
             return await self._send_error(
@@ -969,8 +1019,8 @@ class DaemonHTTPServer:
             )
 
         # 找 workspace(从 run meta 拿)
-        entry = self._manager.get_run(run_id)
-        workspace_str = getattr(entry, "workspace", "") or ""
+        run_meta = self._manager.get_run(run_id)
+        workspace_str = getattr(run_meta, "workspace", "") or ""
         if not workspace_str:
             return await self._send_error(
                 writer, 409, "no_workspace",
@@ -1020,6 +1070,147 @@ class DaemonHTTPServer:
             "state": "done",
             "restored": len(result.restored),
             "note": "已还原 run 起点的文件改动(注:撤销还原整个 run 的文件改动,粒度为 run 级)。",
+        })
+
+    async def _handle_undo_entry(self, writer, run_id: str, ledger_store, entry_seq: int):
+        """A3:文件粒度 undo — 按 entry_seq 还原单个文件。
+
+        诚实四分(409 语义):
+          · 条目不存在                → 409 entry_not_found
+          · undo_token 非 file: 前缀 → 409 not_file_entry
+          · reversible != yes        → 409 not_reversible
+          · undo_state 已 done       → 409 already_undone
+          · 快照不可用               → 409 no_snapshot
+          · 还原成功                 → 200(entry undo_state → done)
+
+        新建文件 undo = 删除(人话文案明说)。
+        undo 仍走审批面(调用方已经过 _require_owner)。
+        """
+        from pathlib import Path as _Path
+        from argos_agent.core.snapshot import RunSnapshot
+
+        # 查条目
+        ledger_entry = ledger_store.get_entry(run_id, entry_seq)
+        if ledger_entry is None:
+            return await self._send_error(
+                writer, 409, "entry_not_found",
+                f"账本中不存在 seq={entry_seq} 的条目",
+            )
+
+        # undo_token 必须是 file: 前缀(文件粒度条目)
+        if not ledger_entry.undo_token or not ledger_entry.undo_token.startswith("file:"):
+            return await self._send_error(
+                writer, 409, "not_file_entry",
+                f"seq={entry_seq} 的条目不是文件类条目(undo_token 无 file: 前缀)",
+            )
+
+        # reversible 检查
+        if ledger_entry.reversible != "yes":
+            return await self._send_error(
+                writer, 409, "not_reversible",
+                f"seq={entry_seq} 的条目不可逆(reversible={ledger_entry.reversible!r}),无法撤销",
+            )
+
+        # 已撤销检查
+        if ledger_entry.undo_state == "done":
+            return await self._send_error(
+                writer, 409, "already_undone",
+                f"seq={entry_seq} 的条目已经撤销(undo_state=done),不可重复撤销",
+            )
+
+        # 从 undo_token 提取文件路径("file:{abs_path}")
+        file_path_str = ledger_entry.undo_token[len("file:"):]
+
+        # 找 run 级 undo_token(快照路径:不带 file: 前缀的 available 条目)
+        all_entries = ledger_store.replay(run_id)
+        snap_token: str | None = None
+        for e in all_entries:
+            if e.undo_token and not e.undo_token.startswith("file:") and e.undo_state == "available":
+                snap_token = e.undo_token
+                break
+        # 也查 done 条目里有无快照(run 级 undo 已完成但单文件 undo 仍需快照)
+        if snap_token is None:
+            for e in all_entries:
+                if e.undo_token and not e.undo_token.startswith("file:"):
+                    snap_token = e.undo_token
+                    break
+
+        if not snap_token:
+            return await self._send_error(
+                writer, 409, "no_snapshot",
+                "无法找到 run 起点快照路径,无法执行文件粒度还原",
+            )
+
+        snap_path = _Path(snap_token)
+        if not snap_path.exists():
+            return await self._send_error(
+                writer, 409, "no_snapshot",
+                f"快照文件不存在:{snap_path}",
+            )
+
+        # 找 workspace
+        run_meta = self._manager.get_run(run_id)
+        workspace_str = getattr(run_meta, "workspace", "") or ""
+        if not workspace_str:
+            return await self._send_error(
+                writer, 409, "no_workspace",
+                "run 无 workspace 路径,无法执行文件粒度还原",
+            )
+        workspace = _Path(workspace_str).expanduser().resolve()
+        if not workspace.exists():
+            return await self._send_error(
+                writer, 409, "no_workspace",
+                f"workspace 不存在:{workspace}",
+            )
+
+        # 计算相对路径(文件路径相对于 workspace)
+        try:
+            file_abs = _Path(file_path_str).resolve()
+            rel_path = str(file_abs.relative_to(workspace))
+        except (ValueError, OSError):
+            # 绝对路径不在 workspace 内或无效:尝试直接用 file_path_str 作相对路径
+            rel_path = file_path_str.lstrip("/")
+
+        # 执行单文件还原
+        snapshot = RunSnapshot(tar_path=snap_path)
+        result = snapshot.restore_file(workspace, rel_path)
+
+        if result.errors:
+            error_detail = "; ".join(f"{p}: {e}" for p, e in result.errors[:3])
+            return await self._send_error(
+                writer, 500, "restore_failed",
+                f"文件还原失败:{error_detail}",
+            )
+
+        # 标记该条目 undo_state → done
+        ledger_store.mark_entry_done(run_id, entry_seq)
+
+        # 判断结果类型:missing = run 中新建(撤销=删除),restored = 已还原
+        was_new_file = bool(result.missing)
+        if was_new_file:
+            note = f"此文件是任务中新建的,撤销即删除(已删除:{file_path_str})"
+        else:
+            note = f"已还原文件:{file_path_str}"
+
+        # 广播 undo_entry_done 事件(审计可见性)
+        undo_ev = {
+            "kind": "undo_entry_done",
+            "run_id": run_id,
+            "entry_seq": entry_seq,
+            "file_path": file_path_str,
+            "was_new_file": was_new_file,
+            "ts": time.time(),
+        }
+        self._manager.store.append(run_id, undo_ev)
+        await self._manager.fanout(run_id, undo_ev)
+
+        await self._send_json(writer, 200, {
+            "run_id": run_id,
+            "entry_seq": entry_seq,
+            "state": "done",
+            "file_path": file_path_str,
+            "was_new_file": was_new_file,
+            "note": note,
         })
 
     # ── P5b §9 自治面：Orders CRUD ───────────────────────────────────

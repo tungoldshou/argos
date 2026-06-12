@@ -106,6 +106,14 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             verify_hint="检查 verify_cmd 已登记（harness 收尾独立运行）",
         ),
         Capability(
+            name="propose_dom_verify",
+            kind="tool",
+            risk="low",
+            reversible=True,
+            visibility="all",
+            verify_hint="检查 L3 DOM 验证策略已登记（host 侧 DomProber 收尾时执行三态断言）",
+        ),
+        Capability(
             name="propose_workflow",
             kind="tool",
             risk="low",

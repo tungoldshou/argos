@@ -166,6 +166,9 @@ _STRUCTURED_OUTPUT_PATTERN = re.compile(
     re.I,
 )
 
+# 从 goal 文本中提取显式 URL（http/https），用于 L3 dom_assert url 来源
+_URL_PATTERN = re.compile(r'https?://[^\s\'"<>]+', re.I)
+
 
 # ── L5 诚实退路（永远是最后一个）────────────────────────────────
 
@@ -271,19 +274,39 @@ def _l2_content_assert_csv(file_path: str) -> VerifyStrategy:
     )
 
 
-def _l3_dom_assert(hints: dict[str, str]) -> VerifyStrategy:
+def _l3_dom_assert(hints: dict[str, str], goal_url: str | None = None) -> VerifyStrategy:
+    """构造 L3 dom_assert 策略。
+
+    url 来源优先级：hints['dom_url'] > goal 中提取的显式 URL > 无（不生成 L3）。
+    selector 来源：hints['dom_selector']（必须存在，否则调用方不应调此函数）。
+    expected_text 来源：hints['dom_expected_text']（可选；提供时走强证据路径，可产 passed/failed；
+        不提供时 DomProber 走弱证据路径，最高只能 unverifiable——见 dom_probe.py 三态注释）。
+    """
     selector = hints.get("dom_selector", "body")
-    url = hints.get("dom_url", "http://localhost")
-    rationale = (
-        f"在 {url!r} 检查 DOM 元素 {selector!r} 存在且有内容 —— "
-        "网页变更在浏览器里可见（内容断言，非传输层）。"
-    )
+    url = hints.get("dom_url") or goal_url or ""
+    if not url:
+        # 无法确定目标 URL → 不生成（调用方已做 guard，此处保险再判一次）
+        # 此分支不应被触达；若触达则返回一个标记策略（level L5 退路由 generate 追加）
+        raise ValueError("_l3_dom_assert: 无 url，不应调用")
+    expected_text = hints.get("dom_expected_text") or ""
+    if expected_text:
+        rationale = (
+            f"在 {url!r} 确认页面文本包含 {expected_text!r} —— "
+            "声明式内容断言，可机检判定（强证据路径）。"
+        )
+    else:
+        rationale = (
+            f"在 {url!r} 检查 DOM 选择器 {selector!r} 相关内容 —— "
+            "仅有文本弱提示，无结构性 DOM 校验通道；"
+            "结果最高为 unverifiable（非 passed）。"
+            "如需机检断言，请在 propose_dom_verify() 中提供 expected_text。"
+        )
     return VerifyStrategy(
         level="L3", kind="dom_assert",
-        cmd=None,  # DOM 断言需外部 browser executor；cmd 留 None，由接线层填
+        cmd=None,  # DOM 断言需外部浏览器探针（DomProber）；cmd 留 None，接线层走探针路径
         target=f"{url}#{selector}",
         rationale_human=rationale,
-        confidence=0.60,
+        confidence=0.60 if expected_text else 0.30,
     )
 
 
@@ -398,8 +421,23 @@ def generate(
             )
 
     # ── L3：网页/DOM 信号 ─────────────────────────────────────────
-    if _WEB_PATTERN.search(goal) and ("dom_selector" in hints or "dom_url" in hints):
-        candidates.append(_l3_dom_assert(hints))
+    # 生成条件（同时满足）：
+    #   1. goal 含网页/DOM 信号
+    #   2. hints 提供了 dom_selector（确定要检查哪个元素）
+    #   3. URL 可解析：hints['dom_url'] 或 goal 中含显式 http(s) URL
+    #      → 捕不到 URL 就诚实不生成（绝不假造 localhost 默认值）
+    # 不放宽发送类红线：纯发送任务已在入口早退，此处不会到达。
+    if _WEB_PATTERN.search(goal) and "dom_selector" in hints:
+        # URL 来源：hints 优先；其次从 goal 文本提取显式 URL
+        _dom_url = hints.get("dom_url") or ""
+        if not _dom_url:
+            _url_matches = _URL_PATTERN.findall(goal)
+            _dom_url = _url_matches[0] if _url_matches else ""
+        if _dom_url:
+            try:
+                candidates.append(_l3_dom_assert(hints, goal_url=_dom_url))
+            except ValueError:
+                pass  # 极端情况保险：url 仍空则跳过，L5 兜底
 
     # ── L5 诚实退路（永远最后）────────────────────────────────────
     candidates.append(_l5_fallback())

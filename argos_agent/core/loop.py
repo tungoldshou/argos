@@ -79,6 +79,20 @@ _CODE_BLOCK = re.compile(r"```(?:python)?\s*\n(.*?)```", re.DOTALL)
 # agent 输出登记验证命令;沙箱内的 propose_verify() 工具仅给个登记回执(真执行在 host verify 阶段)。
 _PROPOSE_VERIFY = re.compile(r"propose_verify\(\s*['\"](.+?)['\"]\s*\)")
 
+# A2 Major-2 修正:propose_dom_verify(url=..., selector=..., expected_text=...) host 侧解析。
+# 与 propose_verify 同构:沙箱内调用仅返回登记回执,真断言在 host verify 阶段由 DomProber 执行。
+# 捕获三个关键字参数(都可选);只有 url 合法（http/https）才登记,selector/expected_text 可省略。
+# url 校验:拒 file:// 等非 http(s) 协议;selector/expected_text 各不超过 500 字符（防滥用）。
+_PROPOSE_DOM_VERIFY = re.compile(
+    r"propose_dom_verify\s*\(([^)]*)\)",
+    re.DOTALL,
+)
+_DOM_KW_URL = re.compile(r"""url\s*=\s*['"]([^'"]+)['"]""")
+_DOM_KW_SEL = re.compile(r"""selector\s*=\s*['"]([^'"]+)['"]""")
+_DOM_KW_EXP = re.compile(r"""expected_text\s*=\s*['"]([^'"]+)['"]""")
+_DOM_URL_ALLOWED = re.compile(r"^https?://", re.I)
+_DOM_PARAM_MAX = 500  # selector / expected_text 最大长度，防滥用
+
 # H1 防假绿:这些命令【永远通过、什么都不验证】,弱模型可声明它们(如 `echo ok`)骗过 verify 门
 # 报"已验证通过"。propose_verify 一律拒登记这类伪命令 → 落回"未机检验证"诚实路径,不产生假绿。
 _TRIVIAL_VERIFY_BINS = frozenset({
@@ -271,6 +285,7 @@ class AgentLoop:
         mcp_manager: Any = None,  # per-session McpManager 实例(AppComponents 注入;None=模块级单例 fallback)
         intent_engine: Any = None,  # P4 §7 IntentEngine | None;None=关闭,行为零变更
         capability_hints: dict[str, str] | None = None,  # P4 策略生成:registry verify_hint 聚合;None=空 dict
+        dom_prober: Any = None,  # A2 L3 DOM 探针:DomProber | None;None=未接入,行为同现状(L3 跳过)
     ) -> None:
         self._store = store
         self._bus = bus
@@ -290,6 +305,14 @@ class AgentLoop:
         self._intent_engine = intent_engine  # P4 §7:IntentEngine | None;None=关闭
         # P4 策略生成:registry verify_hint 聚合(app_factory 透传);None 退空 dict(零变更)。
         self._capability_hints: dict[str, str] = capability_hints or {}
+        # A2 L3 DOM 探针:DomProber | None;None=未接入,_pick_strategy_cmd 跳过 L3(向后兼容)。
+        self._dom_prober = dom_prober
+        # A2 L3 挂起策略:_pick_strategy_cmd 选中 L3 时存此字段(verify_cmd 仍 None),
+        # verify 阶段检测到此字段则走 DomProber 路径而非 run_verify_gate。每轮 reset。
+        self._pending_l3_strategy: "Any | None" = None
+        # A2 Major-2:propose_dom_verify 声明时附带的 expected_text（可为空串）。
+        # 与 _pending_l3_strategy 同生命周期（一起 reset/消费）；覆盖 capability_hints['dom_expected_text']。
+        self._pending_dom_expected_text: str = ""
         # P4 §7 意图确认挂起:call_id 注册表,与 _plan_call_registry 同构。
         # _intent_confirm_registry:call_id → asyncio.Event,respond_intent_confirm 唤醒 loop。
         # _intent_confirmed:确认结果(True=继续, False=取消);_intent_effective_goal:确认后目标。
@@ -391,6 +414,9 @@ class AgentLoop:
         self._intent_confirm_registry = {}
         self._intent_confirmed = False
         self._intent_effective_goal = None
+        # A2 L3:每轮重置挂起 L3 策略(防上轮残留泄漏)。
+        self._pending_l3_strategy = None
+        self._pending_dom_expected_text = ""
 
     def _on_propose_verify(self, cmd: str) -> bool:
         """agent 调 propose_verify('<cmd>') 时登记验证命令(host 侧;真执行在 verify 阶段)。
@@ -420,6 +446,64 @@ class AgentLoop:
             return False
         self._verify_cmd = cmd
         return True
+
+    def _on_propose_dom_verify(self, raw_args: str) -> bool:
+        """agent 调 propose_dom_verify(url=..., selector=..., expected_text=...) 时登记 L3 策略。
+
+        与 propose_verify 同构：
+          · host 侧解析代码文本（沙箱子进程拿不到回调）。
+          · url 必须是 http(s)；拒 file:// 等协议（安全）。
+          · selector / expected_text 各不超过 500 字符（防滥用）。
+          · 有显式 expected_text 时走强证据路径（可产 passed/failed）；
+            无 expected_text 时走弱证据路径（最高 unverifiable）。
+          · 构造 L3 VerifyStrategy 存入 _pending_l3_strategy（等同
+            _pick_strategy_cmd 的 L3 分支，但来自 agent 显式声明，更可靠）。
+          · 只有 _dom_prober 已注入才生效；否则静默忽略（向后兼容）。
+          · 若 _verify_cmd 已设（显式命令优先）→ 忽略（不覆盖）。
+
+        返回是否登记成功（False=被拒/忽略，True=已写入 _pending_l3_strategy）。
+        """
+        # 显式 verify_cmd 优先 —— 已有命令不被 DOM 声明覆盖
+        if self._verify_cmd is not None and self._verify_cmd.strip():
+            return False
+        # DomProber 未注入 → 静默忽略（向后兼容）
+        if self._dom_prober is None:
+            return False
+
+        # 解析关键字参数
+        url_m = _DOM_KW_URL.search(raw_args)
+        sel_m = _DOM_KW_SEL.search(raw_args)
+        exp_m = _DOM_KW_EXP.search(raw_args)
+
+        url = url_m.group(1).strip() if url_m else ""
+        selector = sel_m.group(1).strip() if sel_m else "body"
+        expected_text = exp_m.group(1).strip() if exp_m else ""
+
+        # url 校验：必须 http(s)，拒其余协议（file://, ftp://…）
+        if not url or not _DOM_URL_ALLOWED.match(url):
+            return False
+        # 长度上限防滥用
+        if len(selector) > _DOM_PARAM_MAX or len(expected_text) > _DOM_PARAM_MAX:
+            return False
+
+        # 构造 L3 VerifyStrategy 并存入 _pending_l3_strategy
+        try:
+            from argos_agent.verify.strategy import VerifyStrategy
+            hints: dict[str, str] = {
+                "dom_url": url,
+                "dom_selector": selector,
+            }
+            if expected_text:
+                hints["dom_expected_text"] = expected_text
+            # 通过已有的 _l3_dom_assert 构造器（重用 rationale 逻辑）
+            from argos_agent.verify.strategy import _l3_dom_assert
+            strategy = _l3_dom_assert(hints)
+            self._pending_l3_strategy = strategy
+            # 与策略一起存 expected_text，供 _run_dom_probe_verdict 传给 DomProber
+            self._pending_dom_expected_text = expected_text
+            return True
+        except Exception:  # noqa: BLE001 — fail-closed，任何异常静默忽略
+            return False
 
     def respond_plan_decision(
         self, call_id: str, action: str, feedback: str | None = None,
@@ -484,10 +568,14 @@ class AgentLoop:
           · 首 token 不能在 _TRIVIAL_VERIFY_BINS(反琐碎,与 _on_propose_verify 一致)。
           · 被拒 → 跳下一候选(诚实降级链);所有候选都拒或只剩 L5 → 返 None(走旧路径)。
 
-        L3(dom_assert)和 cmd=None 的 L2 候选本期跳过(P6 接浏览器执行器后回填)。
+        L3(dom_assert,cmd=None)候选：若 DomProber 已接入则挂入 _pending_l3_strategy,
+        返 None（verify_cmd 仍 None）；verify 阶段检测到 _pending_l3_strategy 后走探针路径。
+        DomProber=None 时跳过 L3（向后兼容：行为同本期之前）。
+
+        cmd=None 的 L2 候选继续跳过（具体文件名未知，接线层暂未实现）。
         L5 候选 → 直接返 None(维持现有 NO_TEST 路径,行为 100% 不变)。
 
-        不修改任何外部状态;绝不抛(fail-closed:任何异常 → 返 None 走旧路径)。
+        不修改任何外部状态（_pending_l3_strategy 除外）;绝不抛(fail-closed:任何异常 → 返 None 走旧路径)。
         """
         try:
             from argos_agent.verify.strategy import generate, probe_workspace, WorkspaceFacts
@@ -507,11 +595,14 @@ class AgentLoop:
                 if s.level == "L5":
                     # L5 退路 → 维持旧 NO_TEST 诚实路径,绝不假装有 cmd
                     return None
+                if s.level == "L3" and s.kind == "dom_assert":
+                    # A2 L3 dom_assert：接入了 DomProber 才挂起；否则跳过（向后兼容）。
+                    if self._dom_prober is not None:
+                        self._pending_l3_strategy = s
+                        return None  # verify_cmd 仍 None；verify 阶段走 DOM 探针路径
+                    continue  # DomProber=None → 跳过，继续找下一候选
                 if s.cmd is None:
-                    # L2 artifact_exists 等 cmd=None 候选 → 本期跳过(P6 接执行器后回填)
-                    continue
-                if s.level == "L3":
-                    # L3 dom_assert → 需外部浏览器执行器,本期跳过
+                    # L2 cmd=None 候选（具体文件名未知）→ 暂跳过
                     continue
                 # L1/L2 且有 cmd → 过两道门校验(与 propose_verify 同款)
                 try:
@@ -531,6 +622,92 @@ class AgentLoop:
             return None  # 所有候选都不满足 → 回退旧路径
         except Exception:  # noqa: BLE001 — 策略生成失败不挂 run(fail-closed 回退旧路径)
             return None
+
+    async def _run_dom_probe_verdict(self, strategy: Any, *, attempt: int) -> "Verdict":
+        """A2 L3 DOM 探针：调 DomProber，返回三态 Verdict，并通过 harness bus 投 VerifyVerdict。
+
+        安全不变量：
+          · error 非空 → unverifiable（浏览器不可用/超时/异常，绝不假装 passed）。
+          · found=False + error 空 → failed（真实证据：元素不存在/文本不匹配，回灌 bounce）。
+          · found=True → Verdict.passed（detail 含探针证据摘录，走既有 break/report 路径）。
+          · 任何异常 → unverifiable（fail-closed，不挂 run）。
+
+        此方法在 host 侧 verify 阶段调用（run() 的 async 上下文内），DomProber.probe 是同步的，
+        用 asyncio.to_thread 包装避免阻塞事件循环。
+        """
+        import asyncio as _asyncio
+        from argos_agent.core.types import Verdict
+        from argos_agent.protocol.events import VerifyVerdict as _VV
+
+        # 从策略解析 url / selector / expected_text
+        target = strategy.target or ""
+        # target 格式："{url}#{selector}"（见 strategy._l3_dom_assert）
+        if "#" in target:
+            url_part, selector = target.split("#", 1)
+        else:
+            url_part, selector = target, "body"
+        url = url_part if url_part.startswith("http") else None
+
+        # expected_text 来源优先级：
+        #   1. _pending_dom_expected_text（propose_dom_verify 显式声明）
+        #   2. capability_hints['dom_expected_text']（registry hint 路径，作为兜底）
+        expected_text: str | None = (
+            self._pending_dom_expected_text
+            or self._capability_hints.get("dom_expected_text")
+            or None
+        )
+
+        try:
+            # DomProber.probe 是同步阻塞（Playwright queue），包进 thread 避免阻塞 event loop
+            prober = self._dom_prober
+            result = await _asyncio.to_thread(
+                prober.probe, url, selector, expected_text=expected_text
+            )
+        except Exception as exc:  # noqa: BLE001 — fail-closed
+            result_type = type(exc).__name__
+            result_err = f"DOM 探针线程异常：{result_type}: {exc}"
+            # 构造一个哨兵 result（不引入循环 import）
+            class _R:  # noqa: N801 — 局部哨兵
+                found = False
+                text_excerpt = ""
+                error = result_err
+            result = _R()  # type: ignore[assignment]
+
+        rationale = strategy.rationale_human
+        label = f"dom_assert:{selector}"
+
+        if result.error:
+            # 浏览器不可用/异常 → unverifiable（诚实）
+            detail = (
+                f"[L3 DOM 探针] {rationale}\n"
+                f"探针错误（unverifiable）：{result.error}"
+            )
+            verdict = Verdict(
+                status="unverifiable",
+                detail=detail,
+                verify_cmd=label,
+                attempts=attempt,
+            )
+        elif result.found:
+            # 元素存在（且 expected_text 命中，若有）→ passed（带探针证据）
+            excerpt = result.text_excerpt[:200] if result.text_excerpt else "（无文本摘录）"
+            detail = (
+                f"[L3 DOM 探针] {rationale}\n"
+                f"元素 {selector!r} 存在。摘录：{excerpt}"
+            )
+            verdict = Verdict.passed(detail=detail, verify_cmd=label, attempts=attempt)
+        else:
+            # 元素不存在/文本不匹配 → failed（真实证据，回灌 bounce）
+            detail = (
+                f"[L3 DOM 探针] {rationale}\n"
+                f"元素 {selector!r} 在页面中未找到（或 expected_text 不匹配）。"
+                "请检查网页改动是否已生效，或检查选择器是否正确。"
+            )
+            verdict = Verdict.failed(detail=detail, verify_cmd=label, attempts=attempt)
+
+        # 投 VerifyVerdict 事件（走既有账本/TUI 路径）
+        await self._harness.bus.emit(_VV(verdict=verdict))
+        return verdict
 
     async def run(self, goal: str, session_id: str) -> AsyncIterator["Event"]:
         """驱动一次 run。plan→act→verify→report,投并持久化每个 Event(一份事件三用)。
@@ -1000,6 +1177,13 @@ class AgentLoop:
             # verify 阶段 harness 独立跑它(退出码为准);agent 碰不到执行 → 防篡改测试作弊。
             for m in _PROPOSE_VERIFY.finditer(text):
                 self._on_propose_verify(m.group(1))
+
+            # A2 Major-2:抓 propose_dom_verify(url=..., selector=..., expected_text=...) →
+            # 构造 L3 VerifyStrategy 存 _pending_l3_strategy(与 propose_verify 同构)。
+            # host 侧解析:沙箱子进程拿不到回调;沙箱内同名函数只返回登记回执。
+            for dm in _PROPOSE_DOM_VERIFY.finditer(text):
+                self._on_propose_dom_verify(dm.group(1))
+
             # 拒登记回灌:H1 伪命令(永远是) + W5 桥接 verify 锁(默认开,关需 ARGSOS_BRIDGE_VERIFY_LOCK=0)。
             if self._verify_rejected is not None:
                 if os.environ.get("ARGSOS_BRIDGE_VERIFY_LOCK", "1") != "0" \
@@ -1227,11 +1411,26 @@ class AgentLoop:
                     and not os.environ.get("ARGOS_NO_VERIFY_STRATEGY")):
                 self._verify_cmd = self._pick_strategy_cmd(goal)
 
-            # W2:run_verify_gate 跑 verifier 出三态 Verdict,投 VerifyVerdict;真问题超
-            # max_rounds 时它自己投 Escalation。loop 据返回的 verdict 决定 break / bounce。
-            verdict = await self._harness.run_verify_gate(
-                self._verify_cmd, attempt=self._fail_count + 1
-            )
+            # A2 L3 DOM 探针：_pick_strategy_cmd 若选中 L3 dom_assert 策略，
+            # _pending_l3_strategy 已被设置且 _verify_cmd 仍为 None。
+            # 此时不走 run_verify_gate（无 shell 命令），而是同步调 DomProber → 三态 Verdict。
+            # 安全不变量：
+            #   · 只有 _dom_prober 已注入才会有 _pending_l3_strategy（_pick_strategy_cmd 保证）。
+            #   · error 非空 → unverifiable（诚实）；error 空 found=False → failed（真实证据）；
+            #     found=True → passed（用户级，走既有 break/report 路径）。
+            #   · 显式 verify_cmd 不会到达此分支（_verify_cmd is None 才走策略生成）。
+            if self._pending_l3_strategy is not None and self._verify_cmd is None:
+                verdict = await self._run_dom_probe_verdict(
+                    self._pending_l3_strategy, attempt=self._fail_count + 1
+                )
+                self._pending_l3_strategy = None  # 已消费，清空
+                self._pending_dom_expected_text = ""  # 同步清空
+            else:
+                # W2:run_verify_gate 跑 verifier 出三态 Verdict,投 VerifyVerdict;真问题超
+                # max_rounds 时它自己投 Escalation。loop 据返回的 verdict 决定 break / bounce。
+                verdict = await self._harness.run_verify_gate(
+                    self._verify_cmd, attempt=self._fail_count + 1
+                )
             last_verdict = verdict
             # 压缩后的诚实兜底:这一刻真重跑过 verify(退出码为准)→ 标记已重验,
             # passed 才可信(trust_passed_after_compaction)。无论结局如何都置位:重验确实发生了。

@@ -121,3 +121,40 @@ class LedgerStore:
         """判断该 run 的 undo 是否已完成(含 undo_done 标记)。"""
         entries = self.replay(run_id)
         return any(e.action == "undo_done" for e in entries)
+
+    def get_entry(self, run_id: str, seq: int) -> "LedgerEntry | None":
+        """按 seq 取单条 LedgerEntry;不存在返 None。"""
+        for e in self.replay(run_id):
+            if e.seq == seq:
+                return e
+        return None
+
+    def mark_entry_done(self, run_id: str, seq: int) -> bool:
+        """将指定 seq 条目的 undo_state 从 available 改为 done,覆写文件。
+
+        返回 True = 成功找到并标记;False = 条目不存在或状态不是 available。
+        best-effort:IO 失败 log + 返 False。
+        """
+        entries = self.replay(run_id)
+        target = None
+        for e in entries:
+            if e.seq == seq:
+                target = e
+                break
+        if target is None or target.undo_state != "available":
+            return False
+
+        updated = [
+            e.with_undo_state("done") if e.seq == seq else e
+            for e in entries
+        ]
+        p = self._path(run_id)
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with p.open("w", encoding="utf-8") as fh:
+                for e in updated:
+                    fh.write(json.dumps(e.to_dict(), ensure_ascii=False) + "\n")
+        except OSError as e:
+            log.warning("ledger: mark_entry_done 写入失败 %s seq=%d: %s", p, seq, e)
+            return False
+        return True

@@ -115,6 +115,14 @@ class ApprovalGate:
         # None = fallback 到模块级单例(向后兼容测试/headless 路径)。
         self._permissions_config: Any | None = permissions_config
         self._audit_log: Any | None = audit_log
+        # L0/L2 Trust Dial 语义标志(由 set_trust_level 写入):
+        # _ask_readonly  : L0 → True,让 evaluator 把 approve 升格 ask(含只读动作)。
+        # _reversible_check: L2 → True,让 evaluator 走 reversible_lookup 路径。
+        # _reversible_lookup: app_factory 从 CapabilityRegistry manifest 构造并注入;
+        #   None = 保守退化(L2 时所有动作均保守 ask)。
+        self._ask_readonly: bool = False
+        self._reversible_check: bool = False
+        self._reversible_lookup: "Callable[[str], bool | None] | None" = None
 
     def set_level(self, level: ApprovalLevel) -> None:
         self.level = level
@@ -123,23 +131,24 @@ class ApprovalGate:
         """将 TrustLevel 映射到 ApprovalLevel 并写入 gate（Trust Dial 接线入口）。
 
         接受 TrustLevel 枚举实例。映射规则来自 trust_dial.to_approval_semantics()：
-          L0_EVERY_STEP      → CONFIRM（ask_readonly=True：只读也问，由 evaluator 软规则实现）
-          L1_DANGEROUS_ONLY  → CONFIRM（仅高风险问；默认行为）
-          L2_IRREVERSIBLE_ONLY → CONFIRM（不可逆才问；P2 manifest reversible 就位前退化 L1）
-          L3_SESSION_TRUSTED → ACCEPT_EDITS（同类批过后本会话放行）
-          L4_AUTONOMOUS      → AUTO（全自治；TUI 显红灯）
+          L0_EVERY_STEP        → CONFIRM（ask_readonly=True：只读也问，evaluator 升格 approve→ask）
+          L1_DANGEROUS_ONLY    → CONFIRM（仅高风险问；默认行为）
+          L2_IRREVERSIBLE_ONLY → CONFIRM（不可逆才问；依赖 reversible_lookup；
+                                          lookup 返回 True → 放行；False/None → 保守 ask）
+          L3_SESSION_TRUSTED   → ACCEPT_EDITS（同类批过后本会话放行）
+          L4_AUTONOMOUS        → AUTO（全自治；TUI 显红灯）
 
         HARD RULES 在任何档位继续生效（由 evaluator hard 层强制；不经此方法绕过）。
-        L2 reversible_check 依赖 P2 能力 manifest reversible 字段；P2 未完成前退化 L1 行为，
-        已在 to_approval_semantics 文档中诚实标注，本方法不作额外处理（保守方向）。
+        L2 reversible_lookup 来自注入的 _reversible_lookup;未注入时退化保守 ask（不问任何 False/None 也问）。
         """
-        from argos_agent.permissions.trust_dial import to_approval_semantics
+        from argos_agent.permissions.trust_dial import TrustLevel, to_approval_semantics
         sem = to_approval_semantics(trust)
         al_str = sem["approval_level"]
         self.set_level(ApprovalLevel(al_str))
-        # L0 ask_readonly 语义：存下标志，evaluator 可据此放宽"只读也问"过滤。
-        # 当前 evaluator 路径无此字段 → 保守存储，不影响现有行为。
+        # L0 ask_readonly 语义：True → evaluator 把 approve 升格为 ask（含只读动作）。
         self._ask_readonly: bool = bool(sem.get("ask_readonly", False))
+        # L2 reversible_check 语义：True → evaluator 调用 _reversible_lookup 查表。
+        self._reversible_check: bool = bool(sem.get("reversible_check", False))
         # 存原始档位供 /trust status 精确回读(反向映射 ApprovalLevel→TrustLevel 有损:
         # L0/L1/L2 都落在 CONFIRM,status 会把 L2 误报成 L1 —— 对用户撒谎,不允许)。
         self._trust_level = trust
@@ -148,6 +157,21 @@ class ApprovalGate:
         """Smart approval(spec 2026-06-06 §2.3 / D14):host 启动时把当前 workspace 注入
         gate,evaluator 据此跑 workspace 边界 check(workspace 内写文件不算系统路径)。"""
         self._workspace = workspace
+
+    def set_reversible_lookup(self, fn: "Callable[[str], bool | None] | None") -> None:
+        """注入 L2 可逆性查表函数(Trust Dial §6.2)。
+
+        L2_IRREVERSIBLE_ONLY 档位下,evaluator 调用 fn(action) 查询动作是否可逆：
+          fn 返回 True  → 可逆,自动放行(trigger="trust:L2 可逆放行")。
+          fn 返回 False → 不可逆,保守 ask。
+          fn 返回 None  → reversible 未知,保守 ask。
+          fn 抛异常     → 保守 ask(fail-closed)。
+
+        由 app_factory 从 CapabilityRegistry.get(action).reversible 构造并注入；
+        未注入（None）= 保守退化（L2 下所有动作均 ask）。
+        HARD RULES/secret/soft deny 路径不受此函数影响。
+        """
+        self._reversible_lookup = fn
 
     def set_session_id(self, session_id: str) -> None:
         """绑定 AuditLog 的 session_id(供 jsonl 行携带 session 关联)。"""
@@ -247,13 +271,19 @@ class ApprovalGate:
     # ── Smart approval 内部 helper(spec 2026-06-06 §2.6) ──────────────
     def _evaluate(self, action: str, args: dict[str, Any]) -> "DecisionMeta | None":
         """跑 evaluator;模块出错(import / config 坏)→ 返 None 退回 legacy 语义。
-        优先使用注入的 permissions_config(per-session);无注入则 fallback 到模块级单例。"""
+        优先使用注入的 permissions_config(per-session);无注入则 fallback 到模块级单例。
+        L0/L2 语义标志(ask_readonly/_reversible_check/_reversible_lookup)经参数透传。
+        """
         try:
             from argos_agent.permissions import evaluate, get_config
             cfg = self._permissions_config if self._permissions_config is not None else get_config()
+            # L2:仅在 _reversible_check=True 时传入 reversible_lookup;否则传 None(保守/L1)。
+            rl = self._reversible_lookup if getattr(self, "_reversible_check", False) else None
             return evaluate(
                 action, args, gate_level=self.level, config=cfg,
                 workspace=self._workspace,
+                ask_readonly=getattr(self, "_ask_readonly", False),
+                reversible_lookup=rl,
             )
         except Exception:  # noqa: BLE001 — Smart approval 出错绝不阻塞调用方
             return None

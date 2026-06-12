@@ -711,10 +711,7 @@ class ArgosApp(App):
                 f"当前信任档位：{current_trust.name}（{current_trust.label_human}）",
                 current_trust.description,
             ]
-            # 诚实标注:L0/L2 细粒度语义(只读也问/仅不可逆问)待 evaluator 接线,
-            # 当前按保守 CONFIRM 执行 —— 只会多问,不会少问。
-            if current_trust in (TrustLevel.L0_EVERY_STEP, TrustLevel.L2_IRREVERSIBLE_ONLY):
-                lines.append("（注：本档细粒度语义接线中，当前按保守 CONFIRM 执行——只会多问，不会少问）")
+            # L0/L2 细粒度语义已接线:L0 连只读也问;L2 可逆自动放行/不可逆保守 ask。
             lines += [
                 "",
                 "可用档位：",
@@ -837,11 +834,22 @@ class ArgosApp(App):
             )
             return
 
+        # 检查是否有文件粒度可撤条目(undo_token 含 "file:" 前缀)
+        has_file_undo = any(
+            e.undo_state == "available"
+            and e.undo_token
+            and e.undo_token.startswith("file:")
+            for e in visible
+        )
+
         lines = [f"行为账本 · run {run_id} · 共 {len(visible)} 条"]
         for e in visible:
             # 撤销状态标记
             if e.undo_state == "available":
-                state_mark = "[可撤]"
+                if e.undo_token and e.undo_token.startswith("file:"):
+                    state_mark = "[可撤·文件]"
+                else:
+                    state_mark = "[可撤]"
             elif e.undo_state == "done":
                 state_mark = "[已撤]"
             else:
@@ -849,6 +857,13 @@ class ArgosApp(App):
             # 风险标记
             risk_mark = {"low": "", "medium": "[!]", "high": "[!!]"}.get(e.risk, "")
             lines.append(f"  {e.seq:>3}. {state_mark}{risk_mark} {e.summary_human}")
+
+        if has_file_undo:
+            lines.append("")
+            lines.append(
+                "提示:文件条目支持粒度撤销 — 使用 daemon 端点 POST /runs/{id}/undo"
+                ' body {"entry_seq": N} 还原单个文件'
+            )
 
         await log.append_line("\n".join(lines), kind="system")
 
