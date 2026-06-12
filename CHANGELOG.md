@@ -8,6 +8,36 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+- **v6「可托付的贾维斯」— P0-P6 全落地**:将 Argos 从单进程 TUI agent 重构为**内核 / 协议 / 客户端三层架构**,让"守着看"变成"托付给它跑、随时接管"成为可能。总设计 `docs/argos-v6-design.md`(8 路子系统侦察 + 3 派提案 + 3 镜头裁决,Confidant 胜出)。P0-P6 各阶段：
+  - **P0 协议层**(`argos_agent/protocol/`):全事件族 + `EventBus` 搬入 `protocol/events.py`(内核与客户端共享 ABI);`EventEnvelope`(`v/seq/kind/id/ts/session/run/data`);`tui/events.py` 降为纯转发 shim,52 处 import 路径零破坏;`tests/protocol/` 67 个黄金 JSON 字段冻结 + round-trip + 架构契约测试
+  - **P1 内核通电**(`app_factory.py` + `daemon/`):daemon 真跑 run;`plan_mode` 模块布尔 → `RunContext` contextvar;`McpManager`/`BrowserController` → `AppComponents` 实例注入(全局去单例);`build_run_stack` per-run 全新 sandbox/gate/broker(共享 store/model/认知面,消灭并发串台);无 key 时 `create_run` 503 诚实拒绝
+  - **P2 能力注册表**(`argos_agent/capability/`):Capability manifest(frozen,risk 缺失注册期 `ValueError`) + `CapabilityRegistry`(重名拒 / 不可变视图 / visibility 过滤 / egress 聚合);broker `_execute` 前置 registry dispatch;`ALL_TOOL_NAMES` → `get_tool_names(registry)` 动态派生(/tools 诚实计数);新增 `tests/capability/` + `test_broker_registry_dispatch.py` 共 4 文件 ~1200 行测试,含"加能力只改 manifest,四处禁区未被触碰"AST 断言
+  - **P3 跨进程审批回路**(`daemon/server.py` + `core/loop.py`):call_id 路由(`_workers: dict[run_id → RunWorker]`);SSE 扇出 approval_request 事件解决竞态;`DaemonApprovalGate.respond(call_id)` 立即 resolve;超时 deny fail-closed + 落盘;并发隔离(run A 的 call_id 不能被 run B 接受);`PlanDecisionRequest` 协议化 + 300s 超时 fail-closed;`MemoryRecallEvent` 入协议 ABI
+  - **P3b 行为账本 Ledger**(`argos_agent/ledger/`):四模块(LedgerEntry 可逆三态 / 确定性人话模板 / JSONL 回放 / run 级 undo);`GET/POST /runs/{id}/ledger|undo`;TUI `/ledger` 命令;不可逆动作标 `impossible` 不假装;TUI 降为 daemon 协议客户端(`DaemonEventSource` SSE 续传 + `probe_or_spawn` 自动拉起 + 双路 `start_run`)
+  - **P4 intent 确认回路 + verify 策略自动生成 + Trust Dial**:intent 引擎(`argos_agent/intent/`)NL→Goal 意图预解析,高风险词必确认,超时 120s fail-closed;verify 策略自动生成(`verify/strategy.py`,L1-L5 验证梯子;发送/购买/通知类直接 L5 红线);Trust Dial(`permissions/trust_dial.py`)L0-L4 五档,`/trust` 命令,升档须 InlineChoice 确认,HARD RULES 任何档位不放行;`/yolo=L4` 别名
+  - **P5 conductor 自治核心**(`argos_agent/conductor/`):StandingOrder 人话规矩 + `cronlite.py` 零依赖 cron-lite(@别名/HH:MM/every N/五段);`triggers.py` mtime 轮询+glob+去抖(边界牢笼,`'..'` 与 symlink 逃逸 fail-closed);`proposals.py` `requires_confirmation` 恒 `True`(构造期断言,契约级);tick 幂等防重发;P5b conductor supervisor 宿主进 daemon,结构性"绝不自动执行":supervisor 物理上无法调用 `create_run`(负向断言测试钉死);confirm 红线双写死 `isolation=worktree` + `trust_level=L1`
+  - **P6a computer use**(`argos_agent/perception/`):ComputerAction 7 种动作 + `ComputerExecutor` 零依赖 macOS 后端(screencapture/osascript/open -a);Accessibility 权限被拒返人话指引;非开发者域 HARD RULES(金融文本正则/支付类 app → hard CONFIRM,L4 不放行);conductor 自治 run 一律 RED 拒绝;`ARGOS_COMPUTER_USE=1` 旗标默认关
+  - **P6b 桌面端通道**(`desktop/`):TS ACP SDK(`desktop/sdk/`,零运行时依赖,30 事件 kind 对齐 `protocol/events.py`);`parse.ts` 前向兼容;`client.ts` Unix socket 镜像 daemon 15 端点;黄金向量 33 个 Python 真序列化向量(node:test 39 测试);Tauri 2 行走骨架(`desktop/shell/`),Rust UDS 桥 8 个 IPC 命令,verdict 三态着色(unverifiable=黄,绝不绿)
+
+- **欠账冲刺 A — Trust Dial 细粒度语义 + L3 DOM 验证通道 + 条目级 undo**:
+  - **A1 Trust Dial 真语义**:L0 每步确认(只读也问);L2 `reversible_lookup` 从 capability manifest 构造注入(True=放行带审计痕迹,False/None/异常=保守 ask);HARD RULES/secret 链头短路任何档位;40 条定向测试
+  - **A2 验证梯子 L3 DOM 断言通电**(`DomProber`,host 侧器件):loop 接 `_pending_l3_strategy` 走探针三态;诚实分级——显式 `expected_text` 才可 `passed/failed`,仅选择器弱提示最高 `unverifiable`(反假绿断言钉死);`propose_dom_verify` host 解析(与 `propose_verify` 同构)
+  - **A3 条目级 undo(文件粒度)**:独立文件快照 per-entry(不依赖整 run snapshot);`POST /runs/{id}/undo` 可选 `entry_seq` 单文件回滚(非文件条目/重复撤销等诚实 409 五分);`undo_state` 三态(reversible/impossible/done)
+
+- **欠账冲刺 B — sidecar 自动拉起 + SDK 单源化 + 向量双向防漂移**:
+  - **B1 sidecar 状态机**(`ConnState` probing→spawning→connected/failed,绝不假 connected);`ARGOS_DAEMON_CMD` 可配;拉起失败带 stderr 摘要;窗口关闭不杀常驻内核;acp_heartbeat 10s 前端心跳 + 失效自动重建 session
+  - **B2 SDK 单源化**:`sync_to_shell.mjs` + 漂移测试(内存复现变换与已提交副本逐字节比对,手改即红;已验证可误性);check/build 去写副作用
+  - **B3 向量双向防漂移**:`tests/desktop_channel/` Python 侧 deserialize→serialize→比对入库向量;TS 钉 parse 侧,Python 钉 serialize 侧;31/31 kind 全覆盖
+
+- **desktop .app bundle + 三轨并行加固**:
+  - **桌面壳 .app bundle**:PIL 生成 1024×1024 图标 → `npx tauri icon` 全套;`tauri.conf.json bundle.active=true`;`packaging/build_desktop.sh`(npm ci → tsc → tauri build + codesign 校验);`packaging/desktop.md`(签名状态如实:ad-hoc 未公证;版本单源纪律);实测 release 构建通过,`Argos_0.1.0_aarch64.dmg` 产出
+  - **运行时冒烟测试**(`tests/desktop_smoke/`):起真窗口 + 隔离 daemon,session 注册 = JS 存活铁证(≤20s),心跳前移 = bug4 回归钉;构建失败报红不 skip;teardown 不留孤儿
+  - **验证策略中文泛化**:动词锚定提取(整理到/保存到/创建/生成… 中英双语)→ L2 `artifact_exists`(`test -d/-e`);防过度提取三红线(否定语境/模板占位/路径合法性);61 新测试
+
+- **性能:pytest-xdist 并行化 + SSE keepalive 压缩**:
+  - `pytest-xdist` 上车,全量测试 355s→100-150s(2.4-3.5x),零削弱零生产改动;推荐命令 `uv run pytest -n auto --dist loadgroup`;9 个真子进程/真等待测试补标 `@slow`;binary-dist xdist_group 串行互斥(防 dist/ 重建并发竞态)
+  - SSE keepalive 15s→2s(`daemon/server.py`),断连感知延迟与测试 teardown 各省 ~13s
+
 - **TUI v3「黑曜石之眼」(Obsidian Eye) 全面重设计**:**视觉系统从 27 行 theme 升级为完整 design token 体系,百眼母题成为贯穿全系统的状态语言**。设计过程:3 个 opus 设计方向(瞭望塔仪表/黑曜石极简/百眼签名)并行探索 → 3 镜头评审(美学/Textual 可实现性/产品灵魂)→ 裁决综合 = **B 底盘 + C 签名 + A 仪表**。**核心架构**:
   - **Design tokens**(`tui/theme.py` 27→100+ 行):背景 4 层纵深(`$abyss/$well/$stream/$raise`)+ 墨色 5 阶亮度阶梯(`$ink-bright→$ink-ghost`,纵深引擎)+ 发丝线 2 档 + 金系 3 档(`$eye-soft/$eye/$eye-glow`)+ 语义色(`$pass/$pass-weak/$fail/$unverif/$cyan`);**金橙分家**:chrome 注意力金 #D9A85C 与 unverifiable 橙 #FF9E64 拉开,YOLO 徽标改红(危险态);主题注册名 `argos-night` 不变
   - **眼睛状态机**(百眼母题,全 EAW=N 实测安全字形):`◌`未睁/空态 `◓`等审批 `◔`plan `◉`act `❂`verify `◕`report/done `◍`格纹瞳(self-verified 专用);**v2 emoji 全部处决**(🟢⏳→⏵⏸⏹+眼系),⚠ 强制 VS15 文本形 `⚠︎`,根治宽度对齐灾难
@@ -92,6 +122,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - **opt-out**:`ARGOS_NO_MEMORY=1` 跳过注入
   - **D16**:`/memory` / `/remember` / `/forget` 不进 `COMMAND_HELP`(避免菜单过宽),`parse_slash` 仍识别为 known
   - **0 新外部依赖**(stdlib only);+69 测试(6 文件:`test_memory_tiers` 11 / `test_memory_ranking` 11 / `test_claude_md_walker` 12 / `test_memory_commands` 26 / `test_memory_capture` 10 / `test_memory_injection` 6 / `test_memory_decay` 7);不做(留 v1.1):embedding 语义检索 / 跨机同步 / memory 写入 hook / per-skill 真实隔离
+
+### Fixed
+- **field-test 六连修 — 真实场景试驾抓出的全链路 bug**:实测方法:真用户路径(TUI 整理文件夹 + 桌面壳写文件),三单任务全程观察。
+  - **bug1 workspace 丢失**:`argos` 不带 `--project` 时落默认目录,agent 在错误目录干活 → `resolve_workspace` 默认 cwd(home/根目录护栏);`ArgosApp` 收 workspace 与内核同源
+  - **bug2 中文 mojibake**:SSE 数据体 UTF-8 被客户端按 latin-1 解码('当前目录'→'å½åç®å½') → daemon_source/client 两处读取端改 utf-8
+  - **bug3 重启 TUI 永久 403**:`reap_expired` 实现后零调用(空壳病),owner 永不过期 → `_require_session` 按需 reap,过期 owner 让位
+  - **bug4 桌面壳零心跳**:session 30s 过期变僵尸客户端 → `acp_heartbeat` 命令 + 前端 10s 心跳 + 失效自动重建 session
+  - **bug5 桌面壳前端从未执行**:`index.html` 引用从未构建的 `../dist/main.js`(`tsc --noEmit` 不产物),'Initializing' 是写死文案,cargo/tsc 双绿但窗口是植物人 → `withGlobalTauri` 全局(零打包器正道)+ tsc 真产出进 `frontendDist` + 入库
+  - **bug6 测试隔离洞**:真 daemon 在跑时 7 个 TUI 测试漏连用户内核(403/可能建真 run) → 测试隔离修复
 
 ## [0.1.0] - 2026-06-06
 

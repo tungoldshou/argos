@@ -42,6 +42,9 @@ Argos has three core moats (see [docs/argos-product-definition.md](docs/argos-pr
 - Code execution that escapes the sandbox
 - Verify gate bypass
 - Approval gate bypass
+- Computer-use abuse (`computer.*` tools, `perception/`) — OS-level screen/mouse/keyboard
+  actions; requires `ARGOS_COMPUTER_USE=1` and Accessibility permission; all actions are
+  broker-gated (risk=high, reversible=False, hard CONFIRM)
 
 **Out of scope (by design):**
 - User-installed hooks (`~/.argos/hooks.json`) — user code, user responsibility

@@ -44,7 +44,7 @@ Argos Context Breakdown
     · project             340 tok  [est]
     · skill               220 tok  [est]
     · session              63 tok  [est]
-  tools (22)          1,120 tok  [est]    core/loop.py:430
+  tools (30)          1,120 tok  [est]    core/loop.py:430
   messages            4,517 tok  [api]    memory/store.py:259
 ──────────────────────────────────────────────────
 [green]total 8,100 tok / 200,000 (4.0%)[/green]

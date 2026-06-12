@@ -1,5 +1,7 @@
 # Argos — 产品定义(v5,基于实测证据)
 
+> **后续架构演进见 [`docs/argos-v6-design.md`](argos-v6-design.md)**（v6 P0-P6 已全部实现，2026-06-12）。
+
 > 一句话:**让用不起/用不上强模型的人,在「结果能被验证的事」上,用便宜模型也拿到可靠、不撒谎的结果。**
 >
 > Argos 是一个独立的通用智能体。它不让模型变聪明,只用确定性工程让模型执行你意图的
@@ -67,7 +69,7 @@ agent 声称「完成」时,Argos 不信文字,强制跑一条可机检的验证
 **端到端(懂技术用户真实场景)**:在用户自己的项目里,agent 修对一个有 bug 的函数、
 跑用户自己的 pytest 验证通过(独立复核退出码 0)、没篡改测试。
 
-**回归防线**:476 个 pytest 锁死安全边界与行为(路径牢笼/命令白名单/退出码/防作弊隔离/
+**回归防线**:3224 个 pytest 锁死安全边界与行为(路径牢笼/命令白名单/退出码/防作弊隔离/
 篡改检测/契约分类/CodeAct 契约/浏览器与 MCP 端到端等),覆盖率 ≥80%;`argos --selftest`
 不连网整机自检 + 打包 binary smoke 全绿。
 
@@ -89,11 +91,11 @@ agent 声称「完成」时,Argos 不信文字,强制跑一条可机检的验证
   └─ 自建 CodeAct 引擎(core/loop.py,framework-free,仅 smolagents 做沙箱执行器)
        ├─ 四阶段不可跳:plan → act(抽 ```python 代码块→沙箱执行→回灌)→ verify → report
        ├─ 任意模型(core/protocols.py:Anthropic + OpenAI 双协议;argos setup 接入)
-       ├─ 工具(15 个,注入沙箱命名空间):
+       ├─ 工具(30 个,注入沙箱命名空间):
        │    · 文件:read/write/edit/search_file        · 计划:update_plan(真 TODO 拆解)
-       │    · shell:run_command(白名单+Seatbelt+路径牢笼)· 验证:propose_verify(独立硬门禁)
-       │    · 联网:web_search / web_extract            · 计算机控制:browser_*(浏览器自动化 ×5)
-       │    · 外部工具:mcp_call(原生 MCP,stdio JSON-RPC)
+       │    · shell:run_command(白名单+Seatbelt+路径牢笼)· 验证:propose_verify / propose_dom_verify
+       │    · 联网:web_search / web_extract            · 计算机控制:browser_*(×5) + computer.*(×7)
+       │    · LSP:lsp_definition/references/…(×6)   · 外部工具:mcp_call(原生 MCP,stdio JSON-RPC)
        ├─ verify 硬门禁 + escalation(harness)        ├─ 审批闸(broker:egress+审批+HMAC 回执)
        ├─ Skills 召回 + 契约层(按 goal 注入系统提示)  └─ SQLite 记忆 + 向量/FTS5 召回 + 上下文压缩
   TUI:argos-night 主题 / Markdown 高亮 / 右侧诚实活动栏(模型·进度·工具·回执·成本)/ 启动 logo

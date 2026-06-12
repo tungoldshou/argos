@@ -5,12 +5,15 @@
 
 ## 1. 用法
 
-### 1.1 启动 daemon + TUI
+### 1.1 启动 TUI（daemon 自动探测）
 
 ```bash
-# daemon 自动随 --with-daemon 启动
-argos --with-daemon
+argos
 ```
+
+TUI 启动时自动探测本地 daemon socket（`probe_or_spawn`）：已在运行则复用；
+未运行则尝试拉起 `argosd` 子进程并等待就绪（最多 3s）；拉起失败则退回 inline
+单进程模式（状态栏显 `inline`）。**不需要也不存在 `--with-daemon` 标志。**
 
 起手时,顶部出现一行 tab 条(只有当前 run,1 个 tab):
 

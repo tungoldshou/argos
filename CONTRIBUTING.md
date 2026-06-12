@@ -71,8 +71,10 @@ uv run pytest              # run all tests
 ```
 
 Test categories:
-- `uv run pytest` — full suite (excludes slow)
-- `uv run pytest -m slow` — slow tests (real subprocess, real pyright)
+- `uv run pytest` — full suite (includes slow; 3224 tests)
+- `uv run pytest -m "not slow"` — skip slow tests (real subprocess, real pyright)
+- `uv run pytest -m slow` — only slow tests
+- `uv run pytest -n auto --dist loadgroup` — parallel run via pytest-xdist (~100-150s vs 355s serial)
 - `uv run pytest --cov=argos_agent` — with coverage (≥80% threshold)
 
 ## Project Structure
@@ -80,21 +82,29 @@ Test categories:
 ```
 argos_agent/                # Main package
 ├── __init__.py            # version (importlib.metadata + _MEIPASS fallback)
-├── __main__.py            # CLI entry, daemon spawn, self-update check
+├── __main__.py            # CLI entry, self-update check
 ├── approval.py            # ApprovalLevel + ApprovalGate
 ├── core/                  # AgentLoop, harness, plan/act/verify/report phases
+├── protocol/              # Shared protocol layer: Event dataclasses + EventBus (v6 P0)
+├── capability/            # CapabilityRegistry — dynamic tool/skill registration (v6)
+├── conductor/             # Conductor engine — autonomous trigger & scheduling (v6)
+├── intent/                # NL→Goal intent cards (v6)
+├── ledger/                # Behavior ledger — append-only audit log (v6)
+├── perception/            # Computer-use executor (OS-level screen/mouse/keyboard) (v6)
 ├── sandbox/               # OS Seatbelt profiles, sandbox child
-├── tools/                 # 22 broker-gated tools (write_file, run_command, lsp_*)
-├── tui/                   # Textual UI (app, widgets, commands, events)
-│   ├── widgets/           # ModalScreen widgets
-│   └── events.py          # Frozen Event union
+├── tools/                 # 30 broker-gated tools (file, shell, web, browser, LSP, computer-use, …)
+├── tui/                   # Textual UI (app, widgets, commands)
+│   ├── widgets/           # ModalScreen widgets (tab_strip, activity_panel, …)
+│   └── events.py          # Compat shim → re-exports from protocol/events.py
 ├── hooks/                 # Hooks system (5 events: PreToolUse, PostToolUse, ...)
 ├── lsp/                   # LSP integration (pygls adapter + 6 lsp_* tools)
 ├── skills_runtime/        # AnalysisSkill runtime + 3 builtins (verify, security-review, simplify)
 ├── permissions/           # Smart approval (12 hard rules + soft rules)
-├── daemon/                # Long-running daemon + RunStore + 7 state machine
+├── daemon/                # Headless kernel daemon (argosd) + 7-state machine + HTTP/SSE server
 ├── web.py                 # web_search / web_extract
 ├── memory/                # Persistent memory
+├── routing/               # Per-task model routing + effort tiers
+├── context/               # Context-window analyzer + proactive compaction
 ├── workflow/              # Dynamic workflows (subagents, fanout)
 └── skills.py              # Built-in skill recipes (markdown)
 

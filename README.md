@@ -20,9 +20,11 @@ Three pillars carry the design:
   workspace. Approval gates sit on top for the destructive paths the
   user wants to opt into.
 
-Built as one Python process on Textual. Model-agnostic (Anthropic-Messages
-and OpenAI-compatible endpoints are both first-class). Designed to make
-honest results cheap, not to make a single model cleverer.
+Built in Python on Textual. A background daemon kernel runs the work and
+survives a closed terminal; the TUI attaches as a protocol client, with an
+honest single-process fallback when the daemon is unavailable. Model-agnostic
+(Anthropic-Messages and OpenAI-compatible endpoints are both first-class).
+Designed to make honest results cheap, not to make a single model cleverer.
 
 ---
 
@@ -46,10 +48,11 @@ engineering problem, not a model problem**. Four design choices follow:
    operations (`rm -rf`, system paths, secret patterns) that **never
    bypasses** even at the most permissive AUTO level. The user is always
    the final reviewer for the actions that hurt most.
-4. A long-running daemon (opt-in via `--with-daemon`) lets 5+ minute
-   tasks survive a closed terminal, a power loss, or a model upgrade —
-   state, checkpoints, and the event journal all live on disk, so the
-   next session picks up exactly where the last left off.
+4. A long-running daemon that auto-starts in the background lets 5+
+   minute tasks survive a closed terminal, a power loss, or a model
+   upgrade — state, checkpoints, and the event journal all live on
+   disk, so the next session picks up exactly where the last left off.
+   (Set `ARGOS_NO_DAEMON=1` to force single-process inline mode.)
 
 The result is a tool that lets a developer pick a cheap model, ship real
 work, and catch the lies.
@@ -210,9 +213,10 @@ AUTO (`/yolo`) approval level does not silently flip it on.
 
 ### Smart approval
 
-Four approval levels (`Observe` / `Propose` / `Confirm` / `Auto`) are
-configurable per session, but **certain hard rules never bypass** even
-at AUTO:
+Five Trust Dial levels (L0 `every-step` / L1 `dangerous-only` /
+L2 `irreversible-only` / L3 `session-trusted` / L4 `autonomous`) are
+configurable per session via `/trust`, but **certain hard rules never
+bypass** even at L4:
 
 - Destructive shell operations (`rm -rf`, system paths, format
   commands).
@@ -221,44 +225,52 @@ at AUTO:
   files, anything in `~/.ssh`).
 - Outbound network access to non-allowlisted hosts.
 
-The approval modal itself is a real keyboard-driven prompt, not a
+The approval modal itself is a real keyboard-driven inline prompt, not a
 decorative pause: `1` deny, `2` once, `3` session, `4` always, with a
-visible diff of what the tool would do.
+visible diff of what the tool would do. `/yolo` is kept as an alias for
+`/trust l4`.
 
 ### Long-running daemon
 
 A 7-state machine (`pending` / `running` / `paused` / `suspended` /
-`completed` / `failed` / `cancelled`) lives in an opt-in daemon process.
+`completed` / `failed` / `cancelled`) runs in a background daemon
+process (`argosd`) that Argos auto-detects and auto-starts at launch.
+If the daemon is unreachable, the TUI falls back transparently to
+single-process inline mode (shown in the status bar). There is no
+`--with-daemon` flag; daemon mode is the default when available.
+
 Keyboard bindings on the TUI:
 
 - **`Ctrl+B`** — background the current run. It enters `suspended`
   state on disk; you can start a new goal immediately and resume the old
   one later.
-- **`Esc`** — pause at the next step boundary. The worker only blocks at
-  well-defined step entry, so the pause is deterministic, not
-  interrupt-the-LLM-token.
-- **`Esc Esc`** (within 1.5s) — cancel.
-- **`Ctrl+C`** — soft interrupt. The TUI exits; the daemon keeps the
-  run alive, persisted to JSONL.
+- **`Esc`** (daemon mode) — pause at the next step boundary. The worker
+  only blocks at well-defined step entry, so the pause is deterministic,
+  not interrupt-the-LLM-token.
+- **`Esc Esc`** (within 1.5s, daemon mode) — cancel.
+- **`Esc`** (inline mode) — cancel the current run immediately.
+- **`Ctrl+C`** — quit the TUI.
 
-When the daemon is enabled (`--with-daemon`), a startup modal lists
-suspended runs and lets you resume any of them. State survives TUI
-exit, terminal close, machine reboot, and even a model upgrade (the
-worker reattaches from the last checkpoint).
+State survives TUI exit, terminal close, machine reboot, and even a
+model upgrade (the worker reattaches from the last checkpoint).
+`ARGOS_NO_DAEMON=1` forces inline mode (useful in CI or tests).
 
-### 22 broker-gated tools
+### 30 broker-gated tools
 
 Every tool call — from the agent or from a sub-agent — flows through the
-capability broker. The broker is the only path to the sandbox; it
-checks the action against the egress policy, asks the approval gate
-when needed, signs a receipt, and only then hands off to the executor.
+capability registry and broker. The registry is the authoritative source
+for tool manifests (name, kind, risk, reversibility, visibility); the
+broker checks the action against the egress policy, asks the approval
+gate when needed, signs a receipt, and only then hands off to the
+executor.
 
 Tools span the breadth of an engineer's day:
 
 - **Files** — `read_file`, `write_file`, `edit_file`, `search_files`
 - **Shell** — `run_command` (allowlist + Seatbelt + workspace cage)
 - **Verification** — `propose_verify` (declare-then-execute, isolated
-  from the agent's own code path)
+  from the agent's own code path), `propose_dom_verify` (DOM-level
+  verification via CSS selector + expected text)
 - **Plan** — `update_plan` (real TODO breakdown, rendered in the
   activity panel)
 - **Web** — `web_search`, `web_extract` (Tavily or DDGS, egress
@@ -273,11 +285,17 @@ Tools span the breadth of an engineer's day:
   zero pre-configuration; `~/.argos/mcp.json` is read on demand)
 - **Workflow** — `propose_workflow({name, description, stages})` to
   request a Dynamic Workflow (see below)
+- **Computer use** — `computer.screenshot`, `computer.click`,
+  `computer.double_click`, `computer.type_text`, `computer.key`,
+  `computer.scroll`, `computer.open_app` (OS-level control via
+  AppleScript / `screencapture`; requires `ARGOS_COMPUTER_USE=1` and
+  macOS Accessibility permission; all actions are `risk=high +
+  reversible=False` and governed by hard-CONFIRM approval)
 - **Skill** — built-in skills (`/verify`, `/security-review`,
   `/simplify`) callable on demand without re-using the agent's code
 
 The tool count shown in `/tools` is always the real number from
-`ALL_TOOL_NAMES`. No padding, no "60+ tools" lies.
+`get_tool_names(registry)`. No padding, no "60+ tools" lies.
 
 ### Dynamic Workflows
 
@@ -305,6 +323,86 @@ work and a stronger model can adjudicate. `isolation: worktree` gives
 parallel write-agents their own git worktree, with a diff captured
 before teardown for the user to review.
 
+### Capability registry
+
+The capability registry (`argos_agent/capability/`) is the authoritative
+manifest store for every action the broker can dispatch: name, kind,
+risk level (`low` / `medium` / `high`), reversibility, egress hosts, and
+visibility. The registry is built at startup by `register_builtins()` and
+is the source of truth for the tool count shown in `/tools`.
+
+### Behaviour ledger and Trust Dial
+
+Every signed receipt is distilled into a human-readable ledger entry
+(`argos_agent/ledger/`) — what happened, whether it is reversible, and
+its undo state. `/ledger` shows the full ledger for the current run.
+
+The Trust Dial (`argos_agent/permissions/trust_dial.py`) replaces the
+legacy four-level approval knob with five named levels (L0–L4) that
+speak in plain language: "every step", "dangerous only", "irreversible
+only", "session-trusted", "autonomous". HARD RULES are immune to every
+level. Escalation from a lower to a higher level always surfaces an
+explicit warning; the dial never silently self-upgrades.
+
+### Intent confirmation loop
+
+Before starting a run, the intent engine (`argos_agent/intent/`)
+parses the user's natural-language goal into a structured `IntentCard`
+and surfaces it for a brief confirmation. This catches
+"translation-error = source drift" before any tool is called.
+
+### Conductor (autonomous face)
+
+The conductor (`argos_agent/conductor/`) executes standing orders
+without blocking on the user — cron-lite schedules and file-trigger
+watchers — but **never acts without confirmation**. Every suggestion is
+a `ProactiveSuggestion` with `requires_confirmation=True`. The user
+either `/confirm <id>` or `/dismiss <id>`; the engine does not
+auto-execute. `/orders` lists the active standing orders.
+
+### Computer use (perception)
+
+`argos_agent/perception/` provides OS-level screen and input control
+(screenshot, click, double-click, type, key, scroll, open app) via
+AppleScript and `screencapture` — zero third-party Python dependencies.
+
+This is **off by default**. Set `ARGOS_COMPUTER_USE=1` and grant macOS
+Accessibility permission to the terminal before use. All seven
+`computer.*` tools are `risk=high + reversible=False` and require hard
+CONFIRM approval regardless of the Trust Dial level. The Seatbelt
+sandbox cannot confine global screen/mouse resources; the approval gate,
+the ledger, and the audit trail are the governance layer instead.
+
+### Desktop shell (ACP channel)
+
+`desktop/` contains a Tauri 2 shell that connects to the running
+`argosd` daemon via the ACP protocol (Unix socket, HTTP/SSE). The
+TypeScript SDK (`desktop/sdk/`) is a zero-runtime-dependency client
+library (`DaemonClient`, typed SSE subscriptions).
+
+Build the desktop shell:
+
+```bash
+bash packaging/build_desktop.sh      # release build → .app + .dmg
+bash packaging/build_desktop.sh --debug   # faster debug build
+```
+
+Requires Node.js, Rust toolchain, and macOS 13+. The current build
+is ad-hoc signed (local use only; not notarised). See
+[`packaging/desktop.md`](packaging/desktop.md) for full build and
+signing documentation.
+
+### Self-test firewall (learning)
+
+`argos_agent/learning/` promotes only *verified* runs into skill memory:
+a `passed` run triggers distillation and an A/B promotion gate;
+`failed` / `unverifiable` runs produce a reflection entry for the memory
+layer only (never promoted). `argos_agent/verify/` adds an opt-in
+self-test generator (`ARGOS_SELF_TEST=1`) that tries to synthesise a
+candidate verify command when none was declared — the canary guard
+ensures the generated command can actually fail (a trivial always-pass
+command is discarded, keeping the `unverifiable` verdict honest).
+
 ---
 
 ## Commands
@@ -313,17 +411,35 @@ Slash commands live in the TUI. Tab completion is built in.
 
 | Command | Purpose |
 |---|---|
-| `/plan` | Enter "look at the plan, then act" mode. The agent writes a markdown plan (task breakdown / files touched / risks / approval gates) and the host presents a 4-option approval modal: `1` approve and start, `2` approve and accept edits, `3` keep planning, `4` refine with feedback. Plan-mode tool dispatch blocks `write_file` / `edit_file` / `run_command` until you exit. |
+| `/help` | Show all commands. |
+| `/tools` | List the callable tools (real count from the registry). |
+| `/skills` | Manage the skill ecosystem: list / install / remove / refresh / test. |
+| `/mcp` | List configured MCP external tools. |
+| `/model` | View or switch the active model profile. |
+| `/status` | Current run state. |
+| `/cost` | Per-round cost and cache statistics. |
+| `/resume` | Reattach to the previous session. |
+| `/clear` | Start a new session (clears context). |
+| `/trust` | View or set the Trust Dial level (`/trust [l0\|l1\|l2\|l3\|l4\|status]`). L0 = confirm every step; L4 = full auto; HARD RULES always enforced. Replaces `/yolo`. |
+| `/yolo` | Legacy alias for `/trust l4`. |
+| `/undo` | Roll back all file changes made in this run to the run start-point snapshot. |
+| `/ledger` | View the behaviour ledger for the current run: human-readable entries and undo state. |
+| `/retry` | Resend the last user message. |
+| `/plan` | Enter "look at the plan, then act" mode. The agent writes a markdown plan; the host presents an inline approval modal. Plan-mode tool dispatch blocks `write_file` / `edit_file` / `run_command` until you exit. |
 | `/hooks` | List the active `~/.argos/hooks.json` lifecycle hooks. `/hooks reload` re-reads the config without restarting. |
 | `/lsp` | List the language servers currently in scope. `/lsp reload` re-reads `~/.argos/lsp.json`. |
-| `/verify` | Run `Verifier.verify` against the configured `verify_cmd`. The user-facing path; never goes through `propose_verify`. Without a `verify_cmd` configured, the verdict is `n_a` and the TUI prompts you to set one. |
-| `/security-review` | Three passes: secrets (9 regexes incl. `sk-ant-`), dependency vulnerabilities (shells out to `npm` / `pip-audit` / `cargo-audit` — missing tools are reported as `error`, never silently skipped), dangerous APIs (Python `eval` / JS-TS `eval` / `innerHTML` / `child_process`). Read-only — never modifies code. |
-| `/simplify` | Three passes: token-shingle duplicate detection, function-complexity hotspots, dead-code heuristics. Read-only. |
 | `/permissions` | Inspect or change the current approval level. Hard rules are always shown. |
-| `/runs` | List persisted runs. `/runs {id} resume\|cancel\|info` acts on one. |
-| `/eval` | Self-eval harness. `/eval` lists recent runs + 7d pass rate. `/eval run <task_id>` runs a corpus task. `/eval compare <a> <b>` runs an A/B (md report into transcript). CLI twin: `argos eval list \| run \| compare \| corpus`. |
-| `/model` | List configured profiles and switch `active` (takes effect on next launch). |
-| `/help`, `/tools`, `/skills`, `/mcp` | Discovery: what can this thing actually do right now? |
+| `/runs` | List persisted runs (daemon mode). `/runs {id} resume\|cancel` acts on one. |
+| `/orders` | List standing conductor orders (autonomous scheduled / file-triggered instructions). |
+| `/confirm` | Confirm a conductor proactive suggestion by ID. |
+| `/dismiss` | Dismiss a conductor proactive suggestion by ID. |
+| `/verify` | Run `Verifier.verify` against the configured `verify_cmd`. Never goes through `propose_verify`. Without a `verify_cmd` configured, verdict is `n_a`. |
+| `/security-review` | Three passes: secrets, dependency vulnerabilities (shells out to `npm` / `pip-audit` / `cargo-audit` — missing tools reported as `error`, never silently skipped), dangerous APIs. Read-only. |
+| `/simplify` | Three passes: token-shingle duplicate detection, function-complexity hotspots, dead-code heuristics. Read-only. |
+| `/eval` | Self-eval harness. `/eval` lists recent runs + 7d pass rate. `/eval run <task_id>` runs a corpus task. `/eval compare <a> <b>` runs an A/B (report into transcript). CLI twin: `argos eval list \| run \| compare \| corpus`. |
+| `/routing` | View last 10 routing decisions. `/routing set <category> <tier>` updates routing. |
+| `/context` | View the current LLM context breakdown by bucket (system / memory / tools / messages). |
+| `/remember`, `/forget`, `/memory` | Explicit auto-memory management (hidden from the slash menu; still functional). |
 
 ---
 
@@ -354,16 +470,16 @@ on write. `ARGOS_NO_MEMORY=1` to opt out. See
 ## CLI flags
 
 ```bash
-uv run argos                  # launch TUI
-uv run argos setup            # provider + key + format-probe wizard
-uv run argos --selftest       # offline self-check, prints verdicts
-uv run argos --version        # version (single source: importlib.metadata)
-uv run argos self-update      # check GitHub for new version, notify only
-uv run argos --with-daemon    # opt into the long-running run daemon
-uv run argos --project <path> # confine to a specific project directory
-uv run argos --model <name>   # use a specific config profile for this run
-uv run argos --effort=low|medium|high   # task effort tier (default: medium)
-uv run argos --resume         # reattach to the last session
+uv run argos                       # launch TUI (daemon auto-detected)
+uv run argos setup                 # provider + key + format-probe wizard
+uv run argos --selftest            # offline self-check, prints verdicts
+uv run argos --version             # version (single source: importlib.metadata)
+uv run argos self-update           # check GitHub for new version, notify only
+uv run argos --project <path>      # confine to a specific project directory
+uv run argos --model <name>        # use a specific config profile for this run
+uv run argos --effort=low|medium|high  # task effort tier (default: medium)
+uv run argos --resume <session_id> # pass-through to TUI /resume
+# ARGOS_NO_DAEMON=1 uv run argos   # force single-process inline mode
 ```
 
 ## Per-task model routing (#11)
@@ -397,7 +513,6 @@ See where your context goes, and stop the model from blowing past the window:
 ```bash
 argos context show              # 4-bucket breakdown: system / memory (4 tier) / tools / messages
 argos context show --json       # machine-readable for evals / integrations
-uv run argos --compact-threshold=0.7   # tighten / loosen the auto-compact trigger
 ```
 
 TUI: `/context` for the same table with markup colors; the activity panel
@@ -426,7 +541,7 @@ The defences compose:
    unless the user explicitly exports it. Embeddings are computed
    by the active provider, not by a third party.
 
-The two trust-outs that remain (and the user is told about both):
+The trust-outs that remain (and the user is told about each):
 
 - **Hooks and LSP servers run outside the Seatbelt sandbox** at the
   user's permission level, since they are user-controlled code by
@@ -436,6 +551,16 @@ The two trust-outs that remain (and the user is told about both):
 - **Browser-based tools** can reach any URL the user is willing to
   approve. The visible-window default is deliberate: you should
   *see* the browser doing what the agent claims.
+- **Computer use** (`computer.*` tools, `ARGOS_COMPUTER_USE=1`) operates
+  on global screen and mouse resources that the Seatbelt sandbox cannot
+  isolate. Governance is entirely through the approval gate (hard
+  CONFIRM, every action), the ledger, and the audit trail. Every
+  computer-use action is `risk=high + reversible=False`. Only enable
+  this if you are willing to watch what the agent does.
+- **Desktop shell (ACP channel)** — the Tauri desktop shell connects to
+  `argosd` via a Unix socket on the local machine only. The ACP
+  protocol does not expose the socket over the network. Trust boundary
+  is the local user account.
 
 ---
 
