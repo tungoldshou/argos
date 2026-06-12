@@ -36,7 +36,7 @@ class SkillCandidate:
 
 
 # 名字清洗:从 goal 抽短 slug,降长、剔特殊字符,空则用 fallback
-def _slugify_goal(goal: str, fallback: str = "learned") -> str:
+def slugify_goal(goal: str, fallback: str = "learned") -> str:
     g = (goal or "").strip().lower()
     if not g:
         return fallback
@@ -46,6 +46,10 @@ def _slugify_goal(goal: str, fallback: str = "learned") -> str:
     if not g:
         return fallback
     return g[:40]  # 上限 40 字符
+
+
+# 旧名别名:dream/distiller 跨模块统一用公开名 slugify_goal,保留旧名免破坏内部引用
+_slugify_goal = slugify_goal
 
 
 def _format_code_block(snippets: list[str]) -> str:
