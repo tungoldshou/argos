@@ -43,6 +43,7 @@ EventKind = Literal[
     "ledger_entry",      # ← P3b 新增(§6 行为账本:每条 ToolReceipt 沉淀为可读账本条目)
     "intent_confirm_request",   # ← P4 新增(§7 意图引擎:确认挂起请求)
     "intent_confirm_response",  # ← P4 新增(§7 意图引擎:用户确认/取消响应)
+    "proactive_suggestion",     # ← P5b 新增(§9 自治面:conductor 主动建议事件)
 ]
 
 
@@ -280,6 +281,25 @@ class IntentConfirmResponse:
 
 
 @dataclass(frozen=True, slots=True)
+class ProactiveSuggestionEvent:
+    """P5b §9 自治面:conductor 主动建议事件（daemon → client 方向，SSE 推送）。
+
+    conductor tick 产出 ProactiveSuggestion 后广播此事件。
+    客户端（TUI）收到后在活动栏展示，等用户点击「运行」或「忽略」。
+
+    requires_confirmation 协议级恒 True，不可覆盖——建议永远要用户明确确认，
+    conductor 绝不擅自 create_run。
+    """
+    kind = "proactive_suggestion"
+    suggestion_id: str      # ProactiveSuggestion.id
+    order_id: str           # 来源 StandingOrder.id
+    goal: str               # 已填充占位符的 goal（直接可传给 create_run）
+    reason_human: str       # 供 TUI 展示的人话原因（触发来源说明）
+    suggested_at: float     # Unix 时间戳
+    requires_confirmation: bool = True   # 协议级恒 True；客户端只读
+
+
+@dataclass(frozen=True, slots=True)
 class PlanDecisionRequest:
     """v6 §4 ACP:plan 决策请求事件——去掉 TUI 对 loop 实例的直接引用。
 
@@ -338,6 +358,7 @@ Event = (
     | CompactedEvent | PrunedEvent  # ← context rot(spec 2026-06-07)
     | LedgerEntryEvent              # ← P3b 新增(§6 行为账本)
     | IntentConfirmRequest | IntentConfirmResponse  # ← P4 新增(§7 意图引擎)
+    | ProactiveSuggestionEvent      # ← P5b 新增(§9 自治面:conductor 主动建议)
 )
 
 # kind 常量 → 类,用于反序列化派发
@@ -355,6 +376,7 @@ _KIND_TO_CLASS: dict[str, type] = {
         CompactedEvent, PrunedEvent,  # ← context rot(spec 2026-06-07):可正确反序列化
         LedgerEntryEvent,             # ← P3b 新增(§6 行为账本)
         IntentConfirmRequest, IntentConfirmResponse,  # ← P4 新增(§7 意图引擎)
+        ProactiveSuggestionEvent,     # ← P5b 新增(§9 自治面:conductor 主动建议)
     )
 }
 

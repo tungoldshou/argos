@@ -39,6 +39,7 @@ from argos_agent.tui.events import (
     PlanDecisionRequest,
     PlanRendered,
     PlanUpdate,
+    ProactiveSuggestionEvent,  # ← P5b §9 自治面
     PrunedEvent,
     TokenDelta,
     ToolReceipt,
@@ -618,6 +619,12 @@ class ArgosApp(App):
             await self._permissions_cmd(log, cmd.arg)
         elif cmd.name == "runs":
             await self._runs_cmd(log, cmd.arg)
+        elif cmd.name == "orders":
+            await self._orders_cmd(log)
+        elif cmd.name == "confirm":
+            await self._confirm_suggestion_cmd(log, cmd.arg)
+        elif cmd.name == "dismiss":
+            await self._dismiss_suggestion_cmd(log, cmd.arg)
         elif cmd.name == "verify":
             await self._skill_cmd(log, "verify", cmd.arg)
         elif cmd.name == "security-review":
@@ -1155,6 +1162,163 @@ class ArgosApp(App):
                 )
             except Exception as e:  # noqa: BLE001
                 await log.append_line(f"查 run 失败:{e}", kind="error")
+
+    # ── P5b §9 自治面：/orders /confirm /dismiss ──────────────────────
+
+    async def _orders_cmd(self, log) -> None:
+        """/orders:列出当前 conductor 常驻指令（通过 daemon 或本地 OrderStore）。
+
+        优先走 daemon 端点（/orders）；无 daemon 时直接读本地 OrderStore。
+        只读展示，不执行任何自治动作。
+        """
+        if self._with_daemon and self._daemon_client and self._daemon_session_id:
+            try:
+                status, _, raw = await self._daemon_client._request(
+                    "GET", "/orders", session_id=self._daemon_session_id,
+                )
+                import json as _json
+                orders = _json.loads(raw)
+            except Exception as e:  # noqa: BLE001
+                await log.append_line(f"/orders 请求失败（daemon）:{e}", kind="error")
+                return
+        else:
+            # 无 daemon：本地 OrderStore 直读
+            try:
+                from argos_agent.conductor.orders import OrderStore
+                orders = [o.to_dict() for o in OrderStore().list()]
+            except Exception as e:  # noqa: BLE001
+                await log.append_line(f"读取本地 orders 失败:{e}", kind="error")
+                return
+
+        if not orders:
+            await log.append_line(
+                "无常驻指令。可通过 daemon POST /orders 添加（utterance/kind/schedule/trigger_glob/goal_template）。",
+                kind="system",
+            )
+            return
+
+        lines = [f"常驻指令（{len(orders)} 条）："]
+        for o in orders:
+            enabled = "✓" if o.get("enabled", True) else "✗"
+            kind = o.get("kind", "?")
+            trigger = o.get("schedule") or o.get("trigger_glob") or "(无触发条件)"
+            lines.append(
+                f" {enabled} [{kind}] {o.get('id', '')[:8]}…  "
+                f"{o.get('utterance', '')[:40]}  |  触发：{trigger}"
+            )
+        lines.append("")
+        lines.append("提示：conductor 建议到来时会在此栏出现「新建议」提示，可用 /confirm <id> 确认或 /dismiss <id> 忽略。")
+        await log.append_line("\n".join(lines), kind="system")
+
+    async def _confirm_suggestion_cmd(self, log, suggestion_id: str) -> None:
+        """/confirm <suggestion_id>:用户确认 conductor 建议 → 通过 daemon 端点 create_run。
+
+        TUI 只是 daemon 客户端，真正的确认通过 POST /suggestions/{id}/confirm（daemon 侧）。
+        铁律：isolation=worktree + trust_level=L1_DANGEROUS_ONLY（server 端写死，TUI 不可覆盖）。
+        """
+        suggestion_id = suggestion_id.strip()
+        if not suggestion_id:
+            await log.append_line("用法:/confirm <suggestion_id>", kind="error")
+            return
+        if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
+            await log.append_line(
+                "confirm 需要 daemon 模式（--with-daemon）。",
+                kind="error",
+            )
+            return
+        try:
+            status, _, raw = await self._daemon_client._request(
+                "POST", f"/suggestions/{suggestion_id}/confirm",
+                session_id=self._daemon_session_id,
+            )
+            import json as _json
+            body = _json.loads(raw) if raw else {}
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(f"/confirm 请求失败:{e}", kind="error")
+            return
+        if status == 201:
+            run_id = body.get("run_id", "?")
+            wt = body.get("worktree_path") or "(none)"
+            await log.append_line(
+                f"建议已确认并创建 run：{run_id}\n"
+                f"  隔离：worktree={wt}\n"
+                f"  信任档：L1_DANGEROUS_ONLY（写死，不可升级）\n"
+                f"  用 /runs 查看运行状态。",
+                kind="done",
+            )
+        elif status == 404:
+            await log.append_line(
+                f"建议 {suggestion_id!r} 未找到或已处理（dismissed/confirmed）。",
+                kind="error",
+            )
+        elif status == 503:
+            await log.append_line(
+                f"无法确认：{body.get('error', '服务暂不可用')}",
+                kind="error",
+            )
+        else:
+            await log.append_line(
+                f"/confirm 失败（HTTP {status}）：{body.get('error', raw)}",
+                kind="error",
+            )
+
+    async def _dismiss_suggestion_cmd(self, log, suggestion_id: str) -> None:
+        """/dismiss <suggestion_id>:忽略 conductor 建议（通过 daemon 端点）。"""
+        suggestion_id = suggestion_id.strip()
+        if not suggestion_id:
+            await log.append_line("用法:/dismiss <suggestion_id>", kind="error")
+            return
+        if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
+            await log.append_line(
+                "dismiss 需要 daemon 模式（--with-daemon）。",
+                kind="error",
+            )
+            return
+        try:
+            status, _, raw = await self._daemon_client._request(
+                "POST", f"/suggestions/{suggestion_id}/dismiss",
+                session_id=self._daemon_session_id,
+            )
+            import json as _json
+            body = _json.loads(raw) if raw else {}
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(f"/dismiss 请求失败:{e}", kind="error")
+            return
+        if status == 200:
+            await log.append_line(f"建议 {suggestion_id!r} 已忽略。", kind="system")
+        elif status == 404:
+            await log.append_line(
+                f"建议 {suggestion_id!r} 未找到或已处理。",
+                kind="error",
+            )
+        else:
+            await log.append_line(
+                f"/dismiss 失败（HTTP {status}）：{body.get('error', raw)}",
+                kind="error",
+            )
+
+    # ── TUI ProactiveSuggestionEvent 渲染 ────────────────────────────
+
+    async def _on_proactive_suggestion(self, ev) -> None:
+        """ProactiveSuggestionEvent 渲染：transcript 一行人话 + 操作提示。
+
+        本期 TUI 只读展示（InlineChoice 确认流可后补）；
+        真正的确认通过 POST /suggestions/{id}/confirm（daemon 端点）。
+        """
+        from argos_agent.tui.widgets.transcript import Transcript
+        try:
+            log = self.query_one("#transcript", Transcript)
+            sid_short = ev.suggestion_id[:8] if ev.suggestion_id else "?"
+            await log.append_line(
+                f"[自治建议] {ev.reason_human}\n"
+                f"  目标：{ev.goal}\n"
+                f"  建议 ID：{ev.suggestion_id}\n"
+                f"  → 确认：/confirm {sid_short}  忽略：/dismiss {sid_short}\n"
+                f"  （注：确认后在 worktree 隔离下以 L1 信任档运行，守护铁律不可绕过）",
+                kind="system",
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     async def _skill_cmd(self, log, skill_name: str, arg: str) -> None:
         """/verify / /security-review / /simplify 统一入口(spec §2.6 / §2.7)。
@@ -1905,6 +2069,9 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                     pass
         elif isinstance(ev, ApprovalResponse):
             await log.append_line(f"审批结果:{ev.call_id} → {ev.decision}")
+        elif isinstance(ev, ProactiveSuggestionEvent):
+            # P5b §9 自治面:conductor 建议到达 → transcript 只读展示 + 操作提示
+            await self._on_proactive_suggestion(ev)
         elif isinstance(ev, Escalation):
             await log.append_line(f"⚠︎ 卡住({ev.attempts} 轮):{ev.reason} — 最后失败:{ev.last_failure}", kind="escalation")
             self._set_border(glow.ERROR)

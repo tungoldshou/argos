@@ -57,7 +57,8 @@ class DaemonHTTPServer:
                  session_timeout_s: float = 30.0,
                  registry=None, worktree=None,
                  loop_factory=None, gate=None,
-                 components=None, ledger_store=None):
+                 components=None, ledger_store=None,
+                 conductor_supervisor=None):
         """loop_factory / components 二选一(components 优先走 per-run stack 路径)。
 
         None(默认) = 向后兼容:create_run 创建元数据但不 spawn worker(测试/无 loop 场景)。
@@ -95,6 +96,8 @@ class DaemonHTTPServer:
         self._workers: dict[str, "RunWorker"] = {}
         # P3b §6 行为账本存储(可选,None = 无账本功能)
         self._ledger_store = ledger_store
+        # P5b §9 自治面:conductor supervisor(可选,None = 无自治功能)
+        self._conductor = conductor_supervisor
 
     @property
     def registry(self):
@@ -243,6 +246,26 @@ class DaemonHTTPServer:
                     return await self._handle_get_run(writer, headers, rest)
                 return await self._send_error(writer, 404, CODE_NOT_FOUND,
                                               f"no route for {method} {path}")
+            # P5b §9 自治面:Orders CRUD
+            if method == "POST" and path == "/orders":
+                return await self._handle_create_order(writer, headers, body)
+            if method == "GET" and path == "/orders":
+                return await self._handle_list_orders(writer, headers)
+            if method == "DELETE" and path.startswith("/orders/"):
+                order_id = path[len("/orders/"):]
+                return await self._handle_delete_order(writer, headers, order_id)
+            # P5b §9 自治面:Suggestions 确认 / 忽略
+            if path.startswith("/suggestions/"):
+                rest = path[len("/suggestions/"):]
+                if method == "POST" and rest.endswith("/confirm"):
+                    sid_part = rest[:-len("/confirm")]
+                    return await self._handle_confirm_suggestion(writer, headers, sid_part)
+                if method == "POST" and rest.endswith("/dismiss"):
+                    sid_part = rest[:-len("/dismiss")]
+                    return await self._handle_dismiss_suggestion(writer, headers, sid_part)
+            # GET /suggestions（列出当前 pending）
+            if method == "GET" and path == "/suggestions":
+                return await self._handle_list_suggestions(writer, headers)
             return await self._send_error(writer, 404, CODE_NOT_FOUND,
                                           f"no route for {method} {path}")
         except Exception as e:  # noqa: BLE001
@@ -488,6 +511,10 @@ class DaemonHTTPServer:
             # P3:注册 worker 到路由表
             self._workers[run_id] = worker
             asyncio.create_task(worker.run(), name=f"run-{run_id}")
+        else:
+            # 元数据模式(components/loop_factory 均无):没有 worker 跑终态清理,
+            # 槽位必须当场归还,否则 max_concurrent 次后 daemon 永久 503(槽位泄漏)。
+            self._registry.release_slot()
 
         await self._send_json(writer, 201, {"run_id": run_id})
 
@@ -994,6 +1021,272 @@ class DaemonHTTPServer:
             "restored": len(result.restored),
             "note": "已还原 run 起点的文件改动(注:撤销还原整个 run 的文件改动,粒度为 run 级)。",
         })
+
+    # ── P5b §9 自治面：Orders CRUD ───────────────────────────────────
+
+    def _conductor_orders_dir(self):
+        """conductor OrderStore 目录（与 conductor_supervisor 一致）。"""
+        from pathlib import Path
+        if self._conductor is not None:
+            return self._conductor._orders_dir
+        return Path.home() / ".argos" / "conductor"
+
+    async def _handle_create_order(self, writer, headers, body):
+        """POST /orders — 创建 StandingOrder。
+
+        body JSON 字段：
+          utterance     必填：人话描述
+          kind          必填："schedule" 或 "file_trigger"
+          schedule      kind=schedule 时必填：cron-lite 表达式
+          trigger_glob  kind=file_trigger 时必填：文件 glob
+          goal_template 必填：goal 模板
+          enabled       可选：bool，默认 True
+        返回 201 {id: "..."}；非法 body → 400。
+        """
+        if await self._require_owner(writer, headers) is None:
+            return
+        try:
+            data = json.loads(body.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            return await self._send_error(writer, 400, CODE_BAD_REQUEST, "invalid JSON body")
+
+        utterance = data.get("utterance", "").strip()
+        kind = data.get("kind", "")
+        goal_template = data.get("goal_template", "").strip()
+        if not utterance:
+            return await self._send_error(writer, 400, CODE_BAD_REQUEST, "missing utterance")
+        if kind not in ("schedule", "file_trigger"):
+            return await self._send_error(writer, 400, CODE_BAD_REQUEST,
+                                          "kind must be 'schedule' or 'file_trigger'")
+        if not goal_template:
+            return await self._send_error(writer, 400, CODE_BAD_REQUEST, "missing goal_template")
+        if kind == "schedule" and not data.get("schedule"):
+            return await self._send_error(writer, 400, CODE_BAD_REQUEST,
+                                          "schedule required when kind=schedule")
+        if kind == "file_trigger" and not data.get("trigger_glob"):
+            return await self._send_error(writer, 400, CODE_BAD_REQUEST,
+                                          "trigger_glob required when kind=file_trigger")
+
+        from argos_agent.conductor.orders import StandingOrder, OrderStore
+        import uuid as _uuid
+        order = StandingOrder(
+            id=_uuid.uuid4().hex,
+            utterance=utterance,
+            kind=kind,
+            schedule=data.get("schedule") or None,
+            trigger_glob=data.get("trigger_glob") or None,
+            goal_template=goal_template,
+            enabled=bool(data.get("enabled", True)),
+            created_at=time.time(),
+            last_fired_at=None,
+        )
+        store = OrderStore(self._conductor_orders_dir())
+        store.add(order)
+        await self._send_json(writer, 201, order.to_dict())
+
+    async def _handle_list_orders(self, writer, headers):
+        """GET /orders — 列出所有 StandingOrder。"""
+        if await self._require_session(writer, headers) is None:
+            return
+        from argos_agent.conductor.orders import OrderStore
+        store = OrderStore(self._conductor_orders_dir())
+        orders = store.list()
+        await self._send_json(writer, 200, [o.to_dict() for o in orders])
+
+    async def _handle_delete_order(self, writer, headers, order_id):
+        """DELETE /orders/{id} — 删除 StandingOrder。"""
+        if await self._require_owner(writer, headers) is None:
+            return
+        if not order_id:
+            return await self._send_error(writer, 400, CODE_BAD_REQUEST, "missing order id")
+        from argos_agent.conductor.orders import OrderStore
+        store = OrderStore(self._conductor_orders_dir())
+        deleted = store.delete(order_id)
+        if not deleted:
+            return await self._send_error(writer, 404, CODE_NOT_FOUND,
+                                          f"order {order_id!r} not found")
+        await self._send_json(writer, 204, {"ok": True})
+
+    # ── P5b §9 自治面：Suggestions ──────────────────────────────────
+
+    async def _handle_list_suggestions(self, writer, headers):
+        """GET /suggestions — 列出当前 pending 建议（内存）。"""
+        if await self._require_session(writer, headers) is None:
+            return
+        if self._conductor is None:
+            return await self._send_json(writer, 200, [])
+        pending = self._conductor.pending_suggestions
+        result = [
+            {
+                "suggestion_id": s.id,
+                "order_id": s.order_id,
+                "goal": s.goal,
+                "reason_human": s.reason_human,
+                "suggested_at": s.suggested_at,
+                "requires_confirmation": s.requires_confirmation,
+            }
+            for s in pending.values()
+        ]
+        await self._send_json(writer, 200, result)
+
+    async def _handle_confirm_suggestion(self, writer, headers, suggestion_id):
+        """POST /suggestions/{id}/confirm — 用户确认 → create_run（worktree 隔离 + L1 信任）。
+
+        安全铁律（不可降级）：
+          · isolation = "worktree"（写死）
+          · trust_level = "L1_DANGEROUS_ONLY"（写死，不读全局 TrustDial）
+        返回 {run_id: "..."}；未知 id → 404；已 dismiss → 409。
+        """
+        if await self._require_owner(writer, headers) is None:
+            return
+        if not suggestion_id:
+            return await self._send_error(writer, 400, CODE_BAD_REQUEST, "missing suggestion id")
+        if self._conductor is None:
+            return await self._send_error(writer, 503, "conductor_unavailable",
+                                          "conductor 未启动，无法确认建议")
+
+        s = self._conductor.get_suggestion(suggestion_id)
+        if s is None:
+            return await self._send_error(writer, 404, CODE_NOT_FOUND,
+                                          f"suggestion {suggestion_id!r} not found or already dismissed")
+
+        # 检查 loop_factory 可用（_NO_KEY 哨兵 = 无 key）
+        if self._loop_factory is _NO_KEY:
+            return await self._send_error(
+                writer, 503, "no_worker_key",
+                "daemon 未配置 API key，无法执行 run。请运行 `argos setup` 配置模型 key 后重启 daemon。",
+            )
+
+        # 并发槽位检查
+        if not self._registry.has_capacity():
+            return await self._send_error(
+                writer, 503, CODE_BUSY,
+                f"max_concurrent_runs_reached (max={self._registry.max_concurrent}, "
+                f"active={self._registry.active_count})；建议已登记，请稍后重试确认",
+            )
+        try:
+            await asyncio.wait_for(self._registry.acquire_slot(), timeout=0.01)
+        except asyncio.TimeoutError:
+            return await self._send_error(
+                writer, 503, CODE_BUSY,
+                f"max_concurrent_runs_reached (max={self._registry.max_concurrent})；"
+                f"建议已登记，请稍后重试确认",
+            )
+
+        # 铁律：isolation=worktree，trust_level=L1_DANGEROUS_ONLY
+        try:
+            run_id = await self._manager.create_run(
+                goal=s.goal,
+                workspace="",         # worktree 从 base_dir 隔离，不需要用户 workspace
+                model="",
+                approval_level="confirm",
+            )
+        except Exception:
+            self._registry.release_slot()
+            raise
+
+        # 创建 worktree（即使无 workspace 也在 WorktreeManager.base_dir 建 temp 目录）
+        wt_path = None
+        try:
+            wt_path = self._worktree.create(run_id=run_id, workspace="")
+        except Exception as e:  # noqa: BLE001
+            log.warning("conductor confirm: worktree 创建失败(fallback 无 worktree): %s", e)
+
+        await self._registry.register(
+            run_id=run_id, goal=s.goal, workspace="", worktree_path=wt_path,
+        )
+
+        from argos_agent.daemon.worker import RunWorker
+
+        if self._components is not None:
+            from argos_agent.app_factory import build_run_stack
+            from pathlib import Path as _Path
+            effective_ws_path = _Path(wt_path).expanduser().resolve() if wt_path else None
+            run_stack = build_run_stack(
+                self._components,
+                workspace=effective_ws_path,
+                session_id=f"run-{run_id}",
+            )
+            # 写死 L1_DANGEROUS_ONLY（铁律：自治 run 最高 L1，不读全局 TrustDial）
+            try:
+                from argos_agent.permissions.trust_dial import TrustLevel
+                run_stack.gate.set_trust_level(TrustLevel["L1_DANGEROUS_ONLY"])
+            except Exception as _te:  # noqa: BLE001
+                log.warning("conductor confirm: set_trust_level 失败(诚实降级): %s", _te)
+
+            worker = RunWorker(
+                run_id=run_id,
+                manager=self._manager,
+                loop_factory=run_stack.loop_factory,
+                registry=self._registry,
+                worktree=self._worktree,
+                gate=run_stack.gate,
+                run_stack_close=run_stack.close,
+                approval_timeout_s=60.0,
+                ledger_store=self._ledger_store,
+            )
+            self._workers[run_id] = worker
+            asyncio.create_task(worker.run(), name=f"conductor-run-{run_id}")
+        elif callable(self._loop_factory):
+            worker = RunWorker(
+                run_id=run_id,
+                manager=self._manager,
+                loop_factory=self._loop_factory,
+                registry=self._registry,
+                worktree=self._worktree,
+                gate=self._gate,
+                approval_timeout_s=60.0,
+                ledger_store=self._ledger_store,
+            )
+            if self._gate is not None:
+                try:
+                    from argos_agent.permissions.trust_dial import TrustLevel
+                    self._gate.set_trust_level(TrustLevel["L1_DANGEROUS_ONLY"])
+                except Exception as _te:  # noqa: BLE001
+                    log.warning("conductor confirm: set_trust_level(shared gate) 失败: %s", _te)
+            self._workers[run_id] = worker
+            asyncio.create_task(worker.run(), name=f"conductor-run-{run_id}")
+        else:
+            # 元数据模式:没有 worker 跑终态清理,槽位当场归还(终审 major:槽位泄漏)。
+            self._registry.release_slot()
+
+        # 从 pending 移除（已确认，不再是 pending）
+        self._conductor.pop_suggestion(suggestion_id)
+
+        # 广播 confirm 事件（审计可见性）
+        confirm_ev = {
+            "kind": "suggestion_confirmed",
+            "suggestion_id": suggestion_id,
+            "run_id": run_id,
+            "worktree_path": wt_path,
+            "trust_level": "L1_DANGEROUS_ONLY",
+            "ts": time.time(),
+        }
+        self._manager.store.append(run_id, confirm_ev)
+        await self._manager.fanout(run_id, confirm_ev)
+
+        await self._send_json(writer, 201, {
+            "run_id": run_id,
+            "suggestion_id": suggestion_id,
+            "isolation": "worktree",
+            "trust_level": "L1_DANGEROUS_ONLY",
+            "worktree_path": wt_path,
+        })
+
+    async def _handle_dismiss_suggestion(self, writer, headers, suggestion_id):
+        """POST /suggestions/{id}/dismiss — 用户忽略建议。"""
+        if await self._require_owner(writer, headers) is None:
+            return
+        if not suggestion_id:
+            return await self._send_error(writer, 400, CODE_BAD_REQUEST, "missing suggestion id")
+        if self._conductor is None:
+            return await self._send_error(writer, 503, "conductor_unavailable",
+                                          "conductor 未启动")
+        dismissed = self._conductor.dismiss_suggestion(suggestion_id)
+        if not dismissed:
+            return await self._send_error(writer, 404, CODE_NOT_FOUND,
+                                          f"suggestion {suggestion_id!r} not found or already dismissed")
+        await self._send_json(writer, 200, {"suggestion_id": suggestion_id, "state": "dismissed"})
 
     # ── SSE ──────────────────────────────────────────────────────────
 

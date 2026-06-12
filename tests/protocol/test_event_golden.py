@@ -491,6 +491,58 @@ def test_verify_verdict_unverifiable_roundtrip():
     assert back.verdict.status == "unverifiable"
 
 
+# ── ProactiveSuggestionEvent ─────────────────────────────────────────────────
+
+def test_proactive_suggestion_golden():
+    """P5b §9:conductor 主动建议事件黄金测试(ABI 冻结)。"""
+    ev = PE.ProactiveSuggestionEvent(
+        suggestion_id="abc123def456",
+        order_id="order001",
+        goal="检查昨天的日志",
+        reason_human="定时触发（09:00）：每天早上检查日志",
+        suggested_at=1700000000.0,
+        requires_confirmation=True,
+    )
+    _golden(ev, {
+        "suggestion_id": "abc123def456",
+        "order_id": "order001",
+        "goal": "检查昨天的日志",
+        "reason_human": "定时触发（09:00）：每天早上检查日志",
+        "suggested_at": 1700000000.0,
+        "requires_confirmation": True,
+    })
+
+
+def test_proactive_suggestion_roundtrip():
+    """ProactiveSuggestionEvent 序列化 → 反序列化等值。"""
+    ev = PE.ProactiveSuggestionEvent(
+        suggestion_id="deadbeef0011",
+        order_id="ord_x",
+        goal="整理日志",
+        reason_human="文件变化触发（requirements.txt）：依赖更新时检查",
+        suggested_at=1700001234.5,
+        requires_confirmation=True,
+    )
+    back = _round(ev)
+    assert back.suggestion_id == ev.suggestion_id
+    assert back.order_id == ev.order_id
+    assert back.requires_confirmation is True
+
+
+def test_proactive_suggestion_requires_confirmation_always_true():
+    """requires_confirmation 序列化输出必须是 True（协议级不可覆盖）。"""
+    ev = PE.ProactiveSuggestionEvent(
+        suggestion_id="s1",
+        order_id="o1",
+        goal="g",
+        reason_human="r",
+        suggested_at=1.0,
+        requires_confirmation=True,
+    )
+    obj = __import__("json").loads(PE.serialize_event(ev))
+    assert obj["data"]["requires_confirmation"] is True
+
+
 # ── _KIND_TO_CLASS 完整性 ────────────────────────────────────────────────────
 
 def test_all_kinds_in_kind_to_class():

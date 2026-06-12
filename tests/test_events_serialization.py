@@ -29,6 +29,7 @@ ALL_EVENT_KINDS = {
     "ledger_entry",           # P3b §6 行为账本:每条 ToolReceipt 沉淀为可读账本条目
     "intent_confirm_request",   # P4 §7 意图引擎:确认挂起请求
     "intent_confirm_response",  # P4 §7 意图引擎:用户确认/取消响应
+    "proactive_suggestion",     # P5b §9 自治面:conductor 主动建议事件
 }
 
 

@@ -31,9 +31,10 @@ from argos_agent.protocol.events import (  # noqa: F401
     PlanRendered,
     PlanDecisionRequest,
     MemoryRecallEvent,
-    LedgerEntryEvent,      # ← P3b 新增(§6 行为账本)
-    IntentConfirmRequest,  # ← P4 新增(§7 意图引擎)
-    IntentConfirmResponse, # ← P4 新增(§7 意图引擎)
+    LedgerEntryEvent,          # ← P3b 新增(§6 行为账本)
+    IntentConfirmRequest,      # ← P4 新增(§7 意图引擎)
+    IntentConfirmResponse,     # ← P4 新增(§7 意图引擎)
+    ProactiveSuggestionEvent,  # ← P5b 新增(§9 自治面:conductor 主动建议)
     Event,
     EventBus,
     _KIND_TO_CLASS,

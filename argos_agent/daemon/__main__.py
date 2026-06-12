@@ -78,6 +78,22 @@ async def _serve(args: argparse.Namespace) -> int:
     if recovered:
         log.info("daemon: recovered %d runs: %s", len(recovered), recovered)
 
+    # P5b §9 自治面：conductor supervisor（tick loop 后台协程）
+    # 广播函数：向 _conductor 虚拟 run_id 的 SSE 扇出通道投事件
+    from argos_agent.daemon.conductor_supervisor import ConductorSupervisor, CONDUCTOR_RUN_ID
+    conductor_orders_dir = Path.home() / ".argos" / "conductor"
+
+    async def _conductor_broadcast(ev_dict: dict) -> None:
+        """把 conductor 事件存入 _conductor 流并扇出到 SSE 订阅者。"""
+        manager.store.append(CONDUCTOR_RUN_ID, ev_dict)
+        await manager.fanout(CONDUCTOR_RUN_ID, ev_dict)
+
+    conductor_supervisor = ConductorSupervisor(
+        orders_dir=conductor_orders_dir,
+        tick_interval=float(os.environ.get("ARGOS_CONDUCTOR_TICK_INTERVAL", "30")),
+        broadcast_fn=_conductor_broadcast,
+    )
+
     # P3b §6 行为账本存储(全局单例,所有 run 共享同一个目录)
     from argos_agent.ledger.store import LedgerStore
     ledger_store = LedgerStore()
@@ -91,8 +107,11 @@ async def _serve(args: argparse.Namespace) -> int:
         loop_factory=loop_factory,
         gate=components.gate if components is not None else None,
         ledger_store=ledger_store,
+        conductor_supervisor=conductor_supervisor,
     )
     await server.start()
+    # P5b §9:启动 conductor tick 后台协程
+    conductor_supervisor.start()
 
     # 写 PID
     write_pid(pid_path, os.getpid())
@@ -114,6 +133,11 @@ async def _serve(args: argparse.Namespace) -> int:
     try:
         await shutdown_event.wait()
     finally:
+        # P5b §9:先停 conductor tick(干净取消,不留孤儿任务)
+        try:
+            await conductor_supervisor.stop()
+        except Exception as e:  # noqa: BLE001
+            log.warning("daemon: conductor_supervisor.stop() failed: %s", e)
         await graceful_shutdown(manager, server, socket_path)
         remove_pid(pid_path)
         # 清理 AppComponents(关闭 sandbox/store/browser/mcp 子进程)

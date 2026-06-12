@@ -19,6 +19,9 @@ def test_known_commands_listed():
         "routing",  # 2026-06-07:per-task model routing 配置 + history(/routing, /routing set)
         "context",  # 2026-06-07:Context 可视化(/context, /context --json)
         "ledger",   # P3b §6:行为账本(/ledger — 列出当前 run 的人话条目 + 撤销状态)
+        "orders",   # P5b §9:列出自治常驻指令(/orders)—conductor 自治面
+        "confirm",  # P5b §9:确认 conductor 建议(/confirm <suggestion_id>)—自治面
+        "dismiss",  # P5b §9:忽略 conductor 建议(/dismiss <suggestion_id>)
     }
 
 

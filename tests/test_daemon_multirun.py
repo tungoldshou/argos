@@ -85,14 +85,16 @@ async def test_concurrent_create_runs_all_register(mr_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_post_runs_returns_503_when_max_reached(mr_server, tmp_path: Path):
-    """满了 5 个 + 第 6 个 → 503 busy。"""
+    """5 槽全被占用(模拟 5 个在跑的 worker)+ 第 6 个 → 503 busy。
+
+    注:元数据模式的 run 不再永久占槽(P5b 槽位泄漏修复),故显式 acquire
+    模拟真 worker 在跑 —— 503 契约测的是"满员拒绝",不是泄漏副作用。
+    """
     srv, _, reg = mr_server
     sid = await _create_session(srv.socket_path)
-    # 填满 5 个
-    for i in range(5):
-        status, _, _ = await _req(srv.socket_path, "POST", "/runs",
-                                   session_id=sid, body={"goal": f"g{i}"})
-        assert status == 201
+    # 显式占满 5 槽(等价于 5 个 worker 在跑)
+    for _ in range(5):
+        await reg.acquire_slot()
     # 第 6 个
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",
                                  session_id=sid, body={"goal": "g6"})
@@ -113,7 +115,10 @@ async def test_post_runs_after_cancel_frees_slot(mr_server, tmp_path: Path):
         status, _, raw = await _req(srv.socket_path, "POST", "/runs",
                                      session_id=sid, body={"goal": f"g{i}"})
         rids.append(json.loads(raw.decode("utf-8"))["run_id"])
-    # cancel 第 1 个
+    # 重新占满 5 槽(元数据 run 已即时归还槽位 —— P5b 泄漏修复;此处模拟 5 worker 在跑)
+    for _ in range(5):
+        await reg.acquire_slot()
+    # cancel 第 1 个(cleanup = worker 终态路径,释放 1 槽)
     await reg.cleanup(run_id=rids[0], terminal_state="cancelled")
     # 第 6 个能进
     status, _, _ = await _req(srv.socket_path, "POST", "/runs",
