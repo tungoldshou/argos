@@ -334,14 +334,15 @@
   },
   {
     "kind": "proactive_suggestion",
-    "serialized": "{\"kind\": \"proactive_suggestion\", \"data\": {\"suggestion_id\": \"abc123def456\", \"order_id\": \"order001\", \"goal\": \"检查昨天的日志\", \"reason_human\": \"定时触发（09:00）：每天早上检查日志\", \"suggested_at\": 1700000000.0, \"requires_confirmation\": true}}",
+    "serialized": "{\"kind\": \"proactive_suggestion\", \"data\": {\"suggestion_id\": \"abc123def456\", \"order_id\": \"order001\", \"goal\": \"检查昨天的日志\", \"reason_human\": \"定时触发（09:00）：每天早上检查日志\", \"suggested_at\": 1700000000.0, \"requires_confirmation\": true, \"action\": \"run\"}}",
     "expected_data": {
       "suggestion_id": "abc123def456",
       "order_id": "order001",
       "goal": "检查昨天的日志",
       "reason_human": "定时触发（09:00）：每天早上检查日志",
       "suggested_at": 1700000000.0,
-      "requires_confirmation": true
+      "requires_confirmation": true,
+      "action": "run"
     }
   },
   {

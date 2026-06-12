@@ -127,6 +127,7 @@ class ConductorSupervisor:
             reason_human=s.reason_human,
             suggested_at=s.suggested_at,
             requires_confirmation=True,
+            action=s.action,   # 透传 suggestion.action（"run" 或 "dream"，构造时已校验）
         )
         # 序列化为 dict（与 manager.fanout 期望的 dict 格式一致）
         import json

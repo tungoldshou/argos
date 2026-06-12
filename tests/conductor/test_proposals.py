@@ -209,3 +209,19 @@ class TestProposeReasonHuman:
         order = _make_file_trigger_order()
         s = propose(order, {"path": "/x"}, clock=lambda: 1.0)
         assert order.utterance in s.reason_human
+
+
+# ---------------------------------------------------------------------------
+# action 字段透传
+# ---------------------------------------------------------------------------
+
+def test_propose_carries_order_action():
+    import time
+    o = StandingOrder(
+        id="x1", utterance="夜间整合", kind="schedule", schedule="03:00",
+        trigger_glob=None, goal_template="__dream__", enabled=True,
+        created_at=time.time(), last_fired_at=None, action="dream",
+    )
+    s = propose(o, {})
+    assert s.action == "dream"
+    assert s.requires_confirmation is True

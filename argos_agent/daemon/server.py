@@ -1348,6 +1348,7 @@ class DaemonHTTPServer:
         if s is None:
             return await self._send_error(writer, 404, CODE_NOT_FOUND,
                                           f"suggestion {suggestion_id!r} not found or already dismissed")
+        # TODO(T9): action=="dream" → 路由 DreamPipeline，而非 create_run（spec §5）
 
         # 检查 loop_factory 可用（_NO_KEY 哨兵 = 无 key）
         if self._loop_factory is _NO_KEY:

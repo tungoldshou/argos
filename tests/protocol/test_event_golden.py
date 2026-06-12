@@ -510,6 +510,7 @@ def test_proactive_suggestion_golden():
         "reason_human": "定时触发（09:00）：每天早上检查日志",
         "suggested_at": 1700000000.0,
         "requires_confirmation": True,
+        "action": "run",
     })
 
 
@@ -527,6 +528,23 @@ def test_proactive_suggestion_roundtrip():
     assert back.suggestion_id == ev.suggestion_id
     assert back.order_id == ev.order_id
     assert back.requires_confirmation is True
+    assert back.action == "run"
+
+
+def test_proactive_suggestion_action_dream_roundtrip():
+    """ProactiveSuggestionEvent action='dream' 序列化 → 反序列化往返。"""
+    ev = PE.ProactiveSuggestionEvent(
+        suggestion_id="deadbeef0022",
+        order_id="ord_dream",
+        goal="夜间整合记忆",
+        reason_human="定时触发（03:00）：夜间整合",
+        suggested_at=1700002000.0,
+        requires_confirmation=True,
+        action="dream",
+    )
+    back = _round(ev)
+    assert back.action == "dream"
+    assert back.suggestion_id == ev.suggestion_id
 
 
 def test_proactive_suggestion_requires_confirmation_always_true():

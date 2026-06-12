@@ -21,6 +21,9 @@ log = logging.getLogger("argos.conductor.orders")
 # 常驻指令类型
 OrderKind = Literal["schedule", "file_trigger"]
 
+# 触发后的执行类型（"run" = confirm 后 create_run；"dream" = confirm 后跑 DreamPipeline）
+OrderAction = Literal["run", "dream"]
+
 # 默认 orders JSONL 路径
 _DEFAULT_ORDERS_DIR = Path.home() / ".argos" / "conductor"
 
@@ -42,6 +45,8 @@ class StandingOrder:
         enabled         False → ConductorEngine tick 时跳过
         created_at      创建时间（Unix float）
         last_fired_at   最近一次产出 ProactiveSuggestion 的时间（None = 从未触发）
+        action          触发后的执行类型："run"（默认，confirm 后 create_run）或
+                        "dream"（confirm 后跑 DreamPipeline 夜间整合）
     """
     id: str
     utterance: str
@@ -52,6 +57,7 @@ class StandingOrder:
     enabled: bool
     created_at: float
     last_fired_at: float | None
+    action: OrderAction = "run"   # 带默认值放最后（frozen slots dataclass 规则）
 
     def __post_init__(self) -> None:
         """字段一致性断言（构造时立即检查，fail-loud）。"""
@@ -62,6 +68,10 @@ class StandingOrder:
         if self.kind == "file_trigger" and not self.trigger_glob:
             raise ValueError(
                 f"StandingOrder kind=file_trigger 必须提供 trigger_glob 字段 (id={self.id!r})"
+            )
+        if self.action not in ("run", "dream"):
+            raise ValueError(
+                f"StandingOrder.action 必须是 'run' 或 'dream'，收到 {self.action!r} (id={self.id!r})"
             )
 
     # ------------------------------------------------------------------
@@ -80,11 +90,12 @@ class StandingOrder:
             "enabled": self.enabled,
             "created_at": self.created_at,
             "last_fired_at": self.last_fired_at,
+            "action": self.action,
         }
 
     @staticmethod
     def from_dict(d: dict) -> "StandingOrder":
-        """从落盘 dict 还原 StandingOrder。"""
+        """从落盘 dict 还原 StandingOrder。旧数据无 action 键时默认 'run'（向前兼容）。"""
         return StandingOrder(
             id=str(d["id"]),
             utterance=str(d["utterance"]),
@@ -95,6 +106,7 @@ class StandingOrder:
             enabled=bool(d.get("enabled", True)),
             created_at=float(d["created_at"]),
             last_fired_at=float(d["last_fired_at"]) if d.get("last_fired_at") is not None else None,
+            action=d.get("action", "run"),
         )
 
     def with_last_fired(self, ts: float) -> "StandingOrder":

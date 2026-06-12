@@ -298,6 +298,16 @@ class ProactiveSuggestionEvent:
     reason_human: str       # 供 TUI 展示的人话原因（触发来源说明）
     suggested_at: float     # Unix 时间戳
     requires_confirmation: bool = True   # 协议级恒 True；客户端只读
+    # "run" = confirm 后 create_run；"dream" = confirm 后跑 DreamPipeline
+    # （内联 Literal：protocol 层不许 import conductor）
+    action: Literal["run", "dream"] = "run"
+
+    def __post_init__(self) -> None:
+        """协议校验：action 只接受 'run' 或 'dream'（坏数据 fail-loud）。"""
+        if self.action not in ("run", "dream"):
+            raise ValueError(
+                f"ProactiveSuggestionEvent.action 必须是 'run' 或 'dream'，收到 {self.action!r}"
+            )
 
 
 @dataclass(frozen=True, slots=True)
