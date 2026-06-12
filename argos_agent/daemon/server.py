@@ -275,6 +275,14 @@ class DaemonHTTPServer:
     # ── Session helpers ──────────────────────────────────────────────
 
     async def _require_session(self, writer, headers) -> str | None:
+        # 按需 reap(实测 bug 修复):reap_expired 此前零调用 = owner 永不过期、
+        # observer 永不晋升 —— 重启 TUI 后新 session 永远 403 readonly。
+        # 在鉴权前回收过期 session:过期 owner 让位 → promote 最旧 observer,
+        # 本次请求即可以新身份通过 _require_owner(无需客户端重试)。
+        try:
+            await self._sessions.reap_expired()
+        except Exception as _re:  # noqa: BLE001 — reap 失败不挡鉴权主路
+            log.warning("session reap 失败(忽略): %s", _re)
         sid = headers.get(HEADER_SESSION.lower())
         if not sid:
             await self._send_error(writer, 400, CODE_MISSING_SESSION, "missing X-Argos-Session header")

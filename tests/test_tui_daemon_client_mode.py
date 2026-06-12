@@ -113,11 +113,15 @@ async def test_daemon_unreachable_inline_fallback() -> None:
 
 
 @pytest.mark.asyncio
-async def test_daemon_available_sets_argosd_mode() -> None:
-    """T5: daemon 可达 → _kernel_mode="argosd", _with_daemon=True, StatusBar 更新。"""
+async def test_daemon_available_sets_argosd_mode(monkeypatch) -> None:
+    """T5: daemon 可达 → _kernel_mode="argosd", _with_daemon=True, StatusBar 更新。
+
+    本测显式测 argosd 路径:豁免 conftest 的 ARGOS_NO_DAEMON 隔离开关
+    (probe 已 monkeypatch 成假的,不会碰真 daemon)。"""
     from argos_agent.tui.app import ArgosApp
     from argos_agent.daemon.client import DaemonClient
 
+    monkeypatch.delenv("ARGOS_NO_DAEMON", raising=False)
     app = ArgosApp(demo=True)
 
     status_bar_mock = MagicMock()

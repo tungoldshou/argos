@@ -76,6 +76,23 @@ class _SelftestModel:
         return self._next()
 
 
+def resolve_workspace(project_arg: str | None) -> str | None:
+    """解析有效 workspace(实测 bug 修复:不传 --project 时默认【当前目录】)。
+
+    「所有人」UX 契约:用户在自己的文件夹里启动 argos,agent 就该在那个文件夹干活
+    ——否则任务会落到隐藏的默认工作区,用户的文件一个都看不见(2026-06-12 实测)。
+    护栏:cwd 是 home 目录或文件系统根时不默认(整个家目录当 workspace 危险面太大),
+    返回 None 走旧默认 ~/.argos/workspace,用户可用 --project 显式指定。
+    """
+    if project_arg:
+        return project_arg
+    import os
+    cwd = Path(os.getcwd()).resolve()
+    if cwd == Path.home() or cwd == Path(cwd.anchor):
+        return None
+    return str(cwd)
+
+
 def _run_selftest() -> int:
     """不连真模型自检:脚本模型在 tmp 项目跑一轮四阶段贯通,打印 verdict(整机装配布尔)。
 
@@ -251,14 +268,18 @@ def main() -> None:
         from argos_agent.app_factory import build_components, build_loop_factory
         from argos_agent.approval import ApprovalLevel
         from argos_agent.routing.effort import EffortLevel
+        effective_ws = resolve_workspace(args.project)
         components = build_components(
-            workspace=args.project, model_override=args.model, approval_level=ApprovalLevel.CONFIRM,
+            workspace=effective_ws, model_override=args.model, approval_level=ApprovalLevel.CONFIRM,
             effort=EffortLevel(args.effort),
         )
         factory = build_loop_factory(components)
         # 用 broker 的 gate 作 app.gate(同一实例)→ 工作流/工具审批 respond 落在 loop 真正
         # await 的那个 gate 上;顺带让 /yolo 对真 gate 生效(不再是 app 自建的孤儿 gate)。
-        ArgosApp(loop_factory=factory, gate=components.gate, demo=False).run()
+        ArgosApp(
+            loop_factory=factory, gate=components.gate, demo=False,
+            workspace=effective_ws or components.workspace,
+        ).run()
     except RuntimeError as e:
         from argos_agent.tui.fakeloop import FakeLoop
         print(f"[argos] {e}\n[argos] 运行 `argos setup` 接入模型,或配置环境变量后重启。", file=sys.stderr)

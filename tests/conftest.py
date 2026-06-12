@@ -150,3 +150,15 @@ def _neutralize_mcp_singleton(monkeypatch):
     monkeypatch.setattr(mcp_native, "CONFIG_PATH", Path("/nonexistent/argos-test/mcp.json"))
     yield
     mcp_native.shutdown()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_daemon(monkeypatch):
+    """测试隔离铁律(实测 2026-06-12):pytest 绝不许探测/连接用户真实 daemon。
+
+    真 daemon 在跑时,TUI Pilot 测试会经 _setup_daemon_mode 连上用户内核
+    (建 session、被 observer 403、甚至可能建真 run)。ARGOS_NO_DAEMON=1 强制
+    inline;ARGOS_DAEMON_SOCKET 指向不存在路径作双保险。显式测 daemon 路径的
+    测试自己起独立 server + 显式 socket,不受影响。"""
+    monkeypatch.setenv("ARGOS_NO_DAEMON", "1")
+    monkeypatch.setenv("ARGOS_DAEMON_SOCKET", "/nonexistent/argos-test/daemon.sock")

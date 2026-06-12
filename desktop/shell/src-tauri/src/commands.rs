@@ -190,6 +190,22 @@ pub async fn acp_session_id(state: State<'_, AppState>) -> BridgeResult<Option<S
     Ok(guard.clone())
 }
 
+/// POST /sessions/{id}/heartbeat — 续命当前 session(实测 bug 修复:壳无心跳,
+/// 30s 后 session 过期变僵尸客户端,一切写操作 401)。前端 10s 周期调用。
+#[tauri::command]
+pub async fn acp_heartbeat(state: State<'_, AppState>) -> BridgeResult<serde_json::Value> {
+    let sid = {
+        let guard = state.session_id.lock().await;
+        guard.clone()
+    };
+    let Some(sid) = sid else {
+        return Err(BridgeError::bad_response("no active session"));
+    };
+    let path = format!("/sessions/{}/heartbeat", sid);
+    let body = uds_post(&state.socket_path, &path, Some(&sid), "{}").await?;
+    serde_json::from_str(&body).map_err(|e| BridgeError::bad_response(e))
+}
+
 /// DELETE /sessions/{id} — close the active session (best-effort).
 #[tauri::command]
 pub async fn acp_delete_session(state: State<'_, AppState>) -> BridgeResult<serde_json::Value> {

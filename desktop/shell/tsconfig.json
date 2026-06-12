@@ -1,10 +1,12 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "node",
-    "lib": ["ES2022", "DOM"],
-    "outDir": "./dist",
+    "module": "es2020",
+    "moduleResolution": "bundler",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
     "declaration": false,
     "strict": true,
     "noImplicitAny": true,
@@ -13,7 +15,10 @@
     "noImplicitReturns": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "noEmit": false
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts"
+  ]
 }

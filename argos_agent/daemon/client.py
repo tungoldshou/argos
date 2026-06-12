@@ -235,7 +235,9 @@ class DaemonClient:
                 line = await reader.readline()
                 if not line:
                     return
-                text = line.decode("latin-1").rstrip("\r\n")
+                # SSE 数据体是 UTF-8(server encode("utf-8"));latin-1 会把中文打成 mojibake。
+                # SSE 按行分帧,UTF-8 多字节不含 \n,逐行 utf-8 解码安全。
+                text = line.decode("utf-8", errors="replace").rstrip("\r\n")
                 if not text:
                     # 空行 → 一个 event 结束
                     if data_buf:

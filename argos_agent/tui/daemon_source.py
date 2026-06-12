@@ -175,7 +175,10 @@ class DaemonEventSource:
                         except json.JSONDecodeError:
                             pass
                     return
-                text = line.decode("latin-1", errors="replace").rstrip("\r\n")
+                # SSE 数据体是 UTF-8(server _send_sse_event encode("utf-8"));
+                # latin-1 解码会把中文打成 mojibake(实测:当前目录 → å½åç®å½)。
+                # SSE 按行分帧,UTF-8 多字节序列不含 \n,逐行 utf-8 解码安全。
+                text = line.decode("utf-8", errors="replace").rstrip("\r\n")
                 if not text:
                     # 空行 = 一个 SSE event 结束
                     if data_buf:

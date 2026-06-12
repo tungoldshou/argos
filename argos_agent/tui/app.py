@@ -126,8 +126,15 @@ class ArgosApp(App):
     def __init__(
         self, *, loop_factory: Callable[[], object] | None = None, demo: bool = True,
         gate: ApprovalGate | None = None,
+        workspace: Path | str | None = None,
     ) -> None:
         super().__init__()
+        # 真实 workspace(入口解析:--project 或 cwd 默认);None = 旧默认 ~/.argos/workspace。
+        # 必须与 build_components 用的同一路径,否则 daemon create_run 会把 run 落到错误目录
+        # (实测 bug:在 ~/argos-field-test 启动,agent 却跑在默认工作区整理不到任何文件)。
+        self._workspace_override: Path | None = (
+            Path(workspace).expanduser().resolve() if workspace else None
+        )
         # 主题必须在 compose(DOM 构建)之前注册并激活——Textual 8.x 的事件顺序是
         # Compose(line 3432) → Load(line 3477) → Mount；widget DEFAULT_CSS 在 compose
         # 时解析，若此时 argos-night 未注册，$abyss/$ink-faint 等 v3 token 将
@@ -166,8 +173,8 @@ class ArgosApp(App):
         # 致不同会话共享同一持久化线程。
         self._session_id = uuid.uuid4().hex
         # /undo 配套:workspace 根 + run 自增序号 + 本轮 run 起点的快照(供 /undo 还原)。
-        # 临时默认,真接 loop 时再校准(见 plan Task 10 校准 note §5)。
-        self._workspace: Path = Path.home() / ".argos" / "workspace"
+        # 入口传入的真实 workspace 优先(与 build_components 同源);否则旧默认。
+        self._workspace: Path = self._workspace_override or (Path.home() / ".argos" / "workspace")
         self._run_seq: int = 0
         self._snapshot: "RunSnapshot | None" = None
         # ── Daemon 模式状态(v6 P3b §2)────────────────────────────────
@@ -324,6 +331,18 @@ class ArgosApp(App):
         import os
         from argos_agent.tui.daemon_spawn import probe_or_spawn
         from argos_agent.daemon.client import DaemonClient
+
+        # ARGOS_NO_DAEMON=1 总开关:强制 inline(测试隔离铁律 —— pytest 绝不许探测/
+        # 连接用户真实 daemon,否则测试会在用户内核上建 session/run;实测 2026-06-12:
+        # 真 daemon 在跑时 7 个 TUI 测试漏连上去吃 403)。也供 headless 用户显式关闭。
+        if os.environ.get("ARGOS_NO_DAEMON") == "1":
+            self._kernel_mode = "inline"
+            self._with_daemon = False
+            try:
+                self.query_one("#status-bar", StatusBar).set_kernel_mode("inline(单进程)")
+            except Exception:  # noqa: BLE001
+                pass
+            return
 
         socket_path = Path(os.environ.get("ARGOS_DAEMON_SOCKET", "~/.argos/daemon.sock")).expanduser()
 
