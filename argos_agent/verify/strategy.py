@@ -158,6 +158,154 @@ _FILE_PATTERN = re.compile(
     re.I,
 )
 
+# ── 中文/英文动词锚定目录提取 ────────────────────────────────────
+# 匹配格式：<动词> <目标路径> <子?文件夹|目录>
+# 捕获组 1：目标目录名（可含中文、字母、数字、横线、下划线、点、斜杠，但不能以 ./ 或 ../ 开头）
+_ZH_DIR_VERB_PATTERN = re.compile(
+    r"(?:"
+    # 中文动词锚定：整理到/保存到/放到/移动到/移到/归档到 X 子?文件夹|目录
+    r"(?:整理到|保存到|放到|移动到|移到|归档到)\s*([\w一-鿿][\w一-鿿\-_./]*?)\s*子?(?:文件夹|目录)"
+    # 英文动词锚定：organize/move/save … into/to X folder/directory
+    # 使用 .*? 跳过动词后的多余词语（如 "meeting notes into"）
+    r"|(?:organize|move|save)\b.*?\b(?:into|to)\s+([\w][\w\-_./]+)\s+(?:folder|directory|dir)\b"
+    r")",
+    re.I,
+)
+
+# 中文/英文动词锚定创建目录提取
+# 格式：创建/新建/生成 X 文件夹|目录
+_ZH_CREATE_DIR_PATTERN = re.compile(
+    r"(?:"
+    r"(?:创建|新建|生成)\s*([\w一-鿿][\w一-鿿\-_./]*?)\s*子?(?:文件夹|目录)"
+    r"|(?:create|mkdir)\s+([\w][\w\-_./]*?)\s+(?:folder|directory|dir)"
+    r")",
+    re.I,
+)
+
+# 中文/英文动词锚定创建文件提取
+# 格式：创建/新建/生成/写 X.ext（必须有扩展名才算文件）
+_ZH_CREATE_FILE_PATTERN = re.compile(
+    r"(?:"
+    r"(?:创建|新建|生成|写)\s*([\w一-鿿][\w一-鿿\-_.]*?\.[\w]{1,8})"
+    r"|(?:create|generate|write)\s+([\w][\w\-_.]*?\.[\w]{1,8})\b"
+    r")",
+    re.I,
+)
+
+# 否定语境词，出现在 X 周围时该 X 不提取
+_NEGATION_BEFORE = re.compile(
+    r"(?:不要|别|保持不变|不动|不要动|不能动|禁止动|don[''']t\s+(?:touch|move|modify|change)|keep\s+(?:unchanged|as.is))\s*$",
+    re.I,
+)
+
+# 模板占位符检测（含此类字符串的目标不字面断言）
+# 规则：
+#   · 大写 YYYY/MM/DD/HH/SS — 全大写占位符（不被小写字母包围），含 report_YYYY.csv 场景
+#   · \d{4}-\d{2}-\d{2} — 日期格式字符串（含具体日期，视为格式模板）
+#   · 通配符 * — 路径不应含 *
+#   · <...> / {...} / [...] — 尖括号/花括号/方括号包裹的占位符
+#   · \bYY\b / \bXX\b / \bNN\b — 短占位符（须有词边界，避免误伤 `xx.json` → x 不算 XX）
+_TEMPLATE_PLACEHOLDER = re.compile(
+    r"(?:"
+    r"(?<![a-z])YYYY(?![a-z])"
+    r"|(?<![a-z])MM(?![a-z])"
+    r"|(?<![a-z])DD(?![a-z])"
+    r"|(?<![a-z])HH(?![a-z])"
+    r"|(?<![a-z])SS(?![a-z])"
+    r"|\bYY\b|\bXX\b|\bNN\b"
+    r"|\*"
+    r"|<[^>]+>"
+    r"|\{[^}]+\}"
+    r"|\[[^\]]+\]"
+    r"|\d{4}-\d{2}-\d{2}"
+    r")"
+)
+
+
+def _is_valid_artifact_path(s: str) -> bool:
+    """判断提取到的字符串是否为合法产物路径片段。
+
+    红线：
+      a) 以空格开头/结尾 → 不合法
+      b) 以 ../ 或 ./ 开头 → 不合法（路径遍历风险）
+      c) 含有模板占位符 → 不合法（YYYY/MM/DD/*/XX 等是格式模板，不是字面路径）
+      d) 空字符串 → 不合法
+    """
+    # a) 先检查原始字符串是否有前后空格（strip 前比较）
+    if s != s.strip():
+        return False
+    s = s.strip()
+    if not s:
+        return False
+    # b) 路径遍历
+    if s.startswith("../") or s.startswith("./"):
+        return False
+    # c) 模板占位符
+    if _TEMPLATE_PLACEHOLDER.search(s):
+        return False
+    return True
+
+
+def _is_negation_context(goal: str, match_start: int) -> bool:
+    """检查匹配位置之前是否存在否定语境词（不要/别/don't touch 等）。
+
+    在匹配起始位置前取最多 20 个字符，检查是否含否定词。
+    """
+    prefix = goal[max(0, match_start - 20):match_start]
+    return bool(_NEGATION_BEFORE.search(prefix))
+
+
+def _extract_zh_dir_targets(goal: str) -> list[str]:
+    """从 goal 中用动词锚定提取目录类产物目标（含否定过滤 + 路径合法性检查）。
+
+    Returns:
+        合法目录路径字符串列表（去重，保留首次出现顺序）
+    """
+    results: list[str] = []
+    seen: set[str] = set()
+
+    for pattern in (_ZH_DIR_VERB_PATTERN, _ZH_CREATE_DIR_PATTERN):
+        for m in pattern.finditer(goal):
+            # 两个捕获组分别对应中文/英文
+            target = m.group(1) or m.group(2) or ""
+            target = target.strip()
+            if not target:
+                continue
+            if _is_negation_context(goal, m.start()):
+                continue
+            if not _is_valid_artifact_path(target):
+                continue
+            if target not in seen:
+                seen.add(target)
+                results.append(target)
+
+    return results
+
+
+def _extract_zh_file_targets(goal: str) -> list[str]:
+    """从 goal 中用动词锚定提取文件类产物目标（含否定过滤 + 路径合法性检查）。
+
+    Returns:
+        合法文件路径字符串列表（去重，保留首次出现顺序）
+    """
+    results: list[str] = []
+    seen: set[str] = set()
+
+    for m in _ZH_CREATE_FILE_PATTERN.finditer(goal):
+        target = m.group(1) or m.group(2) or ""
+        target = target.strip()
+        if not target:
+            continue
+        if _is_negation_context(goal, m.start()):
+            continue
+        if not _is_valid_artifact_path(target):
+            continue
+        if target not in seen:
+            seen.add(target)
+            results.append(target)
+
+    return results
+
 # 结构化输出信号（json/csv 输出）
 _STRUCTURED_OUTPUT_PATTERN = re.compile(
     r"\b(json|csv|yaml|yml|xml)\b.*\b(output|file|result|report|export|save|write|generate)\b"
@@ -246,6 +394,20 @@ def _l2_artifact_exists(file_path: str, hints: dict[str, str]) -> VerifyStrategy
     return VerifyStrategy(
         level="L2", kind="artifact_exists",
         cmd=f"test -f {file_path}", target=file_path,
+        rationale_human=rationale, confidence=0.75,
+    )
+
+
+def _l2_artifact_exists_dir(dir_path: str) -> VerifyStrategy:
+    """构造目录存在断言（L2 artifact_exists，用 test -d）。
+
+    Args:
+        dir_path: 目录路径（从 goal 动词锚定提取）
+    """
+    rationale = f"检查目录 {dir_path!r} 存在 = agent 确实创建/整理了声明的输出目录。"
+    return VerifyStrategy(
+        level="L2", kind="artifact_exists",
+        cmd=f"test -d {dir_path}", target=dir_path,
         rationale_human=rationale, confidence=0.75,
     )
 
@@ -396,6 +558,22 @@ def generate(
             candidates.append(_l2_content_assert_json(fname))
         elif fname.endswith(".csv"):
             candidates.append(_l2_content_assert_csv(fname))
+
+    # ── L2：中文/英文动词锚定目录产物提取 ───────────────────────
+    # 防过度提取：否定语境 + 模板占位符 + 路径合法性 已在提取函数内把关
+    dir_targets = _extract_zh_dir_targets(goal)
+    for dname in dir_targets:
+        candidates.append(_l2_artifact_exists_dir(dname))
+
+    # ── L2：中文/英文动词锚定文件产物提取（create/write 语境）──
+    file_targets = _extract_zh_file_targets(goal)
+    for fpath in file_targets:
+        if fpath not in declared:  # 避免与上方 declared 重复
+            candidates.append(_l2_artifact_exists(fpath, {}))
+            if fpath.endswith(".json"):
+                candidates.append(_l2_content_assert_json(fpath))
+            elif fpath.endswith(".csv"):
+                candidates.append(_l2_content_assert_csv(fpath))
 
     # ── L2：结构化输出信号（JSON/CSV 工作区存量）──────────────────
     if not declared:  # 没有显式声明文件才走工作区扫描兜底
