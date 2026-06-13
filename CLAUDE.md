@@ -15,7 +15,7 @@ See `README.md` for the product story and `docs/argos-product-definition.md` for
 ## Where the code lives
 
 - **`argos/`** — the entire active codebase (Python 3.12+). All work happens here.
-- **`tests/`** — pytest suite (3373 tests). Mirrors `argos/` subpackage layout, plus
+- **`tests/`** — pytest suite (3459 tests). Mirrors `argos/` subpackage layout, plus
   integration subdirs: `tests/e2e/`, `tests/eval/`, `tests/workflow/`, `tests/skills_curator/`,
   `tests/input/`, `tests/daemon/`, `tests/tui/`, `tests/desktop_channel/`, `tests/desktop_smoke/`, …
 - **`desktop/`** — Tauri 2 desktop shell (v6 P6b): `desktop/shell/` (Rust/Tauri walking skeleton)
