@@ -129,3 +129,47 @@ def test_distill_extracts_code_snippets_into_body(tmp_path):
     assert cand is not None
     # body 包含代码片段
     assert "def add(a, b)" in cand.body_markdown or "add(a, b)" in cand.body_markdown
+
+
+# ── 回归测试:候选落盘脱敏(review #6) ──────────────────────────────────────────
+
+def test_distill_redacts_secrets_in_body(tmp_path):
+    """distill body 中的明文密钥必须被脱敏(sk-ant- / password=)。
+
+    回退验证:注释掉 distiller._build_markdown 里的脱敏调用,本测试必须 FAIL。
+    """
+    from argos_agent.learning.distiller import distill_run_to_skill
+    from argos_agent.daemon.store import RunStore
+
+    run_id = "r#secrets"
+    # code_action 携带明文密钥
+    snippet_with_secrets = textwrap.dedent("""\
+        import anthropic
+        client = anthropic.Anthropic(api_key="sk-ant-xxxxxxxxxxxxxxxxxxxx")
+        # also: password="hunter2"
+        result = client.messages.create(model="claude-3-haiku-20240307",
+                                        max_tokens=10, messages=[{"role": "user", "content": "hi"}])
+    """)
+    events = _make_passed_events(
+        goal="call api with sk-ant-xxxxxxxxxxxxxxxxxxxx",
+        verify_cmd="pytest -q",
+        code_snippets=[snippet_with_secrets],
+    )
+    _write_run_store(tmp_path, run_id, events)
+    store = RunStore(runs_dir=tmp_path / "runs")
+
+    cand = distill_run_to_skill(
+        run_id=run_id, store=store,
+        goal="call api with sk-ant-xxxxxxxxxxxxxxxxxxxx",
+        verify_cmd="pytest -q",
+        skills_root=tmp_path / "skills",
+    )
+    assert cand is not None
+    body = cand.body_markdown
+    # 明文密钥不得出现
+    assert "sk-ant-xxxxxxxxxxxxxxxxxxxx" not in body, \
+        "sk-ant- 明文密钥出现在 body — 脱敏失效"
+    assert "hunter2" not in body, \
+        "password=hunter2 明文出现在 body — 脱敏失效"
+    # 脱敏占位符应存在
+    assert "<redacted:secret>" in body, "脱敏后应有 <redacted:secret> 占位符"

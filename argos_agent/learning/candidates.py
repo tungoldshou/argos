@@ -16,6 +16,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+# 复用 memory/auto.py 既有脱敏函数(9 条正则覆盖 sk-ant- / ghp_ / AKIA /
+# PRIVATE KEY / password= 等);meta.json 里的 goal / verify_cmd / workspace
+# 不经 distiller,需在此处独立脱敏。
+from argos_agent.memory.auto import _redact_secrets
+
 log = logging.getLogger(__name__)
 
 DEFAULT_ROOT = Path.home() / ".argos" / "learning" / "candidates"
@@ -50,15 +55,20 @@ def save_candidate(cand: Any, *, root: Path, source_run: str,
     try:
         d = _dir_for(root, getattr(cand, "name", "learned"), source_run)
         d.mkdir(parents=True, exist_ok=True)
+        # 脱敏:goal / verify_cmd / workspace 不经 distiller,在落盘前独立脱敏
+        safe_goal = _redact_secrets(goal or "")
+        raw_verify = getattr(cand, "verify_cmd", None)
+        safe_verify = _redact_secrets(raw_verify) if raw_verify else None
+        safe_workspace = _redact_secrets(workspace) if workspace else workspace
         # 原子写(同 promotion_gate._atomic_write_skill 约定)
         for fname, content in (
             ("SKILL.md", getattr(cand, "body_markdown", "")),
             ("meta.json", json.dumps({
                 "name": getattr(cand, "name", "learned"),
                 "source_run": source_run,
-                "verify_cmd": getattr(cand, "verify_cmd", None),
-                "workspace": workspace,
-                "goal": goal,
+                "verify_cmd": safe_verify,
+                "workspace": safe_workspace,
+                "goal": safe_goal,
                 "created_at": time.time(),
                 "consumed": False,
                 "consumed_reason": None,

@@ -69,6 +69,41 @@ def test_save_sanitizes_path_traversal_name(tmp_path: Path):
                 if d.name.startswith("evil")]
 
 
+def test_save_candidate_redacts_meta(tmp_path: Path):
+    """save_candidate 落盘的 meta.json 不得含明文密钥。
+
+    回退验证:注释掉 candidates.save_candidate 里的脱敏调用,本测试必须 FAIL。
+    """
+    import json
+    from argos_agent.learning.candidates import save_candidate
+    from argos_agent.learning.distiller import SkillCandidate
+
+    secret_goal = "fetch data with key sk-ant-xxxxxxxxxxxxxxxxxxxx and password=\"hunter2\""
+    secret_verify = "AKIA1234567890123456 pytest -q"
+    cand = SkillCandidate(
+        name="secret-skill",
+        body_markdown="# secret-skill\nbody",
+        verify_cmd=secret_verify,
+        skill_md_path=Path("unused"),
+    )
+    p = save_candidate(
+        cand, root=tmp_path, source_run="abc123def45678",
+        workspace="/tmp/ws", goal=secret_goal,
+    )
+    assert p is not None
+    meta = json.loads((p / "meta.json").read_text(encoding="utf-8"))
+    # 明文密钥不得出现在任何 meta 字段
+    meta_str = json.dumps(meta)
+    assert "sk-ant-xxxxxxxxxxxxxxxxxxxx" not in meta_str, \
+        "sk-ant- 明文出现在 meta.json — 脱敏失效"
+    assert "hunter2" not in meta_str, \
+        "password=hunter2 明文出现在 meta.json — 脱敏失效"
+    assert "AKIA1234567890123456" not in meta_str, \
+        "AKIA 明文出现在 meta.json — 脱敏失效"
+    # 脱敏占位符应存在
+    assert "<redacted:secret>" in meta_str, "脱敏后应有 <redacted:secret> 占位符"
+
+
 def test_list_drops_self_verified_candidates(tmp_path: Path):
     """E4 纵深防御(评审 B1):候选是持久产物,上游防线之外这里必须再挡一道。
 

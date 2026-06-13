@@ -19,6 +19,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Protocol
 
+# 复用 memory/auto.py 既有脱敏函数(9 条正则覆盖 sk-ant- / ghp_ / AKIA / PRIVATE KEY /
+# password= 等);同代码库私有导入可接受 —— 脱敏逻辑保持单一来源
+from argos_agent.memory.auto import _redact_secrets
+
 
 class _EventSource(Protocol):
     """distill 接受的事件源:有 .replay(run_id) -> Iterable[dict] 即可。"""
@@ -68,7 +72,15 @@ def _build_markdown(
     code_snippets: list[str],
     source_run_id: str,
 ) -> str:
-    """构造 SKILL.md 内容(frontmatter + body)。"""
+    """构造 SKILL.md 内容(frontmatter + body)。
+
+    在最近源头脱敏 goal 与 code_snippets —— 连带保护 promotion_gate 落盘的 body
+    以及 HintedRunner 发给模型的 hint(它们消费此函数的产物)。
+    """
+    # 脱敏:在最近源头处理,保护所有下游消费者
+    safe_goal = _redact_secrets(goal or "(no goal)")
+    safe_snippets = [_redact_secrets(s) for s in code_snippets]
+
     fm_lines = [
         "---",
         f"name: {name}",
@@ -79,7 +91,7 @@ def _build_markdown(
         "",
         f"# {name}",
         "",
-        f"**Goal**: {goal or '(no goal)'}",
+        f"**Goal**: {safe_goal}",
         "",
         "## What worked",
         "",
@@ -87,9 +99,9 @@ def _build_markdown(
         "",
     ]
     body = "\n".join(fm_lines)
-    if code_snippets:
+    if safe_snippets:
         body += "### Key code\n\n"
-        body += _format_code_block(code_snippets) + "\n\n"
+        body += _format_code_block(safe_snippets) + "\n\n"
     if verify_cmd:
         body += "## Verify (re-runnable)\n\n"
         body += f"```bash\n{verify_cmd}\n```\n\n"
