@@ -139,3 +139,51 @@ async def test_no_attachments_run_accepts_without_error():
         assert "多模态" not in str(e) and "multimodal" not in str(e).lower(), (
             f"无附件时不应触发多模态门禁，但得到: {e}"
         )
+
+
+# ── 视觉能力门走 resolve(spec 2026-06-13):未知 tier → resolve 探针/缓存判定 ──
+def _unknown_tier():
+    """未知能力(multimodal=None)→ 门走 resolve。"""
+    from argos.core.models import ModelTier
+    return ModelTier(name="default", model="agnes-flash", base_url="https://x",
+                     max_tokens=64, multimodal=None)
+
+
+@pytest.mark.asyncio
+async def test_unknown_tier_blocks_when_resolve_false(monkeypatch):
+    """multimodal=None + 附件:门走 resolve;resolve→False → 诚实阻断。"""
+    import argos.core.vision_capability as vc
+
+    async def _fake_resolve(tier, model_client, cache, **kw):
+        return False
+    monkeypatch.setattr(vc, "resolve_vision_capability", _fake_resolve)
+
+    loop = _make_minimal_loop(_unknown_tier())
+    events = []
+    try:
+        async for ev in loop.run("x", "s", attachments=[_att()]):
+            events.append(ev)
+    except Exception as e:  # noqa: BLE001
+        assert "看不了图" in str(e) or "multimodal" in str(e).lower()
+        return
+    from argos.protocol.events import Error
+    assert any(isinstance(ev, Error) for ev in events), "resolve→False 应诚实阻断"
+
+
+@pytest.mark.asyncio
+async def test_unknown_tier_passes_gate_when_resolve_true(monkeypatch):
+    """resolve→True → 门放行(后续可能因 mock 不全出别的错,但不是视觉门)。"""
+    import argos.core.vision_capability as vc
+
+    async def _fake_resolve(tier, model_client, cache, **kw):
+        return True
+    monkeypatch.setattr(vc, "resolve_vision_capability", _fake_resolve)
+
+    loop = _make_minimal_loop(_unknown_tier())
+    try:
+        async for _ev in loop.run("x", "s", attachments=[_att()]):
+            pass
+    except Exception as e:  # noqa: BLE001
+        assert "看不了图" not in str(e) and "multimodal" not in str(e).lower(), (
+            f"resolve→True 不应触发视觉门,但得到: {e}"
+        )
