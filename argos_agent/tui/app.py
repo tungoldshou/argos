@@ -1733,6 +1733,11 @@ class ArgosApp(App):
                 report = body.get("report")
                 if report is None:
                     await log.append_line("暂无 Dream 报告(还没跑过夜间整合)。", kind="system")
+                elif not isinstance(report, dict):
+                    await log.append_line(
+                        f"Dream 报告格式异常(期望 dict,收到 {type(report).__name__})",
+                        kind="error",
+                    )
                 else:
                     await log.append_line(self._fmt_dream_report(report), kind="done")
             else:

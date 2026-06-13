@@ -176,3 +176,46 @@ async def test_tui_dream_daemon_posts():
         assert "已启动" in txt
     finally:
         os.environ.pop("ARGOS_NO_DAEMON", None)
+
+
+# ── 6. TUI:/dream status — daemon 返回非 dict report 不崩溃 ──────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad_report", [[], 42, "string", True])
+async def test_tui_dream_status_non_dict_report_does_not_crash(bad_report):
+    """daemon 返回非 dict 的 'report' 值时,/dream status 输出格式错误提示而不炸 App。
+
+    修复评审问题:report = body.get('report') 只守 None;非 dict 值传入
+    _fmt_dream_report 会 AttributeError → exit_on_error 退出 App。
+    """
+    import json as _json
+    import os
+    os.environ["ARGOS_NO_DAEMON"] = "1"
+    try:
+        from argos_agent.tui.app import ArgosApp
+        from argos_agent.tui.commands import parse_slash
+        from argos_agent.tui.fakeloop import FakeLoop
+        from argos_agent.tui.widgets.transcript import Transcript
+
+        app = ArgosApp(loop_factory=lambda: FakeLoop())
+
+        mock_client = MagicMock()
+        mock_client._request = AsyncMock(
+            return_value=(200, {}, _json.dumps({"report": bad_report}))
+        )
+
+        app._with_daemon = True
+        app._daemon_client = mock_client
+        app._daemon_session_id = "test-session-id"
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            cmd = parse_slash("/dream status")
+            await app._dispatch_slash(cmd)
+            txt = app.query_one("#transcript", Transcript).rendered_text
+
+        # 不应炸,应输出格式错误提示
+        assert "格式异常" in txt or "format" in txt.lower()
+    finally:
+        os.environ.pop("ARGOS_NO_DAEMON", None)
