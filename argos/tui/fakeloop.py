@@ -48,7 +48,10 @@ class FakeLoop:
             TokenDelta(text="完成,已验证全绿。\n"),
         ]
 
-    async def run(self, goal: str, session_id: str) -> AsyncIterator[Event]:
+    async def run(self, goal: str, session_id: str,
+                  attachments: list | None = None) -> AsyncIterator[Event]:
+        # attachments:与真 AgentLoop.run 同签名(演示/测试不消费,仅记录供断言)。
+        self.last_attachments = list(attachments or [])
         script = self._script if self._script is not None else self._default_script(goal)
         for ev in script:
             yield ev

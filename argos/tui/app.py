@@ -457,7 +457,7 @@ class ArgosApp(App):
     def on_prompt_area_submitted(self, event: PromptArea.Submitted) -> None:
         # PromptArea 已在内部清空自身;这里只负责分发(slash / goal)。同时收掉 slash 菜单。
         self.query_one("#slash-menu", SlashMenu).hide()
-        self.handle_input(event.text)
+        self.handle_input(event.text, event.attachments)
 
     # ── 语音输入编排(voice input Task 5)──────────────────────────────────────
 
@@ -588,8 +588,8 @@ class ArgosApp(App):
         menu = self.query_one("#slash-menu", SlashMenu)
         menu.show_matches(match_commands(event.text_area.text))
 
-    def handle_input(self, text: str) -> None:
-        """slash 走分发;否则当 goal。同步入口(测试可直接调)。
+    def handle_input(self, text: str, attachments: list | None = None) -> None:
+        """slash 走分发;否则当 goal(可带图片 attachments)。同步入口(测试可直接调)。
 
         Transcript 落行是 async,故 slash 分发与"任务进行中"提示都包成 worker(测试 pause 后可见)。"""
         cmd = parse_slash(text)
@@ -605,7 +605,7 @@ class ArgosApp(App):
                     )
                     return
                 # 非测试同步场景:起一轮 run(测试用 start_run 显式 await)
-                self.run_worker(self.start_run(text.strip()), exclusive=False)
+                self.run_worker(self.start_run(text.strip(), attachments or []), exclusive=False)
             return
         self.run_worker(self._dispatch_slash(cmd), exclusive=False)
 
@@ -1974,7 +1974,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             f"已恢复会话「{title}」,带回 {len(msgs)} 条历史 —— 继续输入即接上文。", kind="done")
 
     # ── 一轮 run:EventBus + loop + Worker 消费 ────────────────────────────
-    async def start_run(self, goal: str) -> None:
+    async def start_run(self, goal: str, attachments: list | None = None) -> None:
         if self._run_active:
             return
         self._run_active = True
@@ -2026,11 +2026,11 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         # daemon 模式:POST /runs → DaemonEventSource 喂 EventBus → 现有渲染路径零改动。
         # inline 模式:直接 loop.run() → 现有路径(向后兼容,不动)。
         if self._with_daemon and self._daemon_client is not None and self._daemon_session_id:
-            await self._start_run_daemon(goal, log)
+            await self._start_run_daemon(goal, log, attachments or [])
         else:
-            await self._start_run_inline(goal, log)
+            await self._start_run_inline(goal, log, attachments or [])
 
-    async def _start_run_inline(self, goal: str, log) -> None:
+    async def _start_run_inline(self, goal: str, log, attachments: list | None = None) -> None:
         """inline 路径(单进程直跑):保持原有语义,支持 FakeLoop + AgentLoop。
 
         plan_decision 走 loop.respond_plan_decision(call_id, action, feedback)——
@@ -2053,7 +2053,8 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
 
         async def _produce() -> None:
             try:
-                async for ev in loop.run(goal, session_id=self._session_id):
+                async for ev in loop.run(goal, session_id=self._session_id,
+                                         attachments=attachments or []):
                     await bus.emit(ev)
             except Exception as e:  # noqa: BLE001 — loop 任何异常降级为 Error 事件
                 chain: list[str] = []
@@ -2083,7 +2084,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 await log.append_line("⎋ 已打断当前任务。", kind="system")
                 self._interrupted = False
 
-    async def _start_run_daemon(self, goal: str, log) -> None:
+    async def _start_run_daemon(self, goal: str, log, attachments: list | None = None) -> None:
         """daemon 路径(v6 P3b §3):POST /runs → DaemonEventSource 喂 EventBus。
 
         · Esc = POST cancel(已在 action_interrupt 处理)
