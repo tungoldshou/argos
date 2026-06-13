@@ -390,7 +390,7 @@ async def deep_probe(*, protocol: str, base_url: str, model: str, api_key: str |
             broker = CapabilityBroker(gate=gate, egress=EgressPolicy(
                 llm_hosts=set(), search_hosts=set(), mcp_hosts=set()),
                 signer=ReceiptSigner(key=b"probe"))
-            sandbox = SeatbeltExecutor(broker_handler=lambda a, ar: broker._execute(a, ar)[0])
+            sandbox = SeatbeltExecutor(broker_handler=lambda a, ar: broker.execute_sync(a, ar)[0])
             store = ArgosStore(db_path=str(_P(td) / "p.db"))
             loop = AgentLoop(store=store, bus=EventBus(), sandbox=sandbox, broker=broker,
                              model=model_factory(tier, api_key), verifier=Verifier(max_rounds=3),

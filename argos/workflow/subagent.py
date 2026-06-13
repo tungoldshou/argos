@@ -134,11 +134,11 @@ class SubAgentFactory:
             )
 
             def _bridge(action: str, args: dict) -> object:
-                # 同步桥走 broker._execute(裸执行):exec_code 同步阻塞无法 await gate,故绕过
-                # request() 的 egress 校验/交互审批/Receipt。真正的硬边界是 Seatbelt(网络系统级
-                # OFF、写限 workspace),egress 白名单这道第二防线在同步桥路径上不生效(既有限制,
-                # 非本功能引入)。子 agent 本就 AUTO 档不需交互审批。
-                value, _exit = broker._execute(action, args)
+                # 同步桥走 broker.execute_sync:exec_code 同步阻塞无法 await gate。execute_sync 做
+                # request() 的所有同步步骤——fail-closed + egress 校验 + 真执行 + Receipt 签发——
+                # 只跳过②交互审批(子 agent 本就 AUTO 档不需交互审批)。真硬边界仍是 Seatbelt;
+                # egress 第二防线与签名回执现在在子 agent 同步桥路径也生效(#3)。
+                value, _exit = broker.execute_sync(action, args)
                 return value
 
             # 平台感知:macOS → Seatbelt,Linux → bwrap(unshare 退化)。在没沙箱后端的

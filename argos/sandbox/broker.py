@@ -139,6 +139,41 @@ class CapabilityBroker:
         # ⑤ 灌回沙箱
         return value
 
+    def execute_sync(self, action: str, args: dict[str, Any]) -> tuple[Any, int | None]:
+        """同步 gating 路径(供同步桥 broker_handler:exec_code 阻塞等结果,无法 await gate)。
+
+        做 request() 的所有【同步】步骤——fail-closed action 校验 + ① egress 检查 + ③ 真执行 +
+        ④ Receipt 签发——唯独跳过 ② 交互审批(需 await,留 v1.1;真边界仍是 Seatbelt OS 沙箱)。
+
+        修复 #3 治理地基:同步桥过去直调 _execute 旁路 egress / 回执 / 审计 → 「每个动作签名回执」
+        「可审计」承诺在沙箱工具路径结构性落空(ledger 基本为空)。execute_sync 让回执真实签发
+        (loop take_receipt → ToolReceipt → ledger 落盘),egress 第二防线在同步桥路径生效。
+
+        _gated 保持默认 False:registry dispatch 能力仍走 _execute 的 PermissionError(它们需经
+        request() 的审批,同步桥给不了),不在此放行;内置 if/elif 工具(run_command/web_*/...)
+        正常执行并补 egress + 回执。
+        """
+        # fail-closed:action 必须已知(registry 或 _RISK 之一),与 request() 顶部同源。
+        _reg = getattr(self, "_registry", None)
+        _registry_risk = _reg.risk_table() if _reg is not None else {}
+        if action not in _registry_risk and action not in _RISK:
+            return f"错误:未知/不支持的特权动作 {action!r},拒绝。", 1
+        # ① egress 检查(网络类,fail-closed)
+        if action in self._derive_network_actions():
+            host = _web.host_for(action, args)
+            if not self._egress.allowed(host):
+                return (
+                    f"错误:egress 拒绝 —— {host!r} 不在允许出网名单。可让用户批准该域名后重试。",
+                    1,
+                )
+        # ③ host 执行真副作用(② 交互审批跳过 —— 同步桥无法 await)
+        value, exit_code = self._execute(action, args, run_ctx=None)
+        # ④ 签 Receipt(HMAC,host 侧):沙箱工具调用现在真有签名回执 + 可审计
+        self.last_receipt = self._signer.sign(
+            action=action, args=args, result=value, exit_code=exit_code,
+        )
+        return value, exit_code
+
     def _derive_network_actions(self) -> set[str]:
         """P2 egress manifest 驱动:从 registry 派生需要 egress 检查的动作集合。
 

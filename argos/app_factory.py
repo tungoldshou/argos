@@ -158,12 +158,12 @@ def _make_gate_broker_sandbox(
         mcp_manager=mcp_manager, browser_controller=browser_controller,
         registry=registry,
     )
-    # 同步 broker_handler 桥走 broker._execute(裸执行):exec_code 阻塞等 broker_reply,
-    # 无法 await gate,故绕过 request() 的 egress 校验/交互审批/Receipt。真正的硬边界是
-    # Seatbelt(网络系统级 OFF、写限 workspace),egress 白名单这道第二防线在同步桥路径上
-    # 不生效(既有限制,非本功能引入)。非 AUTO 档的交互式审批同样受此限,留 v1.1。
+    # 同步 broker_handler 桥走 broker.execute_sync:exec_code 阻塞等 broker_reply,无法 await
+    # gate。execute_sync 做 request() 的所有同步步骤——fail-closed + egress 校验 + 真执行 +
+    # Receipt 签发——只跳过②交互审批(需 await,留 v1.1)。真硬边界仍是 Seatbelt(网络系统级
+    # OFF、写限 workspace);egress 第二防线与签名回执现在在同步桥路径也生效(#3 治理地基)。
     def broker_handler(action: str, args: dict) -> object:
-        value, _exit = broker._execute(action, args)
+        value, _exit = broker.execute_sync(action, args)
         return value
 
     # 沙箱由 loop.run() 自己 spawn/close(每轮一个子进程),此处只构造,不预 spawn。

@@ -135,7 +135,7 @@ def _run_selftest() -> int:
             )
 
             def broker_handler(action, args):
-                value, _exit = broker._execute(action, args)
+                value, _exit = broker.execute_sync(action, args)
                 return value
 
             sandbox = SeatbeltExecutor(broker_handler=broker_handler)
