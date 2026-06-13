@@ -29,7 +29,7 @@ class ModelTier:
     # 给默认值(200k)以不破坏既有按 max_tokens 收尾的构造点;config 按模型填真值。
     context_window: int = 200_000
     protocol: str = "anthropic"   # "anthropic" | "openai";默认值保旧构造点/旧 env 回退零破坏
-    multimodal: bool = False       # 当前模型是否支持图像输入(spec §5);来自 config/setup 探针
+    multimodal: bool | None = None  # 视觉能力 override:None=未知(走懒探针检测);True/False=用户显式声明(跳探针)
 
 
 # ── Credential + CredentialPool ──────────────────────────────────────────────

@@ -9,9 +9,15 @@ def _make_tier(**kwargs):
     return ModelTier(**defaults)
 
 
-def test_model_tier_multimodal_defaults_false():
-    """ModelTier 不传 multimodal → 默认 False(不破坏既有构造点)。"""
+def test_model_tier_multimodal_defaults_none():
+    """ModelTier 不传 multimodal → 默认 None(未知 → 走探针检测,不再默认 False)。"""
     tier = _make_tier()
+    assert tier.multimodal is None
+
+
+def test_model_tier_multimodal_explicit_false_is_override():
+    """ModelTier(multimodal=False) → 显式 override 保留(用户声明纯文本)。"""
+    tier = _make_tier(multimodal=False)
     assert tier.multimodal is False
 
 
