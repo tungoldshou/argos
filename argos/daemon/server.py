@@ -445,6 +445,9 @@ class DaemonHTTPServer:
         from argos.daemon.worker import RunWorker
         # P3:approval_timeout_s 可由 create_run body 携带(默认 60s)。
         approval_timeout_s = float(data.get("approval_timeout_s", 60.0))
+        # 图片附件(base64 over wire)→ ImageAttachment;只在内存随 worker 传,不落 index。
+        from argos.daemon.attachments_wire import decode_attachments
+        run_attachments = decode_attachments(data.get("attachments"))
 
         # P3b §6:run 起点快照(undo_token 来源)。
         # workspace 存在时拍快照;失败 fail-soft(snapshot=None → undo 诚实报 no_snapshot)。
@@ -510,6 +513,7 @@ class DaemonHTTPServer:
                 approval_timeout_s=approval_timeout_s,
                 ledger_store=self._ledger_store,
                 snapshot=run_snapshot,
+                attachments=run_attachments,
             )
             # P3:注册 worker 到路由表,供审批路由使用
             self._workers[run_id] = worker
@@ -537,6 +541,7 @@ class DaemonHTTPServer:
                 approval_timeout_s=approval_timeout_s,
                 ledger_store=self._ledger_store,
                 snapshot=run_snapshot,
+                attachments=run_attachments,
             )
             # P3:注册 worker 到路由表
             self._workers[run_id] = worker

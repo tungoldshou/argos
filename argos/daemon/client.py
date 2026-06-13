@@ -151,15 +151,19 @@ class DaemonClient:
 
     async def create_run(
         self, session_id: str, *, goal: str, workspace: str = "",
-        model: str = "", approval_level: str = "confirm",
+        model: str = "", approval_level: str = "confirm", attachments=None,
     ) -> str:
+        from argos.daemon.attachments_wire import encode_attachments
+        body = {"goal": goal, "workspace": workspace, "model": model,
+                "approval_level": approval_level}
+        wire = encode_attachments(attachments)
+        if wire:
+            body["attachments"] = wire   # 图片 base64;无附件时不加键(请求体与现状一致)
         status, _, raw = await self._request(
-            "POST", "/runs", session_id=session_id,
-            body={"goal": goal, "workspace": workspace, "model": model,
-                  "approval_level": approval_level},
+            "POST", "/runs", session_id=session_id, body=body,
         )
-        body = self._check(status, self._parse_json(status, raw), (201,))
-        return body["run_id"]
+        body_out = self._check(status, self._parse_json(status, raw), (201,))
+        return body_out["run_id"]
 
     async def get_run(self, session_id: str, run_id: str) -> dict:
         status, _, raw = await self._request(
