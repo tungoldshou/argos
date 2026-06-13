@@ -77,7 +77,9 @@ _CODE_BLOCK = re.compile(r"```(?:python)?\s*\n(.*?)```", re.DOTALL)
 # 真验证门:从模型【代码块文本】里抓 propose_verify('<cmd>') 的命令参数(host 侧解析)。
 # 沙箱是独立子进程(Seatbelt),host 回调无法注入其命名空间 —— 故 host 在 act 循环里解析
 # agent 输出登记验证命令;沙箱内的 propose_verify() 工具仅给个登记回执(真执行在 host verify 阶段)。
-_PROPOSE_VERIFY = re.compile(r"propose_verify\(\s*['\"](.+?)['\"]\s*\)")
+# (?:[a-zA-Z]+)? 容忍 f/r/b 等字符串前缀,以【检测】f-string verify(propose_verify(f'...'))——
+# 过去完全失配 → 验证命令静默丢失。抓到后 _on_propose_verify 检测 {} 占位再诚实拒(#11)。
+_PROPOSE_VERIFY = re.compile(r"propose_verify\(\s*(?:[a-zA-Z]+)?['\"](.+?)['\"]\s*\)")
 
 # A2 Major-2 修正:propose_dom_verify(url=..., selector=..., expected_text=...) host 侧解析。
 # 与 propose_verify 同构:沙箱内调用仅返回登记回执,真断言在 host verify 阶段由 DomProber 执行。
@@ -134,7 +136,8 @@ def extract_plan_todos(text: str) -> list[dict] | None:
         in_str: str | None = None
         esc = False
         j = i
-        while j < len(text) and depth > 0:
+        limit = min(len(text), i + 65536)   # #10 防 O(n²):单次配平扫描钳 64KB 窗口,超窗口视为未配平
+        while j < limit and depth > 0:
             ch = text[j]
             if in_str is not None:
                 if esc:
@@ -176,7 +179,8 @@ def extract_workflow_spec(text: str) -> dict | None:
         in_str: str | None = None
         esc = False
         j = i
-        while j < len(text) and depth > 0:
+        limit = min(len(text), i + 65536)   # #10 防 O(n²):单次配平扫描钳 64KB 窗口,超窗口视为未配平
+        while j < limit and depth > 0:
             ch = text[j]
             if in_str is not None:
                 if esc:
@@ -428,6 +432,12 @@ class AgentLoop:
         """
         cmd = (cmd or "").strip()
         if not cmd:
+            return False
+        # #11 f-string 检测:host 侧独立跑验证、拿不到沙箱变量,无法求值 f-string 占位({...})。
+        # 含占位的命令拒登记 + 回灌告知用普通字面量(否则 verify 跑字面 {x} 必失败/静默丢失)。
+        if "{" in cmd and "}" in cmd:
+            self._verify_rejected = cmd
+            self._verify_rejected_fstring = True
             return False
         if os.environ.get("ARGSOS_BRIDGE_VERIFY_LOCK", "1") != "0" \
                 and self._cfg.verify_cmd is not None and self._cfg.verify_cmd.strip():
@@ -1212,7 +1222,14 @@ class AgentLoop:
 
             # 拒登记回灌:H1 伪命令(永远是) + W5 桥接 verify 锁(默认开,关需 ARGSOS_BRIDGE_VERIFY_LOCK=0)。
             if self._verify_rejected is not None:
-                if os.environ.get("ARGSOS_BRIDGE_VERIFY_LOCK", "1") != "0" \
+                if getattr(self, "_verify_rejected_fstring", False):
+                    # #11:f-string verify(含 {} 占位)—— 诚实告知用普通字面量,而非静默丢失。
+                    messages.append({"role": "user", "content":
+                        f"[Argos 验证门] `{self._verify_rejected}` 像是 f-string(含 {{}} 占位)。host 侧"
+                        "独立跑验证、拿不到你沙箱里的变量,无法求值 f-string。请改用普通字符串字面量、"
+                        "填入完整命令(如 propose_verify('pytest -q tests/test_x.py'))。"})
+                    self._verify_rejected_fstring = False
+                elif os.environ.get("ARGSOS_BRIDGE_VERIFY_LOCK", "1") != "0" \
                         and self._cfg.verify_cmd is not None and self._cfg.verify_cmd.strip():
                     # W5:bridge 已配 verify,agent 不必再 propose(开锁时)
                     messages.append({"role": "user", "content":
