@@ -403,6 +403,20 @@ candidate verify command when none was declared — the canary guard
 ensures the generated command can actually fail (a trivial always-pass
 command is discarded, keeping the `unverifiable` verdict honest).
 
+### Dream nightly consolidation
+
+`argos_agent/learning/dream.py` runs every night (03:00 cron, or on-demand)
+to synthesize verified runs into generalized skills. It scans the candidate
+pool (distiller products from runs that lacked runner context), clusters
+them by similarity (goal + verify_cmd token Jaccard ≥ 0.35), synthesizes
+multi-source clusters into a single skill (model writes narrative only;
+code and verify commands are copied verbatim from sources), and runs an
+A/B promotion gate. Fails safely: missing workspaces → "no evidence to
+promote", narrative generation failures → template fallback. All suggestions
+require user confirmation (Conductor `requires_confirmation=true`). Integrates
+with memory consolidation to merge reflections, decay low-confidence entries,
+and archive old experiences (never hard-delete). See `docs/dream.md`.
+
 ---
 
 ## Commands
@@ -437,6 +451,7 @@ Slash commands live in the TUI. Tab completion is built in.
 | `/security-review` | Three passes: secrets, dependency vulnerabilities (shells out to `npm` / `pip-audit` / `cargo-audit` — missing tools reported as `error`, never silently skipped), dangerous APIs. Read-only. |
 | `/simplify` | Three passes: token-shingle duplicate detection, function-complexity hotspots, dead-code heuristics. Read-only. |
 | `/eval` | Self-eval harness. `/eval` lists recent runs + 7d pass rate. `/eval run <task_id>` runs a corpus task. `/eval compare <a> <b>` runs an A/B (report into transcript). CLI twin: `argos eval list \| run \| compare \| corpus`. |
+| `/dream` | Nightly consolidation. `/dream` runs one round immediately (clusters candidates, synthesizes multi-source skills, A/B promotes, consolidates memory). `/dream status` shows the last report. CLI twin: `argos dream [--report]`. |
 | `/routing` | View last 10 routing decisions. `/routing set <category> <tier>` updates routing. |
 | `/context` | View the current LLM context breakdown by bucket (system / memory / tools / messages). |
 | `/remember`, `/forget`, `/memory` | Explicit auto-memory management (hidden from the slash menu; still functional). |
