@@ -233,7 +233,7 @@ class RunWorker:
     def __init__(self, *, run_id: str, manager: RunManager, loop_factory,
                  registry=None, worktree=None, gate=None,
                  run_stack_close=None, approval_timeout_s: float = 60.0,
-                 ledger_store=None, snapshot=None):
+                 ledger_store=None, snapshot=None, attachments=None):
         self.run_id = run_id
         self._manager = manager
         self._loop_factory = loop_factory
@@ -260,6 +260,7 @@ class RunWorker:
         # None = 向后兼容路径(测试/FakeLoop),不落账本。
         self._ledger_store = ledger_store
         self._snapshot = snapshot         # RunSnapshot | None(run 起点快照,undo_token 来源)
+        self._attachments = list(attachments or [])  # 图片附件(create_run body base64 解码而来)→ loop.run
         self._ledger_seq = 0              # 本 run 账本条目顺序号(从 1 起)
         # P1 typed event 桥:兼容 dataclass(AgentLoop)和 dict(FakeLoop)两种形态
 
@@ -326,7 +327,11 @@ class RunWorker:
             # 3. 拿 pause event
             pause_event = self._manager.pause_event(self.run_id)
             # 4. drive
-            async for ev in self._loop.run(entry.goal, session_id=f"run-{self.run_id}"):
+            # 仅在真有图片附件时传 attachments kwarg → 无附件路径调用签名与改造前逐字一致
+            # (测试/演示用的精简 FakeLoop 们无需都改 run 签名,零回归)。
+            _run_kwargs = {"attachments": self._attachments} if self._attachments else {}
+            async for ev in self._loop.run(entry.goal, session_id=f"run-{self.run_id}",
+                                           **_run_kwargs):
                 # 取消检测
                 if self._manager.is_cancel_requested(self.run_id):
                     break

@@ -2127,6 +2127,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 goal=goal,
                 workspace=str(self._workspace),
                 approval_level="confirm",
+                attachments=attachments or [],
             )
         except Exception as e:  # noqa: BLE001
             await log.append_line(f"◉ daemon create_run 失败:{e}", kind="error")
