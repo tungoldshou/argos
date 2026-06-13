@@ -37,3 +37,37 @@ async def test_handle_input_forwards_attachments_to_start_run():
         await pilot.pause()
     assert captured.get("goal") == "看图"
     assert captured.get("attachments") == [_ATT]
+
+
+# ── Task 5: Ctrl+V 剪贴板贴图 ──
+from argos.tui.widgets.prompt import PromptArea
+
+
+@pytest.mark.asyncio
+async def test_ctrl_v_inserts_image_token(monkeypatch):
+    import argos.tui.app as appmod
+    monkeypatch.setattr(appmod, "read_clipboard_image", lambda: _ATT)
+    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.action_paste_image()
+        await pilot.pause()
+        pa = app.query_one("#prompt", PromptArea)
+        assert "[图片 #1]" in pa.text
+
+
+@pytest.mark.asyncio
+async def test_ctrl_v_clipboard_error_is_honest(monkeypatch):
+    import argos.tui.app as appmod
+
+    def boom():
+        raise appmod.ClipboardError("剪贴板里没有图片")
+
+    monkeypatch.setattr(appmod, "read_clipboard_image", boom)
+    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app.action_paste_image()   # 不该抛
+        await pilot.pause()
+        pa = app.query_one("#prompt", PromptArea)
+        assert "[图片" not in pa.text      # 失败不插 token

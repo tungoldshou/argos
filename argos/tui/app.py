@@ -68,6 +68,7 @@ from argos.tui.widgets.verdict_badge import VerdictBadge
 from argos.input.recorder import Recorder, RecorderError
 from argos.input.stt import make_transcriber, SttError
 from argos.input.stt_config import load_stt_config
+from argos.input.clipboard_image import read_clipboard_image, ClipboardError
 from argos.tui.widgets.workflow_panel import WorkflowPanel
 
 _BASE_SUBTITLE = "百眼智能体"
@@ -125,6 +126,7 @@ class ArgosApp(App):
         ("escape", "interrupt", "打断"),
         ("ctrl+b", "background", "后台"),
         ("ctrl+o", "cycle_panel", "右栏视图"),   # TUI v2:智能切手动 pin/循环
+        ("ctrl+v", "paste_image", "贴图"),        # 读剪贴板图片 → [图片 #N] chip
         # #5b T7:tab 切换(放在 Ctrl+1..5 子绑定,tab_strip widget 自己处理)
     ]
 
@@ -243,6 +245,26 @@ class ArgosApp(App):
             )
         except Exception:  # noqa: BLE001 — 未 mount(测试直构)时静默,数据已在字段里
             pass
+
+    async def action_paste_image(self) -> None:
+        """Ctrl+V:读系统剪贴板图片 → 在输入框插入 [图片 #N] chip。
+        诚实:无图 / 无工具 / 平台不支持 → transcript 落明确原因,不崩、不伪绿。"""
+        try:
+            att = read_clipboard_image()
+        except ClipboardError as e:
+            self.run_worker(
+                self.query_one("#transcript", Transcript).append_line(
+                    f"⚠︎ 贴图失败:{e}", kind="error",
+                ),
+                exclusive=False,
+            )
+            return
+        try:
+            prompt = self.query_one("#prompt", PromptArea)
+        except Exception:  # noqa: BLE001 — 无输入框(不该发生)
+            return
+        token = prompt.register_image(att)
+        prompt.insert(token)
 
     def action_cycle_panel(self) -> None:
         """Ctrl+O:右栏视图循环(auto → idle → plan → act → verify → auto)。"""
