@@ -19,6 +19,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - **P6a computer use**(`argos_agent/perception/`):ComputerAction 7 种动作 + `ComputerExecutor` 零依赖 macOS 后端(screencapture/osascript/open -a);Accessibility 权限被拒返人话指引;非开发者域 HARD RULES(金融文本正则/支付类 app → hard CONFIRM,L4 不放行);conductor 自治 run 一律 RED 拒绝;`ARGOS_COMPUTER_USE=1` 旗标默认关
   - **P6b 桌面端通道**(`desktop/`):TS ACP SDK(`desktop/sdk/`,零运行时依赖,30 事件 kind 对齐 `protocol/events.py`);`parse.ts` 前向兼容;`client.ts` Unix socket 镜像 daemon 15 端点;黄金向量 33 个 Python 真序列化向量(node:test 39 测试);Tauri 2 行走骨架(`desktop/shell/`),Rust UDS 桥 8 个 IPC 命令,verdict 三态着色(unverifiable=黄,绝不绿)
 
+- **Dream 夜间整合 — 验证门控跨 run 自进化 + 记忆整理**:让一次验证通过的经验不被丢弃、多次相似经验自动综合成泛化 skill。**核心架构**:
+  - **候选落盘通电**(`argos_agent/learning/candidates.py`):无 runner 时 distiller 产物落盘到 `~/.argos/learning/candidates/<name>-<run_id>/`(之前直接丢弃);`meta.json` 标记 `consumed` 状态与源(含 self_verified 来源记录);E4 双保险拒绝 self_verified 候选;一切 IO 失败诚实降级,不挂主任务
+  - **夜间聚类 + 综合**(`argos_agent/learning/dream.py`):贪心单链聚类(token Jaccard ≥0.35,O(n²),夜间 n<100 毫秒级);簇 ≥2 走综合、单例直接 A/B;模型仅写叙述层("何时适用/注意事项"),代码段与 verify 命令逐字复制自已验证源,三层 fence 剥除(```/~~~/残留 fence);合成失败 → 模板兜底;预算:每晚最多 3 个整合单元,单元源上限 5(超大簇截取+留宿隔晚消化)
+  - **A/B 晋升 + 消费标记**:B 严格 > A 才晋升(pass_rate/cost/speed 二选一胜出);workspace 消失 → 报告 `no_tasks_available` 诚实拒晋升;晋升/拒绝/workspace 消失均标记 consumed,临时失败不标记(下晚重试)
+  - **记忆整理**(`argos_agent/memory/consolidate.py`):同 scope 高相似 reflection 合并(留最新,use_count 累加);分数衰减到阈值以下(默认 0.2) → 移入 `archive.jsonl`;永不硬删,整理动作计入 Dream 报告
+  - **Conductor 接线**(`argos_agent/conductor/orders.py`+`argos_agent/daemon/conductor_supervisor.py`):默认注册 `builtin-dream-nightly`(03:00 cron);材料扫描(≥1 簇或 ≥3 条未消费)才产生 ProactiveSuggestion;confirm 路由 DreamPipeline(不走 create_run);新事件 `dream_progress`/`dream_report`;报告落 `~/.argos/dreams/<date>.jsonl`
+  - **TUI + CLI**:TUI `/dream` 立即跑,`/dream status` 看报告;CLI `argos dream` / `argos dream --report`;全程需用户确认(Conductor `requires_confirmation=true` 恒 True)
+  - **诚实防线**:三层铁律(模型绝不写代码 / 无证据绝不晋升 / E4 防火墙拒 self_verified);spec 在 `docs/superpowers/specs/2026-06-13-dream-consolidation-design.md`,用户文档 `docs/dream.md`,+115 测试贯穿 6 阶段
+
 - **欠账冲刺 A — Trust Dial 细粒度语义 + L3 DOM 验证通道 + 条目级 undo**:
   - **A1 Trust Dial 真语义**:L0 每步确认(只读也问);L2 `reversible_lookup` 从 capability manifest 构造注入(True=放行带审计痕迹,False/None/异常=保守 ask);HARD RULES/secret 链头短路任何档位;40 条定向测试
   - **A2 验证梯子 L3 DOM 断言通电**(`DomProber`,host 侧器件):loop 接 `_pending_l3_strategy` 走探针三态;诚实分级——显式 `expected_text` 才可 `passed/failed`,仅选择器弱提示最高 `unverifiable`(反假绿断言钉死);`propose_dom_verify` host 解析(与 `propose_verify` 同构)
