@@ -37,6 +37,9 @@ class PromptArea(TextArea):
             self.text = text
             super().__init__()
 
+    class VoiceToggle(Message):
+        """空框按空格:请求 app 开/停录音。app 在 on_prompt_area_voice_toggle 处理。"""
+
     DEFAULT_CSS = """
     PromptArea { height: auto; max-height: 8; background: $well; }
     """
@@ -55,6 +58,12 @@ class PromptArea(TextArea):
             return None
 
     async def _on_key(self, event: events.Key) -> None:
+        if event.key == "space" and not self.text:
+            # 空输入框按空格 = 语音开关(对齐 spec §6.1);有字时空格正常输入。
+            event.stop()
+            event.prevent_default()
+            self.post_message(self.VoiceToggle())
+            return
         menu = self._menu()
         menu_active = menu is not None and menu.display and menu.has_matches
         if menu_active and event.key in ("up", "down"):

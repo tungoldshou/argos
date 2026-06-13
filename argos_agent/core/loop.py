@@ -709,11 +709,27 @@ class AgentLoop:
         await self._harness.bus.emit(_VV(verdict=verdict))
         return verdict
 
-    async def run(self, goal: str, session_id: str) -> AsyncIterator["Event"]:
+    async def run(self, goal: str, session_id: str,  # noqa: E501
+                  attachments: "list | None" = None) -> AsyncIterator["Event"]:
         """驱动一次 run。plan→act→verify→report,投并持久化每个 Event(一份事件三用)。
+
+        attachments: 可选图片附件列表(spec §5 方案 C)。
+            - None / [] → 纯文本路径(零回归)。
+            - 非空 + tier.multimodal=False → 诚实阻断(ValueError 经顶层兜底转 Error 事件)。
+            - 非空 + tier.multimodal=True → 附件挂在首条 user 消息的 attachments 边车字段。
 
         顶层兜底:捕获 _drive 内任何未处理异常,挖异常链投 Error(spec §3.3 L5)。
         """
+        # 多模态门禁(spec §5 诚实不变量):发请求前若存在附件但 tier.multimodal=False
+        # → 抛诚实错误,不静默剥图,不假装看到。
+        if attachments:
+            tier = getattr(getattr(self, "_model", None), "tier", None)
+            if tier is not None and not getattr(tier, "multimodal", False):
+                model_name = getattr(tier, "model", "当前模型")
+                raise ValueError(
+                    f"当前模型 {model_name!r} 不支持图像输入（multimodal=False）。"
+                    "请在 setup 配置一个多模态模型（如 claude-3-5-sonnet / gpt-4o）。"
+                )
         self._reset_run_state()
         # 拍 workspace 快照(供 /undo 还原);失败不阻断 run,仅 _last_snapshot = None 走"/undo
         # 不可用"诚实降级路径。延迟 import 避免 core.snapshot ↔ runtime 之间未来的循环风险。
@@ -743,7 +759,7 @@ class AgentLoop:
         except Exception:  # noqa: BLE001 — 守护快照失败不阻断 run(诚实降级:此 run 无篡改检测)
             pass
         try:
-            async for ev in self._drive(goal, session_id):
+            async for ev in self._drive(goal, session_id, attachments=attachments):
                 self._store.append_event(session_id, ev)
                 yield ev
         except Exception as e:  # noqa: BLE001
@@ -979,8 +995,12 @@ class AgentLoop:
         dynamic = format_untrusted(skill_bodies=skill_bodies, memory_lines=memory_lines)
         return (safe, dynamic)
 
-    async def _drive(self, goal: str, session_id: str) -> AsyncIterator["Event"]:
-        """四阶段驱动(不可跳):plan → act(CodeAct 循环) → verify(门禁) → report。"""
+    async def _drive(self, goal: str, session_id: str,
+                     attachments: "list | None" = None) -> AsyncIterator["Event"]:
+        """四阶段驱动(不可跳):plan → act(CodeAct 循环) → verify(门禁) → report。
+
+        attachments: 经 run() 多模态门禁后传入的合法附件列表(None = 纯文本路径)。
+        """
         # 确保 session 行先于任何 event/message 落库(replay/resume 据 session_id 重建;幂等,
         # resume 时已存在则 no-op)。hasattr 守卫:最小 store 替身(无 session 概念)跳过。
         if hasattr(self._store, "ensure_session"):
@@ -1057,7 +1077,12 @@ class AgentLoop:
             messages: list[dict] = self._store.get_messages(session_id)
         else:
             messages = []
-        messages.append({"role": "user", "content": goal})
+        # 方案 C(spec §5):attachments 作边车字段挂在首条 user 消息;
+        # content 仍是字符串 → store/压缩/诚实检查/coalesce 全部不动。
+        _user_msg: dict = {"role": "user", "content": goal}
+        if attachments:
+            _user_msg["attachments"] = list(attachments)
+        messages.append(_user_msg)
         self._store.append_message(session_id, role="user", content=goal)
         self._current_goal = goal   # 不可丢核心:压缩后核心锚据此把目标钉回(spec 2026-06-07)
         self._user_goal = goal      # 收尾 capture_event("run_success") 要记的 goal;修过 bug:之前从未赋值 → 永远空串

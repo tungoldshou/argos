@@ -224,14 +224,20 @@ def test_get_tool_names_registry_includes_new_cap():
 
 
 def test_get_tool_names_count_matches_all_tool_names():
-    """register_builtins 后 get_tool_names(reg) 的长度 == len(ALL_TOOL_NAMES)。
+    """register_builtins 后 get_tool_names(reg) 的长度 == len(ALL_TOOL_NAMES) + 宿主进程专属能力数。
 
     确保 register_builtins 覆盖了全部内置工具，计数诚实。
+
+    宿主进程专属能力(非沙箱工具,不进 ALL_TOOL_NAMES):
+      - stt_transcribe:语音 STT 转写,宿主进程跑,沙箱外;+1(voice input Plan 3)。
     """
+    # 宿主进程专属能力:在 registry 中但不在沙箱命名空间/ALL_TOOL_NAMES 里。
+    _HOST_ONLY_CAPS = {"stt_transcribe"}
     reg = CapabilityRegistry()
     register_builtins(reg)
     result = get_tool_names(reg)
-    assert len(result) == len(ALL_TOOL_NAMES), (
-        f"registry 工具数 {len(result)} != ALL_TOOL_NAMES 静态数 {len(ALL_TOOL_NAMES)}。"
-        "register_builtins 可能漏了某些工具。"
+    sandbox_result = [n for n in result if n not in _HOST_ONLY_CAPS]
+    assert len(sandbox_result) == len(ALL_TOOL_NAMES), (
+        f"registry 沙箱工具数 {len(sandbox_result)} != ALL_TOOL_NAMES 静态数 {len(ALL_TOOL_NAMES)}。"
+        "register_builtins 可能漏了某些工具(宿主进程专属能力已从计数排除)。"
     )

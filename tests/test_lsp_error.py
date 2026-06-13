@@ -99,7 +99,7 @@ def test_tools_registered_in_all_tool_names():
     for name in ("computer.screenshot", "computer.click", "computer.double_click",
                  "computer.type_text", "computer.key", "computer.scroll", "computer.open_app"):
         assert name in ALL_TOOL_NAMES
-    assert len(ALL_TOOL_NAMES) == 30  # propose_dom_verify 加入后 +1
+    assert len(ALL_TOOL_NAMES) == 30  # stt_transcribe 是宿主进程能力非沙箱工具,不计入(propose_dom_verify 加入后 +1)
 
 
 def test_tools_broker_dispatch_lsp_definition():

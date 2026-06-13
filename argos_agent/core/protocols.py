@@ -9,16 +9,72 @@ from typing import Any, Protocol as _TypingProtocol, runtime_checkable
 
 def _coalesce_consecutive_roles(messages: list[dict]) -> list[dict]:
     """合并连续同 role 的消息,保证 user/assistant 交替(Anthropic 兼容端要求,否则 400)。
-    多轮/压缩会产生连续同 role;在发请求前把相邻同 role content 用换行并起来(I1 修复,已有逻辑)。"""
+    多轮/压缩会产生连续同 role;在发请求前把相邻同 role content 用换行并起来(I1 修复,已有逻辑)。
+
+    方案 C 扩展(spec §5):带 attachments 边车字段的消息合并时,attachments 列表一并 concat;
+    content 仍是字符串 → store/压缩/诚实检查全部不动。
+    """
     out: list[dict] = []
     for m in messages:
         role = m.get("role")
         content = m.get("content", "")
+        atts = m.get("attachments")  # list[ImageAttachment] | None
         if out and out[-1]["role"] == role:
             out[-1]["content"] = f"{out[-1]['content']}\n{content}"
+            # attachments concat:任意一侧有附件就合并
+            if atts:
+                existing = out[-1].get("attachments") or []
+                out[-1]["attachments"] = existing + list(atts)
+            # 若当前消息无 attachments,out[-1] 的 attachments 保持原样
         else:
-            out.append({"role": role, "content": content})
+            entry: dict = {"role": role, "content": content}
+            if atts:
+                entry["attachments"] = list(atts)
+            out.append(entry)
     return out
+
+
+def _anthropic_wire_message(m: dict) -> dict:
+    """把内部消息 dict 物化成 Anthropic wire 格式。
+
+    无 attachments → content 保持裸字符串(零回归)。
+    有 attachments → content 展开为 [text_block, image_block, ...] list。
+    """
+    atts = m.get("attachments")
+    if not atts:
+        return {"role": m["role"], "content": m.get("content", "")}
+    from argos_agent.input.attachments import to_base64
+    blocks: list[dict] = [{"type": "text", "text": m.get("content", "")}]
+    for att in atts:
+        blocks.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": att.media_type,
+                "data": to_base64(att),
+            },
+        })
+    return {"role": m["role"], "content": blocks}
+
+
+def _openai_wire_message(m: dict) -> dict:
+    """把内部消息 dict 物化成 OpenAI wire 格式。
+
+    无 attachments → content 保持裸字符串(零回归)。
+    有 attachments → content 展开为 [text_block, image_url_block, ...] list。
+    """
+    atts = m.get("attachments")
+    if not atts:
+        return {"role": m["role"], "content": m.get("content", "")}
+    from argos_agent.input.attachments import to_base64
+    blocks: list[dict] = [{"type": "text", "text": m.get("content", "")}]
+    for att in atts:
+        b64 = to_base64(att)
+        blocks.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{att.media_type};base64,{b64}"},
+        })
+    return {"role": m["role"], "content": blocks}
 
 
 @runtime_checkable
@@ -65,11 +121,14 @@ class AnthropicProtocol:
             system_blocks = [
                 {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}},
             ]
+        coalesced = _coalesce_consecutive_roles(messages)
+        # 方案 C(spec §5):图片只在此处物化成 wire 格式；无附件消息行为与现状逐字节一致。
+        wire_messages = [_anthropic_wire_message(m) for m in coalesced]
         return {
             "model": tier.model,
             "max_tokens": tier.max_tokens,
             "system": system_blocks,
-            "messages": _coalesce_consecutive_roles(messages),
+            "messages": wire_messages,
             "stream": True,
         }
 
@@ -125,12 +184,14 @@ class OpenAIProtocol:
             system_content = f"{system}\n\n{system_dynamic}"
         else:
             system_content = system
-        msgs: list[dict] = [{"role": "system", "content": system_content}]
-        msgs.extend(_coalesce_consecutive_roles(messages))
+        coalesced = _coalesce_consecutive_roles(messages)
+        # 方案 C(spec §5):图片只在此处物化成 wire 格式；无附件消息行为与现状逐字节一致。
+        wire_msgs: list[dict] = [{"role": "system", "content": system_content}]
+        wire_msgs.extend(_openai_wire_message(m) for m in coalesced)
         return {
             "model": tier.model,
             "max_tokens": tier.max_tokens,
-            "messages": msgs,
+            "messages": wire_msgs,
             "stream": True,
             "stream_options": {"include_usage": True},
         }

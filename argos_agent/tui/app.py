@@ -65,9 +65,12 @@ from argos_agent.tui.widgets.thinking import ThinkingIndicator
 from argos_agent.tui.widgets.top_bar import TopBar
 from argos_agent.tui.widgets.transcript import Transcript
 from argos_agent.tui.widgets.verdict_badge import VerdictBadge
+from argos_agent.input.recorder import Recorder, RecorderError
+from argos_agent.input.stt import make_transcriber, SttError
+from argos_agent.input.stt_config import load_stt_config
 from argos_agent.tui.widgets.workflow_panel import WorkflowPanel
 
-_BASE_SUBTITLE = "终端超级智能体"
+_BASE_SUBTITLE = "百眼智能体"
 
 
 def _app_version() -> str:
@@ -202,6 +205,10 @@ class ArgosApp(App):
         self._current_plan_call_id: str | None = None
         # P4 §7:当前意图确认的 call_id(IntentConfirmRequest 事件到达时设置)。
         self._current_intent_call_id: str | None = None
+        # 语音输入状态(Task 5 voice input):录音/转写/注入循环。
+        self._voice_recording: bool = False
+        self._voice_recorder = None
+        self._voice_transcriber = None
         self.sub_title = self._compose_subtitle()
 
     @staticmethod
@@ -451,6 +458,51 @@ class ArgosApp(App):
         # PromptArea 已在内部清空自身;这里只负责分发(slash / goal)。同时收掉 slash 菜单。
         self.query_one("#slash-menu", SlashMenu).hide()
         self.handle_input(event.text)
+
+    # ── 语音输入编排(voice input Task 5)──────────────────────────────────────
+
+    def _get_recorder(self):
+        if self._voice_recorder is None:
+            self._voice_recorder = Recorder()
+        return self._voice_recorder
+
+    def _get_transcriber(self):
+        if self._voice_transcriber is None:
+            self._voice_transcriber = make_transcriber(load_stt_config())
+        return self._voice_transcriber
+
+    async def on_prompt_area_voice_toggle(self, event) -> None:
+        await self._voice_toggle()
+
+    async def _voice_toggle(self) -> None:
+        """开/停录音 → 转写 → 注入输入框(load_text/insert,不模拟粘贴)。
+        每条失败路径诚实落 transcript,不崩、不伪绿。转写不自动提交,由用户回车。"""
+        import asyncio
+        log = self.query_one("#transcript", Transcript)
+        if not self._voice_recording:
+            try:
+                self._get_recorder().start()
+            except RecorderError as e:
+                await log.append_line(f"⚠︎ 录音失败:{e}", kind="error")
+                return
+            self._voice_recording = True
+            await log.append_line("🎙 录音中…(再按空格停止)", kind="system")
+            return
+        # 停止 → 转写
+        self._voice_recording = False
+        try:
+            audio = self._get_recorder().stop()
+        except RecorderError as e:
+            await log.append_line(f"⚠︎ 录音失败:{e}", kind="error")
+            return
+        await log.show_thinking("转写中…")
+        try:
+            text = await asyncio.to_thread(self._get_transcriber().transcribe, audio)
+        except SttError as e:
+            await log.append_line(f"⚠︎ 转写失败:{e}", kind="error")
+            return
+        if text:
+            self.query_one("#prompt", PromptArea).insert(text)
 
     # ── #5b 多 run tab 切换 ────────────────────────────────────────
     def on_tab_strip_tab_activated(self, event: TabActivated) -> None:

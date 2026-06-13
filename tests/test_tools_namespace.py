@@ -31,7 +31,7 @@ def test_all_tool_names_exact():
 def test_all_tool_names_count_is_29():
     """工具恰好 30 个:11 核心（含 propose_dom_verify）+ 5 浏览器 + 1 MCP + 6 LSP + 7 computer use。
     UI 工具数必须等于真实可调用工具数(禁 seed 谎报);每个名字都真有 namespace 包装可调。"""
-    assert len(tools.ALL_TOOL_NAMES) == 30  # propose_dom_verify 加入后 29 → 30
+    assert len(tools.ALL_TOOL_NAMES) == 30  # stt_transcribe 是宿主进程能力非沙箱工具,不计入
     # 浏览器 + MCP + LSP + computer.* 工具确实是 broker-gated 可调用(非占位名)。
     ns = tools.build_child_namespace(broker=_FakeStub())
     for name in ("browser_navigate", "browser_snapshot", "browser_click",
