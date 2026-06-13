@@ -23,12 +23,39 @@ import time
 from pathlib import Path
 
 from argos_agent.conductor import ConductorEngine, OrderStore
+from argos_agent.conductor.orders import StandingOrder
 from argos_agent.conductor.proposals import ProactiveSuggestion
 
 log = logging.getLogger("argos.daemon.conductor")
 
 # conductor 事件流的虚拟 run_id（诚实标注：非真实 run，仅用于 SSE 广播通道）
 CONDUCTOR_RUN_ID = "_conductor"
+
+# builtin 夜间整合 order 的固定 ID（幂等注册靠它去重）
+BUILTIN_DREAM_ORDER_ID = "builtin-dream-nightly"
+
+
+def ensure_builtin_dream_order(store: OrderStore) -> None:
+    """幂等注册 builtin 夜间整合 StandingOrder（Dream 的自治触发源）。
+
+    幂等只看**存在性**（store.get(BUILTIN_DREAM_ORDER_ID) 非 None 即返），不看 enabled：
+    用户主动 disable 后绝不复活（尊重用户意志）。删了才会在下次 ensure 时重建。
+    """
+    if store.get(BUILTIN_DREAM_ORDER_ID) is not None:
+        return
+    order = StandingOrder(
+        id=BUILTIN_DREAM_ORDER_ID,
+        utterance="夜间整合:跨 run 综合蒸馏 + 记忆整理(Dream)",
+        kind="schedule",
+        schedule="03:00",
+        trigger_glob=None,
+        goal_template="__dream__",
+        enabled=True,
+        created_at=time.time(),
+        last_fired_at=None,
+        action="dream",
+    )
+    store.add(order)
 
 
 class ConductorSupervisor:
@@ -102,6 +129,11 @@ class ConductorSupervisor:
     async def _run_loop(self) -> None:
         """tick 主循环。CancelledError 自然退出。"""
         store = OrderStore(self._orders_dir)
+        # builtin 夜间整合 order 幂等注册：注册失败不挂 tick loop（包 try/except）。
+        try:
+            ensure_builtin_dream_order(store)
+        except Exception as exc:  # noqa: BLE001 — 注册失败降级,tick loop 照常跑
+            log.warning("conductor_supervisor: builtin dream order 注册失败(忽略): %s", exc)
         engine = ConductorEngine(store, clock=time.time)
 
         while True:
@@ -109,6 +141,9 @@ class ConductorSupervisor:
                 now = time.time()
                 suggestions = engine.tick(now)
                 for s in suggestions:
+                    # 材料门：action=dream 但候选区无未消费材料 → 空料静默(不进 pending、不广播)。
+                    if not self._should_emit_dream(s):
+                        continue
                     self._pending[s.id] = s
                     await self._emit_suggestion(s)
             except asyncio.CancelledError:
@@ -116,6 +151,24 @@ class ConductorSupervisor:
             except Exception as exc:  # noqa: BLE001
                 log.warning("conductor_supervisor: tick 异常(将在下次 tick 重试): %s", exc)
             await asyncio.sleep(self._tick_interval)
+
+    def _should_emit_dream(self, s: ProactiveSuggestion) -> bool:
+        """材料门：action=dream 的建议仅在候选区有未消费材料时才放行。
+
+        - action != "dream"：永远放行（材料门只管 dream 建议）。
+        - action == "dream"：has_material(DEFAULT_ROOT) 为 True 才放行，否则空料静默。
+        - 学习模块 import 失败（has_material/DEFAULT_ROOT 不可用）：视为无材料 → 静默，
+          绝不让学习子系统的故障挂掉 conductor tick（局部 import + try/except）。
+        """
+        if getattr(s, "action", "run") != "dream":
+            return True
+        try:
+            from argos_agent.learning.candidates import DEFAULT_ROOT
+            from argos_agent.learning.dream import has_material
+            return has_material(DEFAULT_ROOT)
+        except Exception as exc:  # noqa: BLE001 — 学习模块故障视为无材料
+            log.warning("conductor_supervisor: 材料门检查失败(视为无材料,静默): %s", exc)
+            return False
 
     async def _emit_suggestion(self, s: ProactiveSuggestion) -> None:
         """将 ProactiveSuggestion 广播为 ProactiveSuggestionEvent 事件 dict。"""

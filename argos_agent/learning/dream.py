@@ -284,7 +284,19 @@ class DreamPipeline:
         # 懒初始化锁:__init__ 里建 asyncio.Lock 会绑创建时的事件循环,
         # 而 run() 可能跑在另一个 asyncio.run() 的新循环里 → 绑错循环会失效。
         # 推迟到 run() 首次执行时按当前运行循环创建。
+        # run_id 注入由 caller(T9 daemon 的 _dream_bcast)在 broadcast payload 里完成 ——
+        # 本管道只产 {"kind": ..., **payload},不感知 _conductor 虚拟通道。
         self._lock: "asyncio.Lock | None" = None
+
+    @property
+    def is_running(self) -> bool:
+        """只读:当前是否有一次 Dream 正在跑(单飞锁已持有)。
+
+        供 T9 daemon 的 _confirm_dream / POST /dream/run 先探锁 → 409 dream_busy,
+        避免 create_task 后才被 run() 内的单飞判定静默吞掉(返 None,客户端无感)。
+        锁未初始化(从未 run 过)→ 未在跑。
+        """
+        return self._lock is not None and self._lock.locked()
 
     async def run(self) -> "DreamReport | None":
         """跑一次完整 Dream。已有 Dream 在跑 → log + 返 None(单飞)。"""
@@ -343,6 +355,9 @@ class DreamPipeline:
             memory_merged=report.memory_merged, memory_archived=report.memory_archived,
             report_path=report_path,
         )
+        # 收尾标记:DreamProgressEvent docstring 列了 done 阶段,管道必须真 emit 它,
+        # 否则 done 是空头承诺。放在 dream_report 之前(进度先到尾,再发结果汇总)。
+        self._emit("dream_progress", stage="done", detail="", ts=ts)
         self._emit(
             "dream_report",
             units_total=report.units_total, promoted=report.promoted,
@@ -400,6 +415,7 @@ class DreamPipeline:
             for s in live:
                 mark_consumed(s.path, reason="promoted")
             result = (1, 0, 0)
+        # promotion_gate reason 格式: 'no_improvement(a=N/T,b=N/T)' — 改格式需同步此处
         elif res.reason.startswith("no_improvement"):
             for s in live:
                 mark_consumed(s.path, reason="rejected_ab")

@@ -127,6 +127,9 @@ def test_pipeline_promotes_and_consumes_on_improvement(tmp_path: Path):
     kinds = {e["kind"] for e in events}
     assert "dream_progress" in kinds
     assert "dream_report" in kinds
+    # 收尾阶段 done 必须被 emit(DreamProgressEvent docstring 的承诺,不撒谎)
+    stages = {e.get("stage") for e in events if e["kind"] == "dream_progress"}
+    assert "done" in stages, f"done 阶段必须 emit;实得 stages={stages}"
     # 报告落盘:dreams 目录有 .jsonl
     dream_files = list((tmp_path / "dreams").glob("*.jsonl"))
     assert len(dream_files) == 1

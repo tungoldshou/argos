@@ -28,6 +28,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from argos_agent.app_factory import build_run_stack
+from argos_agent.daemon.conductor_supervisor import CONDUCTOR_RUN_ID
 from argos_agent.daemon.manager import RunManager
 from argos_agent.daemon.protocol import (
     CODE_BAD_REQUEST, CODE_BUSY, CODE_INTERNAL, CODE_INVALID_TRANSITION,
@@ -98,6 +99,10 @@ class DaemonHTTPServer:
         self._ledger_store = ledger_store
         # P5b §9 自治面:conductor supervisor(可选,None = 无自治功能)
         self._conductor = conductor_supervisor
+        # Dream(T9):DreamPipeline 单例(懒初始化)。关键:单飞锁在**实例**上,每次
+        # 新建 pipeline 锁就失效 —— 必须复用同一实例(_get_dream_pipeline 缓存)。
+        # 无 components/model → _get_dream_pipeline 返 None(诚实无 key 模式)。
+        self._dream_pipeline = None
 
     @property
     def registry(self):
@@ -266,6 +271,11 @@ class DaemonHTTPServer:
             # GET /suggestions（列出当前 pending）
             if method == "GET" and path == "/suggestions":
                 return await self._handle_list_suggestions(writer, headers)
+            # Dream(T9):手动触发 + 报告查询
+            if method == "POST" and path == "/dream/run":
+                return await self._handle_dream_run(writer, headers)
+            if method == "GET" and path == "/dream/report":
+                return await self._handle_dream_report(writer, headers)
             return await self._send_error(writer, 404, CODE_NOT_FOUND,
                                           f"no route for {method} {path}")
         except Exception as e:  # noqa: BLE001
@@ -1348,7 +1358,10 @@ class DaemonHTTPServer:
         if s is None:
             return await self._send_error(writer, 404, CODE_NOT_FOUND,
                                           f"suggestion {suggestion_id!r} not found or already dismissed")
-        # TODO(T9): action=="dream" → 路由 DreamPipeline，而非 create_run（spec §5）
+        # Dream(T9):action=="dream" → 路由 DreamPipeline，而非 create_run（spec §5）。
+        # 已通过 _require_owner 鉴权 + suggestion 存在性检查,直接交给 _confirm_dream。
+        if getattr(s, "action", "run") == "dream":
+            return await self._confirm_dream(writer, suggestion_id, s)
 
         # 检查 loop_factory 可用（_NO_KEY 哨兵 = 无 key）
         if self._loop_factory is _NO_KEY:
@@ -1487,6 +1500,181 @@ class DaemonHTTPServer:
             return await self._send_error(writer, 404, CODE_NOT_FOUND,
                                           f"suggestion {suggestion_id!r} not found or already dismissed")
         await self._send_json(writer, 200, {"suggestion_id": suggestion_id, "state": "dismissed"})
+
+    # ── Dream(T9):夜间整合接线 ───────────────────────────────────────────
+
+    def _dreams_dir(self) -> Path:
+        """Dream 报告目录。默认 ~/.argos/dreams；ARGOS_DREAMS_DIR 可覆盖（测试注入用）。
+
+        与 _get_dream_pipeline 装配的 dreams_dir 同口径；GET /dream/report 也读这里。
+        """
+        import os
+        override = os.environ.get("ARGOS_DREAMS_DIR")
+        if override:
+            return Path(override)
+        return Path(os.path.expanduser("~/.argos/dreams"))
+
+    def _get_dream_pipeline(self):
+        """懒初始化并缓存 DreamPipeline 单例（单飞锁在实例上，必须复用同一实例）。
+
+        无 components / 无 model（_NO_KEY 等价语义）→ 返 None（诚实无 key 模式，
+        caller 回 503 no_worker_key）。已注入 _dream_pipeline（测试 fake）→ 直接返。
+        """
+        if self._dream_pipeline is not None:
+            return self._dream_pipeline
+        # 无 components → 无法 build_run_stack / 拿 model → 诚实返 None
+        if self._components is None:
+            return None
+        client = getattr(self._components, "model", None)
+        if client is None:
+            return None
+
+        import os
+        from argos_agent.app_factory import build_run_stack
+        from argos_agent.eval.runner import EvalRunner
+        from argos_agent.learning.candidates import DEFAULT_ROOT
+        from argos_agent.learning.dream import DreamPipeline, HintedRunner
+
+        dreams_dir = self._dreams_dir()
+        skills_root = Path(os.path.expanduser("~/.argos/skills"))
+        memory_dir = Path(os.path.expanduser("~/.argos/memory"))
+        eval_base = Path(os.path.expanduser("~/.argos/dreams/eval"))
+
+        # per-run 隔离栈的 loop_factory（() -> AgentLoop）；EvalRunner 期望
+        # loop_factory(model_tier) → loop，故包一层吞掉 tier（Dream 内不分档）。
+        run_stack = build_run_stack(
+            self._components, workspace=None, session_id="dream-eval",
+        )
+
+        def _eval_loop_factory(model_tier: str):
+            return run_stack.loop_factory()
+
+        base_runner = EvalRunner(
+            worktree=self._worktree,
+            base_dir=eval_base,
+            loop_factory=_eval_loop_factory,
+        )
+
+        def _runner_factory(hint):
+            return HintedRunner(inner=base_runner, hint=hint) if hint else base_runner
+
+        async def _narrate(prompt: str) -> str:
+            return await asyncio.wait_for(
+                client.complete(
+                    [{"role": "user", "content": prompt}],
+                    system="你是技能文档撰写者。只输出文字,不输出代码。",
+                ),
+                timeout=60.0,
+            )
+
+        async def _dream_bcast(ev: dict) -> None:
+            # T8 已留契约注释：caller 必须注入 run_id。Dream 事件走 _conductor 虚拟通道。
+            payload = {**ev, "run_id": CONDUCTOR_RUN_ID}
+            self._manager.store.append(CONDUCTOR_RUN_ID, payload)
+            await self._manager.fanout(CONDUCTOR_RUN_ID, payload)
+
+        self._dream_pipeline = DreamPipeline(
+            candidates_root=DEFAULT_ROOT,
+            skills_root=skills_root,
+            memory_dir=memory_dir,
+            dreams_dir=dreams_dir,
+            runner_factory=_runner_factory,
+            narrate=_narrate,
+            broadcast_fn=_dream_bcast,
+        )
+        return self._dream_pipeline
+
+    async def _start_dream(self, writer):
+        """启动一次 Dream（confirm 与 POST /dream/run 共用）。
+
+        返回 None 表示已发送响应（503/409/202）；caller 据此决定是否还需 pop suggestion。
+        return 值：202 时返 True（已启动），否则返 False（已发 503/409）。
+        """
+        pipeline = self._get_dream_pipeline()
+        if pipeline is None:
+            await self._send_error(
+                writer, 503, "no_worker_key",
+                "daemon 未配置 API key，无法执行 Dream。请运行 `argos setup` 配置模型 key 后重启 daemon。",
+            )
+            return False
+        # 先探锁：已在跑 → 409（避免 create_task 后被 run() 单飞静默吞掉，客户端无感）。
+        if pipeline.is_running:
+            await self._send_error(
+                writer, 409, "dream_busy", "已有一次夜间整合在跑，请稍后再试。",
+            )
+            return False
+        asyncio.create_task(pipeline.run(), name="dream-run")
+        return True
+
+    async def _confirm_dream(self, writer, suggestion_id, s):
+        """confirm 一个 action=dream 的 suggestion → 路由 DreamPipeline（而非 create_run）。
+
+        503 no_worker_key / 409 dream_busy / 202 dream_started。202 时 pop suggestion +
+        广播 suggestion_confirmed（dream=True，走 _conductor 通道）。
+        """
+        started = await self._start_dream(writer)
+        if not started:
+            return  # 503 / 409 已发送，suggestion 不消费（可稍后重试）
+        # 已启动：从 pending 移除（confirm 后不再 pending）
+        self._conductor.pop_suggestion(suggestion_id)
+        # 广播 confirm 事件（审计可见性，走 _conductor 虚拟通道）
+        confirm_ev = {
+            "kind": "suggestion_confirmed",
+            "suggestion_id": suggestion_id,
+            "run_id": CONDUCTOR_RUN_ID,
+            "dream": True,
+            "ts": time.time(),
+        }
+        self._manager.store.append(CONDUCTOR_RUN_ID, confirm_ev)
+        await self._manager.fanout(CONDUCTOR_RUN_ID, confirm_ev)
+        await self._send_json(writer, 202, {
+            "state": "dream_started",
+            "suggestion_id": suggestion_id,
+        })
+
+    async def _handle_dream_run(self, writer, headers):
+        """POST /dream/run — owner 手动触发一次 Dream（无 suggestion）。"""
+        if await self._require_owner(writer, headers) is None:
+            return
+        started = await self._start_dream(writer)
+        if not started:
+            return  # 503 / 409 已发送
+        await self._send_json(writer, 202, {"state": "dream_started"})
+
+    async def _handle_dream_report(self, writer, headers):
+        """GET /dream/report — 读最新 Dream 报告（dreams 目录最新 .jsonl 的最后一行）。
+
+        目录空 / 无文件 / 无有效行 → 200 {"report": null}（诚实空态，不假装有报告）。
+        """
+        if await self._require_owner(writer, headers) is None:
+            return
+        report = self._read_latest_dream_report()
+        await self._send_json(writer, 200, {"report": report})
+
+    def _read_latest_dream_report(self) -> dict | None:
+        """读 dreams 目录最新 .jsonl 文件的最后一行 JSON。无 → None（诚实空态）。"""
+        dreams_dir = self._dreams_dir()
+        try:
+            if not dreams_dir.exists():
+                return None
+            files = sorted(dreams_dir.glob("*.jsonl"))
+            if not files:
+                return None
+            # 文件名是 YYYY-MM-DD.jsonl → 字典序即时间序，取最新
+            latest = files[-1]
+            last_obj: dict | None = None
+            for line in latest.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    last_obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue  # 跳过坏行，不让一行毁掉整份报告
+            return last_obj
+        except Exception as e:  # noqa: BLE001 — 读报告失败诚实降级为空态
+            log.warning("dream report 读取失败(降级空态): %s", e)
+            return None
 
     # ── SSE ──────────────────────────────────────────────────────────
 
