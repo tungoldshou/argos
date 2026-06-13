@@ -11,7 +11,6 @@ dependencies = [
     "ddgs>=8.0.0",
     "faster-whisper>=1.0.0",
     "httpx[socks]>=0.28.1",
-    "mlx-embeddings>=0.1.0",
     "mlx-whisper>=0.4.0 ; sys_platform == 'darwin' and platform_machine == 'arm64'",
     "numpy>=2.4.6",
     "playwright>=1.60.0",
@@ -46,6 +45,9 @@ classifiers = [
 argos = "argos.__main__:main"
 # C 阶段(2026-06-07)加打包工具 dispatcher(spec D8);主 argos 启动 0 影响
 argospkg = "argos.cli.pkg:main"
+# 后台 daemon 入口(README/CLAUDE 命名 argosd);等价 `python -m argos.daemon`,
+# 让文档命名的 argosd 名副其实(用户可手动起 daemon,而非 command not found)。
+argosd = "argos.daemon.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/tungoldshou/argos"
