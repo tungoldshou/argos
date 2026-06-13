@@ -5,12 +5,19 @@
   2. test_cli_dream_report_shows_latest — 写两天报告文件,输出最新文件最后一行计数
   3. test_cli_dream_no_key_degrades — monkeypatch build_components 抛 RuntimeError →
      输出含 "argos setup" 提示,执行了 consolidate(不炸),返 0
+  7. test_cli_dream_has_key_promotion — has-key 晋升路径回归测试:
+     - skills_root 必须是 ~/.argos/skills 而非 learning/skills（Blocking-2）
+     - B 侧 runner 必须收到带 hint 的 goal（Blocking-1）
+     - 晋升产物落在正确目录
 """
 from __future__ import annotations
 
 import argparse
+import asyncio
+import dataclasses
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -237,3 +244,125 @@ async def test_tui_dream_status_non_dict_report_does_not_crash(bad_report):
         assert "格式异常" in txt
     finally:
         os.environ.pop("ARGOS_NO_DAEMON", None)
+
+
+# ── 7. has-key 晋升路径回归测试（Blocking-1 + Blocking-2 双钉）──────────────────
+
+
+def test_cli_dream_has_key_promotion(tmp_path, monkeypatch, capsys):
+    """CLI has-key 路径回归：runner_factory 注入 hint（Blocking-1）+ skills_root 正确（Blocking-2）。
+
+    设计原则：
+    - 用真实 CLI 装配（不绕过 run_dream），这样回归才有意义；
+    - monkeypatch EvalRunner / WorktreeManager / build_components 防副作用；
+    - FakeEvalRunner 区分 A 侧（hint=None → fail）和 B 侧（hint 含 "可参考"  → pass）；
+    - spy task.goal 确认 B 侧确实收到了带 hint 的 goal；
+    - 断言晋升产物落在 tmp_skills_root（对应 skills.USER_DIR），不在 learning/skills。
+    """
+    from argos_agent.learning.candidates import save_candidate
+    from argos_agent.learning.distiller import SkillCandidate
+
+    # ── 构建 tmp 目录体系 ──────────────────────────────────────────────────
+    candidates_root = tmp_path / "candidates"
+    skills_root = tmp_path / "skills"      # 替换 USER_DIR 指向
+    dreams_dir = tmp_path / "dreams"
+    memory_dir = tmp_path / "memory"
+    ws = tmp_path / "ws"
+    ws.mkdir(parents=True)
+
+    # 种 2 个相似候选（workspace 存在 + verify_cmd 有效）
+    def _seed(run_id: str, goal: str) -> None:
+        cand = SkillCandidate(
+            name="learned",
+            body_markdown=f"# {goal}\n\n```python\nprint('ok')\n```",
+            verify_cmd="true",
+            skill_md_path=Path("unused"),
+        )
+        save_candidate(cand, root=candidates_root, source_run=run_id,
+                       workspace=str(ws), goal=goal)
+
+    _seed("cli001aaaa11", "fix auth timeout issue")
+    _seed("cli002bbbb22", "fix auth token expiry issue")
+
+    # ── spy：记录 B 侧 runner.run() 收到的 task.goal ──────────────────────
+    b_side_goals: list[str] = []
+
+    @dataclass
+    class _FakeResult:
+        pass_status: str
+
+    class _FakeEvalRunner:
+        """区分 A/B 侧：任何调用前先判断是否被 HintedRunner 包裹。"""
+        def run(self, task, *, model_tier: str = "default"):
+            # 直接调用（A 侧，hint=None 路径）→ failed；让 B>A 成立。
+            return _FakeResult(pass_status="failed")
+
+    class _FakeHintedRunner:
+        """模拟 HintedRunner.run()：记录 hinted goal，返回 passed。"""
+        def __init__(self, inner, hint, max_hint_len=4000):
+            self.inner = inner
+            self.hint = hint
+            self.max_hint_len = max_hint_len
+
+        def run(self, task, *, model_tier: str = "default"):
+            truncated = (self.hint or "")[:self.max_hint_len]
+            hinted_goal = f"可参考以下已验证经验:\n{truncated}\n\n---\n\n{task.goal}"
+            b_side_goals.append(hinted_goal)
+            return _FakeResult(pass_status="passed")
+
+    # ── fake model（narrate 用） ────────────────────────────────────────────
+    fake_model = MagicMock()
+    fake_model.complete = AsyncMock(return_value="模拟叙述文本")
+
+    # fake comps
+    fake_comps = MagicMock()
+    fake_comps.model = fake_model
+
+    # ── monkeypatch：重定向单一来源 + 注入 fake runner/components ─────────────
+    # 重定向 skills.USER_DIR（Blocking-2 的单一来源）→ tmp skills_root
+    monkeypatch.setattr("argos_agent.skills.USER_DIR", skills_root)
+    monkeypatch.setattr("argos_agent.cli.dream._DEFAULT_SKILLS_DIR", skills_root)
+    # 重定向 candidates DEFAULT_ROOT → tmp candidates_root
+    monkeypatch.setattr("argos_agent.learning.candidates.DEFAULT_ROOT", candidates_root)
+    monkeypatch.setattr("argos_agent.cli.dream._DEFAULT_CANDIDATES_DIR", candidates_root)
+    # 重定向 dreams_dir / memory_dir（环境变量）
+    monkeypatch.setenv("ARGOS_DREAMS_DIR", str(dreams_dir))
+    monkeypatch.setenv("ARGOS_MEMORY_DIR", str(memory_dir))
+
+    # build_components 返回 fake_comps（有 key 路径）
+    monkeypatch.setattr("argos_agent.app_factory.build_components",
+                        MagicMock(return_value=fake_comps))
+    # 替换 EvalRunner 构造（返回 fake） + WorktreeManager（no-op）
+    monkeypatch.setattr("argos_agent.eval.runner.EvalRunner",
+                        MagicMock(return_value=_FakeEvalRunner()))
+    monkeypatch.setattr("argos_agent.daemon.worktree.WorktreeManager",
+                        MagicMock(return_value=MagicMock()))
+    # 替换 HintedRunner（用我们的 spy 版）—— 这是 Blocking-1 回归核心
+    monkeypatch.setattr("argos_agent.learning.dream.HintedRunner", _FakeHintedRunner)
+
+    # ── 跑 CLI ────────────────────────────────────────────────────────────
+    import importlib
+    import argos_agent.cli.dream as dream_mod
+    importlib.reload(dream_mod)   # 让 module-level import 的 _DEFAULT_SKILLS_DIR 生效
+
+    ns = argparse.Namespace()
+    ns.report = False
+    code = dream_mod.run_dream(ns)
+    out = capsys.readouterr().out
+
+    assert code == 0, f"run_dream 应返回 0，实得 {code}；stdout={out!r}"
+
+    # ── Blocking-2：晋升产物必须落在 skills_root（~/.argos/skills 等价），不在 learning/skills ──
+    skill_mds = list(skills_root.glob("*/SKILL.md"))
+    assert len(skill_mds) >= 1, (
+        f"晋升产物应落在 skills_root={skills_root}，实际为空；"
+        f"出现在 learning/skills = {list((tmp_path / 'learning' / 'skills').glob('**/*') if (tmp_path / 'learning' / 'skills').exists() else [])}"
+    )
+
+    # ── Blocking-1：B 侧 runner 必须收到含 "可参考" hint 的 goal ──────────────
+    assert len(b_side_goals) >= 1, (
+        "B 侧 runner(HintedRunner) 没有被调用；说明 _runner_factory 没有注入 hint。"
+    )
+    assert any("可参考" in g for g in b_side_goals), (
+        f"B 侧 task.goal 应含 '可参考'（hint 前置），实得：{b_side_goals[:3]}"
+    )

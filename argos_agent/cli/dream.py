@@ -13,13 +13,17 @@ import os
 from pathlib import Path
 from typing import Any
 
+from argos_agent.learning.candidates import DEFAULT_ROOT as _DEFAULT_CANDIDATES_DIR
+from argos_agent.skills import USER_DIR as _DEFAULT_SKILLS_DIR
+
 log = logging.getLogger(__name__)
 
 # ARGOS_DREAMS_DIR 环境变量覆盖(测试/CI 用)
 _DEFAULT_DREAMS_DIR = Path.home() / ".argos" / "dreams"
 _DEFAULT_MEMORY_DIR = Path.home() / ".argos" / "memory"
-_DEFAULT_CANDIDATES_DIR = Path.home() / ".argos" / "learning" / "candidates"
-_DEFAULT_SKILLS_DIR = Path.home() / ".argos" / "learning" / "skills"
+# candidates_root / skills_root 单一来源:直接 import，消除路径漂移根因
+# _DEFAULT_CANDIDATES_DIR = ~/.argos/learning/candidates  (来自 candidates.DEFAULT_ROOT)
+# _DEFAULT_SKILLS_DIR     = ~/.argos/skills              (来自 skills.USER_DIR)
 
 
 def _dreams_dir() -> Path:
@@ -132,6 +136,8 @@ def run_dream(args: Any) -> int:
     mem_dir = _memory_dir()
     mem_dir.mkdir(parents=True, exist_ok=True)
 
+    # Blocking-2 修复：skills_root 用单一来源 USER_DIR（~/.argos/skills），
+    # 与技能加载器（skills.py _load_dir）扫的目录一致；原 learning/skills 是死目录。
     candidates_root = _DEFAULT_CANDIDATES_DIR
     skills_root = _DEFAULT_SKILLS_DIR
 
@@ -151,15 +157,20 @@ def run_dream(args: Any) -> int:
         _narrate = None
 
     # 构建 runner_factory(用于 A/B 晋升)
+    # Blocking-1 修复：B 侧必须用 HintedRunner 包裹，否则 b_passed ≤ a_passed 恒成立
+    # → 永远 no_improvement，CLI 永远晋升不了。照 daemon server.py:1564 范本。
     try:
-        from argos_agent.app_factory import build_components, build_loop_factory
+        from argos_agent.app_factory import build_loop_factory
         from argos_agent.eval.runner import EvalRunner
         from argos_agent.daemon.worktree import WorktreeManager
-        base = Path.home() / ".argos" / "eval"
-        wm = WorktreeManager(base_dir=base / "worktrees")
+        from argos_agent.learning.dream import HintedRunner
+        eval_base = Path.home() / ".argos" / "dreams" / "eval"
+        wm = WorktreeManager(base_dir=eval_base / "worktrees")
+        base_runner = EvalRunner(worktree=wm, base_dir=eval_base)
 
         def _runner_factory(hint: str | None):
-            return EvalRunner(worktree=wm, base_dir=base)
+            # hint 非空 → B 侧带经验；hint=None → A 侧裸跑（与 daemon 范本一致）
+            return HintedRunner(inner=base_runner, hint=hint) if hint else base_runner
     except Exception:  # noqa: BLE001
         _runner_factory = None
 
