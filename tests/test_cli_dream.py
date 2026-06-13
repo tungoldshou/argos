@@ -12,7 +12,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -154,10 +154,8 @@ async def test_tui_dream_daemon_posts():
 
         # 手动注入 daemon 客户端 stub(模拟已连上 daemon)
         mock_client = MagicMock()
-        mock_client._request = MagicMock()
-        import asyncio
-        # POST /dream/run → 202
-        mock_client._request.return_value = (202, {}, '{"state":"dream_started"}')
+        # _request 必须是 AsyncMock,因为 _dream_cmd 对其做 await
+        mock_client._request = AsyncMock(return_value=(202, {}, '{"state":"dream_started"}'))
 
         app._with_daemon = True
         app._daemon_client = mock_client
@@ -174,7 +172,7 @@ async def test_tui_dream_daemon_posts():
         call_args = mock_client._request.call_args
         assert call_args[0][0] == "POST"
         assert "/dream/run" in call_args[0][1]
-        # 断言渲染了成功文案
-        assert "Dream" in txt or "dream" in txt.lower()
+        # 断言渲染了成功文案(202 分支 → "Dream 已启动,进度见活动栏。")
+        assert "已启动" in txt
     finally:
         os.environ.pop("ARGOS_NO_DAEMON", None)

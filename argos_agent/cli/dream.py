@@ -138,13 +138,12 @@ def run_dream(args: Any) -> int:
         comps = build_components()
         model = comps.model
 
-        def _narrate(prompt: str) -> str:
-            """同步叙述调用(pipeline 的 narrate 可以是同步或 async)。"""
-            import asyncio as _aio
-            return _aio.run(model.complete(
+        async def _narrate(prompt: str) -> str:
+            """异步叙述调用(pipeline 在 async 上下文里 await 调用)。"""
+            return await model.complete(
                 [{"role": "user", "content": prompt}],
                 system="你是知识提炼助手,只输出纯文字摘要,不输出代码。",
-            ))
+            )
     except Exception:  # noqa: BLE001
         _narrate = None
 
