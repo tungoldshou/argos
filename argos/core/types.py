@@ -18,6 +18,16 @@ RiskLevel = Literal["low", "medium", "high"]
 # 模型 profile 名:自由字符串(已无 worker/premium 档位之分;就是 config.json 里的 profile 名)。
 ModelTierName = str
 
+# P0 防假绿:这些命令【永远通过、什么都不验证】,弱模型或用户可声明它们(如 `echo ok`)骗过
+# verify 门报"已验证通过"。canonical 归属 types.py —— Verifier(verify_gate)的 canonical 门、
+# loop 的 propose_verify 门、workflow stage 的 verify 校验共用同一份,杜绝多入口门不一致。
+# 关键:echo/cat/ls/pwd 既在 ALLOWED_CMDS(白名单)又是 trivial,只有共用此集、且在 canonical
+# Verifier 上设门,才能堵住"绕开 propose_verify 直接设 verify_cmd='echo ok'"这条假绿路径。
+TRIVIAL_VERIFY_BINS: frozenset[str] = frozenset({
+    "echo", "true", "false", ":", "ls", "pwd", "cat", "printf", "head", "tail",
+    "yes", "whoami", "date", "env", "sleep", "test", "[", "dirname", "basename",
+})
+
 
 @dataclass(frozen=True, slots=True)
 class Verdict:

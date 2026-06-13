@@ -301,7 +301,11 @@ class RunWorker:
             _ws_path = Path(entry.workspace).expanduser().resolve()
         else:
             _ws_path = _runtime._make_default_ctx().workspace
-        _rt_ctx = _runtime.RunContext(workspace=_ws_path, verify_dir=_ws_path)
+        # P0 防假绿:daemon 的 verify_dir==workspace(测试与解同目录),必须 project_mode=True——
+        # 这是唯一让 loop 起始 guard_project_tests 快照既有测试、detect_tampering 在 verify 时通电
+        # 的开关(runtime.guard_project_tests 对 project_mode=False 直接返 0)。否则 agent 在
+        # workspace 改自己的测试、verify 跑被改后的测试 → 假绿且不可见(篡改检测整条死掉)。
+        _rt_ctx = _runtime.RunContext(workspace=_ws_path, verify_dir=_ws_path, project_mode=True)
         _rt_token = _runtime.set_context(_rt_ctx)
         try:
             # DaemonApprovalGate 包装:真 gate 存在且尚未包装时加 timeout fail-closed。

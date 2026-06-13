@@ -45,7 +45,7 @@ from argos.core.honesty import (
     HONESTY_SYSTEM, StreamingContextScrubber, compose_system, format_untrusted,
 )
 from argos.core.plan_mode import PlanExitDecision, PlanRenderer
-from argos.core.types import ModelTierName
+from argos.core.types import ModelTierName, TRIVIAL_VERIFY_BINS
 from argos.protocol.events import (
     CodeAction, CodeResult, CostUpdate, Error, Event, PhaseChange,
     MemoryRecallEvent, PlanDecisionRequest, PlanRendered, PlanUpdate,
@@ -93,12 +93,8 @@ _DOM_KW_EXP = re.compile(r"""expected_text\s*=\s*['"]([^'"]+)['"]""")
 _DOM_URL_ALLOWED = re.compile(r"^https?://", re.I)
 _DOM_PARAM_MAX = 500  # selector / expected_text 最大长度，防滥用
 
-# H1 防假绿:这些命令【永远通过、什么都不验证】,弱模型可声明它们(如 `echo ok`)骗过 verify 门
-# 报"已验证通过"。propose_verify 一律拒登记这类伪命令 → 落回"未机检验证"诚实路径,不产生假绿。
-_TRIVIAL_VERIFY_BINS = frozenset({
-    "echo", "true", "false", ":", "ls", "pwd", "cat", "printf", "head", "tail",
-    "yes", "whoami", "date", "env", "sleep", "test", "[", "dirname", "basename",
-})
+# 反琐碎集 TRIVIAL_VERIFY_BINS 已上移 argos.core.types(canonical;Verifier 的 canonical 门、
+# loop 的 propose_verify 门、workflow stage verify 校验共用同一份,杜绝多入口门不一致)。
 
 # 真 TODO 拆解:从模型代码块文本里抓 update_plan([{...}, ...]) 的列表字面量(host 侧解析,
 # 同 propose_verify 路径 —— 沙箱独立子进程,host 解析 agent 输出把 todos 传回再 yield PlanUpdate)。
@@ -441,7 +437,7 @@ class AgentLoop:
             bin_name = Path(shlex.split(cmd)[0]).name
         except (ValueError, IndexError):
             return False
-        if bin_name in _TRIVIAL_VERIFY_BINS:
+        if bin_name in TRIVIAL_VERIFY_BINS:
             self._verify_rejected = cmd   # 供 act 循环回灌一句"这不是验证命令"
             return False
         self._verify_cmd = cmd
@@ -565,7 +561,7 @@ class AgentLoop:
 
         校验规则与 propose_verify 同款(同一道门):
           · 首 token 必须在 ALLOWED_CMDS(白名单,与 Verifier._run_verify 一致)。
-          · 首 token 不能在 _TRIVIAL_VERIFY_BINS(反琐碎,与 _on_propose_verify 一致)。
+          · 首 token 不能在 TRIVIAL_VERIFY_BINS(反琐碎,与 _on_propose_verify 一致)。
           · 被拒 → 跳下一候选(诚实降级链);所有候选都拒或只剩 L5 → 返 None(走旧路径)。
 
         L3(dom_assert,cmd=None)候选：若 DomProber 已接入则挂入 _pending_l3_strategy,
@@ -612,7 +608,7 @@ class AgentLoop:
                 if not cmd_parts:
                     continue
                 bin_name = Path(cmd_parts[0]).name
-                if bin_name in _TRIVIAL_VERIFY_BINS:
+                if bin_name in TRIVIAL_VERIFY_BINS:
                     continue  # H1 反琐碎门:伪命令 → 跳过
                 if bin_name not in ALLOWED_CMDS:
                     continue  # 白名单门 → 跳过
