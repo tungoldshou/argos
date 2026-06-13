@@ -6,9 +6,11 @@ PackageLocale: en-US
 Publisher: tungoldshou
 PackageName: Argos
 License: MIT
-ShortDescription: Terminal super-agent (CodeAct + verify gate + OS sandbox)
+ShortDescription: The hundred-eyed agent (CodeAct + verify gate + OS sandbox)
 Description: |
-  Argos is a standalone terminal (TUI) coding super-agent. It self-builds a
+  Argos, the hundred-eyed agent, is a verifiable coding agent — a daemon
+  kernel with pluggable clients (terminal TUI today, desktop shell in
+  progress). It self-builds a
   framework-free CodeAct loop with a verify hard-gate, an honesty protocol,
   and an OS-sandboxed executor. The soul of the project is making cheap
   models reliable: every change must pass a real verifier before it is

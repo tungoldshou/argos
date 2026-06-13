@@ -4,10 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Argos is a **terminal (TUI) super-agent** built on Textual. It runs cheap
+Argos — **the hundred-eyed agent** (named for Argus Panoptes, the all-seeing guardian) — runs cheap
 models reliably by wrapping them in a verify hard-gate, an honesty protocol, and an OS-level
-sandbox. Since v6 a background daemon kernel (auto-spawned) runs the work and the TUI attaches
-as a protocol client, falling back to a single inline process when the daemon is unavailable. Model-agnostic (Anthropic-Messages and OpenAI-compatible endpoints both first-class).
+sandbox. Its runtime is a background daemon kernel (auto-spawned) with pluggable clients: the Textual
+TUI is the current primary client, falling back to a single inline process when the daemon is
+unavailable, and a Tauri desktop shell is an in-progress second client. Model-agnostic
+(Anthropic-Messages and OpenAI-compatible endpoints both first-class).
 See `README.md` for the product story and `docs/argos-product-definition.md` for the spec.
 
 ## Where the code lives

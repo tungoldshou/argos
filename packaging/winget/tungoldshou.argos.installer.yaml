@@ -7,7 +7,7 @@ PackageLocale: en-US
 PackageName: Argos
 Publisher: tungoldshou
 License: MIT
-ShortDescription: Terminal super-agent (CodeAct + verify gate + OS sandbox)
+ShortDescription: The hundred-eyed agent (CodeAct + verify gate + OS sandbox)
 ManifestType: installer
 ManifestVersion: 1.6.0
 Installers:

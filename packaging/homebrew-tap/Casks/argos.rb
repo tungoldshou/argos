@@ -4,7 +4,7 @@ cask "argos" do
 
   url "https://github.com/tungoldshou/argos/releases/download/v#{version}/Argos-#{version}-arm64-mac.tar.gz"
   name "Argos"
-  desc "Terminal super-agent: CodeAct loop + verify hard-gate + OS sandbox (Seatbelt)"
+  desc "The hundred-eyed agent: CodeAct loop + verify hard-gate + OS sandbox (Seatbelt)"
   homepage "https://github.com/tungoldshou/argos"
 
   livecheck do
