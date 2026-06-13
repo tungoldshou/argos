@@ -63,8 +63,9 @@ Conductor **绝不擅自执行**（建议恒需用户确认）。
 
 ## 2. 聚类与综合（铁律边界）
 
-- 聚类特征：goal 文本 + verify_cmd + 代码 token 相似度；有 embedder 用
-  embedding（`llm_embed`），不可用降级 token 重叠（与 memory 同款降级阶梯）。
+- 聚类特征：goal 文本 + verify_cmd 的 token 相似度。v1 只实现 token 重叠
+  （夜间路径省 embed 成本/延迟；相似度函数独立可替换）；embedding
+  （`llm_embed`）接入留 follow-up——实现期有意延后。
 - 簇 ≥2 → 综合泛化候选；**单例候选也进 A/B**（顺手通电单 run 晋升）。
 - 综合产物结构：
   - 代码段、verify 命令：**逐字复制自源材料**，每段标注 `source_run`；
@@ -72,7 +73,11 @@ Conductor **绝不擅自执行**（建议恒需用户确认）。
     reflection 文本；
   - **硬防线**：综合器剥离模型输出中的一切 fenced code block —— 可执行内容
     永远不可能出自模型之手；模型调用失败 → 叙述层降级为模板文字（功能不死）。
-- 预算：每晚最多 3 个整合单元（簇或单例统一计数，防失控烧 token）。
+- 预算：每晚多源簇与单例各最多 3 个（双车道上限，合计 ≤6 个整合单元；
+  跨 run 综合不被单例挤掉，单例不饿死，防失控烧 token）。
+- 单元内源数上限 5（超大簇只取前 5 源成一个 unit，余下源**留宿**——
+  不进本轮、保持未消费，下晚重新聚类再整合；防超大簇产巨型 skill 与
+  巨型 A/B 语料——实现期裁定）。
 
 ## 3. A/B 晋升与诚实降级
 
@@ -94,15 +99,18 @@ Conductor **绝不擅自执行**（建议恒需用户确认）。
 - 合并：同 scope 高相似 reflection → 留最新、use_count 累加（相似阈值在
   实现计划中定，默认保守 —— 宁可不合并不可误合并）。
 - 归档：分数衰减到阈值以下（默认 0.2，可配置）→ 移入同目录 `archive.jsonl`。
+  打分复用 memory 既有 decay 公式（单一来源；use-count 回血在召回时通过
+  `last_used_at` 更新体现，不在归档打分重算——实现期裁定）。
 - **永不硬删**；整理动作计入 Dream 报告。
 
 ## 5. Conductor / daemon / UX 接线
 
 - `StandingOrder`、`ProactiveSuggestion`、`ProactiveSuggestionEvent` 增加
-  `kind` 字段，默认 `"run"`（协议加法，向后兼容，golden test 同步）。
+  `action` 字段（实现期改名：`kind` 已被 `StandingOrder.kind` 占用，语义
+  不变），默认 `"run"`（协议加法，向后兼容，golden test 同步）。
 - daemon 启动时注册 `builtin-dream-nightly`（默认 03:00，cron-lite）；tick 时
   扫描材料，够料（≥1 簇或 ≥3 条未消费材料）才产生建议，空料静默。
-- `requires_confirmation` 恒 True 不变；confirm 处理器按 `kind=dream` 路由到
+- `requires_confirmation` 恒 True 不变；confirm 处理器按 `action=dream` 路由到
   DreamPipeline（不走 `create_run`）。
 - 新事件 `dream_progress` / `dream_report`（`protocol/events.py`）经 SSE 广播；
   报告落 `~/.argos/dreams/<date>.jsonl`。

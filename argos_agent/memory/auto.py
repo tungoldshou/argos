@@ -638,6 +638,7 @@ _TYPE_MAP = {
     "tool_repeat_fail": "failure",
     "run_success": "fact",
     "undo": "convention",
+    "task_reflection": "failure",
 }
 _DEFAULT_CONFIDENCE = {
     "escalation_decision": 0.9,
@@ -645,6 +646,7 @@ _DEFAULT_CONFIDENCE = {
     "tool_repeat_fail": 0.7,
     "run_success": 0.6,
     "undo": 0.7,
+    "task_reflection": 0.7,
 }
 _SCOPE_MAP = {
     "escalation_decision": "project",
@@ -652,6 +654,7 @@ _SCOPE_MAP = {
     "tool_repeat_fail": "skill",  # spec §7.1
     "run_success": "project",
     "undo": "project",
+    "task_reflection": "project",
 }
 _tool_fail_count: dict[tuple[str | None, str], int] = {}
 
@@ -676,7 +679,7 @@ def capture_event(kind: str, *, project_id: str | None = None,
                   session_id: str | None = None,
                   **payload) -> MemoryEntry | None:
     """单入口:kind ∈ {escalation_decision, verify_fail, tool_repeat_fail,
-    run_success, undo}。未知 kind 返 None。
+    run_success, undo, task_reflection}。未知 kind 返 None。
 
     spec §7.1 表:
     - escalation_decision: scope=project, conf=0.9
@@ -684,6 +687,7 @@ def capture_event(kind: str, *, project_id: str | None = None,
     - tool_repeat_fail: scope=skill, conf=0.7(同 tool 累计 ≥3 次才写)
     - run_success: scope=project, conf=0.6(goal + 关键命令,steps ≥ 5)
     - undo: scope=project, conf=0.7
+    - task_reflection: scope=project, conf=0.7
     """
     if kind not in _TYPE_MAP:
         return None
@@ -729,6 +733,14 @@ def capture_event(kind: str, *, project_id: str | None = None,
         reason = payload.get("reason", "(no reason given)")
         value = f"undo: {reason}"
         key = f"undo.{reason[:40]}"
+    elif kind == "task_reflection":
+        run_id = payload.get("run_id", "")
+        goal = payload.get("goal", "")
+        verdict = payload.get("verdict", "")
+        snippet = payload.get("last_exc_snippet") or ""
+        tag = " [self_verified]" if payload.get("self_verified") else ""
+        value = f"reflection({verdict}{tag}): {goal}" + (f" — {snippet[:160]}" if snippet else "")
+        key = f"reflection.{run_id[:12]}"
     else:
         return None
     # secret redact
@@ -817,11 +829,20 @@ def _memory_context_block(*, workspace: Path,
 
 
 # ── decay / prune / 容量 cap(spec §9)────────────────────────────────────────
+def decayed_confidence(conf: float, days: float) -> float:
+    """公式核:confidence 衰减后值(spec §9.1)。
+
+    公式:conf - 0.01 * days,clamp 下限 0.0。
+    单一来源——所有调用方(含 consolidate)必须委托此函数,禁止手写第二份。
+    """
+    return max(0.0, conf - 0.01 * days)
+
+
 def _decay_confidence(entry: MemoryEntry, *, now: float | None = None) -> MemoryEntry:
     """单条 decay:confidence -= 0.01 * days_since_last_used(spec §9.1)。"""
     t = now if now is not None else time.time()
     days = max(0.0, (t - entry.last_used_at) / 86400.0)
-    new_conf = max(0.0, entry.confidence - 0.01 * days)
+    new_conf = decayed_confidence(entry.confidence, days)
     return MemoryEntry(
         id=entry.id, type=entry.type, scope=entry.scope,
         key=entry.key, value=entry.value, confidence=new_conf,

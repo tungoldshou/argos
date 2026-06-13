@@ -22,7 +22,11 @@ import pytest
 
 from argos_agent.conductor.orders import OrderStore, StandingOrder
 from argos_agent.conductor.proposals import ProactiveSuggestion
-from argos_agent.daemon.conductor_supervisor import ConductorSupervisor, CONDUCTOR_RUN_ID
+from argos_agent.daemon.conductor_supervisor import (
+    ConductorSupervisor,
+    CONDUCTOR_RUN_ID,
+    ensure_builtin_dream_order,
+)
 from argos_agent.daemon.manager import RunManager
 from argos_agent.daemon.registry import RunRegistry
 from argos_agent.daemon.server import DaemonHTTPServer
@@ -767,5 +771,460 @@ async def test_confirm_shared_gate_l1_actually_applied(tmp_path: Path):
         # 铁证:gate 真被设到 L1 → ApprovalLevel.CONFIRM + 原始档位记录为 L1
         assert gate.level == ApprovalLevel.CONFIRM, f"gate.level 应为 CONFIRM,实得 {gate.level}"
         assert getattr(gate, "_trust_level", None) == TrustLevel.L1_DANGEROUS_ONLY
+    finally:
+        await server.stop()
+
+
+# ── T9: builtin dream nightly order 幂等注册 ──────────────────────────────────
+
+def test_builtin_dream_order_registered_idempotent(tmp_path: Path):
+    """ensure_builtin_dream_order 调两次 → store 恰 1 条 builtin-dream-nightly,action=dream。"""
+    store = OrderStore(tmp_path / "conductor")
+    ensure_builtin_dream_order(store)
+    ensure_builtin_dream_order(store)   # 第二次幂等,不重复登记
+
+    orders = store.list()
+    dream_orders = [o for o in orders if o.id == "builtin-dream-nightly"]
+    assert len(dream_orders) == 1, f"应恰 1 条 builtin-dream-nightly,实得 {len(dream_orders)}"
+    o = dream_orders[0]
+    assert o.action == "dream"
+    assert o.kind == "schedule"
+    assert o.schedule == "03:00"
+    assert o.goal_template == "__dream__"
+    assert o.enabled is True
+
+
+def test_dream_order_disabled_not_resurrected(tmp_path: Path):
+    """用户 disable builtin-dream-nightly 后,再调 ensure → 仍 disabled(幂等只看存在性)。"""
+    store = OrderStore(tmp_path / "conductor")
+    ensure_builtin_dream_order(store)
+
+    order = store.get("builtin-dream-nightly")
+    assert order is not None
+    store.update(order.with_enabled(False))
+
+    # 再次 ensure:存在性已满足 → 不复活,enabled 仍 False
+    ensure_builtin_dream_order(store)
+    after = store.get("builtin-dream-nightly")
+    assert after is not None
+    assert after.enabled is False, "disable 后 ensure 不应复活 builtin dream order"
+
+
+# ── T9: 材料门 — 空料静默,有料放行 ──────────────────────────────────────────
+
+def _make_dream_suggestion(order_id: str = "builtin-dream-nightly") -> ProactiveSuggestion:
+    """构造 action=dream 的 ProactiveSuggestion。"""
+    return ProactiveSuggestion(
+        id=uuid.uuid4().hex,
+        order_id=order_id,
+        goal="__dream__",
+        reason_human="定时触发（03:00）：夜间整合",
+        suggested_at=time.time(),
+        requires_confirmation=True,
+        action="dream",
+    )
+
+
+def test_material_gate_silences_empty_candidates(tmp_path: Path, monkeypatch):
+    """材料门:action=dream 且候选区空 → 不进 pending、不广播。
+
+    用 ARGOS_DREAMS 无关;材料门读 candidates DEFAULT_ROOT。这里把 has_material
+    指向临时候选区(空)验证静默,放一个候选后验证放行。
+    """
+    from argos_agent.learning import candidates as cand_mod
+
+    cand_root = tmp_path / "candidates"
+    # has_material 用局部 import,补丁 DEFAULT_ROOT(supervisor 内 import 它)
+    monkeypatch.setattr(cand_mod, "DEFAULT_ROOT", cand_root)
+
+    events: list[dict] = []
+
+    async def _bcast(ev: dict) -> None:
+        events.append(ev)
+
+    supervisor = ConductorSupervisor(
+        orders_dir=tmp_path / "conductor",
+        tick_interval=999.0,
+        broadcast_fn=_bcast,
+    )
+
+    s = _make_dream_suggestion()
+
+    # 空候选区 → 材料门拦截:_should_emit_dream 应为 False
+    assert supervisor._should_emit_dream(s) is False, "空料应被材料门静默"
+
+    # 放一个候选 → 材料门放行
+    from argos_agent.learning.distiller import SkillCandidate
+    cand = SkillCandidate(
+        name="learned",
+        body_markdown="# x\n\n```python\nprint('ok')\n```",
+        verify_cmd="true",
+        skill_md_path=Path("unused"),
+    )
+    p = cand_mod.save_candidate(
+        cand, root=cand_root, source_run="run0001aaaa11",
+        workspace=str(tmp_path), goal="fix bug",
+    )
+    assert p is not None
+    assert supervisor._should_emit_dream(s) is True, "有料应放行"
+
+    # action=run 的 suggestion 永远放行(材料门只管 dream)
+    run_s = _make_suggestion("ord_run")
+    assert supervisor._should_emit_dream(run_s) is True
+
+
+def test_material_gate_import_failure_treated_as_no_material(tmp_path: Path, monkeypatch):
+    """学习模块 import 失败 → 材料门视为无材料(静默),不挂 conductor。"""
+    import builtins
+
+    events: list[dict] = []
+
+    async def _bcast(ev: dict) -> None:
+        events.append(ev)
+
+    supervisor = ConductorSupervisor(
+        orders_dir=tmp_path / "conductor",
+        tick_interval=999.0,
+        broadcast_fn=_bcast,
+    )
+
+    real_import = builtins.__import__
+
+    def _boom(name, *args, **kw):
+        if "learning.dream" in name or name.endswith("dream"):
+            raise ImportError("simulated learning module failure")
+        return real_import(name, *args, **kw)
+
+    monkeypatch.setattr(builtins, "__import__", _boom)
+    s = _make_dream_suggestion()
+    # import 失败 → 静默(False),不抛
+    assert supervisor._should_emit_dream(s) is False
+
+
+# ── T9: confirm 路由到 DreamPipeline(而非 create_run) ─────────────────────────
+
+class _FakeDreamPipeline:
+    """fake DreamPipeline:run() 返固定 DreamReport,is_running / cross_process_busy 可控。"""
+
+    def __init__(self, *, is_running: bool = False, cross_busy: bool = False):
+        self._is_running = is_running
+        self._cross_busy = cross_busy
+        self.run_called = False
+
+    @property
+    def is_running(self) -> bool:
+        return self._is_running
+
+    def cross_process_busy(self) -> bool:
+        # review#4:daemon _start_dream 预检另一进程是否持跨进程文件锁。
+        return self._cross_busy
+
+    async def run(self):
+        self.run_called = True
+        from argos_agent.learning.dream import DreamReport
+        return DreamReport(units_total=1, promoted=1)
+
+
+@pytest.mark.asyncio
+async def test_confirm_dream_routes_to_pipeline_not_create_run(tmp_path: Path):
+    """confirm 一个 action=dream 的 suggestion → 202 dream_started、跑 pipeline、不 create_run。"""
+    server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
+    fake = _FakeDreamPipeline(is_running=False)
+    server._dream_pipeline = fake   # 注入 fake,绕过懒初始化
+
+    # spy:确保 create_run 不被调
+    create_run_calls = []
+    real_create_run = manager.create_run
+
+    async def _spy_create_run(*a, **kw):
+        create_run_calls.append((a, kw))
+        return await real_create_run(*a, **kw)
+
+    manager.create_run = _spy_create_run
+
+    try:
+        sid = await _create_session(socket_path)
+        rec = server._sessions.get(sid)
+        if rec is not None:
+            import dataclasses
+            server._sessions._sessions[sid] = dataclasses.replace(rec, role="owner")
+
+        s = _make_dream_suggestion()
+        supervisor._pending[s.id] = s
+
+        status, raw = await _raw_req(
+            socket_path, "POST", f"/suggestions/{s.id}/confirm", session_id=sid,
+        )
+        body = json.loads(raw.decode())
+
+        assert status == 202, f"dream confirm 期望 202,实得 {status}:{body}"
+        assert body.get("state") == "dream_started"
+        assert body.get("suggestion_id") == s.id
+        # 让 create_task 调度的 fake.run 跑一拍
+        await asyncio.sleep(0.05)
+        assert fake.run_called, "fake pipeline.run 必须被调用"
+        assert create_run_calls == [], "dream 路径绝不能 create_run"
+        # suggestion 已 pop
+        assert s.id not in supervisor.pending_suggestions
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_confirm_dream_busy_409(tmp_path: Path):
+    """fake pipeline.is_running=True → confirm dream 返 409 dream_busy,suggestion 仍 pending。"""
+    server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
+    fake = _FakeDreamPipeline(is_running=True)
+    server._dream_pipeline = fake
+
+    try:
+        sid = await _create_session(socket_path)
+        rec = server._sessions.get(sid)
+        if rec is not None:
+            import dataclasses
+            server._sessions._sessions[sid] = dataclasses.replace(rec, role="owner")
+
+        s = _make_dream_suggestion()
+        supervisor._pending[s.id] = s
+
+        status, raw = await _raw_req(
+            socket_path, "POST", f"/suggestions/{s.id}/confirm", session_id=sid,
+        )
+        assert status == 409, f"已在跑应返 409,实得 {status}:{raw.decode()[:200]}"
+        assert not fake.run_called, "busy 时不应再调 run"
+        # suggestion 仍 pending(没被消费,可稍后重试)
+        assert s.id in supervisor.pending_suggestions
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_confirm_dream_cross_process_busy_409(tmp_path: Path):
+    """另一进程(CLI)持跨进程文件锁(cross_process_busy=True)→ confirm dream 返 409,不跑。
+
+    review#4 回归守卫:若 daemon 不预检 cross_process_busy,会回 202 却没真跑
+    (run() 因跨进程锁异步返 None,客户端无感)。撤掉 _start_dream 里的
+    cross_process_busy 检查 → 本测试会得 202 + run_called=True → FAIL。
+    """
+    server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
+    # is_running=False(本进程没在跑)但 cross_busy=True(另一进程持锁)
+    fake = _FakeDreamPipeline(is_running=False, cross_busy=True)
+    server._dream_pipeline = fake
+
+    try:
+        sid = await _create_session(socket_path)
+        rec = server._sessions.get(sid)
+        if rec is not None:
+            import dataclasses
+            server._sessions._sessions[sid] = dataclasses.replace(rec, role="owner")
+
+        s = _make_dream_suggestion()
+        supervisor._pending[s.id] = s
+
+        status, raw = await _raw_req(
+            socket_path, "POST", f"/suggestions/{s.id}/confirm", session_id=sid,
+        )
+        assert status == 409, (
+            f"另一进程持锁应返 409,实得 {status}:{raw.decode()[:200]}"
+        )
+        # 让事件循环跑一拍,确认 pipeline.run 绝没被派生
+        await asyncio.sleep(0.02)
+        assert not fake.run_called, "跨进程忙时绝不能派生 run(否则 202 却没真跑)"
+        # suggestion 仍 pending(没被消费,可稍后重试)
+        assert s.id in supervisor.pending_suggestions
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_confirm_dream_no_pipeline_503(tmp_path: Path):
+    """_get_dream_pipeline 返 None(无 key)→ confirm dream 返 503 no_worker_key。"""
+    server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
+    # 不注入 _dream_pipeline,且无 components → _get_dream_pipeline 返 None
+
+    try:
+        sid = await _create_session(socket_path)
+        rec = server._sessions.get(sid)
+        if rec is not None:
+            import dataclasses
+            server._sessions._sessions[sid] = dataclasses.replace(rec, role="owner")
+
+        s = _make_dream_suggestion()
+        supervisor._pending[s.id] = s
+
+        status, raw = await _raw_req(
+            socket_path, "POST", f"/suggestions/{s.id}/confirm", session_id=sid,
+        )
+        assert status == 503, f"无 pipeline 应返 503,实得 {status}:{raw.decode()[:200]}"
+    finally:
+        await server.stop()
+
+
+# ── T9: POST /dream/run + GET /dream/report 端点 ─────────────────────────────
+
+@pytest.mark.asyncio
+async def test_dream_run_endpoint_starts_pipeline(tmp_path: Path):
+    """POST /dream/run(无 suggestion)→ 202 dream_started、跑 pipeline。"""
+    server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
+    fake = _FakeDreamPipeline(is_running=False)
+    server._dream_pipeline = fake
+
+    try:
+        sid = await _create_session(socket_path)
+        rec = server._sessions.get(sid)
+        if rec is not None:
+            import dataclasses
+            server._sessions._sessions[sid] = dataclasses.replace(rec, role="owner")
+
+        status, raw = await _raw_req(socket_path, "POST", "/dream/run", session_id=sid)
+        body = json.loads(raw.decode())
+        assert status == 202, f"期望 202,实得 {status}:{body}"
+        assert body.get("state") == "dream_started"
+        await asyncio.sleep(0.05)
+        assert fake.run_called
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_dream_run_endpoint_busy_409(tmp_path: Path):
+    """POST /dream/run 已在跑 → 409 dream_busy。"""
+    server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
+    server._dream_pipeline = _FakeDreamPipeline(is_running=True)
+
+    try:
+        sid = await _create_session(socket_path)
+        rec = server._sessions.get(sid)
+        if rec is not None:
+            import dataclasses
+            server._sessions._sessions[sid] = dataclasses.replace(rec, role="owner")
+
+        status, raw = await _raw_req(socket_path, "POST", "/dream/run", session_id=sid)
+        assert status == 409
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_dream_report_endpoint_empty_and_nonempty(tmp_path: Path, monkeypatch):
+    """GET /dream/report:目录空 → {"report": null};写一行后 → 该 dict。"""
+    dreams_dir = tmp_path / "dreams"
+    monkeypatch.setenv("ARGOS_DREAMS_DIR", str(dreams_dir))
+
+    server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
+    try:
+        sid = await _create_session(socket_path)
+        rec = server._sessions.get(sid)
+        if rec is not None:
+            import dataclasses
+            server._sessions._sessions[sid] = dataclasses.replace(rec, role="owner")
+
+        # 空态:report=null
+        status, raw = await _raw_req(socket_path, "GET", "/dream/report", session_id=sid)
+        assert status == 200
+        body = json.loads(raw.decode())
+        assert body == {"report": None}, f"空态应返 {{'report': None}},实得 {body}"
+
+        # 写一行报告
+        dreams_dir.mkdir(parents=True, exist_ok=True)
+        report_line = {
+            "ts": 1700000000.0, "units_total": 3, "promoted": 1,
+            "rejected": 1, "skipped": 1, "memory_merged": 2, "memory_archived": 0,
+        }
+        (dreams_dir / "2026-06-13.jsonl").write_text(
+            json.dumps(report_line, ensure_ascii=False) + "\n", encoding="utf-8",
+        )
+
+        status, raw = await _raw_req(socket_path, "GET", "/dream/report", session_id=sid)
+        assert status == 200
+        body = json.loads(raw.decode())
+        assert body["report"] is not None
+        assert body["report"]["units_total"] == 3
+        assert body["report"]["promoted"] == 1
+    finally:
+        await server.stop()
+
+
+# ── T9: TOCTOU 竞态守卫 ─────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_start_dream_concurrent_race_at_most_one_202(tmp_path: Path):
+    """TOCTOU 修复回归：两个几乎同时到达的 POST /dream/run 请求（或 confirm+run），
+    恰好只有一个拿到 202，另一个拿到 409 dream_busy。
+
+    复现路径：_dream_starting 守卫缺失时，两个并发请求都可能在 create_task 派生的
+    pipeline.run() 协程获得调度之前读到 is_running=False，各返 202（撒谎）。
+    修复后：第一个请求同步设置 _dream_starting=True，第二个请求在 is_running 仍为
+    False 的窗口期读到 _dream_starting=True → 409，保证"202=已启动"诚实铁律。
+    """
+    import asyncio
+
+    server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
+
+    # 使用可延迟的 fake pipeline：run() 在 yield 之前不置 is_running=True
+    # （模拟真实 DreamPipeline 的惰性锁初始化行为）。
+    run_count = 0
+
+    class _SlowFakePipeline:
+        """run() 加 yield 让另一个协程有机会插入；is_running 模拟锁未持有阶段。"""
+        def __init__(self):
+            self._is_running = False
+            self.run_called = 0
+
+        @property
+        def is_running(self) -> bool:
+            return self._is_running
+
+        def cross_process_busy(self) -> bool:
+            # review#4:无另一进程持锁 → False(本测试只验进程内 TOCTOU 守卫)。
+            return False
+
+        async def run(self):
+            nonlocal run_count
+            run_count += 1
+            self.run_called += 1
+            self._is_running = True
+            await asyncio.sleep(0.02)   # 模拟实际工作，让另一个 coro 有机会跑
+            self._is_running = False
+            from argos_agent.learning.dream import DreamReport
+            return DreamReport(units_total=1, promoted=1)
+
+    fake = _SlowFakePipeline()
+    server._dream_pipeline = fake
+
+    try:
+        sid = await _create_session(socket_path)
+        rec = server._sessions.get(sid)
+        if rec is not None:
+            import dataclasses
+            server._sessions._sessions[sid] = dataclasses.replace(rec, role="owner")
+
+        # 并发发两个 /dream/run 请求
+        results = await asyncio.gather(
+            _raw_req(socket_path, "POST", "/dream/run", session_id=sid),
+            _raw_req(socket_path, "POST", "/dream/run", session_id=sid),
+        )
+
+        statuses = [r[0] for r in results]
+        bodies = [json.loads(r[1].decode()) for r in results]
+
+        count_202 = statuses.count(202)
+        count_409 = statuses.count(409)
+
+        assert count_202 == 1, (
+            f"并发两请求应恰好只有一个 202，实得 {statuses}。"
+            f"如果两个都是 202，说明 TOCTOU 守卫失效（_dream_starting 未置位）。"
+        )
+        assert count_409 == 1, (
+            f"另一个请求应返 409 dream_busy，实得 {statuses}。bodies={bodies}"
+        )
+
+        # 等待 run 任务完成（防止 dangling task 干扰其他测试）
+        await asyncio.sleep(0.05)
+
+        # 只有一次真实 run 被调用（pipeline 没被双跑）
+        assert fake.run_called == 1, (
+            f"pipeline.run 应只被调一次，实际调了 {fake.run_called} 次"
+        )
     finally:
         await server.stop()

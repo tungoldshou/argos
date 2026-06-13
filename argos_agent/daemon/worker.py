@@ -659,6 +659,8 @@ class RunWorker:
                 verdict_status=verdict_status,
                 self_verified=self_verified,
                 skills_root=skills_root,
+                candidates_root=Path(os.path.expanduser("~/.argos/learning/candidates")),
+                workspace=(getattr(entry, "workspace", "") or None),
                 runner_factory=None,   # worker 不持有 EvalRunner;hook 跳过 promote 仅产候选
                 tasks=[],              # 同上
             )

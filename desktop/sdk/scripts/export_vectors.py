@@ -359,6 +359,29 @@ def _build_vectors() -> list[dict]:
             "reason_human": "定时触发（09:00）：每天早上检查日志",
             "suggested_at": 1700000000.0,
             "requires_confirmation": True,
+            "action": "run",
+        },
+    )
+
+    # ── ComputerActionEvent ─────────────────────────────────────────────────
+    _v(
+        PE.ComputerActionEvent(
+            kind_action="click",
+            x=100,
+            y=200,
+            text_preview="",
+            ok=True,
+            detail="点击成功",
+            artifact_path=None,
+        ),
+        {
+            "kind_action": "click",
+            "x": 100,
+            "y": 200,
+            "text_preview": "",
+            "ok": True,
+            "detail": "点击成功",
+            "artifact_path": None,
         },
     )
 

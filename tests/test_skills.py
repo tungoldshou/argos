@@ -42,6 +42,51 @@ def test_toggle_persists(skills_dir):
     assert "enabled: false" in text
 
 
+def test_load_all_finds_subdir_skill(skills_dir):
+    """回归(review#2):晋升/curator 写 <name>/SKILL.md 子目录,load_all 必须也扫到。
+    回退验证:删掉 load_all 的子目录扫描循环,此断言必 FAIL(晋升技能运行时永不加载)。"""
+    _, user = skills_dir
+    sub = user / "promoted-skill"
+    sub.mkdir()
+    (sub / "SKILL.md").write_text(
+        "---\nname: promoted-skill\ndescription: subdir one\n"
+        "trust: user_created\nenabled: true\n---\n# promoted\n",
+        encoding="utf-8",
+    )
+    names = {s.name for s in skills.load_all()}
+    assert "promoted-skill" in names, "子目录 <name>/SKILL.md 晋升技能必须被 load_all 扫到"
+    # 平铺技能仍在,子目录扫描不破坏现有语义
+    assert {"a", "b", "c"} <= names
+
+
+def test_load_all_subdir_does_not_override_flat(skills_dir):
+    """子目录扫描在平铺之后补扫,沿用"先到不被覆盖":同名子目录技能不顶掉平铺技能。"""
+    _, user = skills_dir
+    sub = user / "c"  # 与平铺 user/c.md 同名
+    sub.mkdir()
+    (sub / "SKILL.md").write_text(
+        "---\nname: c\ndescription: SUBDIR_VERSION\ntrust: user_created\nenabled: true\n---\n# c2\n",
+        encoding="utf-8",
+    )
+    c = next(s for s in skills.load_all() if s.name == "c")
+    assert c.description == "charlie", "同名平铺技能先到,子目录版不覆盖"
+
+
+def test_toggle_subdir_skill(skills_dir):
+    """回归(review#2):子目录技能也能 toggle —— 找不到平铺时回退试 <name>/SKILL.md 并写回该路径。"""
+    _, user = skills_dir
+    sub = user / "promoted-skill"
+    sub.mkdir()
+    md = sub / "SKILL.md"
+    md.write_text(
+        "---\nname: promoted-skill\ndescription: subdir one\n"
+        "trust: user_created\nenabled: true\n---\n# promoted\n",
+        encoding="utf-8",
+    )
+    assert skills.toggle("promoted-skill", enabled=False) is True
+    assert "enabled: false" in md.read_text(encoding="utf-8")
+
+
 def test_import_writes_to_user_dir(tmp_path, skills_dir, monkeypatch):
     _, user = skills_dir
     content = "---\nname: x\ndescription: x desc\ntrust: imported\nenabled: true\n---\n# x\n"

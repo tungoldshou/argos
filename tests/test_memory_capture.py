@@ -117,6 +117,42 @@ def test_capture_returns_none_when_unknown_kind(mem_root, tmp_path):
     assert e is None
 
 
+# ── task_reflection ──────────────────────────────────────────────────────────
+def test_capture_task_reflection_persists(tmp_path, monkeypatch):
+    """task_reflection 必须落盘(修复:未注册 kind 被静默丢弃)。"""
+    monkeypatch.setenv("ARGOS_MEMORY_DIR", str(tmp_path))
+    from argos_agent.memory import auto
+    entry = auto.capture_event(
+        "task_reflection",
+        project_id="proj1",
+        run_id="run123",
+        goal="fix the login bug",
+        verify_cmd="pytest -q",
+        verdict="failed",
+        self_verified=False,
+        last_exc_snippet="AssertionError: boom",
+    )
+    assert entry is not None
+    assert entry.type == "failure"
+    assert entry.scope == "project"
+    assert entry.key == "reflection.run123"
+    assert "fix the login bug" in entry.value
+    assert "failed" in entry.value
+    assert "AssertionError: boom" in entry.value
+
+
+def test_capture_task_reflection_self_verified_tagged(tmp_path, monkeypatch):
+    """self_verified=True 的反思要带防火墙标记(可统计'自验证降级')。"""
+    monkeypatch.setenv("ARGOS_MEMORY_DIR", str(tmp_path))
+    from argos_agent.memory import auto
+    entry = auto.capture_event(
+        "task_reflection", project_id="proj1", run_id="run456", goal="g",
+        verdict="passed", self_verified=True,
+    )
+    assert entry is not None
+    assert "[self_verified]" in entry.value
+
+
 def test_capture_tool_repeat_fail_isolates_by_tool(mem_root, tmp_path):
     """不同 tool 的失败计数应独立。"""
     pid = mem_auto.project_id_for(tmp_path)

@@ -85,13 +85,25 @@ def load_all() -> list[Skill]:
             s = _parse(p)
             if s and s.name not in out:  # builtin 优先,后到的 user 不覆盖
                 out[s.name] = s
+        # 子目录格式 <name>/SKILL.md(晋升 promotion_gate / curator install 的产物)。
+        # 平铺扫描之后补扫,沿用"先到不被覆盖"——同名平铺技能不被子目录顶掉。
+        for p in sorted(d.glob("*/SKILL.md")):
+            s = _parse(p)
+            if s and s.name not in out:
+                out[s.name] = s
     return list(out.values())
 
 
 def toggle(name: str, *, enabled: bool) -> bool:
-    """切换 enabled 写回原文件。"""
+    """切换 enabled 写回原文件。
+
+    先试平铺 d/<name>.md;找不到回退试子目录 d/<name>/SKILL.md(晋升/curator 产物),
+    写回实际找到的那个路径。
+    """
     for d in (BUILTIN_DIR, USER_DIR):
         p = d / f"{name}.md"
+        if not p.exists():
+            p = d / name / "SKILL.md"  # 回退:子目录格式
         if not p.exists():
             continue
         s = _parse(p)

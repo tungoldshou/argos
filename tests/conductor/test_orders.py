@@ -291,3 +291,42 @@ class TestOrderStoreSortOrder:
         orders = store.list()
         created_ats = [o.created_at for o in orders]
         assert created_ats == sorted(created_ats)
+
+
+# ---------------------------------------------------------------------------
+# action 字段
+# ---------------------------------------------------------------------------
+
+def test_order_action_default_run_and_roundtrip():
+    """action 默认 'run';to_dict/from_dict 往返;旧落盘数据(无 action 键)兼容。"""
+    import time
+    o = StandingOrder(
+        id="x1", utterance="u", kind="schedule", schedule="03:00",
+        trigger_glob=None, goal_template="g", enabled=True,
+        created_at=time.time(), last_fired_at=None,
+    )
+    assert o.action == "run"
+    d = o.to_dict()
+    assert d["action"] == "run"
+    d.pop("action")  # 模拟旧数据
+    assert StandingOrder.from_dict(d).action == "run"
+
+
+def test_order_action_dream_roundtrip():
+    import time
+    o = StandingOrder(
+        id="x2", utterance="夜间整合", kind="schedule", schedule="03:00",
+        trigger_glob=None, goal_template="__dream__", enabled=True,
+        created_at=time.time(), last_fired_at=None, action="dream",
+    )
+    assert StandingOrder.from_dict(o.to_dict()).action == "dream"
+
+
+def test_order_action_invalid_rejected():
+    import time
+    with pytest.raises(ValueError):
+        StandingOrder(
+            id="x3", utterance="u", kind="schedule", schedule="03:00",
+            trigger_glob=None, goal_template="g", enabled=True,
+            created_at=time.time(), last_fired_at=None, action="hack",
+        )

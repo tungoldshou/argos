@@ -12,6 +12,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from argos_agent.conductor.orders import OrderAction
+
 if TYPE_CHECKING:
     from argos_agent.conductor.orders import StandingOrder
 
@@ -34,6 +36,8 @@ class ProactiveSuggestion:
         suggested_at        产出时间（Unix float）
         requires_confirmation  契约字段：**永远为 True**。
                             __post_init__ 断言此条件（构造 False → ValueError）。
+        action              恒由来源 StandingOrder.action 决定；"run"（默认，confirm 后
+                            create_run）或 "dream"（confirm 后跑 DreamPipeline）
     """
     id: str
     order_id: str
@@ -41,6 +45,7 @@ class ProactiveSuggestion:
     reason_human: str
     suggested_at: float
     requires_confirmation: bool
+    action: OrderAction = "run"   # 带默认值放最后（frozen slots dataclass 规则）
 
     def __post_init__(self) -> None:
         """契约断言：requires_confirmation 永远为 True（建议永远要确认）。"""
@@ -48,6 +53,10 @@ class ProactiveSuggestion:
             raise ValueError(
                 "ProactiveSuggestion.requires_confirmation 必须为 True "
                 "（建议永远要用户确认，绝不自动执行）"
+            )
+        if self.action not in ("run", "dream"):
+            raise ValueError(
+                f"ProactiveSuggestion.action 必须是 'run' 或 'dream'，收到 {self.action!r}"
             )
 
 
@@ -90,6 +99,7 @@ def propose(
         reason_human=reason,
         suggested_at=now,
         requires_confirmation=True,  # 契约值，永远 True
+        action=order.action,         # 透传来源 order 的 action（"run" 或 "dream"）
     )
 
 

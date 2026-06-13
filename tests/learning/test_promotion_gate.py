@@ -188,3 +188,227 @@ def test_promote_writes_frontmatter_enabled_false(tmp_path):
     skill_md = (tmp_path / "skills" / "learned-review" / "SKILL.md").read_text()
     assert "enabled: false" in skill_md
     assert "learned skill body" in skill_md
+
+
+# ── Task 6:A/B 接线 + 同名覆盖防护 ─────────────────────────────
+
+class _FullPassRunner:
+    """所有 task 永远返回 passed 的 fake runner。"""
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    def run(self, task, *, model_tier: str):
+        from argos_agent.eval.runner import EvalResult
+        self.calls.append((task, model_tier))
+        return EvalResult(
+            task_id=task.id, run_id="r-pass", model_tier=model_tier,
+            started_at=0.0, finished_at=0.0, duration_s=0.0,
+            pass_status="passed", verify_cmd=task.verify_cmd,
+            verify_detail="ok", tampered=(),
+            tokens_in=10, tokens_out=5, cost_usd=0.001, steps=1,
+            worktree_path="", isolation_fallback=None, error=None,
+            corpus_version=task.corpus_version, goal=task.goal,
+        )
+
+
+class _FullFailRunner:
+    """所有 task 永远返回 failed 的 fake runner。"""
+    def run(self, task, *, model_tier: str):
+        from argos_agent.eval.runner import EvalResult
+        return EvalResult(
+            task_id=task.id, run_id="r-fail", model_tier=model_tier,
+            started_at=0.0, finished_at=0.0, duration_s=0.0,
+            pass_status="failed", verify_cmd=task.verify_cmd,
+            verify_detail="fail", tampered=(),
+            tokens_in=10, tokens_out=5, cost_usd=0.001, steps=1,
+            worktree_path="", isolation_fallback=None, error=None,
+            corpus_version=task.corpus_version, goal=task.goal,
+        )
+
+
+def test_promote_runner_b_used_for_b_side(tmp_path):
+    """A 用全 failed runner;B 用全 passed runner_b → promoted=True。
+
+    评审钉死:a_total==2、b_total==2(计数器不被异常守卫吃掉)。
+    """
+    tasks = [object(), object()]  # runner_b.run 接收任意 task 对象
+    # 为让 object() task 能正常传递给 EvalResult 构造,用专门的 fake runner
+    class _ObjRunnerFail:
+        def run(self, task, *, model_tier: str):
+            # 返回一个带 pass_status="failed" 的最简对象
+            class _R:
+                pass_status = "failed"
+            return _R()
+
+    class _ObjRunnerPass:
+        def run(self, task, *, model_tier: str):
+            class _R:
+                pass_status = "passed"
+            return _R()
+
+    runner_a = _ObjRunnerFail()
+    runner_b = _ObjRunnerPass()
+    cand = _make_candidate("learned-ab-test")
+
+    result = promotion_gate.promote(
+        candidate=cand,
+        tasks=tasks,
+        runner=runner_a,
+        runner_b=runner_b,
+        skills_root=tmp_path / "skills",
+    )
+    assert result.promoted is True, f"应晋升,实得 {result}"
+    assert result.a_passed == 0, f"A 侧应全 failed,得 {result.a_passed}"
+    assert result.b_passed == 2, f"B 侧应全 passed,得 {result.b_passed}"
+    assert result.a_total == 2, f"a_total 应==2,得 {result.a_total}"
+    assert result.b_total == 2, f"b_total 应==2,得 {result.b_total}"
+
+
+def test_promote_refuses_overwrite_user_skill(tmp_path):
+    """同名用户技能(无 source_run 标记)已存在 → 拒绝晋升,原文件不动。"""
+    skills_root = tmp_path / "skills"
+    skill_dir = skills_root / "my-skill"
+    skill_dir.mkdir(parents=True)
+    original_content = "# 用户手写技能\n这是用户自己写的技能,无 source_run 标记。\n"
+    (skill_dir / "SKILL.md").write_text(original_content, encoding="utf-8")
+
+    tasks = [_make_task("t1"), _make_task("t2")]
+    runner = _FullPassRunner()
+    cand = _make_candidate("my-skill", body="---\nsource_run: xyz\n---\n# new body\n")
+
+    result = promotion_gate.promote(
+        candidate=cand, tasks=tasks, runner=runner,
+        runner_b=_FullPassRunner(),
+        skills_root=skills_root,
+    )
+    assert result.promoted is False, f"应拒绝,实得 {result}"
+    assert (result.reason or "").startswith("name_collision"), f"reason 应以 name_collision 开头,得 {result.reason!r}"
+    # 原文件内容不变
+    actual = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    assert actual == original_content, "原文件内容不应被修改"
+
+
+def test_promote_overwrites_learned_skill(tmp_path):
+    """同名学习产物(含 source_run 标记)已存在 → 允许覆盖(整合更新)。"""
+    skills_root = tmp_path / "skills"
+    skill_dir = skills_root / "dream-skill"
+    skill_dir.mkdir(parents=True)
+    old_content = "---\nsource_run: oldrun123\nenabled: false\n---\n# 旧版综合技能\n"
+    (skill_dir / "SKILL.md").write_text(old_content, encoding="utf-8")
+
+    tasks = [_make_task("t1"), _make_task("t2")]
+    # A 全 fail, B 全 pass → promoted=True
+    new_body = "---\nsource_run: newrun456\nenabled: false\n---\n# 新版综合技能\n"
+    cand = _make_candidate("dream-skill", body=new_body)
+
+    class _FailRunner:
+        def run(self, task, *, model_tier: str):
+            class _R:
+                pass_status = "failed"
+            return _R()
+
+    class _PassRunner:
+        def run(self, task, *, model_tier: str):
+            class _R:
+                pass_status = "passed"
+            return _R()
+
+    result = promotion_gate.promote(
+        candidate=cand, tasks=tasks,
+        runner=_FailRunner(), runner_b=_PassRunner(),
+        skills_root=skills_root,
+    )
+    assert result.promoted is True, f"应覆盖学习产物,实得 {result}"
+    actual = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    assert "新版综合技能" in actual, "文件应被新候选覆盖"
+    assert "旧版综合技能" not in actual, "旧内容应被替换"
+
+
+def test_promote_refuses_overwrite_user_skill_with_source_run_in_body(tmp_path):
+    """【评审 R1 修复】用户技能 frontmatter 无 source_run 但正文含 "source_run:" 字样
+    (例如文档示例代码)时,全文匹配会误判为学习产物并允许覆盖。
+    正确行为:frontmatter 无 source_run → 保守拒绝,原文件不动。
+    """
+    skills_root = tmp_path / "skills"
+    skill_dir = skills_root / "user-doc-skill"
+    skill_dir.mkdir(parents=True)
+    # 用户手写技能:frontmatter 无 source_run,正文含 "source_run:" 字样(文档示例)
+    original_content = (
+        "---\n"
+        "name: user-doc-skill\n"
+        "enabled: true\n"
+        "---\n"
+        "# 用户手写技能\n"
+        "该技能文档中演示 learning 系统的 YAML 格式:\n"
+        "```yaml\n"
+        "source_run: abc123\n"
+        "source_runs: [abc123, def456]\n"
+        "```\n"
+        "以上是示例,本文件本身是用户技能。\n"
+    )
+    (skill_dir / "SKILL.md").write_text(original_content, encoding="utf-8")
+
+    tasks = [_make_task("t1"), _make_task("t2")]
+    # A 全 fail, B 全 pass:若 is_learned 误判为学习产物会允许覆盖并返回 promoted=True
+    cand = _make_candidate("user-doc-skill", body="---\nsource_run: newrun\n---\n# 新body\n")
+
+    result = promotion_gate.promote(
+        candidate=cand, tasks=tasks, runner=_FullFailRunner(),
+        runner_b=_FullPassRunner(),
+        skills_root=skills_root,
+    )
+    assert result.promoted is False, (
+        f"正文含 source_run 但 frontmatter 无标记 → 应保守拒绝,实得 {result}"
+    )
+    assert (result.reason or "").startswith("name_collision"), (
+        f"reason 应以 name_collision 开头,得 {result.reason!r}"
+    )
+    # 原文件内容不变
+    actual = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    assert actual == original_content, "原用户技能文件不应被修改"
+
+
+def test_promote_refuses_overwrite_skill_with_markdown_divider_trick(tmp_path):
+    """【评审 B2 修复】文件不以 '---' 开头但正文含 '---' Markdown 水平分割线,
+    分割线后跟 'source_run:' 字样 → frontmatter 提取器不应误判为学习产物。
+
+    正确行为:文件首行不是 '---' → is_learned=False → 保守拒绝,原文件不动。
+    """
+    skills_root = tmp_path / "skills"
+    skill_dir = skills_root / "markdown-divider-skill"
+    skill_dir.mkdir(parents=True)
+    # 用户技能:无 frontmatter,正文含 --- 分割线 + source_run: 字样
+    original_content = (
+        "# 用户手写技能(无 frontmatter)\n"
+        "这是用户手动编写的技能文件。\n"
+        "\n"
+        "---\n"
+        "source_run: abc123\n"
+        "source_runs: [abc123, def456]\n"
+        "---\n"
+        "\n"
+        "以上是正文里的水平分割线示例,本文件是用户技能。\n"
+    )
+    (skill_dir / "SKILL.md").write_text(original_content, encoding="utf-8")
+
+    tasks = [_make_task("t1")]
+    # A 全 fail, B 全 pass:若 is_learned 误判为 True 会允许覆盖并返回 promoted=True
+    cand = _make_candidate(
+        "markdown-divider-skill",
+        body="---\nsource_run: newrun\n---\n# 新 body\n",
+    )
+
+    result = promotion_gate.promote(
+        candidate=cand, tasks=tasks, runner=_FullFailRunner(),
+        runner_b=_FullPassRunner(),
+        skills_root=skills_root,
+    )
+    assert result.promoted is False, (
+        f"文件不以 '---' 开头,frontmatter 提取不应采用正文分割线 → 应拒绝,实得 {result}"
+    )
+    assert (result.reason or "").startswith("name_collision"), (
+        f"reason 应以 name_collision 开头,得 {result.reason!r}"
+    )
+    # 原文件内容不变
+    actual = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    assert actual == original_content, "原文件内容不应被修改"
