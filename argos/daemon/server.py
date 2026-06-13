@@ -515,9 +515,8 @@ class DaemonHTTPServer:
                 snapshot=run_snapshot,
                 attachments=run_attachments,
             )
-            # P3:注册 worker 到路由表,供审批路由使用
-            self._workers[run_id] = worker
-            asyncio.create_task(worker.run(), name=f"run-{run_id}")
+            # P3:注册 worker 到路由表(供审批路由)+ 终态自动摘除(#12 防泄漏)
+            self._spawn_worker(worker, run_id, name=f"run-{run_id}")
         elif callable(self._loop_factory):
             # 向后兼容路径:共享 sandbox/gate/broker(loop_factory 注入)
             run_loop_factory = self._make_run_loop_factory(effective_ws_str)
@@ -543,15 +542,23 @@ class DaemonHTTPServer:
                 snapshot=run_snapshot,
                 attachments=run_attachments,
             )
-            # P3:注册 worker 到路由表
-            self._workers[run_id] = worker
-            asyncio.create_task(worker.run(), name=f"run-{run_id}")
+            # P3:注册 worker 到路由表 + 终态自动摘除(#12 防泄漏)
+            self._spawn_worker(worker, run_id, name=f"run-{run_id}")
         else:
             # 元数据模式(components/loop_factory 均无):没有 worker 跑终态清理,
             # 槽位必须当场归还,否则 max_concurrent 次后 daemon 永久 503(槽位泄漏)。
             self._registry.release_slot()
 
         await self._send_json(writer, 201, {"run_id": run_id})
+
+    def _spawn_worker(self, worker: "RunWorker", run_id: str, *, name: str) -> "asyncio.Task":
+        """启动 worker task + 注册路由表;终态(完成/失败/取消)自动从 _workers 摘除,防止常驻
+        daemon 路由表只增不减(每 run 泄漏 RunWorker 及其 gate/snapshot/attachments → 内存膨胀)。
+        worker.run() 自抓 current_task 供 request_hard_cancel,与此处的 task 同一个。"""
+        self._workers[run_id] = worker
+        task = asyncio.create_task(worker.run(), name=name)
+        task.add_done_callback(lambda _t, rid=run_id: self._workers.pop(rid, None))
+        return task
 
     def _make_run_loop_factory(self, workspace: str | None):
         """返回 per-run loop_factory:在 base loop_factory 基础上用指定 workspace 覆盖。
@@ -628,6 +635,11 @@ class DaemonHTTPServer:
         if not ok:
             return await self._send_error(writer, 409, CODE_INVALID_TRANSITION,
                                           "run is in terminal state (cannot cancel)")
+        # #13 硬中断:set-flag(request_cancel)只在事件边界轮询生效,卡在 model stream 时无法
+        # 中断(用户取消后可继续跑 ~5min)。直接 cancel worker task → await 点抛 CancelledError。
+        worker = self._workers.get(run_id)
+        if worker is not None:
+            worker.request_hard_cancel()
         await self._send_json(writer, 202, {"state": "cancel_requested"})
 
     async def _handle_focus(self, writer, headers, run_id):
@@ -1449,8 +1461,7 @@ class DaemonHTTPServer:
                 approval_timeout_s=60.0,
                 ledger_store=self._ledger_store,
             )
-            self._workers[run_id] = worker
-            asyncio.create_task(worker.run(), name=f"conductor-run-{run_id}")
+            self._spawn_worker(worker, run_id, name=f"conductor-run-{run_id}")
         elif callable(self._loop_factory):
             worker = RunWorker(
                 run_id=run_id,
@@ -1468,8 +1479,7 @@ class DaemonHTTPServer:
                     self._gate.set_trust_level(TrustLevel["L1_DANGEROUS_ONLY"])
                 except Exception as _te:  # noqa: BLE001
                     log.warning("conductor confirm: set_trust_level(shared gate) 失败: %s", _te)
-            self._workers[run_id] = worker
-            asyncio.create_task(worker.run(), name=f"conductor-run-{run_id}")
+            self._spawn_worker(worker, run_id, name=f"conductor-run-{run_id}")
         else:
             # 元数据模式:没有 worker 跑终态清理,槽位当场归还(终审 major:槽位泄漏)。
             self._registry.release_slot()

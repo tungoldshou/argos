@@ -281,6 +281,18 @@ class RunWorker:
         """
         return self._gate  # type: ignore[return-value]
 
+    def request_hard_cancel(self) -> bool:
+        """硬取消:直接 cancel 包装 run() 的 asyncio task,在 await 点(如卡住的 model stream)
+        抛 CancelledError 立即中断。区别于 manager.request_cancel 的 set-flag —— 后者只在事件
+        边界轮询生效,无法中断阻塞中的 stream(用户取消后可继续跑 ~5min,打脸"可控")。
+        worker.run() 的 except CancelledError + finally 负责标 cancelled 并收尾(释放 slot/
+        worktree/registry),故硬中断是安全的。返回是否真触发(task 存在且未完成)。"""
+        t = self._task
+        if t is not None and not t.done():
+            t.cancel()
+            return True
+        return False
+
     async def run(self) -> None:
         """worker 入口:running → 完成/失败/取消 之一。
 
@@ -289,6 +301,8 @@ class RunWorker:
           · worktree cleanup
           · registry.cleanup(标终态 + 缩 max_history)
         """
+        # 自持包装本协程的 task,供 request_hard_cancel 硬中断卡住的 stream(set-flag 边界轮询不够)。
+        self._task = asyncio.current_task()
         # 从 index 拿 meta 信息
         entry = self._manager.get_run(self.run_id)
         if entry is None:

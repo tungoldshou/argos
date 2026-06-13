@@ -205,3 +205,32 @@ async def test_worker_drives_loop_in_project_mode(tmp_path: Path):
     await worker.run()
     assert captured.get("project_mode") is True
     assert captured.get("verify_eq_ws") is True
+
+
+@pytest.mark.asyncio
+async def test_worker_hard_cancel_interrupts_blocked_loop(tmp_path: Path):
+    """P2:manager.request_cancel 只 set flag,worker 在事件边界轮询 → 卡在 stream(loop 不 yield)
+    时收不到,跑到底(用户取消后可继续 ~5min)。worker.request_hard_cancel() 直接 cancel 包装本
+    协程的 task,在 await 点抛 CancelledError 中断,worker 标 cancelled。"""
+    class _BlockingLoop:
+        async def run(self, goal, session_id=None, **kwargs):
+            yield {"kind": "token_delta", "text": "start"}   # 触发 running
+            await asyncio.sleep(100)                          # 卡住(模拟 stream 不返)
+            yield {"kind": "token_delta", "text": "never"}
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
+    rid = await mgr.create_run(goal="x", workspace=str(ws))
+    worker = RunWorker(run_id=rid, manager=mgr, loop_factory=lambda: _BlockingLoop())
+    task = asyncio.create_task(worker.run())
+    for _ in range(200):                                       # 等进入 running 且卡住
+        if mgr.get_run(rid).state == "running":
+            break
+        await asyncio.sleep(0.01)
+    assert mgr.get_run(rid).state == "running"
+    await mgr.request_cancel(rid)                              # 老机制:set flag,不中断 sleep
+    assert worker.request_hard_cancel() is True               # 新机制:硬中断
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, timeout=2.0)             # 2s 内结束 = 真被中断
+    assert mgr.get_run(rid).state == "cancelled"
