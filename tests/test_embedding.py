@@ -1,7 +1,7 @@
 """Phase 2:embedding 抽象——source-agnostic(spec §5.4)。
 
 锁死:① Embedder 协议形状(embed/dim);② EndpointEmbedder 包现 llm_embed;
-③ get_embedder 在 MLX 构造失败时回退 endpoint;④ 全失败返回 None(让 recall 降级,不抛)。
+③ get_embedder 返 EndpointEmbedder;④ 构造失败返回 None(让 recall 降级,不抛)。
 """
 import pytest
 
@@ -37,25 +37,20 @@ def test_endpoint_embedder_wraps_llm_embed(monkeypatch):
     assert e.dim == 1536
 
 
-def test_get_embedder_falls_back_to_endpoint_when_mlx_unavailable(monkeypatch):
-    # 强制 MLX 构造抛错 → 应回退 EndpointEmbedder
-    def boom():
-        raise RuntimeError("no mlx")
-
-    monkeypatch.setattr(emb, "_build_mlx_embedder", boom)
+def test_get_embedder_returns_endpoint(monkeypatch):
+    # get_embedder 历史 fallback 装配路径:返 EndpointEmbedder(MiniMax embo-01)。
+    # (MLX 本地路径为死代码 + 未消费 mlx-embeddings 重依赖,已移除;生产主路径走 active_embedder。)
     monkeypatch.setattr(emb, "_endpoint_embed_text", lambda texts: [[0.0] * 1536 for _ in texts])
     e = emb.get_embedder()
     assert isinstance(e, emb.EndpointEmbedder)
 
 
-def test_get_embedder_returns_none_when_all_fail(monkeypatch):
-    monkeypatch.setattr(emb, "_build_mlx_embedder", lambda: (_ for _ in ()).throw(RuntimeError("no mlx")))
-
+def test_get_embedder_returns_none_when_endpoint_fails(monkeypatch):
     def endpoint_boom():
         raise RuntimeError("no endpoint")
 
     monkeypatch.setattr(emb, "_build_endpoint_embedder", endpoint_boom)
-    assert emb.get_embedder() is None  # 全失败 → None,让 recall 走 FTS5 降级
+    assert emb.get_embedder() is None  # 构造失败 → None,让 recall 走 FTS5 降级
 
 
 def test_endpoint_embedder_propagates_embed_error_to_caller(monkeypatch):
