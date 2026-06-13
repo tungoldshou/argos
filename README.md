@@ -1,6 +1,12 @@
-# Argos — A Terminal Super-Agent
+# Argos — The hundred-eyed agent
 
-Argos is a single-process terminal (TUI) super-agent for engineers who want
+> **Current release: v0.1.0 (macOS arm64).** Argos runs as a background
+> kernel with pluggable clients — the terminal TUI today, a desktop shell
+> in progress.
+
+Argos is named for **Argus Panoptes**, the hundred-eyed guardian of Greek
+myth: the watchman who never slept with every eye at once and could not be
+deceived. That is the design. Argos is an agent for engineers who want
 **reliable, verifiable work from cheap models** — without the lying.
 
 Three pillars carry the design:
@@ -21,8 +27,9 @@ Three pillars carry the design:
   user wants to opt into.
 
 Built in Python on Textual. A background daemon kernel runs the work and
-survives a closed terminal; the TUI attaches as a protocol client, with an
-honest single-process fallback when the daemon is unavailable. Model-agnostic
+survives a closed terminal; the TUI attaches as a protocol client — and a
+Tauri desktop shell is an in-progress second client — with an honest
+single-process fallback when the daemon is unavailable. Model-agnostic
 (Anthropic-Messages and OpenAI-compatible endpoints are both first-class).
 Designed to make honest results cheap, not to make a single model cleverer.
 
@@ -79,6 +86,11 @@ Without an API key, `argos` falls back to an honest demo state — it does
 
 ## Install
 
+> **Released today: macOS arm64** (one-line installer, Homebrew cask, or
+> build from source). The Linux, Windows, PyPI, Homebrew-tap, and Nix
+> channels below are **planned (stage #13)** and not yet published — commands
+> with `X.Y.Z` placeholders will 404 until those releases land.
+
 ### One-line installer (macOS arm64)
 
 ```bash
@@ -132,12 +144,12 @@ Invoke-WebRequest -Uri "https://github.com/tungoldshou/argos/releases/latest/dow
 Expand-Archive argos.zip ; .\argos.exe
 ```
 
-### Homebrew tap (Linux CLI + macOS GUI, #13)
+### Homebrew tap (Linux CLI + macOS TUI, #13)
 
 ```bash
 brew tap tungoldshou/argos
 brew install argos           # Linux CLI: AppImage
-brew install --cask argos    # macOS GUI: .app bundle
+brew install --cask argos    # macOS TUI: .app wrapper
 ```
 
 ### Nix (#13)
@@ -146,7 +158,7 @@ brew install --cask argos    # macOS GUI: .app bundle
 nix run github:tungoldshou/argos#argos
 ```
 
-(Flake is a simplified `buildPythonApplication`;full nixpkgs coverage lands in v1.1.)
+(Flake is a simplified `buildPythonApplication`; full nixpkgs coverage lands in a later release.)
 
 See [`docs/packaging-c.md`](docs/packaging-c.md) for the full per-channel
 install matrix, known limitations, and upgrade commands.
@@ -255,7 +267,7 @@ State survives TUI exit, terminal close, machine reboot, and even a
 model upgrade (the worker reattaches from the last checkpoint).
 `ARGOS_NO_DAEMON=1` forces inline mode (useful in CI or tests).
 
-### 30 broker-gated tools
+### Broker-gated tools
 
 Every tool call — from the agent or from a sub-agent — flows through the
 capability registry and broker. The registry is the authoritative source
@@ -374,6 +386,10 @@ sandbox cannot confine global screen/mouse resources; the approval gate,
 the ledger, and the audit trail are the governance layer instead.
 
 ### Desktop shell (ACP channel)
+
+> **Status: in-progress (v6 P6b walking skeleton) — not in the stable
+> release.** The terminal TUI is the shipping client; the desktop shell is a
+> second client surface you can build from source to try.
 
 `desktop/` contains a Tauri 2 shell that connects to the running
 `argosd` daemon via the ACP protocol (Unix socket, HTTP/SSE). The
