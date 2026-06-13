@@ -13,22 +13,31 @@ See `README.md` for the product story and `docs/argos-product-definition.md` for
 ## Where the code lives
 
 - **`argos_agent/`** — the entire active codebase (Python 3.12+). All work happens here.
-- **`tests/`** — pytest suite (3224 tests). Mirrors `argos_agent/` subpackage layout, plus
-  `tests/e2e/`, `tests/eval/`, `tests/workflow/`, `tests/skills_curator/`.
+- **`tests/`** — pytest suite (3373 tests). Mirrors `argos_agent/` subpackage layout, plus
+  integration subdirs: `tests/e2e/`, `tests/eval/`, `tests/workflow/`, `tests/skills_curator/`,
+  `tests/input/`, `tests/daemon/`, `tests/tui/`, `tests/desktop_channel/`, `tests/desktop_smoke/`, …
 - **`desktop/`** — Tauri 2 desktop shell (v6 P6b): `desktop/shell/` (Rust/Tauri walking skeleton)
   and `desktop/sdk/` (ACP TypeScript client SDK, zero runtime dependencies).
 - **`scripts/`** — standalone demo/benchmark scripts (`best_of_n_demo.py`, `tb_pass_at_1_benchmark.py`, …).
+- **`examples/`** — user-facing quickstart guide (`quickstart.md`).
 - **`packaging/`** — multi-channel install (install.sh, Homebrew, WinGet, .deb, PyInstaller spec).
-- **`docs/`** — one doc per major feature (auto-memory, context-viz, per-task-routing, eval, …).
+- **`docs/`** — one doc per major feature (auto-memory, context-viz, per-task-routing, eval,
+  voice-image-input, …); `docs/superpowers/` holds dated design records (`specs/` + `plans/`).
 
 ## Commands
 
 ```bash
 uv sync                       # install deps (uv is the package manager; package is NOT pip-installed in dev)
+uv sync --extra cloud-stt     # optional: enable cloud STT (OpenAI Whisper); local faster-whisper is default-on
 uv run argos                  # launch the TUI (auto-probes daemon socket, falls back to inline)
 uv run argos setup            # provider + key + format-probe wizard
+uv run argos self-update      # check for a newer version and print upgrade instructions (cached 7d)
+uv run argos dream            # run Dream consolidation now (cross-run distill + memory tidy)
+uv run argos dream --report   # show the latest Dream report
 uv run argos --selftest       # offline full-machine self-check (scripted model, real sandbox) — fast smoke
 uv run argos --demo           # FakeLoop success demo (no key needed)
+uv run argos --demo-fail      # FakeLoop escalation / honest-failure demo
+uv run argos --effort high    # per-run effort tier {low,medium,high} — raises step budget + approval level
 uv run argos --project PATH   # run in a user project directory
 python -m argos_agent.daemon  # start the background daemon (Unix socket at ~/.argos/daemon.sock)
 uv run pytest                 # full suite; enforces --cov=argos_agent --cov-fail-under=80
@@ -111,6 +120,7 @@ share mutable state. The `ApprovalGate` from `build_components` is shared with t
 | `capability/` | `CapabilityRegistry` — per-process manifest of all capabilities (kind / visibility / egress_hosts); `register_builtins()` populates it; broker derives network-action set from it at runtime |
 | `tui/` | Textual app (`app.py`) — v3 「黑曜石之眼」 design; slash commands, events shim, theme, glow, fakeloop (demo); auto-probes daemon socket on startup, falls back to inline |
 | `tools/` | broker-gated tools: files, shell, web, receipts |
+| `input/` | multimodal input kernel (interface-agnostic, host-side / outside sandbox) — `ImageAttachment` + path detection / validate / base64 (`attachments.py`), `Recorder` (sounddevice mic capture, `recorder.py`), provider-agnostic STT (`LocalWhisper` mlx→faster-whisper / `CloudWhisper` OpenAI, `stt.py`), `SttConfig` (reads `~/.argos/config.json` stt block, `stt_config.py`). Voice is wired in the TUI (space-to-record); image attachments are materialized in `protocols.py` `payload()` gated by `ModelTier.multimodal`. See `docs/voice-image-input.md` |
 | `permissions/` | approval evaluator, hard rules (never bypass), secret patterns, audit |
 | `approval.py` | `ApprovalGate`, `ApprovalLevel` (OBSERVE/PROPOSE/CONFIRM/AUTO), `guarded_call`; works as a top-level module shared by broker, daemon, TUI |
 | `workflow/` | Dynamic Workflows — declarative `WorkflowSpec`, deterministic `engine.py`, sub-agents, worktree isolation |
@@ -129,7 +139,7 @@ share mutable state. The `ApprovalGate` from `build_components` is shared with t
 | `skills_builtin/` | markdown + dir skills (`verify`, `security-review`, `simplify`, …) |
 | `skills_curator/`, `skills_runtime/` | skill discovery/install and execution |
 | `eval/` | self-eval harness (corpus / runner / compare); CLI twin under `cli/eval.py` |
-| `cli/` | subcommands wired into `__main__.py` argparse: `eval`, `skills`, `context` |
+| `cli/` | subcommands wired into `__main__.py` argparse: `eval`, `skills`, `context`, `dream`; also `pkg.py` (`argospkg` packaging/release dispatcher, separate console entry point) |
 | `browser.py` | `BrowserController` — Playwright browser automation on a dedicated thread (avoids asyncio/sync-API conflict); lazy-launch, honest error on missing chromium |
 | `web.py` | provider abstraction for `web_search` / `web_extract` (search + fetch) — Tavily / DDGS behind one interface, egress-allowlisted |
 | `contracts.py` | contract injection for structured engineering tasks (REST API / DB schema / state machine / config) — domain detection + template; bypassed for open-ended tasks |
@@ -139,6 +149,8 @@ share mutable state. The `ApprovalGate` from `build_components` is shared with t
 | `llm_embed.py` | MiniMax `embo-01` embedding client + local cache; raises `EmbedError` on failure (memory falls back to FTS5) |
 | `jsonl_log.py` | shared best-effort JSONL appender for audit / eval / memory sampling |
 | `config_base.py` | shared JSON-file read + singleton-cache helpers used by lsp/hooks/permissions/routing |
+| `config.py` | env + `config.json` loader — `ARGOS_*` > `VITE_*` > `.env` priority chain; builds `ModelTier` (incl. `multimodal` bit) + `CredentialPool` from comma-split keys; model-agnostic (no hardcoded provider) |
+| `setup_wizard.py` | `argos setup` interactive wizard — provider + key entry, format-probe connectivity test, writes `~/.argos/.env` (0600) + `config.json`; I/O-decoupled (reader/writer/client injected) for testability |
 
 ### Conventions that bite
 
