@@ -177,3 +177,31 @@ async def test_worker_event_seq_increments(tmp_path: Path):
     assert len(seqs) >= 9   # 3 步 × 3 events
     assert seqs == sorted(seqs)
     assert len(set(seqs)) == len(seqs)
+
+
+@pytest.mark.asyncio
+async def test_worker_drives_loop_in_project_mode(tmp_path: Path):
+    """P0 防假绿:daemon worker 的 verify_dir==workspace(测试与解同目录),这是 project_mode 的
+    定义场景——也是唯一让 guard_project_tests/detect_tampering 通电的开关。worker 过去以
+    project_mode=False 驱动 loop → 篡改检测整条死掉:agent 在 workspace 改自己的测试,verify 跑
+    被改后的测试拿假绿且不可见。worker 必须以 project_mode=True 驱动 loop。"""
+    from argos import runtime
+
+    captured: dict = {}
+
+    class _SpyLoop:
+        async def run(self, goal, session_id=None, **kwargs):
+            ctx = runtime.current()
+            captured["project_mode"] = ctx.project_mode
+            captured["verify_eq_ws"] = ctx.verify_dir == ctx.workspace
+            for _ in ():        # 空 async generator
+                yield {}
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
+    rid = await mgr.create_run(goal="x", workspace=str(ws))
+    worker = RunWorker(run_id=rid, manager=mgr, loop_factory=lambda: _SpyLoop())
+    await worker.run()
+    assert captured.get("project_mode") is True
+    assert captured.get("verify_eq_ws") is True

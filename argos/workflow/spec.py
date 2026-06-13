@@ -8,8 +8,12 @@ max_steps 派生。verifier 门与角色独立(coder 缺 verify 走既有 NO_TES
 """
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
+
+from argos.core.types import TRIVIAL_VERIFY_BINS
 
 # 合法 op 集合
 _OPS = {"fan_out", "pipeline", "panel", "loop_until", "synthesize", "best_of_n"}
@@ -206,12 +210,25 @@ def _parse_agent(raw: dict) -> AgentTask:
                     f"(role 派生 read_only={preset.read_only},"
                     f"tool_scope=read 派生 read_only={scope_implies_readonly})"
                 )
+    # P0 防假绿(纵深 fail-fast):stage 的 verify 由模型在 propose_workflow 里自著。trivial 命令
+    # (echo/cat/ls/pwd...)什么都不验证,模型填它 = 自助开绿灯。canonical Verifier 最终也会判
+    # unverifiable(P0 统一门),但解析层立即拒、给模型即时反馈,与 role/tool_scope 校验同风格。
+    verify = raw.get("verify")
+    if verify is not None:
+        try:
+            _vbin = Path(shlex.split(str(verify))[0]).name
+        except (ValueError, IndexError):
+            _vbin = ""
+        if _vbin in TRIVIAL_VERIFY_BINS:
+            raise WorkflowSpecError(
+                f"stage verify 不能是 trivial 命令(永远通过、什么都不验证):{verify!r}"
+            )
     return AgentTask(
         prompt=str(raw["prompt"]),
         model=raw.get("model"),
         tool_scope=scope,
         isolation=iso,
-        verify=raw.get("verify"),
+        verify=verify,
         schema=raw.get("schema"),
         role=role,
         role_overrides=raw.get("role_overrides", {}) or {},

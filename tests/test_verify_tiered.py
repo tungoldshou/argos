@@ -101,3 +101,16 @@ def test_verify_timeout_degrades_to_unverifiable(in_project):
     v = Verifier(max_rounds=3, inline_timeout=0.3).verify("pytest -q test_slow.py")
     assert v.status == "unverifiable"
     assert "超时" in v.detail
+
+
+@pytest.mark.parametrize("trivial_cmd", ["echo ok", "cat", "ls", "pwd", "true", ":"])
+def test_verify_rejects_trivial_command_as_unverifiable(in_project, trivial_cmd):
+    # P0 防假绿(canonical 门):echo/cat/ls/pwd 既在 ALLOWED_CMDS 又"什么都不验证"——退出码
+    # 恒 0,过去经 Verifier._run_verify 直接当 passed = 假绿。propose_verify 路径早设此门,但
+    # 任何直接设 verify_cmd 的入口(config/setup/bridge/workflow)都只经 canonical Verifier,
+    # 它过去只查 ALLOWED_CMDS → 'echo ok' 拿真 passed。canonical 门必须统一拒这类 trivial 命令,
+    # 落 unverifiable(命令无效、非代码没过),绝不 passed 蒙混。
+    v = Verifier(max_rounds=3).verify(trivial_cmd)
+    assert v.status == "unverifiable"
+    # 因 trivial 被拒(而非篡改/超时等其它 unverifiable 原因)。
+    assert "trivial" in v.detail

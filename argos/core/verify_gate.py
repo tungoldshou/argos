@@ -26,7 +26,8 @@ from argos import runtime
 from argos.tools import ALLOWED_CMDS
 
 # 唯一 Verdict 定义在 types.py(契约 §6.1)；re-export 保持旧 import 路径绿。
-from argos.core.types import Verdict  # noqa: F401
+# TRIVIAL_VERIFY_BINS 同源 types.py：canonical 门与 loop/workflow 共用同一份反琐碎集。
+from argos.core.types import TRIVIAL_VERIFY_BINS, Verdict  # noqa: F401
 
 
 # self-test feature flag(任务:opt-in 默认关闭,避免 verifier 行为隐性变化)。
@@ -94,6 +95,23 @@ class Verifier:
             # 关闭 / 没 generator / 旁路失败 → 诚实 unverifiable。
             return Verdict.unverifiable(
                 detail="(无 verify_cmd，未做机检验证)", tampered=[], attempts=attempts,
+            )
+
+        # P0 防假绿(canonical 门):trivial 命令(echo/true/cat/ls/pwd...)什么都不验证。
+        # echo/cat/ls/pwd 既在 ALLOWED_CMDS 又恒退出 0,过去经 _run_verify 直接当 passed = 假绿。
+        # propose_verify 路径早设此门,但 config/setup/bridge/workflow 直接设 verify_cmd 的入口
+        # 只经此 canonical Verifier → 必须统一拒。落 unverifiable(命令无效、非代码没过),不蒙混。
+        try:
+            _bin = Path(shlex.split(verify_cmd)[0]).name
+        except (ValueError, IndexError):
+            _bin = ""
+        if _bin in TRIVIAL_VERIFY_BINS:
+            return Verdict.unverifiable(
+                detail=(
+                    f"验证命令 `{verify_cmd}` 是 trivial(永远通过、什么都不验证)—— "
+                    f"拒绝当作机检验证,落'未验证'诚实路径(绝不假绿)。"
+                ),
+                tampered=[], attempts=attempts,
             )
 
         ok, detail, timed_out = self._run_verify(verify_cmd)

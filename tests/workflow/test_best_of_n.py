@@ -122,7 +122,7 @@ def test_best_of_n_runs_n_candidates_in_parallel(tmp_path, monkeypatch):
         "stages": [{
             "id": "s", "op": "best_of_n", "n": 3,
             "agent": {"prompt": "fix", "tool_scope": "full",
-                      "isolation": "worktree", "verify": "true"},
+                      "isolation": "worktree", "verify": "pytest -q"},
         }],
     })
     # 真调了 3 次(3 个候选)
@@ -152,7 +152,7 @@ def test_best_of_n_default_n_is_three(tmp_path, monkeypatch):
         "name": "t", "description": "",
         "stages": [{
             "id": "s", "op": "best_of_n",
-            "agent": {"prompt": "x", "tool_scope": "full", "verify": "true"},
+            "agent": {"prompt": "x", "tool_scope": "full", "verify": "pytest -q"},
         }],
     })
     assert len(seen) == 3  # 默认 3
@@ -172,7 +172,7 @@ def test_best_of_n_n_is_configurable(tmp_path, monkeypatch):
         "name": "t", "description": "",
         "stages": [{
             "id": "s", "op": "best_of_n", "n": 5,
-            "agent": {"prompt": "x", "tool_scope": "full", "verify": "true"},
+            "agent": {"prompt": "x", "tool_scope": "full", "verify": "pytest -q"},
         }],
     })
     assert len(seen) == 5
@@ -195,7 +195,7 @@ def test_best_of_n_picks_first_passed_when_some_pass(tmp_path, monkeypatch):
         "name": "t", "description": "",
         "stages": [{
             "id": "s", "op": "best_of_n", "n": 3,
-            "agent": {"prompt": "x", "tool_scope": "full", "verify": "true"},
+            "agent": {"prompt": "x", "tool_scope": "full", "verify": "pytest -q"},
         }],
     })
     assert len(sr.results) == 1
@@ -220,7 +220,7 @@ def test_best_of_n_tie_breaks_by_smallest_diff(tmp_path, monkeypatch):
         "name": "t", "description": "",
         "stages": [{
             "id": "s", "op": "best_of_n", "n": 3,
-            "agent": {"prompt": "x", "tool_scope": "full", "verify": "true"},
+            "agent": {"prompt": "x", "tool_scope": "full", "verify": "pytest -q"},
         }],
     })
     assert sr.results[0].agent_id == "s#c1"  # files=1 最小
@@ -239,7 +239,7 @@ def test_best_of_n_tie_breaks_by_index_when_diff_equal(tmp_path, monkeypatch):
         "name": "t", "description": "",
         "stages": [{
             "id": "s", "op": "best_of_n", "n": 2,
-            "agent": {"prompt": "x", "tool_scope": "full", "verify": "true"},
+            "agent": {"prompt": "x", "tool_scope": "full", "verify": "pytest -q"},
         }],
     })
     assert sr.results[0].agent_id == "s#c0"
@@ -261,7 +261,7 @@ def test_best_of_n_all_failed_returns_failed_not_passed(tmp_path, monkeypatch):
         "name": "t", "description": "",
         "stages": [{
             "id": "s", "op": "best_of_n", "n": 3,
-            "agent": {"prompt": "x", "tool_scope": "full", "verify": "true"},
+            "agent": {"prompt": "x", "tool_scope": "full", "verify": "pytest -q"},
         }],
     })
     w = sr.results[0]
@@ -288,7 +288,7 @@ def test_best_of_n_all_unverifiable_returns_unverifiable(tmp_path, monkeypatch):
         "name": "t", "description": "",
         "stages": [{
             "id": "s", "op": "best_of_n", "n": 3,
-            "agent": {"prompt": "x", "tool_scope": "full", "verify": "true"},
+            "agent": {"prompt": "x", "tool_scope": "full", "verify": "pytest -q"},
         }],
     })
     w = sr.results[0]
@@ -311,7 +311,7 @@ def test_best_of_n_mixed_unverifiable_failed_returns_unverifiable(tmp_path, monk
         "name": "t", "description": "",
         "stages": [{
             "id": "s", "op": "best_of_n", "n": 3,
-            "agent": {"prompt": "x", "tool_scope": "full", "verify": "true"},
+            "agent": {"prompt": "x", "tool_scope": "full", "verify": "pytest -q"},
         }],
     })
     w = sr.results[0]
@@ -337,7 +337,7 @@ def test_best_of_n_with_some_crashed_still_picks_passed(tmp_path, monkeypatch):
         "name": "t", "description": "",
         "stages": [{
             "id": "s", "op": "best_of_n", "n": 3,
-            "agent": {"prompt": "x", "tool_scope": "full", "verify": "true"},
+            "agent": {"prompt": "x", "tool_scope": "full", "verify": "pytest -q"},
         }],
     })
     w = sr.results[0]
@@ -369,7 +369,7 @@ def test_best_of_n_emits_progress_per_candidate(tmp_path, monkeypatch):
         "name": "t", "description": "",
         "stages": [{
             "id": "s", "op": "best_of_n", "n": 3,
-            "agent": {"prompt": "x", "tool_scope": "full", "verify": "true"},
+            "agent": {"prompt": "x", "tool_scope": "full", "verify": "pytest -q"},
         }],
     })
     async def _go():
@@ -407,7 +407,7 @@ def test_best_of_n_uses_diff_summary_mode_by_default(tmp_path, monkeypatch):
         "name": "t", "description": "",
         "stages": [{
             "id": "s", "op": "best_of_n", "n": 2,
-            "agent": {"prompt": "x", "tool_scope": "full", "verify": "true",
+            "agent": {"prompt": "x", "tool_scope": "full", "verify": "pytest -q",
                       "isolation": "worktree"},
         }],
     })
@@ -429,7 +429,7 @@ def test_best_of_n_spec_parses_n_defaults_to_three():
         "name": "t", "description": "",
         "stages": [{
             "id": "s", "op": "best_of_n",
-            "agent": {"prompt": "x", "tool_scope": "full", "verify": "true"},
+            "agent": {"prompt": "x", "tool_scope": "full", "verify": "pytest -q"},
         }],
     })
     assert spec.stages[0].n == 3
@@ -441,7 +441,7 @@ def test_best_of_n_spec_clamps_n_to_at_least_one():
         "name": "t", "description": "",
         "stages": [{
             "id": "s", "op": "best_of_n", "n": 0,
-            "agent": {"prompt": "x", "tool_scope": "full", "verify": "true"},
+            "agent": {"prompt": "x", "tool_scope": "full", "verify": "pytest -q"},
         }],
     })
     assert spec.stages[0].n == 1
@@ -453,7 +453,7 @@ def test_best_of_n_spec_clamps_n_to_max_cap():
         "name": "t", "description": "",
         "stages": [{
             "id": "s", "op": "best_of_n", "n": 999,
-            "agent": {"prompt": "x", "tool_scope": "full", "verify": "true"},
+            "agent": {"prompt": "x", "tool_scope": "full", "verify": "pytest -q"},
         }],
     })
     assert spec.stages[0].n == 16
@@ -467,6 +467,6 @@ def test_best_of_n_spec_rejects_non_int_n():
             "name": "t", "description": "",
             "stages": [{
                 "id": "s", "op": "best_of_n", "n": "abc",
-                "agent": {"prompt": "x", "tool_scope": "full", "verify": "true"},
+                "agent": {"prompt": "x", "tool_scope": "full", "verify": "pytest -q"},
             }],
         })
