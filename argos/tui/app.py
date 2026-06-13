@@ -2075,8 +2075,10 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
 
         async def _produce() -> None:
             try:
-                async for ev in loop.run(goal, session_id=self._session_id,
-                                         attachments=attachments or []):
+                # 仅在真有图片附件时传 attachments kwarg → 无附件路径调用签名与改造前逐字一致
+                # (测试/演示用的精简 fake loop 们无需都改 run 签名,零回归)。
+                _run_kwargs = {"attachments": attachments} if attachments else {}
+                async for ev in loop.run(goal, session_id=self._session_id, **_run_kwargs):
                     await bus.emit(ev)
             except Exception as e:  # noqa: BLE001 — loop 任何异常降级为 Error 事件
                 chain: list[str] = []
