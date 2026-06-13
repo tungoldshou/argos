@@ -7,9 +7,9 @@
 
 | 任务 | 标题 | 估测 | 关键文件 | 测试文件 |
 |---|---|---|---|---|
-| T1 | memory/ 模块骨架 + 4 tier + JSONL persistence | 30 min | `argos_agent/memory/auto.py`(新) | `test_memory_tiers.py` |
-| T2 | Memory loader + recency × confidence ranking | 25 min | `argos_agent/memory/auto.py` | `test_memory_ranking.py` |
-| T3 | CLAUDE.md auto-walk + 合并 | 25 min | `argos_agent/memory/auto.py` | `test_claude_md_walker.py` |
+| T1 | memory/ 模块骨架 + 4 tier + JSONL persistence | 30 min | `argos/memory/auto.py`(新) | `test_memory_tiers.py` |
+| T2 | Memory loader + recency × confidence ranking | 25 min | `argos/memory/auto.py` | `test_memory_ranking.py` |
+| T3 | CLAUDE.md auto-walk + 合并 | 25 min | `argos/memory/auto.py` | `test_claude_md_walker.py` |
 | T4 | `/remember` / `/forget` slash 命令 | 30 min | `tui/commands.py` + `tui/app.py` | `test_memory_commands.py` |
 | T5 | Auto-capture 触发点 | 35 min | `core/loop.py` + `core/harness.py` 接 | `test_memory_capture.py` |
 | T6 | 系统提示 `<memory_context>` 注入 | 20 min | `core/loop.py` `_build_system` | `test_memory_injection.py` |
@@ -20,7 +20,7 @@
 ## 1. 任务 T1:memory/ 模块骨架 + 4 tier + JSONL persistence
 
 ### 1.1 目标
-- 新文件 `argos_agent/memory/auto.py`(不污染现有 `memory/__init__.py` 任务历史)
+- 新文件 `argos/memory/auto.py`(不污染现有 `memory/__init__.py` 任务历史)
 - 单一 `MemoryEntry` dataclass(scope 字段 Literal 区分)
 - 4 个路径解析函数 + `_read_jsonl` / `_append_jsonl`
 - 不引入 sqlite / 任何新依赖
@@ -28,7 +28,7 @@
 ### 1.2 实现细节
 
 ```python
-# argos_agent/memory/auto.py
+# argos/memory/auto.py
 from dataclasses import dataclass, asdict
 from typing import Literal
 import json, threading, uuid, time
@@ -221,7 +221,7 @@ feat(memory): #9 T3 CLAUDE.md / AGENTS.md auto-walk + 合并 + secret redact
 def parse_remember(text: str) -> RememberCmd | None: ...
 def parse_forget(text: str) -> ForgetCmd | None: ...
 
-# argos_agent/memory/auto.py
+# argos/memory/auto.py
 def remember(text: str, *, scope: Scope | None = None,
              key: str | None = None, type: Type = "preference",
              evidence: tuple[str, ...] = ("user explicit /remember command",),
@@ -272,7 +272,7 @@ feat(tui): #9 T4 /remember + /forget slash 命令 + 记忆写入接口
 
 ### 5.3 实现
 ```python
-# argos_agent/memory/auto.py
+# argos/memory/auto.py
 def capture_event(kind: str, *, project_id: str | None = None,
                   session_id: str | None = None,
                   **payload) -> MemoryEntry | None:
@@ -341,7 +341,7 @@ feat(core): #9 T5 auto-capture escalation/verify_fail/repeat_fail/run_success/un
 
 ### 6.2 实现
 ```python
-# argos_agent/memory/auto.py
+# argos/memory/auto.py
 def _memory_context_block(*, workspace: Path, project_id: str,
                          session_id: str | None = None) -> str:
     """构造注入到系统提示的 <memory_context> 段。
@@ -438,7 +438,7 @@ feat(memory): #9 T7 decay + prune + 容量 cap
 
 ### 8.2 实现
 ```python
-# argos_agent/memory/auto.py
+# argos/memory/auto.py
 def view_all(*, project_id: str | None = None,
              session_id: str | None = None,
              limit_per_tier: int = 20) -> str:
@@ -455,7 +455,7 @@ def view_all(*, project_id: str | None = None,
 
 # tui/app.py _dispatch_slash
 elif cmd.name == "memory":
-    from argos_agent.memory import auto
+    from argos.memory import auto
     text = auto.view_all(...)
     # 推 transcript(模拟现有 add_transcript_line)
 ```

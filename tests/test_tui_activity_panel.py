@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.tui.widgets.activity_panel import ActivityPanel
-from argos_agent.skills_runtime.events import SkillRunStart, SkillRunEnd
+from argos.tui.widgets.activity_panel import ActivityPanel
+from argos.skills_runtime.events import SkillRunStart, SkillRunEnd
 
 
 def test_skill_catalog_summary_renamed():

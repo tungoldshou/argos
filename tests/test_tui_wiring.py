@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.approval import ApprovalLevel
-from argos_agent.core.types import Verdict
-from argos_agent.tui.app import ArgosApp
-from argos_agent.tui.events import MemoryRecallEvent, PhaseChange, TokenDelta, VerifyVerdict
-from argos_agent.tui.fakeloop import FakeLoop, FailingFakeLoop
-from argos_agent.tui.widgets.code_action import CodeActionBlock
-from argos_agent.tui.widgets.diff_view import DiffView
-from argos_agent.tui.widgets.status_bar import StatusBar
-from argos_agent.tui.widgets.verdict_badge import VerdictBadge
+from argos.approval import ApprovalLevel
+from argos.core.types import Verdict
+from argos.tui.app import ArgosApp
+from argos.tui.events import MemoryRecallEvent, PhaseChange, TokenDelta, VerifyVerdict
+from argos.tui.fakeloop import FakeLoop, FailingFakeLoop
+from argos.tui.widgets.code_action import CodeActionBlock
+from argos.tui.widgets.diff_view import DiffView
+from argos.tui.widgets.status_bar import StatusBar
+from argos.tui.widgets.verdict_badge import VerdictBadge
 
 
 class _RaisingLoop:
@@ -157,7 +157,7 @@ async def test_input_focused_on_mount_and_receives_typing():
     绕过了 driver 的真实输入管线(Kitty/legacy 协议、转义码解析、IME)。本测试只证明
     "焦点接线 + 字符插入逻辑正确",不能证明真实终端里用户敲键能送达——那个失败发生在
     Pilot 跳过的 driver 层(见 test_kitty_keyboard_protocol_disabled_by_default)。"""
-    from argos_agent.tui.widgets.prompt import PromptArea
+    from argos.tui.widgets.prompt import PromptArea
 
     app = ArgosApp(loop_factory=lambda: FakeLoop())
     async with app.run_test() as pilot:
@@ -172,7 +172,7 @@ async def test_input_focused_on_mount_and_receives_typing():
 @pytest.mark.asyncio
 async def test_input_accepts_cjk_characters():
     """回归:输入框能接收汉字(IME 合成后终端送出的字符走与 ASCII 同路径)。"""
-    from argos_agent.tui.widgets.prompt import PromptArea
+    from argos.tui.widgets.prompt import PromptArea
 
     app = ArgosApp(loop_factory=lambda: FakeLoop())
     async with app.run_test() as pilot:
@@ -213,11 +213,11 @@ def test_kitty_keyboard_protocol_disabled_by_default():
     import importlib
     import os
 
-    import argos_agent.tui
+    import argos.tui
 
     saved = os.environ.pop("TEXTUAL_DISABLE_KITTY_KEY", None)
     try:
-        importlib.reload(argos_agent.tui)  # 重跑包 __init__ 的 setdefault
+        importlib.reload(argos.tui)  # 重跑包 __init__ 的 setdefault
         assert os.environ.get("TEXTUAL_DISABLE_KITTY_KEY") == "1"
     finally:
         if saved is not None:
@@ -231,11 +231,11 @@ def test_kitty_disable_respects_explicit_user_optin():
     import importlib
     import os
 
-    import argos_agent.tui
+    import argos.tui
 
     os.environ["TEXTUAL_DISABLE_KITTY_KEY"] = "0"
     try:
-        importlib.reload(argos_agent.tui)
+        importlib.reload(argos.tui)
         assert os.environ.get("TEXTUAL_DISABLE_KITTY_KEY") == "0", "显式用户值必须被尊重"
     finally:
         os.environ["TEXTUAL_DISABLE_KITTY_KEY"] = "1"
@@ -267,8 +267,8 @@ class _LoopWithStore:
 @pytest.mark.asyncio
 async def test_resume_switches_to_most_recent_session(tmp_path):
     """/resume:切到最近一次历史会话,使后续任务带回上下文(修『重开窗口不记得上次』)。"""
-    from argos_agent.memory.store import ArgosStore
-    from argos_agent.tui.widgets.transcript import Transcript
+    from argos.memory.store import ArgosStore
+    from argos.tui.widgets.transcript import Transcript
 
     store = ArgosStore(db_path=str(tmp_path / "r.db"))
     store.ensure_session("old-sess", title="贪吃蛇")
@@ -291,8 +291,8 @@ async def test_resume_switches_to_most_recent_session(tmp_path):
 @pytest.mark.asyncio
 async def test_resume_honest_when_no_history(tmp_path):
     """无历史会话时 /resume 诚实告知,不假装恢复。"""
-    from argos_agent.memory.store import ArgosStore
-    from argos_agent.tui.widgets.transcript import Transcript
+    from argos.memory.store import ArgosStore
+    from argos.tui.widgets.transcript import Transcript
 
     store = ArgosStore(db_path=str(tmp_path / "empty.db"))
     app = ArgosApp(loop_factory=lambda: _LoopWithStore(store), demo=False)
@@ -311,7 +311,7 @@ async def test_resume_honest_when_no_history(tmp_path):
 @pytest.mark.asyncio
 async def test_compacted_event_writes_transcript_line_and_panel():
     """spec §8.1:CompactedEvent → transcript faint 系统行(↯/◌ 压缩 -N% · A→B)+ 右栏上下文区。"""
-    from argos_agent.tui.events import CompactedEvent
+    from argos.tui.events import CompactedEvent
     script = [
         PhaseChange(phase="act", actions=1),
         CompactedEvent(before=12, after=4, reduction_pct=0.22, triggered_by="proactive"),
@@ -330,7 +330,7 @@ async def test_compacted_event_writes_transcript_line_and_panel():
 @pytest.mark.asyncio
 async def test_pruned_event_writes_transcript_line():
     """spec §8.1:PrunedEvent → transcript faint 系统行(◌ 已修剪 N 条)。"""
-    from argos_agent.tui.events import PrunedEvent
+    from argos.tui.events import PrunedEvent
     script = [
         PhaseChange(phase="act", actions=1),
         PrunedEvent(before=80, after=60, removed=5, reduction_pct=0.25, aggressiveness=0.5),
@@ -349,8 +349,8 @@ async def test_pruned_event_writes_transcript_line():
 async def test_status_bar_blocked_on_approval_card_then_cleared():
     """spec §8.4 优先级铁律:审批卡 mount → StatusBar set_blocked(True)(左眼 ◓ + "审批挂起");
     决策落定后 set_blocked(False)。用户阻塞态永远赢(即便引擎在跑)。"""
-    from argos_agent.tui.events import ApprovalRequest
-    from argos_agent.tui.widgets.inline_choice import InlineChoice
+    from argos.tui.events import ApprovalRequest
+    from argos.tui.widgets.inline_choice import InlineChoice
     script = [
         PhaseChange(phase="verify", actions=2),   # 引擎在 verify,但用户阻塞应赢
         ApprovalRequest(
@@ -478,7 +478,7 @@ async def test_apply_event_phase_change_drives_activity_panel_view():
     修复:截图脚本改用 _apply_event 直接投事件(不走 start_run),这里验证接线正确。
     断言:事件到达 → ap._view 更新;on_run_end 未调用 → 视图不回退。
     """
-    from argos_agent.tui.widgets.activity_panel import ActivityPanel
+    from argos.tui.widgets.activity_panel import ActivityPanel
 
     app = ArgosApp(loop_factory=lambda: FakeLoop())
     async with app.run_test() as pilot:

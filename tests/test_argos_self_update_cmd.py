@@ -9,12 +9,12 @@ from unittest.mock import patch
 
 
 def test_self_update_subcommand_registered():
-    """`python -m argos_agent self-update --help` 不应抛错(子命令已注册)。
+    """`python -m argos self-update --help` 不应抛错(子命令已注册)。
 
     subprocess 测 argparse 接线(没有 mock 需求,直接走真 CLI)。
     """
     result = subprocess.run(
-        ["python", "-m", "argos_agent", "self-update", "--help"],
+        ["python", "-m", "argos", "self-update", "--help"],
         capture_output=True, text=True, timeout=10,
     )
     assert result.returncode == 0, f"self-update --help 失败: {result.stderr}"
@@ -30,14 +30,14 @@ def test_self_update_skips_cache(capsys):
     必须 in-process 直接调 _cmd_self_update,这样 patch 才生效。
     """
     payload = json.dumps({"tag_name": "v0.99.0"}).encode()
-    from argos_agent.__main__ import _cmd_self_update
+    from argos.__main__ import _cmd_self_update
 
     mock_resp = type("R", (), {
         "raise_for_status": lambda self: None,
         "json": lambda self: json.loads(payload),
         "content": payload,
     })()
-    with patch("argos_agent.core.updater.httpx.get", return_value=mock_resp) as mock_get:
+    with patch("argos.core.updater.httpx.get", return_value=mock_resp) as mock_get:
         rc = _cmd_self_update(argparse.Namespace())
     out = capsys.readouterr().out + capsys.readouterr().err
     assert mock_get.called, "self-update 应走 httpx.get 直查 GitHub(force 跳过缓存)"
@@ -50,14 +50,14 @@ def test_self_update_skips_cache(capsys):
 def test_self_update_no_newer_version(capsys):
     """mock 远端返同版本,assert stdout 提示 'up to date' / 'latest'。"""
     payload = json.dumps({"tag_name": "v0.1.0"}).encode()  # 同 current
-    from argos_agent.__main__ import _cmd_self_update
+    from argos.__main__ import _cmd_self_update
 
     mock_resp = type("R", (), {
         "raise_for_status": lambda self: None,
         "json": lambda self: json.loads(payload),
         "content": payload,
     })()
-    with patch("argos_agent.core.updater.httpx.get", return_value=mock_resp):
+    with patch("argos.core.updater.httpx.get", return_value=mock_resp):
         rc = _cmd_self_update(argparse.Namespace())
     out = (capsys.readouterr().out + capsys.readouterr().err).lower()
     assert rc == 0

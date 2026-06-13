@@ -11,8 +11,8 @@ from typing import AsyncIterator
 import pytest
 import pytest_asyncio
 
-from argos_agent.daemon.manager import RunManager
-from argos_agent.daemon.server import DaemonHTTPServer
+from argos.daemon.manager import RunManager
+from argos.daemon.server import DaemonHTTPServer
 
 
 # ── fixtures ────────────────────────────────────────────────────────────
@@ -37,7 +37,7 @@ async def _req(socket_path: Path, method: str, path: str, *,
                session_id: str | None = None, body: dict | None = None,
                timeout: float = 5.0):
     """helper:发一个 HTTP 请求,返 (status, headers, body_bytes)。"""
-    from argos_agent.daemon.client import DaemonClient
+    from argos.daemon.client import DaemonClient
     cli = DaemonClient(socket_path, timeout=timeout)
     return await cli._request(method, path, session_id=session_id, body=body)
 
@@ -229,7 +229,7 @@ async def test_sse_event_format(server):
                                  session_id=sid, body={"goal": "x"})
     rid = json.loads(raw.decode("utf-8"))["run_id"]
     # 通过 client subscribe 短拉(不进入主循环)
-    from argos_agent.daemon.client import DaemonClient
+    from argos.daemon.client import DaemonClient
     client = DaemonClient(srv.socket_path, timeout=3.0)
     gen = client.subscribe_events(rid, sid, since=0)
     # 拿 1 个 event 后 break

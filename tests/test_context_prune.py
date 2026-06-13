@@ -11,14 +11,14 @@ from dataclasses import dataclass
 
 import pytest
 
-from argos_agent.context.prune import CoreKeep, PruneResult, prune_messages
-from argos_agent.context.threshold import PRECOMPACT_FLOOR, safe_compact_threshold
-from argos_agent.core.honesty import trust_passed_after_compaction
-from argos_agent.core.loop import AgentLoop, LoopConfig
-from argos_agent.core.verify_gate import Verdict
-from argos_agent.memory.store import ArgosStore
-from argos_agent.sandbox.backend import ExecResult
-from argos_agent.tui.events import (
+from argos.context.prune import CoreKeep, PruneResult, prune_messages
+from argos.context.threshold import PRECOMPACT_FLOOR, safe_compact_threshold
+from argos.core.honesty import trust_passed_after_compaction
+from argos.core.loop import AgentLoop, LoopConfig
+from argos.core.verify_gate import Verdict
+from argos.memory.store import ArgosStore
+from argos.sandbox.backend import ExecResult
+from argos.tui.events import (
     CompactedEvent, EventBus, PrunedEvent, VerifyVerdict,
     deserialize_event, serialize_event,
 )

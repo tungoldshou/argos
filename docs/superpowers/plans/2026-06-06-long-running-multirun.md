@@ -20,7 +20,7 @@
 ## 1. 任务 T1:RunRegistry 注册表
 
 ### 1.1 目标
-- 新文件 `argos_agent/daemon/registry.py`
+- 新文件 `argos/daemon/registry.py`
 - `RunEntry` dataclass(运行中状态 + 累计 cost + focus + worktree_path)
 - `RunRegistry`:register / get / list / mark / add_cost / set_focus / acquire_slot / release_slot / cleanup
 - max_concurrent = 5 semaphore,max_history = 100
@@ -28,7 +28,7 @@
 
 ### 1.2 实现
 ```python
-# argos_agent/daemon/registry.py
+# argos/daemon/registry.py
 from __future__ import annotations
 import asyncio, time
 from dataclasses import dataclass, field
@@ -253,7 +253,7 @@ feat(daemon): #5b T3 owner/observer 角色 + promote 机制 + _require_owner
 ## 4. 任务 T4:WorktreeManager
 
 ### 4.1 目标
-- 新文件 `argos_agent/daemon/worktree.py`
+- 新文件 `argos/daemon/worktree.py`
 - `create(run_id, workspace) -> str | None`:git worktree add 或 temp 目录
 - `cleanup(run_id) -> None`:git worktree remove + 删目录,失败静默
 - `is_git_repo(workspace) -> bool`
@@ -451,7 +451,7 @@ feat(daemon): #5b T6 GET /runs + /runs/{id} 返 cost/worktree/focus 字段
 ## 7. 任务 T7:TUI TabStrip widget + focus POST + SSE 切换
 
 ### 7.1 目标
-- 新文件 `argos_agent/tui/widgets/tab_strip.py`
+- 新文件 `argos/tui/widgets/tab_strip.py`
 - `TabStrip(Widget)`:`Static` 或 `Horizontal` 包 `Button` 列表,每个 button 显示 icon + title + cost
 - 鼠标 click → `post_message(TabActivated(run_id))`
 - 键盘 `Ctrl+1`..`Ctrl+5` 跳第 1..5 tab

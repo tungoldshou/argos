@@ -1,7 +1,7 @@
 """web.py 测试:provider 选择 + 归一化 + extract 兜底。走网部分全 mock,不依赖外网。"""
 import pytest
 
-from argos_agent import web
+from argos import web
 
 
 def test_search_uses_ddgs_when_no_tavily_key(monkeypatch):

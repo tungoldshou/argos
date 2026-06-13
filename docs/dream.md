@@ -1,6 +1,6 @@
 # Dream 夜间整合 — 跨 run 自进化 + 记忆整理
 
-> 别让一次通过的经验被丢弃。 `argos_agent/learning/` 现在会在夜间把多次相似的已验证 run
+> 别让一次通过的经验被丢弃。 `argos/learning/` 现在会在夜间把多次相似的已验证 run
 > 聚类、综合成泛化 skill，再过 A/B 晋升门；同时整理记忆、合并重复、优雅衰减。
 > 灵魂一句话：**只有验证通过的经验才能变成能力，夜间管道不擅自执行，建议恒需确认**。
 
@@ -13,7 +13,7 @@
 
 ### 单 run distiller 的缺口
 
-`argos_agent/learning/` 早就有单 run 学习：当一个 run **通过验证** 时，daemon worker 触发
+`argos/learning/` 早就有单 run 学习：当一个 run **通过验证** 时，daemon worker 触发
 `hook.on_run_completed`，把 distiller 产物（简化版 skill）送进晋升门（A/B 对比）。
 
 **但有两个生产缺口**：
@@ -32,7 +32,7 @@
 
 ## 核心铁律（与 distiller 同源）
 
-所有下述规则在 `argos_agent/learning/dream.py` + `candidates.py` 代码里都有断言钉死：
+所有下述规则在 `argos/learning/dream.py` + `candidates.py` 代码里都有断言钉死：
 
 1. **代码段和 verify 命令逐字来自已验证源**：模型只能写叙述层（"何时适用 / 注意事项"），
    一切可执行内容都从源候选复制，不经模型之手。综合器会剥离模型输出中的一切 fenced code block
@@ -133,7 +133,7 @@ SSE 事件
 
 ## 与 E4 防火墙的关系
 
-E4 防火墙（`argos_agent/verify/` + `permissions/`）防止"自验证 run 进晋升渠道"。
+E4 防火墙（`argos/verify/` + `permissions/`）防止"自验证 run 进晋升渠道"。
 Dream 在此基础上再加**两层纵深**：
 
 1. **候选落盘层**：`save_candidate(..., self_verified=bool(...))`，源记录在 `meta.json`。
@@ -229,12 +229,12 @@ Dream 在此基础上再加**两层纵深**：
 
 ## 相关文件
 
-- `argos_agent/learning/dream.py` — DreamPipeline、聚类、综合
-- `argos_agent/learning/candidates.py` — 候选落盘与扫描
-- `argos_agent/learning/distiller.py` — 单 run 产物生成（Dream 的源头）
-- `argos_agent/learning/promotion_gate.py` — A/B 晋升（Dream 与单 run 共用）
-- `argos_agent/memory/consolidate.py` — 记忆合并 + 衰减 + 归档
-- `argos_agent/conductor/` — 夜间 builtin order、提案生成
-- `argos_agent/daemon/server.py` — `/dream/run` 与 `/dream/report` 端点
-- `argos_agent/cli/dream.py` — CLI 子命令 `argos dream`
+- `argos/learning/dream.py` — DreamPipeline、聚类、综合
+- `argos/learning/candidates.py` — 候选落盘与扫描
+- `argos/learning/distiller.py` — 单 run 产物生成（Dream 的源头）
+- `argos/learning/promotion_gate.py` — A/B 晋升（Dream 与单 run 共用）
+- `argos/memory/consolidate.py` — 记忆合并 + 衰减 + 归档
+- `argos/conductor/` — 夜间 builtin order、提案生成
+- `argos/daemon/server.py` — `/dream/run` 与 `/dream/report` 端点
+- `argos/cli/dream.py` — CLI 子命令 `argos dream`
 - `docs/superpowers/specs/2026-06-13-dream-consolidation-design.md` — 完整设计规格

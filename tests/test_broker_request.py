@@ -5,10 +5,10 @@ import asyncio
 
 import pytest
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel
-from argos_agent.sandbox.broker import BrokerResult, CapabilityBroker
-from argos_agent.sandbox.egress import EgressPolicy
-from argos_agent.tools.receipts import ReceiptSigner
+from argos.approval import ApprovalGate, ApprovalLevel
+from argos.sandbox.broker import BrokerResult, CapabilityBroker
+from argos.sandbox.egress import EgressPolicy
+from argos.tools.receipts import ReceiptSigner
 
 
 def _broker(level=ApprovalLevel.AUTO, search_hosts=None):
@@ -29,7 +29,7 @@ def test_broker_passes_workspace_to_run_command(monkeypatch, tmp_path):
         captured["workspace"] = workspace
         return ("ok", 0)
 
-    monkeypatch.setattr("argos_agent.tools.shell.run_command", fake_run)
+    monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
     gate = ApprovalGate(level=ApprovalLevel.AUTO)
     egress = EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set())
     broker = CapabilityBroker(gate=gate, egress=egress, signer=ReceiptSigner(key=b"k"),
@@ -46,7 +46,7 @@ def test_broker_workspace_defaults_none_back_compat(monkeypatch):
         captured["workspace"] = workspace
         return ("ok", 0)
 
-    monkeypatch.setattr("argos_agent.tools.shell.run_command", fake_run)
+    monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
     gate = ApprovalGate(level=ApprovalLevel.AUTO)
     egress = EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set())
     broker = CapabilityBroker(gate=gate, egress=egress, signer=ReceiptSigner(key=b"k"))
@@ -110,7 +110,7 @@ async def test_unknown_action_rejected():
 async def test_broker_result_is_frozen_dataclass():
     """BrokerResult 是冻结 dataclass(契约 §5 不变量)。"""
     import dataclasses
-    from argos_agent.tools.receipts import Receipt
+    from argos.tools.receipts import Receipt
     # 构造一个假 Receipt
     signer = ReceiptSigner(key=b"test")
     r = signer.sign(action="web_search", args={}, result="x", exit_code=None)
@@ -148,7 +148,7 @@ async def test_web_search_egress_allowed_when_provider_host_listed(monkeypatch):
     """I3:provider 出口 host 在 search_hosts → 放行进入审批/执行(此处 monkeypatch 真搜索)。"""
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)  # DDGS → duckduckgo.com
 
-    import argos_agent.web as _w
+    import argos.web as _w
     monkeypatch.setattr(_w, "search", lambda q, limit=5: {
         "success": True, "results": [{"title": "t", "url": "u", "snippet": "s"}],
     })
@@ -187,7 +187,7 @@ async def test_take_receipt_returns_and_clears():
 async def test_run_command_forced_confirm_even_in_auto():
     """C1:run_command 在 AUTO 档也强制确认 —— 没有挂起的 respond 就超时 fail-closed 拒。
     用极短 timeout 经 gate 验证它确实进了 CONFIRM 等待(而非 AUTO 立即放行)。"""
-    import argos_agent.sandbox.broker as _bk
+    import argos.sandbox.broker as _bk
     gate = ApprovalGate(level=ApprovalLevel.AUTO)
     egress = EgressPolicy(llm_hosts=set(), search_hosts={"duckduckgo.com"}, mcp_hosts=set())
     signer = ReceiptSigner(key=b"k")
@@ -198,7 +198,7 @@ async def test_run_command_forced_confirm_even_in_auto():
 
     async def fake_request(action, args, *, description, risk, timeout=60.0):
         seen["level"] = gate.level
-        from argos_agent.approval import Decision
+        from argos.approval import Decision
         return Decision(kind="deny", reason="测试拒绝")
 
     gate.request = fake_request  # type: ignore[assignment]

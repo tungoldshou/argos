@@ -20,8 +20,8 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from argos_agent.verify.dom_probe import DomProber, DomProbeResult, _selector_to_text_hint
-from argos_agent.verify.strategy import generate, WorkspaceFacts
+from argos.verify.dom_probe import DomProber, DomProbeResult, _selector_to_text_hint
+from argos.verify.strategy import generate, WorkspaceFacts
 
 
 # ═══════════════════════════════════════════════════════
@@ -367,7 +367,7 @@ class _CompletingModel:
 class _FakeSandbox:
     def spawn(self, *, workspace, namespace, allow_workflow=True, read_only=False): ...
     def exec_code(self, code):
-        from argos_agent.sandbox.backend import ExecResult
+        from argos.sandbox.backend import ExecResult
         return ExecResult(stdout="", value_repr="", exc="")
     def close(self): ...
 
@@ -382,15 +382,15 @@ class _FakeVerifier:
     last_usage: dict = {}
 
     def verify(self, verify_cmd, *, attempts=1):
-        from argos_agent.core.verify_gate import Verdict
+        from argos.core.verify_gate import Verdict
         if verify_cmd:
             return Verdict.passed(detail="ok", verify_cmd=verify_cmd, attempts=attempts)
         return Verdict.unverifiable(detail="no cmd", tampered=[], attempts=attempts)
 
 
 def _make_loop(*, dom_prober=None, verify_cmd=None, capability_hints=None):
-    from argos_agent.core.loop import AgentLoop, LoopConfig
-    from argos_agent.protocol.events import EventBus
+    from argos.core.loop import AgentLoop, LoopConfig
+    from argos.protocol.events import EventBus
     return AgentLoop(
         store=_FakeStore(),
         bus=EventBus(),
@@ -468,7 +468,7 @@ class TestRunDomProbeVerdict:
 
     def _make_strategy(self, url: str = "http://localhost", selector: str = "h1") -> object:
         """构造一个最小 L3 VerifyStrategy 仿对象。"""
-        from argos_agent.verify.strategy import VerifyStrategy
+        from argos.verify.strategy import VerifyStrategy
         return VerifyStrategy(
             level="L3", kind="dom_assert",
             cmd=None,
@@ -497,7 +497,7 @@ class TestRunDomProbeVerdict:
         expected_text: str = "h1",
     ) -> object:
         """构造含 dom_expected_text 的 L3 策略（供需要 passed 路径的测试用）。"""
-        from argos_agent.verify.strategy import _l3_dom_assert
+        from argos.verify.strategy import _l3_dom_assert
         hints: dict[str, str] = {
             "dom_url": url,
             "dom_selector": selector,
@@ -704,7 +704,7 @@ class TestProposeDomVerifyParsing:
 
     def test_sandbox_stub_returns_receipt(self) -> None:
         """沙箱内 propose_dom_verify 桩返回登记回执（不是空字符串）。"""
-        from argos_agent.tools import _propose_dom_verify_pure
+        from argos.tools import _propose_dom_verify_pure
         result = _propose_dom_verify_pure(
             url="http://localhost:3000",
             selector=".hero",
@@ -716,21 +716,21 @@ class TestProposeDomVerifyParsing:
 
     def test_sandbox_stub_with_defaults(self) -> None:
         """沙箱桩仅传 url 时不抛异常。"""
-        from argos_agent.tools import _propose_dom_verify_pure
+        from argos.tools import _propose_dom_verify_pure
         result = _propose_dom_verify_pure(url="http://example.com")
         assert isinstance(result, str)
         assert "example.com" in result
 
     def test_propose_dom_verify_in_all_tool_names(self) -> None:
         """propose_dom_verify 应在 ALL_TOOL_NAMES 中（诚实计数来源）。"""
-        from argos_agent.tools import ALL_TOOL_NAMES
+        from argos.tools import ALL_TOOL_NAMES
         assert "propose_dom_verify" in ALL_TOOL_NAMES
 
     def test_propose_dom_verify_in_namespace(self) -> None:
         """沙箱命名空间 build_namespace / _pure() 含 propose_dom_verify。"""
-        from argos_agent.tools import _propose_dom_verify_pure
+        from argos.tools import _propose_dom_verify_pure
         # _pure() 直接测字典键
-        import argos_agent.tools as _t
+        import argos.tools as _t
         ns = _t._pure()
         assert "propose_dom_verify" in ns
         assert ns["propose_dom_verify"] is _propose_dom_verify_pure

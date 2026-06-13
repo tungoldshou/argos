@@ -35,42 +35,42 @@
    ],
    "coupling": [
     {
-     "to": "argos_agent.tui.events（EventBus, Event 及全部子类型）",
+     "to": "argos.tui.events（EventBus, Event 及全部子类型）",
      "how": "loop.py 顶层静态 import 了 CodeAction/CodeResult/CostUpdate/Error/EventBus/PhaseChange/PlanRendered/PlanUpdate/TokenDelta/ToolReceipt；harness.py 静态 import 了 EventBus/PhaseChange/VerifyVerdict/Escalation；loop.py 内还有 4 处延迟 import（CompactedEvent/PrunedEvent/VerifyVerdict/WorkflowProposed/WorkflowDone）。EventBus 是 core 与 TUI 的唯一交汇点但目前物理住在 tui/ 包下。",
      "severity": "high"
     },
     {
-     "to": "argos_agent.core.plan_mode — 模块级全局状态 _plan_mode_active",
+     "to": "argos.core.plan_mode — 模块级全局状态 _plan_mode_active",
      "how": "set_plan_mode/is_plan_mode 操作进程级单例布尔。多并发 AgentLoop 实例（如 workflow 子agent）会互相踩踏 plan-mode 状态。EnterPlanMode/ExitPlanMode 接受 loop 实例但写的是模块全局。",
      "severity": "medium"
     },
     {
-     "to": "argos_agent.sandbox.backend / broker / SandboxBackend",
+     "to": "argos.sandbox.backend / broker / SandboxBackend",
      "how": "TYPE_CHECKING guard + 构造时注入，运行时只通过接口调用，不 import 实现类——耦合已做到较好的依赖注入。",
      "severity": "low"
     },
     {
-     "to": "argos_agent.memory.store（ArgosStore）",
+     "to": "argos.memory.store（ArgosStore）",
      "how": "TYPE_CHECKING + 构造注入，loop 调 store.append_event / store.capture_event / store.recall_memories，通过 duck-typing 接口——可替换。",
      "severity": "low"
     },
     {
-     "to": "argos_agent.routing（ModelRouter）",
+     "to": "argos.routing（ModelRouter）",
      "how": "构造时可选注入 router，None 时走原路径，零破坏；per-task routing 接线已完成。",
      "severity": "low"
     },
     {
-     "to": "argos_agent.workflow.engine（WorkflowEngine factory）",
+     "to": "argos.workflow.engine（WorkflowEngine factory）",
      "how": "构造时注入 workflow_engine_factory: Callable[[], object] | None，act 阶段检测 propose_workflow 后懒调用，隔离良好。",
      "severity": "low"
     },
     {
-     "to": "argos_agent.hooks（PreToolUse/PostToolUse/Stop）",
+     "to": "argos.hooks（PreToolUse/PostToolUse/Stop）",
      "how": "loop.py 静态 import hooks 包及 payload 构建函数，在 run 的起止/每步触发；这是 user-controlled code（CLAUDE.md 注明），不在沙箱内。",
      "severity": "medium"
     },
     {
-     "to": "argos_agent.runtime（detect_tampering, current, SNAPSHOT_PRUNE_DIRS）",
+     "to": "argos.runtime（detect_tampering, current, SNAPSHOT_PRUNE_DIRS）",
      "how": "verify_gate 和 snapshot 直接调 runtime 全局上下文（verify_dir、workspace、受保护文件集合）。runtime 是进程级单例，daemon 多 run 并发时需要每-run 作用域隔离。",
      "severity": "medium"
     }
@@ -87,7 +87,7 @@
     "updater.py 更新通知无行动能力：check_github_release 只查不下载，用户需要手动更新。Jarvis '高度自治' 方向最终需要 in-place 自更新能力（尤其是桌面端形态）。",
     "plan_mode 阻塞式单用户交互假设：PlanRendered 投事件后 loop await _plan_decision_event，整条事件流挂住等一个人的键入。多用户/多客户端场景下需要一个超时+默认决策兜底，避免 daemon 进程被永远挂住。"
    ],
-   "kernel_split_notes": "要让 core-engine 活在 headless daemon kernel 里、隔着协议被 TUI/桌面端客户端调用，需要做以下几件事：\n\n**必须动（阻断性）：**\n\n1. EventBus + Event 类型族搬出 tui/，建立 argos_agent.core.events 模块（或 argos_agent.events）。loop.py/harness.py 改为从新位置 import。TUI 从同一来源消费，不再是事件的物理 owner。这是最大的手术点——涉及 loop.py 的 5 处 import（含 4 处延迟 import）和 harness.py 的 1 处静态 import，但修改是机械的搜索-替换，不触碰任何逻辑。\n\n2. plan_mode 全局状态实例化到 AgentLoop 内部：把 _plan_mode_active 从模块级全局改为 AgentLoop 实例字段，set_plan_mode/is_plan_mode 改为实例方法（或直接用 loop.mode 替代）。EnterPlanMode/ExitPlanMode 已经接受 loop 实例参数，改造路径直接。\n\n3. runtime 上下文的 per-run 隔离：当前 runtime.current() 是进程级单例（verify_dir/workspace/tamper-set）。daemon 多 run 并发时，verify_gate 和 snapshot 都读这个全局。需要改为 contextvars.ContextVar 或在 Verifier 构造时显式传入 verify_dir/workspace，让每个 run 拥有自己的运行时上下文。\n\n**可以推迟（不阻断当前 daemon 单 run 路径）：**\n\n4. daemon/worker.py 已经调 loop.run(goal, session_id) 并 async for 消费事件流，协议层只需在 worker 和 socket server 之间把事件序列化成协议消息（JSON-over-socket 或 SSE）。AgentLoop 本身不需要改接口，run() 返回 AsyncIterator[Event] 的契约直接能被 daemon 层包裹。\n\n5. plan-mode 的阻塞 await 在 daemon 场景需要超时兜底（_plan_decision_event 永远不 set = run 僵死），加 asyncio.wait_for + 默认决策（approve_start 或拒绝）即可，不改引擎核心。\n\n6. ModelClient/CredentialPool/Protocol 完全无状态或内部封装可变状态，跨 run 共享没有问题（app_factory 已经这样做），不需要改动。\n\n**总结：** 3 个 diff（events 模块搬家 + plan_mode 去全局 + runtime ContextVar 化），其余架构原样保留可直接接入 daemon。",
+   "kernel_split_notes": "要让 core-engine 活在 headless daemon kernel 里、隔着协议被 TUI/桌面端客户端调用，需要做以下几件事：\n\n**必须动（阻断性）：**\n\n1. EventBus + Event 类型族搬出 tui/，建立 argos.core.events 模块（或 argos.events）。loop.py/harness.py 改为从新位置 import。TUI 从同一来源消费，不再是事件的物理 owner。这是最大的手术点——涉及 loop.py 的 5 处 import（含 4 处延迟 import）和 harness.py 的 1 处静态 import，但修改是机械的搜索-替换，不触碰任何逻辑。\n\n2. plan_mode 全局状态实例化到 AgentLoop 内部：把 _plan_mode_active 从模块级全局改为 AgentLoop 实例字段，set_plan_mode/is_plan_mode 改为实例方法（或直接用 loop.mode 替代）。EnterPlanMode/ExitPlanMode 已经接受 loop 实例参数，改造路径直接。\n\n3. runtime 上下文的 per-run 隔离：当前 runtime.current() 是进程级单例（verify_dir/workspace/tamper-set）。daemon 多 run 并发时，verify_gate 和 snapshot 都读这个全局。需要改为 contextvars.ContextVar 或在 Verifier 构造时显式传入 verify_dir/workspace，让每个 run 拥有自己的运行时上下文。\n\n**可以推迟（不阻断当前 daemon 单 run 路径）：**\n\n4. daemon/worker.py 已经调 loop.run(goal, session_id) 并 async for 消费事件流，协议层只需在 worker 和 socket server 之间把事件序列化成协议消息（JSON-over-socket 或 SSE）。AgentLoop 本身不需要改接口，run() 返回 AsyncIterator[Event] 的契约直接能被 daemon 层包裹。\n\n5. plan-mode 的阻塞 await 在 daemon 场景需要超时兜底（_plan_decision_event 永远不 set = run 僵死），加 asyncio.wait_for + 默认决策（approve_start 或拒绝）即可，不改引擎核心。\n\n6. ModelClient/CredentialPool/Protocol 完全无状态或内部封装可变状态，跨 run 共享没有问题（app_factory 已经这样做），不需要改动。\n\n**总结：** 3 个 diff（events 模块搬家 + plan_mode 去全局 + runtime ContextVar 化），其余架构原样保留可直接接入 daemon。",
    "inventory": [
     {
      "module": "core/loop.py — AgentLoop, LoopConfig, extract_code_block, extract_plan_todos",
@@ -177,7 +177,7 @@
      "severity": "medium"
     },
     {
-     "to": "argos_agent/approval.py（模块级单例）",
+     "to": "argos/approval.py（模块级单例）",
      "how": "permissions/__init__.py 暴露 get_config() / get_audit_log() 两个模块级惰性单例；ApprovalGate._evaluate / _audit 在 request() 内部 import 并调用它们。多 client 场景下（daemon 同时服务多会话）单例 config 和 audit_log 会被共享，需要变成 per-session 实例。",
      "severity": "high"
     },
@@ -189,63 +189,63 @@
    ],
    "inventory": [
     {
-     "module": "argos_agent/sandbox/broker.py",
+     "module": "argos/sandbox/broker.py",
      "purpose": "CapabilityBroker：egress 检查 → 审批拨盘 → host 侧执行 → HMAC 回执签发的唯一通路；_RISK 表定义所有已知动作的风险级别；_FORCE_CONFIRM_ACTIONS 保证 run_command 在 AUTO 档也强制逐个确认"
     },
     {
-     "module": "argos_agent/sandbox/executor.py",
+     "module": "argos/sandbox/executor.py",
      "purpose": "SeatbeltExecutor：spawn/close macOS Seatbelt 子进程；exec_code 发 CodeBlock JSON-RPC 给子进程，收 broker_call 消息回调 broker_handler，收 result 返回 CodeResult；linux.py 提供 Linux 等价实现"
     },
     {
-     "module": "argos_agent/sandbox/_sandbox_child.py",
+     "module": "argos/sandbox/_sandbox_child.py",
      "purpose": "沙箱子进程：在 Seatbelt deny-all 环境下运行 exec(code)；遇 broker_call op 时向 stdout 写 JSON 请求、等 host 侧回写结果；__authorized_imports__ 白名单控制可导入模块"
     },
     {
-     "module": "argos_agent/sandbox/egress.py",
+     "module": "argos/sandbox/egress.py",
      "purpose": "EgressPolicy：精确 host 白名单（llm + search + mcp + 用户批准），fail-closed；allow() 动态加白"
     },
     {
-     "module": "argos_agent/sandbox/seatbelt.py",
+     "module": "argos/sandbox/seatbelt.py",
      "purpose": "macOS sandbox-exec deny-all profile 生成 + python_child_argv() 构造 seatbelt 子进程命令行；spawn_child() 封装 subprocess.Popen"
     },
     {
-     "module": "argos_agent/sandbox/linux.py",
+     "module": "argos/sandbox/linux.py",
      "purpose": "Linux 等价沙箱后端（seccomp / bubblewrap 路径），供 select_backend() 按平台选择"
     },
     {
-     "module": "argos_agent/approval.py",
+     "module": "argos/approval.py",
      "purpose": "ApprovalGate：level 拨盘（AUTO/CONFIRM/OBSERVE/ACCEPT_EDITS）+ Smart approval（_evaluate → hard/soft rules）+ session 缓存 + 超时 fail-closed + AuditLog 写入 + decision_listener 回调"
     },
     {
-     "module": "argos_agent/permissions/evaluator.py",
+     "module": "argos/permissions/evaluator.py",
      "purpose": "evaluate()：hard shell rules → hard path denylist → secret pattern scan → soft deny/allow/ask → per-tool level → default level 的串联裁决逻辑，返回 DecisionMeta(decision, trigger, reason)"
     },
     {
-     "module": "argos_agent/permissions/hard_rules.py",
+     "module": "argos/permissions/hard_rules.py",
      "purpose": "HARD_SHELL_RULES（rm -rf / sudo / dd 等）+ HARD_PATH_DENYLIST（/etc /usr /sys 等）+ check_hard_shell() + is_system_path() — 不可被预授权降级的铁律规则表"
     },
     {
-     "module": "argos_agent/permissions/secrets.py",
+     "module": "argos/permissions/secrets.py",
      "purpose": "find_secret_in_content()：正则扫描写入内容是否含 API key / token 等密钥 pattern，命中则强制 ask（D8 锁）"
     },
     {
-     "module": "argos_agent/permissions/config.py",
+     "module": "argos/permissions/config.py",
      "purpose": "PermissionsConfig：从 ~/.argos/permissions.json 加载声明式 allow/deny/ask/tools/preauth 规则集；empty() 无文件时的安全默认"
     },
     {
-     "module": "argos_agent/permissions/autonomy.py",
+     "module": "argos/permissions/autonomy.py",
      "purpose": "Zone 三色（GREEN/YELLOW/RED）+ classify() + on_unverifiable_completion()：将 evaluator 决策、reversible、verdict、preauth 综合映射到自主程度，驱动 loop 的静默/澄清/升级路径"
     },
     {
-     "module": "argos_agent/permissions/audit.py",
+     "module": "argos/permissions/audit.py",
      "purpose": "AuditLog：每条审批决策写 ~/.argos/approvals-YYYY-MM-DD.jsonl；cleanup_old_logs() 按保留天数清理"
     },
     {
-     "module": "argos_agent/permissions/events.py",
+     "module": "argos/permissions/events.py",
      "purpose": "ApprovalDecision dataclass：audit log 与 TUI EventBus 共用的决策事件结构体"
     },
     {
-     "module": "argos_agent/tools/receipts.py",
+     "module": "argos/tools/receipts.py",
      "purpose": "ReceiptSigner：HMAC-SHA256 签发 Receipt（action/args_hash/result_hash/exit_code/ts/nonce/sig）；verify() 供 Harness 核验，key 永不进沙箱"
     }
    ],
@@ -292,27 +292,27 @@
    ],
    "coupling": [
     {
-     "to": "argos_agent/tui/app.py (ArgosApp)",
+     "to": "argos/tui/app.py (ArgosApp)",
      "how": "TUI holds _with_daemon bool + _daemon_client (DaemonClient) + _daemon_session_id. All daemon interaction is gated behind --with-daemon flag; when absent the TUI runs the loop inline. This is a shallow flag-gated integration, not a clean client-only architecture.",
      "severity": "medium"
     },
     {
-     "to": "argos_agent/core/loop.py (AgentLoop)",
+     "to": "argos/core/loop.py (AgentLoop)",
      "how": "RunWorker accepts loop_factory: () -> AgentLoop as constructor injection. The dependency is clean (duck-typed, no direct import in worker.py). However loop_factory is NEVER injected from daemon/__main__.py or server.py — the wiring simply does not exist. RunWorker is defined but never instantiated in production daemon code.",
      "severity": "high"
     },
     {
-     "to": "argos_agent/approval.py (ApprovalGate)",
+     "to": "argos/approval.py (ApprovalGate)",
      "how": "Approval crosses the process boundary via SSE fan-out only: server._handle_approval() fans out {kind: approval_response, call_id, decision} to the run's SSE queue, which the worker is supposed to consume. But since RunWorker is never started from the server, the actual in-process ApprovalGate (used by AgentLoop) is never bridged to the daemon's HTTP approval endpoint. There is no back-channel from the SSE event bus into a live ApprovalGate.wait() coroutine.",
      "severity": "high"
     },
     {
-     "to": "argos_agent/tui/events.py (EventBus)",
+     "to": "argos/tui/events.py (EventBus)",
      "how": "daemon/events.py (RunMeta, RunCheckpoint, RunFailure) explicitly reuses the kind-constant pattern from tui/events.py but does NOT register its kinds in _KIND_TO_CLASS. The comment says TUI replay will hit the 'unknown' fallback for these daemon-specific kinds.",
      "severity": "low"
     },
     {
-     "to": "argos_agent/learning/hook.py",
+     "to": "argos/learning/hook.py",
      "how": "RunWorker._maybe_run_learning_hook() imports and calls on_run_completed() post-completion. This is a late-binding import (not at module level) so it won't break if learning is absent, but it creates a hidden dependency from the daemon's worker layer into the learning subsystem.",
      "severity": "low"
     }
@@ -334,67 +334,67 @@
    "kernel_split_notes": "The daemon is structurally the right seed for argosd. The split is already partially done: DaemonClient is a clean Unix-socket client, DaemonHTTPServer is the server side, and the protocol is documented in protocol.py. The changes needed to make this the real kernel:\\n\\n1. Wire loop_factory into DaemonHTTPServer.__init__ (injected from __main__.py via build_components()+build_loop_factory()), then call RunWorker(run_id, manager, loop_factory, registry, worktree).run() as an asyncio.create_task() inside _handle_create_run() immediately after registry.register().\\n\\n2. Bridge ApprovalGate into RunWorker: the loop's ApprovalGate needs to watch the run's SSE fan-out queue for approval_response events. One pattern: RunWorker wraps the gate's wait() with an asyncio.Queue listener on manager.subscribe(run_id), translating incoming approval_response dicts into gate.resolve(call_id, decision) calls.\\n\\n3. Build a per-run CapabilityBroker+SeatbeltExecutor in loop_factory, seeded with the run's workspace (and worktree_path if isolated). The sandbox must be per-run, not shared.\\n\\n4. Add a global /events SSE endpoint (run-list-level fan-out) so TUI and future desktop clients can observe run creation/completion without polling /runs.\\n\\n5. The TUI's _with_daemon flag should become the default mode (not opt-in). ArgosApp should always talk to the daemon via DaemonClient, and the inline loop path should only survive as a fallback when the daemon socket is unreachable. This is the true kernel/client separation.\\n\\n6. The state machine, store, index, sessions, registry, and supervision layers need zero changes for the kernel role — they are already kernel-grade.\"",
    "inventory": [
     {
-     "module": "argos_agent/daemon/state_machine.py",
+     "module": "argos/daemon/state_machine.py",
      "purpose": "7-state FSM (pending/running/paused/suspended/completed/failed/cancelled) with whitelist transition table, terminal-write protection, and side-effect append to JSONL"
     },
     {
-     "module": "argos_agent/daemon/store.py",
+     "module": "argos/daemon/store.py",
      "purpose": "Append-only JSONL event store, one file per run, with fsync on run_meta and corruption detection on replay"
     },
     {
-     "module": "argos_agent/daemon/index.py",
+     "module": "argos/daemon/index.py",
      "purpose": "In-memory StateIndex backed by atomic JSON file (~/.argos/runs/index.json); cache layer over JSONL true-source"
     },
     {
-     "module": "argos_agent/daemon/manager.py",
+     "module": "argos/daemon/manager.py",
      "purpose": "RunManager: coordinates store+index+state_machine+fan-out; owns pause/resume/cancel contract and asyncio.Queue-based SSE pub/sub"
     },
     {
-     "module": "argos_agent/daemon/server.py",
+     "module": "argos/daemon/server.py",
      "purpose": "DaemonHTTPServer: hand-written async HTTP/1.1 over Unix socket with SSE; full REST routing for sessions, runs, events, approvals"
     },
     {
-     "module": "argos_agent/daemon/client.py",
+     "module": "argos/daemon/client.py",
      "purpose": "DaemonClient: matching pure-asyncio HTTP/1.1 + SSE client over Unix socket; no httpx dependency"
     },
     {
-     "module": "argos_agent/daemon/protocol.py",
+     "module": "argos/daemon/protocol.py",
      "purpose": "Shared HTTP protocol constants (header names, error codes)"
     },
     {
-     "module": "argos_agent/daemon/sessions.py",
+     "module": "argos/daemon/sessions.py",
      "purpose": "SessionRegistry: UUID4 sessions with heartbeat expiry, owner/observer role model, and promote-on-owner-disconnect"
     },
     {
-     "module": "argos_agent/daemon/registry.py",
+     "module": "argos/daemon/registry.py",
      "purpose": "RunRegistry: in-memory fast-lookup layer (cost, worktree, focus, task handle, semaphore) over persistent store"
     },
     {
-     "module": "argos_agent/daemon/worker.py",
+     "module": "argos/daemon/worker.py",
      "purpose": "RunWorker: per-run asyncio coroutine host wrapping AgentLoop with pause/resume/cancel at step boundaries and SSE fan-out; FakeLoop for tests — NEVER instantiated from production server code"
     },
     {
-     "module": "argos_agent/daemon/events.py",
+     "module": "argos/daemon/events.py",
      "purpose": "Three daemon-specific event dataclasses: RunMeta (JSONL header), RunCheckpoint (resume point), RunFailure (error record)"
     },
     {
-     "module": "argos_agent/daemon/supervision.py",
+     "module": "argos/daemon/supervision.py",
      "purpose": "SIGTERM/SIGINT handlers and graceful_shutdown: marks running→suspended, stops server, removes socket"
     },
     {
-     "module": "argos_agent/daemon/worktree.py",
+     "module": "argos/daemon/worktree.py",
      "purpose": "WorktreeManager: git worktree create/cleanup for per-run filesystem isolation"
     },
     {
-     "module": "argos_agent/daemon/pidfile.py",
+     "module": "argos/daemon/pidfile.py",
      "purpose": "PID file write/remove for daemon process management"
     },
     {
-     "module": "argos_agent/daemon/socket.py",
+     "module": "argos/daemon/socket.py",
      "purpose": "Socket availability check and permission enforcement (0600)"
     },
     {
-     "module": "argos_agent/daemon/__main__.py",
+     "module": "argos/daemon/__main__.py",
      "purpose": "Daemon process entry point: builds RunManager+DaemonHTTPServer, installs signal handlers, writes PID — but does NOT inject loop_factory"
     }
    ]
@@ -415,53 +415,53 @@
    ],
    "coupling": [
     {
-     "to": "argos_agent/core/loop.py :: AgentLoop",
+     "to": "argos/core/loop.py :: AgentLoop",
      "how": "app_factory.build_loop_factory() 把 AgentLoop 构造函数封装成 () -> AgentLoop 注入 ArgosApp._loop_factory；start_run 每轮调它，把 loop 存进 self._current_loop 供 _handle_plan_rendered 里直接调 ExitPlanMode(loop, ...)",
      "severity": "high"
     },
     {
-     "to": "argos_agent/core/plan_mode.py :: ExitPlanMode",
+     "to": "argos/core/plan_mode.py :: ExitPlanMode",
      "how": "app.py 直接 import ExitPlanMode 并在 _handle_plan_rendered 回调里同步调用；TUI 持有 loop 实例引用，并在 TUI 回调中操控 loop 内部状态机",
      "severity": "high"
     },
     {
-     "to": "argos_agent/approval.py :: ApprovalGate",
+     "to": "argos/approval.py :: ApprovalGate",
      "how": "ArgosApp.__init__ 接受 gate: ApprovalGate（由 app_factory 传入同一实例）；_handle_approval/_handle_workflow_proposed 直接调 gate.respond()；gate.level 被 TUI 直接读取做 AUTO 短路判断；_decision_listener 回调注入活动栏",
      "severity": "high"
     },
     {
-     "to": "argos_agent/core/snapshot.py :: RunSnapshot, SNAPSHOT_ROOT",
+     "to": "argos/core/snapshot.py :: RunSnapshot, SNAPSHOT_ROOT",
      "how": "start_run 头部调 RunSnapshot.take() 拍 workspace 快照；/undo 也从这里 restore",
      "severity": "medium"
     },
     {
-     "to": "argos_agent/memory/store.py :: ArgosStore.recall()",
+     "to": "argos/memory/store.py :: ArgosStore.recall()",
      "how": "start_run 通过 getattr(loop, '_store') 取 store 直接调 store.recall(goal) 做记忆召回提示行；属于穿透 loop 直接访问内核内部对象",
      "severity": "medium"
     },
     {
-     "to": "argos_agent/hooks/ :: fire(), build_user_prompt_payload()",
+     "to": "argos/hooks/ :: fire(), build_user_prompt_payload()",
      "how": "start_run 内 lazy import hooks.fire() 触发 UserPromptSubmit hook；HookFired 事件结果再投 EventBus 走 _apply_event 渲染",
      "severity": "medium"
     },
     {
-     "to": "argos_agent/daemon/client.py :: DaemonClient",
+     "to": "argos/daemon/client.py :: DaemonClient",
      "how": "ArgosApp._with_daemon / _daemon_client 字段存在但当前默认 False；action_interrupt/action_background 分支里有 daemon pause/cancel/suspend 的直接方法调用，协议未隔离",
      "severity": "medium"
     },
     {
-     "to": "argos_agent/tui/events.py :: EventBus",
+     "to": "argos/tui/events.py :: EventBus",
      "how": "EventBus 虽然定义在 tui/ 包里，但 app_factory 和 loop 都直接 import 它；这个文件事实上是 tui 包暴露给内核的共享契约层，并非纯 UI 代码",
      "severity": "medium"
     },
     {
-     "to": "argos_agent/config :: active_tier()",
+     "to": "argos/config :: active_tier()",
      "how": "_apply_event 处理 CostUpdate 时直接调 config.active_tier().context_window 计算上下文占用百分比；config 是全局单例",
      "severity": "low"
     }
    ],
    "reuse_verdict": "refactor",
-   "verdict_reason": "TUI v3 视觉层刚完成不应动。但 tui/ 包目前同时承担了三件不同性质的事：① 纯渲染（widgets/、app.py UI 部分，保留）；② 事件契约定义（events.py 中的所有 dataclass + EventBus，应迁出到 argos_agent/events/ 或 argos_agent/protocol/ 作为内核/客户端的共享协议层）；③ 内核耦合点（app.py 直接持有 loop 实例、直接调 ExitPlanMode、直接读 gate.level、直接穿透到 store.recall）。内核抽离时手术点正是②③，不触动①。",
+   "verdict_reason": "TUI v3 视觉层刚完成不应动。但 tui/ 包目前同时承担了三件不同性质的事：① 纯渲染（widgets/、app.py UI 部分，保留）；② 事件契约定义（events.py 中的所有 dataclass + EventBus，应迁出到 argos/events/ 或 argos/protocol/ 作为内核/客户端的共享协议层）；③ 内核耦合点（app.py 直接持有 loop 实例、直接调 ExitPlanMode、直接读 gate.level、直接穿透到 store.recall）。内核抽离时手术点正是②③，不触动①。",
    "jarvis_gaps": [
     "非开发者用户进不来：整个 TUI 假设用户知道 /yolo、/plan、verify_cmd 等开发者概念；Jarvis 方向需要自然语言引导层和任务意图理解，slash 命令体系要么收到 /help 自动推荐、要么彻底后移成高级功能",
     "审批 UI 无法向非技术用户解释风险：InlineChoice 显示的是 action/args/risk 等技术字段；Jarvis 需要把 ApprovalRequest 翻译成人话（'Argos 想修改 ~/Documents/report.md，是否允许？'），trigger/secret_pattern 字段已具备但 TUI 渲染还不够友好",
@@ -471,90 +471,90 @@
     "sync_output.py（DECSET 2026 同步渲染协议）仅对接 Textual TUI：桌面端用 Electron/WebView 不需要它；这个文件是 TUI 私有的，迁移时不要跟着 protocol 层走",
     "daemon 集成是半成品：_with_daemon 默认 False，pause/suspend/cancel 分支在 app.py 里用 getattr 访问 daemon_client，协议没有正式化；Jarvis headless kernel 的 daemon 协议需要先定义 IPC 接口再让 TUI 适配"
    ],
-   "kernel_split_notes": "手术分三刀，不触动 v3 视觉层：\n\n【刀1 — 共享协议层迁出（必须最先做）】\n把 argos_agent/tui/events.py 整体搬到 argos_agent/protocol/events.py（或 argos_agent/events.py）。它里面的所有 dataclass（TokenDelta、ApprovalRequest 等）加上 EventBus、event_kind()、serialize_event()/deserialize_event() 是内核和所有客户端的共享契约，不应归属 tui/ 包。tui/events.py 保留为 from argos_agent.protocol.events import * 的转发层维持向后兼容。app_factory.py 已 import EventBus，这个 import 路径也需跟着更新。\n\n【刀2 — loop 实例引用隔离（中优先）】\napp.py 当前持有 self._current_loop 并在 _handle_plan_rendered 里直接调 ExitPlanMode(loop, ...)。内核抽离后 loop 对象不能跨进程传递。替代方案：在协议层增加 PlanDecisionRequest 事件（类比 ApprovalRequest），TUI 收到后通过 gate.respond(call_id, decision) 或新的 kernel_rpc(call_id, ...) 把决策写回，loop 侧 await 同一个 asyncio.Event —— 彻底去掉 TUI 对 loop 内部对象的引用。\n\n【刀3 — store.recall 穿透修复（低优先，但影响 Jarvis 记忆展示）】\nstart_run 通过 getattr(loop, '_store') 直接访问内核内部 store；应改成 loop 在 run() 开始时发送一个 MemoryRecallEvent（含命中数），TUI 消费该事件渲染提示行，不再穿透。\n\n【daemon 协议（Jarvis 方向新增）】\n当前 TUI 的 daemon 集成代码（_with_daemon 分支）是未来内核/客户端 IPC 的雏形。建议先把 DaemonClient 接口正式化（定义 pause/cancel/suspend/list_runs 的协议签名），TUI 的 action_interrupt/action_background 再适配这个接口，而不是在 app.py 里散落 getattr 调用。\n\n【不需要动的部分】\nargos_agent/tui/widgets/、glow.py、theme.py、fakeloop.py（演示用）、sync_output.py（TUI 私有渲染优化）、commands.py（parse_slash 是纯函数，可按需复用）。",
+   "kernel_split_notes": "手术分三刀，不触动 v3 视觉层：\n\n【刀1 — 共享协议层迁出（必须最先做）】\n把 argos/tui/events.py 整体搬到 argos/protocol/events.py（或 argos/events.py）。它里面的所有 dataclass（TokenDelta、ApprovalRequest 等）加上 EventBus、event_kind()、serialize_event()/deserialize_event() 是内核和所有客户端的共享契约，不应归属 tui/ 包。tui/events.py 保留为 from argos.protocol.events import * 的转发层维持向后兼容。app_factory.py 已 import EventBus，这个 import 路径也需跟着更新。\n\n【刀2 — loop 实例引用隔离（中优先）】\napp.py 当前持有 self._current_loop 并在 _handle_plan_rendered 里直接调 ExitPlanMode(loop, ...)。内核抽离后 loop 对象不能跨进程传递。替代方案：在协议层增加 PlanDecisionRequest 事件（类比 ApprovalRequest），TUI 收到后通过 gate.respond(call_id, decision) 或新的 kernel_rpc(call_id, ...) 把决策写回，loop 侧 await 同一个 asyncio.Event —— 彻底去掉 TUI 对 loop 内部对象的引用。\n\n【刀3 — store.recall 穿透修复（低优先，但影响 Jarvis 记忆展示）】\nstart_run 通过 getattr(loop, '_store') 直接访问内核内部 store；应改成 loop 在 run() 开始时发送一个 MemoryRecallEvent（含命中数），TUI 消费该事件渲染提示行，不再穿透。\n\n【daemon 协议（Jarvis 方向新增）】\n当前 TUI 的 daemon 集成代码（_with_daemon 分支）是未来内核/客户端 IPC 的雏形。建议先把 DaemonClient 接口正式化（定义 pause/cancel/suspend/list_runs 的协议签名），TUI 的 action_interrupt/action_background 再适配这个接口，而不是在 app.py 里散落 getattr 调用。\n\n【不需要动的部分】\nargos/tui/widgets/、glow.py、theme.py、fakeloop.py（演示用）、sync_output.py（TUI 私有渲染优化）、commands.py（parse_slash 是纯函数，可按需复用）。",
    "inventory": [
     {
-     "module": "argos_agent/tui/app.py",
+     "module": "argos/tui/app.py",
      "purpose": "ArgosApp (Textual App)：start_run、_apply_event 事件分发、_handle_approval/_handle_plan_rendered/_handle_workflow_proposed 审批回路、slash 命令分发、daemon pause/background 动作、glow 呼吸效果协调"
     },
     {
-     "module": "argos_agent/tui/events.py",
+     "module": "argos/tui/events.py",
      "purpose": "共享事件契约：所有 Event dataclass（20+ 类型）、EventBus（asyncio.Queue 单消费者）、serialize/deserialize_event、event_kind()；事实上是内核/客户端的 protocol 层，不是纯 UI"
     },
     {
-     "module": "argos_agent/tui/commands.py",
+     "module": "argos/tui/commands.py",
      "purpose": "slash 命令纯解析：COMMAND_HELP 注册表、parse_slash()、match_commands()；无副作用"
     },
     {
-     "module": "argos_agent/tui/fakeloop.py",
+     "module": "argos/tui/fakeloop.py",
      "purpose": "演示用脚本化 FakeLoop / FailingFakeLoop；与 AgentLoop 同接口（async run -> AsyncIterator[Event]）"
     },
     {
-     "module": "argos_agent/tui/glow.py",
+     "module": "argos/tui/glow.py",
      "purpose": "边框呼吸色计算：phase_color()、verdict_color_self_aware()、ERROR/IDLE_BORDER 常量"
     },
     {
-     "module": "argos_agent/tui/theme.py",
+     "module": "argos/tui/theme.py",
      "purpose": "ARGOS_NIGHT Textual Theme 定义（v3 黑曜石 token 体系）"
     },
     {
-     "module": "argos_agent/tui/sync_output.py",
+     "module": "argos/tui/sync_output.py",
      "purpose": "DECSET 2026 同步输出协议探针：检测终端是否支持 CSI ?2026，减少流式渲染撕裂；TUI 私有"
     },
     {
-     "module": "argos_agent/tui/widgets/activity_panel.py",
+     "module": "argos/tui/widgets/activity_panel.py",
      "purpose": "右侧活动栏：阶段/工具/回执/成本/上下文/记忆/verdict 区段"
     },
     {
-     "module": "argos_agent/tui/widgets/transcript.py",
+     "module": "argos/tui/widgets/transcript.py",
      "purpose": "主对话流：append_token/append_line/mount_block/finalize_response"
     },
     {
-     "module": "argos_agent/tui/widgets/inline_choice.py",
+     "module": "argos/tui/widgets/inline_choice.py",
      "purpose": "行内审批 widget：InlineChoice + format_approval_title，FIFO 队列，on_decide 回调驱动 gate.respond"
     },
     {
-     "module": "argos_agent/tui/widgets/status_bar.py",
+     "module": "argos/tui/widgets/status_bar.py",
      "purpose": "底栏：阶段眼状态机（四态 / 审批挂起优先级）、成本、模型、blocked 态"
     },
     {
-     "module": "argos_agent/tui/widgets/verdict_badge.py",
+     "module": "argos/tui/widgets/verdict_badge.py",
      "purpose": "三态判决徽章渲染"
     },
     {
-     "module": "argos_agent/tui/widgets/workflow_panel.py",
+     "module": "argos/tui/widgets/workflow_panel.py",
      "purpose": "工作流进度树 widget"
     },
     {
-     "module": "argos_agent/tui/widgets/top_bar.py",
+     "module": "argos/tui/widgets/top_bar.py",
      "purpose": "顶栏：版本、模式标识（DEMO/YOLO/plan mode）"
     },
     {
-     "module": "argos_agent/tui/widgets/prompt.py",
+     "module": "argos/tui/widgets/prompt.py",
      "purpose": "输入框 + slash 菜单"
     },
     {
-     "module": "argos_agent/tui/widgets/splash.py",
+     "module": "argos/tui/widgets/splash.py",
      "purpose": "启动画面 StartupSplash"
     },
     {
-     "module": "argos_agent/tui/widgets/code_action.py",
+     "module": "argos/tui/widgets/code_action.py",
      "purpose": "CodeActionBlock：代码展开/折叠 + CodeResult 结果渲染"
     },
     {
-     "module": "argos_agent/tui/widgets/diff_view.py",
+     "module": "argos/tui/widgets/diff_view.py",
      "purpose": "文件 diff 展示"
     },
     {
-     "module": "argos_agent/tui/widgets/thinking.py",
+     "module": "argos/tui/widgets/thinking.py",
      "purpose": "ThinkingIndicator spinner"
     },
     {
-     "module": "argos_agent/tui/widgets/tab_strip.py",
+     "module": "argos/tui/widgets/tab_strip.py",
      "purpose": "Tab 切换栏（多任务/会话）"
     },
     {
-     "module": "argos_agent/app_factory.py",
+     "module": "argos/app_factory.py",
      "purpose": "装配层（不在 tui/ 内）：build_components() + build_loop_factory() 把内核组件注入 ArgosApp；EventBus 在这里也被 import"
     }
    ]
@@ -599,7 +599,7 @@
      "severity": "medium"
     },
     {
-     "to": "argos_agent/runtime.py (RuntimeContext)",
+     "to": "argos/runtime.py (RuntimeContext)",
      "how": "tools/__init__.py 的 _ws()/_vd() 在 project_mode 时查询 runtime.current()，把路径解析和 runtime 上下文耦合",
      "severity": "medium"
     },
@@ -805,7 +805,7 @@
     },
     {
      "to": "tools.py (ALLOWED_CMDS)",
-     "how": "verify_gate 从 argos_agent.tools 导入 ALLOWED_CMDS 做 verify_cmd 白名单校验；若 tools 模块重构，白名单引用需同步更新",
+     "how": "verify_gate 从 argos.tools 导入 ALLOWED_CMDS 做 verify_cmd 白名单校验；若 tools 模块重构，白名单引用需同步更新",
      "severity": "low"
     },
     {
@@ -815,7 +815,7 @@
     }
    ],
    "reuse_verdict": "refactor",
-   "verdict_reason": "workflow/ 引擎逻辑本身（spec 解析、engine 调度、subagent 隔离、best_of_n、pipeline/panel/loop_until ops）设计完整，是真正的差异化资产，值得保留；但与 TUI 事件类型的强耦合（loop._run_workflow 直接 yield WorkflowProposed/WorkflowDone）必须切断，改为内核发布协议无关的 WorkflowEvent，客户端适配层负责转换。contracts.py 是已实现的 v1（系统提示注入，0 成本关键词分类），P1 计划要把它升级为运行时断言层（Check/Contract 三态执行），现有 v1 仍有价值但将被 P1 的 argos_agent/contracts/ 包取代——需要平滑迁移而非直接删除。verify_gate + harness 是护城河核心，不允许退役，只需把 runtime 全局依赖改为注入参数（workspace/verify_dir 显式传入），使 Verifier 可在 daemon 内核里独立实例化。eval/ 耦合 app_factory 的问题需要把 loop_factory 协议化（duck-typed），让 eval 可在无 TUI 的 headless 内核里复用。",
+   "verdict_reason": "workflow/ 引擎逻辑本身（spec 解析、engine 调度、subagent 隔离、best_of_n、pipeline/panel/loop_until ops）设计完整，是真正的差异化资产，值得保留；但与 TUI 事件类型的强耦合（loop._run_workflow 直接 yield WorkflowProposed/WorkflowDone）必须切断，改为内核发布协议无关的 WorkflowEvent，客户端适配层负责转换。contracts.py 是已实现的 v1（系统提示注入，0 成本关键词分类），P1 计划要把它升级为运行时断言层（Check/Contract 三态执行），现有 v1 仍有价值但将被 P1 的 argos/contracts/ 包取代——需要平滑迁移而非直接删除。verify_gate + harness 是护城河核心，不允许退役，只需把 runtime 全局依赖改为注入参数（workspace/verify_dir 显式传入），使 Verifier 可在 daemon 内核里独立实例化。eval/ 耦合 app_factory 的问题需要把 loop_factory 协议化（duck-typed），让 eval 可在无 TUI 的 headless 内核里复用。",
    "jarvis_gaps": [
     "contracts.py v1 是纯系统提示注入，只约束模型写代码前声明约定，无运行时断言能力——Jarvis 方向需要的是 P1 的 Check 层（exit_code/artifact_exists/artifact_schema/content_assert），目前完全未实现，只有计划文档",
     "WorkflowSpec 的 propose_workflow 机制靠模型在代码块里吐 dict，loop 用 regex 捕获——对非开发者用户完全不透明，Jarvis 需要一个用户可直接触达的意图-工作流桥接层（P2 IntentCard），现在不存在",
@@ -828,55 +828,55 @@
    "kernel_split_notes": "手术点共五处。第一，切断 loop._run_workflow 对 tui.events 的直接 import：把 WorkflowProposed/WorkflowDone 从 TUI 事件命名空间搬到 core/events.py（内核协议层），TUI 侧做适配转换；这是最高优先级，否则 workflow/ 永远无法在 headless daemon 里运行。第二，WorkflowProgress 序列化：engine.run() yield 的进度对象加 as_dict() / from_dict()，让 daemon 通过 socket/IPC 把实时进度推给任意客户端。第三，Verifier 去全局 runtime 依赖：把 runtime.detect_tampering() 和 runtime.current() 的调用改为构造时注入（workspace: Path, verify_dir: Path, tamper_checker: Callable），让 Verifier 可在 daemon 子进程里独立实例化，不依赖进程级 runtime 单例。第四，EvalRunner 的 loop_factory 协议化：当前注入点已经用 Any 类型（duck-typed），只需补充 LoopFactory Protocol 定义，让 eval 在 daemon 内核里能接入 headless loop_factory 而非 app_factory（含 TUI）。第五，contracts.py → contracts/ 包迁移：P1 实施时把现有 classify/contract_for 作为 v1 fallback 保留在 contracts/v1.py，新的 Check/Contract/ContractExecutor 放 contracts/executor.py，两者共存直到 loop 切换完成；contracts/ 包对内核完全透明，无 TUI 依赖，可原样进 daemon。",
    "inventory": [
     {
-     "module": "argos_agent/workflow/spec.py",
+     "module": "argos/workflow/spec.py",
      "purpose": "不可变 WorkflowSpec/Stage/AgentTask 数据类 + parse_spec 解析器 + 角色预设（RolePreset）；fail-closed 校验（WorkflowSpecError）"
     },
     {
-     "module": "argos_agent/workflow/engine.py",
+     "module": "argos/workflow/engine.py",
      "purpose": "WorkflowEngine 异步调度器；支持 fan_out/pipeline/panel/loop_until/best_of_n 五种 op；Semaphore 限并发；内建 stagger 防 QPS 雪崩"
     },
     {
-     "module": "argos_agent/workflow/subagent.py",
+     "module": "argos/workflow/subagent.py",
      "purpose": "SubAgentFactory：每个子代理独立 worktree + store + ApprovalGate(AUTO)，共享 egress/signer/verifier；inline_diff/output_mirror 两种产出模式"
     },
     {
-     "module": "argos_agent/workflow/result.py",
+     "module": "argos/workflow/result.py",
      "purpose": "WorkflowResult/StageResult/AgentResult 数据类 + render_preview（供审批预览）+ _synthesize 合成摘要"
     },
     {
-     "module": "argos_agent/workflow/worktree.py",
+     "module": "argos/workflow/worktree.py",
      "purpose": "WorktreeManager：git worktree add（git repo）或 temp dir（非 git）两路隔离；cleanup 保证不泄漏"
     },
     {
-     "module": "argos_agent/contracts.py",
+     "module": "argos/contracts.py",
      "purpose": "v1 契约层：关键词 classify + 五领域系统提示模板（REST/DB/状态机/配置/通用）+ contract_for 注入点；纯字符串操作，0 token 成本"
     },
     {
-     "module": "argos_agent/core/verify_gate.py",
+     "module": "argos/core/verify_gate.py",
      "purpose": "Verifier 三态硬门禁：篡改检测优先 > 白名单校验 > 命令执行 > 超时降级；self-test 旁路（opt-in）；re-export Verdict"
     },
     {
-     "module": "argos_agent/core/harness.py",
+     "module": "argos/core/harness.py",
      "purpose": "Harness：loop 的验证封装层，run_verify_gate 加 attempt 计数；连接 loop 主循环与 Verifier"
     },
     {
-     "module": "argos_agent/core/types.py",
+     "module": "argos/core/types.py",
      "purpose": "Verdict 三态数据类（唯一 canonical 定义）：passed/failed/unverifiable + self_verified 防冒充字段"
     },
     {
-     "module": "argos_agent/eval/runner.py",
+     "module": "argos/eval/runner.py",
      "purpose": "EvalRunner：worktree 隔离跑 AgentLoop，budget(时间/成本)双门控，setup_cmd + verify_cmd 端到端"
     },
     {
-     "module": "argos_agent/eval/compare.py",
+     "module": "argos/eval/compare.py",
      "purpose": "两轮 EvalResult 对比统计（pass_status 分布差异 Δ）"
     },
     {
-     "module": "argos_agent/eval/results.py",
+     "module": "argos/eval/results.py",
      "purpose": "EvalResult JSONL 持久化（append/load/list）"
     },
     {
-     "module": "argos_agent/eval/benchmarks/",
+     "module": "argos/eval/benchmarks/",
      "purpose": "terminal_bench 三变体（单次/docker/best_of_n）：TerminalBench 任务加载器 + verify 白名单适配"
     }
    ]
@@ -885,7 +885,7 @@
    "subsystem": "assembly-dist",
    "one_liner": "进程组装层 + 配置系统 + CLI 分发入口 + 运行时隔离原语 + 打包通道：把所有子系统粘合成一个可执行体并把它交付给用户。",
    "public_api": [
-    "build_components(**kwargs) -> AppComponents  # argos_agent/app_factory.py:84 — 一次性组装全栈(store/broker/sandbox/model/verifier/router/gate/workflow_engine_factory)",
+    "build_components(**kwargs) -> AppComponents  # argos/app_factory.py:84 — 一次性组装全栈(store/broker/sandbox/model/verifier/router/gate/workflow_engine_factory)",
     "build_loop_factory(c: AppComponents) -> Callable[[], AgentLoop]  # app_factory.py:209 — 每轮 run 产新 EventBus，共享其余组件",
     "AppComponents.close()  # 清理 sandbox/store/browser/mcp 子进程",
     "config.active_tier() -> ModelTier  # config.py:209 — 读 config.json active profile，无则 env 回退",
@@ -968,51 +968,51 @@
    "kernel_split_notes": "**需要移入 daemon 内核的部分（kernel-side）：**\n- `app_factory.build_components / build_loop_factory / AppComponents`：内核组装核心，几乎不用改，但要去掉 `os.environ['ARGOS_WORKSPACE'] = str(ws)` 这行全局副作用，改成在 SeatbeltExecutor spawn 时按 session 注入 env。\n- `config.py`（load_config / active_tier / active_key / ArgosConfig）：配置读取留在内核，建议加 per-config-dir 缓存 + 文件 watcher 通知，支持运行时 reload。\n- `isolation.py`（acquire_sandbox / acquire_worktree / release_*）：session 隔离是内核职责，需加并发锁（asyncio.Lock per session_id）和 LRU 清理策略。\n- `git_worktree.py`：底层原语，直接复用，无需改动。\n- `runtime.py（RunContext / set_context / current）`：contextvars 机制在 asyncio daemon 里天然 per-task，保留。\n- `setup_wizard.py`（配置写入逻辑部分）：`_write_config / _probe_connection` 等纯逻辑函数移入内核；TTY 交互部分（`_arrow_select / run`）移到客户端层，daemon 暴露 `POST /setup/apply {profile: ...}` 接口供任何客户端调用。\n\n**需要留在/移到客户端层的部分（client-side）：**\n- `__main__.main()` 中的 `ArgosApp(...)` 启动和 demo 降级：纯 TUI 客户端逻辑。\n- `__main__.main()` 中的 `SANDBOX_CHILD_FLAG` 检查：这是 PyInstaller re-exec 产物，仍需在 binary 入口最早处保留，但不属于 daemon 内核协议。\n- `setup_wizard` 的 TTY 交互部分。\n- `cli/` 四个子命令：需改成通过 daemon socket 协议查询 session 状态，而非读 `app_factory._active_run` 全局。\n\n**测试契约边界（tests/ 分布，共 204 个 test_* 文件）：**\n- 锁死 assembly 行为的核心测试：`test_app_factory.py`（15 symbols，6 cases）——覆盖 build_components 无 key 拒绝、model_override、active_profile、workflow_engine_factory 接线。这些在内核抽离后必须全部保绿，是最重要的回归防线。\n- 锁死 config 的测试：`test_config_base.py / test_config_loader.py / test_config_argos_keys.py`（共约 50 symbols）——覆盖 fail-closed、active 悬空、env 回退链。\n- 锁死 isolation 的测试：`test_isolation.py`（15 symbols）。\n- 锁死 setup 的测试：`test_setup_wizard.py / test_setup_wizard_non_tty.py / test_cli_setup.py`（共约 40 symbols）。\n- 打包测试（10 个 test_packaging_* 文件）：验证 argos.spec、install.sh、Homebrew formula、WinGet manifest 结构，这些测试与内核/客户端拆分无关，可原样保留。\n- `test_runtime.py / test_runtime_context.py`（25 symbols）：RunContext contextvars 语义，内核侧重构时必须全保绿。\"",
    "inventory": [
     {
-     "module": "argos_agent/__main__.py",
+     "module": "argos/__main__.py",
      "purpose": "binary 总入口：sandbox re-exec 哨兵 / argparse / 子命令分发 / TUI 启动 / 无 key demo 降级 / 更新检查"
     },
     {
-     "module": "argos_agent/app_factory.py",
+     "module": "argos/app_factory.py",
      "purpose": "全栈组装器：AppComponents dataclass + build_components() + build_loop_factory()，粘合 store/broker/sandbox/model/verifier/router/workflow_engine"
     },
     {
-     "module": "argos_agent/config.py",
+     "module": "argos/config.py",
      "purpose": "配置系统：~/.argos/config.json + .env 加载、ArgosConfig、ModelTier 构造、active_tier/active_key/active_embedder，env 回退链兼容旧用户"
     },
     {
-     "module": "argos_agent/config_base.py",
+     "module": "argos/config_base.py",
      "purpose": "配置通用助手：read_json_file / cached_singleton / reload_singleton，供 lsp/hooks/permissions/routing 各模块复用"
     },
     {
-     "module": "argos_agent/setup_wizard.py",
+     "module": "argos/setup_wizard.py",
      "purpose": "首次配置向导：provider 预设(5个) + TTY 方向键选择 + API key 探针连通测试 + 写 config.json/.env；I/O 解耦可单测"
     },
     {
-     "module": "argos_agent/runtime.py",
+     "module": "argos/runtime.py",
      "purpose": "run 级运行时上下文：RunContext(workspace/verify_dir/project_mode/guarded) + contextvars 隔离 + 文件指纹(sha256)篡改检测支撑"
     },
     {
-     "module": "argos_agent/isolation.py",
+     "module": "argos/isolation.py",
      "purpose": "会话隔离原语：acquire_sandbox(文件系统隔离) + acquire_worktree(git worktree 隔离) + release_* + is_git_project；IsolationError fail-closed"
     },
     {
-     "module": "argos_agent/git_worktree.py",
+     "module": "argos/git_worktree.py",
      "purpose": "git worktree 底层原语：add_worktree/remove_worktree/is_git_repo/git_available；daemon 和 workflow 共用，与 isolation.py 分离关注点"
     },
     {
-     "module": "argos_agent/cli/context.py",
+     "module": "argos/cli/context.py",
      "purpose": "argos context show 子命令：调 ContextAnalyzer，通过 app_factory._active_run 访问当前 session"
     },
     {
-     "module": "argos_agent/cli/eval.py",
+     "module": "argos/cli/eval.py",
      "purpose": "argos eval 子命令：启动 eval harness"
     },
     {
-     "module": "argos_agent/cli/skills.py",
+     "module": "argos/cli/skills.py",
      "purpose": "argos skills 子命令：skills 安装/列表/执行"
     },
     {
-     "module": "argos_agent/cli/pkg.py",
+     "module": "argos/cli/pkg.py",
      "purpose": "argos pkg 子命令：包管理(argospkg)"
     },
     {

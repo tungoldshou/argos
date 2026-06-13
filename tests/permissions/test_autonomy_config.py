@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.permissions.autonomy import AutonomyPolicy
-from argos_agent.permissions.config import (
+from argos.permissions.autonomy import AutonomyPolicy
+from argos.permissions.config import (
     PermissionsConfig, _reset_config, load, reload_config,
 )
 

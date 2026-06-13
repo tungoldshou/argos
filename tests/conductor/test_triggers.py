@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.conductor.triggers import FileTriggerFact, FileTriggerWatcher
+from argos.conductor.triggers import FileTriggerFact, FileTriggerWatcher
 
 
 # ---------------------------------------------------------------------------
@@ -262,7 +262,7 @@ class TestGlobBoundaryJail:
         inside = base / "ok.txt"
         inside.write_text("fine")
 
-        from argos_agent.conductor.triggers import FileTriggerWatcher
+        from argos.conductor.triggers import FileTriggerWatcher
         w = FileTriggerWatcher("../*.txt", base_dir=base, clock=lambda: 100.0)
         paths = w._match_glob()
         assert str(secret.resolve()) not in paths, f"越界泄漏: {paths}"
@@ -277,7 +277,7 @@ class TestGlobBoundaryJail:
         outside.write_text("leak")
         (base / "link.txt").symlink_to(outside)
 
-        from argos_agent.conductor.triggers import FileTriggerWatcher
+        from argos.conductor.triggers import FileTriggerWatcher
         w = FileTriggerWatcher("*.txt", base_dir=base, clock=lambda: 100.0)
         paths = w._match_glob()
         assert str(outside.resolve()) not in paths, f"symlink 越界泄漏: {paths}"

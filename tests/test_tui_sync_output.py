@@ -20,8 +20,8 @@ import io
 
 import pytest
 
-from argos_agent.tui import sync_output
-from argos_agent.tui.sync_output import (
+from argos.tui import sync_output
+from argos.tui.sync_output import (
     CSI_BSU,
     CSI_ESU,
     clear_probe_cache,

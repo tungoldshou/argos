@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.tui.commands import SlashCommand, parse_slash, COMMAND_NAMES
+from argos.tui.commands import SlashCommand, parse_slash, COMMAND_NAMES
 
 
 def test_known_commands_listed():

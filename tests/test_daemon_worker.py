@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.daemon.events import RunMeta
-from argos_agent.daemon.manager import RunManager
-from argos_agent.daemon.worker import FakeLoop, RunWorker
+from argos.daemon.events import RunMeta
+from argos.daemon.manager import RunManager
+from argos.daemon.worker import FakeLoop, RunWorker
 
 
 def _meta(run_id: str = "abc123def456") -> RunMeta:

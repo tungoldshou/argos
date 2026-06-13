@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.tools import shell
+from argos.tools import shell
 
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="Seatbelt 仅 macOS")
 

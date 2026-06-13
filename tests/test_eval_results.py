@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.eval.results import append, list_runs, load_run, summary
-from argos_agent.eval.runner import EvalResult, PASS_PASSED, PASS_FAILED
+from argos.eval.results import append, list_runs, load_run, summary
+from argos.eval.runner import EvalResult, PASS_PASSED, PASS_FAILED
 
 
 def _make_result(*, run_id: str = "abc123def456", task_id: str = "bug_fix_001_off_by_one",

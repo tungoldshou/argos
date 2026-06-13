@@ -13,18 +13,18 @@ fn dirs_home() -> PathBuf {
 ///
 /// Priority:
 ///   1. `ARGOS_DAEMON_SOCKET` environment variable — canonical Python-side name
-///      (used by argos_agent/tui/app.py and the pytest smoke-test suite for
+///      (used by argos/tui/app.py and the pytest smoke-test suite for
 ///      per-test daemon isolation).  This is the **preferred** override for
 ///      integration tests and multi-daemon setups.
 ///   2. `ARGOS_DAEMON_SOCK` environment variable — legacy short alias kept for
 ///      backwards compatibility (older scripts / custom installs may still set it).
-///   3. `~/.argos/daemon.sock` (convention from argos_agent/daemon/__main__.py)
+///   3. `~/.argos/daemon.sock` (convention from argos/daemon/__main__.py)
 ///
 /// Having the Python side and the Rust side share the same env-var name means
 /// a single `ARGOS_DAEMON_SOCKET=/tmp/test.sock cargo test` is enough to
 /// redirect both halves of the channel — no per-side configuration needed.
 pub fn resolve_socket_path() -> PathBuf {
-    // Canonical name (matches argos_agent/tui/app.py)
+    // Canonical name (matches argos/tui/app.py)
     if let Ok(v) = std::env::var("ARGOS_DAEMON_SOCKET") {
         if !v.is_empty() {
             return PathBuf::from(v);
@@ -43,8 +43,8 @@ pub fn resolve_socket_path() -> PathBuf {
 ///
 /// Priority:
 ///   1. `ARGOS_DAEMON_CMD` environment variable — space-split into argv.
-///      Example: `ARGOS_DAEMON_CMD="uv run python -m argos_agent.daemon"`
-///   2. Hardcoded dev default: `["uv", "run", "python", "-m", "argos_agent.daemon"]`
+///      Example: `ARGOS_DAEMON_CMD="uv run python -m argos.daemon"`
+///   2. Hardcoded dev default: `["uv", "run", "python", "-m", "argos.daemon"]`
 ///      Working directory for spawn: the repo root (one level above `desktop/`).
 ///
 /// NOTE: packaged / PyInstaller sidecar mode is NOT handled here — the binary
@@ -63,7 +63,7 @@ pub fn resolve_daemon_cmd() -> Vec<String> {
         "run".to_string(),
         "python".to_string(),
         "-m".to_string(),
-        "argos_agent.daemon".to_string(),
+        "argos.daemon".to_string(),
     ]
 }
 

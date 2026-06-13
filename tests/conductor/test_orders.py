@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.conductor.orders import StandingOrder, OrderStore
+from argos.conductor.orders import StandingOrder, OrderStore
 
 
 # ---------------------------------------------------------------------------

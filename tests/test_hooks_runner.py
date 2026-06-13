@@ -7,17 +7,17 @@ import time
 
 import pytest
 
-from argos_agent.hooks.config import HookHandler, HookMatcherEntry, HooksConfig
-from argos_agent.hooks.matcher import match
-from argos_agent.hooks.payload import build_pre_payload
-from argos_agent.hooks import runner as _runner
-from argos_agent.hooks.runner import fire, HookFireResult
+from argos.hooks.config import HookHandler, HookMatcherEntry, HooksConfig
+from argos.hooks.matcher import match
+from argos.hooks.payload import build_pre_payload
+from argos.hooks import runner as _runner
+from argos.hooks.runner import fire, HookFireResult
 
 
 @pytest.fixture(autouse=True)
 def _isolated_singleton(monkeypatch):
     """每个测试重置模块级 _config,避免互相污染。"""
-    from argos_agent.hooks import _reset_config
+    from argos.hooks import _reset_config
     _reset_config()
     yield
     _reset_config()
@@ -26,8 +26,8 @@ def _isolated_singleton(monkeypatch):
 def _set_config(*entries_for_pre):
     """helpers:构造 1 事件的 HooksConfig(PreToolUse)。"""
     cfg = HooksConfig(entries={"PreToolUse": list(entries_for_pre)})
-    from argos_agent.hooks import _config
-    import argos_agent.hooks as h
+    from argos.hooks import _config
+    import argos.hooks as h
     h._config = cfg
     return cfg
 

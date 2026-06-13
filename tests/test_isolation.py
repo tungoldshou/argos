@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent import isolation
+from argos import isolation
 
 
 @pytest.fixture

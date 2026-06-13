@@ -1,7 +1,7 @@
 import pytest
 
-from argos_agent.workflow.spec import AgentTask
-from argos_agent.workflow.subagent import SubAgentFactory
+from argos.workflow.spec import AgentTask
+from argos.workflow.subagent import SubAgentFactory
 
 
 @pytest.mark.asyncio

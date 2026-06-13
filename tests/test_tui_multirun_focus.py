@@ -10,9 +10,9 @@ from unittest.mock import patch
 import pytest
 import pytest_asyncio
 
-from argos_agent.daemon.manager import RunManager
-from argos_agent.daemon.registry import RunRegistry
-from argos_agent.daemon.worktree import WorktreeManager
+from argos.daemon.manager import RunManager
+from argos.daemon.registry import RunRegistry
+from argos.daemon.worktree import WorktreeManager
 
 
 class _ScriptLoop:
@@ -32,7 +32,7 @@ async def mr_daemon(tmp_path: Path):
     manager = RunManager(runs_dir=runs_dir, index_path=index_path)
     registry = RunRegistry(max_concurrent=5, max_history=100)
     worktree = WorktreeManager(base_dir=tmp_path / "wt")
-    from argos_agent.daemon.server import DaemonHTTPServer
+    from argos.daemon.server import DaemonHTTPServer
     srv = DaemonHTTPServer(
         manager=manager, socket_path=socket_path,
         registry=registry, worktree=worktree,
@@ -51,8 +51,8 @@ async def mr_daemon(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_app_compose_mounts_tab_strip():
     """ArgosApp compose 包含 TabStrip widget。"""
-    from argos_agent.tui.app import ArgosApp
-    from argos_agent.tui.widgets.tab_strip import TabStrip
+    from argos.tui.app import ArgosApp
+    from argos.tui.widgets.tab_strip import TabStrip
 
     app = ArgosApp(demo=True)
     async with app.run_test() as pilot:
@@ -64,9 +64,9 @@ async def test_app_compose_mounts_tab_strip():
 async def test_app_calls_focus_on_tab_change(mr_daemon, tmp_path: Path):
     """tab 切换 → POST /runs/{id}/focus 调到 daemon。"""
     srv, _, reg = mr_daemon
-    from argos_agent.daemon.client import DaemonClient
-    from argos_agent.tui.app import ArgosApp
-    from argos_agent.tui.widgets.tab_strip import TabStrip
+    from argos.daemon.client import DaemonClient
+    from argos.tui.app import ArgosApp
+    from argos.tui.widgets.tab_strip import TabStrip
 
     app = ArgosApp(demo=True)
     app._daemon_client = DaemonClient(srv.socket_path)
@@ -110,8 +110,8 @@ async def test_app_calls_focus_on_tab_change(mr_daemon, tmp_path: Path):
 @pytest.mark.asyncio
 async def test_app_handles_tab_activated_message(mr_daemon, tmp_path: Path):
     """post_message(TabActivated) → app 处理。"""
-    from argos_agent.daemon.client import DaemonClient
-    from argos_agent.tui.app import ArgosApp
+    from argos.daemon.client import DaemonClient
+    from argos.tui.app import ArgosApp
 
     app = ArgosApp(demo=True)
     async with app.run_test() as pilot:
@@ -141,8 +141,8 @@ async def test_app_handles_tab_activated_message(mr_daemon, tmp_path: Path):
 @pytest.mark.asyncio
 async def test_runs_command_shows_all_runs_with_cost(mr_daemon, tmp_path: Path):
     """/runs 命令显示 cost + state + worktree。"""
-    from argos_agent.daemon.client import DaemonClient
-    from argos_agent.tui.app import ArgosApp
+    from argos.daemon.client import DaemonClient
+    from argos.tui.app import ArgosApp
 
     srv, _, reg = mr_daemon
     app = ArgosApp(demo=True)
@@ -163,7 +163,7 @@ async def test_runs_command_shows_all_runs_with_cost(mr_daemon, tmp_path: Path):
     reg.mark(run_id=rid1, state="running")
     reg.mark(run_id=rid2, state="completed")
     # 调 /runs 命令
-    from argos_agent.tui.widgets.transcript import Transcript
+    from argos.tui.widgets.transcript import Transcript
     async with app.run_test() as pilot:
         log_widget = app.query_one(Transcript)
         await app._runs_cmd(log_widget, "")
@@ -181,8 +181,8 @@ async def test_runs_command_shows_all_runs_with_cost(mr_daemon, tmp_path: Path):
 @pytest.mark.asyncio
 async def test_runs_command_observer_shows_readonly_banner(mr_daemon, tmp_path: Path):
     """observer 调 /runs → transcript 含 READ-ONLY 字样。"""
-    from argos_agent.daemon.client import DaemonClient
-    from argos_agent.tui.app import ArgosApp
+    from argos.daemon.client import DaemonClient
+    from argos.tui.app import ArgosApp
 
     srv, _, _ = mr_daemon
     app = ArgosApp(demo=True)
@@ -192,7 +192,7 @@ async def test_runs_command_observer_shows_readonly_banner(mr_daemon, tmp_path: 
     app._daemon_session_id = sid2
     app._with_daemon = True
     async with app.run_test() as pilot:
-        from argos_agent.tui.widgets.transcript import Transcript
+        from argos.tui.widgets.transcript import Transcript
         log_widget = app.query_one(Transcript)
         await app._runs_cmd(log_widget, "")
         await pilot.pause()
@@ -204,13 +204,13 @@ async def test_runs_command_observer_shows_readonly_banner(mr_daemon, tmp_path: 
 @pytest.mark.asyncio
 async def test_app_handles_observer_readonly_focus():
     """observer 调 focus 端点 → 403,app 应有兜底(不崩)。"""
-    from argos_agent.tui.app import ArgosApp
+    from argos.tui.app import ArgosApp
 
     app = ArgosApp(demo=True)
     class FakeClient:
         async def _request(self, method, path, *, session_id=None, body=None):
             if "/focus" in path:
-                from argos_agent.daemon.client import DaemonError
+                from argos.daemon.client import DaemonError
                 raise DaemonError("HTTP 403 (code=session_readonly): ...")
             return 200, {}, b"{}"
     app._daemon_client = FakeClient()

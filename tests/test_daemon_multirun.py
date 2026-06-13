@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from argos_agent.daemon.manager import RunManager
-from argos_agent.daemon.registry import RunRegistry
-from argos_agent.daemon.server import DaemonHTTPServer
-from argos_agent.daemon.worktree import WorktreeManager
+from argos.daemon.manager import RunManager
+from argos.daemon.registry import RunRegistry
+from argos.daemon.server import DaemonHTTPServer
+from argos.daemon.worktree import WorktreeManager
 
 
 # ── fixtures ────────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ async def mr_server(tmp_path: Path):
 async def _req(socket_path: Path, method: str, path: str, *,
                session_id: str | None = None, body: dict | None = None,
                timeout: float = 5.0):
-    from argos_agent.daemon.client import DaemonClient
+    from argos.daemon.client import DaemonClient
     cli = DaemonClient(socket_path, timeout=timeout)
     return await cli._request(method, path, session_id=session_id, body=body)
 

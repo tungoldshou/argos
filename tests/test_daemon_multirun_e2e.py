@@ -15,10 +15,10 @@ from typing import AsyncIterator
 import pytest
 import pytest_asyncio
 
-from argos_agent.daemon.manager import RunManager
-from argos_agent.daemon.registry import RunRegistry
-from argos_agent.daemon.server import DaemonHTTPServer
-from argos_agent.daemon.worktree import WorktreeManager
+from argos.daemon.manager import RunManager
+from argos.daemon.registry import RunRegistry
+from argos.daemon.server import DaemonHTTPServer
+from argos.daemon.worktree import WorktreeManager
 
 
 class _ScriptLoop:
@@ -34,7 +34,7 @@ class _ScriptLoop:
 
 
 async def _req(socket_path, method, path, *, session_id=None, body=None):
-    from argos_agent.daemon.client import DaemonClient
+    from argos.daemon.client import DaemonClient
     cli = DaemonClient(socket_path, timeout=3.0)
     return await cli._request(method, path, session_id=session_id, body=body)
 
@@ -81,7 +81,7 @@ async def test_e2e_5_concurrent_runs_with_cost_worktree_observer(e2e_daemon, tmp
     assert reg.size == 5
 
     # 2. 起 worker 并发(每 run 不同 cost)
-    from argos_agent.daemon.worker import RunWorker
+    from argos.daemon.worker import RunWorker
     workers = []
     for i, rid in enumerate(rids):
         events = [

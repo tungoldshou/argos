@@ -23,11 +23,11 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.learning import candidates as cand_mod
-from argos_agent.learning import dream
-from argos_agent.learning.candidates import save_candidate
-from argos_agent.learning.distiller import SkillCandidate
-from argos_agent.memory import consolidate as consol_mod
+from argos.learning import candidates as cand_mod
+from argos.learning import dream
+from argos.learning.candidates import save_candidate
+from argos.learning.distiller import SkillCandidate
+from argos.memory import consolidate as consol_mod
 
 # fcntl 仅 unix;本项目主线 macOS/linux。非 unix 平台直接跳过跨进程锁断言。
 fcntl = pytest.importorskip("fcntl")
@@ -134,7 +134,7 @@ def test_run_skips_when_external_holder_owns_lock(tmp_path: Path):
         report = asyncio.run(pipe.run())
         assert report is None, "外部持锁期间 run() 必须返 None(跨进程单飞)"
         # 外部持锁期间候选区不应被消费(没真跑)
-        from argos_agent.learning.candidates import list_unconsumed
+        from argos.learning.candidates import list_unconsumed
         assert len(list_unconsumed(cand_root)) == 1, "未跑就不该消费候选"
     finally:
         dream._release_cross_process_lock(external_fd)

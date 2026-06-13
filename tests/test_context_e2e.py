@@ -9,9 +9,9 @@ from typing import Any
 
 import pytest
 
-from argos_agent.context.threshold import LastCompactedAt
-from argos_agent.core.loop import AgentLoop, LoopConfig
-from argos_agent.tui.events import CompactedEvent
+from argos.context.threshold import LastCompactedAt
+from argos.core.loop import AgentLoop, LoopConfig
+from argos.tui.events import CompactedEvent
 
 
 @dataclass

@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from argos_agent.daemon.manager import RunManager
-from argos_agent.daemon.registry import RunRegistry
-from argos_agent.daemon.server import DaemonHTTPServer
-from argos_agent.daemon.worktree import WorktreeManager
+from argos.daemon.manager import RunManager
+from argos.daemon.registry import RunRegistry
+from argos.daemon.server import DaemonHTTPServer
+from argos.daemon.worktree import WorktreeManager
 
 
 @pytest_asyncio.fixture
@@ -34,7 +34,7 @@ async def focus_server(tmp_path: Path):
 
 
 async def _req(socket_path, method, path, *, session_id=None, body=None):
-    from argos_agent.daemon.client import DaemonClient
+    from argos.daemon.client import DaemonClient
     cli = DaemonClient(socket_path, timeout=3.0)
     return await cli._request(method, path, session_id=session_id, body=body)
 

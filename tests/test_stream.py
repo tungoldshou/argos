@@ -3,7 +3,7 @@
 用假 chunk 模拟 LangGraph astream(messages 模式)的 message_chunk 结构,
 不连真模型。纯逻辑、快。
 """
-from argos_agent.core import text_delta
+from argos.core import text_delta
 
 
 class _Chunk:

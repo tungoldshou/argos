@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import json
 
-from argos_agent.context.analyzer import ContextBreakdown, ContextBucket
-from argos_agent.context.render import format_json, format_table
+from argos.context.analyzer import ContextBreakdown, ContextBucket
+from argos.context.render import format_json, format_table
 
 
 def _b(system=100, memory=50, tools=80, messages=200, total=430, window=1000):

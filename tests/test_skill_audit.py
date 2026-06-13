@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from argos_agent.skills_runtime.builtin.security_review.audit import (
+from argos.skills_runtime.builtin.security_review.audit import (
     detect_lockfiles,
     audit_lockfile,
     audit_dependencies,
@@ -64,7 +64,7 @@ def test_audit_deps_npm_missing_tool_returns_error_severity(tmp_path):
     def _raise(*args, **kwargs):
         raise FileNotFoundError("npm not found")
 
-    with patch("argos_agent.skills_runtime.builtin.security_review.audit.subprocess.run", side_effect=_raise):
+    with patch("argos.skills_runtime.builtin.security_review.audit.subprocess.run", side_effect=_raise):
         findings = audit_dependencies(tmp_path, rel_workspace=tmp_path)
 
     err_findings = [f for f in findings if f.severity == "error" and f.category == "dep_audit"]
@@ -80,7 +80,7 @@ def test_audit_deps_pip_missing_tool_returns_error_severity(tmp_path):
     def _raise(*args, **kwargs):
         raise FileNotFoundError("pip-audit not found")
 
-    with patch("argos_agent.skills_runtime.builtin.security_review.audit.subprocess.run", side_effect=_raise):
+    with patch("argos.skills_runtime.builtin.security_review.audit.subprocess.run", side_effect=_raise):
         findings = audit_dependencies(tmp_path, rel_workspace=tmp_path)
 
     err_findings = [f for f in findings if f.severity == "error" and f.category == "dep_audit"]
@@ -95,7 +95,7 @@ def test_audit_deps_cargo_missing_tool_returns_error_severity(tmp_path):
     def _raise(*args, **kwargs):
         raise FileNotFoundError("cargo-audit not found")
 
-    with patch("argos_agent.skills_runtime.builtin.security_review.audit.subprocess.run", side_effect=_raise):
+    with patch("argos.skills_runtime.builtin.security_review.audit.subprocess.run", side_effect=_raise):
         findings = audit_dependencies(tmp_path, rel_workspace=tmp_path)
 
     err_findings = [f for f in findings if f.severity == "error" and f.category == "dep_audit"]
@@ -112,7 +112,7 @@ def test_audit_lockfile_returns_empty_on_healthy_output(tmp_path):
     mock_result.stdout = json.dumps({"vulnerabilities": {}})
     mock_result.stderr = ""
 
-    with patch("argos_agent.skills_runtime.builtin.security_review.audit.subprocess.run", return_value=mock_result):
+    with patch("argos.skills_runtime.builtin.security_review.audit.subprocess.run", return_value=mock_result):
         findings = audit_lockfile(tmp_path, "npm")
     assert findings == ()
 
@@ -124,7 +124,7 @@ def test_audit_lockfile_nonzero_returncode_yields_error_finding(tmp_path):
     mock_result.stdout = ""
     mock_result.stderr = "audit tool internal error"
 
-    with patch("argos_agent.skills_runtime.builtin.security_review.audit.subprocess.run", return_value=mock_result):
+    with patch("argos.skills_runtime.builtin.security_review.audit.subprocess.run", return_value=mock_result):
         findings = audit_lockfile(tmp_path, "npm")
     err_findings = [f for f in findings if f.severity == "error"]
     assert len(err_findings) >= 1
@@ -163,7 +163,7 @@ def test_audit_deps_npm_vuln_parsed(tmp_path):
     mock_result.stdout = mock_output
     mock_result.stderr = ""
 
-    with patch("argos_agent.skills_runtime.builtin.security_review.audit.subprocess.run", return_value=mock_result):
+    with patch("argos.skills_runtime.builtin.security_review.audit.subprocess.run", return_value=mock_result):
         findings = audit_dependencies(tmp_path, rel_workspace=tmp_path)
 
     dep_vuln = [f for f in findings if f.category == "dep_vuln"]

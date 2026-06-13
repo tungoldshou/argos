@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.learning import hook
+from argos.learning import hook
 
 
 def _write_run_store(tmp_path: Path, run_id: str, events: list[dict]) -> None:
@@ -50,18 +50,18 @@ async def test_passed_run_triggers_distill_and_promote(tmp_path, monkeypatch):
     distill_calls: list[dict] = []
     promote_calls: list[dict] = []
 
-    from argos_agent.learning import distiller, promotion_gate
+    from argos.learning import distiller, promotion_gate
 
     def _distill_stub(**kw):
         distill_calls.append(kw)
-        from argos_agent.learning.distiller import SkillCandidate
+        from argos.learning.distiller import SkillCandidate
         return SkillCandidate(
             name="stub-skill", body_markdown="# body\n", verify_cmd="pytest",
             skill_md_path=tmp_path / "skills" / "stub-skill" / "SKILL.md",
         )
     def _promote_stub(candidate, **kw):
         promote_calls.append({"name": candidate.name, **kw})
-        from argos_agent.learning.promotion_gate import PromotionResult
+        from argos.learning.promotion_gate import PromotionResult
         return PromotionResult(promoted=False, reason="stubbed")
 
     monkeypatch.setattr(distiller, "distill_run_to_skill", _distill_stub)
@@ -93,7 +93,7 @@ async def test_failed_run_triggers_reflection_only(tmp_path, monkeypatch):
     distill_calls: list[dict] = []
     promote_calls: list[dict] = []
 
-    from argos_agent.learning import distiller, promotion_gate, reflection
+    from argos.learning import distiller, promotion_gate, reflection
 
     monkeypatch.setattr(
         reflection, "reflect_failure",
@@ -126,7 +126,7 @@ async def test_failed_run_triggers_reflection_only(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_hook_swallows_distill_exceptions(tmp_path, monkeypatch):
     """distill 抛异常 → on_run_completed 不抛(caller 放心 await)。"""
-    from argos_agent.learning import distiller, promotion_gate
+    from argos.learning import distiller, promotion_gate
 
     def _boom(**kw):
         raise RuntimeError("distill failed")
@@ -198,8 +198,8 @@ def test_passed_without_runner_persists_candidate(tmp_path, monkeypatch):
     (store_dir / f"{run_id}.jsonl").write_text(
         json.dumps({"kind": "run_meta", "run_id": run_id}), encoding="utf-8")
 
-    from argos_agent.learning import distiller
-    from argos_agent.learning.distiller import SkillCandidate
+    from argos.learning import distiller
+    from argos.learning.distiller import SkillCandidate
 
     monkeypatch.setattr(
         distiller, "distill_run_to_skill",
@@ -209,7 +209,7 @@ def test_passed_without_runner_persists_candidate(tmp_path, monkeypatch):
         ),
     )
 
-    from argos_agent.learning.hook import on_run_completed
+    from argos.learning.hook import on_run_completed
     asyncio.run(on_run_completed(
         run_id=run_id, store_dir=store_dir, goal="say hello",
         verify_cmd="pytest -q", verdict_status="passed",
@@ -218,7 +218,7 @@ def test_passed_without_runner_persists_candidate(tmp_path, monkeypatch):
         workspace="/tmp/proj",
         runner_factory=None, tasks=[],
     ))
-    from argos_agent.learning.candidates import list_unconsumed
+    from argos.learning.candidates import list_unconsumed
     got = list_unconsumed(tmp_path / "candidates")
     assert len(got) == 1
     assert got[0].workspace == "/tmp/proj"
@@ -236,12 +236,12 @@ def test_self_verified_passed_never_calls_save_candidate(tmp_path, monkeypatch):
         json.dumps({"kind": "code_action", "code": "x=1"}), encoding="utf-8")
 
     calls: list = []
-    from argos_agent.learning import candidates as cands_mod
+    from argos.learning import candidates as cands_mod
     real_save = cands_mod.save_candidate
     monkeypatch.setattr(cands_mod, "save_candidate",
                         lambda *a, **kw: calls.append(kw) or real_save(*a, **kw))
 
-    from argos_agent.learning.hook import on_run_completed
+    from argos.learning.hook import on_run_completed
     asyncio.run(on_run_completed(
         run_id=run_id, store_dir=store_dir, goal="g",
         verify_cmd="pytest -q", verdict_status="passed", self_verified=True,
@@ -250,5 +250,5 @@ def test_self_verified_passed_never_calls_save_candidate(tmp_path, monkeypatch):
         runner_factory=None, tasks=[],
     ))
     assert calls == []                                     # 调用层防线
-    from argos_agent.learning.candidates import list_unconsumed
+    from argos.learning.candidates import list_unconsumed
     assert list_unconsumed(tmp_path / "candidates") == []  # 产物层防线

@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.eval.compare import (
+from argos.eval.compare import (
     generate_report, run_pair, write_report, write_report_json,
     _winner_pass, _winner_cost,
 )
-from argos_agent.eval.results import list_runs, load_run
-from argos_agent.eval.runner import (
+from argos.eval.results import list_runs, load_run
+from argos.eval.runner import (
     EvalResult, EvalRunner, PASS_PASSED, PASS_FAILED,
 )
-from argos_agent.eval.corpus import EvalTask
+from argos.eval.corpus import EvalTask
 
 from tests.eval._fakes import FakeWorktree, make_fake_loop, make_fake_loop_factory
 

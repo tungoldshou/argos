@@ -4,8 +4,8 @@ from __future__ import annotations
 import pytest
 from textual.app import App, ComposeResult
 
-from argos_agent.tui.theme import ARGOS_NIGHT
-from argos_agent.tui.widgets.tab_strip import (
+from argos.tui.theme import ARGOS_NIGHT
+from argos.tui.widgets.tab_strip import (
     TabActivated,
     TabStrip,
     _format_cost,

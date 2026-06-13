@@ -1,7 +1,7 @@
 """memory.recall + record_task 异步 emb 缓存测试。"""
 import pytest
 
-from argos_agent import memory
+from argos import memory
 
 
 def test_recall_returns_top_k_by_cosine(monkeypatch, tmp_path):

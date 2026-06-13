@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from argos_agent.memory.store import ArgosStore, SCHEMA_VERSION
+from argos.memory.store import ArgosStore, SCHEMA_VERSION
 
 
 EXPECTED_TABLES = {

@@ -20,23 +20,23 @@ from typing import Any
 
 import pytest
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel
-from argos_agent.core.loop import AgentLoop, LoopConfig
-from argos_agent.core.plan_mode import (
+from argos.approval import ApprovalGate, ApprovalLevel
+from argos.core.loop import AgentLoop, LoopConfig
+from argos.core.plan_mode import (
     EnterPlanMode, ExitPlanMode, PlanExitDecision, PlanRenderer,
 )
-from argos_agent.core.verify_gate import Verdict
-from argos_agent.sandbox.broker import CapabilityBroker
-from argos_agent.sandbox.egress import EgressPolicy
-from argos_agent.sandbox.executor import SeatbeltExecutor
-from argos_agent.tools.receipts import ReceiptSigner
-from argos_agent.tui.app import ArgosApp
-from argos_agent.tui.events import (
+from argos.core.verify_gate import Verdict
+from argos.sandbox.broker import CapabilityBroker
+from argos.sandbox.egress import EgressPolicy
+from argos.sandbox.executor import SeatbeltExecutor
+from argos.tools.receipts import ReceiptSigner
+from argos.tui.app import ArgosApp
+from argos.tui.events import (
     CodeAction, CodeResult, CostUpdate, Event, EventBus, PhaseChange,
     PlanRendered, PlanUpdate, TokenDelta, VerifyVerdict,
 )
-from argos_agent.tui.fakeloop import FakeLoop
-from argos_agent.tui.widgets.inline_choice import InlineChoice
+from argos.tui.fakeloop import FakeLoop
+from argos.tui.widgets.inline_choice import InlineChoice
 
 
 # ── 替身:脚本化模型 + 沙箱 + 验证器(不连真 LLM / 真沙箱执行) ──
@@ -60,7 +60,7 @@ class _NoopSandbox:
     def spawn(self, *, workspace, namespace, allow_workflow=True, read_only=False):
         pass
     def exec_code(self, code):
-        from argos_agent.sandbox.backend import ExecResult
+        from argos.sandbox.backend import ExecResult
         self.codes.append(code)
         return ExecResult(stdout="ok", value_repr="", exc="")
     def close(self): pass

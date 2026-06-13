@@ -7,10 +7,10 @@ import asyncio
 import pytest
 from textual.app import App, ComposeResult
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel, Decision
-from argos_agent.tui.events import ApprovalRequest
-from argos_agent.tui.theme import ARGOS_NIGHT
-from argos_agent.tui.widgets.inline_choice import InlineChoice
+from argos.approval import ApprovalGate, ApprovalLevel, Decision
+from argos.tui.events import ApprovalRequest
+from argos.tui.theme import ARGOS_NIGHT
+from argos.tui.widgets.inline_choice import InlineChoice
 
 
 def test_gate_level_default_and_set():

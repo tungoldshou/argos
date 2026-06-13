@@ -29,11 +29,11 @@ import json
 import sys
 from pathlib import Path
 
-# Ensure argos_agent is importable when running from repo root.
+# Ensure argos is importable when running from repo root.
 repo_root = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(repo_root))
 
-import argos_agent.protocol.events as PE  # noqa: E402
+import argos.protocol.events as PE  # noqa: E402
 
 
 def _build_vectors() -> list[dict]:
@@ -181,7 +181,7 @@ def _build_vectors() -> list[dict]:
     )
 
     # ── HookFired ──────────────────────────────────────────────────────────
-    from argos_agent.hooks.events import HookFired
+    from argos.hooks.events import HookFired
     _v(
         HookFired(
             event_name="PreToolUse", command="echo ok",
@@ -192,7 +192,7 @@ def _build_vectors() -> list[dict]:
     )
 
     # ── LspServerEvent ─────────────────────────────────────────────────────
-    from argos_agent.lsp.events import LspServerEvent
+    from argos.lsp.events import LspServerEvent
     _v(
         LspServerEvent(
             server_name="python", status="ready",
@@ -203,7 +203,7 @@ def _build_vectors() -> list[dict]:
     )
 
     # ── LspDiagnosticEvent ─────────────────────────────────────────────────
-    from argos_agent.lsp.events import LspDiagnosticEvent
+    from argos.lsp.events import LspDiagnosticEvent
     _v(
         LspDiagnosticEvent(
             server_name="python", uri="file:///a.py", count=2,
@@ -213,14 +213,14 @@ def _build_vectors() -> list[dict]:
     )
 
     # ── SkillRunStart ──────────────────────────────────────────────────────
-    from argos_agent.skills_runtime.events import SkillRunStart
+    from argos.skills_runtime.events import SkillRunStart
     _v(
         SkillRunStart(skill_name="security-review", args={"path": "."}, cwd="/ws"),
         {"skill_name": "security-review", "cwd": "/ws"},
     )
 
     # ── SkillRunEnd ────────────────────────────────────────────────────────
-    from argos_agent.skills_runtime.events import SkillRunEnd
+    from argos.skills_runtime.events import SkillRunEnd
     _v(
         SkillRunEnd(
             skill_name="security-review", verdict="passed",
@@ -246,7 +246,7 @@ def _build_vectors() -> list[dict]:
 
     # ── ToolReceipt ────────────────────────────────────────────────────────
     # Pins the nested Receipt dataclass wire shape (§6.2 HMAC receipt).
-    from argos_agent.tools.receipts import Receipt as _Receipt
+    from argos.tools.receipts import Receipt as _Receipt
     _receipt = _Receipt(
         action="write_file",
         args_hash="a" * 64,
@@ -274,7 +274,7 @@ def _build_vectors() -> list[dict]:
     # ── VerifyVerdict (all three states) ───────────────────────────────────
     # Pins the nested Verdict dataclass wire shape and the three-state ABI.
     # "unverifiable" must round-trip as "unverifiable" — never "passed"/"failed".
-    from argos_agent.core.types import Verdict as _Verdict
+    from argos.core.types import Verdict as _Verdict
     _v(
         PE.VerifyVerdict(verdict=_Verdict.passed(
             detail="exit 0", verify_cmd="pytest -x tests/", attempts=1,

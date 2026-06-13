@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.learning import reflection
+from argos.learning import reflection
 
 
 def _write_run_store(tmp_path: Path, run_id: str, events: list[dict]) -> None:
@@ -44,13 +44,13 @@ def test_failed_run_writes_reflection_only(tmp_path, monkeypatch):
     """failed verdict → 调 memory capture_event,**不**写任何 skill 文件。"""
     captured: list[dict] = []
     # monkeypatch memory.auto.capture_event 拦截
-    from argos_agent.memory import auto as _mem_auto
+    from argos.memory import auto as _mem_auto
     monkeypatch.setattr(
         _mem_auto, "capture_event",
         lambda kind, **kw: captured.append({"kind": kind, **kw}),
     )
 
-    from argos_agent.learning.reflection import reflect_failure
+    from argos.learning.reflection import reflect_failure
 
     run_id = "r#failed"
     events = _make_failed_events()
@@ -74,13 +74,13 @@ def test_failed_run_writes_reflection_only(tmp_path, monkeypatch):
 def test_unverifiable_run_writes_reflection_only(tmp_path, monkeypatch):
     """unverifiable verdict → 同样只产 reflection。"""
     captured: list[dict] = []
-    from argos_agent.memory import auto as _mem_auto
+    from argos.memory import auto as _mem_auto
     monkeypatch.setattr(
         _mem_auto, "capture_event",
         lambda kind, **kw: captured.append({"kind": kind, **kw}),
     )
 
-    from argos_agent.learning.reflection import reflect_failure
+    from argos.learning.reflection import reflect_failure
 
     run_id = "r#unv"
     events = _make_unverifiable_events()
@@ -101,12 +101,12 @@ def test_unverifiable_run_writes_reflection_only(tmp_path, monkeypatch):
 
 def test_reflection_swallows_memory_exceptions(tmp_path, monkeypatch):
     """memory 写失败 → reflect_failure 不抛(caller 可以放心 await)。"""
-    from argos_agent.memory import auto as _mem_auto
+    from argos.memory import auto as _mem_auto
     def _boom(*a, **kw):
         raise RuntimeError("memory write failed")
     monkeypatch.setattr(_mem_auto, "capture_event", _boom)
 
-    from argos_agent.learning.reflection import reflect_failure
+    from argos.learning.reflection import reflect_failure
     # 不该抛
     reflect_failure(
         run_id="r#nope", store_dir=tmp_path / "runs",

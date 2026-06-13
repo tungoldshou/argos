@@ -1,7 +1,7 @@
 """可观测(契约 §1 CostUpdate;spec §3.3 L5):stream_diag TTFB/chunks/异常链 + per-step cost。"""
 import pytest
 
-from argos_agent.core.observability import (
+from argos.core.observability import (
     StreamDiag,
     stream_diag,
     PRICING,

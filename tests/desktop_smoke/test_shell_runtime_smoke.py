@@ -126,8 +126,8 @@ class _InProcessDaemon:
         self._loop.run_forever()
 
     async def _start(self, ready) -> None:
-        from argos_agent.daemon.manager import RunManager
-        from argos_agent.daemon.server import DaemonHTTPServer
+        from argos.daemon.manager import RunManager
+        from argos.daemon.server import DaemonHTTPServer
 
         runs_dir = self._socket_path.parent / "runs"
         runs_dir.mkdir(parents=True, exist_ok=True)

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from argos_agent.core.models import ModelTier
+from argos.core.models import ModelTier
 
 
 class ScriptedModelClient:

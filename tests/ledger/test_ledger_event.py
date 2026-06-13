@@ -7,8 +7,8 @@ from __future__ import annotations
 import json
 import pytest
 
-from argos_agent.tui import events as E
-from argos_agent.protocol.events import LedgerEntryEvent
+from argos.tui import events as E
+from argos.protocol.events import LedgerEntryEvent
 
 
 class TestLedgerEntryEventContract:

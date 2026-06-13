@@ -20,18 +20,18 @@ from typing import Any, AsyncIterator
 
 import pytest
 
-from argos_agent.conductor.orders import OrderStore, StandingOrder
-from argos_agent.conductor.proposals import ProactiveSuggestion
-from argos_agent.daemon.conductor_supervisor import (
+from argos.conductor.orders import OrderStore, StandingOrder
+from argos.conductor.proposals import ProactiveSuggestion
+from argos.daemon.conductor_supervisor import (
     ConductorSupervisor,
     CONDUCTOR_RUN_ID,
     ensure_builtin_dream_order,
 )
-from argos_agent.daemon.manager import RunManager
-from argos_agent.daemon.registry import RunRegistry
-from argos_agent.daemon.server import DaemonHTTPServer
-from argos_agent.daemon.worktree import WorktreeManager
-from argos_agent.protocol.events import (
+from argos.daemon.manager import RunManager
+from argos.daemon.registry import RunRegistry
+from argos.daemon.server import DaemonHTTPServer
+from argos.daemon.worktree import WorktreeManager
+from argos.protocol.events import (
     ProactiveSuggestionEvent,
     serialize_event,
     deserialize_event,
@@ -72,7 +72,7 @@ async def _raw_req(socket_path: Path, method: str, path: str, *,
                    session_id: str | None = None,
                    body: dict | None = None,
                    timeout: float = 10.0):
-    from argos_agent.daemon.client import DaemonClient
+    from argos.daemon.client import DaemonClient
     cli = DaemonClient(socket_path, timeout=timeout)
     status, _headers, raw = await cli._request(
         method, path, session_id=session_id, body=body,
@@ -600,13 +600,13 @@ def test_proactive_suggestion_event_roundtrip():
 
 def test_proactive_suggestion_event_in_kind_to_class():
     """proactive_suggestion kind 必须注册在 _KIND_TO_CLASS 中。"""
-    from argos_agent.protocol.events import _KIND_TO_CLASS
+    from argos.protocol.events import _KIND_TO_CLASS
     assert "proactive_suggestion" in _KIND_TO_CLASS
 
 
 def test_proactive_suggestion_event_in_event_kind_literal():
     """EventKind Literal 必须包含 'proactive_suggestion'。"""
-    from argos_agent.protocol.events import EventKind
+    from argos.protocol.events import EventKind
     assert "proactive_suggestion" in EventKind.__args__
 
 
@@ -747,8 +747,8 @@ async def test_metadata_mode_create_run_does_not_leak_slots(tmp_path: Path):
 async def test_confirm_shared_gate_l1_actually_applied(tmp_path: Path):
     """loop_factory 共享 gate 路径:confirm 后 gate 真被拨到 L1(CONFIRM 语义),
     不只是响应体字符串(终审 minor #2 的断言缺口)。"""
-    from argos_agent.approval import ApprovalGate, ApprovalLevel
-    from argos_agent.permissions.trust_dial import TrustLevel
+    from argos.approval import ApprovalGate, ApprovalLevel
+    from argos.permissions.trust_dial import TrustLevel
 
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     server._loop_factory = _FakeLoopFactory()
@@ -831,7 +831,7 @@ def test_material_gate_silences_empty_candidates(tmp_path: Path, monkeypatch):
     用 ARGOS_DREAMS 无关;材料门读 candidates DEFAULT_ROOT。这里把 has_material
     指向临时候选区(空)验证静默,放一个候选后验证放行。
     """
-    from argos_agent.learning import candidates as cand_mod
+    from argos.learning import candidates as cand_mod
 
     cand_root = tmp_path / "candidates"
     # has_material 用局部 import,补丁 DEFAULT_ROOT(supervisor 内 import 它)
@@ -854,7 +854,7 @@ def test_material_gate_silences_empty_candidates(tmp_path: Path, monkeypatch):
     assert supervisor._should_emit_dream(s) is False, "空料应被材料门静默"
 
     # 放一个候选 → 材料门放行
-    from argos_agent.learning.distiller import SkillCandidate
+    from argos.learning.distiller import SkillCandidate
     cand = SkillCandidate(
         name="learned",
         body_markdown="# x\n\n```python\nprint('ok')\n```",
@@ -921,7 +921,7 @@ class _FakeDreamPipeline:
 
     async def run(self):
         self.run_called = True
-        from argos_agent.learning.dream import DreamReport
+        from argos.learning.dream import DreamReport
         return DreamReport(units_total=1, promoted=1)
 
 
@@ -1186,7 +1186,7 @@ async def test_start_dream_concurrent_race_at_most_one_202(tmp_path: Path):
             self._is_running = True
             await asyncio.sleep(0.02)   # 模拟实际工作，让另一个 coro 有机会跑
             self._is_running = False
-            from argos_agent.learning.dream import DreamReport
+            from argos.learning.dream import DreamReport
             return DreamReport(units_total=1, promoted=1)
 
     fake = _SlowFakePipeline()

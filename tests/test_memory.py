@@ -1,7 +1,7 @@
 """memory.py 测试:记忆持久化(append-only JSONL,诚实空态)。"""
 import os
 
-from argos_agent import memory
+from argos import memory
 
 
 def test_no_file_returns_empty(tmp_path, monkeypatch):

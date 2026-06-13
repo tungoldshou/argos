@@ -4,9 +4,9 @@
 """
 import pytest
 from pathlib import Path
-from argos_agent.tui.app import ArgosApp
-from argos_agent.core.snapshot import RunSnapshot, SNAPSHOT_ROOT
-from argos_agent.tui.widgets.transcript import Transcript as TranscriptLog
+from argos.tui.app import ArgosApp
+from argos.core.snapshot import RunSnapshot, SNAPSHOT_ROOT
+from argos.tui.widgets.transcript import Transcript as TranscriptLog
 
 
 @pytest.mark.asyncio

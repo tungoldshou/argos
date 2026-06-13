@@ -12,11 +12,11 @@
 - **v0.1.0 已发**,1409 测试绿。`#5b` 多 run tabs / `#7` agent eval / `#9` 自动记忆 /
   `verify 硬门禁` / 篡改检测 / smart approval / workflow 编排都已就位,33 个未推送 commit。
 - **当前 skill 系统**(3 层,各司其职,本 spec 只扩展,**不**改):
-  1. `argos_agent/skills.py`(旧):markdown skill 仓库,**关键字/embedding 召回**——给 LLM
+  1. `argos/skills.py`(旧):markdown skill 仓库,**关键字/embedding 召回**——给 LLM
      提示用(7 个 builtin .md + 1 个用户目录 `~/.argos/skills/`)
-  2. `argos_agent/skills_runtime/`(新):`AnalysisSkill` 抽象 + 3 个 on-demand
+  2. `argos/skills_runtime/`(新):`AnalysisSkill` 抽象 + 3 个 on-demand
      原语(`/verify` / `/security-review` / `/simplify`),slash 命令触发,事件流跑
-  3. `argos_agent/skills_builtin/`(新):3 个 skill 的 SKILL.md 描述文件
+  3. `argos/skills_builtin/`(新):3 个 skill 的 SKILL.md 描述文件
 - **当前缺口**:
   1. **没有"发现"** —— 用户怎么知道有哪些可用 skill?翻 `skills_builtin/` 目录?
   2. **没有"安装"** —— 想加一个社区 skill(比如 `python-lint-skill`),

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.memory import auto as mem_auto
+from argos.memory import auto as mem_auto
 
 
 @pytest.fixture
@@ -75,7 +75,7 @@ def test_block_uses_global_claude_md(mem_root):
 
 def test_block_integration_in_build_system(mem_root, monkeypatch):
     """集成:实际跑 _build_system 看是否含 <memory_context> 段。"""
-    from argos_agent.core.loop import AgentLoop
+    from argos.core.loop import AgentLoop
     p = mem_root / "CLAUDE.md"
     p.write_text("本项目用 tabs 缩进", encoding="utf-8")
     pid = mem_auto.project_id_for(mem_root)

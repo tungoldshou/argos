@@ -8,11 +8,11 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.core.loop import AgentLoop, LoopConfig
-from argos_agent.core.verify_gate import Verdict
-from argos_agent.sandbox.backend import ExecResult
-from argos_agent.tools.receipts import ReceiptSigner
-from argos_agent.tui.events import EventBus, ToolReceipt
+from argos.core.loop import AgentLoop, LoopConfig
+from argos.core.verify_gate import Verdict
+from argos.sandbox.backend import ExecResult
+from argos.tools.receipts import ReceiptSigner
+from argos.tui.events import EventBus, ToolReceipt
 
 
 class FakeModel:

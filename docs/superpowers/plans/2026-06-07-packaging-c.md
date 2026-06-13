@@ -4,7 +4,7 @@
 > **10 任务,1 任务 = 1 commit,合计 +~30 测试,0 新源代码逻辑**(纯 packaging + 配置 +
 > CI 工作流)。C 阶段不引入新业务能力,只把"装得到"从 1 个 OS 扩到 6 个 OS。
 >
-> **本计划不动**:`argos_agent/` 任何业务 .py(除新加 `cli/pkg.py` 一文件);`__main__.py`(`[project.scripts].argos` 已有,不动 main);`core/loop.py` / `setup_wizard.py` / `eval/` / `skills_curator/` / `context/` /
+> **本计划不动**:`argos/` 任何业务 .py(除新加 `cli/pkg.py` 一文件);`__main__.py`(`[project.scripts].argos` 已有,不动 main);`core/loop.py` / `setup_wizard.py` / `eval/` / `skills_curator/` / `context/` /
 > `routing/` / `daemon/` / `memory/` / `sandbox/` / `tools/` / `lsp/` / `skills_runtime/` /
 > `permissions/` / `hooks/` / `mcp_native.py` / `browser.py` / `tui/` / `pyproject.toml` 既有
 > `[project]` name/version/description/dependencies/requires-python/script.argos(只追加);
@@ -15,7 +15,7 @@
 > `packaging/build_windows.sh`(新)+ `packaging/install-deb.sh`(新)+ `packaging/winget/`(新 3 件)
 > + `packaging/homebrew-tap/`(新,等同 homebrew-argos 仓内容)+ `flake.nix`(新)+
 > `.github/workflows/release.yml`(重写,修 0 jobs bug)+ `.github/workflows/publish.yml`(新)+
-> `.github/workflows/bump-homebrew-formula.yml`(新)+ `argos_agent/cli/pkg.py`(新, dispatcher)+
+> `.github/workflows/bump-homebrew-formula.yml`(新)+ `argos/cli/pkg.py`(新, dispatcher)+
 > `CHANGELOG.md` + `README.md` + `tests/test_packaging_*.py` × 6。
 >
 > **不** git 跟踪 CI 产物;**不**真提交 winget-pkgs / nixpkgs PR(留手动);**不**建
@@ -26,7 +26,7 @@
 | 任务 | 标题 | 估测 | 关键文件 | 测试文件 |
 |---|---|---|---|---|
 | T1 | `pyproject.toml` 追加 `license`/`authors`/`keywords`/`classifiers`/`urls` + `[project.scripts].argospkg` + `[tool.hatch.build.targets.sdist]` 显式 include | 15 min | `pyproject.toml`(扩展) | `test_packaging_pypi.py` |
-| T2 | `argos_agent/cli/pkg.py` 新 dispatcher(info/check/manifest) + `[project.scripts]` 验证 | 20 min | `argos_agent/cli/pkg.py`(新) | `test_packaging_pypi.py`(扩展) |
+| T2 | `argos/cli/pkg.py` 新 dispatcher(info/check/manifest) + `[project.scripts]` 验证 | 20 min | `argos/cli/pkg.py`(新) | `test_packaging_pypi.py`(扩展) |
 | T3 | `packaging/build_linux.sh` 新 — PyInstaller onefile + AppImage + .deb + .rpm | 30 min | `packaging/build_linux.sh`(新) | `test_packaging_linux_spec.py` |
 | T4 | `packaging/build_windows.sh` 新 — PyInstaller onefile + .exe zip + .msi (可选 WiX 简化) | 25 min | `packaging/build_windows.sh`(新) | `test_packaging_windows_spec.py` |
 | T5 | `packaging/install-deb.sh` 新 — .deb 一行装(对齐 B 阶段 install.sh 体验) | 15 min | `packaging/install-deb.sh`(新) | `test_packaging_install_scripts.py` |
@@ -38,7 +38,7 @@
 | T11 | 文档 + CHANGELOG + README + acceptance | 20 min | `CHANGELOG.md` + `README.md` + `docs/packaging-c.md` | (含 e2e) |
 
 **关键不变量**(spec 灵魂,plan 全程守住):
-- **不**改 `argos_agent/` 任何业务 .py(除新加 `cli/pkg.py` 一文件,这是 #13 spec 显式允许的)
+- **不**改 `argos/` 任何业务 .py(除新加 `cli/pkg.py` 一文件,这是 #13 spec 显式允许的)
 - **不**改 `__main__.py`(主 `argos` 路径 0 改动,`argospkg` 走新 dispatcher)
 - **不**改 `pyproject.toml` 既有 `[project]` name/version/description/dependencies/
   requires-python/script.argos(只追加)
@@ -58,7 +58,7 @@
 - `pyproject.toml`:
   - `[project]` 加 `license = {text = "MIT"}` / `authors = [...]` / `keywords = [...]` /
     `classifiers = [...]` / `[project.urls]`
-  - `[project.scripts]` 追加 `argospkg = "argos_agent.cli.pkg:main"`
+  - `[project.scripts]` 追加 `argospkg = "argos.cli.pkg:main"`
   - `[tool.hatch.build.targets.sdist]` 显式 `include` + `exclude`(现有 wheel targets 不动)
 
 ### 1.2 既有约束(不破)
@@ -69,7 +69,7 @@
 - `readme = "README.md"` 不动
 - `requires-python = ">=3.12"` 不动
 - `dependencies` 不动
-- `argos = "argos_agent.__main__:main"` 不动(主命令)
+- `argos = "argos.__main__:main"` 不动(主命令)
 - `[build-system]` 不动
 - `[tool.hatch.build.targets.wheel]` 不动
 - `[dependency-groups] dev` 不动
@@ -102,8 +102,8 @@ classifiers = [
 ]
 
 [project.scripts]
-argos = "argos_agent.__main__:main"
-argospkg = "argos_agent.cli.pkg:main"
+argos = "argos.__main__:main"
+argospkg = "argos.cli.pkg:main"
 
 [project.urls]
 Homepage = "https://github.com/tungoldshou/argos"
@@ -113,7 +113,7 @@ Changelog = "https://github.com/tungoldshou/argos/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.sdist]
 include = [
-  "argos_agent",
+  "argos",
   "README.md",
   "LICENSE",
   "CHANGELOG.md",
@@ -140,21 +140,21 @@ exclude = [
 2. `test_pyproject_has_authors_with_email`:`[project.authors]` 非空,首项有 email
 3. `test_pyproject_has_classifiers_list`:`[project.classifiers]` 是 list,含 "License :: OSI Approved :: MIT License" + "Programming Language :: Python :: 3.12"
 4. `test_pyproject_has_urls_section`:`[project.urls]` 含 `Homepage` + `Repository` + `Issues` + `Changelog`
-5. `test_pyproject_scripts_contains_argos_and_argospkg`:`[project.scripts]` 既含 `argos` 又含 `argospkg`,且 `argospkg` 指向 `argos_agent.cli.pkg:main`
-6. `test_pyproject_sdist_includes_critical_files`:`[tool.hatch.build.targets.sdist.include]` 含 `argos_agent` + `README.md` + `LICENSE` + `packaging/VERSION` + `packaging/argos.spec`
+5. `test_pyproject_scripts_contains_argos_and_argospkg`:`[project.scripts]` 既含 `argos` 又含 `argospkg`,且 `argospkg` 指向 `argos.cli.pkg:main`
+6. `test_pyproject_sdist_includes_critical_files`:`[tool.hatch.build.targets.sdist.include]` 含 `argos` + `README.md` + `LICENSE` + `packaging/VERSION` + `packaging/argos.spec`
 
 ### 1.5 验收(契约 §4.4)
 
 - `uv build` 出 `dist/argos_agent-0.1.0-py3-none-any.whl` + `dist/argos-agent-0.1.0.tar.gz`
 - 跑 `pip install ./dist/argos_agent-0.1.0-py3-none-any.whl --quiet` 进 venv,`which argos` 命中
 - 跑 `which argospkg` 命中
-- (注:`argospkg` 命令 import `argos_agent.cli.pkg` → T2 实现后跑通;本任务只校验 pyproject 字段)
+- (注:`argospkg` 命令 import `argos.cli.pkg` → T2 实现后跑通;本任务只校验 pyproject 字段)
 
-## 2. 任务 T2:`argos_agent/cli/pkg.py` 新 dispatcher
+## 2. 任务 T2:`argos/cli/pkg.py` 新 dispatcher
 
 ### 2.1 目标
 
-- 新文件 `argos_agent/cli/pkg.py`:
+- 新文件 `argos/cli/pkg.py`:
   - `main() -> int`:`argospkg` 入口,根据 `sys.argv[1:]` 切子命令
   - `dispatch(argv) -> int`:分发到 info / check / manifest
   - `cmd_info() -> int`:打印 `pyproject.toml` [project] 段 / packaging/VERSION / git tag
@@ -163,7 +163,7 @@ exclude = [
 
 ### 2.2 既有约束(不破)
 
-- **不**改 `argos_agent/cli/__init__.py`(已存在,本任务不触)
+- **不**改 `argos/cli/__init__.py`(已存在,本任务不触)
 - **不**改 `__main__.py`(`argospkg` 是新 entry,主 `argos` 启动 0 影响)
 - **不**改 `eval.py` / `skills.py` / `context.py` 等既有 CLI 模块
 
@@ -241,8 +241,8 @@ def cmd_info(rest: list[str]) -> int:
 def cmd_check(rest: list[str]) -> int:
     """校验 importlib.metadata 能拿版本 + argos 入口 import 成功。"""
     try:
-        from argos_agent.__main__ import main as _argos_main
-        from argos_agent.cli import pkg  # 自我导入
+        from argos.__main__ import main as _argos_main
+        from argos.cli import pkg  # 自我导入
     except Exception as e:  # noqa: BLE001
         print(f"argospkg check: import 失败:{e}", file=sys.stderr)
         return 1
@@ -262,8 +262,8 @@ def cmd_manifest(rest: list[str]) -> int:
 
 ### 2.4 测试(`test_packaging_pypi.py` part 2,~4 测试)
 
-7. `test_argospkg_info_prints_metadata`:subprocess 跑 `python -m argos_agent.cli.pkg info` 退出 0,stdout 含 `name: argos-agent` + `version:` + `pkg/VERSION:`
-8. `test_argospkg_check_imports_cleanly`:subprocess 跑 `python -m argos_agent.cli.pkg check` 退出 0,stdout 含 `import OK`
+7. `test_argospkg_info_prints_metadata`:subprocess 跑 `python -m argos.cli.pkg info` 退出 0,stdout 含 `name: argos-agent` + `version:` + `pkg/VERSION:`
+8. `test_argospkg_check_imports_cleanly`:subprocess 跑 `python -m argos.cli.pkg check` 退出 0,stdout 含 `import OK`
 9. `test_argospkg_unknown_subcommand_exits_nonzero`:`argospkg foo` 退出 2,stderr 含 `unknown subcommand`
 10. `test_argospkg_help_prints_usage`:无参 / `-h` 退出 0 或 1(看实现),stdout 含 `usage: argospkg`
 
@@ -536,11 +536,11 @@ playwright / trafilatura;`propagatedBuildInputs` 只列 nixpkgs 现成的 smolag
   Homebrew tap + WinGet + Nix)。**核心架构**:
   - **PyPI 发布通电**(`pyproject.toml` 扩展 + `.github/workflows/publish.yml` 新):`license`/
     `authors`/`keywords`/`classifiers`/`urls` 字段补齐(spec D14);`[project.scripts]` 加
-    `argospkg = "argos_agent.cli.pkg:main"` 走打包工具 dispatcher(spec D8);sdist 显式 include
+    `argospkg = "argos.cli.pkg:main"` 走打包工具 dispatcher(spec D8);sdist 显式 include
     README/LICENSE/CHANGELOG/packaging/VERSION/packaging/Info.plist/packaging/argos.spec(spec D10);
     OIDC trusted publishing 主推 + `PYPI_API_TOKEN` token fallback(spec D6);`uv build` 出
     wheel + sdist,`pip install ./dist/*.whl` 验通
-  - **`argospkg` dispatcher**(`argos_agent/cli/pkg.py` 新):`info` 印元数据/`check` 验 import/
+  - **`argospkg` dispatcher**(`argos/cli/pkg.py` 新):`info` 印元数据/`check` 验 import/
     `manifest` 预演生成 winget;**0** 改 `__main__.py` 主 `argos` 路径
   - **Linux 打包**(`packaging/build_linux.sh` 新):PyInstaller onefile → 3 格式:
     **AppImage**(主推,跨 glibc)/ **.deb**(apt 路线)/ **.rpm**(dnf 路线);`install-deb.sh` 一行装
@@ -561,12 +561,12 @@ playwright / trafilatura;`propagatedBuildInputs` 只列 nixpkgs 现成的 smolag
     `@v5` 偶发 validator bug 修了);3 job:`build-macos`(B 既有)/`build-linux`(新)/`build-windows`(新);
     `release` job 走 `gh release create` 替换 `softprops/action-gh-release@v2`(免 softprops
     Node 20 依赖 + token 解析);`pypa/gh-action-pypi-publish@release/v1` 走 OIDC trusted publishing
-  - **0 新源代码逻辑**(`argos_agent/` 仅新加 `cli/pkg.py` 一文件);**0 新强制外部依赖**
+  - **0 新源代码逻辑**(`argos/` 仅新加 `cli/pkg.py` 一文件);**0 新强制外部依赖**
     (stdlib only + OIDC 免 token);+~30 测试(6 文件:`test_packaging_pypi` 11 / `test_packaging_linux_spec` 4 /
     `test_packaging_windows_spec` 3 / `test_packaging_install_scripts` 3 / `test_packaging_homebrew` 5 /
     `test_packaging_winget` 4 / `test_packaging_release_workflow` 3);**不**改既有 `packaging/build_arm64.sh`/
     `install.sh`/`Info.plist`/`argos.spec`/`homebrew/argos.rb`/`VERSION`(B 阶段原样保留);**不**改
-    `argos_agent/` 任何业务 .py;**不**真提交 winget-pkgs / nixpkgs / 建 homebrew-argos 仓
+    `argos/` 任何业务 .py;**不**真提交 winget-pkgs / nixpkgs / 建 homebrew-argos 仓
     (留手动;审核期过后单独 PR);spec 在 `docs/superpowers/specs/2026-06-07-packaging-c-design.md`,
     plan 在 `docs/superpowers/plans/2026-06-07-packaging-c.md`,用户文档在 `docs/packaging-c.md`
 ```
@@ -607,13 +607,13 @@ git push --tags   # 触发 release.yml, 3 job 真跑
    字段全(spec D4)
 6. ✅ **WinGet manifest 3 件齐**:1.6.0 schema 字段全(spec D5)
 7. ✅ **`flake.nix` 简化版在**:v1.1 完整化
-8. ✅ **既有 1622 测试 0 破**:`argos_agent/` 仅加 `cli/pkg.py` 一文件;`__main__.py` 0 改;
+8. ✅ **既有 1622 测试 0 破**:`argos/` 仅加 `cli/pkg.py` 一文件;`__main__.py` 0 改;
    `pyproject.toml` 仅追加(无既有字段改写)
 9. ✅ **0 新强制外部依赖**
 
 ## 13. 不触动清单(契约 §9 锁,执行期反复自检)
 
-- [ ] 不改 `argos_agent/` 任何 .py(除新加 `cli/pkg.py` 一文件)
+- [ ] 不改 `argos/` 任何 .py(除新加 `cli/pkg.py` 一文件)
 - [ ] 不改 `__main__.py`
 - [ ] 不改 `core/loop.py` / `setup_wizard.py` / `eval/` / `skills_curator/` / `context/` /
       `routing/` / `daemon/` / `memory/` / `sandbox/` / `tools/` / `lsp/` /

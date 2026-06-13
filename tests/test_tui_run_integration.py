@@ -5,15 +5,15 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.daemon.manager import RunManager
-from argos_agent.daemon.worker import FakeLoop, RunWorker
+from argos.daemon.manager import RunManager
+from argos.daemon.worker import FakeLoop, RunWorker
 
 
 # ── StatusBar 纯函数测试(无 TUI 渲染)────────────────────────
 
 def test_status_bar_count_badges_active_paused_history():
     """status bar 从 list[(id, state)] 渲染 count badges。"""
-    from argos_agent.tui.widgets.status_bar import StatusBar
+    from argos.tui.widgets.status_bar import StatusBar
     bar = StatusBar()   # 不传 model_label,Textual 内部 markup 关键字
     runs = [
         ("a", "running"),
@@ -30,7 +30,7 @@ def test_status_bar_count_badges_active_paused_history():
 
 def test_status_bar_count_badges_empty():
     """TUI v2 去噪:空列表(非 daemon)→ 整段消失,不再显 ⏵0/⏸0/⏹0 噪声。"""
-    from argos_agent.tui.widgets.status_bar import StatusBar
+    from argos.tui.widgets.status_bar import StatusBar
     bar = StatusBar()
     assert bar.render_count_badges([]) == ""
     assert "⏵" not in bar.render_text
@@ -38,7 +38,7 @@ def test_status_bar_count_badges_empty():
 
 def test_status_bar_set_run_summary_renders_in_text():
     """set_run_summary 推 + render_text 含 badges。"""
-    from argos_agent.tui.widgets.status_bar import StatusBar
+    from argos.tui.widgets.status_bar import StatusBar
     bar = StatusBar()
     bar.set_run_summary([("a", "running"), ("b", "paused")])
     text = bar.render_text
@@ -50,13 +50,13 @@ def test_status_bar_set_run_summary_renders_in_text():
 
 def test_activity_panel_run_section_idx_exists():
     """ActivityPanel._RUN_IDX = 4(Run 区段在任务进度/工具/回执 之后)。"""
-    from argos_agent.tui.widgets.activity_panel import ActivityPanel
+    from argos.tui.widgets.activity_panel import ActivityPanel
     assert ActivityPanel._RUN_IDX == 4
 
 
 def test_activity_panel_run_section_text_format():
     """直接调 on_run_summary → _RUN_IDX section 体(纯逻辑断言)。"""
-    from argos_agent.tui.widgets.activity_panel import ActivityPanel
+    from argos.tui.widgets.activity_panel import ActivityPanel
     panel = ActivityPanel()
     # monkey-patch _set 拦截
     captured = {}
@@ -70,7 +70,7 @@ def test_activity_panel_run_section_text_format():
 
 def test_activity_panel_run_section_empty():
     """全 0 → '◌ (无)'(TUI v3:空态一律 ◌ 前缀 + 最弱墨,绝不预填假数据,spec §4.8)。"""
-    from argos_agent.tui.widgets.activity_panel import ActivityPanel
+    from argos.tui.widgets.activity_panel import ActivityPanel
     panel = ActivityPanel()
     captured = {}
     panel._set = lambda idx, body: captured.setdefault(idx, body)  # type: ignore[method-assign]
@@ -82,14 +82,14 @@ def test_activity_panel_run_section_empty():
 
 def test_runs_command_in_command_help():
     """/runs 在 COMMAND_HELP 里。"""
-    from argos_agent.tui.commands import COMMAND_HELP
+    from argos.tui.commands import COMMAND_HELP
     assert "runs" in COMMAND_HELP
     assert "daemon" in COMMAND_HELP["runs"].lower()
 
 
 def test_parse_slash_runs():
     """parse_slash('/runs {id} resume') 拆出 (name='runs', arg='{id} resume')。"""
-    from argos_agent.tui.commands import parse_slash
+    from argos.tui.commands import parse_slash
     cmd = parse_slash("/runs abc123def456 resume")
     assert cmd is not None
     assert cmd.name == "runs"
@@ -158,7 +158,7 @@ def test_resume_modal_data_format(tmp_path: Path):
 
 def test_bindings_contain_ctrl_b():
     """ArgosApp BINDINGS 含 ctrl+b(后台化)。"""
-    from argos_agent.tui.app import ArgosApp
+    from argos.tui.app import ArgosApp
     bindings = [b for b in ArgosApp.BINDINGS if b[0] == "ctrl+b"]
     assert bindings
     assert bindings[0][1] == "background"

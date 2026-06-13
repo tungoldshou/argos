@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.core import honesty
+from argos.core import honesty
 
 
 def test_honesty_system_present_and_honest():

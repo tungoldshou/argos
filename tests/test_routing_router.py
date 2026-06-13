@@ -1,13 +1,13 @@
 """#11 T4 ModelRouter 懒构造 + history + EffortLevel 映射 测试。"""
 import pytest
 
-from argos_agent.approval import ApprovalLevel
-from argos_agent.routing.categorizer import TaskCategory
-from argos_agent.routing.config import RoutingConfig
-from argos_agent.routing.effort import (
+from argos.approval import ApprovalLevel
+from argos.routing.categorizer import TaskCategory
+from argos.routing.config import RoutingConfig
+from argos.routing.effort import (
     EFFORT_PRESETS, EffortLevel, effort_settings,
 )
-from argos_agent.routing.router import ModelRouter
+from argos.routing.router import ModelRouter
 
 
 class _FakeModel:

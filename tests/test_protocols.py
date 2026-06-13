@@ -1,8 +1,8 @@
 import json
-from argos_agent.core.protocols import (
+from argos.core.protocols import (
     get_protocol, AnthropicProtocol, OpenAIProtocol, _coalesce_consecutive_roles,
 )
-from argos_agent.core.models import ModelTier
+from argos.core.models import ModelTier
 
 
 def _tier(protocol="anthropic", base="https://api.x.com"):
@@ -56,7 +56,7 @@ def test_anthropic_text_delta_and_usage():
 
 
 def test_modelclient_selects_protocol_by_tier():
-    from argos_agent.core.models import ModelClient
+    from argos.core.models import ModelClient
     mc = ModelClient.__new__(ModelClient)
     mc.tier = _tier(protocol="openai")
     mc._proto = get_protocol(mc.tier.protocol)
@@ -64,8 +64,8 @@ def test_modelclient_selects_protocol_by_tier():
 
 
 def test_coalesce_still_importable_from_models():
-    # 向后兼容:旧测试/代码 from argos_agent.core.models import _coalesce_consecutive_roles
-    from argos_agent.core.models import _coalesce_consecutive_roles as c
+    # 向后兼容:旧测试/代码 from argos.core.models import _coalesce_consecutive_roles
+    from argos.core.models import _coalesce_consecutive_roles as c
     assert c([{"role": "user", "content": "a"}, {"role": "user", "content": "b"}])[0]["content"] == "a\nb"
 
 
@@ -102,7 +102,7 @@ def test_openai_capture_usage_maps_prompt_completion_cached():
 
 
 import httpx, pytest
-from argos_agent.core.models import ModelClient, CredentialPool
+from argos.core.models import ModelClient, CredentialPool
 
 
 @pytest.mark.asyncio

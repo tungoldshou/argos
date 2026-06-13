@@ -5,8 +5,8 @@ import json
 from pathlib import Path
 
 import pytest
-from argos_agent.ledger.entry import LedgerEntry
-from argos_agent.ledger.store import LedgerStore
+from argos.ledger.entry import LedgerEntry
+from argos.ledger.store import LedgerStore
 
 
 def _make_entry(seq: int, run_id: str = "run001",

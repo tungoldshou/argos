@@ -12,9 +12,9 @@ from typing import AsyncIterator
 
 import pytest
 
-from argos_agent.daemon.manager import RunManager
-from argos_agent.daemon.worker import RunWorker
-from argos_agent.ledger.store import LedgerStore
+from argos.daemon.manager import RunManager
+from argos.daemon.worker import RunWorker
+from argos.ledger.store import LedgerStore
 
 
 class _ReceiptLoop:

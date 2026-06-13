@@ -4,16 +4,16 @@ import json
 import httpx
 import pytest
 
-from argos_agent.approval import ApprovalLevel
-from argos_agent.core.loop import LoopConfig
-from argos_agent.core.models import CredentialPool, ModelClient, ModelTier
-from argos_agent.routing.categorizer import TaskCategory
-from argos_agent.routing.config import RoutingConfig
-from argos_agent.routing.effort import (
+from argos.approval import ApprovalLevel
+from argos.core.loop import LoopConfig
+from argos.core.models import CredentialPool, ModelClient, ModelTier
+from argos.routing.categorizer import TaskCategory
+from argos.routing.config import RoutingConfig
+from argos.routing.effort import (
     EFFORT_PRESETS, EffortLevel, effort_settings,
 )
-from argos_agent.routing.router import ModelRouter
-from argos_agent.tui.events import CostUpdate, deserialize_event, serialize_event
+from argos.routing.router import ModelRouter
+from argos.tui.events import CostUpdate, deserialize_event, serialize_event
 
 
 # ── T5:effort + CostUpdate.tier_name ──────────────────────────────
@@ -90,14 +90,14 @@ def _build_router(cheap: bool = True) -> ModelRouter:
 
 def test_agent_loop_no_router_uses_existing_model_and_tier():
     """既有路径 0 破坏:无 router → CostUpdate.tier_name = cfg.model_tier。"""
-    from argos_agent.core.loop import AgentLoop
-    from argos_agent.core.verify_gate import Verifier
-    from argos_agent.memory.store import ArgosStore
-    from argos_agent.sandbox.broker import CapabilityBroker
-    from argos_agent.sandbox.egress import EgressPolicy
-    from argos_agent.sandbox.executor import SeatbeltExecutor
-    from argos_agent.tools.receipts import ReceiptSigner
-    from argos_agent.tui.events import EventBus
+    from argos.core.loop import AgentLoop
+    from argos.core.verify_gate import Verifier
+    from argos.memory.store import ArgosStore
+    from argos.sandbox.broker import CapabilityBroker
+    from argos.sandbox.egress import EgressPolicy
+    from argos.sandbox.executor import SeatbeltExecutor
+    from argos.tools.receipts import ReceiptSigner
+    from argos.tui.events import EventBus
 
     import tempfile
     from pathlib import Path
@@ -136,7 +136,7 @@ def test_agent_loop_strong_tier_sets_approval_level_override():
             self.calls: list[tuple] = []
 
         def select(self, *, category, tool, step=0):
-            from argos_agent.routing.resolver import RouteDecision
+            from argos.routing.resolver import RouteDecision
             tier = self._cfg.by_category.get(category.value, self._cfg.default)
             self.calls.append((category.value, tool, tier, step))
             client = _make_client(tier)
@@ -148,7 +148,7 @@ def test_agent_loop_strong_tier_sets_approval_level_override():
 
     router = _StaticRouter(routing)
     # 模拟 select 后 loop 应该置 _approval_level_override=CONFIRM
-    from argos_agent.routing.resolver import RouteDecision
+    from argos.routing.resolver import RouteDecision
     decision = RouteDecision(TaskCategory.FILE_EDIT, "edit_file", "strong", "by_category", 1)
     if router.routing.is_force_confirm(decision.tier):
         override = ApprovalLevel.CONFIRM
@@ -159,7 +159,7 @@ def test_agent_loop_strong_tier_sets_approval_level_override():
 
 def test_app_factory_build_components_constructs_router():
     """build_components 应构造 ModelRouter + AppComponents 含 router 字段。"""
-    from argos_agent.app_factory import AppComponents
+    from argos.app_factory import AppComponents
     # 静态检查 AppComponents dataclass 字段含 router
     import dataclasses
     fields = {f.name for f in dataclasses.fields(AppComponents)}
@@ -168,7 +168,7 @@ def test_app_factory_build_components_constructs_router():
 
 def test_agent_loop_router_kw_accepted():
     """AgentLoop.__init__ 接受 router kw-only 参数(默认 None 零破坏)。"""
-    from argos_agent.core.loop import AgentLoop
+    from argos.core.loop import AgentLoop
     import inspect
     sig = inspect.signature(AgentLoop.__init__)
     assert "router" in sig.parameters

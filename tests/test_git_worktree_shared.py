@@ -1,7 +1,7 @@
 """底层 git worktree 原语 + daemon/workflow 两条隔离路径的等价性测试。
 
 核心断言:daemon 的 `WorktreeManager.create` 与 workflow 的 `worktree_for` 现在都基于
-`argos_agent.git_worktree`,对同一个真 git 仓产出**等价的隔离结果**;非 git 工作区则两条
+`argos.git_worktree`,对同一个真 git 仓产出**等价的隔离结果**;非 git 工作区则两条
 都诚实降级(daemon→temp 目录,workflow→共享 base + 注记)。
 """
 from __future__ import annotations
@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent import git_worktree as gw
-from argos_agent.daemon.worktree import WorktreeManager
-from argos_agent.workflow.worktree import worktree_for
+from argos import git_worktree as gw
+from argos.daemon.worktree import WorktreeManager
+from argos.workflow.worktree import worktree_for
 
 pytestmark = pytest.mark.skipif(not shutil.which("git"), reason="git not in PATH")
 

@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-import argos_agent.skills_curator.index as _idx
-import argos_agent.skills_curator.capabilities as _cap
-from argos_agent.skills_curator.recommend import (
+import argos.skills_curator.index as _idx
+import argos.skills_curator.capabilities as _cap
+from argos.skills_curator.recommend import (
     DEFAULT_RULES,
     Recommendation,
     SessionActivity,

@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.config import ConfigError
-from argos_agent.routing.categorizer import TaskCategory
-from argos_agent.routing.config import RoutingConfig, load_routing, set_category
+from argos.config import ConfigError
+from argos.routing.categorizer import TaskCategory
+from argos.routing.config import RoutingConfig, load_routing, set_category
 
 
 def _write_config(dir_: Path, *, models: dict, routing: dict | None = None) -> None:

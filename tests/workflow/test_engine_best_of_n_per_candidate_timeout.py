@@ -19,9 +19,9 @@ import time
 
 import pytest
 
-from argos_agent.core.models import ModelTier
-from argos_agent.workflow.spec import parse_spec
-from argos_agent.workflow.engine import WorkflowEngine
+from argos.core.models import ModelTier
+from argos.workflow.spec import parse_spec
+from argos.workflow.engine import WorkflowEngine
 
 
 class _HangOneFactory:

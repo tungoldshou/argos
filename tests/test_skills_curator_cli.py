@@ -12,7 +12,7 @@ import pytest
 
 def _run_cli(argv: list[str], *, monkeypatch, env_setup=None) -> tuple[int, str, str]:
     """跑 `argos skills <argv>` 走 main(),返 (exit, stdout, stderr)."""
-    from argos_agent.__main__ import main
+    from argos.__main__ import main
     out = io.StringIO()
     err = io.StringIO()
     monkeypatch.setattr(sys, "argv", ["argos", "skills", *argv])
@@ -31,11 +31,11 @@ def _run_cli(argv: list[str], *, monkeypatch, env_setup=None) -> tuple[int, str,
 
 def test_skills_refresh_writes_index(monkeypatch, tmp_path):
     """mock 远端 → 跑 refresh → 写 index.json."""
-    from argos_agent.skills_curator.index import _skills_root
+    from argos.skills_curator.index import _skills_root
 
     monkeypatch.setattr(_skills_root.__module__ + "._skills_root", lambda: tmp_path)
     # 上面写法不工作,改用 module 级别 patch
-    import argos_agent.skills_curator.index as _idx
+    import argos.skills_curator.index as _idx
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
 
     payload = {
@@ -66,7 +66,7 @@ def test_skills_refresh_writes_index(monkeypatch, tmp_path):
 
 
 def test_skills_refresh_handles_network_error(monkeypatch, tmp_path):
-    import argos_agent.skills_curator.index as _idx
+    import argos.skills_curator.index as _idx
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     import urllib.request, urllib.error
     monkeypatch.setattr(urllib.request, "urlopen",
@@ -77,7 +77,7 @@ def test_skills_refresh_handles_network_error(monkeypatch, tmp_path):
 
 
 def test_skills_list_empty(tmp_path, monkeypatch):
-    import argos_agent.skills_curator.index as _idx
+    import argos.skills_curator.index as _idx
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     rc, stdout, _ = _run_cli(["list"], monkeypatch=monkeypatch)
     assert rc == 0
@@ -85,7 +85,7 @@ def test_skills_list_empty(tmp_path, monkeypatch):
 
 
 def test_skills_list_with_installed(tmp_path, monkeypatch):
-    import argos_agent.skills_curator.index as _idx
+    import argos.skills_curator.index as _idx
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     # 装一个 skill
     skill_dir = tmp_path / "user-skill"
@@ -101,7 +101,7 @@ def test_skills_list_with_installed(tmp_path, monkeypatch):
 
 
 def test_skills_install_unknown_errors(tmp_path, monkeypatch):
-    import argos_agent.skills_curator.index as _idx
+    import argos.skills_curator.index as _idx
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     # 无 cache → 自动 refresh;mock refresh 失败
     import urllib.request
@@ -113,7 +113,7 @@ def test_skills_install_unknown_errors(tmp_path, monkeypatch):
 
 
 def test_skills_remove_protected_builtin_errors(tmp_path, monkeypatch):
-    import argos_agent.skills_curator.index as _idx
+    import argos.skills_curator.index as _idx
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     rc, _, stderr = _run_cli(["remove", "verify"], monkeypatch=monkeypatch)
     assert rc == 1
@@ -121,7 +121,7 @@ def test_skills_remove_protected_builtin_errors(tmp_path, monkeypatch):
 
 
 def test_skills_test_not_installed(tmp_path, monkeypatch):
-    import argos_agent.skills_curator.index as _idx
+    import argos.skills_curator.index as _idx
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     rc, _, stderr = _run_cli(["test", "no-such-skill"], monkeypatch=monkeypatch)
     assert rc == 1
@@ -130,7 +130,7 @@ def test_skills_test_not_installed(tmp_path, monkeypatch):
 
 def test_skills_help_lists_subcommands(capsys):
     """`argos skills --help` 列子命令(解析层 sanity)."""
-    from argos_agent.__main__ import _build_parser
+    from argos.__main__ import _build_parser
     p = _build_parser()
     try:
         p.parse_args(["skills", "--help"])
@@ -141,7 +141,7 @@ def test_skills_help_lists_subcommands(capsys):
 
 
 def test_skills_subparser_registers_all_five():
-    from argos_agent.__main__ import _build_parser
+    from argos.__main__ import _build_parser
     p = _build_parser()
     # 直接 parse 5 个子命令
     for sub in ("refresh", "list", "install", "remove", "test"):

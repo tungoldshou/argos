@@ -22,10 +22,10 @@ from typing import Any, Callable
 
 import pytest
 
-from argos_agent.workflow.engine import WorkflowEngine
-from argos_agent.workflow.result import AgentResult
-from argos_agent.workflow.spec import parse_spec
-from argos_agent.workflow.subagent import SubAgentFactory
+from argos.workflow.engine import WorkflowEngine
+from argos.workflow.result import AgentResult
+from argos.workflow.spec import parse_spec
+from argos.workflow.subagent import SubAgentFactory
 
 
 # ── 工具:monkey-patch SubAgentFactory.run_task 返确定结果 ─────────
@@ -461,7 +461,7 @@ def test_best_of_n_spec_clamps_n_to_max_cap():
 
 def test_best_of_n_spec_rejects_non_int_n():
     """n='abc' → 抛 WorkflowSpecError(fail-closed 校验)。"""
-    from argos_agent.workflow.spec import WorkflowSpecError
+    from argos.workflow.spec import WorkflowSpecError
     with pytest.raises(WorkflowSpecError, match="n 非法"):
         parse_spec({
             "name": "t", "description": "",

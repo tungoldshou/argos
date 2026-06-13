@@ -7,9 +7,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from argos_agent.tui.commands import COMMAND_HELP, parse_slash
-from argos_agent.tui.widgets.activity_panel import ActivityPanel
-from argos_agent.tui.widgets.status_bar import StatusBar
+from argos.tui.commands import COMMAND_HELP, parse_slash
+from argos.tui.widgets.activity_panel import ActivityPanel
+from argos.tui.widgets.status_bar import StatusBar
 
 
 def test_command_help_includes_context():
@@ -74,7 +74,7 @@ def test_status_bar_update_ctx_pressure_zero_safe():
 # 直接调 ArgosApp._context_cmd 难(app 构造需 Textual App);
 # 退而:用 _context_cmd 函数体本身,确认它不依赖 app 内部、只读 self attr。
 import inspect
-import argos_agent.tui.app as _app
+import argos.tui.app as _app
 
 
 def test_context_cmd_uses_analyzer_and_render():

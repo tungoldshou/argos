@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.verify.strategy import (
+from argos.verify.strategy import (
     VerifyStrategy,
     WorkspaceFacts,
     generate,

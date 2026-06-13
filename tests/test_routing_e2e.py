@@ -15,13 +15,13 @@ from pathlib import Path
 import httpx
 import pytest
 
-from argos_agent.approval import ApprovalLevel
-from argos_agent.core.loop import AgentLoop, LoopConfig
-from argos_agent.core.models import CredentialPool, ModelClient, ModelTier
-from argos_agent.routing.categorizer import TaskCategory
-from argos_agent.routing.config import RoutingConfig
-from argos_agent.routing.router import ModelRouter
-from argos_agent.tui.events import (
+from argos.approval import ApprovalLevel
+from argos.core.loop import AgentLoop, LoopConfig
+from argos.core.models import CredentialPool, ModelClient, ModelTier
+from argos.routing.categorizer import TaskCategory
+from argos.routing.config import RoutingConfig
+from argos.routing.router import ModelRouter
+from argos.tui.events import (
     CostUpdate, EventBus, VerifyVerdict,
 )
 
@@ -110,12 +110,12 @@ def test_e2e_run_uses_router_loop_state():
     """AgentLoop 注入 router 后,_current_tier 默认 = config.model_tier;router 不为 None
     时每步 select 完会更新 _current_tier(spec §10 接线)。"""
     import tempfile
-    from argos_agent.core.verify_gate import Verifier
-    from argos_agent.memory.store import ArgosStore
-    from argos_agent.sandbox.broker import CapabilityBroker
-    from argos_agent.sandbox.egress import EgressPolicy
-    from argos_agent.sandbox.executor import SeatbeltExecutor
-    from argos_agent.tools.receipts import ReceiptSigner
+    from argos.core.verify_gate import Verifier
+    from argos.memory.store import ArgosStore
+    from argos.sandbox.broker import CapabilityBroker
+    from argos.sandbox.egress import EgressPolicy
+    from argos.sandbox.executor import SeatbeltExecutor
+    from argos.tools.receipts import ReceiptSigner
 
     with tempfile.TemporaryDirectory() as td:
         ws = Path(td) / "ws"
@@ -152,12 +152,12 @@ def test_e2e_run_emits_cost_update_tier_name():
     """e2e:跑一 run,收 CostUpdate,断言 tier_name 非空且按 routing 走。"""
     import asyncio
     import tempfile
-    from argos_agent.core.verify_gate import Verifier
-    from argos_agent.memory.store import ArgosStore
-    from argos_agent.sandbox.broker import CapabilityBroker
-    from argos_agent.sandbox.egress import EgressPolicy
-    from argos_agent.sandbox.executor import SeatbeltExecutor
-    from argos_agent.tools.receipts import ReceiptSigner
+    from argos.core.verify_gate import Verifier
+    from argos.memory.store import ArgosStore
+    from argos.sandbox.broker import CapabilityBroker
+    from argos.sandbox.egress import EgressPolicy
+    from argos.sandbox.executor import SeatbeltExecutor
+    from argos.tools.receipts import ReceiptSigner
 
     class _ScriptedModel:
         """两轮脚本:第一轮吐 edit_file 改 a,第二轮吐完成。"""

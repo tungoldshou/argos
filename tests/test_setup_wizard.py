@@ -3,7 +3,7 @@ import json
 import os
 import stat
 import pytest
-from argos_agent.setup_wizard import PRESETS, write_profile
+from argos.setup_wizard import PRESETS, write_profile
 
 
 def test_presets_have_protocol_and_base_url():
@@ -61,11 +61,11 @@ def test_write_profile_appends_to_existing_config(tmp_path):
 # ── Task 8: 连通 + 格式探针 ─────────────────────────────────────────────────────
 
 import httpx
-from argos_agent.setup_wizard import probe_connection, ProbeResult
+from argos.setup_wizard import probe_connection, ProbeResult
 
 
 def _mock_client(handler):
-    from argos_agent.core.models import ModelClient, CredentialPool, ModelTier
+    from argos.core.models import ModelClient, CredentialPool, ModelTier
     def make(tier, key):
         return ModelClient(tier=tier, pool=CredentialPool([key or "x"]),
                            transport=httpx.MockTransport(handler))
@@ -104,7 +104,7 @@ async def test_probe_connection_http_error_honest():
 
 # ── Task 9: argos setup 子命令 + 交互 run ────────────────────────────────────────
 
-from argos_agent.setup_wizard import run
+from argos.setup_wizard import run
 
 
 @pytest.mark.asyncio
@@ -127,7 +127,7 @@ async def test_run_wizard_happy_path(tmp_path, monkeypatch):
     ])
     out_lines = []
     # probe 注入成功(避免真网络):monkeypatch probe_connection
-    import argos_agent.setup_wizard as W
+    import argos.setup_wizard as W
     async def fake_probe(**kw):
         return W.ProbeResult(True, True, "行", "OK")
     monkeypatch.setattr(W, "probe_connection", fake_probe)
@@ -143,7 +143,7 @@ async def test_run_wizard_happy_path(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_run_wizard_custom_preset(tmp_path, monkeypatch):
     """「自定义」预设触发 protocol/base_url 额外询问(spec §6.1 「(问)」)。"""
-    import argos_agent.setup_wizard as W
+    import argos.setup_wizard as W
     # 自定义是 PRESETS 第 7 项(最后一项)
     custom_idx = str(list(W.PRESETS.keys()).index("自定义") + 1)
     inputs = iter([
@@ -179,7 +179,7 @@ async def test_run_wizard_custom_preset(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_run_wizard_duplicate_name_appends_index(tmp_path, monkeypatch):
     """同名 profile 再配时自动追加序号(spec §6.1 step 5「重名追加序号」)。"""
-    import argos_agent.setup_wizard as W
+    import argos.setup_wizard as W
     async def fake_probe(**kw):
         return W.ProbeResult(True, True, "行", "OK")
     monkeypatch.setattr(W, "probe_connection", fake_probe)
@@ -203,7 +203,7 @@ async def test_run_wizard_duplicate_name_appends_index(tmp_path, monkeypatch):
 
 def test_write_profile_rejects_empty_base_url(tmp_path):
     """fail-closed:空 base_url 的 profile 不得落盘(否则假成功 + 下次启动 ConfigError)。"""
-    import argos_agent.config as C
+    import argos.config as C
     with pytest.raises(C.ConfigError):
         write_profile(config_dir=tmp_path, name="bad", protocol="openai", base_url="",
                       model="m", api_key="k", api_key_env="K", set_active=True)
@@ -212,7 +212,7 @@ def test_write_profile_rejects_empty_base_url(tmp_path):
 
 # ── Task 10: 深度探针(可选 write+verify 往返) ─────────────────────────────────────
 
-from argos_agent.setup_wizard import deep_probe
+from argos.setup_wizard import deep_probe
 
 
 class _ScriptModel:
@@ -251,7 +251,7 @@ def test_corrupt_existing_config_backed_up_not_destroyed(tmp_path):
 
 def test_ask_int_fail_soft_on_non_numeric():
     """T9 HIGH:非数字输入不得崩溃整个 setup,退回默认值。"""
-    from argos_agent.setup_wizard import _ask_int
+    from argos.setup_wizard import _ask_int
     out: list = []
     assert _ask_int(lambda p="": "abc", out.append, "max:", 4096) == 4096   # 非数字→默认,不抛
     assert _ask_int(lambda p="": "8192", out.append, "max:", 4096) == 8192  # 合法→采用
@@ -259,7 +259,7 @@ def test_ask_int_fail_soft_on_non_numeric():
 
 
 def test_ask_float_or_none_fail_soft():
-    from argos_agent.setup_wizard import _ask_float_or_none
+    from argos.setup_wizard import _ask_float_or_none
     out: list = []
     assert _ask_float_or_none(lambda p="": "abc", out.append, "p:") is None  # 非数字→None,不抛
     assert _ask_float_or_none(lambda p="": "0.3", out.append, "p:") == 0.3
@@ -268,7 +268,7 @@ def test_ask_float_or_none_fail_soft():
 
 def test_arrow_select_falls_back_when_not_tty():
     """非 TTY(或 ARGOS_NO_ARROW_SELECT=1)→ _arrow_select 抛 _NotATTY,run() 据此回退编号输入。"""
-    from argos_agent.setup_wizard import _arrow_select, _NotATTY
+    from argos.setup_wizard import _arrow_select, _NotATTY
     with pytest.raises(_NotATTY):
         _arrow_select(["OpenAI", "Anthropic"], title="选择 provider:", writer=lambda _: None)
 
@@ -278,7 +278,7 @@ def test_arrow_select_falls_back_when_not_tty():
 def test_openai_embedder_hits_embeddings_endpoint():
     """OpenAIEmbedder 打 <base_url>/embeddings(Bearer),解析 data[].embedding,惰性置 dim。"""
     import httpx
-    from argos_agent.memory.embedding import OpenAIEmbedder
+    from argos.memory.embedding import OpenAIEmbedder
 
     def handler(req: httpx.Request) -> httpx.Response:
         assert req.url.path.endswith("/embeddings")
@@ -298,7 +298,7 @@ def test_openai_embedder_hits_embeddings_endpoint():
 
 def test_openai_embedder_endpoint_idempotent():
     """base_url 已含 /embeddings 时不重复追加。"""
-    from argos_agent.memory.embedding import OpenAIEmbedder
+    from argos.memory.embedding import OpenAIEmbedder
     e1 = OpenAIEmbedder(base_url="http://x/v1", api_key="K", model="m")
     e2 = OpenAIEmbedder(base_url="http://x/v1/embeddings", api_key="K", model="m")
     assert e1._endpoint() == "http://x/v1/embeddings"

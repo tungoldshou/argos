@@ -22,7 +22,7 @@ pytest_plugins = ["tests.e2e.conftest"]
 @pytest.mark.asyncio
 async def test_run_records_snapshot(build_real_loop):
     """跑一个 noop 任务(脚本模型返回 '直接完成')→ 拍到的快照存在,workspace 文件可还原。"""
-    from argos_agent.core.snapshot import SNAPSHOT_ROOT
+    from argos.core.snapshot import SNAPSHOT_ROOT
 
     # 选个最便宜的任务:无 write_file,只读 + 落报告;脚本一次性宣告完成(无代码块)。
     scripts = ["完成。无事可做。"]
@@ -43,7 +43,7 @@ async def test_run_snapshot_failure_does_not_block_run(build_real_loop, monkeypa
     精确 monkeypatch(方案 A):只让 RunSnapshot.take 抛 OSError(模拟磁盘故障/权限拒绝),
     其它路径(沙箱 spawn / verifier / store)不受影响 —— 严格隔离快照失败这一个变量。
     """
-    from argos_agent.core import snapshot as snap_mod
+    from argos.core import snapshot as snap_mod
 
     def _take_boom(cls, ws, tp):
         raise OSError("simulated snapshot I/O failure")

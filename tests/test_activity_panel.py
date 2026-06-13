@@ -1,8 +1,8 @@
 import pytest
 from textual.app import App, ComposeResult
-from argos_agent.tui.widgets.activity_panel import ActivityPanel
-from argos_agent.tui.theme import ARGOS_NIGHT
-from argos_agent.core.types import ModelTierName  # noqa
+from argos.tui.widgets.activity_panel import ActivityPanel
+from argos.tui.theme import ARGOS_NIGHT
+from argos.core.types import ModelTierName  # noqa
 
 
 class _H(App):
@@ -301,7 +301,7 @@ async def test_activity_panel_has_hook_section():
 @pytest.mark.asyncio
 async def test_activity_panel_on_hook_fired_ok():
     """on_hook_fired(success=True) → 区段体含 'ok' / 命令名。"""
-    from argos_agent.hooks.events import HookFired
+    from argos.hooks.events import HookFired
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -318,7 +318,7 @@ async def test_activity_panel_on_hook_fired_ok():
 @pytest.mark.asyncio
 async def test_activity_panel_on_hook_fired_fail_red():
     """on_hook_fired(success=False, returncode=2) → 显 fail 红色标记(行内含 'fail' 或 'exit 2')。"""
-    from argos_agent.hooks.events import HookFired
+    from argos.hooks.events import HookFired
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -333,7 +333,7 @@ async def test_activity_panel_on_hook_fired_fail_red():
 @pytest.mark.asyncio
 async def test_activity_panel_on_hook_fired_timeout():
     """on_hook_fired(timed_out=True) → 显 timeout 标记。"""
-    from argos_agent.hooks.events import HookFired
+    from argos.hooks.events import HookFired
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -348,7 +348,7 @@ async def test_activity_panel_on_hook_fired_timeout():
 @pytest.mark.asyncio
 async def test_activity_panel_hook_deque_caps_at_50():
     """on_hook_fired 触发 60 次 → deque 最多 50 条(最近 50)。"""
-    from argos_agent.hooks.events import HookFired
+    from argos.hooks.events import HookFired
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -366,7 +366,7 @@ async def test_activity_panel_hook_deque_caps_at_50():
 @pytest.mark.asyncio
 async def test_activity_panel_reset_run_clears_hook_log():
     """reset_run 清空 hook log(每轮独立)。"""
-    from argos_agent.hooks.events import HookFired
+    from argos.hooks.events import HookFired
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -383,7 +383,7 @@ async def test_activity_panel_reset_run_clears_hook_log():
 @pytest.mark.asyncio
 async def test_activity_panel_has_lsp_section():
     """ActivityPanel.compose 含 'LSP' 区段(标题)。"""
-    from argos_agent.lsp.events import LspServerEvent
+    from argos.lsp.events import LspServerEvent
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -395,7 +395,7 @@ async def test_activity_panel_has_lsp_section():
 @pytest.mark.asyncio
 async def test_activity_panel_on_lsp_server_event_ready():
     """status='ready' + elapsed_ms=820 → 区段体显 'python' + 'ready' + 耗时。"""
-    from argos_agent.lsp.events import LspServerEvent
+    from argos.lsp.events import LspServerEvent
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -413,7 +413,7 @@ async def test_activity_panel_on_lsp_server_event_ready():
 @pytest.mark.asyncio
 async def test_activity_panel_on_lsp_server_event_disabled():
     """status='disabled' → 区段体显 'disabled'。"""
-    from argos_agent.lsp.events import LspServerEvent
+    from argos.lsp.events import LspServerEvent
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -429,7 +429,7 @@ async def test_activity_panel_on_lsp_server_event_disabled():
 @pytest.mark.asyncio
 async def test_activity_panel_on_lsp_server_event_crash():
     """status='crash' + error → 区段体显 'crash' + 错误。"""
-    from argos_agent.lsp.events import LspServerEvent
+    from argos.lsp.events import LspServerEvent
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -446,7 +446,7 @@ async def test_activity_panel_on_lsp_server_event_crash():
 @pytest.mark.asyncio
 async def test_activity_panel_lsp_diag_change_detection():
     """lsp_diagnostic_event 同 uri 同 count → 不重渲;新 count → 渲。"""
-    from argos_agent.lsp.events import LspDiagnosticEvent
+    from argos.lsp.events import LspDiagnosticEvent
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -470,7 +470,7 @@ async def test_activity_panel_lsp_diag_change_detection():
 @pytest.mark.asyncio
 async def test_activity_panel_lsp_diag_dedup_no_cache_growth():
     """同 uri 同 count 重复推 → _lsp_diag_cache 不增(5 次推 → 1 个 entry)。"""
-    from argos_agent.lsp.events import LspDiagnosticEvent
+    from argos.lsp.events import LspDiagnosticEvent
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -487,7 +487,7 @@ async def test_activity_panel_lsp_diag_dedup_no_cache_growth():
 @pytest.mark.asyncio
 async def test_activity_panel_reset_run_clears_lsp_log():
     """reset_run 清空 LSP cache(每轮独立)。"""
-    from argos_agent.lsp.events import LspDiagnosticEvent
+    from argos.lsp.events import LspDiagnosticEvent
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()

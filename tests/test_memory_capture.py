@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from argos_agent.memory import auto as mem_auto
+from argos.memory import auto as mem_auto
 
 
 @pytest.fixture
@@ -121,7 +121,7 @@ def test_capture_returns_none_when_unknown_kind(mem_root, tmp_path):
 def test_capture_task_reflection_persists(tmp_path, monkeypatch):
     """task_reflection 必须落盘(修复:未注册 kind 被静默丢弃)。"""
     monkeypatch.setenv("ARGOS_MEMORY_DIR", str(tmp_path))
-    from argos_agent.memory import auto
+    from argos.memory import auto
     entry = auto.capture_event(
         "task_reflection",
         project_id="proj1",
@@ -144,7 +144,7 @@ def test_capture_task_reflection_persists(tmp_path, monkeypatch):
 def test_capture_task_reflection_self_verified_tagged(tmp_path, monkeypatch):
     """self_verified=True 的反思要带防火墙标记(可统计'自验证降级')。"""
     monkeypatch.setenv("ARGOS_MEMORY_DIR", str(tmp_path))
-    from argos_agent.memory import auto
+    from argos.memory import auto
     entry = auto.capture_event(
         "task_reflection", project_id="proj1", run_id="run456", goal="g",
         verdict="passed", self_verified=True,

@@ -1,5 +1,5 @@
-from argos_agent.workflow.spec import parse_spec
-from argos_agent.workflow.result import render_preview, AgentResult, StageResult, WorkflowResult
+from argos.workflow.spec import parse_spec
+from argos.workflow.result import render_preview, AgentResult, StageResult, WorkflowResult
 
 
 def test_render_preview_lists_agents_and_models():

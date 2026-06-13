@@ -25,7 +25,7 @@ def test_build_windows_script_runs_pyinstaller_onefile():
     assert "--name argos" in txt
     assert "--console" in txt
     # Windows add-data 用 ; 分隔(不是 :)
-    assert "schema.sql;argos_agent/memory" in txt, "Windows add-data 应 ; 分隔"
+    assert "schema.sql;argos/memory" in txt, "Windows add-data 应 ; 分隔"
 
 
 def test_build_windows_script_packs_zip_and_optional_msi():

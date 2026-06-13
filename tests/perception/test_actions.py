@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.perception.actions import ComputerAction, TEXT_MAX_LEN
+from argos.perception.actions import ComputerAction, TEXT_MAX_LEN
 
 
 # ── 合法构造 ──────────────────────────────────────────────────────────────────

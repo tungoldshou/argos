@@ -42,7 +42,7 @@ def test_no_exit_plan_mode_direct_call_in_app() -> None:
     但主路径的决策逻辑必须经 respond_plan_decision 或 POST plan_decision，
     ExitPlanMode 调用必须紧跟在 "向后兼容" 注释后（同块内），不能出现在 daemon / inline 主分支。
     """
-    app_path = Path(__file__).parent.parent / "argos_agent" / "tui" / "app.py"
+    app_path = Path(__file__).parent.parent / "argos" / "tui" / "app.py"
     src = app_path.read_text("utf-8")
 
     # 关键断言1：_handle_plan_rendered 里存在 respond_plan_decision 调用（主路径）
@@ -84,7 +84,7 @@ async def test_daemon_unreachable_inline_fallback() -> None:
     """
     # 避免 import Textual App(重量级)，直接测试 _setup_daemon_mode 逻辑
     # 用最小 mock 构造 ArgosApp 实例
-    from argos_agent.tui.app import ArgosApp
+    from argos.tui.app import ArgosApp
 
     app = ArgosApp(demo=True)  # demo=True:不真连模型,仅测 daemon 状态机
 
@@ -101,7 +101,7 @@ async def test_daemon_unreachable_inline_fallback() -> None:
     app.run_worker = MagicMock()  # 不真起 Textual worker
 
     # patch probe_or_spawn 在 daemon_spawn 模块层面返 False
-    with patch("argos_agent.tui.daemon_spawn.probe_or_spawn", new=AsyncMock(return_value=False)):
+    with patch("argos.tui.daemon_spawn.probe_or_spawn", new=AsyncMock(return_value=False)):
         # 直接 await _setup_daemon_mode
         with patch.dict(os.environ, {"ARGOS_DAEMON_SOCKET": "/tmp/_argos_nonexistent_test.sock"}):
             await app._setup_daemon_mode()
@@ -118,8 +118,8 @@ async def test_daemon_available_sets_argosd_mode(monkeypatch) -> None:
 
     本测显式测 argosd 路径:豁免 conftest 的 ARGOS_NO_DAEMON 隔离开关
     (probe 已 monkeypatch 成假的,不会碰真 daemon)。"""
-    from argos_agent.tui.app import ArgosApp
-    from argos_agent.daemon.client import DaemonClient
+    from argos.tui.app import ArgosApp
+    from argos.daemon.client import DaemonClient
 
     monkeypatch.delenv("ARGOS_NO_DAEMON", raising=False)
     app = ArgosApp(demo=True)
@@ -137,7 +137,7 @@ async def test_daemon_available_sets_argosd_mode(monkeypatch) -> None:
 
     fake_session_id = "sess-abc123"
 
-    with patch("argos_agent.tui.daemon_spawn.probe_or_spawn", new=AsyncMock(return_value=True)):
+    with patch("argos.tui.daemon_spawn.probe_or_spawn", new=AsyncMock(return_value=True)):
         with patch.object(DaemonClient, "create_session", new=AsyncMock(return_value=fake_session_id)):
             with patch.dict(os.environ, {"ARGOS_DAEMON_SOCKET": "/tmp/_argos_test_daemon.sock"}):
                 await app._setup_daemon_mode()
@@ -159,8 +159,8 @@ async def test_daemon_event_source_reconnect_with_since() -> None:
     DaemonEventSource 重连时 since=2(= 上次最大 seq),只收后续事件。
     验证:收到事件序列按 seq 顺序,without 重复。
     """
-    from argos_agent.tui.daemon_source import DaemonEventSource
-    from argos_agent.protocol.events import TokenDelta
+    from argos.tui.daemon_source import DaemonEventSource
+    from argos.protocol.events import TokenDelta
 
     # 构造 fake _subscribe_once generator
     call_count = [0]
@@ -266,7 +266,7 @@ class _GateSetterWorker:
         approval_timeout_s: float,
         gate_holder: _GateHolder,
     ) -> None:
-        from argos_agent.daemon.worker import RunWorker, DaemonApprovalGate
+        from argos.daemon.worker import RunWorker, DaemonApprovalGate
         self._worker = RunWorker(
             run_id=run_id,
             manager=manager,
@@ -309,10 +309,10 @@ async def test_protocol_approval_circuit_inline(tmp_path: Path) -> None:
 
     这是「TUI 隔协议批准一个真审批」的协议层等价测试(spec §13 P3a 验收 P3b T1)。
     """
-    from argos_agent.approval import ApprovalGate, ApprovalLevel
-    from argos_agent.daemon.manager import RunManager
-    from argos_agent.daemon.server import DaemonHTTPServer
-    from argos_agent.daemon.client import DaemonClient
+    from argos.approval import ApprovalGate, ApprovalLevel
+    from argos.daemon.manager import RunManager
+    from argos.daemon.server import DaemonHTTPServer
+    from argos.daemon.client import DaemonClient
 
     socket_path = tmp_path / "t1.sock"
     manager = RunManager(
@@ -433,7 +433,7 @@ async def test_protocol_approval_circuit_inline(tmp_path: Path) -> None:
 
 def test_status_bar_kernel_mode_label() -> None:
     """StatusBar.set_kernel_mode 正确更新 render_text 中的内核模式标注。"""
-    from argos_agent.tui.widgets.status_bar import StatusBar
+    from argos.tui.widgets.status_bar import StatusBar
 
     bar = StatusBar()
     # 初始:无模式段

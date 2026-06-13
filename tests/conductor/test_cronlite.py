@@ -14,7 +14,7 @@ from __future__ import annotations
 import pytest
 from datetime import datetime, timezone
 
-from argos_agent.conductor.cronlite import next_due
+from argos.conductor.cronlite import next_due
 
 
 # ---------------------------------------------------------------------------

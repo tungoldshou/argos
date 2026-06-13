@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from argos_agent.ledger.builder import build_entry
+from argos.ledger.builder import build_entry
 
 
 class _FakeReceipt:

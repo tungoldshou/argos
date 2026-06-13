@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.sandbox import seatbelt
+from argos.sandbox import seatbelt
 
 
 def test_profile_denies_by_default():

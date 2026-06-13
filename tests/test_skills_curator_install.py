@@ -9,8 +9,8 @@ from typing import Callable
 
 import pytest
 
-import argos_agent.skills_curator.index as _idx
-import argos_agent.skills_curator.capabilities as _cap
+import argos.skills_curator.index as _idx
+import argos.skills_curator.capabilities as _cap
 
 
 # ── helpers ──────────────────────────────────────────────────
@@ -151,7 +151,7 @@ def test_list_installed_finds_skill_md_files(tmp_path, monkeypatch):
 
 
 def test_builtin_three_names_protected():
-    from argos_agent.skills_curator.index import BUILTIN_NAMES
+    from argos.skills_curator.index import BUILTIN_NAMES
     assert "verify" in BUILTIN_NAMES
     assert "security-review" in BUILTIN_NAMES
     assert "simplify" in BUILTIN_NAMES
@@ -177,7 +177,7 @@ def install_env(tmp_path, monkeypatch):
 def test_install_protected_builtin_raises(install_env, monkeypatch):
     import os
     os.environ["ARGOS_SKILLS_NETWORK_OK"] = "1"
-    from argos_agent.skills_curator.install import install, InstallError
+    from argos.skills_curator.install import install, InstallError
     with pytest.raises(InstallError, match="protected_skill"):
         install("verify")
     os.environ.pop("ARGOS_SKILLS_NETWORK_OK", None)
@@ -187,7 +187,7 @@ def test_install_not_in_index_raises(install_env, monkeypatch):
     import urllib.request
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda url, timeout=10.0: (_ for _ in ()).throw(TimeoutError("no")))
-    from argos_agent.skills_curator.install import install, InstallError
+    from argos.skills_curator.install import install, InstallError
     with pytest.raises(InstallError, match="index_unavailable|not_in_index"):
         install("nope")
 
@@ -200,7 +200,7 @@ def test_install_sha_mismatch_raises(install_env, monkeypatch):
     import urllib.request
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda url, timeout=10.0: _Resp(content.encode("utf-8")))
-    from argos_agent.skills_curator.install import install, InstallError
+    from argos.skills_curator.install import install, InstallError
     with pytest.raises(InstallError, match="sha_mismatch"):
         install("bad-skill")
 
@@ -215,7 +215,7 @@ def test_install_size_drift_warning(install_env, monkeypatch):
     import urllib.request
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda url, timeout=10.0: _Resp(content.encode("utf-8")))
-    from argos_agent.skills_curator.install import install
+    from argos.skills_curator.install import install
     r = install("big-skill", run_smoke=False)
     assert r.path.exists()
     assert any("size_drift" in w for w in r.warnings)
@@ -232,7 +232,7 @@ def test_install_capabilities_missing_raises(install_env, monkeypatch):
     import urllib.request
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda url, timeout=10.0: _Resp(content.encode("utf-8")))
-    from argos_agent.skills_curator.install import install, InstallError
+    from argos.skills_curator.install import install, InstallError
     with pytest.raises(InstallError, match="frontmatter_invalid"):
         install("bad-meta")
 
@@ -242,7 +242,7 @@ def test_install_insecure_url_raises(install_env, monkeypatch):
         "evil", capabilities=["read"],
         skill_md_url="http://insecure.example.com/SKILL.md",
     )])
-    from argos_agent.skills_curator.install import install, InstallError
+    from argos.skills_curator.install import install, InstallError
     with pytest.raises(InstallError, match="insecure_url"):
         install("evil")
 
@@ -256,7 +256,7 @@ def test_install_happy_path_writes_file(install_env, monkeypatch):
     import urllib.request
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda url, timeout=10.0: _Resp(content.encode("utf-8")))
-    from argos_agent.skills_curator.install import install
+    from argos.skills_curator.install import install
     r = install("good", run_smoke=False)
     assert r.path.exists()
     assert r.sha256 == sha
@@ -273,7 +273,7 @@ def test_install_force_enabled_false(install_env, monkeypatch):
     import urllib.request
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda url, timeout=10.0: _Resp(content.encode("utf-8")))
-    from argos_agent.skills_curator.install import install
+    from argos.skills_curator.install import install
     install("auto-off", run_smoke=False)
     written = (install_env / "auto-off" / "SKILL.md").read_text("utf-8")
     assert "enabled: false" in written
@@ -288,7 +288,7 @@ def test_install_existing_skill_backs_up_to_trash(install_env, monkeypatch):
     import urllib.request
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda url, timeout=10.0: _Resp(content.encode("utf-8")))
-    from argos_agent.skills_curator.install import install
+    from argos.skills_curator.install import install
     install("twice", run_smoke=False)
     install("twice", run_smoke=False)  # 二次 → backup
     assert (install_env / ".trash").exists()
@@ -305,7 +305,7 @@ def test_install_network_capability_requires_env_confirm(install_env, monkeypatc
     import urllib.request
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda url, timeout=10.0: _Resp(content.encode("utf-8")))
-    from argos_agent.skills_curator.install import install, InstallError
+    from argos.skills_curator.install import install, InstallError
     import os
     # 不设 env
     os.environ.pop("ARGOS_SKILLS_NETWORK_OK", None)

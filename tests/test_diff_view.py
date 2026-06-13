@@ -9,8 +9,8 @@
 import pytest
 from textual.app import App, ComposeResult
 
-from argos_agent.tui.theme import ARGOS_NIGHT
-from argos_agent.tui.widgets.diff_view import DiffView
+from argos.tui.theme import ARGOS_NIGHT
+from argos.tui.widgets.diff_view import DiffView
 
 _UNIFIED = "@@ -15 +15 @@\n-    range(0, len(xs)-n, n)\n+    range(0, len(xs), n)"
 

@@ -17,10 +17,10 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel
-from argos_agent.permissions.evaluator import DecisionMeta, evaluate, _apply_trust_semantics
-from argos_agent.permissions.config import PermissionsConfig, RuleEntry
-from argos_agent.permissions.trust_dial import TrustLevel
+from argos.approval import ApprovalGate, ApprovalLevel
+from argos.permissions.evaluator import DecisionMeta, evaluate, _apply_trust_semantics
+from argos.permissions.config import PermissionsConfig, RuleEntry
+from argos.permissions.trust_dial import TrustLevel
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -149,7 +149,7 @@ class TestGateL0Wiring:
         set_trust_level(L0) 写入 CONFIRM，但 evaluator 的 ask_readonly=True 会把 AUTO
         级 soft-allow approve 升格 ask。用 soft-allow 规则触发 approve 来验证 L0 效果。
         """
-        from argos_agent.permissions.config import PermissionsConfig, RuleEntry
+        from argos.permissions.config import PermissionsConfig, RuleEntry
         gate = ApprovalGate()
         gate.set_trust_level(TrustLevel.L0_EVERY_STEP)
         # 注入允许 read_file 的 permissions_config
@@ -369,21 +369,21 @@ class TestTrustStatusAnnotation:
     def test_app_py_no_wiring_annotation(self):
         """tui/app.py 不再含接线中字样。"""
         from pathlib import Path
-        src = Path(__file__).parents[2] / "argos_agent" / "tui" / "app.py"
+        src = Path(__file__).parents[2] / "argos" / "tui" / "app.py"
         text = src.read_text(encoding="utf-8")
         assert "接线中" not in text, "tui/app.py 仍含接线中注解，应已摘除"
 
     def test_trust_dial_no_wiring_annotation(self):
         """trust_dial.py 不再含"P2 未完成前退化 L1"。"""
         from pathlib import Path
-        src = Path(__file__).parents[2] / "argos_agent" / "permissions" / "trust_dial.py"
+        src = Path(__file__).parents[2] / "argos" / "permissions" / "trust_dial.py"
         text = src.read_text(encoding="utf-8")
         assert "P2 未完成前退化 L1" not in text
 
     def test_approval_py_no_wiring_annotation(self):
         """approval.py 不再含"当前 evaluator 路径无此字段"（旧保守存储注释）。"""
         from pathlib import Path
-        src = Path(__file__).parents[2] / "argos_agent" / "approval.py"
+        src = Path(__file__).parents[2] / "argos" / "approval.py"
         text = src.read_text(encoding="utf-8")
         assert "当前 evaluator 路径无此字段" not in text
 

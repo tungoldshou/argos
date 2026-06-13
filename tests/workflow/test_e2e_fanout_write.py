@@ -13,8 +13,8 @@ import sys
 
 import pytest
 
-from argos_agent.workflow.engine import WorkflowEngine
-from argos_agent.workflow.spec import parse_spec
+from argos.workflow.engine import WorkflowEngine
+from argos.workflow.spec import parse_spec
 
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="真 Seatbelt 沙箱仅 macOS")
 

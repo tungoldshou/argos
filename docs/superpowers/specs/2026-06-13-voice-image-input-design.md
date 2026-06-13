@@ -12,7 +12,7 @@
 
 ## 2. 决策摘要(已锁定)
 
-1. **形态**：共享输入内核放进 `argos_agent/`，TUI 先接，桌面壳后接。
+1. **形态**：共享输入内核放进 `argos/`，TUI 先接，桌面壳后接。
 2. **STT 默认开**：语音随基础安装即用，不是可选 extra。默认本地引擎用**跨平台 `faster-whisper`**(各平台有 wheel)，**模型权重首次录音懒下载**(装机不胖)；Apple Silicon 自动走 `mlx-whisper` 加速路径；云端 provider 可选——首选 `openai`(Apache-2.0，多数用户已有 key)、次选 `deepgram-sdk`(MIT，流式强)，Groq(whisper)亦可；**MiniMax ASR 无第一方 Python SDK，从默认列表拿掉，仅当用户已配 MiniMax key 时作机会性 bonus**。provider-agnostic 单接口，镜像 `web.py` 的双后端模式；云端走 broker egress 白名单 + 审批闸。GitHub 调研结论：**无单一整包方案**覆盖整条 TUI 链路；底层积木全 MIT/Apache 可直接装，aider `/voice`(Apache-2.0)的录音循环作**参考重写**(不拷贝)，**按键录音 + provider 路由两层自己写**(Textual 生态无先例)。
 3. **图片输入**：剪贴板读取(macOS `pngpaste`/AppKit，Linux `xclip`/`xsel`)+ prompt 内图片路径检测/拖拽，**两者都做**。键位用 **`Ctrl+V`**(贴合 Claude Code 肌肉记忆)。
 4. **多模态降级**：路由模型纯文本时**诚实阻断 + 提示配置多模态模型**，绝不静默剥图、绝不假装看到。
@@ -23,7 +23,7 @@
 ## 3. 架构总览
 
 ```
-用户动作  ──►  argos_agent/input/  ──►  (goal_text, [ImageAttachment])  ──►  AgentLoop
+用户动作  ──►  argos/input/  ──►  (goal_text, [ImageAttachment])  ──►  AgentLoop
   │                  │
   ├ 空格(空框)录音      ├ recorder.py → stt.py(Transcriber) → 转写文本(并入 goal_text)
   ├ Ctrl+V 粘贴         ├ paste 分流(TUI 侧)：图 → attachments；超长文本 → 文本侧缓冲
@@ -34,7 +34,7 @@
 
 ## 4. `input/` 子包模块
 
-新增 `argos_agent/input/`，高内聚、可独立测试：
+新增 `argos/input/`，高内聚、可独立测试：
 
 | 模块 | 职责 | 依赖 / 诚实边界 |
 |---|---|---|
@@ -127,8 +127,8 @@
 
 ## 12. 触及文件清单
 
-- 新增：`argos_agent/input/{__init__,recorder,stt,clipboard_image,attachments}.py`
-- 改：`argos_agent/core/models.py`(`ModelTier.multimodal`)、`argos_agent/core/protocols.py`(两个 `payload()` + `_coalesce_consecutive_roles` 处理 attachments)、`argos_agent/core/loop.py`(首条 user 消息挂 attachments + 多模态门禁)、`argos_agent/tui/widgets/prompt.py`(空格录音拦截 + `events.Paste` 分流 + 占位 chip + 侧缓冲)、`argos_agent/tui/app.py`(`Ctrl+V` / chip 渲染 / 提交展开流)、setup 向导、`capability/` 注册
+- 新增：`argos/input/{__init__,recorder,stt,clipboard_image,attachments}.py`
+- 改：`argos/core/models.py`(`ModelTier.multimodal`)、`argos/core/protocols.py`(两个 `payload()` + `_coalesce_consecutive_roles` 处理 attachments)、`argos/core/loop.py`(首条 user 消息挂 attachments + 多模态门禁)、`argos/tui/widgets/prompt.py`(空格录音拦截 + `events.Paste` 分流 + 占位 chip + 侧缓冲)、`argos/tui/app.py`(`Ctrl+V` / chip 渲染 / 提交展开流)、setup 向导、`capability/` 注册
 - 配置：`~/.argos/config.json` schema(`stt` 块 + tier `multimodal`)
 - 打包：`pyproject.toml` **基础依赖**增 `sounddevice` + `faster-whisper`(语音默认开)；`mlx-whisper` 作 Apple Silicon 条件依赖(`sys_platform=='darwin' and platform_machine=='arm64'`)；`openai` / `deepgram-sdk` 作可选 extra。**Python 版本**：在 3.12 验证(faster-whisper 在 3.13 有 PyAV 冲突 issue #1231，3.12 不受影响)，必要时为依赖加约束。**禁止 GPL/AGPL 运行依赖**(nerd-dictation/whisper-writer GPL-3、SpeechRecognition 捆 GPL-2 FLAC、pynput LGPL、Open Interpreter AGPL — 仅只读设计)。
 - 测试：镜像上述模块的 `tests/`

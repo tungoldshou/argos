@@ -1,7 +1,7 @@
 """role 字段 + 4 角色预设 spec 验收(任务:每个角色独立上下文/工具/提示词/上限)。"""
 import pytest
 
-from argos_agent.workflow.spec import (
+from argos.workflow.spec import (
     AgentTask, ROLE_PRESETS, Stage, WorkflowSpec, parse_spec, WorkflowSpecError,
 )
 

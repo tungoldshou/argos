@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent import jsonl_log
+from argos import jsonl_log
 
 
 # ── append_line 验收 ─────────────────────────────────

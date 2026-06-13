@@ -1,8 +1,8 @@
 """Phase 2:events 持久化 + replay 重建(契约 §2 / spec §5.8 + §12.6)。"""
 import pytest
 
-from argos_agent.memory.store import ArgosStore, ReplayState
-from argos_agent.tui import events as E
+from argos.memory.store import ArgosStore, ReplayState
+from argos.tui import events as E
 
 
 @pytest.fixture

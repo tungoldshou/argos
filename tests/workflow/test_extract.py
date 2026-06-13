@@ -1,4 +1,4 @@
-from argos_agent.core.loop import extract_workflow_spec
+from argos.core.loop import extract_workflow_spec
 
 
 def test_extract_dict_literal_arg():

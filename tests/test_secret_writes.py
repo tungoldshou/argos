@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.permissions.secrets import (
+from argos.permissions.secrets import (
     MAX_SCAN_BYTES,
     SECRET_PATTERNS,
     find_secret_in_content,

@@ -14,8 +14,8 @@ import dataclasses
 
 import pytest
 
-from argos_agent.conductor.orders import StandingOrder
-from argos_agent.conductor.proposals import ProactiveSuggestion, propose
+from argos.conductor.orders import StandingOrder
+from argos.conductor.proposals import ProactiveSuggestion, propose
 
 
 # ---------------------------------------------------------------------------

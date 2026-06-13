@@ -5,8 +5,8 @@ import asyncio
 
 import pytest
 
-from argos_agent.daemon.registry import RunEntry, RunRegistry
-from argos_agent.daemon.state_machine import TERMINAL_STATES
+from argos.daemon.registry import RunEntry, RunRegistry
+from argos.daemon.state_machine import TERMINAL_STATES
 
 
 # ── register ──────────────────────────────────────────────────────────

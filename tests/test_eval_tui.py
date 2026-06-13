@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.tui import commands as tui_cmd
-from argos_agent.eval.results import append
-from argos_agent.eval.runner import EvalResult, PASS_PASSED, PASS_FAILED
+from argos.tui import commands as tui_cmd
+from argos.eval.results import append
+from argos.eval.runner import EvalResult, PASS_PASSED, PASS_FAILED
 
 
 # ── parse_slash / COMMAND_HELP ───────────────────────────────────────
@@ -49,19 +49,19 @@ def test_eval_compare_subcommand_parsed():
 class _FakeApp:
     """ArgosApp 的最小替代(只暴露 _eval_cmd / _eval_run_cmd / _eval_compare_cmd)。"""
     def __init__(self):
-        from argos_agent.tui.app import ArgosApp
+        from argos.tui.app import ArgosApp
         self._session_id = "test-session"
 
     async def _eval_cmd(self, log, arg: str) -> None:
-        from argos_agent.tui.app import ArgosApp
+        from argos.tui.app import ArgosApp
         return await ArgosApp._eval_cmd(self, log, arg)
 
     async def _eval_run_cmd(self, log, task_id: str) -> None:
-        from argos_agent.tui.app import ArgosApp
+        from argos.tui.app import ArgosApp
         return await ArgosApp._eval_run_cmd(self, log, task_id)
 
     async def _eval_compare_cmd(self, log, a: str, b: str) -> None:
-        from argos_agent.tui.app import ArgosApp
+        from argos.tui.app import ArgosApp
         return await ArgosApp._eval_compare_cmd(self, log, a, b)
 
 
@@ -84,7 +84,7 @@ class _FakeLog:
 async def test_eval_no_args_no_runs_prints_message(tmp_path, monkeypatch):
     """无 run → 友好提示,不假绿。"""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from argos_agent.eval import results as _results
+    from argos.eval import results as _results
     monkeypatch.setattr(_results, "_RUNS_DIR", tmp_path / "eval" / "runs")
     app = _FakeApp()
     log = _FakeLog()
@@ -97,7 +97,7 @@ async def test_eval_no_args_no_runs_prints_message(tmp_path, monkeypatch):
 async def test_eval_no_args_lists_runs(tmp_path, monkeypatch):
     """有 run → 表格 + 摘要。"""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from argos_agent.eval import results as _results
+    from argos.eval import results as _results
     monkeypatch.setattr(_results, "_RUNS_DIR", tmp_path / "eval" / "runs")
     now = time.time()
     r1 = EvalResult(
@@ -143,7 +143,7 @@ async def test_eval_unknown_subcommand_errors():
 @pytest.mark.asyncio
 async def test_eval_run_unknown_task_errors(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from argos_agent.eval import corpus as _corpus
+    from argos.eval import corpus as _corpus
     monkeypatch.setattr(_corpus, "_corpus_root", lambda: tmp_path / "nope")
     app = _FakeApp()
     log = _FakeLog()
@@ -157,8 +157,8 @@ async def test_eval_run_happy_path_appends_and_prints(tmp_path, monkeypatch):
     """/eval run bug_fix_001 → 调 runner + 落 JSONL + 打印结果。"""
     from tests.eval._seed_corpus import write_seed_corpus
     from tests.eval._fakes import FakeWorktree, make_fake_loop, make_fake_loop_factory
-    from argos_agent.eval import runner as _runner_mod
-    from argos_agent.daemon import worktree as _wt_mod
+    from argos.eval import runner as _runner_mod
+    from argos.daemon import worktree as _wt_mod
 
     root = tmp_path / "corpus"
     write_seed_corpus(root)
@@ -194,8 +194,8 @@ async def test_eval_run_happy_path_appends_and_prints(tmp_path, monkeypatch):
 async def test_eval_compare_requires_colon_or_matches_ids(tmp_path, monkeypatch):
     """compare 缺冒号时,会用纯 id(此时 task_id 必须一致)。"""
     from tests.eval._seed_corpus import write_seed_corpus
-    from argos_agent.eval import runner as _runner_mod
-    from argos_agent.daemon import worktree as _wt_mod
+    from argos.eval import runner as _runner_mod
+    from argos.daemon import worktree as _wt_mod
     from tests.eval._fakes import FakeWorktree, make_fake_loop
 
     root = tmp_path / "corpus"
@@ -237,7 +237,7 @@ async def test_eval_compare_mismatched_ids_errors():
 @pytest.mark.asyncio
 async def test_eval_compare_unknown_task_errors(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from argos_agent.eval import corpus as _corpus
+    from argos.eval import corpus as _corpus
     monkeypatch.setattr(_corpus, "_corpus_root", lambda: tmp_path / "nope")
     app = _FakeApp()
     log = _FakeLog()

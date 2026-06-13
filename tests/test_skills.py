@@ -2,7 +2,7 @@
 import pytest
 from pathlib import Path
 
-from argos_agent import skills
+from argos import skills
 
 
 @pytest.fixture
@@ -116,13 +116,13 @@ class _FakeEmbedder:
 
 def _use_embedder(monkeypatch, fn):
     """让 skills.recall 用注入的 embedder(替代旧的直连 MiniMax llm_embed)。"""
-    monkeypatch.setattr("argos_agent.config.active_embedder", lambda: _FakeEmbedder(fn))
+    monkeypatch.setattr("argos.config.active_embedder", lambda: _FakeEmbedder(fn))
 
 
 def test_recall_keyword_fallback_when_no_embedder(skills_dir, monkeypatch):
     """零模型兜底:未配 embedding(active_embedder 返 None)→ skill 召回走关键词重叠(不返空)。
     skills 不需要大模型也能用;不相关 goal 仍空(无关键词重叠)。"""
-    monkeypatch.setattr("argos_agent.config.active_embedder", lambda: None)
+    monkeypatch.setattr("argos.config.active_embedder", lambda: None)
     # skills_dir: a(desc=alpha,enabled) / b(disabled) / c(desc=charlie,enabled)
     out = skills.recall("帮我处理 alpha 相关的事", k=3, sim_min=0.4)
     assert "a" in {s.name for s in out}, "goal 含 'alpha' → 关键词命中 skill a 的描述"

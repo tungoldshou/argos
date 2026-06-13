@@ -15,10 +15,10 @@ from unittest import mock
 
 import pytest
 
-from argos_agent.sandbox import linux as linux_mod
-from argos_agent.sandbox.backend import SandboxBackend
-from argos_agent.sandbox.executor import SeatbeltExecutor
-from argos_agent.sandbox.linux import BwrapExecutor, UnshareExecutor, select_backend
+from argos.sandbox import linux as linux_mod
+from argos.sandbox.backend import SandboxBackend
+from argos.sandbox.executor import SeatbeltExecutor
+from argos.sandbox.linux import BwrapExecutor, UnshareExecutor, select_backend
 
 
 # ── 接口对齐(跨平台) ────────────────────────────

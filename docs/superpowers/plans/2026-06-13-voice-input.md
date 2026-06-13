@@ -14,12 +14,12 @@
 
 ## File Structure
 
-- `argos_agent/input/stt_config.py` — `SttConfig` + `load_stt_config()`: read the `stt` block from `~/.argos/config.json` (defaults make local work with zero config). One responsibility: STT config resolution.
-- `argos_agent/input/stt.py` — `Transcriber` protocol, `SttError`, `is_apple_silicon`, `LocalWhisper`, `CloudWhisper`, `make_transcriber`, WAV encode helper. One responsibility: audio → text.
-- `argos_agent/input/recorder.py` — `Recorder` (sounddevice toggle), `RecorderError`. One responsibility: mic → numpy audio.
-- `argos_agent/tui/widgets/prompt.py` — empty-prompt space → `VoiceToggle` message.
-- `argos_agent/tui/app.py` — `_voice_toggle` orchestration (record → transcribe off-loop → inject), lazy recorder/transcriber factories.
-- `argos_agent/capability/builtins.py` — register `stt_transcribe` egress hosts.
+- `argos/input/stt_config.py` — `SttConfig` + `load_stt_config()`: read the `stt` block from `~/.argos/config.json` (defaults make local work with zero config). One responsibility: STT config resolution.
+- `argos/input/stt.py` — `Transcriber` protocol, `SttError`, `is_apple_silicon`, `LocalWhisper`, `CloudWhisper`, `make_transcriber`, WAV encode helper. One responsibility: audio → text.
+- `argos/input/recorder.py` — `Recorder` (sounddevice toggle), `RecorderError`. One responsibility: mic → numpy audio.
+- `argos/tui/widgets/prompt.py` — empty-prompt space → `VoiceToggle` message.
+- `argos/tui/app.py` — `_voice_toggle` orchestration (record → transcribe off-loop → inject), lazy recorder/transcriber factories.
+- `argos/capability/builtins.py` — register `stt_transcribe` egress hosts.
 - `pyproject.toml` — base deps `sounddevice` + `faster-whisper`; conditional `mlx-whisper`; optional `cloud-stt` extra.
 - Tests (new): `tests/input/test_stt_config.py`, `tests/input/test_stt.py`, `tests/input/test_recorder.py`, `tests/tui/test_voice.py`, `tests/test_pyproject_voice_deps.py`, plus a capability assertion.
 
@@ -28,7 +28,7 @@
 ## Task 1: STT config loader
 
 **Files:**
-- Create: `argos_agent/input/stt_config.py`
+- Create: `argos/input/stt_config.py`
 - Test: `tests/input/test_stt_config.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -38,7 +38,7 @@ Create `tests/input/test_stt_config.py`:
 ```python
 """SttConfig + load_stt_config:读 config.json 的 stt 块,缺省让本地零配置可用。"""
 import json
-from argos_agent.input.stt_config import SttConfig, load_stt_config
+from argos.input.stt_config import SttConfig, load_stt_config
 
 
 def test_defaults_when_no_stt_block(tmp_path):
@@ -71,11 +71,11 @@ def test_reads_cloud_block_and_resolves_key(tmp_path):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/input/test_stt_config.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'argos_agent.input.stt_config'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'argos.input.stt_config'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Create `argos_agent/input/stt_config.py`:
+Create `argos/input/stt_config.py`:
 
 ```python
 """STT 配置:读 ~/.argos/config.json 的 stt 块。缺省让本地引擎零配置即用。
@@ -144,7 +144,7 @@ Expected: PASS (4 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add argos_agent/input/stt_config.py tests/input/test_stt_config.py
+git add argos/input/stt_config.py tests/input/test_stt_config.py
 git commit -m "feat(input): STT config loader (local default, cloud key resolution)"
 ```
 
@@ -153,7 +153,7 @@ git commit -m "feat(input): STT config loader (local default, cloud key resoluti
 ## Task 2: `Transcriber` + `LocalWhisper`
 
 **Files:**
-- Create: `argos_agent/input/stt.py`
+- Create: `argos/input/stt.py`
 - Test: `tests/input/test_stt.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -164,7 +164,7 @@ Create `tests/input/test_stt.py`:
 """STT:LocalWhisper(注入 backend 测,不加载真模型)+ 平台检测。"""
 import numpy as np
 import pytest
-from argos_agent.input.stt import LocalWhisper, SttError, is_apple_silicon
+from argos.input.stt import LocalWhisper, SttError, is_apple_silicon
 
 
 def test_local_whisper_uses_injected_backend():
@@ -181,7 +181,7 @@ def test_local_whisper_wraps_backend_error():
     assert "model exploded" in str(e.value)
 
 def test_is_apple_silicon_uses_platform(monkeypatch):
-    import argos_agent.input.stt as stt
+    import argos.input.stt as stt
     monkeypatch.setattr(stt.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(stt.platform, "machine", lambda: "arm64")
     assert is_apple_silicon() is True
@@ -195,11 +195,11 @@ def test_is_apple_silicon_uses_platform(monkeypatch):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/input/test_stt.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'argos_agent.input.stt'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'argos.input.stt'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Create `argos_agent/input/stt.py`:
+Create `argos/input/stt.py`:
 
 ```python
 """语音转文字(STT):provider-agnostic。本地默认(faster-whisper,Apple Silicon 走 mlx),
@@ -276,7 +276,7 @@ Expected: PASS (3 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add argos_agent/input/stt.py tests/input/test_stt.py
+git add argos/input/stt.py tests/input/test_stt.py
 git commit -m "feat(input): Transcriber protocol + LocalWhisper (faster-whisper/mlx)"
 ```
 
@@ -285,7 +285,7 @@ git commit -m "feat(input): Transcriber protocol + LocalWhisper (faster-whisper/
 ## Task 3: `CloudWhisper` + WAV encode + `make_transcriber`
 
 **Files:**
-- Modify: `argos_agent/input/stt.py`
+- Modify: `argos/input/stt.py`
 - Test: `tests/input/test_stt.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -293,8 +293,8 @@ git commit -m "feat(input): Transcriber protocol + LocalWhisper (faster-whisper/
 Append to `tests/input/test_stt.py`:
 
 ```python
-from argos_agent.input.stt import CloudWhisper, make_transcriber, _pcm16_wav_bytes
-from argos_agent.input.stt_config import SttConfig
+from argos.input.stt import CloudWhisper, make_transcriber, _pcm16_wav_bytes
+from argos.input.stt_config import SttConfig
 
 
 def test_pcm16_wav_bytes_is_valid_wav():
@@ -337,7 +337,7 @@ Expected: FAIL — `ImportError: cannot import name 'CloudWhisper'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Append to `argos_agent/input/stt.py`:
+Append to `argos/input/stt.py`:
 
 ```python
 def _pcm16_wav_bytes(audio, samplerate: int) -> bytes:
@@ -406,7 +406,7 @@ Expected: PASS (7 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add argos_agent/input/stt.py tests/input/test_stt.py
+git add argos/input/stt.py tests/input/test_stt.py
 git commit -m "feat(input): CloudWhisper + WAV encode + make_transcriber"
 ```
 
@@ -415,7 +415,7 @@ git commit -m "feat(input): CloudWhisper + WAV encode + make_transcriber"
 ## Task 4: `Recorder` (mic capture)
 
 **Files:**
-- Create: `argos_agent/input/recorder.py`
+- Create: `argos/input/recorder.py`
 - Test: `tests/input/test_recorder.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -426,7 +426,7 @@ Create `tests/input/test_recorder.py`:
 """Recorder:sounddevice 开关录音(注入 fake sd 测,不碰真麦克风)。"""
 import numpy as np
 import pytest
-from argos_agent.input.recorder import Recorder, RecorderError
+from argos.input.recorder import Recorder, RecorderError
 
 
 class _FakeStream:
@@ -486,11 +486,11 @@ def test_empty_recording_is_honest():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/input/test_recorder.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'argos_agent.input.recorder'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'argos.input.recorder'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Create `argos_agent/input/recorder.py`:
+Create `argos/input/recorder.py`:
 
 ```python
 """麦克风采集:sounddevice 开关式录音 → float32 16kHz 单声道数组(宿主进程,沙箱外)。
@@ -563,7 +563,7 @@ Expected: PASS (4 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add argos_agent/input/recorder.py tests/input/test_recorder.py
+git add argos/input/recorder.py tests/input/test_recorder.py
 git commit -m "feat(input): Recorder (sounddevice toggle capture, honest errors)"
 ```
 
@@ -572,8 +572,8 @@ git commit -m "feat(input): Recorder (sounddevice toggle capture, honest errors)
 ## Task 5: TUI space-to-record wiring
 
 **Files:**
-- Modify: `argos_agent/tui/widgets/prompt.py` (`VoiceToggle` message; empty-space interception in `_on_key`)
-- Modify: `argos_agent/tui/app.py` (`_voice_toggle` + handler + lazy factories + `_voice_recording` state)
+- Modify: `argos/tui/widgets/prompt.py` (`VoiceToggle` message; empty-space interception in `_on_key`)
+- Modify: `argos/tui/app.py` (`_voice_toggle` + handler + lazy factories + `_voice_recording` state)
 - Test: `tests/tui/test_voice.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -585,7 +585,7 @@ Create `tests/tui/test_voice.py`:
 import numpy as np
 import pytest
 from textual.app import App
-from argos_agent.tui.widgets.prompt import PromptArea
+from argos.tui.widgets.prompt import PromptArea
 
 
 def test_voice_toggle_message_exists():
@@ -634,7 +634,7 @@ Expected: FAIL — `AttributeError: type object 'PromptArea' has no attribute 'V
 
 - [ ] **Step 3: Write minimal implementation**
 
-**3a.** In `argos_agent/tui/widgets/prompt.py`, add the `VoiceToggle` message class inside `PromptArea` (next to `Submitted`):
+**3a.** In `argos/tui/widgets/prompt.py`, add the `VoiceToggle` message class inside `PromptArea` (next to `Submitted`):
 
 ```python
     class VoiceToggle(Message):
@@ -655,12 +655,12 @@ Then in `PromptArea._on_key`, add the empty-space interception as the FIRST bran
         # ... rest unchanged ...
 ```
 
-**3b.** In `argos_agent/tui/app.py`, add voice imports near the other `argos_agent` imports:
+**3b.** In `argos/tui/app.py`, add voice imports near the other `argos` imports:
 
 ```python
-from argos_agent.input.recorder import Recorder, RecorderError
-from argos_agent.input.stt import make_transcriber, SttError
-from argos_agent.input.stt_config import load_stt_config
+from argos.input.recorder import Recorder, RecorderError
+from argos.input.stt import make_transcriber, SttError
+from argos.input.stt_config import load_stt_config
 ```
 
 Add `_voice_recording` init in `ArgosApp.__init__` (alongside other run state):
@@ -730,7 +730,7 @@ Append to `tests/tui/test_voice.py`:
 ```python
 @pytest.mark.asyncio
 async def test_voice_toggle_records_then_injects(monkeypatch):
-    from argos_agent.tui.app import ArgosApp
+    from argos.tui.app import ArgosApp
 
     class _FakeRec:
         def start(self): self.started = True
@@ -750,7 +750,7 @@ async def test_voice_toggle_records_then_injects(monkeypatch):
 
     app = _Harness()
     async with app.run_test() as pilot:
-        from argos_agent.tui.widgets.transcript import Transcript  # 若 transcript 缺失则跳过
+        from argos.tui.widgets.transcript import Transcript  # 若 transcript 缺失则跳过
         app._voice_recording = False
         app._rec = _FakeRec()
         app._trans = _FakeTrans()
@@ -771,7 +771,7 @@ Run: `uv run pytest tests/tui/test_voice.py -v`
 Expected: PASS (skips allowed for the injected-orchestration test on a bare harness)
 
 ```bash
-git add argos_agent/tui/widgets/prompt.py argos_agent/tui/app.py tests/tui/test_voice.py
+git add argos/tui/widgets/prompt.py argos/tui/app.py tests/tui/test_voice.py
 git commit -m "feat(tui): space-to-record voice → transcribe → inject (honest failures)"
 ```
 
@@ -780,7 +780,7 @@ git commit -m "feat(tui): space-to-record voice → transcribe → inject (hones
 ## Task 6: register cloud STT egress hosts
 
 **Files:**
-- Modify: `argos_agent/capability/builtins.py` (add `_STT_EGRESS` + `stt_transcribe` capability)
+- Modify: `argos/capability/builtins.py` (add `_STT_EGRESS` + `stt_transcribe` capability)
 - Test: `tests/test_capability_stt_egress.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -789,8 +789,8 @@ Create `tests/test_capability_stt_egress.py`:
 
 ```python
 """stt_transcribe 能力声明云端 STT 出网 host,register_builtins 后进 egress 聚合。"""
-from argos_agent.capability.registry import CapabilityRegistry
-from argos_agent.capability.builtins import register_builtins
+from argos.capability.registry import CapabilityRegistry
+from argos.capability.builtins import register_builtins
 
 
 def test_stt_egress_hosts_registered():
@@ -809,7 +809,7 @@ Expected: FAIL — `assert 'stt_transcribe' in reg` (not registered yet)
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `argos_agent/capability/builtins.py`, add a host constant near `_SEARCH_EGRESS` (around line 39-45):
+In `argos/capability/builtins.py`, add a host constant near `_SEARCH_EGRESS` (around line 39-45):
 
 ```python
 # 云端 STT 出网 host(spec §7:注册进 egress 白名单作单一真值表;
@@ -847,7 +847,7 @@ Expected: PASS (tool-count / registry tests still green; if a hard-coded builtin
 - [ ] **Step 6: Commit**
 
 ```bash
-git add argos_agent/capability/builtins.py tests/test_capability_stt_egress.py
+git add argos/capability/builtins.py tests/test_capability_stt_egress.py
 git commit -m "feat(capability): register cloud STT egress hosts"
 ```
 

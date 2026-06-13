@@ -5,7 +5,7 @@
 """
 import pytest
 
-from argos_agent.memory import embedding as emb
+from argos.memory import embedding as emb
 
 
 class _FakeEmbedder:

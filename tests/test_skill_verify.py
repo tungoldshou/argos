@@ -7,10 +7,10 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from argos_agent.core.verify_gate import Verdict
-from argos_agent.skills_runtime.analysis import AnalysisSkillContext
-from argos_agent.skills_runtime import registry
-from argos_agent.skills_runtime.builtin.verify import run as verify_run
+from argos.core.verify_gate import Verdict
+from argos.skills_runtime.analysis import AnalysisSkillContext
+from argos.skills_runtime import registry
+from argos.skills_runtime.builtin.verify import run as verify_run
 
 
 @pytest.fixture(autouse=True)
@@ -29,7 +29,7 @@ def test_verify_calls_verifier_verify_directly(tmp_path):
     fake_verifier = MagicMock()
     fake_verifier.verify.return_value = Verdict.passed(detail="ok", verify_cmd="pytest -q", attempts=1)
 
-    with patch("argos_agent.skills_runtime.builtin.verify.Verifier", return_value=fake_verifier):
+    with patch("argos.skills_runtime.builtin.verify.Verifier", return_value=fake_verifier):
         result = asyncio.run(verify_run({"path": None}, _ctx(tmp_path)))
 
     assert fake_verifier.verify.called
@@ -41,7 +41,7 @@ def test_verify_passing_verdict_translates_to_passed(tmp_path):
     fake_verifier = MagicMock()
     fake_verifier.verify.return_value = Verdict.passed(detail="ok", verify_cmd="pytest -q", attempts=1)
 
-    with patch("argos_agent.skills_runtime.builtin.verify.Verifier", return_value=fake_verifier):
+    with patch("argos.skills_runtime.builtin.verify.Verifier", return_value=fake_verifier):
         result = asyncio.run(verify_run({"path": None}, _ctx(tmp_path)))
 
     assert result.verdict == "passed"
@@ -55,7 +55,7 @@ def test_verify_failing_verdict_translates_to_failed_with_finding(tmp_path):
         detail="exit=1, test_bar failed", verify_cmd="pytest -q", attempts=1,
     )
 
-    with patch("argos_agent.skills_runtime.builtin.verify.Verifier", return_value=fake_verifier):
+    with patch("argos.skills_runtime.builtin.verify.Verifier", return_value=fake_verifier):
         result = asyncio.run(verify_run({"path": None}, _ctx(tmp_path)))
 
     assert result.verdict == "failed"
@@ -71,7 +71,7 @@ def test_verify_unverifiable_translates_to_partial(tmp_path):
         detail="(无 verify_cmd,未做机检验证)", tampered=[], attempts=1,
     )
 
-    with patch("argos_agent.skills_runtime.builtin.verify.Verifier", return_value=fake_verifier):
+    with patch("argos.skills_runtime.builtin.verify.Verifier", return_value=fake_verifier):
         result = asyncio.run(verify_run({"path": None}, _ctx(tmp_path)))
 
     assert result.verdict == "partial"
@@ -83,8 +83,8 @@ def test_verify_does_not_call_propose_verify(tmp_path):
     fake_verifier = MagicMock()
     fake_verifier.verify.return_value = Verdict.passed(detail="ok", verify_cmd="pytest -q", attempts=1)
 
-    with patch("argos_agent.skills_runtime.builtin.verify.Verifier", return_value=fake_verifier):
-        with patch("argos_agent.skills_runtime.builtin.verify.propose_verify") as mock_propose:
+    with patch("argos.skills_runtime.builtin.verify.Verifier", return_value=fake_verifier):
+        with patch("argos.skills_runtime.builtin.verify.propose_verify") as mock_propose:
             asyncio.run(verify_run({"path": None}, _ctx(tmp_path)))
             assert not mock_propose.called
 
@@ -96,8 +96,8 @@ def test_verify_no_verify_cmd_yields_partial_or_na(tmp_path):
         detail="(无 verify_cmd,未做机检验证)", tampered=[], attempts=1,
     )
 
-    with patch("argos_agent.skills_runtime.builtin.verify.Verifier", return_value=fake_verifier), \
-         patch("argos_agent.skills_runtime.builtin.verify._read_verify_cmd", return_value=None):
+    with patch("argos.skills_runtime.builtin.verify.Verifier", return_value=fake_verifier), \
+         patch("argos.skills_runtime.builtin.verify._read_verify_cmd", return_value=None):
         result = asyncio.run(verify_run({"path": None}, _ctx(tmp_path)))
 
     assert result.verdict in ("partial", "n_a")

@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.core.loop import AgentLoop, LoopConfig
-from argos_agent.core.verify_gate import Verdict
-from argos_agent.sandbox.backend import ExecResult
-from argos_agent.tui.events import Escalation, EventBus, PhaseChange, VerifyVerdict
+from argos.core.loop import AgentLoop, LoopConfig
+from argos.core.verify_gate import Verdict
+from argos.sandbox.backend import ExecResult
+from argos.tui.events import Escalation, EventBus, PhaseChange, VerifyVerdict
 
 
 class CompletingModel:
@@ -156,7 +156,7 @@ async def test_loop_self_verified_does_not_capture_run_success(monkeypatch, tmp_
     monkeypatch.setenv("ARGOS_MEMORY_DIR", str(mem_dir))
     monkeypatch.setenv("ARGOS_NO_MEMORY", "1")  # 关 auto-memory 副作用,只观察 capture_event
 
-    from argos_agent.memory import auto as mem_auto
+    from argos.memory import auto as mem_auto
     captured: list[dict] = []
     orig_capture = mem_auto.capture_event
 
@@ -194,7 +194,7 @@ async def test_loop_user_verified_captures_run_success(monkeypatch, tmp_path):
     monkeypatch.setenv("ARGOS_MEMORY_DIR", str(mem_dir))
     monkeypatch.setenv("ARGOS_NO_MEMORY", "1")
 
-    from argos_agent.memory import auto as mem_auto
+    from argos.memory import auto as mem_auto
     captured: list[dict] = []
     orig_capture = mem_auto.capture_event
 

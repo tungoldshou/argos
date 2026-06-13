@@ -10,7 +10,7 @@
 import asyncio
 import pytest
 
-from argos_agent import approval
+from argos import approval
 
 
 @pytest.mark.asyncio

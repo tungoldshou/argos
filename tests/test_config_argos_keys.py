@@ -10,7 +10,7 @@ import pytest
 def reload_config(monkeypatch):
     """重新加载 config 模块,并隔离 .env.local 文件(测试环境不依赖本地文件)。"""
     def _reload():
-        import argos_agent.config as cfg
+        import argos.config as cfg
         # patch Path.exists 让 .env.local 被视为不存在,使测试不受本地文件影响。
         with patch.object(Path, "exists", return_value=False):
             return importlib.reload(cfg)

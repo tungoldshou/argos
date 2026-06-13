@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.core.types import Verdict
-from argos_agent.permissions.autonomy import (
+from argos.core.types import Verdict
+from argos.permissions.autonomy import (
     AutonomyPolicy, Zone, classify, on_unverifiable_completion,
 )
-from argos_agent.permissions.config import PermissionsConfig
+from argos.permissions.config import PermissionsConfig
 
 
 def _auto_read_file_config() -> PermissionsConfig:
@@ -155,7 +155,7 @@ def test_failed_verdict_classifies_red():
 # ── 验收 d: 预授权能把某类 RED 降到自动 ──────────────────────
 def test_preauth_downgrades_soft_ask_to_green():
     """预授权某个 soft_ask matcher → 该规则触发的 RED 降到 GREEN。"""
-    from argos_agent.permissions.config import RuleEntry
+    from argos.permissions.config import RuleEntry
     config = PermissionsConfig(
         version=1,
         ask=(RuleEntry(tool="run_command", matcher="git push"),),

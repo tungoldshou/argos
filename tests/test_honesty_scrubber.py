@@ -1,7 +1,7 @@
 """诚实栈(契约 §3 HONESTY 不变量;spec §3.5/§12.1):HONESTY_SYSTEM 搬迁 + 注入顺序 + Scrubber。"""
 import pytest
 
-from argos_agent.core.honesty import (
+from argos.core.honesty import (
     HONESTY_SYSTEM,
     UNTRUSTED_OPEN,
     UNTRUSTED_CLOSE,

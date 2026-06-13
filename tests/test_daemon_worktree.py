@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.daemon.worktree import WorktreeError, WorktreeManager
+from argos.daemon.worktree import WorktreeError, WorktreeManager
 
 
 # ── is_git_repo ────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ def test_create_fails_when_git_missing(monkeypatch, tmp_path: Path):
     mgr = WorktreeManager(base_dir=tmp_path / "wt")
     # monkeypatch subprocess.run 在 worktree 路径上抛 FileNotFoundError
     # (底层 git 调用现统一在 git_worktree;在那里注入,才真正走 git-missing 路径)
-    import argos_agent.git_worktree as gwmod
+    import argos.git_worktree as gwmod
 
     original_run = gwmod.subprocess.run
 

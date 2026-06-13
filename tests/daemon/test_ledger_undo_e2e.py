@@ -18,11 +18,11 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from argos_agent.core.snapshot import RunSnapshot
-from argos_agent.daemon.manager import RunManager
-from argos_agent.daemon.server import DaemonHTTPServer
-from argos_agent.ledger.builder import build_entry
-from argos_agent.ledger.store import LedgerStore
+from argos.core.snapshot import RunSnapshot
+from argos.daemon.manager import RunManager
+from argos.daemon.server import DaemonHTTPServer
+from argos.ledger.builder import build_entry
+from argos.ledger.store import LedgerStore
 
 
 # ── 内部 HTTP helper(复用 test_daemon_server.py 风格)──────────────────────
@@ -34,7 +34,7 @@ async def _req(
     timeout: float = 5.0,
 ):
     """发 HTTP 请求,返 (status, headers, body_bytes)。"""
-    from argos_agent.daemon.client import DaemonClient
+    from argos.daemon.client import DaemonClient
     cli = DaemonClient(socket_path, timeout=timeout)
     return await cli._request(method, path, session_id=session_id, body=body)
 
@@ -317,7 +317,7 @@ async def test_undo_file_only_run_finds_snapshot_via_snapshot_root(
       2. 在 SNAPSHOT_ROOT 放一个合法快照 run-{run_id}.tar。
       3. POST /undo → 应还原成功（200），而非 409 no_snapshot。
     """
-    from argos_agent.core.snapshot import SNAPSHOT_ROOT
+    from argos.core.snapshot import SNAPSHOT_ROOT
     import tarfile
 
     srv, manager, ledger_store = ledger_server
@@ -381,7 +381,7 @@ async def test_undo_file_only_run_no_snapshot_root_still_returns_no_snapshot(
     tmp_path: Path, ledger_server
 ):
     """Minor-1 回归：纯 file: 条目 run，SNAPSHOT_ROOT 也没有对应快照 → 仍 409 no_snapshot。"""
-    from argos_agent.core.snapshot import SNAPSHOT_ROOT
+    from argos.core.snapshot import SNAPSHOT_ROOT
 
     srv, manager, ledger_store = ledger_server
 

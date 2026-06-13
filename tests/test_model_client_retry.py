@@ -10,7 +10,7 @@ import json
 import httpx
 import pytest
 
-from argos_agent.core.models import CredentialPool, ModelClient, ModelTier
+from argos.core.models import CredentialPool, ModelClient, ModelTier
 
 
 def _sse_text(text: str) -> str:
@@ -52,7 +52,7 @@ async def test_stream_429_then_200_rotates_and_succeeds(monkeypatch):
         return _ok_response("成功")
 
     # 把 jittered_backoff 替成 0,测试不卡
-    from argos_agent.core import recovery
+    from argos.core import recovery
     monkeypatch.setattr(recovery, "jittered_backoff", lambda attempt, **kw: 0.0)
 
     client = ModelClient(tier=tier, pool=pool, transport=httpx.MockTransport(handler))
@@ -111,7 +111,7 @@ async def test_stream_429_exhausted_key_not_reused_immediately(monkeypatch):
             return _err_response(429, "rate limit", retry_after="5")
         return _ok_response("ok")
 
-    from argos_agent.core import recovery
+    from argos.core import recovery
     monkeypatch.setattr(recovery, "jittered_backoff", lambda attempt, **kw: 0.0)
 
     client = ModelClient(tier=tier, pool=pool, transport=httpx.MockTransport(handler))
@@ -138,7 +138,7 @@ async def test_stream_429_persistent_raises_after_max_attempts(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return _err_response(429, "rate limit", retry_after="0")
 
-    from argos_agent.core import recovery
+    from argos.core import recovery
     monkeypatch.setattr(recovery, "jittered_backoff", lambda attempt, **kw: 0.0)
 
     client = ModelClient(tier=tier, pool=pool, transport=httpx.MockTransport(handler))

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.skills_runtime.builtin.security_review.permission import (
+from argos.skills_runtime.builtin.security_review.permission import (
     scan_file_for_permission_issues,
     PYTHON_PATTERNS,
     JS_TS_PATTERNS,

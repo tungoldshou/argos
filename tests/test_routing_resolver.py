@@ -1,7 +1,7 @@
 """#11 T3 RoutingResolver 3 层优先级 测试。"""
-from argos_agent.routing.categorizer import TaskCategory
-from argos_agent.routing.config import RoutingConfig
-from argos_agent.routing.resolver import resolve
+from argos.routing.categorizer import TaskCategory
+from argos.routing.config import RoutingConfig
+from argos.routing.resolver import resolve
 
 
 def test_resolve_by_tool_wins_over_category():

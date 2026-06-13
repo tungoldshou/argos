@@ -20,7 +20,7 @@ from typing import Any
 
 import pytest
 
-from argos_agent.protocol.events import deserialize_event, serialize_event
+from argos.protocol.events import deserialize_event, serialize_event
 
 # vectors.json 路径（相对于仓库根）
 VECTORS_PATH = (

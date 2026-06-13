@@ -17,11 +17,11 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.learning import dream
-from argos_agent.learning.candidates import (
+from argos.learning import dream
+from argos.learning.candidates import (
     list_unconsumed, save_candidate,
 )
-from argos_agent.learning.distiller import SkillCandidate
+from argos.learning.distiller import SkillCandidate
 
 
 # ── fake runner ───────────────────────────────────────────────────────────────
@@ -217,7 +217,7 @@ def test_pipeline_name_collision_consumes_sources(tmp_path: Path, monkeypatch):
     import asyncio as _asyncio
     from unittest.mock import patch
 
-    from argos_agent.learning.promotion_gate import PromotionResult
+    from argos.learning.promotion_gate import PromotionResult
 
     cand_root = tmp_path / "candidates"
     ws = tmp_path / "ws"
@@ -230,7 +230,7 @@ def test_pipeline_name_collision_consumes_sources(tmp_path: Path, monkeypatch):
     # promote 永远返回 name_collision:<slug> — 模拟非学习技能同名
     collision_result = PromotionResult(promoted=False, reason="name_collision:fix-login-auth-bug")
 
-    with patch("argos_agent.learning.promotion_gate.promote", return_value=collision_result):
+    with patch("argos.learning.promotion_gate.promote", return_value=collision_result):
         pipe, _events = _make_pipeline(tmp_path, lambda hint: _PassRunner())
         report = _asyncio.run(pipe.run())
 

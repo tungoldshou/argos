@@ -23,20 +23,20 @@ import sys
 import time
 from pathlib import Path
 
-# 让脚本可以 import argos_agent
+# 让脚本可以 import argos
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from argos_agent import config
-from argos_agent.approval import ApprovalGate, ApprovalLevel
-from argos_agent.core.models import CredentialPool, ModelClient
-from argos_agent.core.verify_gate import Verifier
-from argos_agent.memory.store import ArgosStore
-from argos_agent.sandbox.broker import CapabilityBroker
-from argos_agent.sandbox.egress import EgressPolicy
-from argos_agent.tools.receipts import ReceiptSigner
-from argos_agent.workflow.engine import WorkflowEngine
-from argos_agent.workflow.spec import parse_spec
-from argos_agent.workflow.subagent import SubAgentFactory
+from argos import config
+from argos.approval import ApprovalGate, ApprovalLevel
+from argos.core.models import CredentialPool, ModelClient
+from argos.core.verify_gate import Verifier
+from argos.memory.store import ArgosStore
+from argos.sandbox.broker import CapabilityBroker
+from argos.sandbox.egress import EgressPolicy
+from argos.tools.receipts import ReceiptSigner
+from argos.workflow.engine import WorkflowEngine
+from argos.workflow.spec import parse_spec
+from argos.workflow.subagent import SubAgentFactory
 
 
 # ── 自包含任务:写一个 fib(n) → verify 真实 import + assert ──

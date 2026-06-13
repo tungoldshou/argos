@@ -34,6 +34,6 @@ jobs:
       - name: Install bubblewrap (enables real sandbox tests on Linux)
         run: sudo apt-get update && sudo apt-get install -y bubblewrap
       - name: Run full test suite
-        # 全量 `uv run pytest -q` —— pyproject 里 addopts 强制 --cov=argos_agent
+        # 全量 `uv run pytest -q` —— pyproject 里 addopts 强制 --cov=argos
         # --cov-fail-under=80,所以这是覆盖门 + 沙箱真跑的统一验证。
         run: uv run pytest -q

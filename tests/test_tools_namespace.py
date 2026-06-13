@@ -6,8 +6,8 @@ import asyncio
 
 import pytest
 
-from argos_agent import tools
-from argos_agent.tools import files
+from argos import tools
+from argos.tools import files
 
 
 def test_all_tool_names_exact():
@@ -117,8 +117,8 @@ def test_write_file_strips_app_prefix_for_tb_compat(tmp_path, monkeypatch):
     这是 TB 任务的"必须"——所有 TB task.yaml 用 /app/... 路径;agent 调 write_file
     不知道宿主 worktree 在哪,只认知 /app。适配器把 /app/... 翻译成 worktree 相对路径。
     """
-    from argos_agent import runtime
-    from argos_agent.tools import files as ftools
+    from argos import runtime
+    from argos.tools import files as ftools
     ws = tmp_path / "ws"
     ws.mkdir()
     (ws / "existing.txt").write_text("x")
@@ -145,8 +145,8 @@ def test_write_file_strips_app_prefix_for_tb_compat(tmp_path, monkeypatch):
 
 def test_safe_path_rejects_traversal_but_allows_app_prefix(tmp_path, monkeypatch):
     """_safe_path:工作区遍历仍拒(/app/ 之外的绝对路径);/app/ 视为相对。"""
-    from argos_agent.tools import files as ftools
-    from argos_agent import runtime
+    from argos.tools import files as ftools
+    from argos import runtime
     ws = tmp_path / "ws"
     ws.mkdir()
     ctx = runtime.RunContext(workspace=ws, verify_dir=ws, project_mode=True)

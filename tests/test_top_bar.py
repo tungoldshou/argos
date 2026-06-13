@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 from textual.app import App, ComposeResult
 
-from argos_agent.tui.widgets.top_bar import TopBar
+from argos.tui.widgets.top_bar import TopBar
 
 
 class _H(App):

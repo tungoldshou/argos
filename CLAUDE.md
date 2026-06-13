@@ -12,8 +12,8 @@ See `README.md` for the product story and `docs/argos-product-definition.md` for
 
 ## Where the code lives
 
-- **`argos_agent/`** — the entire active codebase (Python 3.12+). All work happens here.
-- **`tests/`** — pytest suite (3373 tests). Mirrors `argos_agent/` subpackage layout, plus
+- **`argos/`** — the entire active codebase (Python 3.12+). All work happens here.
+- **`tests/`** — pytest suite (3373 tests). Mirrors `argos/` subpackage layout, plus
   integration subdirs: `tests/e2e/`, `tests/eval/`, `tests/workflow/`, `tests/skills_curator/`,
   `tests/input/`, `tests/daemon/`, `tests/tui/`, `tests/desktop_channel/`, `tests/desktop_smoke/`, …
 - **`desktop/`** — Tauri 2 desktop shell (v6 P6b): `desktop/shell/` (Rust/Tauri walking skeleton)
@@ -39,8 +39,8 @@ uv run argos --demo           # FakeLoop success demo (no key needed)
 uv run argos --demo-fail      # FakeLoop escalation / honest-failure demo
 uv run argos --effort high    # per-run effort tier {low,medium,high} — raises step budget + approval level
 uv run argos --project PATH   # run in a user project directory
-python -m argos_agent.daemon  # start the background daemon (Unix socket at ~/.argos/daemon.sock)
-uv run pytest                 # full suite; enforces --cov=argos_agent --cov-fail-under=80
+python -m argos.daemon  # start the background daemon (Unix socket at ~/.argos/daemon.sock)
+uv run pytest                 # full suite; enforces --cov=argos --cov-fail-under=80
 uv run pytest -n auto --dist loadgroup  # parallel run (~100-150s); xdist NOT in addopts by default
 uv run pytest -m "not slow"   # skip real-subprocess / real-pyright e2e (faster)
 uv run pytest -m slow         # ONLY the slow real-process tests
@@ -55,7 +55,7 @@ uv run pytest tests/test_loop.py -k pattern   # by name pattern
 - `pytest-xdist` is in dev-deps; `-n auto --dist loadgroup` keeps same-`xdist_group` tests
   on one worker. `addopts` does **not** include `-n` — serial entry is preserved for debugging.
 - Mark tests that spawn real subprocesses or run real pyright with `@pytest.mark.slow`.
-- `pythonpath = ["."]` in `pyproject.toml` lets tests import `argos_agent` without installing it.
+- `pythonpath = ["."]` in `pyproject.toml` lets tests import `argos` without installing it.
 - Set `ARGOS_NO_DAEMON=1` in tests to prevent TUI tests from attaching to a live daemon.
 
 ## Architecture — the big picture
@@ -110,7 +110,7 @@ each run gets its own `SeatbeltExecutor + ApprovalGate + CapabilityBroker` so co
 share mutable state. The `ApprovalGate` from `build_components` is shared with the TUI app so
 `/yolo` and tool/workflow approvals land on the gate the loop actually awaits.
 
-### Subpackage map (`argos_agent/`)
+### Subpackage map (`argos/`)
 
 | Package / module | Responsibility |
 |---|---|
@@ -154,7 +154,7 @@ share mutable state. The `ApprovalGate` from `build_components` is shared with t
 
 ### Conventions that bite
 
-- **Version is single-sourced** from `importlib.metadata` (`argos_agent.__version__`) ← `pyproject.toml`
+- **Version is single-sourced** from `importlib.metadata` (`argos.__version__`) ← `pyproject.toml`
   + `packaging/VERSION`. Don't hardcode version strings; use `/ship` to bump the three in sync.
 - Config and state live under `~/.argos/`:
   `config.json`, `.env`, `mcp.json`, `lsp.json`, `hooks.json`,

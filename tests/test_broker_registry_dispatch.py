@@ -16,11 +16,11 @@ import asyncio
 
 import pytest
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel
-from argos_agent.capability import Capability, CapabilityRegistry, register_builtins
-from argos_agent.sandbox.broker import CapabilityBroker
-from argos_agent.sandbox.egress import EgressPolicy
-from argos_agent.tools.receipts import ReceiptSigner
+from argos.approval import ApprovalGate, ApprovalLevel
+from argos.capability import Capability, CapabilityRegistry, register_builtins
+from argos.sandbox.broker import CapabilityBroker
+from argos.sandbox.egress import EgressPolicy
+from argos.tools.receipts import ReceiptSigner
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ async def test_registry_none_unknown_action_rejected():
 @pytest.mark.asyncio
 async def test_registry_none_web_search_passes_egress():
     """registry=None 时内置 web_search 走旧路径（risk from _RISK）。"""
-    import argos_agent.web as _w
+    import argos.web as _w
 
     br = _make_broker(registry=None)
     # monkeypatch 只能在函数里用；改用 unittest.mock
@@ -114,7 +114,7 @@ def test_execute_fallthrough_when_dispatch_none(monkeypatch):
         captured["cmd"] = command
         return ("ok", 0)
 
-    monkeypatch.setattr("argos_agent.tools.shell.run_command", fake_run)
+    monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
 
     reg = CapabilityRegistry()
     reg.register(Capability(name="run_command", kind="tool", risk="high", dispatch=None))
@@ -138,7 +138,7 @@ def test_execute_fallthrough_when_not_in_registry(monkeypatch):
         captured["cmd"] = command
         return ("ok", 0)
 
-    monkeypatch.setattr("argos_agent.tools.shell.run_command", fake_run)
+    monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
 
     reg = CapabilityRegistry()
     # registry 里只有别的能力，没有 run_command
@@ -279,8 +279,8 @@ def test_register_builtins_idempotent():
 
 def test_app_factory_components_has_registry(monkeypatch, tmp_path):
     """build_components 返回的 AppComponents 含非 None registry（P2 内置注册）。"""
-    import argos_agent.config as _cfg
-    from argos_agent.core.models import ModelTier
+    import argos.config as _cfg
+    from argos.core.models import ModelTier
     fake_tier = ModelTier(
         name="fake", model="claude-fake-1",
         base_url="https://fake.anthropic.com", max_tokens=4096,
@@ -289,7 +289,7 @@ def test_app_factory_components_has_registry(monkeypatch, tmp_path):
     monkeypatch.setattr(_cfg, "active_key", lambda: "sk-fake-key")
     monkeypatch.setattr(_cfg, "active_embedder", lambda: None)
 
-    from argos_agent.app_factory import build_components
+    from argos.app_factory import build_components
     c = build_components(workspace=str(tmp_path))
     try:
         assert c.registry is not None
@@ -304,8 +304,8 @@ def test_app_factory_components_has_registry(monkeypatch, tmp_path):
 
 def test_build_run_stack_shares_registry(monkeypatch, tmp_path):
     """build_run_stack 返回的 broker 共享 AppComponents 的同一 registry 实例。"""
-    import argos_agent.config as _cfg
-    from argos_agent.core.models import ModelTier
+    import argos.config as _cfg
+    from argos.core.models import ModelTier
     fake_tier = ModelTier(
         name="fake", model="claude-fake-1",
         base_url="https://fake.anthropic.com", max_tokens=4096,
@@ -314,7 +314,7 @@ def test_build_run_stack_shares_registry(monkeypatch, tmp_path):
     monkeypatch.setattr(_cfg, "active_key", lambda: "sk-fake-key")
     monkeypatch.setattr(_cfg, "active_embedder", lambda: None)
 
-    from argos_agent.app_factory import build_components, build_run_stack
+    from argos.app_factory import build_components, build_run_stack
     c = build_components(workspace=str(tmp_path))
     try:
         stack = build_run_stack(c)
@@ -369,8 +369,8 @@ async def test_dispatch_capability_allowed_via_request():
 
 def test_build_run_stack_egress_includes_registry_hosts(monkeypatch, tmp_path):
     """build_run_stack 后,per-run egress 含 registry 声明的 egress_hosts(消灭双真值表)。"""
-    import argos_agent.config as _cfg
-    from argos_agent.core.models import ModelTier
+    import argos.config as _cfg
+    from argos.core.models import ModelTier
     fake_tier = ModelTier(
         name="fake", model="claude-fake-1",
         base_url="https://fake.anthropic.com", max_tokens=4096,
@@ -379,11 +379,11 @@ def test_build_run_stack_egress_includes_registry_hosts(monkeypatch, tmp_path):
     monkeypatch.setattr(_cfg, "active_key", lambda: "sk-fake-key")
     monkeypatch.setattr(_cfg, "active_embedder", lambda: None)
 
-    from argos_agent.app_factory import build_components, build_run_stack
+    from argos.app_factory import build_components, build_run_stack
     c = build_components(workspace=str(tmp_path))
     try:
         # 向进程级 registry 注册一个带 egress_hosts 的额外能力
-        from argos_agent.capability import Capability
+        from argos.capability import Capability
         c.registry.register(Capability(
             name="extra_web_tool",
             kind="tool",
@@ -409,8 +409,8 @@ def test_build_run_stack_egress_includes_registry_hosts(monkeypatch, tmp_path):
 
 def test_build_run_stack_egress_excludes_wildcard(monkeypatch, tmp_path):
     """egress_hosts 含 '*' 通配的能力,per-run egress 不因此开放所有 host(过滤通配)。"""
-    import argos_agent.config as _cfg
-    from argos_agent.core.models import ModelTier
+    import argos.config as _cfg
+    from argos.core.models import ModelTier
     fake_tier = ModelTier(
         name="fake", model="claude-fake-1",
         base_url="https://fake.anthropic.com", max_tokens=4096,
@@ -419,10 +419,10 @@ def test_build_run_stack_egress_excludes_wildcard(monkeypatch, tmp_path):
     monkeypatch.setattr(_cfg, "active_key", lambda: "sk-fake-key")
     monkeypatch.setattr(_cfg, "active_embedder", lambda: None)
 
-    from argos_agent.app_factory import build_components, build_run_stack
+    from argos.app_factory import build_components, build_run_stack
     c = build_components(workspace=str(tmp_path))
     try:
-        from argos_agent.capability import Capability
+        from argos.capability import Capability
         c.registry.register(Capability(
             name="wildcard_tool",
             kind="tool",
@@ -449,7 +449,7 @@ class TestEgressManifestDriven:
 
     def test_no_registry_returns_builtin_set(self):
         """registry=None 时 fallback = 原 _NETWORK_ACTIONS(行为零变更)。"""
-        from argos_agent.sandbox.broker import _NETWORK_ACTIONS
+        from argos.sandbox.broker import _NETWORK_ACTIONS
         broker = _make_broker(registry=None)
         derived = broker._derive_network_actions()
         assert derived == set(_NETWORK_ACTIONS), (
@@ -462,7 +462,7 @@ class TestEgressManifestDriven:
         web_search / web_extract 在 builtins 中声明了 egress_hosts → 必须出现在派生集合中。
         此测试固化"派生集合 ⊇ 原集合"的硬回归保证。
         """
-        from argos_agent.sandbox.broker import _NETWORK_ACTIONS
+        from argos.sandbox.broker import _NETWORK_ACTIONS
         reg = CapabilityRegistry()
         register_builtins(reg)
         broker = _make_broker(registry=reg)
@@ -490,7 +490,7 @@ class TestEgressManifestDriven:
 
     def test_no_egress_cap_not_in_derived_set(self):
         """未声明 egress_hosts 的能力不进派生集合(只含 _NETWORK_ACTIONS 兜底)。"""
-        from argos_agent.sandbox.broker import _NETWORK_ACTIONS
+        from argos.sandbox.broker import _NETWORK_ACTIONS
         reg = CapabilityRegistry()
         reg.register(Capability(
             name="local_tool",

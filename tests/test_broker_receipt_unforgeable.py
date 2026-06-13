@@ -5,7 +5,7 @@ import dataclasses
 
 import pytest
 
-from argos_agent.tools.receipts import Receipt, ReceiptSigner
+from argos.tools.receipts import Receipt, ReceiptSigner
 
 
 def test_receipt_is_frozen():

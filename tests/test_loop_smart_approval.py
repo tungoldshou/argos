@@ -8,16 +8,16 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel
+from argos.approval import ApprovalGate, ApprovalLevel
 
 
 @pytest.fixture(autouse=True)
 def _reset(tmp_path, monkeypatch):
-    from argos_agent.permissions import config as _cfg
-    from argos_agent.permissions import audit as _audit
+    from argos.permissions import config as _cfg
+    from argos.permissions import audit as _audit
     monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")
     monkeypatch.setattr(_audit, "AUDIT_DIR", tmp_path / "audit")
-    from argos_agent.permissions import _reset_config, _reset_audit
+    from argos.permissions import _reset_config, _reset_audit
     _reset_config()
     _reset_audit()
     yield
@@ -40,9 +40,9 @@ async def test_no_config_uses_gate_level():
 # ── D5 锁铁证 1:default_level=AUTO + 危险命令仍 deny ───────────
 @pytest.mark.asyncio
 async def test_d5_default_auto_still_deny_dangerous():
-    from argos_agent.permissions import config as _cfg
+    from argos.permissions import config as _cfg
     Path(_cfg.CONFIG_PATH).write_text(json.dumps({"version": 1, "default_level": "auto"}))
-    from argos_agent.permissions import reload_config
+    from argos.permissions import reload_config
     reload_config()
     gate = ApprovalGate(ApprovalLevel.AUTO)
     d = await gate.request("run_command", {"cmd": "rm -rf /"}, description="x", risk="high")
@@ -54,13 +54,13 @@ async def test_d5_default_auto_still_deny_dangerous():
 # ── D5 锁铁证 2:default_level=AUTO + soft allow `^rm ` + 危险命令仍 deny ──
 @pytest.mark.asyncio
 async def test_d5_soft_allow_cannot_bypass_hard_rule():
-    from argos_agent.permissions import config as _cfg
+    from argos.permissions import config as _cfg
     Path(_cfg.CONFIG_PATH).write_text(json.dumps({
         "version": 1,
         "default_level": "auto",
         "allow": [{"tool": "run_command", "matcher": r"^rm "}],
     }))
-    from argos_agent.permissions import reload_config
+    from argos.permissions import reload_config
     reload_config()
     gate = ApprovalGate(ApprovalLevel.AUTO)
     d = await gate.request("run_command", {"cmd": "rm -rf /"}, description="x", risk="high")
@@ -72,12 +72,12 @@ async def test_d5_soft_allow_cannot_bypass_hard_rule():
 # ── soft allow 短路:不查 level ─────────────────────────────────
 @pytest.mark.asyncio
 async def test_soft_allow_short_circuits_in_loop():
-    from argos_agent.permissions import config as _cfg
+    from argos.permissions import config as _cfg
     Path(_cfg.CONFIG_PATH).write_text(json.dumps({
         "version": 1,
         "allow": [{"tool": "run_command", "matcher": r"^pytest"}],
     }))
-    from argos_agent.permissions import reload_config
+    from argos.permissions import reload_config
     reload_config()
     gate = ApprovalGate(ApprovalLevel.CONFIRM)  # 即便 confirm 档
     d = await gate.request("run_command", {"cmd": "pytest -x"}, description="x", risk="low")
@@ -98,7 +98,7 @@ async def test_system_path_denied_in_loop():
 # ── audit log 写:denied 也写(D17 锁) ─────────────────────────
 @pytest.mark.asyncio
 async def test_audit_log_written_on_deny():
-    from argos_agent.permissions import audit as _audit
+    from argos.permissions import audit as _audit
     gate = ApprovalGate(ApprovalLevel.AUTO)
     await gate.request("run_command", {"cmd": "rm -rf /"}, description="x", risk="high")
     files = list(_audit.AUDIT_DIR.glob("approvals-*.jsonl"))
@@ -111,7 +111,7 @@ async def test_audit_log_written_on_deny():
 # ── audit log 写:approved 也写 ─────────────────────────────
 @pytest.mark.asyncio
 async def test_audit_log_written_on_approve():
-    from argos_agent.permissions import audit as _audit
+    from argos.permissions import audit as _audit
     gate = ApprovalGate(ApprovalLevel.AUTO)
     await gate.request("run_command", {"cmd": "ls -la"}, description="x", risk="low")
     files = list(_audit.AUDIT_DIR.glob("approvals-*.jsonl"))

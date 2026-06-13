@@ -20,12 +20,12 @@ from typing import Any
 
 import pytest
 
-from argos_agent.eval.benchmarks import terminal_bench as tb
-from argos_agent.eval.benchmarks import terminal_bench_best_of_n as bridge
-from argos_agent.workflow.engine import WorkflowEngine
-from argos_agent.workflow.result import AgentResult
-from argos_agent.workflow.spec import WorkflowSpec
-from argos_agent.workflow.subagent import SubAgentFactory
+from argos.eval.benchmarks import terminal_bench as tb
+from argos.eval.benchmarks import terminal_bench_best_of_n as bridge
+from argos.workflow.engine import WorkflowEngine
+from argos.workflow.result import AgentResult
+from argos.workflow.spec import WorkflowSpec
+from argos.workflow.subagent import SubAgentFactory
 
 from tests.eval._fakes import FakeWorktree
 

@@ -1,5 +1,5 @@
 """#11 T1 任务分类启发式测试。"""
-from argos_agent.routing.categorizer import TaskCategory, categorize
+from argos.routing.categorizer import TaskCategory, categorize
 
 
 def test_categorize_plan_phase_returns_plan():

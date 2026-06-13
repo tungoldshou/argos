@@ -14,11 +14,11 @@ from dataclasses import dataclass
 
 import pytest
 
-from argos_agent.core.loop import AgentLoop, LoopConfig
-from argos_agent.core.verify_gate import Verdict
-from argos_agent.memory import auto as mem_auto
-from argos_agent.sandbox.backend import ExecResult
-from argos_agent.tui.events import EventBus
+from argos.core.loop import AgentLoop, LoopConfig
+from argos.core.verify_gate import Verdict
+from argos.memory import auto as mem_auto
+from argos.sandbox.backend import ExecResult
+from argos.tui.events import EventBus
 
 
 # ── fakes ─────────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ def test_user_goal_is_captured_on_passed_run(mem_root, tmp_path):
     """完成(passed)且 ≥5 步 → capture_event('run_success', goal=...) 落库,
     落库的 goal 字段【非空、等于传入的 goal】(回归 bug:之前恒空串)。"""
     store = None  # loop 自己起一个 in-memory store 即可
-    from argos_agent.memory.store import ArgosStore
+    from argos.memory.store import ArgosStore
     store = ArgosStore(db_path=":memory:")
     store.ensure_session("s", title="t", model="worker", system_snapshot="")
     cfg = LoopConfig(max_steps=10, compaction=False, compact_threshold=0.0,
@@ -94,11 +94,11 @@ def test_user_goal_is_captured_on_passed_run(mem_root, tmp_path):
     import asyncio
     events = asyncio.run(_drain())
     # 真跑过 verify 并 passed(防测空过)
-    from argos_agent.tui.events import VerifyVerdict
+    from argos.tui.events import VerifyVerdict
     verdicts = [e.verdict for e in events if isinstance(e, VerifyVerdict)]
     assert verdicts and verdicts[0].status == "passed"
     # 落库验证:run_success 行的 value 形如 "{goal} (key_cmd=...)",goal 必须是我们的 goal
-    from argos_agent.memory.auto import _project_path, _read_jsonl
+    from argos.memory.auto import _project_path, _read_jsonl
     rows = _read_jsonl(_project_path(pid))
     successes = [r for r in rows if r.key.startswith("run_success.")]
     assert successes, "应有一条 run_success 落库"
@@ -109,7 +109,7 @@ def test_user_goal_is_captured_on_passed_run(mem_root, tmp_path):
 
 def test_user_goal_assigned_at_run_start(tmp_path):
     """run() 起始后 _user_goal 已赋值(不是事后才设),让收尾路径 100% 命中。"""
-    from argos_agent.memory.store import ArgosStore
+    from argos.memory.store import ArgosStore
     store = ArgosStore(db_path=":memory:")
     store.ensure_session("s", title="t", model="worker", system_snapshot="")
     loop = AgentLoop(store=store, bus=EventBus(), sandbox=_FakeSandbox(), broker=None,

@@ -8,18 +8,18 @@
 
 **Tech Stack:** Python 3.12, Textual ≥8.2.7, stdlib `subprocess`/`base64`. macOS clipboard via `pngpaste`, Linux via `xclip` (honest error if absent). No new pip deps.
 
-**Spec:** `docs/superpowers/specs/2026-06-13-voice-image-input-design.md` (§6.2, §6.3, §3 image input, §13 criteria 2/3/4). **Depends on:** Plan 1 (`argos_agent/input/attachments.py`, `ModelTier.multimodal`, `loop.run(..., attachments=...)`) must be merged first.
+**Spec:** `docs/superpowers/specs/2026-06-13-voice-image-input-design.md` (§6.2, §6.3, §3 image input, §13 criteria 2/3/4). **Depends on:** Plan 1 (`argos/input/attachments.py`, `ModelTier.multimodal`, `loop.run(..., attachments=...)`) must be merged first.
 
 ---
 
 ## File Structure
 
-- `argos_agent/input/clipboard_image.py` — read a system-clipboard image (mac/linux) into an `ImageAttachment`. **One responsibility:** clipboard → bytes → validated attachment. Honest `ClipboardError` on every failure path.
-- `argos_agent/tui/widgets/prompt.py` — `PromptArea` paste pipeline: side buffers, placeholder chips, `register_image`, submission expansion; `Submitted` carries `attachments`.
-- `argos_agent/tui/app.py` — `Ctrl+V` action, thread `attachments` through `on_prompt_area_submitted`→`handle_input`→`start_run`→`_start_run_inline`/`_start_run_daemon`.
-- `argos_agent/daemon/client.py` — `create_run` carries base64 attachments in the POST body.
-- `argos_agent/daemon/server.py` — `_handle_create_run` decodes base64 attachments, passes to `RunWorker`.
-- `argos_agent/daemon/worker.py` — `RunWorker` carries attachments → `loop.run(..., attachments=...)`.
+- `argos/input/clipboard_image.py` — read a system-clipboard image (mac/linux) into an `ImageAttachment`. **One responsibility:** clipboard → bytes → validated attachment. Honest `ClipboardError` on every failure path.
+- `argos/tui/widgets/prompt.py` — `PromptArea` paste pipeline: side buffers, placeholder chips, `register_image`, submission expansion; `Submitted` carries `attachments`.
+- `argos/tui/app.py` — `Ctrl+V` action, thread `attachments` through `on_prompt_area_submitted`→`handle_input`→`start_run`→`_start_run_inline`/`_start_run_daemon`.
+- `argos/daemon/client.py` — `create_run` carries base64 attachments in the POST body.
+- `argos/daemon/server.py` — `_handle_create_run` decodes base64 attachments, passes to `RunWorker`.
+- `argos/daemon/worker.py` — `RunWorker` carries attachments → `loop.run(..., attachments=...)`.
 - Tests (new): `tests/input/test_clipboard_image.py`, `tests/tui/test_prompt_paste.py`, `tests/daemon/test_attachment_transport.py`.
 
 ---
@@ -27,7 +27,7 @@
 ## Task 1: clipboard image reader
 
 **Files:**
-- Create: `argos_agent/input/clipboard_image.py`
+- Create: `argos/input/clipboard_image.py`
 - Test: `tests/input/test_clipboard_image.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -38,9 +38,9 @@ Create `tests/input/test_clipboard_image.py`:
 """clipboard_image.py — 读系统剪贴板图片(mac pngpaste / linux xclip),诚实错误。"""
 import subprocess
 import pytest
-from argos_agent.input import clipboard_image as ci
-from argos_agent.input.clipboard_image import ClipboardError
-from argos_agent.input.attachments import ImageAttachment
+from argos.input import clipboard_image as ci
+from argos.input.clipboard_image import ClipboardError
+from argos.input.attachments import ImageAttachment
 
 _PNG = b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR" + b"\x00\x00\x00\x0a\x00\x00\x00\x0a" + b"\x00" * 5
 
@@ -83,11 +83,11 @@ def test_unsupported_platform_is_honest(monkeypatch):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/input/test_clipboard_image.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'argos_agent.input.clipboard_image'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'argos.input.clipboard_image'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Create `argos_agent/input/clipboard_image.py`:
+Create `argos/input/clipboard_image.py`:
 
 ```python
 """读系统剪贴板里的图片 → ImageAttachment(宿主进程,沙箱外)。
@@ -101,7 +101,7 @@ import shutil
 import subprocess
 import sys
 
-from argos_agent.input.attachments import (
+from argos.input.attachments import (
     ImageAttachment, sniff_media_type, sniff_dimensions, validate_attachment,
 )
 
@@ -159,7 +159,7 @@ Expected: PASS (4 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add argos_agent/input/clipboard_image.py tests/input/test_clipboard_image.py
+git add argos/input/clipboard_image.py tests/input/test_clipboard_image.py
 git commit -m "feat(input): clipboard image reader (mac/linux, honest errors)"
 ```
 
@@ -168,7 +168,7 @@ git commit -m "feat(input): clipboard image reader (mac/linux, honest errors)"
 ## Task 2: PromptArea paste pipeline state + pure helpers
 
 **Files:**
-- Modify: `argos_agent/tui/widgets/prompt.py` (`PromptArea.__init__` and add helpers; `Submitted` gets an `attachments` field)
+- Modify: `argos/tui/widgets/prompt.py` (`PromptArea.__init__` and add helpers; `Submitted` gets an `attachments` field)
 - Test: `tests/tui/test_prompt_paste.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -177,8 +177,8 @@ Create `tests/tui/test_prompt_paste.py`:
 
 ```python
 """PromptArea 粘贴管线纯逻辑:占位 token 生成 + 提交展开(无需挂载 app)。"""
-from argos_agent.tui.widgets.prompt import PromptArea
-from argos_agent.input.attachments import ImageAttachment
+from argos.tui.widgets.prompt import PromptArea
+from argos.input.attachments import ImageAttachment
 
 _ATT = ImageAttachment(data=b"\x89PNG\r\n\x1a\n", media_type="image/png",
                        source_label="clipboard")
@@ -242,7 +242,7 @@ Expected: FAIL — `AttributeError: 'PromptArea' object has no attribute '_make_
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `argos_agent/tui/widgets/prompt.py`, the top imports currently are:
+In `argos/tui/widgets/prompt.py`, the top imports currently are:
 
 ```python
 from rich.text import Text
@@ -259,7 +259,7 @@ from textual import events
 from textual.message import Message
 from textual.widgets import Static, TextArea
 
-from argos_agent.input.attachments import (
+from argos.input.attachments import (
     ImageAttachment, extract_image_paths, load_image_path, AttachmentError,
 )
 
@@ -343,7 +343,7 @@ Expected: PASS (7 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add argos_agent/tui/widgets/prompt.py tests/tui/test_prompt_paste.py
+git add argos/tui/widgets/prompt.py tests/tui/test_prompt_paste.py
 git commit -m "feat(tui): PromptArea paste-pipeline side buffers + expansion helpers"
 ```
 
@@ -352,7 +352,7 @@ git commit -m "feat(tui): PromptArea paste-pipeline side buffers + expansion hel
 ## Task 3: PromptArea paste interception + Enter wiring
 
 **Files:**
-- Modify: `argos_agent/tui/widgets/prompt.py` (add `_on_paste`; change Enter handler in `_on_key`)
+- Modify: `argos/tui/widgets/prompt.py` (add `_on_paste`; change Enter handler in `_on_key`)
 - Test: `tests/tui/test_prompt_paste.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -406,7 +406,7 @@ Expected: FAIL — `AttributeError: 'PromptArea' object has no attribute '_on_pa
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `argos_agent/tui/widgets/prompt.py`, add the paste handler (place it right before `_on_key`):
+In `argos/tui/widgets/prompt.py`, add the paste handler (place it right before `_on_key`):
 
 ```python
     async def _on_paste(self, event: events.Paste) -> None:
@@ -450,7 +450,7 @@ Expected: PASS (9 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add argos_agent/tui/widgets/prompt.py tests/tui/test_prompt_paste.py
+git add argos/tui/widgets/prompt.py tests/tui/test_prompt_paste.py
 git commit -m "feat(tui): PromptArea intercepts paste, expands attachments on submit"
 ```
 
@@ -459,10 +459,10 @@ git commit -m "feat(tui): PromptArea intercepts paste, expands attachments on su
 ## Task 4: thread attachments through the inline run path
 
 **Files:**
-- Modify: `argos_agent/tui/app.py:450-453` (`on_prompt_area_submitted`)
-- Modify: `argos_agent/tui/app.py:539-558` (`handle_input`)
-- Modify: `argos_agent/tui/app.py:1925-1979` (`start_run`)
-- Modify: `argos_agent/tui/app.py:1981-2033` (`_start_run_inline`, the `loop.run` call at line 2004)
+- Modify: `argos/tui/app.py:450-453` (`on_prompt_area_submitted`)
+- Modify: `argos/tui/app.py:539-558` (`handle_input`)
+- Modify: `argos/tui/app.py:1925-1979` (`start_run`)
+- Modify: `argos/tui/app.py:1981-2033` (`_start_run_inline`, the `loop.run` call at line 2004)
 - Test: `tests/tui/test_prompt_paste.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -472,7 +472,7 @@ Append to `tests/tui/test_prompt_paste.py`:
 ```python
 def test_handle_input_threads_attachments_to_start_run(monkeypatch):
     """handle_input 把 attachments 透传给 start_run(纯分发,不起真 run)。"""
-    from argos_agent.tui.app import ArgosApp
+    from argos.tui.app import ArgosApp
     captured = {}
 
     # 用一个最小 stub 冒充 app:只测 handle_input 的分发逻辑
@@ -490,7 +490,7 @@ def test_handle_input_threads_attachments_to_start_run(monkeypatch):
             captured["goal"] = goal
             captured["attachments"] = list(attachments)
 
-    from argos_agent.input.attachments import ImageAttachment
+    from argos.input.attachments import ImageAttachment
     att = ImageAttachment(data=b"\x89PNG\r\n\x1a\n", media_type="image/png", source_label="x")
     stub = _Stub()
     stub.handle_input("看图", [att])
@@ -582,7 +582,7 @@ Expected: PASS (existing TUI tests green; new args are optional)
 - [ ] **Step 6: Commit**
 
 ```bash
-git add argos_agent/tui/app.py tests/tui/test_prompt_paste.py
+git add argos/tui/app.py tests/tui/test_prompt_paste.py
 git commit -m "feat(tui): thread image attachments through inline run path"
 ```
 
@@ -591,8 +591,8 @@ git commit -m "feat(tui): thread image attachments through inline run path"
 ## Task 5: `Ctrl+V` clipboard-image action
 
 **Files:**
-- Modify: `argos_agent/tui/app.py:120-126` (`BINDINGS`)
-- Modify: `argos_agent/tui/app.py` (add `action_paste_image`)
+- Modify: `argos/tui/app.py:120-126` (`BINDINGS`)
+- Modify: `argos/tui/app.py` (add `action_paste_image`)
 - Test: `tests/tui/test_prompt_paste.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -602,8 +602,8 @@ Append to `tests/tui/test_prompt_paste.py`:
 ```python
 @pytest.mark.asyncio
 async def test_ctrl_v_inserts_image_token(monkeypatch):
-    from argos_agent.input.attachments import ImageAttachment
-    import argos_agent.tui.app as appmod
+    from argos.input.attachments import ImageAttachment
+    import argos.tui.app as appmod
 
     att = ImageAttachment(data=b"\x89PNG\r\n\x1a\n", media_type="image/png", source_label="clipboard")
     monkeypatch.setattr(appmod, "read_clipboard_image", lambda: att, raising=False)
@@ -613,7 +613,7 @@ async def test_ctrl_v_inserts_image_token(monkeypatch):
             yield PromptArea(id="p")
         async def action_paste_image(self):
             # 引用真实 app 的实现:此处通过组合调用验证 token 注入
-            from argos_agent.tui.app import ArgosApp
+            from argos.tui.app import ArgosApp
             await ArgosApp.action_paste_image(self)
         def query_one(self, sel, t=None):  # 简化:聚焦的 PromptArea
             return self._pa
@@ -628,7 +628,7 @@ async def test_ctrl_v_inserts_image_token(monkeypatch):
         assert "[图片 #1]" in pa.text
 ```
 
-(Note for executor: the clipboard read is monkeypatched at the module symbol `argos_agent.tui.app.read_clipboard_image`, so import it at module top in step 3. The assertion verifies the `register_image`→`insert` token path that `action_paste_image` drives.)
+(Note for executor: the clipboard read is monkeypatched at the module symbol `argos.tui.app.read_clipboard_image`, so import it at module top in step 3. The assertion verifies the `register_image`→`insert` token path that `action_paste_image` drives.)
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -637,10 +637,10 @@ Expected: FAIL — `AttributeError: type object 'ArgosApp' has no attribute 'act
 
 - [ ] **Step 3: Write minimal implementation**
 
-**3a.** Add the clipboard import near the top of `argos_agent/tui/app.py` (with the other `argos_agent` imports):
+**3a.** Add the clipboard import near the top of `argos/tui/app.py` (with the other `argos` imports):
 
 ```python
-from argos_agent.input.clipboard_image import read_clipboard_image, ClipboardError
+from argos.input.clipboard_image import read_clipboard_image, ClipboardError
 ```
 
 **3b.** Add `Ctrl+V` to `BINDINGS` (app.py:120-126):
@@ -688,7 +688,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add argos_agent/tui/app.py tests/tui/test_prompt_paste.py
+git add argos/tui/app.py tests/tui/test_prompt_paste.py
 git commit -m "feat(tui): Ctrl+V clipboard image → [图片 #N] chip (honest failures)"
 ```
 
@@ -697,10 +697,10 @@ git commit -m "feat(tui): Ctrl+V clipboard image → [图片 #N] chip (honest fa
 ## Task 6: daemon attachment transport (client → server → worker → loop)
 
 **Files:**
-- Modify: `argos_agent/daemon/client.py:152-162` (`create_run`)
-- Modify: `argos_agent/daemon/server.py` (`_handle_create_run`, around line 405-575)
-- Modify: `argos_agent/daemon/worker.py` (`RunWorker.__init__` and `run` at line 329)
-- Modify: `argos_agent/tui/app.py:2034` (`_start_run_daemon` signature + `create_run` call)
+- Modify: `argos/daemon/client.py:152-162` (`create_run`)
+- Modify: `argos/daemon/server.py` (`_handle_create_run`, around line 405-575)
+- Modify: `argos/daemon/worker.py` (`RunWorker.__init__` and `run` at line 329)
+- Modify: `argos/tui/app.py:2034` (`_start_run_daemon` signature + `create_run` call)
 - Test: `tests/daemon/test_attachment_transport.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -709,8 +709,8 @@ Create `tests/daemon/test_attachment_transport.py`:
 
 ```python
 """daemon 附件传输:base64 编解码往返 + worker 透传给 loop.run。"""
-from argos_agent.daemon.attachments_wire import encode_attachments, decode_attachments
-from argos_agent.input.attachments import ImageAttachment
+from argos.daemon.attachments_wire import encode_attachments, decode_attachments
+from argos.input.attachments import ImageAttachment
 
 _ATT = ImageAttachment(data=b"\x89PNG\r\n\x1a\nABC", media_type="image/png",
                        source_label="clipboard", width=10, height=10)
@@ -739,11 +739,11 @@ def test_decode_empty_is_empty():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/daemon/test_attachment_transport.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'argos_agent.daemon.attachments_wire'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'argos.daemon.attachments_wire'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-**3a.** Create `argos_agent/daemon/attachments_wire.py` (shared base64 codec, keeps server/client DRY):
+**3a.** Create `argos/daemon/attachments_wire.py` (shared base64 codec, keeps server/client DRY):
 
 ```python
 """daemon 协议:ImageAttachment ↔ JSON-safe wire dict(base64)。
@@ -752,7 +752,7 @@ from __future__ import annotations
 
 import base64
 
-from argos_agent.input.attachments import ImageAttachment
+from argos.input.attachments import ImageAttachment
 
 
 def encode_attachments(atts) -> list[dict]:
@@ -793,7 +793,7 @@ def decode_attachments(wire) -> list[ImageAttachment]:
         self, session_id: str, *, goal: str, workspace: str = "",
         model: str = "", approval_level: str = "confirm", attachments=None,
     ) -> str:
-        from argos_agent.daemon.attachments_wire import encode_attachments
+        from argos.daemon.attachments_wire import encode_attachments
         body = {"goal": goal, "workspace": workspace, "model": model,
                 "approval_level": approval_level}
         wire = encode_attachments(attachments)
@@ -810,7 +810,7 @@ def decode_attachments(wire) -> list[ImageAttachment]:
 
 ```python
         # 图片附件(base64 over wire)→ ImageAttachment;只在内存随 worker 传,不落 index。
-        from argos_agent.daemon.attachments_wire import decode_attachments
+        from argos.daemon.attachments_wire import decode_attachments
         run_attachments = decode_attachments(data.get("attachments"))
 ```
 
@@ -882,7 +882,7 @@ Expected: PASS (existing daemon tests green; new kwargs optional)
 - [ ] **Step 6: Commit**
 
 ```bash
-git add argos_agent/daemon/attachments_wire.py argos_agent/daemon/client.py argos_agent/daemon/server.py argos_agent/daemon/worker.py argos_agent/tui/app.py tests/daemon/test_attachment_transport.py
+git add argos/daemon/attachments_wire.py argos/daemon/client.py argos/daemon/server.py argos/daemon/worker.py argos/tui/app.py tests/daemon/test_attachment_transport.py
 git commit -m "feat(daemon): base64 image attachment transport client→server→worker→loop"
 ```
 

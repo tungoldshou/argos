@@ -1,10 +1,10 @@
 # tests/test_models_cache.py
-from argos_agent.core.models import ModelClient, _coalesce_consecutive_roles
-from argos_agent.tui.events import CostUpdate
+from argos.core.models import ModelClient, _coalesce_consecutive_roles
+from argos.tui.events import CostUpdate
 
 
 def test_capture_usage_reads_cache_tokens():
-    from argos_agent.core.protocols import get_protocol
+    from argos.core.protocols import get_protocol
     mc = ModelClient.__new__(ModelClient)
     mc.last_usage = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0, "cache_creation": 0}
     mc._proto = get_protocol("anthropic")
@@ -42,9 +42,9 @@ def test_coalesce_consecutive_roles_keeps_alternation():
 
 def test_payload_normalizes_messages():
     """_payload 必须把消息归一化(交替),保护真请求不被端点拒。"""
-    from argos_agent.core.protocols import get_protocol
+    from argos.core.protocols import get_protocol
     mc = ModelClient.__new__(ModelClient)
-    from argos_agent.core.models import ModelTier
+    from argos.core.models import ModelTier
     mc.tier = ModelTier(name="worker", model="m", base_url="http://x", max_tokens=100, context_window=1000)
     mc._proto = get_protocol(mc.tier.protocol)
     payload = mc._payload(

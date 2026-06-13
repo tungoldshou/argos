@@ -1,7 +1,7 @@
 """Phase 2:sessions + messages 读写(契约 §2)。"""
 import pytest
 
-from argos_agent.memory.store import ArgosStore, SessionRow, MessageRow
+from argos.memory.store import ArgosStore, SessionRow, MessageRow
 
 
 @pytest.fixture

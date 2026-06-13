@@ -1,6 +1,6 @@
 """SttConfig + load_stt_config:读 config.json 的 stt 块,缺省让本地零配置可用。"""
 import json
-from argos_agent.input.stt_config import SttConfig, load_stt_config
+from argos.input.stt_config import SttConfig, load_stt_config
 
 
 def test_defaults_when_no_stt_block(tmp_path):

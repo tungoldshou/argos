@@ -5,7 +5,7 @@ import asyncio
 
 import pytest
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel, Decision
+from argos.approval import ApprovalGate, ApprovalLevel, Decision
 
 
 def test_approval_levels():

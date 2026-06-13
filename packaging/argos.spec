@@ -16,7 +16,7 @@ _vec_dir = Path(sqlite_vec.__file__).resolve().parent
 _vec_binaries = [(str(p), "sqlite_vec") for p in _vec_dir.glob("*.dylib")]
 
 hiddenimports = (
-    collect_submodules("argos_agent")
+    collect_submodules("argos")
     + collect_submodules("smolagents")
     + collect_submodules("textual")
     + collect_submodules("rich")
@@ -30,9 +30,9 @@ _ROOT = Path(SPECPATH).parent
 datas = (
     collect_data_files("textual", include_py_files=False)
     + collect_data_files("smolagents")
-    + [(str(_ROOT / "argos_agent" / "memory" / "schema.sql"), "argos_agent/memory")]
-    + [(str(p), "argos_agent/skills_builtin")
-       for p in (_ROOT / "argos_agent" / "skills_builtin").glob("*.md")]
+    + [(str(_ROOT / "argos" / "memory" / "schema.sql"), "argos/memory")]
+    + [(str(p), "argos/skills_builtin")
+       for p in (_ROOT / "argos" / "skills_builtin").glob("*.md")]
     # 版本号:同步 packaging/VERSION + dist-info 让 frozen bundle 报 0.1.0(非 0.0.0+unknown)
     + [(str(_ROOT / "packaging" / "VERSION"), "packaging")]
     + copy_metadata("argos-agent")
@@ -40,12 +40,12 @@ datas = (
 
 a = Analysis(
     # PyInstaller 按 spec 文件所在目录(packaging/)解析相对路径,故用 ../ 指回仓库根。
-    ["../argos_agent/__main__.py"],
+    ["../argos/__main__.py"],
     pathex=[".."],
     binaries=_vec_binaries,
     datas=datas,
     hiddenimports=hiddenimports,
-    hookspath=["../argos_agent/_pyinstaller_hooks"],
+    hookspath=["../argos/_pyinstaller_hooks"],
     excludes=["langchain", "langgraph", "fastapi", "uvicorn"],  # 旧栈不进新 binary(已非入口)
     cipher=block_cipher,
 )

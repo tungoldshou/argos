@@ -15,19 +15,19 @@ from dataclasses import dataclass
 
 import pytest
 
-from argos_agent.tui import events as tui_events
-from argos_agent.tui.events import (
+from argos.tui import events as tui_events
+from argos.tui.events import (
     Event, EventBus, deserialize_event, event_kind, serialize_event,
 )
 
 
 # ── 1. 全局只有一个 EventBus 实现 ─────────────────────
-def test_only_one_eventbus_class_in_whole_argos_agent():
-    """扫 argos_agent 子包所有 .py 模块 → 只应找到 1 个 `class EventBus` 定义。"""
+def test_only_one_eventbus_class_in_whole_argos():
+    """扫 argos 子包所有 .py 模块 → 只应找到 1 个 `class EventBus` 定义。"""
     import os
-    import argos_agent
+    import argos
 
-    root = os.path.dirname(argos_agent.__file__)
+    root = os.path.dirname(argos.__file__)
     found: list[tuple[str, int, str]] = []
     for dirpath, _dirs, files in os.walk(root):
         # 跳过缓存与测试
@@ -83,11 +83,11 @@ def _all_event_classes_in(module):
 
 
 @pytest.mark.parametrize("module_path,module_name", [
-    ("argos_agent.permissions.events", "permissions"),
-    ("argos_agent.daemon.events", "daemon"),
-    ("argos_agent.hooks.events", "hooks"),
-    ("argos_agent.lsp.events", "lsp"),
-    ("argos_agent.skills_runtime.events", "skills_runtime"),
+    ("argos.permissions.events", "permissions"),
+    ("argos.daemon.events", "daemon"),
+    ("argos.hooks.events", "hooks"),
+    ("argos.lsp.events", "lsp"),
+    ("argos.skills_runtime.events", "skills_runtime"),
 ])
 def test_all_domain_event_classes_have_kind_attribute(module_path, module_name):
     """5 个领域 events.py 中每个事件 dataclass 都有 `kind` 类属性(沿用 EventBus 路由约定)。"""
@@ -103,11 +103,11 @@ def test_all_domain_event_classes_have_kind_attribute(module_path, module_name):
 
 # ── 3. `kind` 必须是 snake_case 类名变体 ─────────────────
 @pytest.mark.parametrize("module_path", [
-    "argos_agent.permissions.events",
-    "argos_agent.daemon.events",
-    "argos_agent.hooks.events",
-    "argos_agent.lsp.events",
-    "argos_agent.skills_runtime.events",
+    "argos.permissions.events",
+    "argos.daemon.events",
+    "argos.hooks.events",
+    "argos.lsp.events",
+    "argos.skills_runtime.events",
 ])
 def test_event_kind_is_snake_case_version_of_class_name(module_path):
     """`kind` 字段约定 = 类名的 snake_case(EventBus 路由依赖)。"""
@@ -153,11 +153,11 @@ def _make_placeholder(cls) -> object:
 
 
 @pytest.mark.parametrize("module_path", [
-    "argos_agent.permissions.events",
-    "argos_agent.daemon.events",
-    "argos_agent.hooks.events",
-    "argos_agent.lsp.events",
-    "argos_agent.skills_runtime.events",
+    "argos.permissions.events",
+    "argos.daemon.events",
+    "argos.hooks.events",
+    "argos.lsp.events",
+    "argos.skills_runtime.events",
 ])
 def test_serialize_event_includes_kind_for_all_domain_events(module_path):
     """serialize_event(ev) 必须含 `kind` 字段(路由与 replay 依赖),每个领域事件都行。"""
@@ -177,11 +177,11 @@ def test_serialize_event_includes_kind_for_all_domain_events(module_path):
 
 # ── 5. 领域 events.py 不重新定义 EventBus ─────────────
 @pytest.mark.parametrize("module_path", [
-    "argos_agent.permissions.events",
-    "argos_agent.daemon.events",
-    "argos_agent.hooks.events",
-    "argos_agent.lsp.events",
-    "argos_agent.skills_runtime.events",
+    "argos.permissions.events",
+    "argos.daemon.events",
+    "argos.hooks.events",
+    "argos.lsp.events",
+    "argos.skills_runtime.events",
 ])
 def test_no_domain_event_module_defines_local_eventbus(module_path):
     """5 个领域 events.py 不应有 `class EventBus` 定义(只复用 tui.events.EventBus)。"""

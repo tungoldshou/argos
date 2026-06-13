@@ -4,7 +4,7 @@
 """
 import pytest
 
-from argos_agent.contracts import classify, contract_for
+from argos.contracts import classify, contract_for
 
 
 @pytest.mark.parametrize("goal,expected", [

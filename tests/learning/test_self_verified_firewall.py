@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.core.types import Verdict
-from argos_agent.learning import hook
+from argos.core.types import Verdict
+from argos.learning import hook
 
 
 # ── helpers ────────────────────────────────────────────────
@@ -113,7 +113,7 @@ async def test_self_verified_passed_does_not_trigger_distill(tmp_path, monkeypat
 
     这是 reward-hacking 死亡螺旋的防火墙:agent 不能从"自己造自己跑过的测试"里蒸馏技能。
     """
-    from argos_agent.learning import distiller, promotion_gate, reflection
+    from argos.learning import distiller, promotion_gate, reflection
 
     distill_calls: list[dict] = []
     promote_calls: list[dict] = []
@@ -148,14 +148,14 @@ async def test_self_verified_passed_does_not_trigger_distill(tmp_path, monkeypat
 @pytest.mark.asyncio
 async def test_self_verified_default_false_is_backward_compatible(tmp_path, monkeypatch):
     """on_run_completed 不传 self_verified 时,默认 False(保留旧调用方契约)。"""
-    from argos_agent.learning import distiller, promotion_gate
+    from argos.learning import distiller, promotion_gate
 
     distill_calls: list[dict] = []
     promote_calls: list[dict] = []
 
     def _distill_stub(**kw):
         distill_calls.append(kw)
-        from argos_agent.learning.distiller import SkillCandidate
+        from argos.learning.distiller import SkillCandidate
         return SkillCandidate(
             name="s", body_markdown="# b\n", verify_cmd="pytest -q",
             skill_md_path=tmp_path / "skills" / "s" / "SKILL.md",
@@ -187,14 +187,14 @@ async def test_self_verified_default_false_is_backward_compatible(tmp_path, monk
 @pytest.mark.asyncio
 async def test_user_verified_passed_still_triggers_distill_and_promote(tmp_path, monkeypatch):
     """self_verified=False(用户级)passed → distill + promote 都跑(回归测试)。"""
-    from argos_agent.learning import distiller, promotion_gate
+    from argos.learning import distiller, promotion_gate
 
     distill_calls: list[dict] = []
     promote_calls: list[dict] = []
 
     def _distill_stub(**kw):
         distill_calls.append(kw)
-        from argos_agent.learning.distiller import SkillCandidate
+        from argos.learning.distiller import SkillCandidate
         return SkillCandidate(
             name="user-skill", body_markdown="# b\n", verify_cmd="pytest -q",
             skill_md_path=tmp_path / "skills" / "user-skill" / "SKILL.md",
@@ -202,7 +202,7 @@ async def test_user_verified_passed_still_triggers_distill_and_promote(tmp_path,
 
     def _promote_stub(candidate, **kw):
         promote_calls.append({"name": candidate.name, **kw})
-        from argos_agent.learning.promotion_gate import PromotionResult
+        from argos.learning.promotion_gate import PromotionResult
         return PromotionResult(promoted=False, reason="stubbed")
 
     monkeypatch.setattr(distiller, "distill_run_to_skill", _distill_stub)
@@ -227,7 +227,7 @@ async def test_user_verified_passed_still_triggers_distill_and_promote(tmp_path,
 @pytest.mark.asyncio
 async def test_failed_run_path_unchanged(tmp_path, monkeypatch):
     """failed 路径(self_verified 任意)只走 reflection,不动 distill/promote。"""
-    from argos_agent.learning import distiller, promotion_gate, reflection
+    from argos.learning import distiller, promotion_gate, reflection
 
     distill_calls: list[dict] = []
     promote_calls: list[dict] = []

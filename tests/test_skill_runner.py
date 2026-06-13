@@ -8,14 +8,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from argos_agent.skills_runtime.analysis import (
+from argos.skills_runtime.analysis import (
     AnalysisSkill,
     AnalysisSkillContext,
     AnalysisSkillResult,
     Finding,
 )
-from argos_agent.skills_runtime import registry, runner
-from argos_agent.skills_runtime.runner import run_skill
+from argos.skills_runtime import registry, runner
+from argos.skills_runtime.runner import run_skill
 
 
 @pytest.fixture(autouse=True)

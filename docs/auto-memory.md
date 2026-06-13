@@ -190,8 +190,8 @@ Dream 在每天 03:00 由 conductor 触发(cron 任务),需用户确认后执行
 
 ## 相关文件
 
-- `argos_agent/memory/auto.py` — 实现
-- `argos_agent/core/loop.py` — `_build_system` 注入
-- `argos_agent/tui/app.py` — `_dispatch_slash` 接 /remember / /forget / /memory
+- `argos/memory/auto.py` — 实现
+- `argos/core/loop.py` — `_build_system` 注入
+- `argos/tui/app.py` — `_dispatch_slash` 接 /remember / /forget / /memory
 - `docs/superpowers/specs/2026-06-06-auto-memory-design.md` — 设计规格
 - `docs/superpowers/plans/2026-06-06-auto-memory.md` — 实施计划

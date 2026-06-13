@@ -12,10 +12,10 @@ pytestmark = pytest.mark.skip(reason="真 LLM 烟测,运行时手动跑(连真 M
 @pytest.mark.asyncio
 async def test_real_minimax_implements_and_verifies(tmp_path):
     import os
-    from argos_agent import runtime
-    from argos_agent.app_factory import build_components, build_loop_factory
-    from argos_agent.approval import ApprovalLevel
-    from argos_agent.tui.events import VerifyVerdict
+    from argos import runtime
+    from argos.app_factory import build_components, build_loop_factory
+    from argos.approval import ApprovalLevel
+    from argos.tui.events import VerifyVerdict
 
     os.environ["ARGOS_DB_PATH"] = str(tmp_path / "argos.db")
     proj = tmp_path / "proj"

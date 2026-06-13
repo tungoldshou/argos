@@ -337,7 +337,7 @@ before teardown for the user to review.
 
 ### Capability registry
 
-The capability registry (`argos_agent/capability/`) is the authoritative
+The capability registry (`argos/capability/`) is the authoritative
 manifest store for every action the broker can dispatch: name, kind,
 risk level (`low` / `medium` / `high`), reversibility, egress hosts, and
 visibility. The registry is built at startup by `register_builtins()` and
@@ -346,10 +346,10 @@ is the source of truth for the tool count shown in `/tools`.
 ### Behaviour ledger and Trust Dial
 
 Every signed receipt is distilled into a human-readable ledger entry
-(`argos_agent/ledger/`) — what happened, whether it is reversible, and
+(`argos/ledger/`) — what happened, whether it is reversible, and
 its undo state. `/ledger` shows the full ledger for the current run.
 
-The Trust Dial (`argos_agent/permissions/trust_dial.py`) replaces the
+The Trust Dial (`argos/permissions/trust_dial.py`) replaces the
 legacy four-level approval knob with five named levels (L0–L4) that
 speak in plain language: "every step", "dangerous only", "irreversible
 only", "session-trusted", "autonomous". HARD RULES are immune to every
@@ -358,14 +358,14 @@ explicit warning; the dial never silently self-upgrades.
 
 ### Intent confirmation loop
 
-Before starting a run, the intent engine (`argos_agent/intent/`)
+Before starting a run, the intent engine (`argos/intent/`)
 parses the user's natural-language goal into a structured `IntentCard`
 and surfaces it for a brief confirmation. This catches
 "translation-error = source drift" before any tool is called.
 
 ### Conductor (autonomous face)
 
-The conductor (`argos_agent/conductor/`) executes standing orders
+The conductor (`argos/conductor/`) executes standing orders
 without blocking on the user — cron-lite schedules and file-trigger
 watchers — but **never acts without confirmation**. Every suggestion is
 a `ProactiveSuggestion` with `requires_confirmation=True`. The user
@@ -374,7 +374,7 @@ auto-execute. `/orders` lists the active standing orders.
 
 ### Computer use (perception)
 
-`argos_agent/perception/` provides OS-level screen and input control
+`argos/perception/` provides OS-level screen and input control
 (screenshot, click, double-click, type, key, scroll, open app) via
 AppleScript and `screencapture` — zero third-party Python dependencies.
 
@@ -410,10 +410,10 @@ signing documentation.
 
 ### Self-test firewall (learning)
 
-`argos_agent/learning/` promotes only *verified* runs into skill memory:
+`argos/learning/` promotes only *verified* runs into skill memory:
 a `passed` run triggers distillation and an A/B promotion gate;
 `failed` / `unverifiable` runs produce a reflection entry for the memory
-layer only (never promoted). `argos_agent/verify/` adds an opt-in
+layer only (never promoted). `argos/verify/` adds an opt-in
 self-test generator (`ARGOS_SELF_TEST=1`) that tries to synthesise a
 candidate verify command when none was declared — the canary guard
 ensures the generated command can actually fail (a trivial always-pass
@@ -421,7 +421,7 @@ command is discarded, keeping the `unverifiable` verdict honest).
 
 ### Dream nightly consolidation
 
-`argos_agent/learning/dream.py` runs every night (03:00 cron, or on-demand)
+`argos/learning/dream.py` runs every night (03:00 cron, or on-demand)
 to synthesize verified runs into generalized skills. It scans the candidate
 pool (distiller products from runs that lacked runner context), clusters
 them by similarity (goal + verify_cmd token Jaccard ≥ 0.35), synthesizes

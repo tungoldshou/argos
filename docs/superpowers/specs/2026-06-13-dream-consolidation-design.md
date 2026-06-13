@@ -5,7 +5,7 @@
 
 ## 背景与目标
 
-`argos_agent/learning/` 已有单 run 学习闭环：daemon worker 收尾触发
+`argos/learning/` 已有单 run 学习闭环：daemon worker 收尾触发
 `hook.on_run_completed` —— passed 且非 self_verified 走 `distiller`（模板化蒸馏，
 不调模型）+ `promotion_gate`（A/B 晋升门）；其余走 `reflection` 写记忆。
 
@@ -45,8 +45,8 @@ Conductor **绝不擅自执行**（建议恒需用户确认）。
 
 新增模块：
 
-- `argos_agent/learning/candidates.py` —— 候选落盘/读取/消费标记。
-- `argos_agent/learning/dream.py` —— DreamPipeline 本体（聚类/综合/晋升/记忆整理/报告）。
+- `argos/learning/candidates.py` —— 候选落盘/读取/消费标记。
+- `argos/learning/dream.py` —— DreamPipeline 本体（聚类/综合/晋升/记忆整理/报告）。
 
 复用不改语义：`distiller.py`、`promotion_gate.py`、`eval/runner.py`、
 `conductor/` 触发器、`memory/` 存储。

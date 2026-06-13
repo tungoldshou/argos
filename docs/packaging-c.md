@@ -97,7 +97,7 @@ nix profile install github:tungoldshou/argos#argos
 ## 已知限制(spec §1 风险 / §15 风险 + 未来 v1.1)
 
 - **PyPI wheel 不含 `argos-agent` 同名 Linux binary**:wheel 是源码包,装后走 `python -m
-  argos_agent.__main__`;Linux 上要单 binary 装用 AppImage/.deb/.rpm/brew。
+  argos.__main__`;Linux 上要单 binary 装用 AppImage/.deb/.rpm/brew。
 - **WinGet 审核期**(首次提交到 `microsoft/winget-pkgs` 走审核,几小时-几天):
   期间 `winget install` 装不到,README 标"待审";直接下 .exe zip 兜底。
 - **Nix 简化版依赖不全**:`ddgs` / `mlx-embeddings` / `sqlite-vec` / `playwright` /

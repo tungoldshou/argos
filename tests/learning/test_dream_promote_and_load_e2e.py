@@ -27,10 +27,10 @@ from pathlib import Path
 
 import pytest
 
-import argos_agent.skills as skills_mod
-from argos_agent.learning import dream
-from argos_agent.learning.candidates import save_candidate
-from argos_agent.learning.distiller import SkillCandidate
+import argos.skills as skills_mod
+from argos.learning import dream
+from argos.learning.candidates import save_candidate
+from argos.learning.distiller import SkillCandidate
 
 
 # ── fake runners ─────────────────────────────────────────────────────────────

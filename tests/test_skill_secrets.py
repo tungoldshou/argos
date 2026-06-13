@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.skills_runtime.builtin.security_review.secrets import (
+from argos.skills_runtime.builtin.security_review.secrets import (
     scan_file_for_secrets,
     SECRET_PATTERNS,
     SKIP_BASENAMES,      # 跳过白名单(完全跳过)

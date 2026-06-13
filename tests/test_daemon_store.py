@@ -8,13 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.daemon.events import RunCheckpoint, RunFailure, RunMeta
-from argos_agent.daemon.index import StateIndex
-from argos_agent.daemon.state_machine import (
+from argos.daemon.events import RunCheckpoint, RunFailure, RunMeta
+from argos.daemon.index import StateIndex
+from argos.daemon.state_machine import (
     ALLOWED, RUN_ID_RE, STATES, TERMINAL_STATES, InvalidTransition,
     read_state, transition,
 )
-from argos_agent.daemon.store import RunStore
+from argos.daemon.store import RunStore
 
 
 def _meta(run_id: str = "abc123def456") -> RunMeta:

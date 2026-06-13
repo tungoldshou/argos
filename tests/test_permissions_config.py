@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.permissions.config import (
+from argos.permissions.config import (
     PermissionsConfig,
     RuleEntry,
     ToolLevelOverride,
@@ -67,7 +67,7 @@ def test_invalid_tool_level_raises():
 
 def test_load_nonexistent_returns_empty(tmp_path, monkeypatch):
     """无 permissions.json → EmptyPermissionsConfig(D20 锁)。"""
-    from argos_agent.permissions import config as _cfg
+    from argos.permissions import config as _cfg
     monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")
     cfg = _cfg.load()
     assert isinstance(cfg, PermissionsConfig)
@@ -75,7 +75,7 @@ def test_load_nonexistent_returns_empty(tmp_path, monkeypatch):
 
 
 def test_load_valid_json(tmp_path, monkeypatch):
-    from argos_agent.permissions import config as _cfg
+    from argos.permissions import config as _cfg
     p = tmp_path / "permissions.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -93,7 +93,7 @@ def test_load_valid_json(tmp_path, monkeypatch):
 
 
 def test_load_bad_json_raises(tmp_path, monkeypatch):
-    from argos_agent.permissions import config as _cfg
+    from argos.permissions import config as _cfg
     p = tmp_path / "permissions.json"
     p.write_text("{not json")
     monkeypatch.setattr(_cfg, "CONFIG_PATH", p)
@@ -102,7 +102,7 @@ def test_load_bad_json_raises(tmp_path, monkeypatch):
 
 
 def test_load_wrong_version_raises(tmp_path, monkeypatch):
-    from argos_agent.permissions import config as _cfg
+    from argos.permissions import config as _cfg
     p = tmp_path / "permissions.json"
     p.write_text(json.dumps({"version": 99}))
     monkeypatch.setattr(_cfg, "CONFIG_PATH", p)
@@ -112,7 +112,7 @@ def test_load_wrong_version_raises(tmp_path, monkeypatch):
 
 def test_load_bad_regex_skipped_not_raises(tmp_path, monkeypatch):
     """坏 regex 不抛,只跳过该 entry(不整体禁用,防"一条 rule 写错 = 全部失效")。"""
-    from argos_agent.permissions import config as _cfg
+    from argos.permissions import config as _cfg
     p = tmp_path / "permissions.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -128,8 +128,8 @@ def test_load_bad_regex_skipped_not_raises(tmp_path, monkeypatch):
 
 def test_reload_config_keeps_old_on_failure(tmp_path, monkeypatch):
     """坏配置 reload → 保旧 + 报错。"""
-    from argos_agent.permissions.config import reload_config as _reload
-    from argos_agent.permissions import config as _cfg
+    from argos.permissions.config import reload_config as _reload
+    from argos.permissions import config as _cfg
     monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")
     _cfg._reset_config()
     # 先放一个合法配置
@@ -147,8 +147,8 @@ def test_reload_config_keeps_old_on_failure(tmp_path, monkeypatch):
 
 def test_reload_config_picks_up_new(tmp_path, monkeypatch):
     """合法新 config → 切换生效。"""
-    from argos_agent.permissions.config import reload_config as _reload
-    from argos_agent.permissions import config as _cfg
+    from argos.permissions.config import reload_config as _reload
+    from argos.permissions import config as _cfg
     monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")
     _cfg._reset_config()
     (tmp_path / "permissions.json").write_text(json.dumps({

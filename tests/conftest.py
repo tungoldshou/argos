@@ -6,8 +6,8 @@ import sys
 
 import pytest
 
-from argos_agent.sandbox import executor as _executor_mod
-from argos_agent.sandbox.linux import _AVAILABLE_BACKEND as _LINUX_BACKEND
+from argos.sandbox import executor as _executor_mod
+from argos.sandbox.linux import _AVAILABLE_BACKEND as _LINUX_BACKEND
 
 
 def current_sandbox_backend() -> str | None:
@@ -129,7 +129,7 @@ def _reset_skills_registry():
     autouse=True:无需各测试显式调用 _reset_registry()。
     """
     try:
-        from argos_agent.skills_runtime import _reset_registry as _rr
+        from argos.skills_runtime import _reset_registry as _rr
         _rr()
         yield
         _rr()
@@ -145,7 +145,7 @@ def _neutralize_mcp_singleton(monkeypatch):
     自己构造独立 McpManager(config_path=...),不受此影响。"""
     from pathlib import Path
 
-    from argos_agent import mcp_native
+    from argos import mcp_native
     mcp_native.shutdown()  # 清掉可能已建的单例
     monkeypatch.setattr(mcp_native, "CONFIG_PATH", Path("/nonexistent/argos-test/mcp.json"))
     yield

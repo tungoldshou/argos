@@ -1,7 +1,7 @@
 """Recorder:sounddevice 开关录音(注入 fake sd 测,不碰真麦克风)。"""
 import numpy as np
 import pytest
-from argos_agent.input.recorder import Recorder, RecorderError
+from argos.input.recorder import Recorder, RecorderError
 
 
 class _FakeStream:

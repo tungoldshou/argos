@@ -56,7 +56,7 @@ desktop/sdk/
 
 #### 向量导出再生
 
-当 `argos_agent/protocol/events.py` 或相关 events 文件有 breaking change 时：
+当 `argos/protocol/events.py` 或相关 events 文件有 breaking change 时：
 
 ```bash
 cd <repo_root>
@@ -142,7 +142,7 @@ SSE 流：`bridge::uds_sse_batch` 用裸 `tokio::net::UnixStream`（非 hyper）
 
 | 层 | TUI（Python/Textual） | 桌面端（Tauri/WebView） |
 |---|---|---|
-| 传输 | `argos_agent/tui/commands.py` → HTTP over `~/.argos/daemon.sock` | Rust `bridge.rs` → HTTP over 同一 socket |
+| 传输 | `argos/tui/commands.py` → HTTP over `~/.argos/daemon.sock` | Rust `bridge.rs` → HTTP over 同一 socket |
 | 序列化 | `protocol/events.py` serialize_event | `acp-parse.ts` parseSSELine（向量测试对齐） |
 | 会话 | `X-Argos-Session` header | 同；AppState 存 session_id |
 | SSE | Python SSE client 逐行 yield | Rust `uds_sse_batch` 裸 UnixStream 读 `data:` 行 |
@@ -176,7 +176,7 @@ SDK 的 `VerdictStatus` 类型无 `null` / `unknown` 逃逸路径。渲染层无
 
 **选项 A（推荐）：PyInstaller 单文件 + Tauri sidecar**
 
-1. `argos_agent/__main__.py daemon` 模式已有 PyInstaller spec（`packaging/argos.spec`）。
+1. `argos/__main__.py daemon` 模式已有 PyInstaller spec（`packaging/argos.spec`）。
 2. Tauri `tauri.conf.json` 的 `bundle.externalBin` 字段声明 sidecar 二进制路径。
 3. Rust 侧用 `tauri-plugin-shell`（`process::Command::new_sidecar("argosd")`) 拉起，
    传 `--socket-path ~/.argos/daemon.sock`；pid 写入 AppState，窗口关闭时 kill。

@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.mcp_native import McpManager
+from argos.mcp_native import McpManager
 
 
 # 一个最小但合规的 stdio MCP echo server(newline-delimited JSON-RPC)。
@@ -123,7 +123,7 @@ def test_bad_command_server_marked_unavailable(tmp_path):
 
 # ── ④ broker 路由 ─────────────────────────────────────────────────────────────
 def test_broker_routes_mcp_call(monkeypatch):
-    from argos_agent.sandbox.broker import CapabilityBroker, _RISK
+    from argos.sandbox.broker import CapabilityBroker, _RISK
 
     captured = {}
 
@@ -132,7 +132,7 @@ def test_broker_routes_mcp_call(monkeypatch):
             captured["args"] = (server, tool, arguments)
             return "MCP RESULT"
 
-    monkeypatch.setattr("argos_agent.mcp_native.get_manager", lambda: FakeMgr())
+    monkeypatch.setattr("argos.mcp_native.get_manager", lambda: FakeMgr())
     broker = object.__new__(CapabilityBroker)
     broker._mcp_manager = None        # 无注入 → fallback 到 monkeypatched get_manager
     broker._browser_controller = None  # 无注入 → 此测试不走 browser_*
@@ -143,13 +143,13 @@ def test_broker_routes_mcp_call(monkeypatch):
 
 
 def test_broker_mcp_call_coerces_non_dict_arguments(monkeypatch):
-    from argos_agent.sandbox.broker import CapabilityBroker
+    from argos.sandbox.broker import CapabilityBroker
 
     class FakeMgr:
         def call(self, server, tool, arguments):
             return f"args={arguments!r}"
 
-    monkeypatch.setattr("argos_agent.mcp_native.get_manager", lambda: FakeMgr())
+    monkeypatch.setattr("argos.mcp_native.get_manager", lambda: FakeMgr())
     broker = object.__new__(CapabilityBroker)
     broker._mcp_manager = None        # 无注入 → fallback 到 monkeypatched get_manager
     broker._browser_controller = None  # 无注入 → 此测试不走 browser_*

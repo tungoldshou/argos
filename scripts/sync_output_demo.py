@@ -31,10 +31,10 @@ import sys
 import time
 from pathlib import Path
 
-# 让脚本可以直接 import argos_agent
+# 让脚本可以直接 import argos
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from argos_agent.tui.sync_output import probe_sync_output, sync_batch
+from argos.tui.sync_output import probe_sync_output, sync_batch
 
 
 def stream_demo(

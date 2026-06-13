@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from argos_agent.memory import auto as mem_auto
+from argos.memory import auto as mem_auto
 
 
 @pytest.fixture

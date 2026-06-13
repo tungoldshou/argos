@@ -14,7 +14,7 @@ from __future__ import annotations
 
 def test_splash_live_with_key_shows_live_badge():
     """live=True + has_key=True → 显 LIVE 徽标(v3:去掉 star8 前缀,纯文字)。"""
-    from argos_agent.tui.widgets.splash import StartupSplash
+    from argos.tui.widgets.splash import StartupSplash
     sp = StartupSplash(model_label="M3", tier="sonnet", live=True, has_key=True)
     text = sp.renderable_text
     assert "LIVE" in text, f"有 key + live=True 应显 LIVE,实际 text={text!r}"
@@ -25,7 +25,7 @@ def test_splash_live_with_key_shows_live_badge():
 def test_splash_live_without_key_downgrades_and_warns():
     """live=True + has_key=False → 不显 LIVE 徽标,改显 未配 key + 指引文案(v3:star8 字形已处决)。
     防止徽标撒谎说"真能用"实际一跑就 401。"""
-    from argos_agent.tui.widgets.splash import StartupSplash
+    from argos.tui.widgets.splash import StartupSplash
     sp = StartupSplash(model_label="M3", tier="sonnet", live=True, has_key=False)
     text = sp.renderable_text
     assert "LIVE" not in text, (
@@ -40,7 +40,7 @@ def test_splash_live_without_key_downgrades_and_warns():
 
 def test_splash_demo_mode_unchanged_when_no_key():
     """live=False(demo 模式)+ has_key=False → 仍显 DEMO 演示(向后兼容);v3 无 star8 前缀。"""
-    from argos_agent.tui.widgets.splash import StartupSplash
+    from argos.tui.widgets.splash import StartupSplash
     sp = StartupSplash(model_label="M3", tier="sonnet", live=False, has_key=False)
     text = sp.renderable_text
     assert "DEMO" in text
@@ -52,7 +52,7 @@ def test_splash_default_has_key_true_preserves_existing_callers():
     """默认 has_key=True → 旧调用方(没传 has_key 的)行为不变:显 LIVE,不显未配 key 警告。
     v3:star8(U+2733)字形已处决,徽标改为纯 LIVE。
     """
-    from argos_agent.tui.widgets.splash import StartupSplash
+    from argos.tui.widgets.splash import StartupSplash
     sp = StartupSplash(model_label="M3", tier="sonnet", live=True)  # 无 has_key
     text = sp.renderable_text
     assert "LIVE" in text

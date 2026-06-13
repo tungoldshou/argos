@@ -1,10 +1,10 @@
 """candidates:候选落盘/读取/消费标记。"""
 from pathlib import Path
 
-from argos_agent.learning.candidates import (
+from argos.learning.candidates import (
     StoredCandidate, save_candidate, list_unconsumed, mark_consumed,
 )
-from argos_agent.learning.distiller import SkillCandidate
+from argos.learning.distiller import SkillCandidate
 
 
 def _cand(name: str = "fix-login") -> SkillCandidate:
@@ -75,8 +75,8 @@ def test_save_candidate_redacts_meta(tmp_path: Path):
     回退验证:注释掉 candidates.save_candidate 里的脱敏调用,本测试必须 FAIL。
     """
     import json
-    from argos_agent.learning.candidates import save_candidate
-    from argos_agent.learning.distiller import SkillCandidate
+    from argos.learning.candidates import save_candidate
+    from argos.learning.distiller import SkillCandidate
 
     secret_goal = "fetch data with key sk-ant-xxxxxxxxxxxxxxxxxxxx and password=\"hunter2\""
     secret_verify = "AKIA1234567890123456 pytest -q"

@@ -19,16 +19,16 @@ def workflow_loop(tmp_path, scripted_model_factory, requires_sandbox):
     requires_sandbox 依赖:无沙箱后端的平台(mac 缺 sandbox-exec、Linux 缺 bwrap/unshare)
     直接 skip,绝不 mock 把沙箱测试假跑过。
     """
-    from argos_agent.core.loop import AgentLoop, LoopConfig
-    from argos_agent.core.verify_gate import Verifier
-    from argos_agent.memory.store import ArgosStore
-    from argos_agent.sandbox.broker import CapabilityBroker
-    from argos_agent.sandbox.egress import EgressPolicy
-    from argos_agent.sandbox.executor import select_backend
-    from argos_agent.tools.receipts import ReceiptSigner
-    from argos_agent.tui.events import EventBus
-    from argos_agent.approval import ApprovalGate, ApprovalLevel
-    from argos_agent.workflow.engine import WorkflowEngine
+    from argos.core.loop import AgentLoop, LoopConfig
+    from argos.core.verify_gate import Verifier
+    from argos.memory.store import ArgosStore
+    from argos.sandbox.broker import CapabilityBroker
+    from argos.sandbox.egress import EgressPolicy
+    from argos.sandbox.executor import select_backend
+    from argos.tools.receipts import ReceiptSigner
+    from argos.tui.events import EventBus
+    from argos.approval import ApprovalGate, ApprovalLevel
+    from argos.workflow.engine import WorkflowEngine
     from tests.e2e.scripted_model import ScriptedModelClient
     import os
 
@@ -82,7 +82,7 @@ def voting_model_factory():
 @pytest.fixture
 def counting_model_factory():
     import asyncio
-    from argos_agent.core.models import ModelTier
+    from argos.core.models import ModelTier
 
     class _Factory:
         def __init__(self):
@@ -106,7 +106,7 @@ def counting_model_factory():
 def slow_model_factory():
     # 慢模型:stream 睡久(卡在 sleep)→ 好让取消发生在中途,验证 RAII 拆资源。
     import asyncio
-    from argos_agent.core.models import ModelTier
+    from argos.core.models import ModelTier
 
     def make(profile=None):
         class _Slow:
@@ -122,7 +122,7 @@ def slow_model_factory():
 @pytest.fixture
 def failing_model_factory():
     class _Boom:
-        from argos_agent.core.models import ModelTier
+        from argos.core.models import ModelTier
         tier = ModelTier(name="worker", model="boom", base_url="memory://", max_tokens=64)
 
         async def stream(self, messages, *, system, system_dynamic=None):

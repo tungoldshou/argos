@@ -5,8 +5,8 @@ import time
 
 import pytest
 
-from argos_agent.memory import auto as mem_auto
-from argos_agent.tui import commands as tui_cmd
+from argos.memory import auto as mem_auto
+from argos.tui import commands as tui_cmd
 
 
 @pytest.fixture
@@ -198,7 +198,7 @@ def test_view_all_includes_session_when_sid_given(mem_root):
 
 def test_memory_command_renders_to_transcript(mem_root):
     """TUI _memory_cmd 调 view_all 推到 transcript(只测函数,不动 widget)。"""
-    from argos_agent.memory.auto import view_all
+    from argos.memory.auto import view_all
     text = view_all()
     assert "memories" in text
 

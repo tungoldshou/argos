@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent import browser as bmod
-from argos_agent.browser import BrowserController, _Cmd
+from argos import browser as bmod
+from argos.browser import BrowserController, _Cmd
 
 
 class FakePage:
@@ -130,7 +130,7 @@ def test_controller_launch_failure_is_honest(monkeypatch):
 
 # ── ③ broker._execute 把 browser_* 转给单例 controller ────────────────────────
 def test_broker_execute_routes_browser_actions(monkeypatch):
-    from argos_agent.sandbox.broker import CapabilityBroker, _RISK
+    from argos.sandbox.broker import CapabilityBroker, _RISK
 
     captured = []
 
@@ -146,7 +146,7 @@ def test_broker_execute_routes_browser_actions(monkeypatch):
         def screenshot(self, p):
             captured.append(("shot", p)); return "SHOT ok"
 
-    monkeypatch.setattr("argos_agent.browser.get_controller", lambda: FakeCtrl())
+    monkeypatch.setattr("argos.browser.get_controller", lambda: FakeCtrl())
 
     # 直接测 _execute 的路由(它是 request 的内部裸执行;此处只验 action→controller 映射)。
     broker = object.__new__(CapabilityBroker)
@@ -167,6 +167,6 @@ def test_broker_execute_routes_browser_actions(monkeypatch):
 def test_browser_actions_are_gated_not_in_network_egress():
     """浏览器动作经审批闸(_RISK 有项),但不在 _NETWORK_ACTIONS(egress allowlist 针对
     web_search/extract 的 provider host;浏览器导航任意站点是其本职,不套出网白名单)。"""
-    from argos_agent.sandbox.broker import _NETWORK_ACTIONS, _RISK
+    from argos.sandbox.broker import _NETWORK_ACTIONS, _RISK
     assert "browser_navigate" in _RISK
     assert "browser_navigate" not in _NETWORK_ACTIONS

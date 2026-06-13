@@ -3,7 +3,7 @@ import threading
 
 import pytest
 
-from argos_agent.memory.store import ArgosStore, _CHECKPOINT_EVERY
+from argos.memory.store import ArgosStore, _CHECKPOINT_EVERY
 
 
 def test_concurrent_writes_all_persist(tmp_path):

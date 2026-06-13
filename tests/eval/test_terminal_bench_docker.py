@@ -27,8 +27,8 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.eval.benchmarks import terminal_bench as tb
-from argos_agent.eval.benchmarks.terminal_bench import (
+from argos.eval.benchmarks import terminal_bench as tb
+from argos.eval.benchmarks.terminal_bench import (
     TBClassification, TBTask, classify, load_tb_task,
 )
 
@@ -150,9 +150,9 @@ def test_classify_unchanged_for_local_python_image(tmp_path):
 @requires_docker
 def test_docker_run_tests_passing_returns_passed(tmp_path):
     """run-tests.sh 退出 0 → 判 passed。整条 EvalRunner 路径走下来,pass_status='passed'。"""
-    from argos_agent.eval.benchmarks.terminal_bench import run_subset, _build_verify_cmd
-    from argos_agent.eval.runner import EvalRunner
-    from argos_agent.eval.runner import PASS_PASSED
+    from argos.eval.benchmarks.terminal_bench import run_subset, _build_verify_cmd
+    from argos.eval.runner import EvalRunner
+    from argos.eval.runner import PASS_PASSED
     from tests.eval._fakes import FakeWorktree, make_fake_loop_factory, make_fake_loop
 
     # 准备任务:run-tests.sh 直接 `true`(退出 0)
@@ -181,8 +181,8 @@ def test_docker_run_tests_passing_returns_passed(tmp_path):
 @requires_docker
 def test_docker_run_tests_failing_returns_failed(tmp_path):
     """run-tests.sh 退出非 0 → 判 failed。没放水。"""
-    from argos_agent.eval.benchmarks.terminal_bench import run_subset
-    from argos_agent.eval.runner import EvalRunner, PASS_FAILED
+    from argos.eval.benchmarks.terminal_bench import run_subset
+    from argos.eval.runner import EvalRunner, PASS_FAILED
     from tests.eval._fakes import FakeWorktree, make_fake_loop_factory, make_fake_loop
 
     d = _make_tb_task(
@@ -207,8 +207,8 @@ def test_docker_run_tests_failing_returns_failed(tmp_path):
 @requires_docker
 def test_docker_unpullable_image_returns_setup_failed(tmp_path):
     """镜像拉不到 → setup_failed(诚实:没真跑,不计 passed)。"""
-    from argos_agent.eval.benchmarks.terminal_bench import run_subset
-    from argos_agent.eval.runner import EvalRunner, PASS_SETUP_FAILED
+    from argos.eval.benchmarks.terminal_bench import run_subset
+    from argos.eval.runner import EvalRunner, PASS_SETUP_FAILED
     from tests.eval._fakes import FakeWorktree, make_fake_loop_factory, make_fake_loop
 
     # 用一个肯定拉不到的 FROM(私有仓库 / 假镜像)
@@ -239,10 +239,10 @@ def test_docker_unpullable_image_returns_setup_failed(tmp_path):
 @requires_docker
 def test_best_of_n_works_on_docker_path(tmp_path, monkeypatch):
     """在容器路径下,best_of_n 应能跑 N 候选(每候选独立容器 + verify),选第一个 passed。"""
-    from argos_agent.workflow.engine import WorkflowEngine
-    from argos_agent.workflow.spec import parse_spec
-    from argos_agent.workflow.subagent import SubAgentFactory
-    from argos_agent.workflow.result import AgentResult
+    from argos.workflow.engine import WorkflowEngine
+    from argos.workflow.spec import parse_spec
+    from argos.workflow.subagent import SubAgentFactory
+    from argos.workflow.result import AgentResult
     import asyncio
 
     d = _make_tb_task(
@@ -256,7 +256,7 @@ def test_best_of_n_works_on_docker_path(tmp_path, monkeypatch):
     seen: list[str] = []
 
     async def _spy(self, task, *, item, agent_id, on_phase):
-        from argos_agent.workflow.result import AgentResult
+        from argos.workflow.result import AgentResult
         seen.append(agent_id)
         return AgentResult(
             agent_id=agent_id, ok=True, output=f"done {agent_id}",
@@ -272,7 +272,7 @@ def test_best_of_n_works_on_docker_path(tmp_path, monkeypatch):
     )
 
     parsed = load_tb_task(d)
-    from argos_agent.eval.benchmarks.terminal_bench_best_of_n import build_spec_for_task
+    from argos.eval.benchmarks.terminal_bench_best_of_n import build_spec_for_task
     spec = build_spec_for_task(parsed, n=3, model_tier="default")
 
     async def _go():
@@ -295,8 +295,8 @@ def test_best_of_n_works_on_docker_path(tmp_path, monkeypatch):
 @requires_docker
 def test_docker_wrong_solution_still_failed(tmp_path):
     """即使有容器,错产出也得 failed。没把容器路径当放水口。"""
-    from argos_agent.eval.benchmarks.terminal_bench import run_subset
-    from argos_agent.eval.runner import EvalRunner, PASS_FAILED
+    from argos.eval.benchmarks.terminal_bench import run_subset
+    from argos.eval.runner import EvalRunner, PASS_FAILED
     from tests.eval._fakes import FakeWorktree, make_fake_loop_factory, make_fake_loop
 
     d = _make_tb_task(
@@ -329,7 +329,7 @@ def test_container_executor_runs_run_tests_inside_container(tmp_path):
 
     这是端到端验证 —— 不靠 fake loop,真容器真脚本。
     """
-    from argos_agent.eval.benchmarks.terminal_bench_docker import TBContainerExecutor
+    from argos.eval.benchmarks.terminal_bench_docker import TBContainerExecutor
 
     # 准备一个真 TB 任务目录 + 走 to_eval_task 把 tests/run-tests.sh 复制到 workdir
     d = _make_tb_task(
@@ -352,7 +352,7 @@ def test_container_executor_runs_run_tests_inside_container(tmp_path):
 @requires_docker
 def test_container_executor_returns_nonzero_on_failing_tests(tmp_path):
     """容器内 run-tests.sh 退出非 0 → executor 返非 0(没把错洗成 0)。"""
-    from argos_agent.eval.benchmarks.terminal_bench_docker import TBContainerExecutor
+    from argos.eval.benchmarks.terminal_bench_docker import TBContainerExecutor
 
     d = _make_tb_task(
         tmp_path,
@@ -377,7 +377,7 @@ def test_container_executor_returns_nonzero_on_failing_tests(tmp_path):
 def test_subagent_output_mirror_copies_agent_files(tmp_path, monkeypatch):
     """直接验 _mirror_worktree:worktree 里改/增的文件 → mirror。绕开 spy dance。"""
     import subprocess
-    from argos_agent.workflow.subagent import SubAgentFactory
+    from argos.workflow.subagent import SubAgentFactory
 
     mirror = tmp_path / "mirror"
     mirror.mkdir()
@@ -413,9 +413,9 @@ def test_docker_verify_sees_mirror_with_seeded_tests(tmp_path, monkeypatch):
     """
     import subprocess
     import shutil as _sh
-    from argos_agent.workflow.subagent import SubAgentFactory
-    from argos_agent.eval.benchmarks.terminal_bench_docker import TBContainerExecutor
-    from argos_agent.eval.benchmarks.terminal_bench import load_tb_task, to_eval_task
+    from argos.workflow.subagent import SubAgentFactory
+    from argos.eval.benchmarks.terminal_bench_docker import TBContainerExecutor
+    from argos.eval.benchmarks.terminal_bench import load_tb_task, to_eval_task
 
     # 1. 准备 TB 任务(用 hello-world 真源,从 TB 仓库 clone 出)
     src = Path("/tmp/tb-inspect/original-tasks/hello-world")
@@ -471,7 +471,7 @@ def test_docker_verify_sees_mirror_with_seeded_tests(tmp_path, monkeypatch):
     dance。
     """
     import subprocess
-    from argos_agent.workflow.subagent import SubAgentFactory
+    from argos.workflow.subagent import SubAgentFactory
 
     mirror = tmp_path / "mirror"
     mirror.mkdir()

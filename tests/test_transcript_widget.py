@@ -8,8 +8,8 @@ v3 更新点:
 """
 import pytest
 from textual.app import App, ComposeResult
-from argos_agent.tui.theme import ARGOS_NIGHT
-from argos_agent.tui.widgets.transcript import (
+from argos.tui.theme import ARGOS_NIGHT
+from argos.tui.widgets.transcript import (
     Transcript, UserMessage, AssistantMessage, SystemLine,
 )
 

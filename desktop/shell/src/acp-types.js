@@ -1,7 +1,7 @@
 /**
  * Argos ACP (Argos Client Protocol) TypeScript types.
  *
- * Hand-aligned to argos_agent/protocol/events.py (v6 P0-P5b).
+ * Hand-aligned to argos/protocol/events.py (v6 P0-P5b).
  * Each Event type comment marks the corresponding Python source line.
  *
  * Design invariants (from argos-v6-design.md §2.2 + §4):

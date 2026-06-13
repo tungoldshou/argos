@@ -11,7 +11,7 @@
 > 加 `compact_threshold` 透传 kw)、`tui/commands.py` 既有 `COMMAND_HELP`(只加 "context")、
 > `tui/widgets/activity_panel.py` 既有 `on_context`(只加一行 badge 文本,保旧 10 格条不破)。
 >
-> **新代码全部在**:`argos_agent/context/`(4 个新模块)+ `core/loop.py`(扩展) +
+> **新代码全部在**:`argos/context/`(4 个新模块)+ `core/loop.py`(扩展) +
 > `tui/commands.py`(扩展)+ `tui/app.py`(扩展)+ `tui/widgets/activity_panel.py`(扩展)+
 > `tui/widgets/status_bar.py`(扩展)+ `__main__.py`(扩展)+ `CHANGELOG.md` + `README.md` +
 > `docs/context-viz.md`。
@@ -46,12 +46,12 @@
 
 ### 1.1 目标
 
-- 新目录 `argos_agent/context/`
+- 新目录 `argos/context/`
 - `tokens.py`:`token_estimate(text: str) -> tuple[int, str]` —— 走 chars4 兜底,
   若装了 tiktoken 用 cl100k_base
 - 返回 `(tokens, method)`,method ∈ `{"estimate:chars4", "estimate:tiktoken"}`
 - 永远不抛(`except Exception: ...` 兜底)
-- `context/__init__.py`:`from argos_agent.context.tokens import token_estimate`
+- `context/__init__.py`:`from argos.context.tokens import token_estimate`
 
 ### 1.2 实现要点
 
@@ -132,7 +132,7 @@ def analyze(loop, *, store, workspace, goal=None) -> ContextBreakdown:
 
     # 2) memory:4 tier 各自 load → 各自 token → details
     try:
-        from argos_agent.memory import auto as _auto
+        from argos.memory import auto as _auto
         u_t, _ = token_estimate("\n".join(e.value for e in _auto.load(scope="user")))
         p_t, _ = token_estimate("\n".join(e.value for e in _auto.load(scope="project")))
         s_t, _ = token_estimate("\n".join(e.value for e in _auto.load(scope="skill")))
@@ -326,7 +326,7 @@ self._messages_override = None
 
 ```python
 async def _maybe_proactive_compact(self, session_id: str, step: int):
-    from argos_agent.context.threshold import _should_compact, LastCompactedAt
+    from argos.context.threshold import _should_compact, LastCompactedAt
     if not getattr(self._cfg, "compact_threshold", 0.8):
         return
     usage = getattr(self._model, "last_usage", None) or {}
@@ -354,7 +354,7 @@ async def _maybe_proactive_compact(self, session_id: str, step: int):
     new_total = sum(max(1, len(m.get("content") or "") // 4) for m in new_messages)
     self._messages_override = new_messages
     self._last_compact_used = LastCompactedAt(used=pre_used)
-    from argos_agent.tui.events import CompactedEvent
+    from argos.tui.events import CompactedEvent
     yield CompactedEvent(
         before=pre_used, after=new_total,
         reduction_pct=max(0.0, (pre_used - new_total) / max(1, pre_used)),
@@ -405,8 +405,8 @@ async def _maybe_proactive_compact(self, session_id: str, step: int):
 
 ```python
 async def _context_cmd(self, arg: str) -> None:
-    from argos_agent.context.analyzer import analyze
-    from argos_agent.context.render import format_table, format_json
+    from argos.context.analyzer import analyze
+    from argos.context.render import format_table, format_json
     log = self.query_one(Transcript)
     try:
         b = analyze(self._agent_loop,
@@ -470,8 +470,8 @@ elif cmd == "context":
         return 1
     as_json = "--json" in rest
     # session 提取(简化:无显式 session 注入,analyzer 走 store 默认路径)
-    from argos_agent.context.analyzer import analyze
-    from argos_agent.context.render import format_table, format_json
+    from argos.context.analyzer import analyze
+    from argos.context.render import format_table, format_json
     b = analyze(_active_loop, store=_active_store, workspace=_active_workspace)
     print(format_json(b) if as_json else format_table(b))
     return 0
@@ -525,7 +525,7 @@ elif cmd == "context":
   - **0 新强制外部依赖**(stdlib only;`tiktoken` 走 `try/except ImportError` 降级);+44 测试
     (6 文件:`test_context_tokens` 8 / `test_context_analyzer` 10 / `test_context_threshold`
     8 / `test_context_render` 7 / `test_context_e2e` 5 / `test_tui_context` 6);新文件
-    `argos_agent/context/`(4 模块:__init__ / tokens / analyzer / render / threshold);
+    `argos/context/`(4 模块:__init__ / tokens / analyzer / render / threshold);
     spec 在 `docs/superpowers/specs/2026-06-07-context-viz-design.md`,plan 在
     `docs/superpowers/plans/2026-06-07-context-viz.md`;**不**改 `ModelClient` 既有方法 /
     `LoopConfig` 既有字段 / `core/loop.py` 流程 / `compact_messages` 既有签名 / `CostUpdate`

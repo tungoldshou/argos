@@ -14,12 +14,12 @@ from __future__ import annotations
 import pytest
 from textual.app import App, ComposeResult
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel
-from argos_agent.tui.app import ArgosApp
-from argos_agent.tui.events import ApprovalRequest
-from argos_agent.tui.fakeloop import FakeLoop
-from argos_agent.tui.theme import ARGOS_NIGHT
-from argos_agent.tui.widgets.inline_choice import InlineChoice, format_approval_title
+from argos.approval import ApprovalGate, ApprovalLevel
+from argos.tui.app import ArgosApp
+from argos.tui.events import ApprovalRequest
+from argos.tui.fakeloop import FakeLoop
+from argos.tui.theme import ARGOS_NIGHT
+from argos.tui.widgets.inline_choice import InlineChoice, format_approval_title
 
 _PLAN_OPTIONS = [
     ("approve_start", "Approve and start"),

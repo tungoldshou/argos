@@ -1,7 +1,7 @@
 """STT:LocalWhisper(注入 backend 测,不加载真模型)+ 平台检测。"""
 import numpy as np
 import pytest
-from argos_agent.input.stt import LocalWhisper, SttError, is_apple_silicon
+from argos.input.stt import LocalWhisper, SttError, is_apple_silicon
 
 
 def test_local_whisper_uses_injected_backend():
@@ -18,7 +18,7 @@ def test_local_whisper_wraps_backend_error():
     assert "model exploded" in str(e.value)
 
 def test_is_apple_silicon_uses_platform(monkeypatch):
-    import argos_agent.input.stt as stt
+    import argos.input.stt as stt
     monkeypatch.setattr(stt.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(stt.platform, "machine", lambda: "arm64")
     assert is_apple_silicon() is True
@@ -29,8 +29,8 @@ def test_is_apple_silicon_uses_platform(monkeypatch):
     assert is_apple_silicon() is False  # Linux ARM 不是 Apple Silicon(关键:不靠 ImportError)
 
 
-from argos_agent.input.stt import CloudWhisper, make_transcriber, _pcm16_wav_bytes
-from argos_agent.input.stt_config import SttConfig
+from argos.input.stt import CloudWhisper, make_transcriber, _pcm16_wav_bytes
+from argos.input.stt_config import SttConfig
 
 
 def test_pcm16_wav_bytes_is_valid_wav():

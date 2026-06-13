@@ -17,9 +17,9 @@ from unittest.mock import MagicMock, call
 
 import pytest
 
-from argos_agent.conductor.orders import OrderStore, StandingOrder
-from argos_agent.conductor.engine import ConductorEngine
-from argos_agent.conductor.triggers import FileTriggerFact, FileTriggerWatcher
+from argos.conductor.orders import OrderStore, StandingOrder
+from argos.conductor.engine import ConductorEngine
+from argos.conductor.triggers import FileTriggerFact, FileTriggerWatcher
 
 
 # ---------------------------------------------------------------------------

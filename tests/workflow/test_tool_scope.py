@@ -1,5 +1,5 @@
 """测试 tool_scope=read 时 build_child_namespace 真正剔除写工具(兑现审批「只读」承诺)。"""
-from argos_agent import tools
+from argos import tools
 
 
 def test_read_only_namespace_strips_mutating_tools():

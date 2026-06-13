@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.skills_curator.index import (
+from argos.skills_curator.index import (
     BUILTIN_NAMES,
     DEFAULT_INDEX_URL,
     IndexCache,
@@ -192,7 +192,7 @@ def test_fetch_remote_timeout_raises(monkeypatch):
 def test_save_cache_atomic_write(tmp_path, monkeypatch):
     """tmp file rename,不是 partial write."""
     monkeypatch.setattr(
-        "argos_agent.skills_curator.index._skills_root", lambda: tmp_path
+        "argos.skills_curator.index._skills_root", lambda: tmp_path
     )
     e = _parse_entry(_make_entry_dict())
     cache = IndexCache(version=1, generated_at=1717700000.0, skills=(e,))
@@ -203,7 +203,7 @@ def test_save_cache_atomic_write(tmp_path, monkeypatch):
 
 def test_save_cache_creates_skills_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "argos_agent.skills_curator.index._skills_root", lambda: tmp_path / "deep" / "skills"
+        "argos.skills_curator.index._skills_root", lambda: tmp_path / "deep" / "skills"
     )
     e = _parse_entry(_make_entry_dict())
     cache = IndexCache(version=1, generated_at=0.0, skills=(e,))
@@ -213,14 +213,14 @@ def test_save_cache_creates_skills_dir(tmp_path, monkeypatch):
 
 def test_load_cache_returns_none_when_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "argos_agent.skills_curator.index._skills_root", lambda: tmp_path
+        "argos.skills_curator.index._skills_root", lambda: tmp_path
     )
     assert load_cache() is None
 
 
 def test_load_cache_round_trip(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "argos_agent.skills_curator.index._skills_root", lambda: tmp_path
+        "argos.skills_curator.index._skills_root", lambda: tmp_path
     )
     e = _parse_entry(_make_entry_dict())
     cache = IndexCache(version=1, generated_at=1717700000.0, skills=(e,))
@@ -234,7 +234,7 @@ def test_load_cache_round_trip(tmp_path, monkeypatch):
 
 def test_load_cache_corrupt_returns_none(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "argos_agent.skills_curator.index._skills_root", lambda: tmp_path
+        "argos.skills_curator.index._skills_root", lambda: tmp_path
     )
     (tmp_path / "index.json").write_text("not json", encoding="utf-8")
     assert load_cache() is None
@@ -242,7 +242,7 @@ def test_load_cache_corrupt_returns_none(tmp_path, monkeypatch):
 
 def test_cache_age_days_none_for_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "argos_agent.skills_curator.index._skills_root", lambda: tmp_path
+        "argos.skills_curator.index._skills_root", lambda: tmp_path
     )
     assert cache_age_days() is None
 
@@ -250,7 +250,7 @@ def test_cache_age_days_none_for_missing(tmp_path, monkeypatch):
 def test_cache_age_days_returns_positive(tmp_path, monkeypatch):
     import time
     monkeypatch.setattr(
-        "argos_agent.skills_curator.index._skills_root", lambda: tmp_path
+        "argos.skills_curator.index._skills_root", lambda: tmp_path
     )
     e = _parse_entry(_make_entry_dict())
     save_cache(IndexCache(version=1, generated_at=0.0, skills=(e,)))

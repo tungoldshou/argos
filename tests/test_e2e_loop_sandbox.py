@@ -16,14 +16,14 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel
-from argos_agent.core.loop import AgentLoop, LoopConfig
-from argos_agent.core.verify_gate import Verdict, Verifier
-from argos_agent.sandbox.broker import CapabilityBroker
-from argos_agent.sandbox.egress import EgressPolicy
-from argos_agent.sandbox.executor import select_backend
-from argos_agent.tools.receipts import ReceiptSigner
-from argos_agent.tui.events import CodeResult, EventBus, PhaseChange
+from argos.approval import ApprovalGate, ApprovalLevel
+from argos.core.loop import AgentLoop, LoopConfig
+from argos.core.verify_gate import Verdict, Verifier
+from argos.sandbox.broker import CapabilityBroker
+from argos.sandbox.egress import EgressPolicy
+from argos.sandbox.executor import select_backend
+from argos.tools.receipts import ReceiptSigner
+from argos.tui.events import CodeResult, EventBus, PhaseChange
 
 
 class ScriptModel:

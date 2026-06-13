@@ -6,7 +6,7 @@ import pytest
 
 def test_splash_permissions_banner():
     """reason 串含 'permissions' → 显 'permissions 已禁用' 前缀。"""
-    from argos_agent.tui.widgets.splash import StartupSplash
+    from argos.tui.widgets.splash import StartupSplash
     sp = StartupSplash(model_label="M3", tier="sonnet", live=True)
     sp.set_bad_config("permissions: JSON 解析失败: ...")
     text = sp.renderable_text
@@ -16,7 +16,7 @@ def test_splash_permissions_banner():
 
 def test_splash_lsp_banner_preserved():
     """reason 含 'LSP' → 'LSP 已禁用' 前缀(向后兼容 hooks/LSP 行为)。"""
-    from argos_agent.tui.widgets.splash import StartupSplash
+    from argos.tui.widgets.splash import StartupSplash
     sp = StartupSplash(model_label="M3", tier="sonnet", live=True)
     sp.set_bad_config("LSP: 加载失败")
     text = sp.renderable_text
@@ -25,7 +25,7 @@ def test_splash_lsp_banner_preserved():
 
 def test_splash_hooks_banner_default():
     """reason 不含 LSP/permissions → hooks 前缀(向后兼容)。"""
-    from argos_agent.tui.widgets.splash import StartupSplash
+    from argos.tui.widgets.splash import StartupSplash
     sp = StartupSplash(model_label="M3", tier="sonnet", live=True)
     sp.set_bad_config("command not found")
     text = sp.renderable_text

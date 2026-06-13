@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from argos_agent.memory.store import ArgosStore
+from argos.memory.store import ArgosStore
 
 
 def _write_jsonl(path, records):

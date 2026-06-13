@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.core.loop import AgentLoop, LoopConfig
-from argos_agent.core.honesty import HONESTY_SYSTEM, UNTRUSTED_OPEN, UNTRUSTED_CLOSE
-from argos_agent.core.types import Verdict
-from argos_agent.memory.store import MemoryRecord
-from argos_agent.sandbox.backend import ExecResult
-from argos_agent.tui.events import EventBus, TokenDelta
+from argos.core.loop import AgentLoop, LoopConfig
+from argos.core.honesty import HONESTY_SYSTEM, UNTRUSTED_OPEN, UNTRUSTED_CLOSE
+from argos.core.types import Verdict
+from argos.memory.store import MemoryRecord
+from argos.sandbox.backend import ExecResult
+from argos.tui.events import EventBus, TokenDelta
 
 
 class CapturingModel:
@@ -75,7 +75,7 @@ def _loop(model, store):
 async def test_w3_no_store_recall_degrades_to_honesty_only(monkeypatch):
     # 隔离 store 召回降级这条不变量:把 skills 召回打桩成空,排除 skills 注入的干扰
     # (skills 召回独立于 store,不依赖它的 recall;本测试只断言「无 store.recall → 无记忆注入」)。
-    monkeypatch.setattr("argos_agent.skills.recall", lambda *a, **k: [])
+    monkeypatch.setattr("argos.skills.recall", lambda *a, **k: [])
     model = CapturingModel(["完成。"])
     loop = _loop(model, FakeStore())  # 无 recall
     async for _ in loop.run("写个文件", "s"):
@@ -91,7 +91,7 @@ async def test_w3_no_store_recall_degrades_to_honesty_only(monkeypatch):
 async def test_env_context_injected_into_safe_segment(monkeypatch, tmp_path):
     """系统提示注入运行环境块(cwd/OS/日期),在可信安全段(HONESTY 之后、untrusted 之前),
     并明示无需用代码现场探测目录 —— 根治"问目录却跑 os.getcwd/pwd"那类无谓代码动作。"""
-    monkeypatch.setattr("argos_agent.skills.recall", lambda *a, **k: [])
+    monkeypatch.setattr("argos.skills.recall", lambda *a, **k: [])
     model = CapturingModel(["完成。"])
     loop = AgentLoop(
         store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(), broker=None,
@@ -113,8 +113,8 @@ async def test_env_context_injected_into_safe_segment(monkeypatch, tmp_path):
 async def test_project_mode_run_guards_existing_tests(monkeypatch, tmp_path):
     """头号护城河洞修复接线:project_mode 起 run 时自动快照既有测试 →
     之后改它即被 detect_tampering 抓到(此前 guard_files 生产零调用 = 死代码,篡改检测形同虚设)。"""
-    from argos_agent import runtime
-    monkeypatch.setattr("argos_agent.skills.recall", lambda *a, **k: [])
+    from argos import runtime
+    monkeypatch.setattr("argos.skills.recall", lambda *a, **k: [])
     (tmp_path / "test_existing.py").write_text("def test(): assert True\n")
     runtime.use_project(str(tmp_path))
     try:
@@ -141,10 +141,10 @@ async def test_skills_recalled_into_untrusted_without_store_recall(monkeypatch):
     任务:loop 把 system 拆 (stable, dynamic) 透传 — stable 含 HONESTY + 工具签名等,
     dynamic 含 untrusted 围栏 + skill body + memory 召回。W3 验证顺序锁稳定段在前、动态段在后。
     """
-    from argos_agent import skills as _skills
+    from argos import skills as _skills
     fake = _skills.Skill(name="py-test-runner", description="跑 pytest", trust="builtin",
                          enabled=True, body="用 `pytest -q` 跑测试。")
-    monkeypatch.setattr("argos_agent.skills.recall", lambda *a, **k: [fake])
+    monkeypatch.setattr("argos.skills.recall", lambda *a, **k: [fake])
     model = CapturingModel(["完成。"])
     loop = _loop(model, FakeStore())  # 无 recall,但 skill 仍应注入
     async for _ in loop.run("帮我跑测试", "s"):
@@ -162,7 +162,7 @@ async def test_skills_recalled_into_untrusted_without_store_recall(monkeypatch):
 async def test_contract_injected_for_structured_task(monkeypatch):
     """结构化工程任务(REST API)→ 安全段 = HONESTY_SYSTEM + 契约 checklist(可信,在 untrusted 之前)。
     契约层是 Argos 差异化资产;此前 loop 从不注入(死代码),现接进 _build_system。"""
-    monkeypatch.setattr("argos_agent.skills.recall", lambda *a, **k: [])
+    monkeypatch.setattr("argos.skills.recall", lambda *a, **k: [])
     model = CapturingModel(["完成。"])
     loop = _loop(model, FakeStore())
     async for _ in loop.run("设计一个用户管理的 REST API 端点", "s"):
@@ -175,7 +175,7 @@ async def test_contract_injected_for_structured_task(monkeypatch):
 @pytest.mark.asyncio
 async def test_no_contract_for_unstructured_task(monkeypatch):
     """非结构化任务(写作)→ 不注入契约(实测契约对开放式任务有害),退裸 HONESTY_SYSTEM。"""
-    monkeypatch.setattr("argos_agent.skills.recall", lambda *a, **k: [])
+    monkeypatch.setattr("argos.skills.recall", lambda *a, **k: [])
     model = CapturingModel(["完成。"])
     loop = _loop(model, FakeStore())
     async for _ in loop.run("写一篇关于猫的散文", "s"):

@@ -13,10 +13,10 @@ import asyncio
 
 import pytest
 
-from argos_agent.approval import ApprovalLevel
-from argos_agent.core.loop import AgentLoop, LoopConfig
-from argos_agent.core.plan_mode import EnterPlanMode
-from argos_agent.protocol.events import CodeAction, Error, EventBus, PlanRendered
+from argos.approval import ApprovalLevel
+from argos.core.loop import AgentLoop, LoopConfig
+from argos.core.plan_mode import EnterPlanMode
+from argos.protocol.events import CodeAction, Error, EventBus, PlanRendered
 
 from tests.test_loop_codeact import FakeModel, FakeSandbox, FakeStore, FakeVerifier
 

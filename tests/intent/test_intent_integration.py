@@ -26,9 +26,9 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../"))
 
-from argos_agent.intent.card import IntentCard
-from argos_agent.intent.engine import IntentEngine
-from argos_agent.protocol.events import (
+from argos.intent.card import IntentCard
+from argos.intent.engine import IntentEngine
+from argos.protocol.events import (
     Error,
     IntentConfirmRequest,
     IntentConfirmResponse,
@@ -137,7 +137,7 @@ class TestIntentEventGoldenSnapshot:
 
     def test_all_event_kinds_includes_intent(self):
         """ALL_EVENT_KINDS 守卫:两个新事件 kind 在 _KIND_TO_CLASS 中。"""
-        from argos_agent.protocol.events import _KIND_TO_CLASS
+        from argos.protocol.events import _KIND_TO_CLASS
         assert "intent_confirm_request" in _KIND_TO_CLASS
         assert "intent_confirm_response" in _KIND_TO_CLASS
 
@@ -151,8 +151,8 @@ class TestLoopIntentEngineNone:
     @pytest.fixture()
     def loop(self, tmp_path):
         """构造最小 AgentLoop(intent_engine=None)。"""
-        from argos_agent.core.loop import AgentLoop, LoopConfig
-        from argos_agent.protocol.events import EventBus
+        from argos.core.loop import AgentLoop, LoopConfig
+        from argos.protocol.events import EventBus
 
         store = MagicMock()
         store.append_event = MagicMock()
@@ -180,7 +180,7 @@ class TestLoopIntentEngineNone:
         model.stream = _fake_stream
 
         verifier = MagicMock()
-        from argos_agent.core.types import Verdict
+        from argos.core.types import Verdict
         verifier.verify = MagicMock(return_value=Verdict(
             status="unverifiable", detail="no verify_cmd",
             tampered=[], attempts=0, verify_cmd=None,
@@ -214,8 +214,8 @@ class TestLoopIntentConfirmHold:
     @pytest.fixture()
     def minimal_loop(self, tmp_path):
         """带 FakeIntentEngine 的最小 AgentLoop。"""
-        from argos_agent.core.loop import AgentLoop, LoopConfig
-        from argos_agent.protocol.events import EventBus
+        from argos.core.loop import AgentLoop, LoopConfig
+        from argos.protocol.events import EventBus
 
         card = _make_card()
         engine = FakeIntentEngine(card)
@@ -244,7 +244,7 @@ class TestLoopIntentConfirmHold:
         model.stream = _fake_stream
 
         verifier = MagicMock()
-        from argos_agent.core.types import Verdict
+        from argos.core.types import Verdict
         verifier.verify = MagicMock(return_value=Verdict(
             status="unverifiable", detail="no verify_cmd",
             tampered=[], attempts=0, verify_cmd=None,
@@ -352,8 +352,8 @@ class TestLoopIntentConfirmTimeout:
 
     @pytest.mark.asyncio
     async def test_timeout_emits_error(self, tmp_path):
-        from argos_agent.core.loop import AgentLoop, LoopConfig
-        from argos_agent.protocol.events import EventBus
+        from argos.core.loop import AgentLoop, LoopConfig
+        from argos.protocol.events import EventBus
 
         card = _make_card()
         engine = FakeIntentEngine(card)
@@ -382,7 +382,7 @@ class TestLoopIntentConfirmTimeout:
         model.stream = _fake_stream
 
         verifier = MagicMock()
-        from argos_agent.core.types import Verdict
+        from argos.core.types import Verdict
         verifier.verify = MagicMock(return_value=Verdict(
             status="unverifiable", detail="no verify_cmd",
             tampered=[], attempts=0, verify_cmd=None,
@@ -411,8 +411,8 @@ class TestRespondIntentConfirm:
     """respond_intent_confirm 的 call_id 注册表行为。"""
 
     def _make_loop(self, tmp_path):
-        from argos_agent.core.loop import AgentLoop, LoopConfig
-        from argos_agent.protocol.events import EventBus
+        from argos.core.loop import AgentLoop, LoopConfig
+        from argos.protocol.events import EventBus
 
         store = MagicMock()
         store.append_event = MagicMock()
@@ -526,8 +526,8 @@ class TestLoopIntentEngineEdgeCases:
     """IntentEngine 故障降级与 confirmation_required=False 直出路径。"""
 
     def _make_minimal(self, tmp_path, card: IntentCard):
-        from argos_agent.core.loop import AgentLoop, LoopConfig
-        from argos_agent.protocol.events import EventBus
+        from argos.core.loop import AgentLoop, LoopConfig
+        from argos.protocol.events import EventBus
 
         engine = FakeIntentEngine(card)
         store = MagicMock()
@@ -551,7 +551,7 @@ class TestLoopIntentEngineEdgeCases:
 
         model.stream = _fake_stream
         verifier = MagicMock()
-        from argos_agent.core.types import Verdict
+        from argos.core.types import Verdict
         verifier.verify = MagicMock(return_value=Verdict(
             status="unverifiable", detail="no verify_cmd",
             tampered=[], attempts=0, verify_cmd=None,
@@ -583,8 +583,8 @@ class TestLoopIntentEngineEdgeCases:
     @pytest.mark.asyncio
     async def test_engine_exception_falls_back_to_original_goal(self, tmp_path):
         """IntentEngine.parse 抛异常 → 诚实降级用原 goal 继续,不崩。"""
-        from argos_agent.core.loop import AgentLoop, LoopConfig
-        from argos_agent.protocol.events import EventBus
+        from argos.core.loop import AgentLoop, LoopConfig
+        from argos.protocol.events import EventBus
 
         class FailingEngine:
             async def parse(self, utterance, model):
@@ -611,7 +611,7 @@ class TestLoopIntentEngineEdgeCases:
 
         model.stream = _fake_stream
         verifier = MagicMock()
-        from argos_agent.core.types import Verdict
+        from argos.core.types import Verdict
         verifier.verify = MagicMock(return_value=Verdict(
             status="unverifiable", detail="no verify_cmd",
             tampered=[], attempts=0, verify_cmd=None,
@@ -650,8 +650,8 @@ class TestDaemonIntentConfirmFailClosed:
 
     def test_respond_intent_confirm_false_for_unknown_id(self, tmp_path):
         """call_id 不在注册表 → respond_intent_confirm 返 False → 409。"""
-        from argos_agent.core.loop import AgentLoop, LoopConfig
-        from argos_agent.protocol.events import EventBus
+        from argos.core.loop import AgentLoop, LoopConfig
+        from argos.protocol.events import EventBus
 
         store = MagicMock()
         store.append_event = MagicMock()
@@ -679,8 +679,8 @@ class TestDaemonIntentConfirmFailClosed:
 
     def test_respond_intent_confirm_false_for_empty_registry(self, tmp_path):
         """重置后注册表为空 → 任何 call_id 都返 False。"""
-        from argos_agent.core.loop import AgentLoop, LoopConfig
-        from argos_agent.protocol.events import EventBus
+        from argos.core.loop import AgentLoop, LoopConfig
+        from argos.protocol.events import EventBus
 
         store = MagicMock()
         store.append_event = MagicMock()

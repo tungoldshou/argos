@@ -81,8 +81,8 @@ def _try_png(svg_path: Path) -> Path | None:
 
 async def shot_splash_idle() -> None:
     """截图 1:splash-idle — 启动后 idle 态,StartupSplash 已完成呈现,DEMO 模式。"""
-    from argos_agent.tui.app import ArgosApp
-    from argos_agent.tui.fakeloop import FakeLoop
+    from argos.tui.app import ArgosApp
+    from argos.tui.fakeloop import FakeLoop
 
     app = ArgosApp(loop_factory=lambda: FakeLoop(), demo=True)
     async with app.run_test(size=(100, 30)) as pilot:
@@ -100,9 +100,9 @@ async def shot_run_act() -> None:
     改为直接逐一 await _apply_event,模拟 run 进行中状态,截图时右栏保持 act 视图。
     这是 by-design 行为:spec §4.8 规定 run 收尾自动回 idle;截图必须在 run 结束前捕获 act 视图。
     """
-    from argos_agent.tui.app import ArgosApp
-    from argos_agent.tui.fakeloop import FakeLoop
-    from argos_agent.tui.events import PhaseChange, TokenDelta, CodeAction, CodeResult, FileDiff, CostUpdate
+    from argos.tui.app import ArgosApp
+    from argos.tui.fakeloop import FakeLoop
+    from argos.tui.events import PhaseChange, TokenDelta, CodeAction, CodeResult, FileDiff, CostUpdate
     import time
 
     t0 = time.monotonic()
@@ -125,7 +125,7 @@ async def shot_run_act() -> None:
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
         # 回显用户目标行(模拟 start_run 的 user_line 调用)
-        from argos_agent.tui.widgets.transcript import Transcript
+        from argos.tui.widgets.transcript import Transcript
         await app.query_one("#transcript", Transcript).user_line("修复 src/parser.py 的 off-by-one 错误")
         # 直接投事件:run 中间态,on_run_end 不会被调用,右栏停留在 act 视图
         for ev in act_events:
@@ -138,11 +138,11 @@ async def shot_run_act() -> None:
 
 async def shot_approval() -> None:
     """截图 3:approval — InlineChoice 行内审批卡挂起,StatusBar ◓ blocked 态。"""
-    from argos_agent.tui.app import ArgosApp
-    from argos_agent.tui.fakeloop import FakeLoop
-    from argos_agent.tui.events import PhaseChange, TokenDelta, ApprovalRequest
-    from argos_agent.tui.widgets.inline_choice import InlineChoice
-    from argos_agent.tui.widgets.status_bar import StatusBar
+    from argos.tui.app import ArgosApp
+    from argos.tui.fakeloop import FakeLoop
+    from argos.tui.events import PhaseChange, TokenDelta, ApprovalRequest
+    from argos.tui.widgets.inline_choice import InlineChoice
+    from argos.tui.widgets.status_bar import StatusBar
 
     script = [
         PhaseChange(phase="act", actions=1),
@@ -174,10 +174,10 @@ async def shot_approval() -> None:
 
 async def shot_verdict_passed() -> None:
     """截图 4a:verdict-passed — verify 通过,VerdictBadge 绿色 passed 态。"""
-    from argos_agent.tui.app import ArgosApp
-    from argos_agent.tui.fakeloop import FakeLoop
-    from argos_agent.core.types import Verdict
-    from argos_agent.tui.events import PhaseChange, VerifyVerdict, TokenDelta, CostUpdate
+    from argos.tui.app import ArgosApp
+    from argos.tui.fakeloop import FakeLoop
+    from argos.core.types import Verdict
+    from argos.tui.events import PhaseChange, VerifyVerdict, TokenDelta, CostUpdate
     import time
 
     t0 = time.monotonic()
@@ -206,10 +206,10 @@ async def shot_verdict_passed() -> None:
 
 async def shot_verdict_failed() -> None:
     """截图 4b:verdict-failed — verify 失败,VerdictBadge 红色 failed 态 + StatusBar -alert。"""
-    from argos_agent.tui.app import ArgosApp
-    from argos_agent.tui.fakeloop import FakeLoop
-    from argos_agent.core.types import Verdict
-    from argos_agent.tui.events import PhaseChange, VerifyVerdict, Escalation, TokenDelta
+    from argos.tui.app import ArgosApp
+    from argos.tui.fakeloop import FakeLoop
+    from argos.core.types import Verdict
+    from argos.tui.events import PhaseChange, VerifyVerdict, Escalation, TokenDelta
 
     script = [
         PhaseChange(phase="act", actions=1),

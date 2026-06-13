@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.eval.benchmarks import terminal_bench as tb
-from argos_agent.eval.corpus import EvalTask, load_task
-from argos_agent.eval.runner import (
+from argos.eval.benchmarks import terminal_bench as tb
+from argos.eval.corpus import EvalTask, load_task
+from argos.eval.runner import (
     PASS_ERROR, PASS_FAILED, PASS_PASSED, PASS_SETUP_FAILED,
 )
 
@@ -163,7 +163,7 @@ def _make_runner(tmp_path, *, verdict, detail="", steps=1):
     wt = FakeWorktree(tmp_path / "wt_base")
     loop = make_fake_loop(verdict=verdict, detail=detail, steps=steps)
     factory = make_fake_loop_factory(loop)
-    from argos_agent.eval.runner import EvalRunner
+    from argos.eval.runner import EvalRunner
     return EvalRunner(worktree=wt, base_dir=tmp_path / "eval_base", loop_factory=factory, budget_s=10)
 
 

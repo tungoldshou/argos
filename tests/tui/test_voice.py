@@ -2,8 +2,8 @@
 import numpy as np
 import pytest
 from textual.app import App
-from argos_agent.tui.theme import ARGOS_NIGHT
-from argos_agent.tui.widgets.prompt import PromptArea
+from argos.tui.theme import ARGOS_NIGHT
+from argos.tui.widgets.prompt import PromptArea
 
 
 def test_voice_toggle_message_exists():
@@ -53,8 +53,8 @@ async def test_nonempty_space_types_normally():
 
 @pytest.mark.asyncio
 async def test_voice_toggle_records_then_injects(monkeypatch):
-    from argos_agent.tui.app import ArgosApp
-    from argos_agent.tui.fakeloop import FakeLoop
+    from argos.tui.app import ArgosApp
+    from argos.tui.fakeloop import FakeLoop
 
     class _FakeRec:
         def start(self): self.started = True

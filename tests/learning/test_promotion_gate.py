@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from argos_agent.learning import promotion_gate
+from argos.learning import promotion_gate
 
 
 @dataclass
@@ -58,7 +58,7 @@ class _FakeRunner:
 
     def _run_once(self, task, seq, *, hint, model_tier: str):
         # 跑一个 EvalResult-look-alike。直接用 eval.runner.EvalResult 避免重复定义。
-        from argos_agent.eval.runner import EvalResult, PASS_PASSED, PASS_FAILED
+        from argos.eval.runner import EvalResult, PASS_PASSED, PASS_FAILED
         outcome = _FakeLoop(hint=hint, pass_sequence=seq).run_sync(task.goal, task.working_dir)
         status = outcome.verdict_status
         return EvalResult(
@@ -74,7 +74,7 @@ class _FakeRunner:
 
 
 def _make_task(task_id: str = "t#1", verify_cmd: str = "true"):
-    from argos_agent.eval.corpus import EvalTask
+    from argos.eval.corpus import EvalTask
     return EvalTask(
         id=task_id, category="self_check", difficulty="easy",
         title=f"task {task_id}", goal=f"goal {task_id}", verify_cmd=verify_cmd,
@@ -84,7 +84,7 @@ def _make_task(task_id: str = "t#1", verify_cmd: str = "true"):
 
 
 def _make_candidate(name: str, body: str = "# skill body", verify_cmd: str = "true"):
-    from argos_agent.learning.distiller import SkillCandidate
+    from argos.learning.distiller import SkillCandidate
     return SkillCandidate(
         name=name, body_markdown=body, verify_cmd=verify_cmd,
         skill_md_path=Path(f"/tmp/skills/{name}/SKILL.md"),
@@ -94,7 +94,7 @@ def _make_candidate(name: str, body: str = "# skill body", verify_cmd: str = "tr
 # ── 验收 b: A/B 不提升的候选不被晋升 ─────────────────────
 def test_promoted_when_pass_rate_improves(tmp_path):
     """A=0/2 passed, B=2/2 passed → promoted=True,B 严格 > A。"""
-    from argos_agent.learning.distiller import SkillCandidate
+    from argos.learning.distiller import SkillCandidate
 
     tasks = [_make_task("t1"), _make_task("t2")]
     runner = _FakeRunner(sequence_a=["failed", "failed"], sequence_b=["passed", "passed"])
@@ -140,7 +140,7 @@ def test_not_promoted_when_regression(tmp_path):
 
 def test_builtin_name_rejected(tmp_path):
     """候选 name 命中 BUILTIN_NAMES → 即返 rejected(不跑 A/B,免测)。"""
-    from argos_agent.skills_curator.index import BUILTIN_NAMES
+    from argos.skills_curator.index import BUILTIN_NAMES
     builtin = next(iter(BUILTIN_NAMES))
     cand = _make_candidate(builtin)
     # runner 永远不应用
@@ -198,7 +198,7 @@ class _FullPassRunner:
         self.calls: list[tuple] = []
 
     def run(self, task, *, model_tier: str):
-        from argos_agent.eval.runner import EvalResult
+        from argos.eval.runner import EvalResult
         self.calls.append((task, model_tier))
         return EvalResult(
             task_id=task.id, run_id="r-pass", model_tier=model_tier,
@@ -214,7 +214,7 @@ class _FullPassRunner:
 class _FullFailRunner:
     """所有 task 永远返回 failed 的 fake runner。"""
     def run(self, task, *, model_tier: str):
-        from argos_agent.eval.runner import EvalResult
+        from argos.eval.runner import EvalResult
         return EvalResult(
             task_id=task.id, run_id="r-fail", model_tier=model_tier,
             started_at=0.0, finished_at=0.0, duration_s=0.0,

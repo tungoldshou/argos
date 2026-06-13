@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.core.loop import AgentLoop, LoopConfig
-from argos_agent.core.verify_gate import Verdict
-from argos_agent.sandbox.backend import ExecResult
-from argos_agent.tui.events import EventBus, VerifyVerdict
+from argos.core.loop import AgentLoop, LoopConfig
+from argos.core.verify_gate import Verdict
+from argos.sandbox.backend import ExecResult
+from argos.tui.events import EventBus, VerifyVerdict
 from tests.test_loop_codeact import FakeStore  # 复用
 
 
@@ -66,7 +66,7 @@ class _RecModel:
 async def test_h2_nudges_to_verify_when_code_changed_without_verify_cmd():
     """H2:agent 改了代码(write_file 真跑过)却没声明验证命令 → 回灌一次催促声明真验证;
     仍不声明则诚实收尾(不无限催)。"""
-    from argos_agent.core.verify_gate import Verifier
+    from argos.core.verify_gate import Verifier
     model = _RecModel([
         "```python\nwrite_file('x.py', 'x=1')\n```",   # 改代码
         "完成。",                                        # 宣布完成、无 propose_verify → 该被催一次
@@ -86,7 +86,7 @@ async def test_h2_nudges_to_verify_when_code_changed_without_verify_cmd():
 @pytest.mark.asyncio
 async def test_h2_no_nudge_for_readonly_task():
     """纯读任务(只 read_file,没写)→ 不催验证(避免误催纯读/问答任务)。"""
-    from argos_agent.core.verify_gate import Verifier
+    from argos.core.verify_gate import Verifier
     model = _RecModel([
         "```python\nprint(read_file('x.py'))\n```",   # 只读,没改
         "完成。",
@@ -105,7 +105,7 @@ async def test_fake_verify_command_does_not_produce_false_green():
     """H1 端到端回归:模型声明 `echo ok` 当验证 → 被拒不登记 → verify 落 unverifiable(未机检验证),
     绝不报 passed 假绿。修复前 echo 在白名单、跑出 exit 0 → 会误判 passed(本测试即守此回归)。"""
     from tests.test_loop_codeact import FakeModel
-    from argos_agent.core.verify_gate import Verifier   # 真 Verifier:verify_cmd=None → unverifiable
+    from argos.core.verify_gate import Verifier   # 真 Verifier:verify_cmd=None → unverifiable
     model = FakeModel([
         "```python\npropose_verify('echo ok')\nwrite_file('x.py','x=1')\n```",
         "完成。",

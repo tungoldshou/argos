@@ -32,7 +32,7 @@ We will:
 Argos has several core moats (see [docs/argos-product-definition.md](docs/argos-product-definition.md)):
 
 1. **propose_verify** — agent declares its verify command; we run it independently
-2. **Verdict / VerdictStatus** — three-state result (`passed` / `failed` / `unverifiable`), fail-closed; defined in `argos_agent/core/types.py`; Argos never fabricates a green result
+2. **Verdict / VerdictStatus** — three-state result (`passed` / `failed` / `unverifiable`), fail-closed; defined in `argos/core/types.py`; Argos never fabricates a green result
 3. **OS Seatbelt** — agent code runs in a subprocess under a macOS Seatbelt profile, no network by default
 4. **CapabilityBroker + CapabilityRegistry** — every side effect passes egress-policy checks (derived from the per-process `CapabilityRegistry`) and receives an HMAC-signed receipt; each daemon run gets its own isolated `SeatbeltExecutor + ApprovalGate + CapabilityBroker` via `build_run_stack()`, so concurrent runs never share mutable state
 5. **Approval Gate / Trust Dial** — levels L0 (OBSERVE) through L4 (AUTO / `/yolo`); HARD RULES enforced in `permissions/` cannot be bypassed at any trust level

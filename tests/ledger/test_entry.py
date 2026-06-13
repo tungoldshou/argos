@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import dataclasses
 import pytest
-from argos_agent.ledger.entry import LedgerEntry, UndoState, Reversible
+from argos.ledger.entry import LedgerEntry, UndoState, Reversible
 
 
 def _make_entry(**kwargs) -> LedgerEntry:

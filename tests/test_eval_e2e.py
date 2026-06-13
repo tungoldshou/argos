@@ -15,12 +15,12 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.eval.compare import (
+from argos.eval.compare import (
     generate_report, run_pair, write_report, write_report_json,
 )
-from argos_agent.eval.corpus import EvalTask
-from argos_agent.eval.results import list_runs, load_run, summary
-from argos_agent.eval.runner import (
+from argos.eval.corpus import EvalTask
+from argos.eval.results import list_runs, load_run, summary
+from argos.eval.runner import (
     EvalResult, EvalRunner, PASS_PASSED, PASS_FAILED,
 )
 
@@ -29,7 +29,7 @@ from tests.eval._seed_corpus import write_seed_corpus
 
 
 def _make_task(root: Path, task_id: str = "bug_fix_001_off_by_one") -> EvalTask:
-    from argos_agent.eval.corpus import load_task
+    from argos.eval.corpus import load_task
     return load_task(task_id)
 
 
@@ -98,7 +98,7 @@ def test_e2e_passing_task_recorded_as_passed(tmp_path, monkeypatch):
     task = _make_task(root)
     r = runner.run(task, model_tier="cheap")
     assert r.pass_status == PASS_PASSED
-    from argos_agent.eval.results import append
+    from argos.eval.results import append
     append(r, base=base)
     loaded = load_run(r.run_id, base=base)
     assert loaded is not None
@@ -154,7 +154,7 @@ def test_e2e_all_14_corpus_tasks_loadable(tmp_path, monkeypatch):
     root = tmp_path / "corpus"
     write_seed_corpus(root)
     monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", str(root))
-    from argos_agent.eval.corpus import list_tasks, load_task, corpus_version
+    from argos.eval.corpus import list_tasks, load_task, corpus_version
     tasks = list_tasks()
     assert len(tasks) == 14
     for t in tasks:

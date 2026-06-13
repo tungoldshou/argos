@@ -6,7 +6,7 @@
 
 ## 1. 这是什么
 
-Argos 内置一个**自评估子包** `argos_agent.eval/`,让 Argos 跑一份**任务题库**(`corpus`),
+Argos 内置一个**自评估子包** `argos.eval/`,让 Argos 跑一份**任务题库**(`corpus`),
 量化 pass rate / time / cost,做 A/B 对比,**dogfooding**(Argos 测 Argos)。
 
 护城河 3 句话:
@@ -118,7 +118,7 @@ echo 'medium' > ~/.argos/eval/corpus/my_new_task/difficulty
 `verify_cmd` 设计原则:
 - **客观** —— 退出码 0 = pass,不是"代码长得好不好看"
 - **快** —— ≤ 30s 跑完
-- **白名单** —— `Verifier.verify` 走 ALLOWED_CMDS(定义于 `argos_agent/tools/__init__.py`,由 `core/verify_gate.py` 导入)
+- **白名单** —— `Verifier.verify` 走 ALLOWED_CMDS(定义于 `argos/tools/__init__.py`,由 `core/verify_gate.py` 导入)
 
 ## 5. 报告解读
 
@@ -210,7 +210,7 @@ argos eval corpus                                 # 列 corpus 任务
 
 | 问题 | 检查 |
 |---|---|
-| `eval` 命令 unknown | `python -c "import argos_agent.eval"` 确认包可导入 |
+| `eval` 命令 unknown | `python -c "import argos.eval"` 确认包可导入 |
 | `LoopFactory required` | CLI `argos eval run` 默认使用 fake 桩(无需真实 LLM key);如需真实模型运行,请使用 TUI `/eval run` 或在代码中传入 `loop_factory` |
 | 报告不写盘 | `~/.argos/eval/reports/` 权限;或 `keep_worktree` flag 留下的 worktree |
 | 任务找不到 | `argos eval corpus` 看清单;task id 区分大小写 |

@@ -13,7 +13,7 @@ import json
 
 import pytest
 
-from argos_agent.lsp.client import encode_frame, parse_frames, LspClient, LspProtocolError
+from argos.lsp.client import encode_frame, parse_frames, LspClient, LspProtocolError
 
 
 # ── encode_frame ────────────────────────────────────────────────────

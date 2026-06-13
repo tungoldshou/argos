@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.verify.strategy import (
+from argos.verify.strategy import (
     Level,
     Kind,
     VerifyStrategy,

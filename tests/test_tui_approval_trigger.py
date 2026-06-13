@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel
-from argos_agent.tui.app import ArgosApp
-from argos_agent.tui.events import ApprovalRequest
-from argos_agent.tui.fakeloop import FakeLoop
-from argos_agent.tui.widgets.inline_choice import InlineChoice, format_approval_title
+from argos.approval import ApprovalGate, ApprovalLevel
+from argos.tui.app import ArgosApp
+from argos.tui.events import ApprovalRequest
+from argos.tui.fakeloop import FakeLoop
+from argos.tui.widgets.inline_choice import InlineChoice, format_approval_title
 
 
 def test_title_no_trigger():

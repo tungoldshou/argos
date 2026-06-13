@@ -30,13 +30,13 @@
 
 | 模块 | 职责 | 阶段 |
 |---|---|---|
-| `argos_agent/contracts/` | Check/Contract 类型、三态契约执行器、模型合成+fail-closed 解析 | P1 |
-| `argos_agent/intent/` | IntentCard、歧义面试(只问改变方案的问题)、确认闸 | P2 |
-| `argos_agent/planner/` | 产物 DAG 拆解(节点=产物+契约)、DAG 校验、预览渲染 | P3 |
-| `argos_agent/orchestrator/` | 接口冻结、worktree fan-out、节点上下文配给(改造现 workflow/) | P4 |
-| `argos_agent/ladder/` | 诊断→重试→换策略→换模型梯子;节点级 fail-with-evidence | P5 |
-| `argos_agent/delivery/` | 集成代理、端到端验收、EvidenceBundle、`argos verdict` | P6 |
-| `argos_agent/depth/` | 模型×任务类能力表(吃 eval 数据)→ 拆解粒度/闸门策略 | P7 |
+| `argos/contracts/` | Check/Contract 类型、三态契约执行器、模型合成+fail-closed 解析 | P1 |
+| `argos/intent/` | IntentCard、歧义面试(只问改变方案的问题)、确认闸 | P2 |
+| `argos/planner/` | 产物 DAG 拆解(节点=产物+契约)、DAG 校验、预览渲染 | P3 |
+| `argos/orchestrator/` | 接口冻结、worktree fan-out、节点上下文配给(改造现 workflow/) | P4 |
+| `argos/ladder/` | 诊断→重试→换策略→换模型梯子;节点级 fail-with-evidence | P5 |
+| `argos/delivery/` | 集成代理、端到端验收、EvidenceBundle、`argos verdict` | P6 |
+| `argos/depth/` | 模型×任务类能力表(吃 eval 数据)→ 拆解粒度/闸门策略 | P7 |
 
 保留复用:core/(loop/verify_gate/honesty)、sandbox/、permissions/、tui/(v2)、eval/、daemon/。
 逐步退役:routing/ 的档位语义并入 P5 升级梯子;workflow/spec 并入 P3 产物 DAG。

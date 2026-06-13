@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.daemon.events import RunMeta
-from argos_agent.daemon.manager import RunManager
-from argos_agent.daemon.state_machine import transition
-from argos_agent.daemon.worker import FakeLoop, RunWorker
+from argos.daemon.events import RunMeta
+from argos.daemon.manager import RunManager
+from argos.daemon.state_machine import transition
+from argos.daemon.worker import FakeLoop, RunWorker
 
 
 @pytest.mark.asyncio
@@ -118,7 +118,7 @@ async def test_resume_from_suspended(tmp_path: Path):
 async def test_index_state_machine_full_transitions(tmp_path: Path):
     """跑遍所有合法转换。"""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
-    from argos_agent.daemon.state_machine import ALLOWED, TERMINAL_STATES
+    from argos.daemon.state_machine import ALLOWED, TERMINAL_STATES
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     # 跑遍所有 allowed transitions(从非终态)
     for frm, allowed in ALLOWED.items():
@@ -129,7 +129,7 @@ async def test_index_state_machine_full_transitions(tmp_path: Path):
             mgr.index.upsert(rid, state=frm)
             # transition from=frm, target=to 应成功
             try:
-                from argos_agent.daemon.state_machine import transition
+                from argos.daemon.state_machine import transition
                 transition(current=frm, target=to, index=mgr.index, run_id=rid,
                            store=mgr.store, reason="test")
             except Exception as e:  # noqa: BLE001

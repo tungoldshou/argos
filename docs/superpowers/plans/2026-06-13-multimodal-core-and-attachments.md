@@ -16,11 +16,11 @@
 
 ## File Structure
 
-- `argos_agent/input/__init__.py` — new package marker (empty).
-- `argos_agent/input/attachments.py` — `ImageAttachment`, `AttachmentError`, media-type sniffing, validation, base64, dimension sniffing, prompt path extraction. **One responsibility:** turning raw bytes/paths into validated image attachments. No network, no TUI.
-- `argos_agent/core/models.py` — add `ModelTier.multimodal` capability flag.
-- `argos_agent/core/protocols.py` — image-block helpers, attachment-aware `_coalesce_consecutive_roles`, attachment materialization in both `payload()` methods.
-- `argos_agent/core/loop.py` — `build_user_message`, `multimodal_gate`, `MultimodalUnsupportedError`; thread `attachments` through `run`/`_drive`.
+- `argos/input/__init__.py` — new package marker (empty).
+- `argos/input/attachments.py` — `ImageAttachment`, `AttachmentError`, media-type sniffing, validation, base64, dimension sniffing, prompt path extraction. **One responsibility:** turning raw bytes/paths into validated image attachments. No network, no TUI.
+- `argos/core/models.py` — add `ModelTier.multimodal` capability flag.
+- `argos/core/protocols.py` — image-block helpers, attachment-aware `_coalesce_consecutive_roles`, attachment materialization in both `payload()` methods.
+- `argos/core/loop.py` — `build_user_message`, `multimodal_gate`, `MultimodalUnsupportedError`; thread `attachments` through `run`/`_drive`.
 - Tests (new files, additive): `tests/input/test_attachments.py`, `tests/test_models_multimodal.py`, `tests/test_protocols_attachments.py`, `tests/test_loop_attachments.py`.
 
 ---
@@ -28,8 +28,8 @@
 ## Task 1: `ImageAttachment` + media-type sniffing
 
 **Files:**
-- Create: `argos_agent/input/__init__.py`
-- Create: `argos_agent/input/attachments.py`
+- Create: `argos/input/__init__.py`
+- Create: `argos/input/attachments.py`
 - Test: `tests/input/test_attachments.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -38,7 +38,7 @@ Create `tests/input/test_attachments.py`:
 
 ```python
 """input/attachments.py — 图片附件数据 + 嗅探/校验/编码(纯逻辑,无网络)。"""
-from argos_agent.input.attachments import (
+from argos.input.attachments import (
     ImageAttachment, AttachmentError, sniff_media_type,
     SUPPORTED_MEDIA_TYPES, MAX_IMAGE_BYTES,
 )
@@ -83,16 +83,16 @@ def test_supported_set_and_limit_constants():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/input/test_attachments.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'argos_agent.input'`
+Expected: FAIL — `ModuleNotFoundError: No module named 'argos.input'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Create `argos_agent/input/__init__.py` (empty file):
+Create `argos/input/__init__.py` (empty file):
 
 ```python
 ```
 
-Create `argos_agent/input/attachments.py`:
+Create `argos/input/attachments.py`:
 
 ```python
 """图片附件:原始字节/路径 → 校验过的 ImageAttachment(纯逻辑,无网络、无 TUI)。
@@ -148,7 +148,7 @@ Expected: PASS (8 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add argos_agent/input/__init__.py argos_agent/input/attachments.py tests/input/test_attachments.py
+git add argos/input/__init__.py argos/input/attachments.py tests/input/test_attachments.py
 git commit -m "feat(input): ImageAttachment + media-type sniffing"
 ```
 
@@ -157,7 +157,7 @@ git commit -m "feat(input): ImageAttachment + media-type sniffing"
 ## Task 2: validation, base64, dimension sniffing
 
 **Files:**
-- Modify: `argos_agent/input/attachments.py`
+- Modify: `argos/input/attachments.py`
 - Test: `tests/input/test_attachments.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -165,7 +165,7 @@ git commit -m "feat(input): ImageAttachment + media-type sniffing"
 Append to `tests/input/test_attachments.py`:
 
 ```python
-from argos_agent.input.attachments import (
+from argos.input.attachments import (
     validate_attachment, to_base64, sniff_dimensions,
 )
 import base64 as _b64
@@ -224,7 +224,7 @@ Expected: FAIL — `ImportError: cannot import name 'validate_attachment'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Append to `argos_agent/input/attachments.py`:
+Append to `argos/input/attachments.py`:
 
 ```python
 import base64
@@ -271,7 +271,7 @@ Expected: PASS (15 passed total)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add argos_agent/input/attachments.py tests/input/test_attachments.py
+git add argos/input/attachments.py tests/input/test_attachments.py
 git commit -m "feat(input): attachment validation + base64 + dimension sniff"
 ```
 
@@ -280,7 +280,7 @@ git commit -m "feat(input): attachment validation + base64 + dimension sniff"
 ## Task 3: prompt path extraction + load from disk
 
 **Files:**
-- Modify: `argos_agent/input/attachments.py`
+- Modify: `argos/input/attachments.py`
 - Test: `tests/input/test_attachments.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -288,7 +288,7 @@ git commit -m "feat(input): attachment validation + base64 + dimension sniff"
 Append to `tests/input/test_attachments.py`:
 
 ```python
-from argos_agent.input.attachments import extract_image_paths, load_image_path
+from argos.input.attachments import extract_image_paths, load_image_path
 
 
 def test_extract_image_paths_finds_existing_image(tmp_path):
@@ -331,7 +331,7 @@ Expected: FAIL — `ImportError: cannot import name 'extract_image_paths'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Append to `argos_agent/input/attachments.py`:
+Append to `argos/input/attachments.py`:
 
 ```python
 import re
@@ -376,7 +376,7 @@ Expected: PASS (20 passed total)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add argos_agent/input/attachments.py tests/input/test_attachments.py
+git add argos/input/attachments.py tests/input/test_attachments.py
 git commit -m "feat(input): image path extraction + load_image_path"
 ```
 
@@ -385,7 +385,7 @@ git commit -m "feat(input): image path extraction + load_image_path"
 ## Task 4: `ModelTier.multimodal` capability flag
 
 **Files:**
-- Modify: `argos_agent/core/models.py:30-31`
+- Modify: `argos/core/models.py:30-31`
 - Test: `tests/test_models_multimodal.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -394,7 +394,7 @@ Create `tests/test_models_multimodal.py`:
 
 ```python
 """ModelTier.multimodal 能力位:默认 False(零破坏既有构造点),可显式开。"""
-from argos_agent.core.models import ModelTier
+from argos.core.models import ModelTier
 
 
 def test_multimodal_defaults_false():
@@ -414,7 +414,7 @@ Expected: FAIL — `TypeError: __init__() got an unexpected keyword argument 'mu
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `argos_agent/core/models.py`, the `ModelTier` dataclass currently ends:
+In `argos/core/models.py`, the `ModelTier` dataclass currently ends:
 
 ```python
     context_window: int = 200_000
@@ -437,7 +437,7 @@ Expected: PASS (2 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add argos_agent/core/models.py tests/test_models_multimodal.py
+git add argos/core/models.py tests/test_models_multimodal.py
 git commit -m "feat(models): ModelTier.multimodal capability flag (default False)"
 ```
 
@@ -446,8 +446,8 @@ git commit -m "feat(models): ModelTier.multimodal capability flag (default False
 ## Task 5: protocol image-block helpers + attachment-aware coalesce
 
 **Files:**
-- Modify: `argos_agent/core/protocols.py:10-21` (`_coalesce_consecutive_roles`)
-- Modify: `argos_agent/core/protocols.py` (add module-level helpers near top)
+- Modify: `argos/core/protocols.py:10-21` (`_coalesce_consecutive_roles`)
+- Modify: `argos/core/protocols.py` (add module-level helpers near top)
 - Test: `tests/test_protocols_attachments.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -456,11 +456,11 @@ Create `tests/test_protocols_attachments.py`:
 
 ```python
 """协议层附件:image block 形状 + coalesce 带附件 + materialize。"""
-from argos_agent.core.protocols import (
+from argos.core.protocols import (
     _coalesce_consecutive_roles, _anthropic_image_block, _openai_image_block,
     _materialize_attachments,
 )
-from argos_agent.input.attachments import ImageAttachment
+from argos.input.attachments import ImageAttachment
 
 _ATT = ImageAttachment(data=b"\x89PNG\r\n\x1a\n", media_type="image/png",
                        source_label="s.png")
@@ -513,7 +513,7 @@ Expected: FAIL — `ImportError: cannot import name '_anthropic_image_block'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `argos_agent/core/protocols.py`, replace `_coalesce_consecutive_roles` (lines 10-21) with this attachment-aware version and add the three helpers right after it:
+In `argos/core/protocols.py`, replace `_coalesce_consecutive_roles` (lines 10-21) with this attachment-aware version and add the three helpers right after it:
 
 ```python
 def _coalesce_consecutive_roles(messages: list[dict]) -> list[dict]:
@@ -539,7 +539,7 @@ def _coalesce_consecutive_roles(messages: list[dict]) -> list[dict]:
 
 def _anthropic_image_block(att) -> dict:
     """ImageAttachment → Anthropic image content block(base64 source)。"""
-    from argos_agent.input.attachments import to_base64
+    from argos.input.attachments import to_base64
     return {
         "type": "image",
         "source": {"type": "base64", "media_type": att.media_type, "data": to_base64(att)},
@@ -548,7 +548,7 @@ def _anthropic_image_block(att) -> dict:
 
 def _openai_image_block(att) -> dict:
     """ImageAttachment → OpenAI image_url content block(data URI)。"""
-    from argos_agent.input.attachments import to_base64
+    from argos.input.attachments import to_base64
     return {
         "type": "image_url",
         "image_url": {"url": f"data:{att.media_type};base64,{to_base64(att)}"},
@@ -571,7 +571,7 @@ def _materialize_attachments(messages: list[dict], block_fn) -> list[dict]:
     return out
 ```
 
-(The `from argos_agent.input.attachments import to_base64` is a local import inside the helpers to avoid any import-order coupling; `input.attachments` imports nothing from `core`, so there is no cycle.)
+(The `from argos.input.attachments import to_base64` is a local import inside the helpers to avoid any import-order coupling; `input.attachments` imports nothing from `core`, so there is no cycle.)
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -586,7 +586,7 @@ Expected: PASS (all existing protocol/payload tests still green)
 - [ ] **Step 6: Commit**
 
 ```bash
-git add argos_agent/core/protocols.py tests/test_protocols_attachments.py
+git add argos/core/protocols.py tests/test_protocols_attachments.py
 git commit -m "feat(protocols): image-block helpers + attachment-aware coalesce"
 ```
 
@@ -595,7 +595,7 @@ git commit -m "feat(protocols): image-block helpers + attachment-aware coalesce"
 ## Task 6: Anthropic `payload()` materializes attachments
 
 **Files:**
-- Modify: `argos_agent/core/protocols.py:48-74` (`AnthropicProtocol.payload`)
+- Modify: `argos/core/protocols.py:48-74` (`AnthropicProtocol.payload`)
 - Test: `tests/test_protocols_attachments.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -603,7 +603,7 @@ git commit -m "feat(protocols): image-block helpers + attachment-aware coalesce"
 Append to `tests/test_protocols_attachments.py`:
 
 ```python
-from argos_agent.core.protocols import AnthropicProtocol
+from argos.core.protocols import AnthropicProtocol
 
 
 class _Tier:
@@ -666,7 +666,7 @@ Expected: PASS (2 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add argos_agent/core/protocols.py tests/test_protocols_attachments.py
+git add argos/core/protocols.py tests/test_protocols_attachments.py
 git commit -m "feat(protocols): Anthropic payload materializes image attachments"
 ```
 
@@ -675,7 +675,7 @@ git commit -m "feat(protocols): Anthropic payload materializes image attachments
 ## Task 7: OpenAI `payload()` materializes attachments
 
 **Files:**
-- Modify: `argos_agent/core/protocols.py:119-136` (`OpenAIProtocol.payload`)
+- Modify: `argos/core/protocols.py:119-136` (`OpenAIProtocol.payload`)
 - Test: `tests/test_protocols_attachments.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -683,7 +683,7 @@ git commit -m "feat(protocols): Anthropic payload materializes image attachments
 Append to `tests/test_protocols_attachments.py`:
 
 ```python
-from argos_agent.core.protocols import OpenAIProtocol
+from argos.core.protocols import OpenAIProtocol
 
 
 def test_openai_payload_no_attachment_keeps_string_content():
@@ -734,7 +734,7 @@ Expected: PASS (2 passed)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add argos_agent/core/protocols.py tests/test_protocols_attachments.py
+git add argos/core/protocols.py tests/test_protocols_attachments.py
 git commit -m "feat(protocols): OpenAI payload materializes image attachments"
 ```
 
@@ -743,7 +743,7 @@ git commit -m "feat(protocols): OpenAI payload materializes image attachments"
 ## Task 8: loop threads attachments + honest multimodal gate
 
 **Files:**
-- Modify: `argos_agent/core/loop.py` (add module-level `MultimodalUnsupportedError`, `build_user_message`, `multimodal_gate`; thread `attachments` through `run` at `loop.py:712` and the first-message build at `loop.py:1060`)
+- Modify: `argos/core/loop.py` (add module-level `MultimodalUnsupportedError`, `build_user_message`, `multimodal_gate`; thread `attachments` through `run` at `loop.py:712` and the first-message build at `loop.py:1060`)
 - Test: `tests/test_loop_attachments.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -753,10 +753,10 @@ Create `tests/test_loop_attachments.py`:
 ```python
 """loop 附件管线:消息构造 + 多模态诚实门(纯函数,无需实例化重 loop)。"""
 import pytest
-from argos_agent.core.loop import (
+from argos.core.loop import (
     build_user_message, multimodal_gate, MultimodalUnsupportedError,
 )
-from argos_agent.input.attachments import ImageAttachment
+from argos.input.attachments import ImageAttachment
 
 _ATT = ImageAttachment(data=b"\x89PNG\r\n\x1a\n", media_type="image/png",
                        source_label="s.png")
@@ -790,7 +790,7 @@ Expected: FAIL — `ImportError: cannot import name 'build_user_message'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `argos_agent/core/loop.py`, add near the top-level definitions (after imports, before `class AgentLoop`):
+In `argos/core/loop.py`, add near the top-level definitions (after imports, before `class AgentLoop`):
 
 ```python
 class MultimodalUnsupportedError(Exception):
@@ -863,7 +863,7 @@ Expected: PASS (existing loop tests still green; `run`/`_drive` new arg is optio
 - [ ] **Step 6: Commit**
 
 ```bash
-git add argos_agent/core/loop.py tests/test_loop_attachments.py
+git add argos/core/loop.py tests/test_loop_attachments.py
 git commit -m "feat(loop): thread image attachments + honest multimodal gate"
 ```
 
@@ -880,7 +880,7 @@ Expected: all green, coverage ≥ 80% (coverage gate is on the full suite, per C
 
 - [ ] **Step 2: If coverage dipped below 80%**
 
-The new `argos_agent/input/attachments.py` is fully covered by `tests/input/test_attachments.py`. If total coverage is under 80%, it is almost certainly an unrelated pre-existing gap — confirm by running `uv run pytest` (serial) and reading the coverage report's `Missing` column for `argos_agent/input/` and the touched `core/` files. Add targeted tests only for lines this plan introduced.
+The new `argos/input/attachments.py` is fully covered by `tests/input/test_attachments.py`. If total coverage is under 80%, it is almost certainly an unrelated pre-existing gap — confirm by running `uv run pytest` (serial) and reading the coverage report's `Missing` column for `argos/input/` and the touched `core/` files. Add targeted tests only for lines this plan introduced.
 
 - [ ] **Step 3: No commit** (verification only). If new tests were added in Step 2, commit them:
 

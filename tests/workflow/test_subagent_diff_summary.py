@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.workflow.spec import AgentTask
-from argos_agent.workflow.subagent import SubAgentFactory
+from argos.workflow.spec import AgentTask
+from argos.workflow.subagent import SubAgentFactory
 
 
 # ── 工具 ────────────────────────────────────────────────
@@ -43,7 +43,7 @@ async def test_default_mode_omits_full_diff_from_output(
     tmp_path, scripted_model_factory, requires_sandbox,
 ):
     """inline_diff=False(默认)→ output 不含 'diff --git' 字面,含摘要+verdict+引用。"""
-    from argos_agent.workflow.subagent import SubAgentFactory as _SAF
+    from argos.workflow.subagent import SubAgentFactory as _SAF
     # 子 agent 跑在 worktree 隔离(isolation=worktree)→ _capture_diff 路径触发
     task = AgentTask(prompt="改 {item}", tool_scope="full", isolation="worktree",
                      verify="true")
@@ -66,7 +66,7 @@ async def test_default_mode_omits_full_diff_from_output(
     factory = _SAF.for_test(workspace=base, model_factory=scripted_model_factory)
     big_diff = "diff --git a/f.py b/f.py\nindex 1234..5678 100644\n" + "x\n" * 5000
     monkeypatched = _SAF._capture_diff_text.__get__(factory, type(factory))
-    import argos_agent.workflow.subagent as _sa_mod
+    import argos.workflow.subagent as _sa_mod
     _sa_mod.SubAgentFactory._capture_diff_text = staticmethod(lambda wd: big_diff)
 
     res = await factory.run_task(
@@ -92,7 +92,7 @@ async def test_default_mode_omits_full_diff_from_output(
 @pytest.mark.asyncio
 async def test_diff_ref_recovers_full_diff(tmp_path, scripted_model_factory, requires_sandbox):
     """diff_ref 路径读出来的文本以 'diff --git' 开头(完整 diff 可取回)。"""
-    import argos_agent.workflow.subagent as _sa_mod
+    import argos.workflow.subagent as _sa_mod
     base = tmp_path / "base2"
     base.mkdir()
     subprocess.run(["git", "-C", str(base), "init", "-q"], check=True)
@@ -122,7 +122,7 @@ async def test_parallel_agents_output_bounded_not_linear_in_diff_size(
     tmp_path, scripted_model_factory, requires_sandbox,
 ):
     """3 个子 agent 各 5KB diff → output 总长 << 15KB(默认模式)。"""
-    import argos_agent.workflow.subagent as _sa_mod
+    import argos.workflow.subagent as _sa_mod
     base = tmp_path / "base3"
     base.mkdir()
     subprocess.run(["git", "-C", str(base), "init", "-q"], check=True)
@@ -156,12 +156,12 @@ async def test_inline_diff_true_keeps_legacy_behavior(
     tmp_path, scripted_model_factory, requires_sandbox,
 ):
     """inline_diff=True → output 含 'diff --git'(旧行为),diff_ref/diff_summary 留空。"""
-    import argos_agent.workflow.subagent as _sa_mod
-    from argos_agent.core.models import CredentialPool
-    from argos_agent.core.verify_gate import Verifier
-    from argos_agent.memory.store import ArgosStore
-    from argos_agent.sandbox.egress import EgressPolicy
-    from argos_agent.tools.receipts import ReceiptSigner
+    import argos.workflow.subagent as _sa_mod
+    from argos.core.models import CredentialPool
+    from argos.core.verify_gate import Verifier
+    from argos.memory.store import ArgosStore
+    from argos.sandbox.egress import EgressPolicy
+    from argos.tools.receipts import ReceiptSigner
     import os
 
     base = tmp_path / "base4"
@@ -203,7 +203,7 @@ async def test_inline_diff_true_keeps_legacy_behavior(
 @pytest.mark.asyncio
 async def test_no_changes_leaves_diff_fields_empty(tmp_path, scripted_model_factory, requires_sandbox):
     """worktree 没改动 → diff_ref=None, diff_file_count=0, output 不变(无摘要段)。"""
-    import argos_agent.workflow.subagent as _sa_mod
+    import argos.workflow.subagent as _sa_mod
     base = tmp_path / "base5"
     base.mkdir()
     subprocess.run(["git", "-C", str(base), "init", "-q"], check=True)
@@ -228,7 +228,7 @@ async def test_no_changes_leaves_diff_fields_empty(tmp_path, scripted_model_fact
 # ── _summarize_diff 单元测试 ────────────────────────────
 def test_summarize_diff_extracts_counts():
     """_summarize_diff(diff_text) 返 (summary, file_count)。"""
-    from argos_agent.workflow.subagent import SubAgentFactory
+    from argos.workflow.subagent import SubAgentFactory
     diff = (
         "diff --git a/a.py b/a.py\n@@ -1 +1 @@\n-old\n+new\n"
         "diff --git a/b.py b/b.py\n@@ -1 +1 @@\n-x\n+y\n"

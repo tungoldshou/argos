@@ -1,8 +1,8 @@
 """dream:聚类 + 综合的铁律测试。"""
 from pathlib import Path
 
-from argos_agent.learning.candidates import StoredCandidate
-from argos_agent.learning.dream import (
+from argos.learning.candidates import StoredCandidate
+from argos.learning.dream import (
     SIM_THRESHOLD, cluster_candidates, synthesize, _token_sim, _strip_code_blocks,
 )
 
@@ -44,7 +44,7 @@ def test_cluster_cap_limits_units():
 
 def test_cluster_oversized_truncates_and_holds_over():
     """超大簇截取+留宿:7 个高相似候选 → 恰好 1 个 unit、5 个源;余 2 个不进任何 unit。"""
-    from argos_agent.learning.dream import MAX_UNIT_SOURCES
+    from argos.learning.dream import MAX_UNIT_SOURCES
     cands = [_sc(f"s{i}", f"fix login auth bug attempt {i}",
                  run=f"run{i:013d}") for i in range(7)]
     units = cluster_candidates(cands)
@@ -110,7 +110,7 @@ def test_synthesize_no_narrative_uses_template():
 
 
 def test_narrative_prompt_contains_goals_and_no_code_request():
-    from argos_agent.learning.dream import narrative_prompt
+    from argos.learning.dream import narrative_prompt
     a = _sc("a", "fix login bug", run="run1aaaaaaaaaaaa")
     b = _sc("b", "fix login auth bug", run="run2bbbbbbbbbbbb")
     unit = next(u for u in cluster_candidates([a, b]) if len(u.sources) == 2)
@@ -122,7 +122,7 @@ def test_narrative_prompt_contains_goals_and_no_code_request():
 
 def test_build_eval_tasks_skips_missing_workspace(tmp_path):
     """workspace 不存在的源进 gone 列表;存在且有 verify_cmd 的构造 EvalTask。"""
-    from argos_agent.learning.dream import build_eval_tasks, DreamUnit
+    from argos.learning.dream import build_eval_tasks, DreamUnit
 
     existing_ws = tmp_path / "ws_real"
     existing_ws.mkdir()
@@ -150,8 +150,8 @@ def test_build_eval_tasks_skips_missing_workspace(tmp_path):
 
 def test_hinted_runner_prepends_hint_to_goal(tmp_path):
     """HintedRunner.run 应把 hint 前置到 task.goal,inner runner 收到修改后的 goal。"""
-    from argos_agent.learning.dream import HintedRunner
-    from argos_agent.eval.corpus import EvalTask
+    from argos.learning.dream import HintedRunner
+    from argos.eval.corpus import EvalTask
 
     captured_goals: list[str] = []
 
@@ -186,8 +186,8 @@ def test_hinted_runner_truncates_long_hint(tmp_path):
 
     HintedRunner 应有 max_hint_len: int = 4000 字段;run() 内截断 hint。
     """
-    from argos_agent.learning.dream import HintedRunner
-    from argos_agent.eval.corpus import EvalTask
+    from argos.learning.dream import HintedRunner
+    from argos.eval.corpus import EvalTask
 
     captured_goals: list[str] = []
 

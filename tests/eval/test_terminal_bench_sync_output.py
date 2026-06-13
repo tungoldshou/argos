@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 import pytest
 
-from argos_agent.eval.benchmarks import terminal_bench as tb
+from argos.eval.benchmarks import terminal_bench as tb
 
 
 def _stub_report() -> tb.TBBatchReport:
@@ -70,7 +70,7 @@ def test_cmd_tb_output_includes_bsu_esu_when_sync_flag_true(monkeypatch):
         rc = tb.cmd_tb(args)
     assert rc == 0
     out = buf.getvalue()
-    from argos_agent.tui.sync_output import CSI_BSU, CSI_ESU
+    from argos.tui.sync_output import CSI_BSU, CSI_ESU
     assert out.startswith(CSI_BSU), f"输出应以 BSU 开头,实际: {out[:30]!r}"
     assert out.endswith(CSI_ESU), f"输出应以 ESU 结尾,实际: {out[-30:]!r}"
 
@@ -85,7 +85,7 @@ def test_cmd_tb_output_omits_brackets_when_sync_flag_false(monkeypatch):
         rc = tb.cmd_tb(args)
     assert rc == 0
     out = buf.getvalue()
-    from argos_agent.tui.sync_output import CSI_BSU, CSI_ESU
+    from argos.tui.sync_output import CSI_BSU, CSI_ESU
     assert CSI_BSU not in out
     assert CSI_ESU not in out
     # 但报告内容照样在

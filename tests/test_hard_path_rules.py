@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.permissions.hard_rules import (
+from argos.permissions.hard_rules import (
     HARD_PATH_DENYLIST,
     is_argos_own_env,
     is_env_file,

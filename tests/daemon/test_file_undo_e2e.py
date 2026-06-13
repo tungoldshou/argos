@@ -22,19 +22,19 @@ from typing import AsyncIterator
 import pytest
 import pytest_asyncio
 
-from argos_agent.core.snapshot import RunSnapshot
-from argos_agent.daemon.manager import RunManager
-from argos_agent.daemon.server import DaemonHTTPServer
-from argos_agent.daemon.worker import RunWorker
-from argos_agent.ledger.builder import build_entry
-from argos_agent.ledger.entry import LedgerEntry
-from argos_agent.ledger.store import LedgerStore
+from argos.core.snapshot import RunSnapshot
+from argos.daemon.manager import RunManager
+from argos.daemon.server import DaemonHTTPServer
+from argos.daemon.worker import RunWorker
+from argos.ledger.builder import build_entry
+from argos.ledger.entry import LedgerEntry
+from argos.ledger.store import LedgerStore
 
 
 # ── HTTP helpers ──────────────────────────────────────────────────────────────
 
 async def _req(socket_path, method, path, *, session_id=None, body=None, timeout=5.0):
-    from argos_agent.daemon.client import DaemonClient
+    from argos.daemon.client import DaemonClient
     cli = DaemonClient(socket_path, timeout=timeout)
     return await cli._request(method, path, session_id=session_id, body=body)
 

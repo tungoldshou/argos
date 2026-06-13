@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from argos_agent.eval.runner import (
+from argos.eval.runner import (
     LoopOutcome,
     PASS_PASSED, PASS_FAILED, PASS_UNVERIFIABLE, PASS_SETUP_FAILED, PASS_ERROR,
 )

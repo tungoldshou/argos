@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 import pytest
-from argos_agent.workflow.worktree import worktree_for
+from argos.workflow.worktree import worktree_for
 
 
 def _git_init(p: Path):

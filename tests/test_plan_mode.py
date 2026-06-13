@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.core.plan_mode import (
+from argos.core.plan_mode import (
     EnterPlanMode,
     ExitPlanMode,
     PlanExitDecision,
@@ -162,7 +162,7 @@ def test_exit_plan_mode_invalid_action():
 
 # --- PlanRenderer.render() ---
 
-from argos_agent.core.plan_mode import PlanRenderer  # noqa: E402
+from argos.core.plan_mode import PlanRenderer  # noqa: E402
 
 
 def test_render_empty_plan():
@@ -232,7 +232,7 @@ def test_set_and_get_plan_mode():
 
 def test_sandbox_tool_blocked_in_plan_mode():
     """plan mode 时 `run_command_gated` 返 plan mode 错误串(不进沙箱)。"""
-    from argos_agent.tools import run_command_gated
+    from argos.tools import run_command_gated
     set_plan_mode(True)
     try:
         result = run_command_gated(command="echo hello")
@@ -244,7 +244,7 @@ def test_sandbox_tool_blocked_in_plan_mode():
 
 def test_write_file_blocked_in_plan_mode():
     """plan mode 时 `write_file_gated` 返 plan mode 错误串。"""
-    from argos_agent.tools import write_file_gated
+    from argos.tools import write_file_gated
     set_plan_mode(True)
     try:
         result = write_file_gated(path="x.py", content="y")
@@ -255,7 +255,7 @@ def test_write_file_blocked_in_plan_mode():
 
 def test_edit_file_blocked_in_plan_mode():
     """plan mode 时 `edit_file_gated` 返 plan mode 错误串。"""
-    from argos_agent.tools import edit_file_gated
+    from argos.tools import edit_file_gated
     set_plan_mode(True)
     try:
         result = edit_file_gated(path="x.py", old="a", new="b")
@@ -266,7 +266,7 @@ def test_edit_file_blocked_in_plan_mode():
 
 def test_sandbox_tools_work_in_normal_act_mode():
     """act mode 默认时,沙箱工具不被挡(返回具体结果或 sandbox 错误,不是 plan 错误)。"""
-    from argos_agent.tools import run_command_gated
+    from argos.tools import run_command_gated
     # 默认 plan_mode = False
     set_plan_mode(False)
     result = run_command_gated(command="echo hello")
@@ -276,7 +276,7 @@ def test_sandbox_tools_work_in_normal_act_mode():
 
 def test_enter_plan_mode_sets_module_state():
     """EnterPlanMode 调后 is_plan_mode() 返 True(模块级状态联动)。"""
-    from argos_agent.core.plan_mode import EnterPlanMode
+    from argos.core.plan_mode import EnterPlanMode
 
     class _Loop:
         mode = "act"
@@ -293,7 +293,7 @@ def test_enter_plan_mode_sets_module_state():
 
 def test_exit_plan_mode_clears_module_state():
     """ExitPlanMode 调后 is_plan_mode() 返 False。"""
-    from argos_agent.core.plan_mode import EnterPlanMode, ExitPlanMode
+    from argos.core.plan_mode import EnterPlanMode, ExitPlanMode
 
     class _Loop:
         mode = "act"

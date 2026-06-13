@@ -43,9 +43,9 @@ classifiers = [
 ]
 
 [project.scripts]
-argos = "argos_agent.__main__:main"
+argos = "argos.__main__:main"
 # C 阶段(2026-06-07)加打包工具 dispatcher(spec D8);主 argos 启动 0 影响
-argospkg = "argos_agent.cli.pkg:main"
+argospkg = "argos.cli.pkg:main"
 
 [project.urls]
 Homepage = "https://github.com/tungoldshou/argos"
@@ -62,13 +62,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["argos_agent"]
+packages = ["argos"]
 
 # C 阶段(2026-06-07)显式 sdist include:wheel 自动收 *.py,但 sdist 要列数据文件
 # (schema.sql / skills_builtin / packaging/VERSION) — 否则 pip install --no-binary 装不起来
 [tool.hatch.build.targets.sdist]
 include = [
-  "argos_agent",
+  "argos",
   "README.md",
   "LICENSE",
   "CHANGELOG.md",
@@ -99,11 +99,11 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-# 让测试能 import argos_agent(脚本式项目,包未安装)。
+# 让测试能 import argos(脚本式项目,包未安装)。
 pythonpath = ["."]
 testpaths = ["tests"]
 # 80% 覆盖门(spec §9)。注:跑测试子集时总覆盖会低于门 → 以全量 `uv run pytest` 为准。
-addopts = "--cov=argos_agent --cov-report=term-missing --cov-fail-under=80"
+addopts = "--cov=argos --cov-report=term-missing --cov-fail-under=80"
 markers = [
     "slow: 真进程/真 pyright e2e,默认 skip(uv run pytest -m 'not slow' 跑快测)",
     "xdist_group: 同组测试串行在同一 worker(用于共享不可隔离资源;组名按资源命名)",
@@ -116,6 +116,6 @@ markers = [
 [tool.coverage.run]
 omit = [
     # 诚实排除(非凑数,理由在侧):
-    "argos_agent/_pyinstaller_hooks/*",        # 打包 hook,逻辑由 build/smoke 验证,无单测
-    "argos_agent/sandbox/_sandbox_child.py",   # 跑在 Seatbelt 子进程,父进程 coverage 测不到(沙箱 e2e 真覆盖)
+    "argos/_pyinstaller_hooks/*",        # 打包 hook,逻辑由 build/smoke 验证,无单测
+    "argos/sandbox/_sandbox_child.py",   # 跑在 Seatbelt 子进程,父进程 coverage 测不到(沙箱 e2e 真覆盖)
 ]

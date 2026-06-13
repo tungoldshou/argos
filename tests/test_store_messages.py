@@ -1,5 +1,5 @@
 # tests/test_store_messages.py
-from argos_agent.memory.store import ArgosStore
+from argos.memory.store import ArgosStore
 
 
 def test_get_messages_returns_thread_in_order(tmp_path):

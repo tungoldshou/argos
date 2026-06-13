@@ -5,7 +5,7 @@
 """
 import inspect
 
-from argos_agent.core.loop import AgentLoop
+from argos.core.loop import AgentLoop
 
 
 def test_tool_signatures_block_contains_read_file_signature():

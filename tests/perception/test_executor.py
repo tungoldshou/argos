@@ -21,8 +21,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from argos_agent.perception.actions import ComputerAction
-from argos_agent.perception.executor import (
+from argos.perception.actions import ComputerAction
+from argos.perception.executor import (
     ComputerExecutor,
     ComputerActionResult,
     _DISABLED_MSG,
@@ -86,7 +86,7 @@ def test_screenshot_calls_screencapture(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
     monkeypatch.setattr(subprocess, "run", mock_run)
     # 不调 PIL,monkeypatch Image.open
-    monkeypatch.setattr("argos_agent.perception.executor.ComputerExecutor._screenshot",
+    monkeypatch.setattr("argos.perception.executor.ComputerExecutor._screenshot",
                         lambda self: ComputerActionResult(
                             ok=True, detail="截图已保存至 /tmp/argos_screen_test.png",
                             artifact_path="/tmp/argos_screen_test.png", size=(1920, 1080)

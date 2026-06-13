@@ -160,13 +160,13 @@ daemon 行为:
 
 ## 9. 实现位置
 
-- `argos_agent/daemon/registry.py` — RunRegistry
-- `argos_agent/daemon/worktree.py` — WorktreeManager
-- `argos_agent/git_worktree.py` — 底层 git worktree 原语(WorktreeManager 调用)
-- `argos_agent/daemon/sessions.py` — owner/observer + promote
-- `argos_agent/daemon/server.py` — 5 端点扩 + 503 拒
-- `argos_agent/daemon/worker.py` — cost 累加 + 终态 cleanup
-- `argos_agent/tui/widgets/tab_strip.py` — TabStrip widget
-- `argos_agent/tui/app.py` — `_on_tab_activated` + `/runs` 扩展
+- `argos/daemon/registry.py` — RunRegistry
+- `argos/daemon/worktree.py` — WorktreeManager
+- `argos/git_worktree.py` — 底层 git worktree 原语(WorktreeManager 调用)
+- `argos/daemon/sessions.py` — owner/observer + promote
+- `argos/daemon/server.py` — 5 端点扩 + 503 拒
+- `argos/daemon/worker.py` — cost 累加 + 终态 cleanup
+- `argos/tui/widgets/tab_strip.py` — TabStrip widget
+- `argos/tui/app.py` — `_on_tab_activated` + `/runs` 扩展
 - spec: `docs/superpowers/specs/2026-06-06-long-running-multirun-design.md`
 - plan: `docs/superpowers/plans/2026-06-06-long-running-multirun.md`

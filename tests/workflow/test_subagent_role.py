@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.workflow.spec import AgentTask, ROLE_PRESETS
-from argos_agent.workflow.subagent import SubAgentFactory
+from argos.workflow.spec import AgentTask, ROLE_PRESETS
+from argos.workflow.subagent import SubAgentFactory
 
 
 def _spy_agent_loop(monkeypatch, captured: dict):
     """monkeypatch subagent 模块里的 AgentLoop,捕获所有 kwargs 给测试断言。"""
-    from argos_agent.workflow import subagent as _sub
+    from argos.workflow import subagent as _sub
 
     real_AgentLoop = _sub.AgentLoop
 

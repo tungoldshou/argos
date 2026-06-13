@@ -1,5 +1,5 @@
 import pytest
-from argos_agent.workflow.spec import AgentTask, Stage, WorkflowSpec, parse_spec, WorkflowSpecError
+from argos.workflow.spec import AgentTask, Stage, WorkflowSpec, parse_spec, WorkflowSpecError
 
 
 def test_parse_minimal_fan_out():

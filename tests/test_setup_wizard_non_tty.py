@@ -19,7 +19,7 @@ def _writer():
 def test_setup_wizard_eof_returns_cleanly_with_friendly_message(tmp_path, monkeypatch):
     """非 TTY(管道/CI)→ reader EOFError → run() 不抛、写友好提示、正常 return。"""
     import asyncio
-    from argos_agent import setup_wizard
+    from argos import setup_wizard
 
     lines: list[str] = []
     calls = {"n": 0}
@@ -48,7 +48,7 @@ def test_setup_wizard_eof_returns_cleanly_with_friendly_message(tmp_path, monkey
 def test_setup_wizard_eof_mid_loop_also_handled(tmp_path):
     """中段 EOF(用户答了 provider 后 stdin 突然关)也走同一兜底。"""
     import asyncio
-    from argos_agent import setup_wizard
+    from argos import setup_wizard
 
     lines: list[str] = []
     call_count = {"n": 0}

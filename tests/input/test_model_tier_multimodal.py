@@ -3,7 +3,7 @@ from __future__ import annotations
 
 
 def _make_tier(**kwargs):
-    from argos_agent.core.models import ModelTier
+    from argos.core.models import ModelTier
     defaults = dict(name="default", model="test", base_url="https://x", max_tokens=1024)
     defaults.update(kwargs)
     return ModelTier(**defaults)

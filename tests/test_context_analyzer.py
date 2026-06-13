@@ -8,7 +8,7 @@ import types
 from dataclasses import dataclass
 from pathlib import Path
 
-from argos_agent.context.analyzer import (
+from argos.context.analyzer import (
     ContextAnalyzer,
     ContextBreakdown,
     ContextBucket,
@@ -91,13 +91,13 @@ def test_analyze_system_uses_build_system():
 
 def test_analyze_memory_loads_four_scopes(monkeypatch):
     """memory 桶 details 4 项:user/project/skill/session,source 标 memory/auto.py:82。"""
-    # mock argos_agent.memory.auto.load
-    fake_auto = types.ModuleType("argos_agent.memory.auto")
+    # mock argos.memory.auto.load
+    fake_auto = types.ModuleType("argos.memory.auto")
 
     def _fake_load(*, scope=None):
         return []  # 0 entries,但调用 4 次
     fake_auto.load = _fake_load
-    monkeypatch.setitem(sys.modules, "argos_agent.memory.auto", fake_auto)
+    monkeypatch.setitem(sys.modules, "argos.memory.auto", fake_auto)
 
     loop = _loop()
     b = analyze(loop, store=loop.store, workspace=Path("."))

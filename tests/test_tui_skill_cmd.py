@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch, MagicMock
 
 import pytest
 
-from argos_agent.tui.commands import COMMAND_HELP, match_commands, parse_slash
+from argos.tui.commands import COMMAND_HELP, match_commands, parse_slash
 
 
 def test_command_help_has_three_new_entries():
@@ -41,15 +41,15 @@ def test_slash_command_parses_no_arg():
 
 def test_path_not_found_chat_message(tmp_path):
     """path arg 不存在 → chat 显 'path not found: <arg>',不弹栈(由 runner 路径覆盖)。"""
-    from argos_agent.skills_runtime.analysis import AnalysisSkillResult
+    from argos.skills_runtime.analysis import AnalysisSkillResult
     fake_result = AnalysisSkillResult(
         summary="path not found: nope.py",
         findings=(), duration_ms=0,
         errors=("path not found: nope.py",),
         verdict="skipped",
     )
-    from argos_agent.skills_runtime import registry, _reset_registry
-    from argos_agent.skills_runtime.analysis import AnalysisSkill, AnalysisSkillContext
+    from argos.skills_runtime import registry, _reset_registry
+    from argos.skills_runtime.analysis import AnalysisSkill, AnalysisSkillContext
     import asyncio
 
     # _SKILLS 是模块级单例:同一 xdist worker 进程内其他测试若注册了 "verify" 就会冲突。
@@ -75,9 +75,9 @@ def test_path_not_found_chat_message(tmp_path):
 async def test_pilot_skill_cmd_dispatch(tmp_path, monkeypatch):
     """Pilot e2e:真实 TUI 输入 /verify → 调 run_skill → chat 显 summary。"""
     from textual.app import App
-    from argos_agent.tui.app import ArgosApp
-    from argos_agent.tui.fakeloop import FakeLoop
-    from argos_agent.skills_runtime import _reset_registry, register_builtin_skills
+    from argos.tui.app import ArgosApp
+    from argos.tui.fakeloop import FakeLoop
+    from argos.skills_runtime import _reset_registry, register_builtin_skills
 
     _reset_registry()  # 清理前一个测试的 stub
     monkeypatch.chdir(tmp_path)
@@ -85,8 +85,8 @@ async def test_pilot_skill_cmd_dispatch(tmp_path, monkeypatch):
     async with app.run_test(size=(120, 30)) as pilot:
         await pilot.pause()
         # 通过 query prompt 并 submit 触发 /verify
-        from argos_agent.tui.commands import parse_slash
-        from argos_agent.tui.widgets.transcript import Transcript
+        from argos.tui.commands import parse_slash
+        from argos.tui.widgets.transcript import Transcript
         log = app.query_one("#transcript", Transcript)
         cmd = parse_slash("/verify")
         await app._dispatch_slash(cmd)

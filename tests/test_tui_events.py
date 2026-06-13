@@ -6,7 +6,7 @@ import dataclasses
 
 import pytest
 
-from argos_agent.tui.events import (
+from argos.tui.events import (
     EventBus,
     TokenDelta,
     CodeAction,
@@ -21,7 +21,7 @@ from argos_agent.tui.events import (
     Escalation,
     Error,
 )
-from argos_agent.core.types import Verdict
+from argos.core.types import Verdict
 
 
 def test_all_events_are_frozen_dataclasses():

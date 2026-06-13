@@ -15,7 +15,7 @@ from __future__ import annotations
 import dataclasses
 import pytest
 
-from argos_agent.capability.manifest import Capability
+from argos.capability.manifest import Capability
 
 
 # ------------------------------------------------------------------

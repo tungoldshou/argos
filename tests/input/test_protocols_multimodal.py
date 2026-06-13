@@ -15,12 +15,12 @@ import pytest
 
 def _att(data: bytes = b"\x89PNG\x00", media_type: str = "image/png",
           source_label: str = "test.png"):
-    from argos_agent.input.attachments import ImageAttachment
+    from argos.input.attachments import ImageAttachment
     return ImageAttachment(data=data, media_type=media_type, source_label=source_label)
 
 
 def _tier(multimodal: bool = True):
-    from argos_agent.core.models import ModelTier
+    from argos.core.models import ModelTier
     return ModelTier(name="default", model="c", base_url="https://x", max_tokens=64,
                      multimodal=multimodal)
 
@@ -29,7 +29,7 @@ def _tier(multimodal: bool = True):
 
 def test_coalesce_no_attachments_unchanged():
     """无 attachments 消息 → 行为与改造前一致(零回归)。"""
-    from argos_agent.core.protocols import _coalesce_consecutive_roles
+    from argos.core.protocols import _coalesce_consecutive_roles
     msgs = [
         {"role": "user", "content": "hi"},
         {"role": "assistant", "content": "hello"},
@@ -43,7 +43,7 @@ def test_coalesce_no_attachments_unchanged():
 
 def test_coalesce_consecutive_same_role_text_joined():
     """连续同 role 纯文本 → content 换行拼接(现有行为保留)。"""
-    from argos_agent.core.protocols import _coalesce_consecutive_roles
+    from argos.core.protocols import _coalesce_consecutive_roles
     msgs = [
         {"role": "user", "content": "a"},
         {"role": "user", "content": "b"},
@@ -55,7 +55,7 @@ def test_coalesce_consecutive_same_role_text_joined():
 
 def test_coalesce_consecutive_same_role_attachments_concat():
     """连续同 role 且有 attachments → attachments 列表拼接。"""
-    from argos_agent.core.protocols import _coalesce_consecutive_roles
+    from argos.core.protocols import _coalesce_consecutive_roles
     att1 = _att(b"A", source_label="a.png")
     att2 = _att(b"B", source_label="b.png")
     msgs = [
@@ -70,7 +70,7 @@ def test_coalesce_consecutive_same_role_attachments_concat():
 
 def test_coalesce_attachment_message_followed_by_plain_different_role():
     """带 attachments 的 user 后接 assistant(不同 role)→ 不合并。"""
-    from argos_agent.core.protocols import _coalesce_consecutive_roles
+    from argos.core.protocols import _coalesce_consecutive_roles
     att = _att()
     msgs = [
         {"role": "user", "content": "img msg", "attachments": [att]},
@@ -87,7 +87,7 @@ def test_coalesce_attachment_message_followed_by_plain_different_role():
 
 def test_anthropic_payload_no_attachments_content_is_plain_string():
     """无附件 → Anthropic payload messages[0]['content'] 仍是裸字符串(零回归)。"""
-    from argos_agent.core.protocols import AnthropicProtocol
+    from argos.core.protocols import AnthropicProtocol
     p = AnthropicProtocol()
     payload = p.payload(
         [{"role": "user", "content": "hello"}],
@@ -100,7 +100,7 @@ def test_anthropic_payload_no_attachments_content_is_plain_string():
 
 def test_anthropic_payload_with_attachment_content_becomes_list():
     """带附件 → Anthropic payload message['content'] 变成 list(text + image blocks)。"""
-    from argos_agent.core.protocols import AnthropicProtocol
+    from argos.core.protocols import AnthropicProtocol
     att = _att(b"\x89PNG\x00\x00\x00", "image/png", "screen.png")
     p = AnthropicProtocol()
     payload = p.payload(
@@ -122,7 +122,7 @@ def test_anthropic_payload_with_attachment_content_becomes_list():
 
 def test_anthropic_payload_multiple_attachments():
     """多图附件 → content list 包含 1 text + N image blocks。"""
-    from argos_agent.core.protocols import AnthropicProtocol
+    from argos.core.protocols import AnthropicProtocol
     att1 = _att(b"A", "image/png", "a.png")
     att2 = _att(b"B", "image/jpeg", "b.jpg")
     p = AnthropicProtocol()
@@ -143,7 +143,7 @@ def test_anthropic_payload_multiple_attachments():
 
 def test_openai_payload_no_attachments_content_is_plain_string():
     """无附件 → OpenAI payload 用户消息 content 仍是裸字符串(零回归)。"""
-    from argos_agent.core.protocols import OpenAIProtocol
+    from argos.core.protocols import OpenAIProtocol
     p = OpenAIProtocol()
     payload = p.payload(
         [{"role": "user", "content": "hello"}],
@@ -157,7 +157,7 @@ def test_openai_payload_no_attachments_content_is_plain_string():
 
 def test_openai_payload_with_attachment_content_becomes_list():
     """带附件 → OpenAI payload 用户消息 content 变成 list(text_url + image_url blocks)。"""
-    from argos_agent.core.protocols import OpenAIProtocol
+    from argos.core.protocols import OpenAIProtocol
     att = _att(b"\xff\xd8\xff\xe0", "image/jpeg", "photo.jpg")
     p = OpenAIProtocol()
     payload = p.payload(
@@ -178,7 +178,7 @@ def test_openai_payload_with_attachment_content_becomes_list():
 
 def test_openai_payload_multiple_attachments():
     """多图附件 → content list 包含 1 text + N image_url blocks。"""
-    from argos_agent.core.protocols import OpenAIProtocol
+    from argos.core.protocols import OpenAIProtocol
     att1 = _att(b"A", "image/png", "a.png")
     att2 = _att(b"B", "image/webp", "b.webp")
     p = OpenAIProtocol()

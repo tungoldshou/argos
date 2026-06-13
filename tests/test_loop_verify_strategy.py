@@ -13,10 +13,10 @@ import os
 import pytest
 from pathlib import Path
 
-from argos_agent.core.loop import AgentLoop, LoopConfig
-from argos_agent.core.verify_gate import Verdict
-from argos_agent.protocol.events import EventBus, VerifyVerdict, PhaseChange
-from argos_agent.sandbox.backend import ExecResult
+from argos.core.loop import AgentLoop, LoopConfig
+from argos.core.verify_gate import Verdict
+from argos.protocol.events import EventBus, VerifyVerdict, PhaseChange
+from argos.sandbox.backend import ExecResult
 
 
 # ─── 测试替身 ──────────────────────────────────────────────────────────────────
@@ -144,8 +144,8 @@ def test_blacklisted_strategy_cmd_degrades_to_no_test(tmp_path: Path, monkeypatc
 
     用 monkeypatch 替换 generate，让它只返回 L5（模拟所有 cmd 被拒的终态）。
     """
-    from argos_agent.verify import strategy as _strat_mod
-    from argos_agent.verify.strategy import VerifyStrategy, WorkspaceFacts
+    from argos.verify import strategy as _strat_mod
+    from argos.verify.strategy import VerifyStrategy, WorkspaceFacts
 
     _l5_only = (
         VerifyStrategy(
@@ -179,8 +179,8 @@ def test_blacklisted_strategy_cmd_degrades_to_no_test(tmp_path: Path, monkeypatc
 
 def test_trivial_cmd_in_strategy_degrades_gracefully(tmp_path: Path, monkeypatch) -> None:
     """策略产的 cmd 首 token 在 _TRIVIAL_VERIFY_BINS（如 echo）→ 被拒跳过 → 降至 L5 → NO_TEST。"""
-    from argos_agent.verify import strategy as _strat_mod
-    from argos_agent.verify.strategy import VerifyStrategy
+    from argos.verify import strategy as _strat_mod
+    from argos.verify.strategy import VerifyStrategy
 
     _echo_then_l5 = (
         VerifyStrategy(
@@ -209,8 +209,8 @@ def test_trivial_cmd_in_strategy_degrades_gracefully(tmp_path: Path, monkeypatch
 
 def test_non_allowlisted_cmd_in_strategy_degrades_gracefully(tmp_path: Path, monkeypatch) -> None:
     """策略产的 cmd 首 token 不在 ALLOWED_CMDS（如 curl）→ 被拒 → 降 L5 → NO_TEST。"""
-    from argos_agent.verify import strategy as _strat_mod
-    from argos_agent.verify.strategy import VerifyStrategy
+    from argos.verify import strategy as _strat_mod
+    from argos.verify.strategy import VerifyStrategy
 
     _curl_then_l5 = (
         VerifyStrategy(
@@ -326,7 +326,7 @@ def test_no_verify_strategy_env_disables_generation(tmp_path: Path, monkeypatch)
     )
 
     # 走诚实 NO_TEST 完成路径（到 report，无 Escalation）
-    from argos_agent.protocol.events import Escalation
+    from argos.protocol.events import Escalation
     phases = [ev.phase for ev in events if isinstance(ev, PhaseChange)]
     escalations = [ev for ev in events if isinstance(ev, Escalation)]
     assert "report" in phases
@@ -352,7 +352,7 @@ def test_no_verify_strategy_env_empty_string_still_enables(tmp_path: Path, monke
 
 def test_capability_hints_passed_to_generate(tmp_path: Path, monkeypatch) -> None:
     """loop 构造时传入 capability_hints → _pick_strategy_cmd 透传给 generate()。"""
-    from argos_agent.verify import strategy as _strat_mod
+    from argos.verify import strategy as _strat_mod
 
     received_hints: list[dict] = []
 
@@ -408,7 +408,7 @@ def test_pick_strategy_cmd_does_not_mutate_verify_cmd(tmp_path: Path) -> None:
 
 def test_pick_strategy_cmd_returns_none_on_exception(tmp_path: Path, monkeypatch) -> None:
     """generate() 内部抛异常 → _pick_strategy_cmd fail-closed 返 None（不崩 run）。"""
-    from argos_agent.verify import strategy as _strat_mod
+    from argos.verify import strategy as _strat_mod
 
     monkeypatch.setattr(_strat_mod, "generate", lambda *a, **kw: 1 / 0)
 
@@ -431,8 +431,8 @@ def test_pick_strategy_cmd_nonexistent_workspace() -> None:
 
 def test_pick_strategy_cmd_skips_l3(tmp_path: Path, monkeypatch) -> None:
     """L3 dom_assert 候选（cmd=None，需外部 browser executor）→ 跳过 → 降 L5 → None。"""
-    from argos_agent.verify import strategy as _strat_mod
-    from argos_agent.verify.strategy import VerifyStrategy
+    from argos.verify import strategy as _strat_mod
+    from argos.verify.strategy import VerifyStrategy
 
     _l3_then_l5 = (
         VerifyStrategy(

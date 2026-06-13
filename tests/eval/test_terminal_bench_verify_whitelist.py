@@ -21,14 +21,14 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent import runtime
-from argos_agent.core.verify_gate import Verifier
-from argos_agent.eval.benchmarks import terminal_bench as tb
-from argos_agent.tools import ALLOWED_CMDS
-from argos_agent.eval.runner import (
+from argos import runtime
+from argos.core.verify_gate import Verifier
+from argos.eval.benchmarks import terminal_bench as tb
+from argos.tools import ALLOWED_CMDS
+from argos.eval.runner import (
     EvalRunner, LoopOutcome, PASS_PASSED, PASS_FAILED, PASS_UNVERIFIABLE,
 )
-from argos_agent.eval.corpus import EvalTask
+from argos.eval.corpus import EvalTask
 
 from tests.eval._fakes import FakeWorktree, make_fake_loop_factory
 
@@ -83,7 +83,7 @@ def test_run_eval_passes_when_solution_is_correct(tmp_path):
         worktree=wt, base_dir=tmp_path / "eval_base",
         loop_factory=factory, budget_s=10,
     )
-    from argos_agent.eval.benchmarks.terminal_bench import run_subset
+    from argos.eval.benchmarks.terminal_bench import run_subset
     workdir = tmp_path / "corpus"
     report = run_subset(
         [SMOKE_DIR / "tb_echo_hello"], runner=runner, model_tier="default",
@@ -109,7 +109,7 @@ def test_run_eval_fails_when_solution_is_wrong(tmp_path):
         worktree=wt, base_dir=tmp_path / "eval_base",
         loop_factory=factory, budget_s=10,
     )
-    from argos_agent.eval.benchmarks.terminal_bench import run_subset
+    from argos.eval.benchmarks.terminal_bench import run_subset
     workdir = tmp_path / "corpus"
     report = run_subset(
         [SMOKE_DIR / "tb_echo_hello"], runner=runner, model_tier="default",

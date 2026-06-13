@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.core.snapshot import RunSnapshot
+from argos.core.snapshot import RunSnapshot
 
 
 class TestRestoreFileSingleFile:

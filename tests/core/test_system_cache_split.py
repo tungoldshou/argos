@@ -9,9 +9,9 @@
 """
 from __future__ import annotations
 
-from argos_agent.core.honesty import compose_system_pair
-from argos_agent.core.protocols import AnthropicProtocol, OpenAIProtocol
-from argos_agent.core.types import ModelTierName
+from argos.core.honesty import compose_system_pair
+from argos.core.protocols import AnthropicProtocol, OpenAIProtocol
+from argos.core.types import ModelTierName
 
 
 # ── compose_system_pair 验收 ──────────────────────────────────
@@ -33,7 +33,7 @@ def test_compose_system_pair_empty_untrusted_still_returns_pair():
 
 # ── AnthropicProtocol 双块验收 ────────────────────────────────
 def _tier():
-    from argos_agent.core.models import ModelTier
+    from argos.core.models import ModelTier
     return ModelTier(name="default", model="c", base_url="https://x", max_tokens=64)
 
 
@@ -171,7 +171,7 @@ def test_openai_legacy_single_string_path_unchanged():
 # ── ModelClient 透传验收 ──────────────────────────────────
 def test_model_client_passes_system_dynamic_through():
     """ModelClient._payload(messages, system, system_dynamic) → 协议层收到 system_dynamic。"""
-    from argos_agent.core.models import CredentialPool, ModelClient
+    from argos.core.models import CredentialPool, ModelClient
     tier = _tier()
     pool = CredentialPool(["k"])
     client = ModelClient(tier=tier, pool=pool)
@@ -197,7 +197,7 @@ def test_model_client_passes_system_dynamic_through():
 
 def test_model_client_system_dynamic_default_none():
     """ModelClient 现有 caller 不传 system_dynamic → 默认 None(向后兼容,旧行为不变)。"""
-    from argos_agent.core.models import CredentialPool, ModelClient
+    from argos.core.models import CredentialPool, ModelClient
     pool = CredentialPool(["k"])
     client = ModelClient(tier=_tier(), pool=pool)
 

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from argos_agent.ledger.summary import summarize
+from argos.ledger.summary import summarize
 
 
 class TestFilesystemSummaries:

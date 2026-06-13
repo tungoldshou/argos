@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.sandbox.executor import select_backend
+from argos.sandbox.executor import select_backend
 
 
 @pytest.fixture

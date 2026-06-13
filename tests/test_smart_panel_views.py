@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from textual.app import App, ComposeResult
 
-from argos_agent.tui.widgets.activity_panel import ActivityPanel
-from argos_agent.tui.theme import ARGOS_NIGHT
+from argos.tui.widgets.activity_panel import ActivityPanel
+from argos.tui.theme import ARGOS_NIGHT
 
 
 class _H(App):
@@ -102,7 +102,7 @@ async def test_snapshot_text_aggregates_hidden_sections():
 
 @pytest.mark.asyncio
 async def test_verdict_section_shows_three_state_honestly():
-    from argos_agent.core.verify_gate import Verdict
+    from argos.core.verify_gate import Verdict
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()

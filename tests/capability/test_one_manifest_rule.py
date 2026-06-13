@@ -25,12 +25,12 @@ import textwrap
 
 import pytest
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel
-from argos_agent.capability import Capability, CapabilityRegistry, register_builtins
-from argos_agent.sandbox.broker import CapabilityBroker, _RISK
-from argos_agent.sandbox.egress import EgressPolicy
-from argos_agent.tools import ALL_TOOL_NAMES, get_tool_names
-from argos_agent.tools.receipts import ReceiptSigner
+from argos.approval import ApprovalGate, ApprovalLevel
+from argos.capability import Capability, CapabilityRegistry, register_builtins
+from argos.sandbox.broker import CapabilityBroker, _RISK
+from argos.sandbox.egress import EgressPolicy
+from argos.tools import ALL_TOOL_NAMES, get_tool_names
+from argos.tools.receipts import ReceiptSigner
 
 
 # ── 辅助：构造 broker，可选注入 registry ─────────────────────────────────────

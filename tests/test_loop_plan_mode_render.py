@@ -19,10 +19,10 @@ import asyncio
 
 import pytest
 
-from argos_agent.approval import ApprovalLevel
-from argos_agent.core.loop import AgentLoop, LoopConfig
-from argos_agent.tui.events import EventBus, PlanRendered
-from argos_agent.core.plan_mode import PlanExitDecision
+from argos.approval import ApprovalLevel
+from argos.core.loop import AgentLoop, LoopConfig
+from argos.tui.events import EventBus, PlanRendered
+from argos.core.plan_mode import PlanExitDecision
 
 from tests.test_loop_codeact import FakeModel, FakeSandbox, FakeStore, FakeVerifier
 
@@ -49,7 +49,7 @@ def _plan_mode_loop(scripts: list[str], *, verify_cmd=None, level=ApprovalLevel.
     """造一个进入 plan mode 状态的 loop:先经 EnterPlanMode 切到 plan(同真用户打 /plan 路径),
     用 FakeModel/FakeSandbox 跑 plan 阶段模型输出。verify_cmd 缺省 = 无测任务(走诚实收尾)。
     model 缺省 = 自建 FakeModel(scripts);传 _RecordingFakeModel 等子类以断言模型看到的 messages。"""
-    from argos_agent.core.plan_mode import EnterPlanMode
+    from argos.core.plan_mode import EnterPlanMode
     loop = AgentLoop(
         store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(),
         broker=None, model=model or FakeModel(scripts), verifier=FakeVerifier(),
@@ -136,7 +136,7 @@ async def test_plan_mode_approve_start_continues_to_act_phase():
     await dec_task
 
     # 应有 plan→act 阶段流转(PhaseChange("act") 在 PlanRendered 之后出现)
-    from argos_agent.tui.events import PhaseChange
+    from argos.tui.events import PhaseChange
     plan_rendered_idx = next(i for i, ev in enumerate(events) if isinstance(ev, PlanRendered))
     act_changes = [i for i, ev in enumerate(events)
                   if isinstance(ev, PhaseChange) and ev.phase == "act"]

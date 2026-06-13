@@ -10,9 +10,9 @@ import sys
 
 import pytest
 
-from argos_agent.tui.events import VerifyVerdict, PhaseChange
-from argos_agent.memory.store import ReplayState
-from argos_agent.approval import ApprovalLevel
+from argos.tui.events import VerifyVerdict, PhaseChange
+from argos.memory.store import ReplayState
+from argos.approval import ApprovalLevel
 from tests.e2e.conftest import drain
 
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="真 Seatbelt 沙箱仅 macOS")

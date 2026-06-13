@@ -4,10 +4,10 @@ from __future__ import annotations
 import pytest
 from pathlib import Path
 
-from argos_agent.core.snapshot import RunSnapshot, SNAPSHOT_ROOT
-from argos_agent.ledger.builder import build_entry
-from argos_agent.ledger.entry import LedgerEntry
-from argos_agent.ledger.store import LedgerStore
+from argos.core.snapshot import RunSnapshot, SNAPSHOT_ROOT
+from argos.ledger.builder import build_entry
+from argos.ledger.entry import LedgerEntry
+from argos.ledger.store import LedgerStore
 
 
 class _FakeReceipt:

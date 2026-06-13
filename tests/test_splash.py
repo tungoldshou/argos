@@ -13,9 +13,9 @@
 from __future__ import annotations
 
 import pytest
-from argos_agent.tui.app import ArgosApp
-from argos_agent.tui.fakeloop import FakeLoop
-from argos_agent.tui.widgets.splash import StartupSplash
+from argos.tui.app import ArgosApp
+from argos.tui.fakeloop import FakeLoop
+from argos.tui.widgets.splash import StartupSplash
 
 
 @pytest.mark.asyncio

@@ -13,16 +13,16 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.permissions.hard_rules import (
+from argos.permissions.hard_rules import (
     check_computer_hard_rules,
     check_computer_open_app,
     check_computer_type_text,
     _FINANCIAL_TEXT_PATTERN,
     _PAYMENT_APP_PATTERN,
 )
-from argos_agent.permissions.config import PermissionsConfig
-from argos_agent.permissions.evaluator import evaluate
-from argos_agent.approval import ApprovalLevel
+from argos.permissions.config import PermissionsConfig
+from argos.permissions.evaluator import evaluate
+from argos.approval import ApprovalLevel
 
 
 # ── 1. check_computer_type_text —— 命中场景 ───────────────────────────────────
@@ -238,7 +238,7 @@ def test_evaluator_computer_type_text_normal_auto_approve():
 
 def test_autonomy_classify_computer_financial_not_demotable():
     """autonomy.classify:computer.type_text 金融文本 → RED,即便 preauth 也不降级(铁律)。"""
-    from argos_agent.permissions.autonomy import classify, AutonomyPolicy
+    from argos.permissions.autonomy import classify, AutonomyPolicy
 
     # 尝试用 preauth 降级
     policy = AutonomyPolicy(
@@ -261,7 +261,7 @@ def test_autonomy_classify_computer_financial_not_demotable():
 
 def test_autonomy_classify_hard_rule_computer_not_preauth_demotable():
     """autonomy.classify:即便 reversible=True(假设情形),hard_rule 触发也不可被 preauth 降级。"""
-    from argos_agent.permissions.autonomy import classify, AutonomyPolicy
+    from argos.permissions.autonomy import classify, AutonomyPolicy
 
     policy = AutonomyPolicy(
         preauth={"computer_type_financial_pattern": True}  # preauth 试图降级
@@ -318,8 +318,8 @@ def test_autonomy_conductor_computer_high_risk_is_red():
     验证路径:reversible=False(computer.* 铁律) → 优先级1 直接 RED。
     RED 在 conductor 自治模式(trust≤L1)下 = 拒绝并要求人工在场确认。
     """
-    from argos_agent.permissions.autonomy import classify, Zone, AutonomyPolicy
-    from argos_agent.permissions.config import PermissionsConfig
+    from argos.permissions.autonomy import classify, Zone, AutonomyPolicy
+    from argos.permissions.config import PermissionsConfig
 
     config = PermissionsConfig.empty()
     policy = AutonomyPolicy()   # 默认策略:无 preauth,clarification_required=True
@@ -356,8 +356,8 @@ def test_autonomy_conductor_computer_type_text_financial_is_red():
     验证 evaluator hard_rule 触发 → autonomy.classify → RED,
     即便 conductor 试图 preauth 降级也无效(护城河铁律)。
     """
-    from argos_agent.permissions.autonomy import classify, Zone, AutonomyPolicy
-    from argos_agent.permissions.config import PermissionsConfig
+    from argos.permissions.autonomy import classify, Zone, AutonomyPolicy
+    from argos.permissions.config import PermissionsConfig
 
     config = PermissionsConfig.empty()
     # conductor 试图通过 preauth 降级金融规则(应无效)
@@ -384,8 +384,8 @@ def test_autonomy_conductor_computer_open_payment_app_is_red():
     额外验证 check_computer_hard_rules 命中支付/银行 app 时,
     完整的 evaluator → autonomy.classify 管线正确拒绝。
     """
-    from argos_agent.permissions.autonomy import classify, Zone, AutonomyPolicy
-    from argos_agent.permissions.config import PermissionsConfig
+    from argos.permissions.autonomy import classify, Zone, AutonomyPolicy
+    from argos.permissions.config import PermissionsConfig
 
     config = PermissionsConfig.empty()
     policy = AutonomyPolicy()

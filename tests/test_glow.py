@@ -1,4 +1,4 @@
-from argos_agent.tui import glow
+from argos.tui import glow
 
 
 def test_phase_colors_distinct():
@@ -26,8 +26,8 @@ def test_breathe_color_dims_and_restores():
 
 
 import pytest
-from argos_agent.tui.app import ArgosApp
-from argos_agent.tui.fakeloop import FakeLoop
+from argos.tui.app import ArgosApp
+from argos.tui.fakeloop import FakeLoop
 
 
 @pytest.mark.asyncio
@@ -48,8 +48,8 @@ async def test_border_idle_then_runs_then_resets():
 async def test_terminal_verdict_glow_survives_report_phase():
     """诚实(终态优先):failed/unverifiable 告警色锁定后,后续 report 阶段色不得覆盖。
     否则 verify(failed)→report 会把告警红抹成中性灰,视觉上'降级'了真实失败。"""
-    from argos_agent.core.verify_gate import Verdict
-    from argos_agent.tui.events import PhaseChange, VerifyVerdict
+    from argos.core.verify_gate import Verdict
+    from argos.tui.events import PhaseChange, VerifyVerdict
 
     app = ArgosApp(loop_factory=lambda: FakeLoop())
     async with app.run_test(size=(100, 30)) as pilot:
@@ -66,8 +66,8 @@ async def test_terminal_verdict_glow_survives_report_phase():
 @pytest.mark.asyncio
 async def test_passed_verdict_glow_does_not_lock():
     """passed 不锁:passed→report 允许 report 阶段色接管(passed 是好事,不需持续告警)。"""
-    from argos_agent.core.verify_gate import Verdict
-    from argos_agent.tui.events import PhaseChange, VerifyVerdict
+    from argos.core.verify_gate import Verdict
+    from argos.tui.events import PhaseChange, VerifyVerdict
 
     app = ArgosApp(loop_factory=lambda: FakeLoop())
     async with app.run_test(size=(100, 30)) as pilot:

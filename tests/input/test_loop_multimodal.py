@@ -20,28 +20,28 @@ import pytest
 
 def _att(data: bytes = b"\x89PNG\x00", media_type: str = "image/png",
           source_label: str = "test.png"):
-    from argos_agent.input.attachments import ImageAttachment
+    from argos.input.attachments import ImageAttachment
     return ImageAttachment(data=data, media_type=media_type, source_label=source_label)
 
 
 def _plain_tier():
     """纯文本模型(multimodal=False)。"""
-    from argos_agent.core.models import ModelTier
+    from argos.core.models import ModelTier
     return ModelTier(name="default", model="text-model", base_url="https://x",
                      max_tokens=64, multimodal=False)
 
 
 def _mm_tier():
     """多模态模型(multimodal=True)。"""
-    from argos_agent.core.models import ModelTier
+    from argos.core.models import ModelTier
     return ModelTier(name="default", model="vision-model", base_url="https://x",
                      max_tokens=64, multimodal=True)
 
 
 def _make_minimal_loop(tier):
     """构造最小化 AgentLoop，绑定给定 tier，其余组件全部 mock。"""
-    from argos_agent.core.loop import AgentLoop, LoopConfig
-    from argos_agent.approval import ApprovalLevel
+    from argos.core.loop import AgentLoop, LoopConfig
+    from argos.approval import ApprovalLevel
 
     cfg = LoopConfig(
         model_tier="default",
@@ -77,7 +77,7 @@ def _make_minimal_loop(tier):
 
 def test_run_signature_accepts_attachments():
     """AgentLoop.run() 签名接受可选 attachments 参数(不传 = None = 零回归)。"""
-    from argos_agent.core.loop import AgentLoop
+    from argos.core.loop import AgentLoop
     import inspect
     sig = inspect.signature(AgentLoop.run)
     assert "attachments" in sig.parameters
@@ -85,7 +85,7 @@ def test_run_signature_accepts_attachments():
 
 def test_run_attachments_default_is_none():
     """attachments 参数默认值为 None(零回归:既有调用不传也能工作)。"""
-    from argos_agent.core.loop import AgentLoop
+    from argos.core.loop import AgentLoop
     import inspect
     sig = inspect.signature(AgentLoop.run)
     param = sig.parameters["attachments"]
@@ -98,7 +98,7 @@ async def test_plain_tier_with_attachments_raises_honest_error():
 
     诚实不变量(spec §5):绝不静默剥图、绝不假装看到。
     """
-    from argos_agent.core.loop import AgentLoop
+    from argos.core.loop import AgentLoop
     att = _att()
 
     # 最简 loop，仅测门禁是否触发
@@ -114,7 +114,7 @@ async def test_plain_tier_with_attachments_raises_honest_error():
         return
 
     # 或者以 Error 事件形式发出
-    from argos_agent.protocol.events import Error
+    from argos.protocol.events import Error
     error_events = [e for e in events if isinstance(e, Error)]
     assert error_events, "纯文本 tier 带附件应产生诚实阻断 Error 事件"
     msg = error_events[0].message
@@ -127,7 +127,7 @@ async def test_no_attachments_run_accepts_without_error():
 
     loop 后续可能因为 mock 不完整而出其他错误；此测试只保证门禁不会错误触发。
     """
-    from argos_agent.core.loop import AgentLoop
+    from argos.core.loop import AgentLoop
     loop = _make_minimal_loop(_plain_tier())
 
     events = []

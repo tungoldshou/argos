@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.core.loop import AgentLoop, LoopConfig, extract_code_block
-from argos_agent.core.verify_gate import Verdict
-from argos_agent.sandbox.backend import ExecResult
-from argos_agent.tui.events import (
+from argos.core.loop import AgentLoop, LoopConfig, extract_code_block
+from argos.core.verify_gate import Verdict
+from argos.sandbox.backend import ExecResult
+from argos.tui.events import (
     CodeAction, CodeResult, PhaseChange, TokenDelta, VerifyVerdict,
 )
 
@@ -60,7 +60,7 @@ class FakeStore:
 
 
 def _loop(scripts, verify_cmd=None):
-    from argos_agent.tui.events import EventBus
+    from argos.tui.events import EventBus
     return AgentLoop(
         store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(),
         broker=None, model=FakeModel(scripts), verifier=FakeVerifier(),
@@ -142,7 +142,7 @@ class _RealisticVerifier:
 
 
 def _loop_with(model, verify_cmd=None, verifier=None):
-    from argos_agent.tui.events import EventBus
+    from argos.tui.events import EventBus
     return AgentLoop(
         store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(),
         broker=None, model=model, verifier=verifier or _RealisticVerifier(),
@@ -154,7 +154,7 @@ def _loop_with(model, verify_cmd=None, verifier=None):
 async def test_loop_emits_costupdate_with_real_tokens_and_elapsed():
     """回归:真 loop 每步发 CostUpdate(真 token 累计 + 真 elapsed)。否则状态栏/成本表死值 0,
     用户以为'没反应'。FakeLoop 之外此前从不发 CostUpdate(本轮修复点)。"""
-    from argos_agent.tui.events import CostUpdate
+    from argos.tui.events import CostUpdate
     model = _FakeModelWithUsage(["```python\nx=1\n```", "完成。"])
     loop = _loop_with(model)
     costs = []
@@ -182,7 +182,7 @@ class _FakeModelWithTier(_FakeModelWithUsage):
 async def test_cost_computed_for_known_pricing_model():
     """回归:成本接入定价表后,已知模型(MiniMax-M2 在 PRICING)应算出真实正成本,
     不再恒 $(N/A)。此前 cost_usd 硬编码 None → 即便模型在表里也永远 N/A(bug)。"""
-    from argos_agent.tui.events import CostUpdate
+    from argos.tui.events import CostUpdate
     model = _FakeModelWithTier(["```python\nx=1\n```", "完成。"], "MiniMax-M2")
     loop = _loop_with(model)
     costs = [ev for ev in [e async for e in loop.run("g", "s")] if isinstance(ev, CostUpdate)]
@@ -194,7 +194,7 @@ async def test_cost_computed_for_known_pricing_model():
 async def test_cost_none_for_unknown_model_not_fake_zero():
     """诚实:未知单价模型 → cost_usd 回退 None(UI 显 $(N/A)),
     而非 cost_of 对未知模型返回的 0.0(那会显失真的恒 $0.000)。"""
-    from argos_agent.tui.events import CostUpdate
+    from argos.tui.events import CostUpdate
     model = _FakeModelWithTier(["```python\nx=1\n```", "完成。"], "No-Such-Model-9000")
     loop = _loop_with(model)
     costs = [ev for ev in [e async for e in loop.run("g", "s")] if isinstance(ev, CostUpdate)]
@@ -227,7 +227,7 @@ async def test_loop_completion_line_says_verified_when_passed():
 def test_codeact_contract_in_honesty_system():
     """回归:HONESTY_SYSTEM 必须含明确 CodeAct 契约(强制 ```python 围栏 + 禁 JSON 工具调用)。
     实测:缺这段时 MiniMax-M3 吐 JSON 工具调用 → extract_code_block 抽不到 → agent 对编码任务恒为 no-op。"""
-    from argos_agent.core.honesty import HONESTY_SYSTEM
+    from argos.core.honesty import HONESTY_SYSTEM
     assert "```python" in HONESTY_SYSTEM, "必须给出 ```python 围栏示例/要求"
     assert "JSON" in HONESTY_SYSTEM and "不会被执行" in HONESTY_SYSTEM, "必须明确禁止 JSON 工具调用"
     assert "write_file(path, content)" in HONESTY_SYSTEM, "应文档化工具的 Python 函数签名"
@@ -258,7 +258,7 @@ async def test_max_steps_exhaustion_still_walks_phase_gate():
     # 模型死循环:有代码块但永远不说完成(只有一个脚本,FakeModel 在末位反复发同一段)。
     # max_steps=2 强制 while 在第二次循环后退出。
     model = FakeModel(["```python\nwrite_file('a','b')\n```"])
-    from argos_agent.tui.events import EventBus
+    from argos.tui.events import EventBus
     loop = AgentLoop(
         store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(),
         broker=None, model=model, verifier=FakeVerifier(),
@@ -291,7 +291,7 @@ async def test_max_steps_bailout_runs_verify_not_just_phase_change():
     修法:补齐段复用正常 verify 路径(enter_phase + run_verify_gate + last_verdict=...)。
     本测试断言:有 verify_cmd 时,VerifyVerdict 事件必须被投出,status="passed"。
     """
-    from argos_agent.tui.events import EventBus
+    from argos.tui.events import EventBus
     # 模型死循环写代码但永远不说完成;verify_cmd 配了 → 真应该跑 verify。
     model = FakeModel(["```python\nwrite_file('a','b')\n```"])
     loop = AgentLoop(
@@ -320,7 +320,7 @@ async def test_max_steps_bailout_without_verify_cmd_honest_completion():
 
     模型没改代码 / 没声明 verify:不算失败,只是"无测任务" → 收尾诚实标 NO_TEST。
     """
-    from argos_agent.tui.events import EventBus
+    from argos.tui.events import EventBus
     model = FakeModel(["```python\nwrite_file('a','b')\n```"])
     loop = AgentLoop(
         store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(),

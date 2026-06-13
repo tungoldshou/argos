@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from argos_agent.core.updater import _check_for_update, _is_cache_fresh, _is_newer
+from argos.core.updater import _check_for_update, _is_cache_fresh, _is_newer
 
 
 # ---------- 单元:cache 判定 ----------
@@ -70,7 +70,7 @@ def test_check_returns_newer_version(tmp_path: Path):
     import os
     os.utime(cache, (eight_days_ago, eight_days_ago))
     payload = json.dumps({"tag_name": "v0.2.0", "body": "release notes"}).encode()
-    with patch("argos_agent.core.updater.httpx.get") as mock_get:
+    with patch("argos.core.updater.httpx.get") as mock_get:
         mock_get.return_value = type("R", (), {"raise_for_status": lambda self: None, "json": lambda self: json.loads(payload), "content": payload})()
         result = _check_for_update(LATEST_URL, "0.1.0", cache)
     assert result == "0.2.0"
@@ -86,7 +86,7 @@ def test_check_returns_none_when_no_newer(tmp_path: Path):
     import os
     os.utime(cache, (eight_days_ago, eight_days_ago))
     payload = json.dumps({"tag_name": "v0.1.0", "body": ""}).encode()
-    with patch("argos_agent.core.updater.httpx.get") as mock_get:
+    with patch("argos.core.updater.httpx.get") as mock_get:
         mock_get.return_value = type("R", (), {"raise_for_status": lambda self: None, "json": lambda self: json.loads(payload), "content": payload})()
         result = _check_for_update(LATEST_URL, "0.1.0", cache)
     assert result is None
@@ -98,7 +98,7 @@ def test_check_returns_none_on_network_failure(tmp_path: Path):
     eight_days_ago = time.time() - 8 * 86400
     import os
     os.utime(cache, (eight_days_ago, eight_days_ago))
-    with patch("argos_agent.core.updater.httpx.get", side_effect=Exception("network down")):
+    with patch("argos.core.updater.httpx.get", side_effect=Exception("network down")):
         result = _check_for_update(LATEST_URL, "0.1.0", cache)
     assert result is None  # 静默
     # 网络失败不刷缓存(下次再试)
@@ -111,6 +111,6 @@ def test_check_skips_when_no_httpx_call_when_cache_fresh(tmp_path: Path):
     """缓存新鲜 → 不调 httpx(用 mock 显式断言)。"""
     cache = tmp_path / ".last_update_check"
     cache.touch()  # fresh
-    with patch("argos_agent.core.updater.httpx.get") as mock_get:
+    with patch("argos.core.updater.httpx.get") as mock_get:
         _check_for_update(LATEST_URL, "0.1.0", cache)
         mock_get.assert_not_called()

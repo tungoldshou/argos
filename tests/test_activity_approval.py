@@ -1,7 +1,7 @@
 """ActivityPanel Approval 区段 + 3 色 + 计数器测试。"""
 from __future__ import annotations
 
-from argos_agent.tui.widgets.activity_panel import ActivityPanel
+from argos.tui.widgets.activity_panel import ActivityPanel
 
 
 def test_approval_section_starts_empty():

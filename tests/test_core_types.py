@@ -3,7 +3,7 @@ import dataclasses
 
 import pytest
 
-from argos_agent.core import types as T
+from argos.core import types as T
 
 
 def test_verdict_status_literal_values():

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.permissions.trust_dial import (
+from argos.permissions.trust_dial import (
     TrustLevel,
     EscalationSuggestion,
     hard_rules_immune,

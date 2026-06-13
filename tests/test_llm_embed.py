@@ -3,7 +3,7 @@ import json
 import pytest
 from pathlib import Path
 
-from argos_agent import llm_embed
+from argos import llm_embed
 
 
 def test_embed_dim_is_1536():

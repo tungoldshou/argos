@@ -10,10 +10,10 @@ from urllib.parse import quote
 
 import pytest
 
-from argos_agent.lsp.client import LspClient, encode_frame
-from argos_agent.lsp.config import LspConfig, LspServerConfig
-from argos_agent.lsp.manager import LspManager, set_spawn_proc_fn, set_event_emit_fn
-from argos_agent.lsp.tools import (
+from argos.lsp.client import LspClient, encode_frame
+from argos.lsp.config import LspConfig, LspServerConfig
+from argos.lsp.manager import LspManager, set_spawn_proc_fn, set_event_emit_fn
+from argos.lsp.tools import (
     lsp_definition_gated, lsp_references_gated, lsp_hover_gated,
     lsp_document_symbols_gated, lsp_workspace_symbols_gated,
     lsp_diagnostics_gated,

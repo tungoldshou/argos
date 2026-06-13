@@ -1,7 +1,7 @@
 """verify 分级 + 三态 Verdict fail-closed(契约 §6.1/§6;spec §3.3 L2/§12.5)。"""
 import pytest
 
-from argos_agent.core.types import Verdict
+from argos.core.types import Verdict
 
 
 def test_verdict_passed_constructor():
@@ -34,8 +34,8 @@ import os
 import textwrap
 from pathlib import Path
 
-from argos_agent.core.verify_gate import Verifier
-from argos_agent import runtime
+from argos.core.verify_gate import Verifier
+from argos import runtime
 
 
 def _mk_project(tmp_path: Path) -> Path:

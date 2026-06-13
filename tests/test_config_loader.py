@@ -1,6 +1,6 @@
 import json
 import pytest
-from argos_agent import config as C
+from argos import config as C
 
 
 def _write(tmp_path, cfg: dict, env: str = ""):
@@ -90,7 +90,7 @@ def test_price_registered_into_pricing(tmp_path, monkeypatch):
            "base_url": "https://x", "model": "PricedModel", "api_key_env": "K",
            "price_in": 0.5, "price_out": 2.0}}}, env="K=k\n")
     C.load_config()
-    from argos_agent.core.observability import PRICING
+    from argos.core.observability import PRICING
     assert PRICING.get("PricedModel") == {"in": 0.5, "out": 2.0}
 
 
@@ -100,7 +100,7 @@ def test_legacy_env_fallback_when_no_config(tmp_path, monkeypatch):
     monkeypatch.setenv("ARGOS_LLM_KEY", "legacykey")
     monkeypatch.setenv("ARGOS_LLM_MODEL", "MiniMax-M3")
     import importlib
-    from argos_agent import config as C2
+    from argos import config as C2
     importlib.reload(C2)   # 重读模块级 _WORKER_* (它们在 import 时算)
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     tier = C2.active_tier()
@@ -142,7 +142,7 @@ def test_active_embedder_openai_with_embedding_model(tmp_path, monkeypatch):
            "base_url": "http://localhost:11434/v1", "model": "qwen", "api_key_env": "OK",
            "embedding_model": "nomic-embed-text"}}}, env="OK=k\n")
     emb = C.active_embedder()
-    from argos_agent.memory.embedding import OpenAIEmbedder
+    from argos.memory.embedding import OpenAIEmbedder
     assert isinstance(emb, OpenAIEmbedder)
     assert emb._model == "nomic-embed-text" and emb._base == "http://localhost:11434/v1"
 

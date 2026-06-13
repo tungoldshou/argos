@@ -24,10 +24,10 @@ from typing import Any, AsyncIterator
 
 import pytest
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel, Decision
-from argos_agent.daemon.manager import RunManager
-from argos_agent.daemon.server import DaemonHTTPServer
-from argos_agent.daemon.worker import DaemonApprovalGate, RunWorker
+from argos.approval import ApprovalGate, ApprovalLevel, Decision
+from argos.daemon.manager import RunManager
+from argos.daemon.server import DaemonHTTPServer
+from argos.daemon.worker import DaemonApprovalGate, RunWorker
 
 
 # ── 测试工具 ──────────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ async def _raw_req(socket_path: Path, method: str, path: str, *,
                    session_id: str | None = None,
                    body: dict | None = None,
                    timeout: float = 10.0):
-    from argos_agent.daemon.client import DaemonClient
+    from argos.daemon.client import DaemonClient
     cli = DaemonClient(socket_path, timeout=timeout)
     status, _headers, raw = await cli._request(
         method, path, session_id=session_id, body=body,
@@ -187,7 +187,7 @@ async def test_approval_circuit_full(tmp_path: Path):
         await _wait_run_state(manager, run_id, "running", timeout=3.0)
 
         # 订阅 SSE,等待 approval_request 事件
-        from argos_agent.daemon.client import DaemonClient
+        from argos.daemon.client import DaemonClient
         cli = DaemonClient(socket_path, timeout=8.0)
         seen_approval_request = False
         call_id: str | None = None
@@ -524,7 +524,7 @@ class FakePlanLoop:
         """与 AgentLoop.respond_plan_decision 同签名。"""
         if call_id not in self._plan_call_registry:
             return False
-        from argos_agent.core.plan_mode import ExitPlanMode
+        from argos.core.plan_mode import ExitPlanMode
         result = ExitPlanMode(self, action, feedback)
         if result.startswith("错误:"):
             return False

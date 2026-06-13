@@ -1,7 +1,7 @@
 """Phase 2:可解释召回 recall() → (MemoryRecord, reason)(契约 §2 / spec §5.6)。"""
 import pytest
 
-from argos_agent.memory.store import ArgosStore, MemoryRecord
+from argos.memory.store import ArgosStore, MemoryRecord
 
 
 class _FakeEmbedder:

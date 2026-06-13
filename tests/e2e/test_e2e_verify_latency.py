@@ -8,7 +8,7 @@ import time
 
 import pytest
 
-from argos_agent.core.verify_gate import Verifier
+from argos.core.verify_gate import Verifier
 
 
 @pytest.mark.slow  # 7 次 pytest 子进程采样 P50/P99 —— 真子进程,标 slow。

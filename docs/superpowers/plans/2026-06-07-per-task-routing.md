@@ -9,7 +9,7 @@
 > `__init__`)、`LoopConfig` 既有字段、`ApprovalGate` 既有签名、`core/loop.py` 既有
 > 流程、`Config` 加载器签名(只在 build_components 加 effort 参数)。
 >
-> **新代码全部在**:`argos_agent/routing/`(5 个新模块)+ `argos_agent/core/models.py`
+> **新代码全部在**:`argos/routing/`(5 个新模块)+ `argos/core/models.py`
 > + `core/loop.py` + `app_factory.py` + `__main__.py` 扩展 + `tui/commands.py` +
 > `tui/app.py` + `tui/events.py`(`CostUpdate.tier_name` 新字段,默认空串保旧事件)。
 >
@@ -42,7 +42,7 @@
 
 ### 1.1 目标
 
-- 新目录 `argos_agent/routing/`
+- 新目录 `argos/routing/`
 - `__init__.py`:`TaskCategory` 枚举(8 类)、公开 `categorize()` 函数
 - `categorizer.py`:`_extract_tool_calls()` 抽 `tool_name`、`_classify()` 决策
 - 8 类别穷尽覆盖 + 兜底 `SIMPLE_READ`
@@ -54,7 +54,7 @@
 
 ```python
 """Per-task model routing(契约 §11;spec #11)。"""
-from argos_agent.routing.categorizer import TaskCategory, categorize
+from argos.routing.categorizer import TaskCategory, categorize
 
 __all__ = ["TaskCategory", "categorize"]
 ```
@@ -199,8 +199,8 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from argos_agent.config import ConfigError, load_config
-from argos_agent.routing.categorizer import TaskCategory
+from argos.config import ConfigError, load_config
+from argos.routing.categorizer import TaskCategory
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,8 +333,8 @@ feat(routing): #11 T2 RoutingConfig 加载 + set_category 原子写 + tier fail-
 from __future__ import annotations
 
 from dataclasses import dataclass
-from argos_agent.routing.categorizer import TaskCategory
-from argos_agent.routing.config import RoutingConfig
+from argos.routing.categorizer import TaskCategory
+from argos.routing.config import RoutingConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -396,7 +396,7 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass
 
-from argos_agent.approval import ApprovalLevel
+from argos.approval import ApprovalLevel
 
 
 class EffortLevel(enum.Enum):
@@ -437,11 +437,11 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from argos_agent.config import ConfigError
-from argos_agent.core.models import CredentialPool, ModelClient
-from argos_agent.routing.categorizer import TaskCategory
-from argos_agent.routing.config import RoutingConfig
-from argos_agent.routing.resolver import RouteDecision, resolve
+from argos.config import ConfigError
+from argos.core.models import CredentialPool, ModelClient
+from argos.routing.categorizer import TaskCategory
+from argos.routing.config import RoutingConfig
+from argos.routing.resolver import RouteDecision, resolve
 
 if TYPE_CHECKING:
     pass
@@ -516,7 +516,7 @@ feat(routing): #11 T4 ModelRouter 懒构造 + history + EffortLevel 映射
 `__main__.py`:
 
 ```python
-from argos_agent.routing.effort import EffortLevel
+from argos.routing.effort import EffortLevel
 ...
 p.add_argument("--effort", choices=[e.value for e in EffortLevel],
                default=EffortLevel.MEDIUM.value,
@@ -529,7 +529,7 @@ components = build_components(..., effort=effort)
 `app_factory.py:build_components`:
 
 ```python
-from argos_agent.routing.effort import EffortLevel, effort_settings
+from argos.routing.effort import EffortLevel, effort_settings
 ...
 def build_components(*, ..., effort: EffortLevel = EffortLevel.MEDIUM) -> AppComponents:
     ...
@@ -637,8 +637,8 @@ yield CostUpdate(
 `app_factory.py:AppComponents` 加 `router` 字段 + `build_components` 构造 router:
 
 ```python
-from argos_agent.routing.config import load_routing
-from argos_agent.routing.router import ModelRouter
+from argos.routing.config import load_routing
+from argos.routing.router import ModelRouter
 ...
 def build_components(*, ..., effort=EffortLevel.MEDIUM) -> AppComponents:
     ...
@@ -814,14 +814,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-from argos_agent.approval import ApprovalLevel
-from argos_agent.config import save_config
-from argos_agent.core.loop import AgentLoop, LoopConfig
-from argos_agent.core.models import CredentialPool, ModelClient
-from argos_agent.routing.categorizer import TaskCategory
-from argos_agent.routing.config import RoutingConfig, set_category
-from argos_agent.routing.router import ModelRouter
-from argos_agent.tui.events import (
+from argos.approval import ApprovalLevel
+from argos.config import save_config
+from argos.core.loop import AgentLoop, LoopConfig
+from argos.core.models import CredentialPool, ModelClient
+from argos.routing.categorizer import TaskCategory
+from argos.routing.config import RoutingConfig, set_category
+from argos.routing.router import ModelRouter
+from argos.tui.events import (
     ApprovalRequest, CostUpdate, EventBus, VerifyVerdict,
 )
 
@@ -839,19 +839,19 @@ def _sse_transport(text_pieces: list[str]) -> httpx.MockTransport:
 
 
 def _client(name: str, text: str) -> ModelClient:
-    from argos_agent.core.models import ModelTier
+    from argos.core.models import ModelTier
     tier = ModelTier(name=name, model=f"{name}-model", base_url="https://x/a", max_tokens=4096)
     return ModelClient(tier=tier, pool=CredentialPool(["key"]), transport=_sse_transport([text]))
 
 
 def test_e2e_routing_strong_tier_forces_confirm(tmp_path):
     """三档切换 + strong→CONFIRM 端到端铁证。"""
-    from argos_agent.sandbox.broker import CapabilityBroker
-    from argos_agent.sandbox.egress import EgressPolicy
-    from argos_agent.sandbox.executor import SeatbeltExecutor
-    from argos_agent.tools.receipts import ReceiptSigner
-    from argos_agent.core.verify_gate import Verifier
-    from argos_agent.memory.store import ArgosStore
+    from argos.sandbox.broker import CapabilityBroker
+    from argos.sandbox.egress import EgressPolicy
+    from argos.sandbox.executor import SeatbeltExecutor
+    from argos.tools.receipts import ReceiptSigner
+    from argos.core.verify_gate import Verifier
+    from argos.memory.store import ArgosStore
 
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -955,7 +955,7 @@ TUI: `/routing` to see last 10 calls; `/routing set verify strong` to update.
 
 ```bash
 rtk pytest tests/ -q
-rtk python -c "from argos_agent.routing import categorize, TaskCategory; print(categorize(code='edit_file(...)', phase='act', step=3))"
+rtk python -c "from argos.routing import categorize, TaskCategory; print(categorize(code='edit_file(...)', phase='act', step=3))"
 ```
 
 ### 9.4 Commit

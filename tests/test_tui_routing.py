@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.routing.categorizer import TaskCategory
-from argos_agent.routing.config import (
+from argos.routing.categorizer import TaskCategory
+from argos.routing.config import (
     RoutingConfig, load_routing, set_category,
 )
-from argos_agent.tui.commands import parse_slash
+from argos.tui.commands import parse_slash
 
 
 def test_parse_slash_routing_known():
@@ -48,7 +48,7 @@ def test_routing_config_set_unknown_tier_raises(tmp_path):
 
 
 def test_routing_config_set_invalid_category_raises(tmp_path):
-    from argos_agent.config import ConfigError
+    from argos.config import ConfigError
     with pytest.raises(ValueError):
         # 不用 set_category 路径,直接构造 TaskCategory 会 ValueError
         TaskCategory("foo_bar")
@@ -74,7 +74,7 @@ def test_routing_config_force_confirm_helper():
 def test_activity_panel_cost_update_renders_tier_label():
     """ActivityPanel.on_cost 签名接受 tier_name kw(无 Textual app 跑不动 _set,只检签名)。"""
     import inspect
-    from argos_agent.tui.widgets.activity_panel import ActivityPanel
+    from argos.tui.widgets.activity_panel import ActivityPanel
     sig = inspect.signature(ActivityPanel.on_cost)
     assert "tier_name" in sig.parameters
     assert sig.parameters["tier_name"].default == ""
@@ -83,7 +83,7 @@ def test_activity_panel_cost_update_renders_tier_label():
 def test_activity_panel_on_cost_default_no_tier_label():
     """tier_name 缺省时不应出 [?] 之类的占位标签(签名默认值 = "" 防误打)。"""
     import inspect
-    from argos_agent.tui.widgets.activity_panel import ActivityPanel
+    from argos.tui.widgets.activity_panel import ActivityPanel
     sig = inspect.signature(ActivityPanel.on_cost)
     # 默认值是空串,on_cost 内部据此判定不打 [xxx] 标签
     assert sig.parameters["tier_name"].default == ""

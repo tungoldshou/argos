@@ -1,4 +1,4 @@
-from argos_agent.core.honesty import HONESTY_SYSTEM
+from argos.core.honesty import HONESTY_SYSTEM
 
 
 def test_honesty_mentions_propose_workflow_and_ops():

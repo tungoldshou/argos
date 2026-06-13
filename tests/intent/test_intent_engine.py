@@ -17,8 +17,8 @@ from __future__ import annotations
 import json
 import pytest
 
-from argos_agent.intent.card import IntentCard
-from argos_agent.intent.engine import IntentEngine
+from argos.intent.card import IntentCard
+from argos.intent.engine import IntentEngine
 
 
 # ─── FakeModel ─────────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 import httpx
 import pytest
 
-from argos_agent.core.recovery import ClassifiedError, classify_error, jittered_backoff
+from argos.core.recovery import ClassifiedError, classify_error, jittered_backoff
 
 
 def _http_status_error(status: int, body: str = "") -> httpx.HTTPStatusError:

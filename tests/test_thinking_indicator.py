@@ -8,8 +8,8 @@ v3 更新点:
 """
 import pytest
 from textual.app import App, ComposeResult
-from argos_agent.tui.theme import ARGOS_NIGHT
-from argos_agent.tui.widgets.thinking import ThinkingIndicator, _FRAMES, _BLINK_GLYPHS
+from argos.tui.theme import ARGOS_NIGHT
+from argos.tui.widgets.thinking import ThinkingIndicator, _FRAMES, _BLINK_GLYPHS
 
 
 class _H(App):

@@ -8,7 +8,7 @@
 
 让 Argos 接受**语音输入**与**图片输入**。诚实前提：旗舰形态是终端 TUI（Textual），
 终端做不了 GUI 式的「按住说话 / 剪贴板直接贴图」，所以输入能力做成**与界面无关的共享内核**
-（`argos_agent/input/`），TUI 先用、桌面壳成熟后复用同一套。
+（`argos/input/`），TUI 先用、桌面壳成熟后复用同一套。
 
 管线产出两样东西：一段**文本**（语音转写并入 prompt，走老路）和一组**图片附件**
 （走方案 C 的边车 `attachments` 字段，只在协议适配器一处物化成 wire 格式）。
@@ -29,7 +29,7 @@
 
 ## `input/` 子包
 
-`argos_agent/input/` —— 高内聚、可独立测试、纯宿主进程（沙箱外）。
+`argos/input/` —— 高内聚、可独立测试、纯宿主进程（沙箱外）。
 
 | 模块 | 公开 API | 职责 / 诚实边界 |
 |---|---|---|
@@ -45,16 +45,16 @@
 
 零回归是硬约束：无附件的消息行为与改动前**逐字节一致**（`content` 仍是裸字符串）。
 
-- **能力位**：`ModelTier.multimodal: bool`（[`core/models.py`](../argos_agent/core/models.py)），来自 config / setup 探针，默认 `False`。
-- **门禁**（[`core/loop.py`](../argos_agent/core/loop.py) `run()`）：存在附件但 `tier.multimodal=False` →
+- **能力位**：`ModelTier.multimodal: bool`（[`core/models.py`](../argos/core/models.py)），来自 config / setup 探针，默认 `False`。
+- **门禁**（[`core/loop.py`](../argos/core/loop.py) `run()`）：存在附件但 `tier.multimodal=False` →
   抛诚实错误「当前模型不支持图像输入」，顶层兜底转 `Error` 事件——**绝不静默剥图、绝不假装看到**。
 - **注入**：通过门禁后，附件挂在首条 user 消息的 `attachments` 边车字段（`content` 保持字符串）。
-- **物化**（[`core/protocols.py`](../argos_agent/core/protocols.py) `payload()` 一处）：
+- **物化**（[`core/protocols.py`](../argos/core/protocols.py) `payload()` 一处）：
   - Anthropic：`content` → `[{"type":"text",...}, {"type":"image","source":{"type":"base64",...}}]`
   - OpenAI：`content` → `[{"type":"text",...}, {"type":"image_url","image_url":{"url":"data:<mime>;base64,..."}}]`
   - `_coalesce_consecutive_roles` 合并同 role 时 `attachments` 列表一并 concat，不触发崩溃。
 
-## TUI 接线（[`tui/app.py`](../argos_agent/tui/app.py) + [`tui/widgets/prompt.py`](../argos_agent/tui/widgets/prompt.py)）
+## TUI 接线（[`tui/app.py`](../argos/tui/app.py) + [`tui/widgets/prompt.py`](../argos/tui/widgets/prompt.py)）
 
 **语音（已接）**：`PromptArea` 在输入框为空时拦截空格，发 `VoiceToggle` 消息；
 `app.on_prompt_area_voice_toggle → _voice_toggle` 开/停录音，转写在 `asyncio.to_thread` 上跑，

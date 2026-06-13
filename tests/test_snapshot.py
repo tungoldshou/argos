@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.core.snapshot import RunSnapshot, RestoreResult
+from argos.core.snapshot import RunSnapshot, RestoreResult
 
 
 def test_take_records_existing_files(tmp_path: Path):

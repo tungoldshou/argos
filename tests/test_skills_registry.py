@@ -7,13 +7,13 @@ from typing import Literal
 
 import pytest
 
-from argos_agent.skills_runtime.analysis import (
+from argos.skills_runtime.analysis import (
     AnalysisSkill,
     AnalysisSkillResult,
     AnalysisSkillContext,
     Finding,
 )
-from argos_agent.skills_runtime.registry import (
+from argos.skills_runtime.registry import (
     register,
     get,
     list_all,

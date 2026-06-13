@@ -25,7 +25,7 @@ seed_corpus.py` 在 conftest / test 启动时按需生成(tmp_path / `ARGOS_EVAL
 ## 1. 任务 T1:corpus schema + 任务解析
 
 ### 1.1 目标
-- 新文件 `argos_agent/eval/corpus.py`:`load_task(task_id, *, root=None) -> EvalTask` /
+- 新文件 `argos/eval/corpus.py`:`load_task(task_id, *, root=None) -> EvalTask` /
   `list_tasks(*, root=None) -> list[EvalTask]` / `corpus_version(root=None) -> int`
 - `EvalTask` dataclass(id / category / difficulty / title / goal / verify_cmd /
   setup_cmd / expected_files / working_dir)
@@ -34,7 +34,7 @@ seed_corpus.py` 在 conftest / test 启动时按需生成(tmp_path / `ARGOS_EVAL
 
 ### 1.2 实现
 ```python
-# argos_agent/eval/corpus.py
+# argos/eval/corpus.py
 from __future__ import annotations
 import os, json
 from dataclasses import dataclass, field
@@ -130,7 +130,7 @@ feat(eval): #7 T1 corpus schema + 任务解析 + 14 种子生成 fixture
 ## 2. 任务 T2:Eval runner 核心 `run()`
 
 ### 2.1 目标
-- 新文件 `argos_agent/eval/runner.py`
+- 新文件 `argos/eval/runner.py`
 - `EvalTask` / `EvalResult` dataclass
 - `EvalRunner` 类:接受 `WorktreeManager` / `base_dir` / `budget_s` / `budget_cost_usd`
 - `run(task, model_tier) -> EvalResult`:走 worktree + 真 AgentLoop + 真 verify
@@ -139,7 +139,7 @@ feat(eval): #7 T1 corpus schema + 任务解析 + 14 种子生成 fixture
 
 ### 2.2 实现(节选关键)
 ```python
-# argos_agent/eval/runner.py
+# argos/eval/runner.py
 @dataclass(frozen=True, slots=True)
 class EvalResult:
     task_id: str
@@ -273,7 +273,7 @@ feat(eval): #7 T3 WorktreeManager 集成 + keep_worktree 调试 flag
 ## 4. 任务 T4:Result JSONL 持久化
 
 ### 4.1 目标
-- 新文件 `argos_agent/eval/results.py`
+- 新文件 `argos/eval/results.py`
 - `append(result, *, base_dir) -> None`:写 `~/.argos/eval/runs/<date>/<run_id>.jsonl`
 - `list_runs(*, base_dir, date=None, limit=50) -> list[EvalResult]`
 - `load_run(run_id, *, base_dir) -> EvalResult | None`
@@ -281,12 +281,12 @@ feat(eval): #7 T3 WorktreeManager 集成 + keep_worktree 调试 flag
 
 ### 4.2 实现
 ```python
-# argos_agent/eval/results.py
+# argos/eval/results.py
 from __future__ import annotations
 import json, time
 from dataclasses import asdict
 from pathlib import Path
-from argos_agent.eval.runner import EvalResult
+from argos.eval.runner import EvalResult
 
 _RUNS_DIR = Path.home() / ".argos" / "eval" / "runs"
 _WRITE_LOCK = threading.Lock()
@@ -395,18 +395,18 @@ feat(eval): #7 T4 Result JSONL 持久化 + list/load/summary
 ## 5. 任务 T5:A/B 对比 + 报告生成器
 
 ### 5.1 目标
-- 新文件 `argos_agent/eval/compare.py`
+- 新文件 `argos/eval/compare.py`
 - `run_pair(runner, task, *, model_a, model_b) -> tuple[EvalResult, EvalResult]`:同 task 两遍
 - `generate_report(a, b) -> str`:side-by-side markdown 报告
 - `write_report(a, b, *, base=None) -> Path`:落 `~/.argos/eval/reports/ab-<task_id>-<date>.md`
 
 ### 5.2 实现
 ```python
-# argos_agent/eval/compare.py
+# argos/eval/compare.py
 from __future__ import annotations
 import time
 from pathlib import Path
-from argos_agent.eval.runner import EvalResult, EvalRunner, EvalTask
+from argos.eval.runner import EvalResult, EvalRunner, EvalTask
 
 def run_pair(runner: EvalRunner, task: EvalTask, *, model_a: str, model_b: str
              ) -> tuple[EvalResult, EvalResult]:
@@ -493,22 +493,22 @@ feat(eval): #7 T5 A/B run_pair + 报告生成器(md) + write_report
 ## 6. 任务 T6:`argos eval` CLI 子命令
 
 ### 6.1 目标
-- 改 `argos_agent/__main__.py` 加 subparser `eval`
-- 新文件 `argos_agent/cli/eval.py`:`cmd_list` / `cmd_run` / `cmd_compare` / `cmd_corpus`
+- 改 `argos/__main__.py` 加 subparser `eval`
+- 新文件 `argos/cli/eval.py`:`cmd_list` / `cmd_run` / `cmd_compare` / `cmd_corpus`
 - 用 argparse 子命令,无 click
 - `--model <tier>` / `--budget <usd>` / `--budget-s <seconds>` / `--corpus <dir>` flags
 
 ### 6.2 实现
 ```python
-# argos_agent/cli/eval.py
+# argos/cli/eval.py
 from __future__ import annotations
 import argparse
 from pathlib import Path
-from argos_agent.eval.corpus import list_tasks, load_task, corpus_version
-from argos_agent.eval.runner import EvalRunner
-from argos_agent.eval.results import list_runs, load_run
-from argos_agent.eval.compare import run_pair, write_report
-from argos_agent.daemon.worktree import WorktreeManager
+from argos.eval.corpus import list_tasks, load_task, corpus_version
+from argos.eval.runner import EvalRunner
+from argos.eval.results import list_runs, load_run
+from argos.eval.compare import run_pair, write_report
+from argos.daemon.worktree import WorktreeManager
 
 def _format_run(r) -> str:
     cost = f"${r.cost_usd:.4f}" if r.cost_usd is not None else "$N/A"
@@ -561,7 +561,7 @@ def cmd_corpus(args) -> int:
             print(f"    {t.id:<32}  {t.difficulty}")
     return 0
 
-# argos_agent/__main__.py 扩 subparser
+# argos/__main__.py 扩 subparser
 sp_eval = sub.add_parser("eval", help="Agent 自我评估 + A/B 对比(#7)")
 sp_eval_sp = sp_eval.add_subparsers(dest="eval_command")
 sp_eval_sp.add_parser("list", help="列最近 run").set_defaults(func=lambda a: cmd_list(a))
@@ -616,7 +616,7 @@ feat(eval): #7 T6 argos eval CLI 子命令(list/run/compare/corpus)
 ```python
 # tui/app.py
 async def _eval_cmd(self, log, arg):
-    from argos_agent.eval.results import list_runs, summary
+    from argos.eval.results import list_runs, summary
     if not arg.strip():
         runs = list_runs(limit=20)
         if not runs:
@@ -679,10 +679,10 @@ feat(tui): #7 T7 /eval slash 列最近 + 摘要(7d pass rate)
 ```python
 # tui/app.py
 async def _eval_run_cmd(self, log, task_id: str):
-    from argos_agent.eval.corpus import load_task
-    from argos_agent.eval.runner import EvalRunner
-    from argos_agent.eval.results import append as append_result
-    from argos_agent.daemon.worktree import WorktreeManager
+    from argos.eval.corpus import load_task
+    from argos.eval.runner import EvalRunner
+    from argos.eval.results import append as append_result
+    from argos.daemon.worktree import WorktreeManager
     try:
         task = load_task(task_id)
     except FileNotFoundError as e:
@@ -690,7 +690,7 @@ async def _eval_run_cmd(self, log, task_id: str):
         return
     await log.append_line(f"[eval] task={task.id} category={task.category} difficulty={task.difficulty}")
     # 用 config active model(本期不热切换)
-    from argos_agent import config as _cfg
+    from argos import config as _cfg
     model_tier = _cfg.load_config().active if _cfg._has_config_file() else "default"
     wm = WorktreeManager(base_dir=Path.home() / ".argos" / "eval" / "worktrees")
     runner = EvalRunner(worktree=wm, base_dir=Path.home() / ".argos" / "eval")
@@ -705,10 +705,10 @@ async def _eval_run_cmd(self, log, task_id: str):
     )
 
 async def _eval_compare_cmd(self, log, a: str, b: str):
-    from argos_agent.eval.corpus import load_task
-    from argos_agent.eval.runner import EvalRunner
-    from argos_agent.eval.compare import run_pair, write_report
-    from argos_agent.daemon.worktree import WorktreeManager
+    from argos.eval.corpus import load_task
+    from argos.eval.runner import EvalRunner
+    from argos.eval.compare import run_pair, write_report
+    from argos.daemon.worktree import WorktreeManager
     # 解析 a/b:<id>:<model> 或纯 run_id
     def _parse(spec: str) -> tuple[str | None, str | None]:
         if ":" in spec:

@@ -1,8 +1,8 @@
 # tests/test_code_action_block.py
 import pytest
 from textual.app import App, ComposeResult
-from argos_agent.tui.theme import ARGOS_NIGHT
-from argos_agent.tui.widgets.code_action import CodeActionBlock
+from argos.tui.theme import ARGOS_NIGHT
+from argos.tui.widgets.code_action import CodeActionBlock
 
 
 class _H(App):

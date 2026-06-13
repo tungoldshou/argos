@@ -2,11 +2,11 @@
 """批3 Task 11:长上下文压缩——溢出触发 compact_messages + 重试;store 压缩保留最近 N。"""
 import pytest
 
-from argos_agent.core.loop import AgentLoop, LoopConfig
-from argos_agent.core.verify_gate import Verdict
-from argos_agent.sandbox.backend import ExecResult
-from argos_agent.tui.events import EventBus
-from argos_agent.memory.store import ArgosStore
+from argos.core.loop import AgentLoop, LoopConfig
+from argos.core.verify_gate import Verdict
+from argos.sandbox.backend import ExecResult
+from argos.tui.events import EventBus
+from argos.memory.store import ArgosStore
 
 
 class _OverflowThenOkModel:

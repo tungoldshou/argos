@@ -5,7 +5,7 @@
 
 同时验证:
 1. round-trip:serialize → deserialize 等值
-2. 架构契约:argos_agent/core/ 与 argos_agent/protocol/ 源文件中不含 'tui.events' 字样
+2. 架构契约:argos/core/ 与 argos/protocol/ 源文件中不含 'tui.events' 字样
    (用文本扫描实现,防回归)
 """
 from __future__ import annotations
@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-import argos_agent
-import argos_agent.protocol.events as PE
+import argos
+import argos.protocol.events as PE
 
 
 # ── 辅助 ──────────────────────────────────────────────────────────────────────
@@ -355,7 +355,7 @@ def test_pruned_event_roundtrip():
 # ── HookFired ─────────────────────────────────────────────────────────────────
 
 def test_hook_fired_golden():
-    from argos_agent.hooks.events import HookFired
+    from argos.hooks.events import HookFired
     ev = HookFired(
         event_name="PreToolUse", command="echo ok",
         success=True, returncode=0, elapsed_ms=42,
@@ -367,7 +367,7 @@ def test_hook_fired_golden():
 
 
 def test_hook_fired_roundtrip():
-    from argos_agent.hooks.events import HookFired
+    from argos.hooks.events import HookFired
     ev = HookFired(
         event_name="PostToolUse", command="black .",
         success=False, returncode=1, elapsed_ms=100,
@@ -380,7 +380,7 @@ def test_hook_fired_roundtrip():
 # ── LspServerEvent ────────────────────────────────────────────────────────────
 
 def test_lsp_server_event_golden():
-    from argos_agent.lsp.events import LspServerEvent
+    from argos.lsp.events import LspServerEvent
     ev = LspServerEvent(
         server_name="python", status="ready",
         command="pyright --stdio", exit_code=None,
@@ -393,7 +393,7 @@ def test_lsp_server_event_golden():
 
 
 def test_lsp_server_event_roundtrip():
-    from argos_agent.lsp.events import LspServerEvent
+    from argos.lsp.events import LspServerEvent
     ev = LspServerEvent(server_name="ts", status="crash", exit_code=1, elapsed_ms=0)
     back = _round(ev)
     assert back.status == "crash" and back.exit_code == 1
@@ -402,7 +402,7 @@ def test_lsp_server_event_roundtrip():
 # ── LspDiagnosticEvent ────────────────────────────────────────────────────────
 
 def test_lsp_diagnostic_event_golden():
-    from argos_agent.lsp.events import LspDiagnosticEvent
+    from argos.lsp.events import LspDiagnosticEvent
     ev = LspDiagnosticEvent(
         server_name="python", uri="file:///a.py", count=2,
         severity_counts={"error": 1, "warning": 1}, cached=False, cwd="/ws",
@@ -414,7 +414,7 @@ def test_lsp_diagnostic_event_golden():
 
 
 def test_lsp_diagnostic_event_roundtrip():
-    from argos_agent.lsp.events import LspDiagnosticEvent
+    from argos.lsp.events import LspDiagnosticEvent
     ev = LspDiagnosticEvent(server_name="ts", uri="file:///b.ts", count=0,
                             severity_counts={}, cached=True)
     back = _round(ev)
@@ -424,13 +424,13 @@ def test_lsp_diagnostic_event_roundtrip():
 # ── SkillRunStart ─────────────────────────────────────────────────────────────
 
 def test_skill_run_start_golden():
-    from argos_agent.skills_runtime.events import SkillRunStart
+    from argos.skills_runtime.events import SkillRunStart
     ev = SkillRunStart(skill_name="security-review", args={"path": "."}, cwd="/ws")
     _golden(ev, {"skill_name": "security-review", "cwd": "/ws"})
 
 
 def test_skill_run_start_roundtrip():
-    from argos_agent.skills_runtime.events import SkillRunStart
+    from argos.skills_runtime.events import SkillRunStart
     ev = SkillRunStart(skill_name="simplify", args={}, cwd="", timestamp_ms=0)
     back = _round(ev)
     assert back.skill_name == "simplify"
@@ -439,7 +439,7 @@ def test_skill_run_start_roundtrip():
 # ── SkillRunEnd ───────────────────────────────────────────────────────────────
 
 def test_skill_run_end_golden():
-    from argos_agent.skills_runtime.events import SkillRunEnd
+    from argos.skills_runtime.events import SkillRunEnd
     ev = SkillRunEnd(
         skill_name="security-review", verdict="passed",
         duration_ms=1234, finding_count=0, error_count=0, cwd="/ws",
@@ -451,7 +451,7 @@ def test_skill_run_end_golden():
 
 
 def test_skill_run_end_roundtrip():
-    from argos_agent.skills_runtime.events import SkillRunEnd
+    from argos.skills_runtime.events import SkillRunEnd
     ev = SkillRunEnd(skill_name="x", verdict="failed",
                      duration_ms=50, finding_count=3, error_count=1)
     back = _round(ev)
@@ -461,7 +461,7 @@ def test_skill_run_end_roundtrip():
 # ── ToolReceipt (嵌套 dataclass) ──────────────────────────────────────────────
 
 def test_tool_receipt_roundtrip_keeps_receipt_dataclass():
-    from argos_agent.tools.receipts import Receipt, ReceiptSigner
+    from argos.tools.receipts import Receipt, ReceiptSigner
     signer = ReceiptSigner(key=b"golden-test")
     rec = signer.sign(action="write_file", args={"path": "/x.py"}, result="ok", exit_code=0)
     ev = PE.ToolReceipt(receipt=rec)
@@ -474,17 +474,17 @@ def test_tool_receipt_roundtrip_keeps_receipt_dataclass():
 # ── VerifyVerdict (嵌套 dataclass) ────────────────────────────────────────────
 
 def test_verify_verdict_passed_roundtrip():
-    from argos_agent.core.verify_gate import Verdict
+    from argos.core.verify_gate import Verdict
     v = Verdict.passed(detail="all green", verify_cmd="pytest -q", attempts=1)
     ev = PE.VerifyVerdict(verdict=v)
     back = _round(ev)
-    from argos_agent.core.verify_gate import Verdict as _V
+    from argos.core.verify_gate import Verdict as _V
     assert isinstance(back.verdict, _V)
     assert back.verdict.status == "passed"
 
 
 def test_verify_verdict_unverifiable_roundtrip():
-    from argos_agent.core.verify_gate import Verdict
+    from argos.core.verify_gate import Verdict
     v = Verdict.unverifiable(detail="no cmd", tampered=[], attempts=0)
     ev = PE.VerifyVerdict(verdict=v)
     back = _round(ev)
@@ -646,12 +646,12 @@ def _scan_for_tui_events_import(dirpath: str, *, skip_dirs: tuple[str, ...] = ()
 
 
 def test_production_no_tui_events_import():
-    """argos_agent/ 全树(tui/ 自身除外)零 tui.events 引用(防回归,零豁免)。
+    """argos/ 全树(tui/ 自身除外)零 tui.events 引用(防回归,零豁免)。
 
     tui/ 包内部(app.py/fakeloop.py 等)允许走自家 shim;其余一切生产代码
-    必须 import argos_agent.protocol.events。
+    必须 import argos.protocol.events。
     """
-    root = Path(argos_agent.__file__).parent
+    root = Path(argos.__file__).parent
     hits = _scan_for_tui_events_import(str(root), skip_dirs=("tui",))
     assert not hits, (
         "生产代码中发现 tui.events 引用(应改用 protocol.events):\n"
@@ -660,8 +660,8 @@ def test_production_no_tui_events_import():
 
 
 def test_protocol_no_tui_events_import():
-    """argos_agent/protocol/ 中不应有 tui.events import(防循环依赖)。"""
-    root = Path(argos_agent.__file__).parent / "protocol"
+    """argos/protocol/ 中不应有 tui.events import(防循环依赖)。"""
+    root = Path(argos.__file__).parent / "protocol"
     hits = _scan_for_tui_events_import(str(root))
     assert not hits, (
         "protocol/ 中发现 tui.events import(循环依赖风险):\n"

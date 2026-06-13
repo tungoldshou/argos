@@ -1,5 +1,5 @@
 """tests/workflow/test_tool.py — propose_workflow 纯工具注册 + 深度护栏测试."""
-from argos_agent import tools
+from argos import tools
 
 
 def test_propose_workflow_in_namespace_and_returns_receipt():

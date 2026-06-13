@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.eval.corpus import corpus_version, list_tasks, load_task
+from argos.eval.corpus import corpus_version, list_tasks, load_task
 
 from tests.eval._seed_corpus import write_seed_corpus
 

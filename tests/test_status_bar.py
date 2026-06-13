@@ -11,8 +11,8 @@
 import pytest
 from textual.app import App, ComposeResult
 
-from argos_agent.tui.theme import ARGOS_NIGHT
-from argos_agent.tui.widgets.status_bar import StatusBar
+from argos.tui.theme import ARGOS_NIGHT
+from argos.tui.widgets.status_bar import StatusBar
 
 
 class _H(App):

@@ -8,8 +8,8 @@ import json
 
 import pytest
 
-from argos_agent.protocol.envelope import EventEnvelope, wrap_event
-from argos_agent.protocol.events import (
+from argos.protocol.envelope import EventEnvelope, wrap_event
+from argos.protocol.events import (
     TokenDelta, PhaseChange, CostUpdate, Error,
     serialize_event, deserialize_event,
 )

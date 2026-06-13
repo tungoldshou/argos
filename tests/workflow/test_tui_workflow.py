@@ -6,11 +6,11 @@
 """
 import pytest
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel
-from argos_agent.tui.app import ArgosApp
-from argos_agent.tui.events import WorkflowDone, WorkflowProgress, WorkflowProposed
-from argos_agent.tui.fakeloop import FakeLoop
-from argos_agent.tui.widgets.workflow_panel import WorkflowPanel
+from argos.approval import ApprovalGate, ApprovalLevel
+from argos.tui.app import ArgosApp
+from argos.tui.events import WorkflowDone, WorkflowProgress, WorkflowProposed
+from argos.tui.fakeloop import FakeLoop
+from argos.tui.widgets.workflow_panel import WorkflowPanel
 
 
 @pytest.mark.asyncio
@@ -41,7 +41,7 @@ async def test_workflow_proposed_pushes_modal_under_confirm():
             preview="预览内容 [VOTE]", call_id="c2"))
         await pilot.pause()
         # TUI v2:CONFIRM 档在流内渲染 InlineChoice(不再 push 居中模态)
-        from argos_agent.tui.widgets.inline_choice import InlineChoice
+        from argos.tui.widgets.inline_choice import InlineChoice
         choices = list(app.query(InlineChoice))
         assert choices, "CONFIRM 档应在流内渲染工作流审批 InlineChoice"
         body = str(choices[0].query_one("#ic-body").render())
@@ -77,7 +77,7 @@ async def test_workflow_confirm_callback_responds_on_shared_gate():
         # 先在 gate 上挂一个与 call_id 对应的待批项(模拟 loop 侧 gate.request)。
         import asyncio
         loop = asyncio.get_running_loop()
-        from argos_agent.approval import _Pending
+        from argos.approval import _Pending
         fut: asyncio.Future = loop.create_future()
         gate._pending["c4"] = _Pending(call_id="c4",
             payload={"action": "run_workflow", "args": {}},

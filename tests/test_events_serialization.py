@@ -8,7 +8,7 @@ import dataclasses
 
 import pytest
 
-from argos_agent.tui import events as E
+from argos.tui import events as E
 
 
 ALL_EVENT_KINDS = {
@@ -127,7 +127,7 @@ def test_error_default_chain_is_empty_list():
 
 # ── M7:嵌套 dataclass(Receipt/Verdict)round-trip 回真对象,不是 dict ──────────────
 def test_tool_receipt_roundtrip_keeps_receipt_dataclass():
-    from argos_agent.tools.receipts import Receipt, ReceiptSigner
+    from argos.tools.receipts import Receipt, ReceiptSigner
     signer = ReceiptSigner(key=b"m7-test")
     rec = signer.sign(action="run_command", args={"command": "echo hi"},
                       result="hi", exit_code=0)
@@ -143,7 +143,7 @@ def test_tool_receipt_roundtrip_keeps_receipt_dataclass():
 
 
 def test_verify_verdict_roundtrip_keeps_verdict_dataclass():
-    from argos_agent.core.verify_gate import Verdict
+    from argos.core.verify_gate import Verdict
     v = Verdict.failed(detail="[exit_code=1]\nboom", verify_cmd="pytest -q", attempts=2)
     ev = E.VerifyVerdict(verdict=v)
     back = E.deserialize_event(E.serialize_event(ev))
@@ -155,7 +155,7 @@ def test_verify_verdict_roundtrip_keeps_verdict_dataclass():
 
 
 def test_verify_verdict_unverifiable_roundtrip_with_tampered():
-    from argos_agent.core.verify_gate import Verdict
+    from argos.core.verify_gate import Verdict
     v = Verdict.unverifiable(detail="受保护文件被改", tampered=["a.py", "b.py"], attempts=1)
     back = E.deserialize_event(E.serialize_event(E.VerifyVerdict(verdict=v)))
     assert isinstance(back.verdict, Verdict)
@@ -166,13 +166,13 @@ def test_verify_verdict_unverifiable_roundtrip_with_tampered():
 # ── Hooks(spec §2.4):HookFired 经 EventBus 走 TUI 活动栏 ─────────────────────
 def test_hook_fired_in_kind_to_class():
     """HookFired 注册到 _KIND_TO_CLASS(否则 deserialize 抛 ValueError,events.py:259)。"""
-    from argos_agent.hooks.events import HookFired
+    from argos.hooks.events import HookFired
     assert E._KIND_TO_CLASS.get("hook_fired") is HookFired
 
 
 def test_hook_fired_serialize_roundtrip():
     """HookFired serialize → deserialize → 等价。"""
-    from argos_agent.hooks.events import HookFired
+    from argos.hooks.events import HookFired
     ev = HookFired(
         event_name="PreToolUse", command="echo ok",
         success=True, returncode=0, elapsed_ms=130,
@@ -190,19 +190,19 @@ def test_hook_fired_serialize_roundtrip():
 # ── LSP(spec 2026-06-06 §10.1):LspServerEvent / LspDiagnosticEvent ─────────
 def test_lsp_server_event_in_kind_to_class():
     """LspServerEvent 注册到 _KIND_TO_CLASS(否则 deserialize 抛 ValueError)。"""
-    from argos_agent.lsp.events import LspServerEvent
+    from argos.lsp.events import LspServerEvent
     assert E._KIND_TO_CLASS.get("lsp_server_event") is LspServerEvent
 
 
 def test_lsp_diagnostic_event_in_kind_to_class():
     """LspDiagnosticEvent 注册到 _KIND_TO_CLASS。"""
-    from argos_agent.lsp.events import LspDiagnosticEvent
+    from argos.lsp.events import LspDiagnosticEvent
     assert E._KIND_TO_CLASS.get("lsp_diagnostic_event") is LspDiagnosticEvent
 
 
 def test_lsp_server_event_serialize_roundtrip():
     """LspServerEvent serialize → deserialize → 等价。"""
-    from argos_agent.lsp.events import LspServerEvent
+    from argos.lsp.events import LspServerEvent
     ev = LspServerEvent(
         server_name="python", status="ready", command="pyright-langserver --stdio",
         exit_code=None, elapsed_ms=820, error=None, cwd="/ws", timestamp_ms=1234567,
@@ -222,7 +222,7 @@ def test_lsp_server_event_serialize_roundtrip():
 
 def test_lsp_diagnostic_event_serialize_roundtrip():
     """LspDiagnosticEvent serialize → deserialize → 等价。"""
-    from argos_agent.lsp.events import LspDiagnosticEvent
+    from argos.lsp.events import LspDiagnosticEvent
     ev = LspDiagnosticEvent(
         server_name="python", uri="file:///a.py", count=3,
         severity_counts={"error": 2, "warning": 1},

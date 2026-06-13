@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.__main__ import resolve_workspace
+from argos.__main__ import resolve_workspace
 
 
 # ── bug 1:workspace 默认 cwd ────────────────────────────────────────────────
@@ -40,9 +40,9 @@ class TestResolveWorkspace:
 @pytest.mark.asyncio
 async def test_sse_chinese_no_mojibake(tmp_path):
     """中文事件经 server SSE → DaemonClient.subscribe_events 解析后逐字符一致。"""
-    from argos_agent.daemon.manager import RunManager
-    from argos_agent.daemon.server import DaemonHTTPServer
-    from argos_agent.daemon.client import DaemonClient
+    from argos.daemon.manager import RunManager
+    from argos.daemon.server import DaemonHTTPServer
+    from argos.daemon.client import DaemonClient
 
     socket_path = tmp_path / "d.sock"
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
@@ -78,9 +78,9 @@ async def test_observer_promoted_after_owner_expiry_on_next_request(tmp_path):
     永远 observer,create_run 永久 403 session_readonly。
     """
     import asyncio
-    from argos_agent.daemon.manager import RunManager
-    from argos_agent.daemon.server import DaemonHTTPServer
-    from argos_agent.daemon.client import DaemonClient
+    from argos.daemon.manager import RunManager
+    from argos.daemon.server import DaemonHTTPServer
+    from argos.daemon.client import DaemonClient
 
     socket_path = tmp_path / "d.sock"
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")

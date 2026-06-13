@@ -4,7 +4,7 @@
 prompt injection 只能在 untrusted 段内活动,翻不到上面去;StreamingContextScrubber
 不得把围栏标记吐回 UI。
 """
-from argos_agent.core.honesty import (
+from argos.core.honesty import (
     HONESTY_SYSTEM,
     StreamingContextScrubber,
     compose_system,

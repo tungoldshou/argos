@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.tui.app import ArgosApp
-from argos_agent.tui.events import CodeAction, CodeResult
-from argos_agent.tui.fakeloop import FakeLoop
-from argos_agent.tui.widgets.code_action import CodeActionBlock
-from argos_agent.tui.widgets.transcript import SystemLine, Transcript, UserMessage
+from argos.tui.app import ArgosApp
+from argos.tui.events import CodeAction, CodeResult
+from argos.tui.fakeloop import FakeLoop
+from argos.tui.widgets.code_action import CodeActionBlock
+from argos.tui.widgets.transcript import SystemLine, Transcript, UserMessage
 
 # 各类会咬人的方括号内容(控制台 markup 视角下全是"非法标签")。
 _BRACKETY = "已点击 \"input[value='Google Search']\" [返回值] [1, 2, 3] list[str] [/not a tag]"

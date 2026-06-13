@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.permissions.audit import AuditLog, AUDIT_DIR, RETAIN_DAYS
+from argos.permissions.audit import AuditLog, AUDIT_DIR, RETAIN_DAYS
 
 
 def test_audit_log_creates_dir(tmp_path, monkeypatch):
     p = tmp_path / "audit"
-    monkeypatch.setattr("argos_agent.permissions.audit.AUDIT_DIR", p)
+    monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)
     log = AuditLog(session_id="s1")
     log.log(tool="x", args="y", decision="approved", trigger="level:auto", by="level", risk="low")
     assert p.exists()
@@ -22,7 +22,7 @@ def test_audit_log_creates_dir(tmp_path, monkeypatch):
 
 def test_audit_log_appends_jsonl(tmp_path, monkeypatch):
     p = tmp_path / "audit"
-    monkeypatch.setattr("argos_agent.permissions.audit.AUDIT_DIR", p)
+    monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)
     log = AuditLog(session_id="s1")
     log.log(tool="run_command", args="ls", decision="approved", trigger="soft_allow:^ls ", by="allowlist", risk="low")
     log.log(tool="run_command", args="rm -rf /", decision="denied", trigger="hard_rule:rm_rf_root", by="rule", risk="high")
@@ -39,7 +39,7 @@ def test_audit_log_appends_jsonl(tmp_path, monkeypatch):
 def test_audit_log_io_failure_continues(tmp_path, monkeypatch):
     """写失败(模拟 OSError)→ log warning + 继续(不抛,spec §2.7)。"""
     p = tmp_path / "audit"
-    monkeypatch.setattr("argos_agent.permissions.audit.AUDIT_DIR", p)
+    monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)
     log = AuditLog(session_id="s1")
     import builtins
     real_open = builtins.open
@@ -56,7 +56,7 @@ def test_audit_log_io_failure_continues(tmp_path, monkeypatch):
 
 def test_audit_log_secret_pattern_field(tmp_path, monkeypatch):
     p = tmp_path / "audit"
-    monkeypatch.setattr("argos_agent.permissions.audit.AUDIT_DIR", p)
+    monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)
     log = AuditLog(session_id="s1")
     log.log(
         tool="write_file", args="a.py", decision="asked", trigger="secret:AWS access key",
@@ -70,7 +70,7 @@ def test_audit_log_secret_pattern_field(tmp_path, monkeypatch):
 def test_audit_log_cleanup_old(tmp_path, monkeypatch):
     """30 天前文件启动时被删(D7 锁)。"""
     p = tmp_path / "audit"
-    monkeypatch.setattr("argos_agent.permissions.audit.AUDIT_DIR", p)
+    monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)
     p.mkdir()
     old_date = (datetime.now() - timedelta(days=31)).strftime("%Y-%m-%d")
     new_date = datetime.now().strftime("%Y-%m-%d")
@@ -85,7 +85,7 @@ def test_audit_log_cleanup_old(tmp_path, monkeypatch):
 def test_audit_log_user_deny_by_field(tmp_path, monkeypatch):
     """用户手动 deny 时 by='user'。"""
     p = tmp_path / "audit"
-    monkeypatch.setattr("argos_agent.permissions.audit.AUDIT_DIR", p)
+    monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)
     log = AuditLog(session_id="s1")
     log.log(tool="x", args="y", decision="denied", trigger="manual:1", by="user", risk="high")
     obj = json.loads(next(p.glob("approvals-*.jsonl")).read_text().strip())
@@ -95,7 +95,7 @@ def test_audit_log_user_deny_by_field(tmp_path, monkeypatch):
 def test_audit_log_schema_fields(tmp_path, monkeypatch):
     """audit row 字段全(必填 + 可选)。"""
     p = tmp_path / "audit"
-    monkeypatch.setattr("argos_agent.permissions.audit.AUDIT_DIR", p)
+    monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)
     log = AuditLog(session_id="s1")
     log.log(
         tool="run_command", args="rm -rf /", decision="denied",

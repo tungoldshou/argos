@@ -196,7 +196,7 @@
 ### 5.1 数据结构
 
 ```python
-# argos_agent/eval/runner.py
+# argos/eval/runner.py
 @dataclass(frozen=True, slots=True)
 class EvalTask:
     id: str
@@ -234,7 +234,7 @@ class EvalResult:
 ### 5.2 核心 API
 
 ```python
-# argos_agent/eval/runner.py
+# argos/eval/runner.py
 class EvalRunner:
     def __init__(self, *, worktree: WorktreeManager, base_dir: Path,
                  budget_s: int = 600, budget_cost_usd: float = 1.0):

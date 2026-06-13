@@ -1,7 +1,7 @@
 """CredentialPool(契约 §7;spec §3.4):least_used + exhausted-TTL 复活 + terminal vs transient 401。"""
 import pytest
 
-from argos_agent.core.models import CredentialPool
+from argos.core.models import CredentialPool
 
 
 def test_least_used_rotates(monkeypatch):
@@ -13,7 +13,7 @@ def test_least_used_rotates(monkeypatch):
 
 
 def test_exhausted_skipped_until_ttl(monkeypatch):
-    import argos_agent.core.models as m
+    import argos.core.models as m
     t = {"now": 1000.0}
     monkeypatch.setattr(m.time, "time", lambda: t["now"])
     pool = CredentialPool(["a", "b"])
@@ -49,7 +49,7 @@ def test_is_terminal_401_distinguishes():
 
 def test_all_exhausted_returns_least_anyway():
     # 全部 exhausted → 仍返一个(fail-open 取最早 expire 的,避免无 key 可用直接崩;由上层退避)。
-    import argos_agent.core.models as m
+    import argos.core.models as m
     pool = CredentialPool(["a", "b"])
     pool.mark_exhausted("a", ttl_s=10.0)
     pool.mark_exhausted("b", ttl_s=10.0)

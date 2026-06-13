@@ -8,9 +8,9 @@
 ## 组件1：intent/ — NL→Goal 意图引擎（2026-06-11）
 
 **交付文件：**
-- `argos_agent/intent/__init__.py`
-- `argos_agent/intent/card.py` — `IntentCard` frozen dataclass
-- `argos_agent/intent/engine.py` — `IntentEngine`（`parse` + `render_confirmation`）
+- `argos/intent/__init__.py`
+- `argos/intent/card.py` — `IntentCard` frozen dataclass
+- `argos/intent/engine.py` — `IntentEngine`（`parse` + `render_confirmation`）
 - `tests/intent/__init__.py`
 - `tests/intent/test_intent_engine.py` — 32 个测试全绿
 
@@ -24,7 +24,7 @@
 
 ```python
 # 推荐写法（loop.py run() 最前部）
-from argos_agent.intent import IntentEngine, IntentCard
+from argos.intent import IntentEngine, IntentCard
 
 intent_card: IntentCard = await IntentEngine().parse(goal, self._model)
 if intent_card.confirmation_required:
@@ -101,7 +101,7 @@ class IntentConfirmResponse:
 
 ---
 
-## 组件3：Trust Dial（`argos_agent/permissions/trust_dial.py`）
+## 组件3：Trust Dial（`argos/permissions/trust_dial.py`）
 
 ### 已完成
 
@@ -122,8 +122,8 @@ class IntentConfirmResponse:
 **集成方案**：在 `ApprovalGate`（或其上层装配函数）添加一个辅助方法：
 
 ```python
-from argos_agent.permissions.trust_dial import TrustLevel, to_approval_semantics
-from argos_agent.approval import ApprovalLevel
+from argos.permissions.trust_dial import TrustLevel, to_approval_semantics
+from argos.approval import ApprovalLevel
 
 def apply_trust_level(gate: ApprovalGate, trust: TrustLevel) -> None:
     """将 TrustLevel 映射到 ApprovalLevel 并写入 gate。"""
@@ -195,7 +195,7 @@ apply_trust_level(gate, trust)
 ## 组件2：verify/strategy.py — Verify Strategy Generator（2026-06-11）
 
 **交付文件：**
-- `argos_agent/verify/strategy.py` — `VerifyStrategy`、`WorkspaceFacts`、`probe_workspace`、`generate`
+- `argos/verify/strategy.py` — `VerifyStrategy`、`WorkspaceFacts`、`probe_workspace`、`generate`
 - `tests/verify_strategy/__init__.py`
 - `tests/verify_strategy/test_strategy.py` — 64 个测试全绿
 
@@ -203,14 +203,14 @@ apply_trust_level(gate, trust)
 
 ### A. loop verify 阶段接入点（`verify_cmd is None` 分支）
 
-**接入文件**：`argos_agent/core/loop.py`（禁区，集成阶段接线）
+**接入文件**：`argos/core/loop.py`（禁区，集成阶段接线）
 
 **接入位置**：loop verify 阶段，`verify_cmd is None → Verdict.unverifiable(...)` 的分支之前。
 
 **推荐接线伪代码**：
 
 ```python
-from argos_agent.verify.strategy import generate, probe_workspace, WorkspaceFacts
+from argos.verify.strategy import generate, probe_workspace, WorkspaceFacts
 
 if verify_cmd is None:
     ws_path = runtime.current().workspace

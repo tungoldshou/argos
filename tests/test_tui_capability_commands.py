@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.tui.app import ArgosApp
-from argos_agent.tui.commands import parse_slash
-from argos_agent.tui.fakeloop import FakeLoop
-from argos_agent.tui.widgets.transcript import Transcript
+from argos.tui.app import ArgosApp
+from argos.tui.commands import parse_slash
+from argos.tui.fakeloop import FakeLoop
+from argos.tui.widgets.transcript import Transcript
 
 
 async def _dispatch(app, text: str) -> str:
@@ -40,7 +40,7 @@ async def test_tools_lists_real_29_tools_grouped():
 @pytest.mark.asyncio
 async def test_skills_lists_builtin_library(tmp_path, monkeypatch):
     """#10 T6:/skills 重写为 curator 视图,列 installed + available + Recommended."""
-    import argos_agent.skills_curator.index as _idx
+    import argos.skills_curator.index as _idx
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     app = ArgosApp(loop_factory=lambda: FakeLoop())
     async with app.run_test() as pilot:

@@ -5,8 +5,8 @@
 """
 import pytest
 
-from argos_agent import runtime
-from argos_agent.tools import files
+from argos import runtime
+from argos.tools import files
 
 
 @pytest.fixture(autouse=True)
@@ -20,7 +20,7 @@ def reset_sandbox():
 def auto_approve_gate():
     """装一个自动批准的审批 gate —— runtime 测试验证的是项目模式/路径逻辑,不是审批流。
     缺 gate 时有副作用工具会 fail-closed 默认拒绝,影响 write_file 等工具的正常测试。"""
-    from argos_agent import approval
+    from argos import approval
     gate = approval.ApprovalGate(level=approval.ApprovalLevel.AUTO)
     token = approval.set_current_gate(gate)
     yield

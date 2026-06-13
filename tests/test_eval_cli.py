@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 
-# ── 必备:把 argos_agent/ 注入 sys.path,让 `python -m argos_agent eval ...` 跑通 ─
+# ── 必备:把 argos/ 注入 sys.path,让 `python -m argos eval ...` 跑通 ─
 
 
 # ── cmd_list ──────────────────────────────────────────────────────────
@@ -17,9 +17,9 @@ import pytest
 def test_eval_list_no_runs_prints_message(capsys, tmp_path, monkeypatch):
     """无 run 跑过 → 友好提示,不假绿。"""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from argos_agent.eval import results as _results
+    from argos.eval import results as _results
     monkeypatch.setattr(_results, "_RUNS_DIR", tmp_path / "eval" / "runs")
-    from argos_agent.cli import eval as cli
+    from argos.cli import eval as cli
     rc = cli.cmd_list(_ns(limit=20))
     assert rc == 0
     out = capsys.readouterr().out
@@ -29,10 +29,10 @@ def test_eval_list_no_runs_prints_message(capsys, tmp_path, monkeypatch):
 def test_eval_list_with_runs_prints_table(capsys, tmp_path, monkeypatch):
     """落 1 个 result → 表格渲出。"""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    from argos_agent.eval import results as _results
+    from argos.eval import results as _results
     monkeypatch.setattr(_results, "_RUNS_DIR", tmp_path / "eval" / "runs")
-    from argos_agent.eval.results import append
-    from argos_agent.eval.runner import EvalResult, PASS_PASSED
+    from argos.eval.results import append
+    from argos.eval.runner import EvalResult, PASS_PASSED
     now = 1717700000.0
     r = EvalResult(
         task_id="bug_fix_001_off_by_one", run_id="abc111abc111",
@@ -46,7 +46,7 @@ def test_eval_list_with_runs_prints_table(capsys, tmp_path, monkeypatch):
     # list_runs() 用 monkeypatch 后的 _RUNS_DIR = tmp_path/"eval"/"runs"
     # 两边都指向同一目录
     append(r, base=tmp_path / "eval")
-    from argos_agent.cli import eval as cli
+    from argos.cli import eval as cli
     rc = cli.cmd_list(_ns(limit=20))
     assert rc == 0
     out = capsys.readouterr().out
@@ -59,7 +59,7 @@ def test_eval_list_with_runs_prints_table(capsys, tmp_path, monkeypatch):
 
 
 def test_eval_corpus_prints_task_list(capsys, tmp_path, monkeypatch):
-    from argos_agent.cli import eval as cli
+    from argos.cli import eval as cli
     from tests.eval._seed_corpus import write_seed_corpus
     root = tmp_path / "corpus"
     write_seed_corpus(root)
@@ -80,11 +80,11 @@ def test_eval_corpus_prints_task_list(capsys, tmp_path, monkeypatch):
 
 def test_eval_run_invokes_runner(capsys, tmp_path, monkeypatch):
     """cmd_run 调 EvalRunner + 落 JSONL + 打印结果。"""
-    from argos_agent.cli import eval as cli
-    from argos_agent.daemon.worktree import WorktreeManager
+    from argos.cli import eval as cli
+    from argos.daemon.worktree import WorktreeManager
     from tests.eval._seed_corpus import write_seed_corpus
     from tests.eval._fakes import FakeWorktree, make_fake_loop_factory, make_fake_loop
-    from argos_agent.eval.runner import EvalRunner
+    from argos.eval.runner import EvalRunner
 
     root = tmp_path / "corpus"
     write_seed_corpus(root)
@@ -108,7 +108,7 @@ def test_eval_run_invokes_runner(capsys, tmp_path, monkeypatch):
 
 
 def test_eval_run_unknown_task_raises(capsys, tmp_path, monkeypatch):
-    from argos_agent.cli import eval as cli
+    from argos.cli import eval as cli
     rc = cli.cmd_run(_ns(task_id="nonexistent_task_999", model=None, budget=1.0, budget_s=600, keep_worktree=True))
     assert rc == 2
     err = capsys.readouterr().err
@@ -117,10 +117,10 @@ def test_eval_run_unknown_task_raises(capsys, tmp_path, monkeypatch):
 
 def test_eval_run_returns_nonzero_on_failure(capsys, tmp_path, monkeypatch):
     """弱模型跑挂(setup_failed / failed) → CLI 返非零。"""
-    from argos_agent.cli import eval as cli
+    from argos.cli import eval as cli
     from tests.eval._seed_corpus import write_seed_corpus
     from tests.eval._fakes import FakeWorktree, make_fake_loop, make_fake_loop_factory
-    from argos_agent.eval.runner import EvalRunner, PASS_FAILED
+    from argos.eval.runner import EvalRunner, PASS_FAILED
 
     root = tmp_path / "corpus"
     write_seed_corpus(root)
@@ -142,10 +142,10 @@ def test_eval_run_returns_nonzero_on_failure(capsys, tmp_path, monkeypatch):
 
 
 def test_eval_compare_writes_report(capsys, tmp_path, monkeypatch):
-    from argos_agent.cli import eval as cli
+    from argos.cli import eval as cli
     from tests.eval._seed_corpus import write_seed_corpus
     from tests.eval._fakes import FakeWorktree, make_fake_loop, make_fake_loop_factory
-    from argos_agent.eval.runner import EvalRunner
+    from argos.eval.runner import EvalRunner
 
     root = tmp_path / "corpus"
     write_seed_corpus(root)
@@ -181,7 +181,7 @@ def test_eval_compare_writes_report(capsys, tmp_path, monkeypatch):
 
 def test_eval_subcommand_registered_in_main(monkeypatch):
     """__main__.py 注册了 eval subparser + list/run/compare/corpus 子命令。"""
-    from argos_agent.__main__ import _build_parser
+    from argos.__main__ import _build_parser
     p = _build_parser()
     # `argos eval --help` 不应崩
     import argparse
@@ -195,7 +195,7 @@ def test_eval_subcommand_registered_in_main(monkeypatch):
 
 
 def test_eval_compare_subparser_registers_required_args():
-    from argos_agent.__main__ import _build_parser
+    from argos.__main__ import _build_parser
     p = _build_parser()
     args = p.parse_args(["eval", "compare", "bug_fix_001", "cheap", "strong"])
     assert args.task_id == "bug_fix_001"

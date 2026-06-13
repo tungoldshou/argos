@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.learning import distiller
+from argos.learning import distiller
 
 
 def _write_run_store(tmp_path: Path, run_id: str, events: list[dict]) -> Path:
@@ -54,8 +54,8 @@ def _make_passed_events(*, goal: str = "test goal",
 # ── 验收 a: passed run 触发 distill 产出候选 ──────────────────
 def test_passed_run_produces_candidate(tmp_path):
     """passed 轨迹 + verify_cmd → distill 返非 None 的 SkillCandidate。"""
-    from argos_agent.learning.distiller import distill_run_to_skill, SkillCandidate
-    from argos_agent.daemon.store import RunStore
+    from argos.learning.distiller import distill_run_to_skill, SkillCandidate
+    from argos.daemon.store import RunStore
 
     run_id = "r#passed"
     events = _make_passed_events(verify_cmd="pytest -q")
@@ -75,8 +75,8 @@ def test_passed_run_produces_candidate(tmp_path):
 
 def test_distill_writes_skill_md_to_skills_dir(tmp_path):
     """distill 应在 skills_root/<name>/SKILL.md 落盘,frontmatter 含 enabled=false。"""
-    from argos_agent.learning.distiller import distill_run_to_skill
-    from argos_agent.daemon.store import RunStore
+    from argos.learning.distiller import distill_run_to_skill
+    from argos.daemon.store import RunStore
 
     run_id = "r#write"
     events = _make_passed_events()
@@ -98,8 +98,8 @@ def test_distill_writes_skill_md_to_skills_dir(tmp_path):
 
 def test_distill_handles_missing_run_id_gracefully(tmp_path):
     """store 里没这条 run → distill 返 None(不抛)。"""
-    from argos_agent.learning.distiller import distill_run_to_skill
-    from argos_agent.daemon.store import RunStore
+    from argos.learning.distiller import distill_run_to_skill
+    from argos.daemon.store import RunStore
 
     store = RunStore(runs_dir=tmp_path / "runs")
     cand = distill_run_to_skill(
@@ -112,8 +112,8 @@ def test_distill_handles_missing_run_id_gracefully(tmp_path):
 
 def test_distill_extracts_code_snippets_into_body(tmp_path):
     """distill 抽 code_action 事件,产物 body 应含代码片段(以代码块呈现)。"""
-    from argos_agent.learning.distiller import distill_run_to_skill
-    from argos_agent.daemon.store import RunStore
+    from argos.learning.distiller import distill_run_to_skill
+    from argos.daemon.store import RunStore
 
     run_id = "r#code"
     snippet = "def add(a, b):\n    return a + b\n"
@@ -138,8 +138,8 @@ def test_distill_redacts_secrets_in_body(tmp_path):
 
     回退验证:注释掉 distiller._build_markdown 里的脱敏调用,本测试必须 FAIL。
     """
-    from argos_agent.learning.distiller import distill_run_to_skill
-    from argos_agent.daemon.store import RunStore
+    from argos.learning.distiller import distill_run_to_skill
+    from argos.daemon.store import RunStore
 
     run_id = "r#secrets"
     # code_action 携带明文密钥

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.memory.consolidate import (
+from argos.memory.consolidate import (
     ARCHIVE_NAME,
     ConsolidationReport,
     consolidate,

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.sandbox.egress import EgressPolicy
+from argos.sandbox.egress import EgressPolicy
 
 
 def test_llm_and_search_hosts_allowed():

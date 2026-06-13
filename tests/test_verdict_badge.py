@@ -12,9 +12,9 @@
 import pytest
 from textual.app import App, ComposeResult
 
-from argos_agent.core.verify_gate import Verdict
-from argos_agent.tui.theme import ARGOS_NIGHT
-from argos_agent.tui.widgets.verdict_badge import VerdictBadge
+from argos.core.verify_gate import Verdict
+from argos.tui.theme import ARGOS_NIGHT
+from argos.tui.widgets.verdict_badge import VerdictBadge
 
 
 class _H(App):

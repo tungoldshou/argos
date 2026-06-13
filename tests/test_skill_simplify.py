@@ -7,19 +7,19 @@ from unittest.mock import patch
 
 import pytest
 
-from argos_agent.skills_runtime.analysis import (
+from argos.skills_runtime.analysis import (
     AnalysisSkillContext,
     AnalysisSkillResult,
 )
-from argos_agent.skills_runtime import registry
-from argos_agent.skills_runtime.builtin.simplify import run as simp_run
-from argos_agent.skills_runtime.builtin.simplify.duplication import (
+from argos.skills_runtime import registry
+from argos.skills_runtime.builtin.simplify import run as simp_run
+from argos.skills_runtime.builtin.simplify.duplication import (
     detect_duplicates,
 )
-from argos_agent.skills_runtime.builtin.simplify.complexity import (
+from argos.skills_runtime.builtin.simplify.complexity import (
     detect_complex_functions,
 )
-from argos_agent.skills_runtime.builtin.simplify.dead_code import detect_dead_code
+from argos.skills_runtime.builtin.simplify.dead_code import detect_dead_code
 
 
 @pytest.fixture(autouse=True)

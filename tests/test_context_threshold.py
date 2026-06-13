@@ -3,7 +3,7 @@
 8 测试覆盖 5 跳过 + 2 允许 + 5% buffer 幂等。"""
 from __future__ import annotations
 
-from argos_agent.context.threshold import LastCompactedAt, _should_compact
+from argos.context.threshold import LastCompactedAt, _should_compact
 
 
 def test_skip_when_compaction_disabled():

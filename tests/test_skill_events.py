@@ -5,8 +5,8 @@ import json
 
 import pytest
 
-from argos_agent.skills_runtime.events import SkillRunStart, SkillRunEnd
-from argos_agent.tui.events import (
+from argos.skills_runtime.events import SkillRunStart, SkillRunEnd
+from argos.tui.events import (
     Event, EventKind, _KIND_TO_CLASS, deserialize_event, serialize_event,
 )
 

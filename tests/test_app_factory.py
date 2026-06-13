@@ -5,13 +5,13 @@
 """
 import pytest
 
-import argos_agent.app_factory as af
-from argos_agent.app_factory import build_components
-from argos_agent.core.loop import AgentLoop
-from argos_agent.core.models import ModelClient
-from argos_agent.core.verify_gate import Verifier
-from argos_agent.memory.store import ArgosStore
-from argos_agent.sandbox.broker import CapabilityBroker
+import argos.app_factory as af
+from argos.app_factory import build_components
+from argos.core.loop import AgentLoop
+from argos.core.models import ModelClient
+from argos.core.verify_gate import Verifier
+from argos.memory.store import ArgosStore
+from argos.sandbox.broker import CapabilityBroker
 
 
 def test_build_components_assembles_full_stack(tmp_path, monkeypatch):
@@ -86,6 +86,6 @@ def test_build_loop_factory_wires_workflow_engine(tmp_path, monkeypatch):
     loop = af.build_loop_factory(c)()
     assert loop._workflow_engine_factory is not None
     # 工厂能产出一个 WorkflowEngine
-    from argos_agent.workflow.engine import WorkflowEngine
+    from argos.workflow.engine import WorkflowEngine
     assert isinstance(c.workflow_engine_factory(), WorkflowEngine)
     c.close()

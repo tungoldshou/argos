@@ -79,12 +79,12 @@ Test categories:
 - `uv run pytest -m "not slow"` — skip slow tests (real subprocess, real pyright)
 - `uv run pytest -m slow` — only slow tests
 - `uv run pytest -n auto --dist loadgroup` — parallel run via pytest-xdist (~100-150s vs 355s serial)
-- `uv run pytest --cov=argos_agent` — with coverage (≥80% threshold)
+- `uv run pytest --cov=argos` — with coverage (≥80% threshold)
 
 ## Project Structure
 
 ```
-argos_agent/                # Main package
+argos/                # Main package
 ├── __init__.py            # version (importlib.metadata + _MEIPASS fallback)
 ├── __main__.py            # CLI entry, self-update check
 ├── approval.py            # ApprovalLevel + ApprovalGate
@@ -125,7 +125,7 @@ docs/                       # Specs + plans
 ├── superpowers/plans/      # Implementation plans (TDD tasks)
 └── argos-product-definition.md  # Product north star
 
-tests/                      # Mirror argos_agent/ structure
+tests/                      # Mirror argos/ structure
 .github/                    # CI workflows (release.yml)
 packaging/                  # PyInstaller + install.sh + Homebrew Cask
 ```
@@ -158,7 +158,7 @@ Per the project CLAUDE.md conventions:
 
 ## Adding New Tools
 
-Tools live in `argos_agent/tools/` and are registered in `__init__.py`:
+Tools live in `argos/tools/` and are registered in `__init__.py`:
 
 1. Define a frozen dataclass: `@dataclass(frozen=True) class YourTool: name: ClassVar[str] = "your_tool"; ...`
 2. Implement the `gated` version (e.g. `your_tool_gated`) with Seatbelt + approval gate
@@ -168,7 +168,7 @@ Tools live in `argos_agent/tools/` and are registered in `__init__.py`:
 
 ## Adding New Skills
 
-Skills are runtime analyzers in `argos_agent/skills_runtime/`. To add a new slash skill:
+Skills are runtime analyzers in `argos/skills_runtime/`. To add a new slash skill:
 
 1. Write a spec under `docs/superpowers/specs/`
 2. Implement `AnalysisSkill` in `skills_runtime/builtin/<name>/`

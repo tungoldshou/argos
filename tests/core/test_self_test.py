@@ -22,10 +22,10 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent import runtime
-from argos_agent.core.types import Verdict
-from argos_agent.core.verify_gate import Verifier
-from argos_agent.verify.self_test import TestGenerator, TestProposal, _is_whitelisted
+from argos import runtime
+from argos.core.types import Verdict
+from argos.core.verify_gate import Verifier
+from argos.verify.self_test import TestGenerator, TestProposal, _is_whitelisted
 
 
 # ── 帮手 fixtures ─────────────────────────────────────────
@@ -249,7 +249,7 @@ def test_test_generator_canary_check_unit(tmp_path):
 def test_test_generator_writes_test_file_and_canary_passes(tmp_path, monkeypatch):
     """TestGenerator 在 canary 过时把测试文件写到 verify_dir 内,真跑也可被外部 _run_verify
     找到(它 cwd=verify_dir;workspace 内的 lib.py 通过 PYTHONPATH 也能 import)。"""
-    from argos_agent import runtime
+    from argos import runtime
     # 切到 tmp_path(workspace=verify_dir=tmp_path)
     token = runtime.use_project(str(tmp_path))
     try:

@@ -15,11 +15,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel
-from argos_agent.capability import CapabilityRegistry, register_builtins
-from argos_agent.sandbox.broker import CapabilityBroker
-from argos_agent.sandbox.egress import EgressPolicy
-from argos_agent.tools.receipts import ReceiptSigner
+from argos.approval import ApprovalGate, ApprovalLevel
+from argos.capability import CapabilityRegistry, register_builtins
+from argos.sandbox.broker import CapabilityBroker
+from argos.sandbox.egress import EgressPolicy
+from argos.tools.receipts import ReceiptSigner
 
 # 所有预期的 computer.* 能力名
 _EXPECTED_COMPUTER_CAPS = (
@@ -189,7 +189,7 @@ async def test_computer_action_hmac_receipt_signed_on_approval():
       broker.request → 审批 → _execute → ComputerExecutor.dispatch → signer.sign → last_receipt
     """
     import os
-    from argos_agent.perception.executor import ComputerExecutor, ComputerActionResult
+    from argos.perception.executor import ComputerExecutor, ComputerActionResult
 
     reg = _make_registry_with_builtins()
     gate = ApprovalGate(level=ApprovalLevel.AUTO)
@@ -244,7 +244,7 @@ def test_ledger_entry_for_computer_action_reversible_impossible(action: str):
     computer.* 并触发正确的可逆性/undo_state 推断(账本诚实性)。
     不依赖 daemon.registry.LedgerEntry.from_receipt,避免 pytest.skip 逃逸。
     """
-    from argos_agent.ledger.builder import build_entry
+    from argos.ledger.builder import build_entry
 
     signer = ReceiptSigner(key=b"k")
     receipt = signer.sign(

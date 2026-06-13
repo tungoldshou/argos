@@ -10,12 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.eval.corpus import EvalTask, load_task
-from argos_agent.eval.runner import (
+from argos.eval.corpus import EvalTask, load_task
+from argos.eval.runner import (
     EvalResult, EvalRunner, LoopOutcome,
     PASS_PASSED, PASS_FAILED, PASS_UNVERIFIABLE, PASS_SETUP_FAILED, PASS_ERROR,
 )
-from argos_agent.daemon.worktree import WorktreeManager
+from argos.daemon.worktree import WorktreeManager
 
 from tests.eval._fakes import FakeWorktree, make_fake_loop, make_fake_loop_factory
 from tests.eval._seed_corpus import write_seed_corpus

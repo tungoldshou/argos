@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from argos_agent.memory.store import ArgosStore, MemoryRecord
+from argos.memory.store import ArgosStore, MemoryRecord
 
 
 class _FakeEmbedder:

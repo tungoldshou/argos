@@ -28,7 +28,7 @@ def test_loop_mode_field_defaults_to_act(build_real_loop):
 
 def test_loop_enter_plan_mode_changes_mode():
     """EnterPlanMode(loop) 把 stub loop 的 mode 切到 'plan'(最小回归保护)。"""
-    from argos_agent.core.plan_mode import EnterPlanMode
+    from argos.core.plan_mode import EnterPlanMode
 
     class _StubLoop:
         def __init__(self):
@@ -49,7 +49,7 @@ def test_loop_enter_plan_mode_changes_mode():
 
 def test_loop_enter_then_exit_plan_mode_round_trip():
     """EnterPlanMode → ExitPlanMode 往返:mode 回 'act' + _plan_decision 存住用户决策。"""
-    from argos_agent.core.plan_mode import EnterPlanMode, ExitPlanMode, PlanExitDecision
+    from argos.core.plan_mode import EnterPlanMode, ExitPlanMode, PlanExitDecision
 
     class _StubLoop:
         def __init__(self):

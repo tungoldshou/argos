@@ -1,12 +1,12 @@
 """harness L1-L5 编排(契约 §9;spec §3.3):阶段门不可跳 + verify gate 三态 + escalation + 回执核验。"""
 import pytest
 
-from argos_agent.tui.events import EventBus, PhaseChange, VerifyVerdict, Escalation
-from argos_agent.core.types import Verdict
-from argos_agent.core.verify_gate import Verifier
-from argos_agent.tools.receipts import ReceiptSigner
-from argos_agent.core.harness import Harness, PHASE_ORDER
-from argos_agent import runtime
+from argos.tui.events import EventBus, PhaseChange, VerifyVerdict, Escalation
+from argos.core.types import Verdict
+from argos.core.verify_gate import Verifier
+from argos.tools.receipts import ReceiptSigner
+from argos.core.harness import Harness, PHASE_ORDER
+from argos import runtime
 
 
 class _RecordingBus(EventBus):

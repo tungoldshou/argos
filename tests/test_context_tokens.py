@@ -6,7 +6,7 @@ from __future__ import annotations
 import sys
 import types
 
-from argos_agent.context.tokens import token_estimate
+from argos.context.tokens import token_estimate
 
 
 def test_estimate_empty_returns_min_one():

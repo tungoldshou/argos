@@ -16,20 +16,20 @@ import os
 import textwrap
 import pytest
 
-from argos_agent.hooks import (
+from argos.hooks import (
     _reset_config, get_config, fire,
 )
-from argos_agent.hooks.config import HookHandler, HookMatcherEntry, HooksConfig
-from argos_agent.hooks.payload import (
+from argos.hooks.config import HookHandler, HookMatcherEntry, HooksConfig
+from argos.hooks.payload import (
     build_post_payload, build_pre_payload, build_session_start_payload,
     build_stop_payload, build_user_prompt_payload,
 )
-from argos_agent.hooks.events import HookFired
+from argos.hooks.events import HookFired
 
 
 def _set_hooks(entries_per_event: dict[str, list[HookMatcherEntry]]) -> None:
     """测试 helper:把模块级 _config 设为给定 entries。"""
-    import argos_agent.hooks as h
+    import argos.hooks as h
     h._config = HooksConfig(entries=entries_per_event)
 
 
@@ -187,7 +187,7 @@ async def test_drive_emits_session_start_hook_fired(build_real_loop, tmp_path):
     用 build_real_loop fixture + scripted model;此端到端覆盖 SessionStart fire 点的连接。
     Pre/Post/Stop 由 _drive 内部按条件触发,单元测试已覆盖 payload + 子进程。
     """
-    from argos_agent.hooks.events import HookFired as _HookFired
+    from argos.hooks.events import HookFired as _HookFired
 
     # 装一个记录 hook 触发的钩子(写 stdout 到 tmp 标记)
     marker = tmp_path / "hook_fired.marker"
@@ -220,7 +220,7 @@ async def test_drive_pre_blocking_yields_fail_hookfired(build_real_loop):
     用 build_real_loop;PreToolUse hook 设成永远 exit 2;模型产出 write_file 代码块。
     HookFired(PreToolUse, success=False)应被 yield。反喂模板由 unit test 覆盖。
     """
-    from argos_agent.hooks.events import HookFired as _HookFired
+    from argos.hooks.events import HookFired as _HookFired
 
     reject_cmd = "bash -c 'printf %s \"{\\\"stopReason\\\":\\\"audit blocked\\\"}\"; exit 2'"
     _set_hooks({

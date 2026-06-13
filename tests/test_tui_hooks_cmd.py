@@ -23,8 +23,8 @@ def isolated_hooks_home(monkeypatch):
 @pytest.mark.asyncio
 async def test_hooks_command_lists_3_events_4_hooks(isolated_hooks_home, monkeypatch):
     """/hooks 渲染 3 事件 4 hook(测试调 _dispatch_slash 走 list 路径)。"""
-    from argos_agent.hooks import _reset_config
-    from argos_agent.hooks import reload_config
+    from argos.hooks import _reset_config
+    from argos.hooks import reload_config
     isolated_hooks_home.mkdir(parents=True, exist_ok=True)
     p = isolated_hooks_home / "hooks.json"
     p.write_text(json.dumps({
@@ -41,7 +41,7 @@ async def test_hooks_command_lists_3_events_4_hooks(isolated_hooks_home, monkeyp
             ],
         },
     }))
-    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    monkeypatch.setattr("argos.hooks.config.HOOKS_CONFIG_PATH", p)
     _reset_config()
     # 验证 reload 拿到 3 事件
     cfg = reload_config()
@@ -54,12 +54,12 @@ async def test_hooks_command_lists_3_events_4_hooks(isolated_hooks_home, monkeyp
 @pytest.mark.asyncio
 async def test_hooks_reload_replaces_singleton(isolated_hooks_home, monkeypatch):
     """改 ~/.argos/hooks.json 后 /hooks reload → 后续 fire 用新配。"""
-    from argos_agent.hooks import _reset_config, get_config, reload_config
+    from argos.hooks import _reset_config, get_config, reload_config
     isolated_hooks_home.mkdir(parents=True, exist_ok=True)
     p = isolated_hooks_home / "hooks.json"
     # 初始空
     p.write_text(json.dumps({"version": 1, "hooks": {}}))
-    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    monkeypatch.setattr("argos.hooks.config.HOOKS_CONFIG_PATH", p)
     _reset_config()
     assert get_config().entries == {}
     # 改
@@ -74,14 +74,14 @@ async def test_hooks_reload_replaces_singleton(isolated_hooks_home, monkeypatch)
 @pytest.mark.asyncio
 async def test_hooks_reload_invalid_keeps_old(isolated_hooks_home, monkeypatch):
     """reload 时新配不合规 → 保旧 + 抛 HooksConfigError。"""
-    from argos_agent.hooks import _reset_config, get_config, reload_config, HooksConfigError
+    from argos.hooks import _reset_config, get_config, reload_config, HooksConfigError
     isolated_hooks_home.mkdir(parents=True, exist_ok=True)
     p = isolated_hooks_home / "hooks.json"
     p.write_text(json.dumps({
         "version": 1,
         "hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "old"}]}]},
     }))
-    monkeypatch.setattr("argos_agent.hooks.config.HOOKS_CONFIG_PATH", p)
+    monkeypatch.setattr("argos.hooks.config.HOOKS_CONFIG_PATH", p)
     _reset_config()
     cfg_old = reload_config()
     # 改坏
@@ -94,7 +94,7 @@ async def test_hooks_reload_invalid_keeps_old(isolated_hooks_home, monkeypatch):
 
 def test_bad_config_splash_banner():
     """启动时坏配置 → StartupSplash.set_bad_config(reason) 被调,渲染含 'hooks 已禁用'。"""
-    from argos_agent.tui.widgets.splash import StartupSplash
+    from argos.tui.widgets.splash import StartupSplash
     sp = StartupSplash(model_label="x", tier="default", live=True)
     sp.set_bad_config("parse error: bad json at line 3")
     # 渲染文本含 'hooks 已禁用'
@@ -105,6 +105,6 @@ def test_bad_config_splash_banner():
 
 def test_command_help_includes_hooks():
     """COMMAND_HELP 含 'hooks' 描述。"""
-    from argos_agent.tui.commands import COMMAND_HELP
+    from argos.tui.commands import COMMAND_HELP
     assert "hooks" in COMMAND_HELP
     assert "reload" in COMMAND_HELP["hooks"]

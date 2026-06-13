@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent import config_base
+from argos import config_base
 
 
 # ── read_json_file 验收 ─────────────────────────────

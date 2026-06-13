@@ -37,12 +37,12 @@ PYI_ARGS=(
   --name argos
   --onefile
   --console
-  --add-data "argos_agent/memory/schema.sql:argos_agent/memory"
+  --add-data "argos/memory/schema.sql:argos/memory"
   --add-data "packaging/VERSION:packaging"
   --add-data "packaging/Info.plist:packaging"
   --collect-submodules smolagents
   --collect-submodules textual
-  --collect-submodules argos_agent
+  --collect-submodules argos
   --collect-data-files textual
   --collect-data-files smolagents
   --copy-metadata argos-agent
@@ -50,7 +50,7 @@ PYI_ARGS=(
   --exclude-module langgraph
   --exclude-module fastapi
   --exclude-module uvicorn
-  argos_agent/__main__.py
+  argos/__main__.py
 )
 uv run pyinstaller "${PYI_ARGS[@]}"
 

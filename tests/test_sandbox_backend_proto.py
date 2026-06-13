@@ -6,7 +6,7 @@ from typing import get_type_hints
 
 import pytest
 
-from argos_agent.sandbox.backend import ExecResult, SandboxBackend
+from argos.sandbox.backend import ExecResult, SandboxBackend
 
 
 def test_exec_result_is_frozen_slots_dataclass():

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.cli import context as _cli_ctx
+from argos.cli import context as _cli_ctx
 
 
 @dataclass
@@ -58,9 +58,9 @@ class _FakeRuntime:
 
 
 def _install_fake_runtime(monkeypatch):
-    """把 argos_agent.app_factory._active_run 替换为 fake;cli 从这里取。
+    """把 argos.app_factory._active_run 替换为 fake;cli 从这里取。
     raising=False 因为模块未定义该属性(本期首次引入)。"""
-    import argos_agent.app_factory as _af
+    import argos.app_factory as _af
     fake = _FakeRuntime()
     monkeypatch.setattr(_af, "_active_run", fake, raising=False)
 
@@ -99,7 +99,7 @@ def test_cli_context_show_with_session(monkeypatch, capsys):
 
 def test_cli_context_show_no_runtime(monkeypatch, capsys):
     """无 _active_run(_active_components 走全空)→ analyze 内部走全空桶,exit 0,仍输出表格(降级不崩)。"""
-    import argos_agent.app_factory as _af
+    import argos.app_factory as _af
     monkeypatch.setattr(_af, "_active_run", None, raising=False)
     args = _cli_ctx.argparse.Namespace(json=False, session=None)
     rc = _cli_ctx.cmd_show(args)

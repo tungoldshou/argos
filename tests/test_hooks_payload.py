@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.hooks.payload import (
+from argos.hooks.payload import (
     build_pre_payload,
     build_post_payload,
     build_stop_payload,

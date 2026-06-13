@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.lsp.config import (
+from argos.lsp.config import (
     LspConfig,
     LspServerConfig,
     LspConfigError,
@@ -15,7 +15,7 @@ from argos_agent.lsp.config import (
     LSP_CONFIG_PATH,
     load,
 )
-from argos_agent.lsp import get_config, reload_config, _reset_config
+from argos.lsp import get_config, reload_config, _reset_config
 
 
 # ── Task 1: dataclass 单元测试 ─────────────────────────────────────
@@ -114,7 +114,7 @@ def test_lsp_config_path_is_argos_home():
 
 def test_load_missing_file_returns_builtin(tmp_path, monkeypatch):
     """lsp.json 不存在 → load() 返 BUILTIN_DEFAULT_CONFIG(单 python)。"""
-    monkeypatch.setattr("argos_agent.lsp.config.LSP_CONFIG_PATH", tmp_path / "nope.json")
+    monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", tmp_path / "nope.json")
     cfg = load()
     assert "python" in cfg.servers
     assert cfg.servers["python"].command == ("pyright-langserver", "--stdio")
@@ -129,7 +129,7 @@ def test_load_valid_minimal(tmp_path, monkeypatch):
             "python": {"command": ["pyright-langserver", "--stdio"], "filetypes": [".py", ".pyi"]},
         },
     }))
-    monkeypatch.setattr("argos_agent.lsp.config.LSP_CONFIG_PATH", p)
+    monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
     cfg = load()
     assert cfg.version == 1
     assert "python" in cfg.servers
@@ -155,7 +155,7 @@ def test_load_valid_multi_server(tmp_path, monkeypatch):
             },
         },
     }))
-    monkeypatch.setattr("argos_agent.lsp.config.LSP_CONFIG_PATH", p)
+    monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
     cfg = load()
     assert len(cfg.servers) == 3
     assert cfg.servers["rust"].init_options == {"cargo": {"allFeatures": True}}
@@ -167,7 +167,7 @@ def test_load_invalid_json_raises(tmp_path, monkeypatch):
     """JSON 坏字 → LspConfigError(绝不部分加载,spec D11)。"""
     p = tmp_path / "lsp.json"
     p.write_text("{not valid json")
-    monkeypatch.setattr("argos_agent.lsp.config.LSP_CONFIG_PATH", p)
+    monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
     with pytest.raises(LspConfigError):
         load()
 
@@ -176,7 +176,7 @@ def test_load_missing_version_raises(tmp_path, monkeypatch):
     """version 缺 → LspConfigError。"""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({"servers": {}}))
-    monkeypatch.setattr("argos_agent.lsp.config.LSP_CONFIG_PATH", p)
+    monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
     with pytest.raises(LspConfigError, match="version"):
         load()
 
@@ -185,7 +185,7 @@ def test_load_wrong_version_raises(tmp_path, monkeypatch):
     """version 不匹配(本机 v1,文件 v2)→ 报错 + 拒载。"""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({"version": 2, "servers": {}}))
-    monkeypatch.setattr("argos_agent.lsp.config.LSP_CONFIG_PATH", p)
+    monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
     with pytest.raises(LspConfigError, match="version"):
         load()
 
@@ -197,7 +197,7 @@ def test_load_command_not_array_raises(tmp_path, monkeypatch):
         "version": 1,
         "servers": {"x": {"command": "pyright-langserver --stdio", "filetypes": [".py"]}},
     }))
-    monkeypatch.setattr("argos_agent.lsp.config.LSP_CONFIG_PATH", p)
+    monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
     with pytest.raises(LspConfigError, match="command"):
         load()
 
@@ -209,7 +209,7 @@ def test_load_filetypes_empty_raises(tmp_path, monkeypatch):
         "version": 1,
         "servers": {"x": {"command": ["y"], "filetypes": []}},
     }))
-    monkeypatch.setattr("argos_agent.lsp.config.LSP_CONFIG_PATH", p)
+    monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
     with pytest.raises(LspConfigError, match="filetypes"):
         load()
 
@@ -221,7 +221,7 @@ def test_load_server_name_with_space_raises(tmp_path, monkeypatch):
         "version": 1,
         "servers": {"py thon": {"command": ["y"], "filetypes": [".py"]}},
     }))
-    monkeypatch.setattr("argos_agent.lsp.config.LSP_CONFIG_PATH", p)
+    monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
     with pytest.raises(LspConfigError, match="name"):
         load()
 
@@ -231,7 +231,7 @@ def test_load_unreadable_file_treated_as_missing(tmp_path, monkeypatch):
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({"version": 1, "servers": {}}))
     p.chmod(0o000)
-    monkeypatch.setattr("argos_agent.lsp.config.LSP_CONFIG_PATH", p)
+    monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
     try:
         cfg = load()
         assert "python" in cfg.servers
@@ -246,7 +246,7 @@ def test_reload_replaces_singleton(tmp_path, monkeypatch):
         "version": 1,
         "servers": {"python": {"command": ["a"], "filetypes": [".py"]}},
     }))
-    monkeypatch.setattr("argos_agent.lsp.config.LSP_CONFIG_PATH", p)
+    monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
     cfg1 = reload_config()
     assert "python" in cfg1.servers
     p.write_text(json.dumps({
@@ -268,7 +268,7 @@ def test_reload_invalid_keeps_old(tmp_path, monkeypatch):
         "version": 1,
         "servers": {"python": {"command": ["a"], "filetypes": [".py"]}},
     }))
-    monkeypatch.setattr("argos_agent.lsp.config.LSP_CONFIG_PATH", p)
+    monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
     cfg_old = reload_config()
     p.write_text("{not json")
     with pytest.raises(LspConfigError):

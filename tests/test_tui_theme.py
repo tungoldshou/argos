@@ -1,8 +1,8 @@
 # tests/test_tui_theme.py
 """argos-night 黑曜石主题 token 体系验证（v3「黑曜石之眼」）。"""
 import pytest
-from argos_agent.tui.app import ArgosApp
-from argos_agent.tui.fakeloop import FakeLoop
+from argos.tui.app import ArgosApp
+from argos.tui.fakeloop import FakeLoop
 
 
 @pytest.mark.asyncio
@@ -17,7 +17,7 @@ async def test_argos_night_theme_registered_and_applied():
 @pytest.mark.asyncio
 async def test_argos_night_tokens():
     """v3 黑曜石底盘：语义槽 + 墨色 + 金系 + 诚实三色全部到位。"""
-    from argos_agent.tui.theme import ARGOS_NIGHT
+    from argos.tui.theme import ARGOS_NIGHT
 
     assert ARGOS_NIGHT.dark is True
 
@@ -64,7 +64,7 @@ async def test_argos_night_tokens():
 
 def test_argos_night_variables_background_layers():
     """背景三层纵深 + 两档发丝线全部存在。"""
-    from argos_agent.tui.theme import ARGOS_NIGHT
+    from argos.tui.theme import ARGOS_NIGHT
 
     v = ARGOS_NIGHT.variables
     assert v["abyss"] == "#0B0C10"
@@ -78,7 +78,7 @@ def test_argos_night_variables_background_layers():
 
 def test_argos_night_variables_ink_scale():
     """墨色五阶亮度阶梯全部存在（纵深引擎）。"""
-    from argos_agent.tui.theme import ARGOS_NIGHT
+    from argos.tui.theme import ARGOS_NIGHT
 
     v = ARGOS_NIGHT.variables
     assert v["ink-bright"] == "#ECEEF5"
@@ -90,7 +90,7 @@ def test_argos_night_variables_ink_scale():
 
 def test_argos_night_variables_eye_system():
     """金系三档(chrome 强调)全部存在；金橙分家铁律：eye* 非橙。"""
-    from argos_agent.tui.theme import ARGOS_NIGHT
+    from argos.tui.theme import ARGOS_NIGHT
 
     v = ARGOS_NIGHT.variables
     assert v["eye-soft"] == "#A8854A"
@@ -103,7 +103,7 @@ def test_argos_night_variables_eye_system():
 
 def test_argos_night_variables_semantic_colors():
     """语义色(诚实铁律)：pass/pass-weak/fail/unverif/unverif-deep/cyan 全部存在且不混色。"""
-    from argos_agent.tui.theme import ARGOS_NIGHT
+    from argos.tui.theme import ARGOS_NIGHT
 
     v = ARGOS_NIGHT.variables
     assert v["pass"] == "#9ECE6A"
@@ -122,7 +122,7 @@ def test_argos_night_variables_semantic_colors():
 
 def test_argos_night_variables_plan_and_cursor():
     """模式徽标 plan 色 + 块光标 token 存在。"""
-    from argos_agent.tui.theme import ARGOS_NIGHT
+    from argos.tui.theme import ARGOS_NIGHT
 
     v = ARGOS_NIGHT.variables
     assert v["plan"] == "#7AA2F7"
@@ -132,7 +132,7 @@ def test_argos_night_variables_plan_and_cursor():
 
 def test_argos_night_variables_scrollbar_and_border():
     """滚动条/边框辅助 token 存在。"""
-    from argos_agent.tui.theme import ARGOS_NIGHT
+    from argos.tui.theme import ARGOS_NIGHT
 
     v = ARGOS_NIGHT.variables
     assert v["scrollbar"] == "#1B1D29"
@@ -142,7 +142,7 @@ def test_argos_night_variables_scrollbar_and_border():
 
 def test_argos_night_variables_text_muted_compat():
     """向后兼容兜底：$text-muted 映射到 $ink-dim(旧 CSS 引用)。"""
-    from argos_agent.tui.theme import ARGOS_NIGHT
+    from argos.tui.theme import ARGOS_NIGHT
 
     v = ARGOS_NIGHT.variables
     assert "text-muted" in v, "$text-muted 向后兼容 token 必须存在"
@@ -151,14 +151,14 @@ def test_argos_night_variables_text_muted_compat():
 
 def test_argos_night_name_unchanged():
     """注册名 'argos-night' 不变——契约(避免用户配置破损)。"""
-    from argos_agent.tui.theme import ARGOS_NIGHT
+    from argos.tui.theme import ARGOS_NIGHT
 
     assert ARGOS_NIGHT.name == "argos-night"
 
 
 def test_argos_night_variables_count():
     """variables dict 至少包含完整 token 集(背景7+墨5+金3+语义6+徽1+光标2+滚动2+边框1+兜底1=28)。"""
-    from argos_agent.tui.theme import ARGOS_NIGHT
+    from argos.tui.theme import ARGOS_NIGHT
 
     assert len(ARGOS_NIGHT.variables) >= 28, (
         f"variables 数量不足，期望 >=28，实际 {len(ARGOS_NIGHT.variables)}"

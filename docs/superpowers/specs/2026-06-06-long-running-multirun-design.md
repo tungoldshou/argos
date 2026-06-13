@@ -124,7 +124,7 @@
 ### 4.1 数据结构
 
 ```python
-# argos_agent/daemon/registry.py
+# argos/daemon/registry.py
 @dataclass
 class RunEntry:
     run_id: str
@@ -351,7 +351,7 @@ async def _require_owner(self, writer, headers) -> str | None:
 ### 8.2 WorktreeManager
 
 ```python
-# argos_agent/daemon/worktree.py
+# argos/daemon/worktree.py
 class WorktreeManager:
     def __init__(self, base_dir: Path = Path.home() / ".argos" / "worktrees"):
         self._base = base_dir

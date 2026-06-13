@@ -40,7 +40,7 @@ def test_cli_dream_report_empty(tmp_path, monkeypatch, capsys):
     """ARGOS_DREAMS_DIR 指 tmp 空目录,run_dream(--report) → 输出含"暂无",返 0。"""
     monkeypatch.setenv("ARGOS_DREAMS_DIR", str(tmp_path))
 
-    from argos_agent.cli.dream import run_dream
+    from argos.cli.dream import run_dream
     code = run_dream(_args(report=True))
     out = capsys.readouterr().out
     assert code == 0
@@ -68,7 +68,7 @@ def test_cli_dream_report_shows_latest(tmp_path, monkeypatch, capsys):
                          "rejected": 1, "skipped": 1, "memory_merged": 2, "memory_archived": 4})
     new.write_text(line1 + "\n" + line2 + "\n")
 
-    from argos_agent.cli.dream import run_dream
+    from argos.cli.dream import run_dream
     code = run_dream(_args(report=True))
     out = capsys.readouterr().out
     assert code == 0
@@ -90,7 +90,7 @@ def test_cli_dream_report_non_dict_does_not_crash(tmp_path, monkeypatch, capsys,
     report_file = tmp_path / "2020-01-01.jsonl"
     report_file.write_text(json.dumps(bad_payload) + "\n")
 
-    from argos_agent.cli.dream import run_dream
+    from argos.cli.dream import run_dream
     code = run_dream(_args(report=True))
     out = capsys.readouterr().out
     assert code == 0
@@ -113,15 +113,15 @@ def test_cli_dream_no_key_degrades(tmp_path, monkeypatch, capsys):
 
     def _fake_consolidate(memory_dir):
         consolidate_called.append(memory_dir)
-        from argos_agent.memory.consolidate import ConsolidationReport
+        from argos.memory.consolidate import ConsolidationReport
         return ConsolidationReport(merged=0, archived=0)
 
     with (
-        patch("argos_agent.app_factory.build_components",
+        patch("argos.app_factory.build_components",
               side_effect=RuntimeError("no API key")),
-        patch("argos_agent.memory.consolidate.consolidate", side_effect=_fake_consolidate),
+        patch("argos.memory.consolidate.consolidate", side_effect=_fake_consolidate),
     ):
-        from argos_agent.cli import dream as _dream_mod
+        from argos.cli import dream as _dream_mod
         # 重新 import 以防模块级缓存干扰
         import importlib
         importlib.reload(_dream_mod)
@@ -143,10 +143,10 @@ async def test_tui_dream_inline_refuses():
     import os
     os.environ["ARGOS_NO_DAEMON"] = "1"
     try:
-        from argos_agent.tui.app import ArgosApp
-        from argos_agent.tui.commands import parse_slash
-        from argos_agent.tui.fakeloop import FakeLoop
-        from argos_agent.tui.widgets.transcript import Transcript
+        from argos.tui.app import ArgosApp
+        from argos.tui.commands import parse_slash
+        from argos.tui.fakeloop import FakeLoop
+        from argos.tui.widgets.transcript import Transcript
 
         app = ArgosApp(loop_factory=lambda: FakeLoop())
         async with app.run_test() as pilot:
@@ -168,10 +168,10 @@ async def test_tui_dream_daemon_posts():
     import os
     os.environ["ARGOS_NO_DAEMON"] = "1"
     try:
-        from argos_agent.tui.app import ArgosApp
-        from argos_agent.tui.commands import parse_slash
-        from argos_agent.tui.fakeloop import FakeLoop
-        from argos_agent.tui.widgets.transcript import Transcript
+        from argos.tui.app import ArgosApp
+        from argos.tui.commands import parse_slash
+        from argos.tui.fakeloop import FakeLoop
+        from argos.tui.widgets.transcript import Transcript
 
         # 提取 /dream 纯函数渲染逻辑测试(不经过 Textual app 的 daemon 探测)
         # 直接测 _dream_cmd 实现中的 daemon 分支 — 注入 mock daemon client
@@ -218,10 +218,10 @@ async def test_tui_dream_status_non_dict_report_does_not_crash(bad_report):
     import os
     os.environ["ARGOS_NO_DAEMON"] = "1"
     try:
-        from argos_agent.tui.app import ArgosApp
-        from argos_agent.tui.commands import parse_slash
-        from argos_agent.tui.fakeloop import FakeLoop
-        from argos_agent.tui.widgets.transcript import Transcript
+        from argos.tui.app import ArgosApp
+        from argos.tui.commands import parse_slash
+        from argos.tui.fakeloop import FakeLoop
+        from argos.tui.widgets.transcript import Transcript
 
         app = ArgosApp(loop_factory=lambda: FakeLoop())
 
@@ -259,8 +259,8 @@ def test_cli_dream_has_key_promotion(tmp_path, monkeypatch, capsys):
     - spy task.goal 确认 B 侧确实收到了带 hint 的 goal；
     - 断言晋升产物落在 tmp_skills_root（对应 skills.USER_DIR），不在 learning/skills。
     """
-    from argos_agent.learning.candidates import save_candidate
-    from argos_agent.learning.distiller import SkillCandidate
+    from argos.learning.candidates import save_candidate
+    from argos.learning.distiller import SkillCandidate
 
     # ── 构建 tmp 目录体系 ──────────────────────────────────────────────────
     candidates_root = tmp_path / "candidates"
@@ -320,29 +320,29 @@ def test_cli_dream_has_key_promotion(tmp_path, monkeypatch, capsys):
 
     # ── monkeypatch：重定向单一来源 + 注入 fake runner/components ─────────────
     # 重定向 skills.USER_DIR（Blocking-2 的单一来源）→ tmp skills_root
-    monkeypatch.setattr("argos_agent.skills.USER_DIR", skills_root)
-    monkeypatch.setattr("argos_agent.cli.dream._DEFAULT_SKILLS_DIR", skills_root)
+    monkeypatch.setattr("argos.skills.USER_DIR", skills_root)
+    monkeypatch.setattr("argos.cli.dream._DEFAULT_SKILLS_DIR", skills_root)
     # 重定向 candidates DEFAULT_ROOT → tmp candidates_root
-    monkeypatch.setattr("argos_agent.learning.candidates.DEFAULT_ROOT", candidates_root)
-    monkeypatch.setattr("argos_agent.cli.dream._DEFAULT_CANDIDATES_DIR", candidates_root)
+    monkeypatch.setattr("argos.learning.candidates.DEFAULT_ROOT", candidates_root)
+    monkeypatch.setattr("argos.cli.dream._DEFAULT_CANDIDATES_DIR", candidates_root)
     # 重定向 dreams_dir / memory_dir（环境变量）
     monkeypatch.setenv("ARGOS_DREAMS_DIR", str(dreams_dir))
     monkeypatch.setenv("ARGOS_MEMORY_DIR", str(memory_dir))
 
     # build_components 返回 fake_comps（有 key 路径）
-    monkeypatch.setattr("argos_agent.app_factory.build_components",
+    monkeypatch.setattr("argos.app_factory.build_components",
                         MagicMock(return_value=fake_comps))
     # 替换 EvalRunner 构造（返回 fake） + WorktreeManager（no-op）
-    monkeypatch.setattr("argos_agent.eval.runner.EvalRunner",
+    monkeypatch.setattr("argos.eval.runner.EvalRunner",
                         MagicMock(return_value=_FakeEvalRunner()))
-    monkeypatch.setattr("argos_agent.daemon.worktree.WorktreeManager",
+    monkeypatch.setattr("argos.daemon.worktree.WorktreeManager",
                         MagicMock(return_value=MagicMock()))
     # 替换 HintedRunner（用我们的 spy 版）—— 这是 Blocking-1 回归核心
-    monkeypatch.setattr("argos_agent.learning.dream.HintedRunner", _FakeHintedRunner)
+    monkeypatch.setattr("argos.learning.dream.HintedRunner", _FakeHintedRunner)
 
     # ── 跑 CLI ────────────────────────────────────────────────────────────
     import importlib
-    import argos_agent.cli.dream as dream_mod
+    import argos.cli.dream as dream_mod
     importlib.reload(dream_mod)   # 让 module-level import 的 _DEFAULT_SKILLS_DIR 生效
 
     ns = argparse.Namespace()
@@ -380,8 +380,8 @@ def test_cli_dream_eval_runner_receives_loop_factory(tmp_path, monkeypatch, caps
     验证方式：用 spy 捕获 EvalRunner(...)  构造调用参数，断言 loop_factory is not None。
     回退验证：把 loop_factory 传参从 cli/dream.py 删掉，此测试必须 FAIL。
     """
-    from argos_agent.learning.candidates import save_candidate
-    from argos_agent.learning.distiller import SkillCandidate
+    from argos.learning.candidates import save_candidate
+    from argos.learning.distiller import SkillCandidate
 
     # ── 最小目录体系（只需触发 has-key 分支到 EvalRunner 构造即可）────────────
     candidates_root = tmp_path / "candidates"
@@ -422,23 +422,23 @@ def test_cli_dream_eval_runner_receives_loop_factory(tmp_path, monkeypatch, caps
     fake_run_stack.loop_factory = MagicMock(return_value=MagicMock())  # 非 None
 
     # ── monkeypatch ───────────────────────────────────────────────────────
-    monkeypatch.setattr("argos_agent.skills.USER_DIR", skills_root)
-    monkeypatch.setattr("argos_agent.cli.dream._DEFAULT_SKILLS_DIR", skills_root)
-    monkeypatch.setattr("argos_agent.learning.candidates.DEFAULT_ROOT", candidates_root)
-    monkeypatch.setattr("argos_agent.cli.dream._DEFAULT_CANDIDATES_DIR", candidates_root)
+    monkeypatch.setattr("argos.skills.USER_DIR", skills_root)
+    monkeypatch.setattr("argos.cli.dream._DEFAULT_SKILLS_DIR", skills_root)
+    monkeypatch.setattr("argos.learning.candidates.DEFAULT_ROOT", candidates_root)
+    monkeypatch.setattr("argos.cli.dream._DEFAULT_CANDIDATES_DIR", candidates_root)
     monkeypatch.setenv("ARGOS_DREAMS_DIR", str(dreams_dir))
     monkeypatch.setenv("ARGOS_MEMORY_DIR", str(memory_dir))
 
-    monkeypatch.setattr("argos_agent.app_factory.build_components",
+    monkeypatch.setattr("argos.app_factory.build_components",
                         MagicMock(return_value=fake_comps))
-    monkeypatch.setattr("argos_agent.app_factory.build_run_stack",
+    monkeypatch.setattr("argos.app_factory.build_run_stack",
                         MagicMock(return_value=fake_run_stack))
-    monkeypatch.setattr("argos_agent.eval.runner.EvalRunner", _spy_eval_runner)
-    monkeypatch.setattr("argos_agent.daemon.worktree.WorktreeManager",
+    monkeypatch.setattr("argos.eval.runner.EvalRunner", _spy_eval_runner)
+    monkeypatch.setattr("argos.daemon.worktree.WorktreeManager",
                         MagicMock(return_value=MagicMock()))
 
     import importlib
-    import argos_agent.cli.dream as dream_mod
+    import argos.cli.dream as dream_mod
     importlib.reload(dream_mod)
 
     ns = argparse.Namespace()

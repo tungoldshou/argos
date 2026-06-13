@@ -15,7 +15,7 @@ import pytest
 
 ROOT = Path(__file__).parent.parent
 PYPROJECT = ROOT / "pyproject.toml"
-CLI_PKG = ROOT / "argos_agent" / "cli" / "pkg.py"
+CLI_PKG = ROOT / "argos" / "cli" / "pkg.py"
 PUBLISH_YML = ROOT / ".github" / "workflows" / "publish.yml"
 
 
@@ -67,19 +67,19 @@ def test_pyproject_scripts_contains_argos_and_argospkg():
     m = re.search(r'\[project\.scripts\](.*?)(?=\n\[|\Z)', txt, flags=re.DOTALL)
     assert m, "pyproject 缺 [project.scripts] 段"
     body = m.group(1)
-    assert re.search(r'^\s*argos\s*=\s*"argos_agent\.__main__:main"', body, re.M), \
-        "缺 argos = argos_agent.__main__:main"
-    assert re.search(r'^\s*argospkg\s*=\s*"argos_agent\.cli\.pkg:main"', body, re.M), \
-        "缺 argospkg = argos_agent.cli.pkg:main"
+    assert re.search(r'^\s*argos\s*=\s*"argos\.__main__:main"', body, re.M), \
+        "缺 argos = argos.__main__:main"
+    assert re.search(r'^\s*argospkg\s*=\s*"argos\.cli\.pkg:main"', body, re.M), \
+        "缺 argospkg = argos.cli.pkg:main"
 
 
 def test_pyproject_sdist_includes_critical_files():
-    """[tool.hatch.build.targets.sdist.include] 含 argos_agent + README + LICENSE + VERSION + argos.spec。"""
+    """[tool.hatch.build.targets.sdist.include] 含 argos + README + LICENSE + VERSION + argos.spec。"""
     txt = PYPROJECT.read_text()
     m = re.search(r'\[tool\.hatch\.build\.targets\.sdist\](.*?)(?=\n\[|\Z)', txt, flags=re.DOTALL)
     assert m, "pyproject 缺 [tool.hatch.build.targets.sdist] 段"
     body = m.group(1)
-    for f in ("argos_agent", "README.md", "LICENSE", "CHANGELOG.md",
+    for f in ("argos", "README.md", "LICENSE", "CHANGELOG.md",
               "packaging/VERSION", "packaging/Info.plist", "packaging/argos.spec"):
         assert f in body, f"[tool.hatch.build.targets.sdist.include] 缺 {f}"
     # exclude 也得有(在 body 内)
@@ -100,7 +100,7 @@ def test_argospkg_pkg_file_exists():
 def test_argospkg_info_prints_metadata():
     """`argospkg info` 退出 0,stdout 含 name/version/pkg/VERSION。"""
     r = subprocess.run(
-        [sys.executable, "-m", "argos_agent.cli.pkg", "info"],
+        [sys.executable, "-m", "argos.cli.pkg", "info"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
     )
     assert r.returncode == 0, f"argospkg info 返 {r.returncode};stderr={r.stderr}"
@@ -113,7 +113,7 @@ def test_argospkg_info_prints_metadata():
 def test_argospkg_check_imports_cleanly():
     """`argospkg check` 退出 0,stdout 含 'import OK'。"""
     r = subprocess.run(
-        [sys.executable, "-m", "argos_agent.cli.pkg", "check"],
+        [sys.executable, "-m", "argos.cli.pkg", "check"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
     )
     assert r.returncode == 0, f"argospkg check 返 {r.returncode};stderr={r.stderr}"
@@ -123,7 +123,7 @@ def test_argospkg_check_imports_cleanly():
 def test_argospkg_unknown_subcommand_exits_nonzero():
     """`argospkg foo` 退出非 0(2),stderr 含 'unknown subcommand'。"""
     r = subprocess.run(
-        [sys.executable, "-m", "argos_agent.cli.pkg", "foo"],
+        [sys.executable, "-m", "argos.cli.pkg", "foo"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
     )
     assert r.returncode != 0
@@ -133,7 +133,7 @@ def test_argospkg_unknown_subcommand_exits_nonzero():
 def test_argospkg_manifest_lists_winget_dir():
     """`argospkg manifest` 退出 0,列 packaging/winget/ 文件(若存在)。"""
     r = subprocess.run(
-        [sys.executable, "-m", "argos_agent.cli.pkg", "manifest"],
+        [sys.executable, "-m", "argos.cli.pkg", "manifest"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
     )
     assert r.returncode == 0, f"argospkg manifest 返 {r.returncode};stderr={r.stderr}"
@@ -144,14 +144,14 @@ def test_argospkg_manifest_lists_winget_dir():
 def test_argospkg_help_prints_usage():
     """`--help` 返 0 + 显 usage;无参 返 1 + 显 usage(用户调用方式提示)。"""
     r = subprocess.run(
-        [sys.executable, "-m", "argos_agent.cli.pkg", "--help"],
+        [sys.executable, "-m", "argos.cli.pkg", "--help"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
     )
     assert r.returncode == 0, f"--help 返 {r.returncode};stderr={r.stderr}"
     assert "usage: argospkg" in r.stdout
 
     r2 = subprocess.run(
-        [sys.executable, "-m", "argos_agent.cli.pkg"],
+        [sys.executable, "-m", "argos.cli.pkg"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
     )
     # 无参 dispatch 返 1(告诉用户"请给子命令"),但 usage 仍打印
@@ -186,7 +186,7 @@ def test_uv_build_dry_run_succeeds():
     sdist = list(dist.glob("*.tar.gz"))
     assert whl, f"dist/ 无 .whl;有:{list(dist.iterdir())}"
     assert sdist, f"dist/ 无 .tar.gz;有:{list(dist.iterdir())}"
-    # 名字符合 spec §4.4(hatch 把 `argos-agent` 规整为 `argos_agent` 文件名)
+    # 名字符合 spec §4.4(hatch 把 `argos-agent` 规整为 `argos` 文件名)
     assert whl[0].name.startswith("argos_agent-"), f"wheel 名字错:{whl[0].name}"
     assert sdist[0].name.startswith("argos_agent-"), f"sdist 名字错:{sdist[0].name}"
 

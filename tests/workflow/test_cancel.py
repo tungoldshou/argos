@@ -9,8 +9,8 @@ import subprocess
 
 import pytest
 
-from argos_agent.workflow.engine import WorkflowEngine
-from argos_agent.workflow.spec import parse_spec
+from argos.workflow.engine import WorkflowEngine
+from argos.workflow.spec import parse_spec
 
 
 def _git_init(p):

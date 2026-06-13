@@ -1,5 +1,5 @@
 # tests/test_transcript_fences.py
-from argos_agent.tui.widgets.transcript import strip_code_fences
+from argos.tui.widgets.transcript import strip_code_fences
 
 
 def test_strip_complete_block():

@@ -17,7 +17,7 @@ import json
 
 import pytest
 
-import argos_agent.protocol.events as PE
+import argos.protocol.events as PE
 
 
 # ── 辅助 ──────────────────────────────────────────────────────────────────────
@@ -189,7 +189,7 @@ def test_text_preview_truncation_convention():
 
 def test_tui_events_shim_exports_computer_action_event():
     """tui/events.py shim 必须 re-export ComputerActionEvent。"""
-    from argos_agent.tui import events as E  # noqa: PLC0415
+    from argos.tui import events as E  # noqa: PLC0415
     assert hasattr(E, "ComputerActionEvent"), (
         "tui/events.py shim 未导出 ComputerActionEvent —— 需要在 shim 中加入 re-export"
     )

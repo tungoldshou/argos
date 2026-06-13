@@ -87,9 +87,9 @@
                  └─────────────────────────────────────────────────┘
 ```
 
-以下包均已落地（v6 P0-P6 完成）：`argos_agent/protocol/`（事件+envelope+序列化 ABI）、`argos_agent/capability/`
-（统一注册表）、`argos_agent/intent/`、`argos_agent/ledger/`、`argos_agent/conductor/`、
-`argos_agent/perception/`（computer-use 执行器）。`daemon/` 已提拔为内核装配主线。
+以下包均已落地（v6 P0-P6 完成）：`argos/protocol/`（事件+envelope+序列化 ABI）、`argos/capability/`
+（统一注册表）、`argos/intent/`、`argos/ledger/`、`argos/conductor/`、
+`argos/perception/`（computer-use 执行器）。`daemon/` 已提拔为内核装配主线。
 `tui/events.py` 留 re-export shim。**不动**：`tui/widgets/`、`glow/theme/sync_output`（TUI 私有）、
 `git_worktree.py`、Seatbelt 子进程协议、daemon 的 state_machine/store/index/sessions。
 

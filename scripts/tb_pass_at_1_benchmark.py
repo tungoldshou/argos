@@ -18,20 +18,20 @@ import sys
 import time
 from pathlib import Path
 
-# 让脚本可以 import argos_agent(无需 pip install)
+# 让脚本可以 import argos(无需 pip install)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from argos_agent import config
-from argos_agent.approval import ApprovalGate, ApprovalLevel
-from argos_agent.core.models import CredentialPool, ModelClient
-from argos_agent.core.verify_gate import Verifier
-from argos_agent.eval.benchmarks import terminal_bench_best_of_n as bridge
-from argos_agent.sandbox.broker import CapabilityBroker
-from argos_agent.sandbox.egress import EgressPolicy
-from argos_agent.tools.receipts import ReceiptSigner
-from argos_agent.workflow.engine import WorkflowEngine
-from argos_agent.workflow.subagent import SubAgentFactory
-from argos_agent.memory.store import ArgosStore
+from argos import config
+from argos.approval import ApprovalGate, ApprovalLevel
+from argos.core.models import CredentialPool, ModelClient
+from argos.core.verify_gate import Verifier
+from argos.eval.benchmarks import terminal_bench_best_of_n as bridge
+from argos.sandbox.broker import CapabilityBroker
+from argos.sandbox.egress import EgressPolicy
+from argos.tools.receipts import ReceiptSigner
+from argos.workflow.engine import WorkflowEngine
+from argos.workflow.subagent import SubAgentFactory
+from argos.memory.store import ArgosStore
 
 
 def _resolve_tier_and_key(use_env_override: bool) -> tuple:
@@ -59,7 +59,7 @@ def _resolve_tier_and_key(use_env_override: bool) -> tuple:
         provider = (os.environ.get("ARGOS_LLM_PROVIDER")
                     or os.environ.get("VITE_LLM_PROVIDER") or "anthropic").lower()
         if model and base and key:
-            from argos_agent.core.models import ModelTier
+            from argos.core.models import ModelTier
             tier = ModelTier(
                 name="script-override", model=model, base_url=base,
                 max_tokens=8192, context_window=128000, protocol=provider,

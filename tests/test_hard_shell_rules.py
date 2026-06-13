@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.permissions.hard_rules import (
+from argos.permissions.hard_rules import (
     HARD_SHELL_RULES,
     HardShellRule,
     check_hard_shell,

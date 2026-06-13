@@ -4,11 +4,11 @@ from __future__ import annotations
 import pytest
 from textual.app import App, ComposeResult
 
-from argos_agent.core.types import Verdict
-from argos_agent.tui.theme import ARGOS_NIGHT
-from argos_agent.tui.widgets.code_action import CodeActionBlock
-from argos_agent.tui.widgets.diff_view import DiffView
-from argos_agent.tui.widgets.verdict_badge import VerdictBadge
+from argos.core.types import Verdict
+from argos.tui.theme import ARGOS_NIGHT
+from argos.tui.widgets.code_action import CodeActionBlock
+from argos.tui.widgets.diff_view import DiffView
+from argos.tui.widgets.verdict_badge import VerdictBadge
 
 
 class _Host(App):
@@ -96,7 +96,7 @@ async def test_verdict_badge_three_states():
         await pilot.pause()
         assert badge.status == "unverifiable" and "无法验证" in badge.render_text
 
-from argos_agent.tui.widgets.status_bar import StatusBar
+from argos.tui.widgets.status_bar import StatusBar
 
 
 @pytest.mark.asyncio

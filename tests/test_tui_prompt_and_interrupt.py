@@ -12,11 +12,11 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from argos_agent.tui.app import ArgosApp
-from argos_agent.tui.commands import match_commands
-from argos_agent.tui.events import Event, PhaseChange
-from argos_agent.tui.fakeloop import FakeLoop
-from argos_agent.tui.widgets.prompt import PromptArea, SlashMenu
+from argos.tui.app import ArgosApp
+from argos.tui.commands import match_commands
+from argos.tui.events import Event, PhaseChange
+from argos.tui.fakeloop import FakeLoop
+from argos.tui.widgets.prompt import PromptArea, SlashMenu
 
 
 # ── match_commands 纯逻辑(slash 菜单 / Tab 补全的单一判据) ───────────────────

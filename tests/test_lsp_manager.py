@@ -12,9 +12,9 @@ from typing import Any
 
 import pytest
 
-from argos_agent.lsp.client import LspClient, encode_frame, parse_frames
-from argos_agent.lsp.config import LspConfig, LspServerConfig
-from argos_agent.lsp.manager import (
+from argos.lsp.client import LspClient, encode_frame, parse_frames
+from argos.lsp.config import LspConfig, LspServerConfig
+from argos.lsp.manager import (
     LspManager,
     ServerStatus,
     _BACKOFF_SECONDS,
@@ -334,7 +334,7 @@ async def test_crash_marks_crashed_and_schedules_retry(fake_proc_factory, monkey
         sleeps.append(s)
         return None
 
-    monkeypatch.setattr("argos_agent.lsp.manager.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("argos.lsp.manager.asyncio.sleep", fake_sleep)
 
     tasks: list[asyncio.Task] = []
 
@@ -451,7 +451,7 @@ async def test_request_queueing_when_not_ready(fake_proc_factory, monkeypatch):
     # 短路 30s sleep
     async def fake_sleep(s):
         return None
-    monkeypatch.setattr("argos_agent.lsp.manager.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("argos.lsp.manager.asyncio.sleep", fake_sleep)
 
     # 用一个慢启动的 spawn
     mgr = LspManager(_config_with_python())

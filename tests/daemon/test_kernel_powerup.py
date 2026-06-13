@@ -22,9 +22,9 @@ from typing import AsyncIterator
 import pytest
 import pytest_asyncio
 
-from argos_agent.daemon.manager import RunManager
-from argos_agent.daemon.server import DaemonHTTPServer
-from argos_agent.daemon.worker import FakeLoop
+from argos.daemon.manager import RunManager
+from argos.daemon.server import DaemonHTTPServer
+from argos.daemon.worker import FakeLoop
 
 
 # ── helpers ─────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ async def _raw_req(socket_path: Path, method: str, path: str, *,
                    body: dict | None = None,
                    timeout: float = 10.0):
     """raw HTTP 请求,返 (status, raw_bytes)。"""
-    from argos_agent.daemon.client import DaemonClient
+    from argos.daemon.client import DaemonClient
     cli = DaemonClient(socket_path, timeout=timeout)
     status, _headers, raw = await cli._request(method, path,
                                                 session_id=session_id,
@@ -87,7 +87,7 @@ async def _collect_sse_events(socket_path: Path, sid: str, run_id: str,
     events: list[dict] = []
     deadline = time.monotonic() + timeout
 
-    from argos_agent.daemon.client import DaemonClient
+    from argos.daemon.client import DaemonClient
     cli = DaemonClient(socket_path, timeout=timeout)
     async for ev in cli.subscribe_events(run_id, sid):
         events.append(ev)
@@ -132,7 +132,7 @@ async def server_with_fake_loop(tmp_path: Path):
 @pytest_asyncio.fixture
 async def server_no_key(tmp_path: Path):
     """_NO_KEY 哨兵 DaemonHTTPServer(诚实无 key 模式,daemon/__main__.py 路径)。"""
-    from argos_agent.daemon.server import _NO_KEY
+    from argos.daemon.server import _NO_KEY
     runs_dir = tmp_path / "runs"
     index_path = tmp_path / "index.json"
     socket_path = tmp_path / "daemon.sock"
@@ -219,7 +219,7 @@ class _WorkspaceCapturingFakeLoop:
         self.captured_workspace: str | None = None
 
     async def run(self, goal: str, session_id: str):
-        import argos_agent.runtime as _runtime
+        import argos.runtime as _runtime
         # 捕获 runtime context,验证每个 run 拿到的是自己的 workspace
         ctx = _runtime.current()
         self.captured_workspace = str(ctx.workspace)
@@ -376,8 +376,8 @@ async def test_per_run_components_are_distinct_objects(tmp_path: Path):
     (测试环境无需 seatbelt/sandbox 子进程),专注验证对象身份与 close 钩子。
     """
     import unittest.mock as mock
-    from argos_agent.daemon.server import DaemonHTTPServer
-    from argos_agent.daemon.manager import RunManager
+    from argos.daemon.server import DaemonHTTPServer
+    from argos.daemon.manager import RunManager
 
     ws1 = tmp_path / "ws1"
     ws2 = tmp_path / "ws2"
@@ -437,7 +437,7 @@ async def test_per_run_components_are_distinct_objects(tmp_path: Path):
     await srv.start()
 
     try:
-        with mock.patch("argos_agent.daemon.server.build_run_stack", side_effect=_fake_build_run_stack):
+        with mock.patch("argos.daemon.server.build_run_stack", side_effect=_fake_build_run_stack):
             sid = await _create_session(socket_path)
 
             # 并发提交两个 run
@@ -510,7 +510,7 @@ async def test_create_run_honest_rejection_when_no_key(server_no_key: tuple):
 
 def test_to_event_dict_dict_passthrough():
     """dict 输入原样直通。"""
-    from argos_agent.daemon.worker import _to_event_dict
+    from argos.daemon.worker import _to_event_dict
     d = {"kind": "token_delta", "text": "hello", "step": 0}
     result = _to_event_dict(d)
     assert result == d
@@ -519,8 +519,8 @@ def test_to_event_dict_dict_passthrough():
 
 def test_to_event_dict_dataclass_typed():
     """typed dataclass(protocol.events)正确序列化为 dict。"""
-    from argos_agent.daemon.worker import _to_event_dict
-    from argos_agent.protocol.events import TokenDelta
+    from argos.daemon.worker import _to_event_dict
+    from argos.protocol.events import TokenDelta
     ev = TokenDelta(text="hello")
     result = _to_event_dict(ev)
     assert result["kind"] == "token_delta"
@@ -529,8 +529,8 @@ def test_to_event_dict_dataclass_typed():
 
 def test_to_event_dict_code_action():
     """CodeAction dataclass 序列化 kind + step + code。"""
-    from argos_agent.daemon.worker import _to_event_dict
-    from argos_agent.protocol.events import CodeAction
+    from argos.daemon.worker import _to_event_dict
+    from argos.protocol.events import CodeAction
     ev = CodeAction(code="print(1)", step=3)
     result = _to_event_dict(ev)
     assert result["kind"] == "code_action"
@@ -541,8 +541,8 @@ def test_to_event_dict_code_action():
 def test_daemon_approval_gate_timeout_denies():
     """DaemonApprovalGate 超时后返回 deny Decision(不自动放行)。"""
     import asyncio
-    from argos_agent.daemon.worker import DaemonApprovalGate
-    from argos_agent.approval import ApprovalGate, ApprovalLevel, Decision
+    from argos.daemon.worker import DaemonApprovalGate
+    from argos.approval import ApprovalGate, ApprovalLevel, Decision
 
     async def _run():
         # 用真 gate(CONFIRM 档,timeout 极短)

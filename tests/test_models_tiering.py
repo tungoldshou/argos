@@ -4,7 +4,7 @@ import json
 import httpx
 import pytest
 
-from argos_agent.core.models import ModelTier, ModelClient, CredentialPool
+from argos.core.models import ModelTier, ModelClient, CredentialPool
 
 
 def test_model_tier_frozen_and_fields():

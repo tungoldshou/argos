@@ -15,9 +15,9 @@ from urllib.parse import quote
 
 import pytest
 
-from argos_agent.lsp.client import LspClient, encode_frame
-from argos_agent.lsp.config import LspConfig, LspServerConfig
-from argos_agent.lsp.manager import (
+from argos.lsp.client import LspClient, encode_frame
+from argos.lsp.config import LspConfig, LspServerConfig
+from argos.lsp.manager import (
     LspManager,
     _reset_content_cache,
     set_spawn_proc_fn,

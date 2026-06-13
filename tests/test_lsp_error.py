@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from argos_agent.lsp.config import LspConfig, LspServerConfig
-from argos_agent.lsp.manager import LspManager, set_spawn_proc_fn, set_event_emit_fn
-from argos_agent.lsp.tools import (
+from argos.lsp.config import LspConfig, LspServerConfig
+from argos.lsp.manager import LspManager, set_spawn_proc_fn, set_event_emit_fn
+from argos.lsp.tools import (
     lsp_definition_gated, lsp_diagnostics_gated,
     lsp_hover_gated, lsp_references_gated, lsp_document_symbols_gated,
     lsp_workspace_symbols_gated,
@@ -92,7 +92,7 @@ def test_all_six_gated_tools_dispatch_without_exception(tmp_path):
 
 def test_tools_registered_in_all_tool_names():
     """6 个 lsp_* 工具在 ALL_TOOL_NAMES 中;7 个 computer.* 在 ALL_TOOL_NAMES 中(工具数 22 → 29)。"""
-    from argos_agent.tools import ALL_TOOL_NAMES
+    from argos.tools import ALL_TOOL_NAMES
     for name in ("lsp_definition", "lsp_references", "lsp_hover",
                  "lsp_document_symbols", "lsp_workspace_symbols", "lsp_diagnostics"):
         assert name in ALL_TOOL_NAMES
@@ -107,7 +107,7 @@ def test_tools_broker_dispatch_lsp_definition():
 
     本测试只验 broker._RISK 包含 lsp_* + _execute 有 lsp_* 分支(代码静态断言,
     因为 _execute 走的是 action.startswith('lsp_') 分发,不在 _RISK 中也 OK)。"""
-    from argos_agent.sandbox import broker as broker_mod
+    from argos.sandbox import broker as broker_mod
     import inspect
     src = inspect.getsource(broker_mod.CapabilityBroker._execute)
     assert "lsp_" in src

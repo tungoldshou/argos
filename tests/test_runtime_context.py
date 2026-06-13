@@ -2,8 +2,8 @@
 import asyncio
 from pathlib import Path
 
-from argos_agent import runtime
-from argos_agent.runtime import RunContext
+from argos import runtime
+from argos.runtime import RunContext
 
 
 def test_set_context_then_current_reads_it(tmp_path):

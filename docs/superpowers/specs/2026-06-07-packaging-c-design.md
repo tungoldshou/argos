@@ -76,14 +76,14 @@
 10. **Cross-platform matrix** — `release.yml` 加 `linux` job(AppImage/.deb/.rpm)+ `windows`
     job(.exe/.msi),macos 已有(B 阶段)
 11. **0 新源代码逻辑** — 全部在 `packaging/`(脚本/配置)+ `pyproject.toml`(项目元数据)+
-    `.github/workflows/`(CI) + `CHANGELOG.md` + `README.md`;不修 `argos_agent/`(除可能的
+    `.github/workflows/`(CI) + `CHANGELOG.md` + `README.md`;不修 `argos/`(除可能的
     pyproject 显式 include)
 12. **0 新强制外部依赖** — 不加 sqlite;PyPI publish 走 OIDC 免 token;`winget`/`dpkg-deb`/
     `rpmbuild`/`msitools` 都在 CI runner 装
 13. **测试 +30**(spec §14):`test_packaging_pypi.py` / `test_packaging_linux_spec.py` /
     `test_packaging_windows_spec.py` / `test_packaging_homebrew.py` /
     `test_packaging_winget.py` / `test_packaging_release_workflow.py`
-14. **不**改 `argos_agent/` 任何模块;**不**改 `__main__.py`;**不**改 `core/loop.py` /
+14. **不**改 `argos/` 任何模块;**不**改 `__main__.py`;**不**改 `core/loop.py` /
     `setup_wizard.py` / `eval/` / `skills_curator/`(spec §18 锁)
 
 ### 2.2 非目标(本期不做)
@@ -203,8 +203,8 @@ dependencies = [              # 现有,不动
 ]
 
 [project.scripts]
-argos = "argos_agent.__main__:main"          # 现有
-argospkg = "argos_agent.cli.pkg:main"        # 新(spec D8 dispatcher)
+argos = "argos.__main__:main"          # 现有
+argospkg = "argos.cli.pkg:main"        # 新(spec D8 dispatcher)
 
 [project.urls]
 Homepage = "https://github.com/tungoldshou/argos"
@@ -217,12 +217,12 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["argos_agent"]
+packages = ["argos"]
 
 [tool.hatch.build.targets.sdist]
 # 显式 include:源码包不全 0 数据就装不起来(schema.sql / skills_builtin)
 include = [
-  "argos_agent",
+  "argos",
   "README.md",
   "LICENSE",
   "CHANGELOG.md",
@@ -243,7 +243,7 @@ exclude = [
 ]
 ```
 
-### 4.2 `argos_agent/cli/pkg.py`(新,spec D8 dispatcher)
+### 4.2 `argos/cli/pkg.py`(新,spec D8 dispatcher)
 
 ```python
 """`argospkg` 命令 — 打包工具 dispatcher(规格里 argv[0] = argospkg 切到 packaging 子命令)。
@@ -254,14 +254,14 @@ import sys
 
 def main() -> int:
     """根据 argv 切到 packaging 子命令。MVP 暴露 'info' / 'check' / 'manifest'。"""
-    from argos_agent.cli.pkg import dispatch
+    from argos.cli.pkg import dispatch
     return dispatch(sys.argv[1:])
 
 if __name__ == "__main__":
     sys.exit(main())
 ```
 
-`argos_agent/cli/pkg.py` 提供:
+`argos/cli/pkg.py` 提供:
 - `info` — 打印 `pyproject.toml` [project] 段 / packaging/VERSION / 当前 git tag
 - `check` — 跑 `uv build --dry-run` 模拟,确认 wheel/sdist 能产出
 - `manifest` — 显式生成 WinGet manifest(给 winget 提交用)
@@ -340,12 +340,12 @@ uv run pyinstaller --clean --noconfirm \
   --name argos \
   --onefile \
   --console \
-  --add-data "argos_agent/memory/schema.sql:argos_agent/memory" \
+  --add-data "argos/memory/schema.sql:argos/memory" \
   --add-data "packaging/VERSION:packaging" \
   --add-data "packaging/Info.plist:packaging" \
   --collect-submodules smolagents \
   --collect-submodules textual \
-  --collect-submodules argos_agent \
+  --collect-submodules argos \
   --collect-data-files textual \
   --collect-data-files smolagents \
   --copy-metadata argos-agent \
@@ -354,7 +354,7 @@ uv run pyinstaller --clean --noconfirm \
   --exclude-module fastapi \
   --exclude-module uvicorn \
   --osx-bundle-identifier "com.tungoldshou.argos" \
-  argos_agent/__main__.py
+  argos/__main__.py
 
 BIN=dist/argos
 file "$BIN"                          # 必须 ELF 64-bit LSB executable
@@ -502,12 +502,12 @@ uv run pyinstaller --clean --noconfirm \
   --name argos \
   --onefile \
   --console \
-  --add-data "argos_agent/memory/schema.sql;argos_agent/memory" \
+  --add-data "argos/memory/schema.sql;argos/memory" \
   --add-data "packaging/VERSION;packaging" \
   --add-data "packaging/Info.plist;packaging" \
   --collect-submodules smolagents \
   --collect-submodules textual \
-  --collect-submodules argos_agent \
+  --collect-submodules argos \
   --collect-data-files textual \
   --collect-data-files smolagents \
   --copy-metadata argos-agent \
@@ -515,7 +515,7 @@ uv run pyinstaller --clean --noconfirm \
   --exclude-module langgraph \
   --exclude-module fastapi \
   --exclude-module uvicorn \
-  argos_agent/__main__.py
+  argos/__main__.py
 
 BIN=dist/argos.exe
 [ -f "$BIN" ] || { echo "FATAL: 缺 $BIN"; exit 1; }
@@ -935,7 +935,7 @@ jobs:
 
 ### 12.3 既有 1622 测试 0 破坏
 
-- 不动 `argos_agent/` 任何源文件
+- 不动 `argos/` 任何源文件
 - 不动 `__main__.py`(除 `[project.scripts]` 已有 `argos`,本期待加 `argospkg` 走 dispatcher)
 - 不动 `core/loop.py` / `setup_wizard.py` / `eval/` / `skills_curator/`
 - 不动 `pyproject.toml` 既有字段(只加 `license` / `authors` / `keywords` / `classifiers` /
@@ -954,7 +954,7 @@ jobs:
 - **风险 7**:Homebrew tap 仓 GH PAT 泄露 — secret 走 repo-level 加密;v1.1 接 GitHub App
 - **风险 8**:跨 OS 矩阵 CI 跑 30+ 分钟 — release 频率低,可接受;v1.1 接 cache 加速
 - **风险 9**:`bump-formula-pr` 公式冲突 — 本期走 sed 简单注入;v1.1 走 `praeclarum/homebrew-bump-formula-pr`
-- **风险 10**:`argos_agent/cli/pkg.py` 加 dispatcher 影响 main 启动速度 — 仅在 `argospkg`
+- **风险 10**:`argos/cli/pkg.py` 加 dispatcher 影响 main 启动速度 — 仅在 `argospkg`
   命令路径走,主 `argos` 启动 0 影响
 - **未来 v1.1**:
   - Linux aarch64 / musl(Alpine)
@@ -997,7 +997,7 @@ jobs:
 结构 assertion):
 
 1. `pyproject.toml` 增 `license` / `authors` / `keywords` / `classifiers` / `urls` / `[project.scripts].argospkg` / `[tool.hatch.build.targets.sdist]` 显式 include
-2. `argos_agent/cli/pkg.py` 新 dispatcher(`info` / `check` / `manifest`)+ `[project.scripts]` 验证
+2. `argos/cli/pkg.py` 新 dispatcher(`info` / `check` / `manifest`)+ `[project.scripts]` 验证
 3. `packaging/build_linux.sh` 新 — PyInstaller + AppImage + .deb + .rpm
 4. `packaging/build_windows.sh` 新 — PyInstaller + .exe zip + .msi(可选)
 5. `packaging/install-deb.sh` 新 — .deb 一行装
@@ -1011,7 +1011,7 @@ jobs:
 
 ## 16. 不触动清单(契约 §9 锁)
 
-- **不**改 `argos_agent/` 任何 .py(除新加 `cli/pkg.py` 一文件)
+- **不**改 `argos/` 任何 .py(除新加 `cli/pkg.py` 一文件)
 - **不**改 `__main__.py`(`[project.scripts].argos` 已有,不动 main;`argospkg` 走新 dispatcher)
 - **不**改 `core/loop.py` / `setup_wizard.py` / `eval/` / `skills_curator/` / `context/` / `routing/` /
   `daemon/` / `memory/` / `sandbox/` / `tools/` / `lsp/` / `skills_runtime/` / `permissions/` /

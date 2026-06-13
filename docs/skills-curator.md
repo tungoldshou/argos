@@ -1,7 +1,7 @@
 # Skills curator
 
 > 装 / 卸 / 测 / 推荐 社区 skill 的治理层(spec 2026-06-07-skills-curator)。
-> **不**动 `argos_agent/skills.py` / `skills_runtime/` —— 那是 LLM 提示召回 + 3 个
+> **不**动 `argos/skills.py` / `skills_runtime/` —— 那是 LLM 提示召回 + 3 个
 > builtin skill 编排;curator 只管**装卸**,沿用 #10 spec §3 "不重写 skill runtime"。
 
 ## 5 道防线(spec §6)
@@ -136,11 +136,11 @@ git-commit-hygiene   0.0.4     ... [read, write]              available  -
 
 | 子系统 | 职责 | 本期动? |
 |---|---|---|
-| `argos_agent/skills.py` | markdown 仓库 + 关键字/embedding 召回(LLM 提示用) | **不**动 |
-| `argos_agent/skills_runtime/` | 3 个 builtin skill 编排(/verify 等) | **不**动 |
-| `argos_agent/skills_builtin/` | 3 个受保护 builtin (verify/security-review/simplify) + 4 个内置 seed skill 模板 (git-commit-hygiene / py-test-runner / sql-query-safety / web-search-recipe) | **不**动 |
-| `argos_agent/skills_curator/` (新) | 装 / 卸 / 测 / 推荐 + 5 道防线 | **新加** |
-| `argos_agent/cli/skills.py` (新) | `argos skills` CLI 子命令 | **新加** |
+| `argos/skills.py` | markdown 仓库 + 关键字/embedding 召回(LLM 提示用) | **不**动 |
+| `argos/skills_runtime/` | 3 个 builtin skill 编排(/verify 等) | **不**动 |
+| `argos/skills_builtin/` | 3 个受保护 builtin (verify/security-review/simplify) + 4 个内置 seed skill 模板 (git-commit-hygiene / py-test-runner / sql-query-safety / web-search-recipe) | **不**动 |
+| `argos/skills_curator/` (新) | 装 / 卸 / 测 / 推荐 + 5 道防线 | **新加** |
+| `argos/cli/skills.py` (新) | `argos skills` CLI 子命令 | **新加** |
 | `tui/commands.py` + `tui/app.py` | `/skills` 替换为 curator 视图 | **扩展** |
 
 ## 验证铁证

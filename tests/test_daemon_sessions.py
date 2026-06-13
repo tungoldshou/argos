@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from argos_agent.daemon.sessions import HEARTBEAT_TIMEOUT_S, SessionRegistry
+from argos.daemon.sessions import HEARTBEAT_TIMEOUT_S, SessionRegistry
 
 
 @pytest.mark.asyncio

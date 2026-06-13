@@ -17,8 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel
-from argos_agent.permissions.trust_dial import (
+from argos.approval import ApprovalGate, ApprovalLevel
+from argos.permissions.trust_dial import (
     TrustLevel,
     escalation_warning,
     hard_rules_immune,
@@ -172,14 +172,14 @@ class TestSlashCommandRegistration:
     """/yolo 和 /trust 都是 known 命令；/yolo 帮助文案提示新用法。"""
 
     def test_yolo_still_known(self):
-        from argos_agent.tui.commands import parse_slash
+        from argos.tui.commands import parse_slash
         cmd = parse_slash("/yolo")
         assert cmd is not None
         assert cmd.known is True
         assert cmd.name == "yolo"
 
     def test_trust_now_known(self):
-        from argos_agent.tui.commands import parse_slash
+        from argos.tui.commands import parse_slash
         cmd = parse_slash("/trust l3")
         assert cmd is not None
         assert cmd.known is True
@@ -187,29 +187,29 @@ class TestSlashCommandRegistration:
         assert cmd.arg == "l3"
 
     def test_trust_status_known(self):
-        from argos_agent.tui.commands import parse_slash
+        from argos.tui.commands import parse_slash
         cmd = parse_slash("/trust status")
         assert cmd is not None
         assert cmd.known is True
 
     def test_trust_no_arg_known(self):
-        from argos_agent.tui.commands import parse_slash
+        from argos.tui.commands import parse_slash
         cmd = parse_slash("/trust")
         assert cmd is not None
         assert cmd.known is True
         assert cmd.arg == ""
 
     def test_trust_in_command_help(self):
-        from argos_agent.tui.commands import COMMAND_HELP
+        from argos.tui.commands import COMMAND_HELP
         assert "trust" in COMMAND_HELP
 
     def test_yolo_help_mentions_trust(self):
-        from argos_agent.tui.commands import COMMAND_HELP
+        from argos.tui.commands import COMMAND_HELP
         # yolo 帮助文案中应提示新命令（含 trust 关键词）
         assert "trust" in COMMAND_HELP["yolo"]
 
     def test_match_commands_includes_trust(self):
-        from argos_agent.tui.commands import match_commands
+        from argos.tui.commands import match_commands
         results = match_commands("/tru")
         names = [n for n, _ in results]
         assert "trust" in names
@@ -224,7 +224,7 @@ class TestDaemonTrustLevelParam:
 
     def _make_server(self):
         """构造最小 DaemonHTTPServer 实例（不启动 socket）。"""
-        from argos_agent.daemon.server import DaemonHTTPServer
+        from argos.daemon.server import DaemonHTTPServer
         mgr = MagicMock()
         mgr.create_run = AsyncMock(return_value="run-test-001")
         mgr.store = MagicMock()
@@ -260,7 +260,7 @@ class TestDaemonTrustLevelParam:
         # 模拟 _apply_trust_to_gate(gate) → None（无 trust_level）
         trust_str = None
         if trust_str:
-            from argos_agent.permissions.trust_dial import TrustLevel
+            from argos.permissions.trust_dial import TrustLevel
             gate.set_trust_level(TrustLevel[trust_str])
         assert gate.level is ApprovalLevel.CONFIRM
 
@@ -274,7 +274,7 @@ class TestDaemonTrustLevelParam:
     def test_valid_trust_name_applied(self, trust_name: str, expected_al: ApprovalLevel):
         """有效 trust_level 枚举名正确写入 gate。"""
         gate = ApprovalGate()
-        from argos_agent.permissions.trust_dial import TrustLevel
+        from argos.permissions.trust_dial import TrustLevel
         gate.set_trust_level(TrustLevel[trust_name])
         assert gate.level is expected_al
 
@@ -285,7 +285,7 @@ class TestDaemonTrustLevelParam:
         # 模拟 _apply_trust_to_gate 的容错逻辑
         trust_str = "INVALID_LEVEL_XYZ"
         try:
-            from argos_agent.permissions.trust_dial import TrustLevel
+            from argos.permissions.trust_dial import TrustLevel
             tl = TrustLevel[trust_str]
             gate.set_trust_level(tl)
         except KeyError:
@@ -297,7 +297,7 @@ class TestDaemonTrustLevelParam:
         gate = ApprovalGate()
         trust_str = ""
         if trust_str:
-            from argos_agent.permissions.trust_dial import TrustLevel
+            from argos.permissions.trust_dial import TrustLevel
             gate.set_trust_level(TrustLevel[trust_str])
         assert gate.level is ApprovalLevel.CONFIRM
 

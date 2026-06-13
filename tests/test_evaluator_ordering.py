@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import pytest
 
-from argos_agent.approval import ApprovalLevel
-from argos_agent.permissions.config import PermissionsConfig, RuleEntry
-from argos_agent.permissions.evaluator import (
+from argos.approval import ApprovalLevel
+from argos.permissions.config import PermissionsConfig, RuleEntry
+from argos.permissions.evaluator import (
     DecisionMeta,
     DecisionType,
     evaluate,

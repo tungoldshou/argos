@@ -303,7 +303,7 @@ EFFORT_PRESETS: dict[EffortLevel, EffortSettings] = {
 CLI 解析:
 
 ```python
-# argos_agent/__main__.py 加:
+# argos/__main__.py 加:
 p.add_argument("--effort", choices=["low", "medium", "high"], default="medium",
                help="LoopConfig.max_steps + approval_level 档位(默认 medium)")
 ```
@@ -431,7 +431,7 @@ tier 不存在 → 弹错。成功 → 落一行 "已写入 ~/.argos/config.json
 
 ## 13. CLI `--effort` 与子命令
 
-`argos_agent/__main__.py`:
+`argos/__main__.py`:
 
 ```python
 p.add_argument("--effort", choices=["low", "medium", "high"], default="medium",

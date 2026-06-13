@@ -16,14 +16,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from argos_agent.approval import ApprovalGate, ApprovalLevel
-from argos_agent.core.plan_mode import EnterPlanMode, PlanExitDecision
-from argos_agent.tui.app import ArgosApp
-from argos_agent.tui.events import (
+from argos.approval import ApprovalGate, ApprovalLevel
+from argos.core.plan_mode import EnterPlanMode, PlanExitDecision
+from argos.tui.app import ArgosApp
+from argos.tui.events import (
     Event, PlanRendered, PhaseChange, TokenDelta, VerifyVerdict, CostUpdate,
 )
-from argos_agent.tui.fakeloop import FakeLoop
-from argos_agent.tui.widgets.inline_choice import InlineChoice
+from argos.tui.fakeloop import FakeLoop
+from argos.tui.widgets.inline_choice import InlineChoice
 
 
 class _PlanRenderedLoop:
@@ -43,7 +43,7 @@ class _PlanRenderedLoop:
         yield PhaseChange(phase="plan", actions=0)
         yield TokenDelta(text=f"我会按目标做事:{goal}\n")
         # 投 PlanRendered → TUI 应流内渲染 InlineChoice
-        from argos_agent.core.plan_mode import PlanRenderer
+        from argos.core.plan_mode import PlanRenderer
         plan_md = PlanRenderer.render(goal=goal, todos=[], tool_calls=[])
         yield PlanRendered(plan_md=plan_md)
         # 挂起(模拟 ExitPlanMode 写完决策后由 TUI 唤醒)
@@ -52,7 +52,7 @@ class _PlanRenderedLoop:
         yield PhaseChange(phase="act", actions=1)
         yield TokenDelta(text="干活中\n")
         yield PhaseChange(phase="verify", actions=1)
-        from argos_agent.core.verify_gate import Verdict
+        from argos.core.verify_gate import Verdict
         yield VerifyVerdict(verdict=Verdict.passed(detail="ok", verify_cmd="echo ok", attempts=1))
         yield PhaseChange(phase="report", actions=1)
         yield CostUpdate(tokens_in=10, tokens_out=5, cost_usd=0.0, elapsed_s=0.1)

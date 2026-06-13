@@ -8,8 +8,8 @@
 """
 import pytest
 
-from argos_agent.tui.app import ArgosApp
-from argos_agent.tui.widgets.transcript import Transcript as TranscriptLog
+from argos.tui.app import ArgosApp
+from argos.tui.widgets.transcript import Transcript as TranscriptLog
 
 
 def _make_app(*, run_active: bool, loop_factory, session_id: str = "sess-test") -> ArgosApp:
