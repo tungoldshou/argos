@@ -189,6 +189,7 @@ def load_config() -> ArgosConfig:
         tiers[name] = ModelTier(
             name=name, model=m["model"], base_url=m["base_url"],
             max_tokens=max_tokens, context_window=context_window, protocol=m["protocol"],
+            multimodal=m.get("multimodal"),   # 未设→None(走探针);true/false→显式 override
         )
         key_envs[name] = m.get("api_key_env", "")
         embed_models[name] = m.get("embedding_model", "")
