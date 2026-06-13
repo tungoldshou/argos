@@ -245,6 +245,63 @@ def test_pipeline_name_collision_consumes_sources(tmp_path: Path, monkeypatch):
     assert _read_consumed_reason(cand_dir) == "name_collision"
 
 
+# ── test 7: rejected_ab 路径覆盖 ─────────────────────────────────────────────
+
+def test_pipeline_rejected_ab_consumes_with_reason(tmp_path: Path):
+    """A/B 都 pass(b_passed==a_passed → no_improvement)→ rejected+1、源全消费、reason==rejected_ab。
+
+    这是 review#7 要求的回归守卫:
+    - b_passed <= a_passed 触发 no_improvement 分支(dream.py:419-422)
+    - mark_consumed(reason="rejected_ab") 必须被调用
+    - report.rejected 计数必须增 1
+    - 候选区必须清空(不留 unconsumed)
+    - meta.json 的 consumed_reason 必须等于 "rejected_ab"
+    若 rejected_ab 逻辑回退(如漏调 mark_consumed / 计数未累加 / reason 写错),
+    下面至少一条 assert 会 FAIL ——这是该测试的核心价值。
+    """
+    cand_root = tmp_path / "candidates"
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    # 种 2 个相似候选(共享 "login auth" 主题 → 被聚为同一 unit)
+    cand_dir1 = _seed_candidate(
+        cand_root, run="rab10001aaaa", goal="fix login auth bug",
+        workspace=str(ws), verify_cmd="true",
+    )
+    cand_dir2 = _seed_candidate(
+        cand_root, run="rab20002bbbb", goal="fix login auth timeout bug",
+        workspace=str(ws), verify_cmd="true",
+    )
+
+    # 关键:A(hint=None)和 B(hint!=None)都走 _PassRunner
+    # → a_passed == b_passed → b_passed <= a_passed → no_improvement → rejected_ab
+    pipe, events = _make_pipeline(tmp_path, lambda hint: _PassRunner())
+    report = asyncio.run(pipe.run())
+
+    assert report is not None
+    # rejected 计数必须为 1(1 个 unit,走了 no_improvement 分支)
+    assert report.rejected == 1, (
+        f"期望 rejected==1,实得 {report.rejected};"
+        " 可能 no_improvement 分支漏计数"
+    )
+    # 没有晋升产物
+    assert report.promoted == 0
+    # 候选区必须全清空(2 个源都被 mark_consumed)
+    remaining = list_unconsumed(cand_root)
+    assert remaining == [], (
+        f"期望候选区清空,实际 unconsumed={remaining};"
+        " 可能 mark_consumed 未被调用"
+    )
+    # 两个候选 meta.json 的 consumed_reason 必须是 "rejected_ab"
+    reason1 = _read_consumed_reason(cand_dir1)
+    reason2 = _read_consumed_reason(cand_dir2)
+    assert reason1 == "rejected_ab", (
+        f"cand1 consumed_reason={reason1!r},期望 'rejected_ab'"
+    )
+    assert reason2 == "rejected_ab", (
+        f"cand2 consumed_reason={reason2!r},期望 'rejected_ab'"
+    )
+
+
 # ── test 6: async broadcast_fn 不静默丢事件 ──────────────────────────────────
 
 def test_emit_handles_async_broadcast_fn(tmp_path: Path):
