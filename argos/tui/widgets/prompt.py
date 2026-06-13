@@ -104,6 +104,14 @@ class PromptArea(TextArea):
         except Exception:  # noqa: BLE001 — 测试单挂 PromptArea 时无菜单
             return None
 
+    async def _on_paste(self, event: events.Paste) -> None:
+        """拦括号粘贴:超长 → 占位 chip + 侧缓冲;否则原样内联。
+        全程自己 insert + stop,完全接管粘贴行为(不依赖 TextArea 默认 _on_paste)。"""
+        event.stop()
+        event.prevent_default()
+        token = self._make_paste_token(event.text)
+        self.insert(token if token is not None else event.text)
+
     async def _on_key(self, event: events.Key) -> None:
         if event.key == "space" and not self.text:
             # 空输入框按空格 = 语音开关(对齐 spec §6.1);有字时空格正常输入。
@@ -136,8 +144,12 @@ class PromptArea(TextArea):
                     return
             stripped = text.strip()
             if stripped:
-                self.post_message(self.Submitted(stripped))
-                self.clear()
+                expanded, attachments = self._expand_submission(stripped)
+                if expanded or attachments:
+                    self.post_message(self.Submitted(expanded, attachments))
+                    self._paste_store.clear()
+                    self._image_store.clear()
+                    self.clear()
             return
         if event.key == "tab":
             if menu_active:

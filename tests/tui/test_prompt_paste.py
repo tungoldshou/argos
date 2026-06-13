@@ -67,3 +67,62 @@ def test_submitted_carries_attachments():
 def test_submitted_attachments_default_empty():
     msg = PromptArea.Submitted("hi")
     assert msg.attachments == []
+
+
+# ── Task 3: paste interception + Enter 展开(需挂载,带主题宿主) ──
+import pytest
+from textual import events
+from textual.app import App
+from argos.tui.theme import ARGOS_NIGHT
+
+
+class _ThemeHost(App):
+    """挂 PromptArea 的临时宿主;注入 ARGOS_NIGHT 变量,使 DEFAULT_CSS 里的 $token 可解析。"""
+    def get_theme_variable_defaults(self) -> dict[str, str]:
+        return ARGOS_NIGHT.variables
+
+    def compose(self):
+        yield PromptArea(id="p")
+
+
+@pytest.mark.asyncio
+async def test_on_paste_long_text_inserts_token_not_raw():
+    app = _ThemeHost()
+    async with app.run_test():
+        pa = app.query_one("#p", PromptArea)
+        big = "y" * 10050
+        await pa._on_paste(events.Paste(big))
+        assert "[粘贴文本 #1" in pa.text          # 占位符进输入框
+        assert "y" * 10050 not in pa.text          # 不是原始 10050 个 y
+        assert any(v == big for v in pa._paste_store.values())  # 侧缓冲存了全文
+
+
+@pytest.mark.asyncio
+async def test_on_paste_short_text_inlines():
+    app = _ThemeHost()
+    async with app.run_test():
+        pa = app.query_one("#p", PromptArea)
+        await pa._on_paste(events.Paste("hello"))
+        assert "hello" in pa.text
+        assert pa._paste_store == {}
+
+
+@pytest.mark.asyncio
+async def test_enter_submits_expanded_text():
+    captured = []
+
+    class _H(_ThemeHost):
+        def on_prompt_area_submitted(self, event):
+            captured.append(event)
+
+    app = _H()
+    async with app.run_test() as pilot:
+        pa = app.query_one("#p", PromptArea)
+        pa.focus()
+        big = "z" * 10050
+        await pa._on_paste(events.Paste(big))     # 输入框现在是 [粘贴文本 #1 ...]
+        await pilot.press("enter")
+        await pilot.pause()
+        assert len(captured) == 1
+        assert captured[0].text == big             # 提交时展开回全文
+        assert captured[0].attachments == []
