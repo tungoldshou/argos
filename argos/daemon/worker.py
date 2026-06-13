@@ -403,10 +403,9 @@ class RunWorker:
                         )
                     except Exception as e:  # noqa: BLE001
                         log.warning("worker: cost add failed for %s: %s", self.run_id, e)
-                # 序列化 + 持久化 + 投 SSE(统一使用 ev_dict)
-                self._event_seq += 1
-                ev_dict["_seq"] = self._event_seq
-                self._manager.store.append(self.run_id, ev_dict)
+                # 序列化 + 持久化 + 投 SSE(统一使用 ev_dict)。_seq 由 store 集中领号(唯一单调,
+                # 跨 worker/manager 两条写入路径一致 → 客户端按 _seq 续传不错位);用返回值更新 index。
+                self._event_seq = self._manager.store.append(self.run_id, ev_dict)
                 self._manager.index.upsert(self.run_id, last_event_seq=self._event_seq)
                 await self._manager.fanout(self.run_id, ev_dict)
                 # P3b §6 行为账本:ToolReceipt 事件 → LedgerEntry 落盘 + 广播

@@ -92,8 +92,9 @@ def transition(
             f"(allowed: {sorted(ALLOWED.get(current, set()))})"
         )
     # 副作用
+    seq = 0
     if store is not None:
-        store.append(run_id, {
+        seq = store.append(run_id, {
             "kind": "state_change",
             "ts": time.time(),
             "from": current,
@@ -106,8 +107,13 @@ def transition(
         # 没有 entry,创建一个最小 entry(target 状态)
         index.upsert(
             run_id, state=target, goal="", workspace="",
-            created_at=now, updated_at=now, last_event_seq=0,
+            created_at=now, updated_at=now, last_event_seq=seq,
         )
+    elif seq > 0:
+        # #5 集中领号:state_change 也领 _seq,把 index 游标同步到该 seq(单调最大),否则
+        # index.last_event_seq 落后于 manager 写的终态事件 → resume/重连游标偏小、重发已见。
+        index.upsert(run_id, state=target, updated_at=now, last_event_seq=seq)
     else:
+        # store=None(纯状态机测试):不触碰 last_event_seq,避免把游标清零。
         index.upsert(run_id, state=target, updated_at=now)
     return target
