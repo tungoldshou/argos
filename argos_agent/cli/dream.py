@@ -86,6 +86,9 @@ def run_dream(args: Any) -> int:
         if report is None:
             print("暂无 Dream 报告(候选区空或从未跑过 Dream)。")
             return 0
+        if not isinstance(report, dict):
+            print(f"Dream 报告格式异常(期望 dict,收到 {type(report).__name__})。")
+            return 0
         print(_fmt_report(report))
         return 0
 

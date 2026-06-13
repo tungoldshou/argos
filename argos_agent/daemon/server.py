@@ -1620,6 +1620,12 @@ class DaemonHTTPServer:
 
         def _reset_starting(_fut):
             self._dream_starting = False
+            try:
+                exc = _fut.exception() if not _fut.cancelled() else None
+            except Exception:  # noqa: BLE001
+                exc = None
+            if exc is not None:
+                log.warning("dream-run 任务异常退出: %s", exc)
 
         task = asyncio.create_task(pipeline.run(), name="dream-run")
         task.add_done_callback(_reset_starting)

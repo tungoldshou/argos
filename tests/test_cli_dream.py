@@ -65,11 +65,29 @@ def test_cli_dream_report_shows_latest(tmp_path, monkeypatch, capsys):
     code = run_dream(_args(report=True))
     out = capsys.readouterr().out
     assert code == 0
-    # 最后一行计数:units=5 promoted=3
-    assert "5" in out   # units_total
-    assert "3" in out   # promoted
-    # 旧文件的 units=1 不应出现(除非 "1" 作为子串在摘要行里 — 故检 "units_total=5")
-    assert "units_total=5" in out or "units: 5" in out or "5" in out
+    # 最后一行计数:units=5 promoted=3(_fmt_report 真实输出格式)
+    assert "units_total=5" in out and "promoted=3" in out
+
+
+# ── 2b. --report 非 dict 报告内容 → 守卫不崩溃 ─────────────────────────
+
+
+@pytest.mark.parametrize("bad_payload", [[], 42, "str", True])
+def test_cli_dream_report_non_dict_does_not_crash(tmp_path, monkeypatch, capsys, bad_payload):
+    """写入非 dict JSON 行到 dreams JSONL;run_dream(--report) 不抛 AttributeError,
+    返 0,输出含 '格式异常'。
+    """
+    monkeypatch.setenv("ARGOS_DREAMS_DIR", str(tmp_path))
+
+    # 写一个 JSONL 文件,最后一行是坏 payload
+    report_file = tmp_path / "2020-01-01.jsonl"
+    report_file.write_text(json.dumps(bad_payload) + "\n")
+
+    from argos_agent.cli.dream import run_dream
+    code = run_dream(_args(report=True))
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "格式异常" in out
 
 
 # ── 3. 无 key 降级:build_components 抛 RuntimeError ─────────────────────
@@ -216,6 +234,6 @@ async def test_tui_dream_status_non_dict_report_does_not_crash(bad_report):
             txt = app.query_one("#transcript", Transcript).rendered_text
 
         # 不应炸,应输出格式错误提示
-        assert "格式异常" in txt or "format" in txt.lower()
+        assert "格式异常" in txt
     finally:
         os.environ.pop("ARGOS_NO_DAEMON", None)
