@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="argos", description="终端超级智能体")
+    p = argparse.ArgumentParser(prog="argos", description="Argos — the hundred-eyed agent")
     # 版本号从 argos_agent.__version__ 读(importlib.metadata)
     import argos_agent
     p.add_argument(

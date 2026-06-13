@@ -69,7 +69,7 @@ argos skills remove <name>
 | 用过 `/security-review` | `security-review-extended` |
 | 项目 ≥5 种后缀 | `simplify` |
 | verify ≥2 + edit_file ≥5 | `test-debugger` |
-| session ≥30 步 | `simplify` |
+| commands_run + tools_called ≥30 | `simplify` |
 
 R13 (memory preference 接入)留 v1.1,本期不接,避免接错。
 
@@ -100,7 +100,7 @@ skill 装不能破坏本地完整性的最低保证。
 - ❌ **skill 私有 server(自托管)** —— 留 v1.1
 - ❌ **skill marketplace 评价 / 投票** —— 留 v1.1
 - ❌ **skill 自带二进制依赖** —— SKILL.md 只能配 markdown + 文本
-- ❌ **热加载** —— install 后需重启 TUI 才生效
+- ❌ **热加载** —— install 后下一次 run 才生效(skills 每次 run 从磁盘重新加载,无需重启 TUI)
 - ❌ **TUI 直接 install** —— 落 transcript 提示到 host CLI 跑
 
 ## 示例:装 python-lint
@@ -138,7 +138,7 @@ git-commit-hygiene   0.0.4     ... [read, write]              available  -
 |---|---|---|
 | `argos_agent/skills.py` | markdown 仓库 + 关键字/embedding 召回(LLM 提示用) | **不**动 |
 | `argos_agent/skills_runtime/` | 3 个 builtin skill 编排(/verify 等) | **不**动 |
-| `argos_agent/skills_builtin/` | 3 个 builtin SKILL.md | **不**动 |
+| `argos_agent/skills_builtin/` | 3 个受保护 builtin (verify/security-review/simplify) + 4 个内置 seed skill 模板 (git-commit-hygiene / py-test-runner / sql-query-safety / web-search-recipe) | **不**动 |
 | `argos_agent/skills_curator/` (新) | 装 / 卸 / 测 / 推荐 + 5 道防线 | **新加** |
 | `argos_agent/cli/skills.py` (新) | `argos skills` CLI 子命令 | **新加** |
 | `tui/commands.py` + `tui/app.py` | `/skills` 替换为 curator 视图 | **扩展** |
@@ -154,8 +154,7 @@ git-commit-hygiene   0.0.4     ... [read, write]              available  -
 - size drift → 警告 + 装继续
 - network skill 需 env 确认
 
-测试统计:1409 → 1495(+86,#10 spec §13 估测 ~30 但 #10 实际交付 86 因为含 e2e
-链路 + 12 规则全覆盖 + TUI 11 + recommend 19)。
+测试分布:6 个 test_skills_curator_*.py 文件,~88 个测试函数,覆盖 refresh / install / list / remove 全链路 + sha256 校验 + builtin 保护 + 12 条推荐规则 + TUI + CLI。
 
 ## v1.1 计划
 

@@ -6,7 +6,7 @@
 
 ## 1. 这是什么
 
-`#7` 加了一个**自评估子包** `argos_agent.eval/`,让 Argos 跑一份**任务题库**(`corpus`),
+Argos 内置一个**自评估子包** `argos_agent.eval/`,让 Argos 跑一份**任务题库**(`corpus`),
 量化 pass rate / time / cost,做 A/B 对比,**dogfooding**(Argos 测 Argos)。
 
 护城河 3 句话:
@@ -118,7 +118,7 @@ echo 'medium' > ~/.argos/eval/corpus/my_new_task/difficulty
 `verify_cmd` 设计原则:
 - **客观** —— 退出码 0 = pass,不是"代码长得好不好看"
 - **快** —— ≤ 30s 跑完
-- **白名单** —— `Verifier.verify` 走 ALLOWED_CMDS(参考 `core/verify_gate.py`)
+- **白名单** —— `Verifier.verify` 走 ALLOWED_CMDS(定义于 `argos_agent/tools/__init__.py`,由 `core/verify_gate.py` 导入)
 
 ## 5. 报告解读
 
@@ -169,6 +169,7 @@ echo 'medium' > ~/.argos/eval/corpus/my_new_task/difficulty
 |---|---|---|
 | setup.sh 退出非 0 | abort | `setup_failed` |
 | LLM / 限流 / IO 异常 | abort | `error` |
+| verify_cmd 未配置(None) | 诚实完成,标注未测试 | `unverifiable`(NO_TEST) |
 | verify_cmd 退出 0 | pass | `passed` |
 | verify_cmd 退出非 0 | fail | `failed` |
 | 篡改检测触发 | 不可信 | `unverifiable` |
@@ -210,7 +211,7 @@ argos eval corpus                                 # 列 corpus 任务
 | 问题 | 检查 |
 |---|---|
 | `eval` 命令 unknown | `python -c "import argos_agent.eval"` 确认包可导入 |
-| `LoopFactory required` | 真 LLM 跑 v1.1 才接;v1 走 fake 桩 |
+| `LoopFactory required` | CLI `argos eval run` 默认使用 fake 桩(无需真实 LLM key);如需真实模型运行,请使用 TUI `/eval run` 或在代码中传入 `loop_factory` |
 | 报告不写盘 | `~/.argos/eval/reports/` 权限;或 `keep_worktree` flag 留下的 worktree |
 | 任务找不到 | `argos eval corpus` 看清单;task id 区分大小写 |
 
@@ -219,6 +220,6 @@ argos eval corpus                                 # 列 corpus 任务
 - ❌ 在线 leaderboard(本地 + 私享)
 - ❌ 跨项目 eval(本期只 dogfooding Argos 自己)
 - ❌ 沙箱外网络 eval(verify_cmd 走 ARGOS sandbox 白名单)
-- ❌ CI 自动 fail-on-drop(`ARGOS_EVAL_CI=1` 模式 v1.1)
+- ❌ CI 自动 fail-on-drop(计划中,尚未实现)
 - ❌ Eval 自动答题(LLM 不生任务,人维护 corpus 防"我测我多聪明"循环)
 - ❌ 统计显著性检验(样本小,t 检验不适用)

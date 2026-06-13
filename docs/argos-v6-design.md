@@ -87,9 +87,9 @@
                  └─────────────────────────────────────────────────┘
 ```
 
-包布局变化：新增 `argos_agent/protocol/`（事件+envelope+序列化 ABI）、`argos_agent/capability/`
+以下包均已落地（v6 P0-P6 完成）：`argos_agent/protocol/`（事件+envelope+序列化 ABI）、`argos_agent/capability/`
 （统一注册表）、`argos_agent/intent/`、`argos_agent/ledger/`、`argos_agent/conductor/`、
-`argos_agent/perception/`（computer-use 执行器）。`daemon/` 提拔为内核装配主线。
+`argos_agent/perception/`（computer-use 执行器）。`daemon/` 已提拔为内核装配主线。
 `tui/events.py` 留 re-export shim。**不动**：`tui/widgets/`、`glow/theme/sync_output`（TUI 私有）、
 `git_worktree.py`、Seatbelt 子进程协议、daemon 的 state_machine/store/index/sessions。
 
@@ -184,24 +184,31 @@ Capability(
 
 ## 11. 桌面端（预留通道）
 
-Tauri/Electron 壳 + argosd sidecar，同一 Unix socket 协议，内核零改动；
+Tauri 壳 + argosd sidecar，同一 Unix socket 协议，内核零改动；
 TUI 与桌面端订阅同一 run 的 SSE 实时同步。打包新增 client-only 规格。
 （实施排最后阶段，协议与事件双层措辞从 P0 起就为它铺路。）
 
 ## 12. 工程事实清单（评审团逐条核实，实施必读）
 
-1. `runtime.py:65` **早已是 contextvars.ContextVar** —— 不要重写 per-run；
-   真正要修的是 `_DEFAULT_CTX` 共享可变单例隐患（runtime.py:64 docstring 已警告）。
-2. 真·进程单例需去全局的只有：`plan_mode` 模块布尔、`permissions.get_config/get_audit_log`、
-   `McpManager`、`BrowserController`、`os.environ['ARGOS_WORKSPACE']` 副作用。
-3. `tui.events` 爆炸半径 = **52 个文件**（15 生产 + 37 测试），shim 必须保住全部 import 路径。
-4. `RunWorker.__init__` 已收 `loop_factory`（worker.py:51）但**零 caller** —— P1 通电就是接这根线。
+1. ~~`runtime.py:65` **早已是 contextvars.ContextVar** —— 不要重写 per-run；
+   真正要修的是 `_DEFAULT_CTX` 共享可变单例隐患（runtime.py:64 docstring 已警告）。~~
+   **✅ 已完成（P1）**：`_DEFAULT_CTX` 已移除；`runtime.py` 全面切换至 ContextVar，每 run 独立上下文。
+2. ~~真·进程单例需去全局的只有：`plan_mode` 模块布尔、`permissions.get_config/get_audit_log`、
+   `McpManager`、`BrowserController`、`os.environ['ARGOS_WORKSPACE']` 副作用。~~
+   **✅ 已完成（P1）**：上述全局单例已在 P1 内核通电中清除。
+3. ~~`tui.events` 爆炸半径 = **52 个文件**（15 生产 + 37 测试），shim 必须保住全部 import 路径。~~
+   **✅ 已完成（P0）**：`tui/events.py` re-export shim 已就位；爆炸半径实测约 40 个文件，全部 import 路径保住。
+4. ~~`RunWorker.__init__` 已收 `loop_factory`（worker.py:51）但**零 caller** —— P1 通电就是接这根线。~~
+   **✅ 已完成（P1）**：`loop_factory` 已在 daemon/server.py 中接入，约 4 处调用点全部通电。
 5. `serialize_event/deserialize_event/_KIND_TO_CLASS`（tui/events.py:299-321）已存在且有
    round-trip 测试 —— 协议 ABI 是升格不是发明。
-6. 真 bug：LSP 动作（lsp_definition 等）在 `_execute` 有分发、不在 `_RISK` 表。
-7. 测试基线 ~1872 个、覆盖率门 80%（全量跑）；PyInstaller re-exec 约束不变。
+6. ~~真 bug：LSP 动作（lsp_definition 等）在 `_execute` 有分发、不在 `_RISK` 表。~~
+   **✅ 已修复（P2）**：`capability/builtins.py` 已将 LSP 动作以 `kind="lsp"` 注册入 CapabilityRegistry，broker dispatch 路径一致。
+7. 测试基线 ~3000 个（`grep -rh "def test_" tests/ | wc -l` 取实时计数）、覆盖率门 80%（全量跑）；PyInstaller re-exec 约束不变。
 
 ## 13. 实施路线（P0-P6，每阶段独立可交付、基线不破）
+
+> **✅ 全部阶段已完成（2026-06-12）。** 以下表格保留为历史参考记录。
 
 | 阶段 | 交付 | 验收 |
 |---|---|---|

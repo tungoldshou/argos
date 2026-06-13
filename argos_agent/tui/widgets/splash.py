@@ -80,7 +80,7 @@ def _compose_text(*, model_label: str, live: bool, plan_mode: bool,
         _LOGO
         + "\n                   ARGOS\n"
         + f"\n                    {eye}\n"
-        + f"\n       终端超级智能体 · v{_VERSION} · {model_label} · {badge}"
+        + f"\n       百眼智能体 · v{_VERSION} · {model_label} · {badge}"
         + key_hint
         + "\n       输入目标开始 · / 命令 · Esc 打断 · ^C 退出"
     )

@@ -99,14 +99,20 @@
 /dream status             # 显示上次报告内容
 ```
 
+> **注意**：`/dream` 需要 daemon 模式。在 inline 模式（`ARGOS_NO_DAEMON=1`）下，TUI 会诚实拒绝并提示
+> "Dream 需要 daemon 模式（当前 inline）"。CLI `argos dream` 不受此限制——它直接在进程内运行
+> DreamPipeline，无需 daemon。
+
 ### CLI 命令
 
 ```bash
-argos dream               # 立即运行一轮整合
+argos dream               # 立即运行一轮整合（进程内，无需 daemon）
 argos dream --report      # 显示最新报告
 ```
 
 ## 端点（daemon HTTP/SSE）
+
+这些是标准 ACP 端点，TUI、桌面壳（desktop/）或任何协议客户端均可消费。
 
 ```
 POST /dream/run           # 触发一轮整合（请求体为空或 {dry_run: bool}）
@@ -143,19 +149,10 @@ Dream 在此基础上再加**两层纵深**：
 
 ### 关闭夜间自动整合
 
-在 `~/.argos/conductor/orders.json` 中，修改或删除 `builtin-dream-nightly` 的 `enabled: true` 字段：
+在 `~/.argos/conductor/orders.jsonl` 中，找到 `builtin-dream-nightly` 那一行，将 `enabled` 改为 `false`（每行一个独立 JSON 对象）：
 
-```json
-{
-  "orders": [
-    {
-      "id": "builtin-dream-nightly",
-      "trigger": {"kind": "cron", "pattern": "03:00"},
-      "enabled": false,
-      "action": "dream"
-    }
-  ]
-}
+```jsonl
+{"id": "builtin-dream-nightly", "trigger": {"kind": "cron", "pattern": "03:00"}, "enabled": false, "action": "dream"}
 ```
 
 手动触发仍可用（`/dream` / `argos dream`）。
@@ -221,7 +218,7 @@ Dream 在此基础上再加**两层纵深**：
 
 **成本上限**：综合失败 → 模板兜底，不烧 token；A/B workspace 消失 → 推荐诚实拒绝，不强行。
 
-## 明确不做（v1 边界）
+## 明确不做（当前边界）
 
 - 不让模型写任何可执行内容（代码 / 命令）。
 - 不做跨项目 skill 共享 / 上传（local-only）。

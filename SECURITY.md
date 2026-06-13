@@ -29,11 +29,13 @@ We will:
 
 ## Security Architecture
 
-Argos has three core moats (see [docs/argos-product-definition.md](docs/argos-product-definition.md)):
+Argos has several core moats (see [docs/argos-product-definition.md](docs/argos-product-definition.md)):
 
 1. **propose_verify** — agent declares its verify command; we run it independently
-2. **parseTrusted** — three-state Verdict (passed / failed / unverifiable); never lies
-3. **OS Seatbelt** — agent code runs in sandbox, no network by default
+2. **Verdict / VerdictStatus** — three-state result (`passed` / `failed` / `unverifiable`), fail-closed; defined in `argos_agent/core/types.py`; Argos never fabricates a green result
+3. **OS Seatbelt** — agent code runs in a subprocess under a macOS Seatbelt profile, no network by default
+4. **CapabilityBroker + CapabilityRegistry** — every side effect passes egress-policy checks (derived from the per-process `CapabilityRegistry`) and receives an HMAC-signed receipt; each daemon run gets its own isolated `SeatbeltExecutor + ApprovalGate + CapabilityBroker` via `build_run_stack()`, so concurrent runs never share mutable state
+5. **Approval Gate / Trust Dial** — levels L0 (OBSERVE) through L4 (AUTO / `/yolo`); HARD RULES enforced in `permissions/` cannot be bypassed at any trust level
 
 ## Threat Model
 
@@ -57,8 +59,13 @@ Argos has three core moats (see [docs/argos-product-definition.md](docs/argos-pr
 - **Unsigned binary** — first launch requires right-click → Open, or
   `xattr -d com.apple.quarantine /Applications/Argos.app`. Code signing
   is on the roadmap (v0.x milestone).
-- **No automatic updates** — `argos self-update` only checks; user runs the
-  installer.
+- **No automatic updates** — `argos self-update` force-checks and prints the
+  upgrade URL; it does not auto-install. The user runs the installer manually.
+- **Desktop shell in progress** — `desktop/` is the Tauri 2 second client (v6
+  P6b walking skeleton, not yet released). The Seatbelt sandbox guarantees
+  described above apply to the daemon kernel (`argosd`); both the terminal TUI
+  and the future desktop client attach to that same daemon as protocol clients,
+  so the sandbox boundary does not change when the desktop client ships.
 
 ## Past Advisories
 

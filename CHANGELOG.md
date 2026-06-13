@@ -151,7 +151,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - **持久化恢复**:daemon 启动时扫 `running` 改 `suspended` + JSONL 末态胜(`completed` 不复活)
   - **Status bar**:`⏵{active} / ⏸{paused} / ⏹{history}` count badges;**Activity panel**:"Run" 区段
   - **`/runs` 命令**:list + `/runs {id} resume|cancel|info`
-  - **opt-in**:`--with-daemon` 显式开(默认 False,legacy 行为完整保留)
+  - **opt-in**:`--with-daemon` 显式开(默认 False,legacy 行为完整保留)(注:此标志已在 v6 移除 — daemon 现为常驻默认;`ARGOS_NO_DAEMON=1` 强制单进程内联模式)
   - 53+ 新测试(7 文件:`test_daemon_store` / `test_daemon_sessions` / `test_daemon_server` / `test_daemon_worker` / `test_daemon_lifecycle` / `test_tui_run_integration` 等)
   - **不做(留 v1.1 / #5b)**:多 run 并行 + Run tabs + 多 TUI 互斥 read-only + worktree-per-run + cost tracking per run
 - **Skills 3-pack:on-demand 自检原语(`/verify` / `/security-review` / `/simplify`)。** 用户中途一键复跑 verify、提交前扫 secrets + dep 漏洞 + 危险 API、重构前看重复 / 复杂度 / 死代码。架构:`skills_runtime/` 模块(skill registry 单例 + `run_skill()` 编排 + 2 个 TUI event 接入);`builtin/` 子模块分离数据契约与具体 skill 实现;slash command 走 TUI `_dispatch_slash` + `_skill_cmd` 统一入口(同 `/lsp` 模式)。**3 个 skill**:`/verify` 薄包装 `Verifier.verify`(**D9/D13 关键 — 显式走 verify 入口不绕 `propose_verify`**,诚实:无 `verify_cmd` 配置 → verdict=n_a 引导用户配);`/security-review` 3-pass 编排(secrets 9 regex 含 `sk-ant-` 新增 + dep audit shell out 缺工具必报 error severity **D5 防假绿** + permission Python/JS-TS 危险 API)+ dedup + sort;`/simplify` 3-pass(token shingle 重复 + 复杂度 + 死代码启发)+ top-N 截断。**3 个 SKILL.md** 配方 + 3 skill 注册到 `~/.argos/skills_builtin/` 供 LLM 召回。TUI 活动栏 "Skill Catalog" / "Skill"(重排,避撞既有 `Skill` 标识)。`+110+ 测试`(3 pass 独立 + 3 整合 + 边界 + Pilot e2e);`COMMAND_HELP` 15→18;不引入新外部依赖;**不做(v1.1)**:`/lsp` 类子命令(`/security-review src/` 路径限定本期 v1 实装)、Web 仪表盘。**安全警示**:Pass 2 需用户自装 `pip-audit` / `npm` / `cargo-audit`(同 hooks spec D11 用户责任);`.env` / `.env.*` / `secrets.toml` / `*.pem` / `*.key` 跳过不扫(D4 user-controlled 秘密存储);测试代码 `eval` / `exec` 降级 info(避免误报)。
@@ -176,6 +176,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **头部/启动画面标题去"诚实可靠的编码智能体",改"终端超级智能体"。** Argos 不只是编码 agent,而是覆盖编码 + 检索 + 计算机控制 + 编排的超级智能体;诚实仍是内核(HONESTY_SYSTEM/verify 门不变),但不必挂在标题上自我标榜。
 - **右侧活动栏分格(此前各区块挤成一坨)。** `_Section` 之间的分隔线原用近黑 `$panel` 几乎不可见、且零间距 → 用户体感"全挤一起、看不出格子"。改:每块顶部 `$foreground-darken-3` 灰色分隔线 + 嵌在线上的**橙色粗体标题** + 块间留 1 行空白,渲染成清晰的"格子"。(注:`$text-muted` 是自定义主题变量,在 DEFAULT_CSS 的 border 解析期不可用,故分隔线用内置派生色 `$foreground-darken-3`。)另:活动栏"任务进度"区在没有真 TODO 拆解时显示的是 4 个工作阶段(plan/act/verify/report),**不是被限制成 4 条**;agent 调 `update_plan` 后会渲染全部子任务(不截断)。
 - **浏览器默认改为【有头/可见】窗口(计算机控制本该让你看着它做)。** 此前 `BrowserController` 默认 `headless=True`,agent 调浏览器时不弹窗,用户会以为"根本没打开浏览器"(实测反馈)。现在默认开**可见 Chromium 窗口**,你能亲眼看着 agent 导航/点按/填表;无显示器/CI/SSH 环境可设 `ARGOS_BROWSER_HEADLESS=1` 强制无头。另加 `--disable-blink-features=AutomationControlled` 去掉 `navigator.webdriver` 自动化指纹,让真实站点(尤其 Google)少一点直接弹反机器人验证 —— **诚实**:不保证绕过 CAPTCHA,大站仍可能挑战自动化,命中时 agent 会如实换路(web_search,实测就是这么干的)。
+- **产品身份更名:启动标题与用户文档从"终端超级智能体"改为"百眼智能体"("the hundred-eyed agent",百眼 Argus Panoptes 母题)。** 架构叙述去"单进程终端"定语 — 改为内核 + 协议 + 客户端三层表述:argosd 常驻内核(Unix socket `~/.argos/daemon.sock`),TUI 为当前主客户端(单进程内联为 daemon 不可达时的诚实兜底),Tauri 2 桌面壳(`desktop/`)为进行中的第二客户端(v6 P6b 行走骨架,**尚未正式发布**)。历史条目中的"终端超级智能体"字样保留为点时间记录,不回溯修改。
 
 ### Fixed
 - **改了代码却不声明验证可直接"完成" → 验证门形同虚设(H2 护城河洞)。** 弱模型只要从不调 `propose_verify`,就一路走"诚实非阻塞完成"标"未机检验证"收尾——门**从不强制**它验证。诚实但宽松:偷懒模型可全程跳过验证纪律,正面打脸"让便宜模型可靠"。修:act 循环 host 侧解析代码块,记录本轮是否真发生写操作(`write_file(`/`edit_file(`);宣布完成时若**改了代码却没声明有效验证命令** → 回灌**一次**催促它用 `propose_verify` 声明真验证(pytest/cargo test/ruff/mypy/tsc)。**只催一轮**(`verify_nudged` 兜底):仍不声明则照常走"未机检验证"诚实收尾,不无限催;**纯读/问答任务(无写操作)不触发**,避免误催。+2 测试(改代码无验证 → 催促恰回灌一次;纯读任务不催)。
@@ -227,7 +228,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **模型无关 + `argos setup` 向导(支持任何模型,不绑定)。** 三层解耦:① **协议适配层**(`core/protocols.py`)—— 抽出 `Protocol` 策略,`AnthropicProtocol`(`/v1/messages`)+ 新增 `OpenAIProtocol`(`/chat/completions`、Bearer、system 作首条消息、`stream_options.include_usage` 抓 usage、`prompt_tokens_details.cached_tokens` 抓缓存),`ModelClient` 按 `tier.protocol` 转交;覆盖云端各家 + OpenRouter + 本地 Ollama/LM Studio/vLLM/DeepSeek。② **声明式配置** —— `~/.argos/config.json`(平等命名 profiles + `active` 指针,**无"档位"**)+ `~/.argos/.env`(密钥明文 **0600**,`api_key_env` 引用,**密钥绝不进 config.json**);**无 config.json 时自动用旧 `ARGOS_LLM_*`/`VITE_*` env 合成单 profile**(现有用户零改动);加载 fail-closed(active 悬空/缺字段/protocol 非法/非正整数/json 畸形 → `ConfigError`);价格 `price_in/out` 可选(无则诚实 `$(N/A)`)。③ **`argos setup` 向导** —— 选 provider 预设(OpenAI/Anthropic/MiniMax/DeepSeek/Ollama/OpenRouter/自定义)→ 填 model/key/url → **连通+CodeAct 格式探针(真发请求,口径同真 loop 的 HONESTY_SYSTEM+extract_code_block,诚实评级 行/勉强/不行,如实警告"此模型默认不吐围栏")** → 可选深度 write+verify 探针(默认跳过)→ 自动分流写 .env(0600 原子写,无明文暴露窗口)/config.json;取代旧"无 key→cryptic env"路径。④ **`/model`** 列出 profiles 并切换 active(重启后生效)。**诚实**:无价不编价、密钥明文如实告知、探针真跑不假定、无 key 不假装能跑、UI 上下文%用实际模型窗口当分母。
 - **agent 改进套件**:① **多轮上下文** —— `store.get_messages(session_id)` 还原对话线程,loop 跨轮全量重发 messages + app 每会话独立 `session_id`,每轮持久化最终 assistant 回答(说"继续"能记得上文);② **真验证门** —— agent `propose_verify(cmd)` 提议验证命令、harness 独立跑真退出码(propose-execute 隔离防作弊),`_actions >= 1` 守卫(没动手不算完成),TDD 诚实提示 + 召回注入顺序安全;③ **上下文用量显示** —— ActivityPanel "上下文" 区进度条 + 百分比(只算输入侧 token,反映当前窗口占用、非会话累计);④ **长上下文压缩** —— loop 接 `should_compress`,**上下文溢出反应式触发**(非数值阈值)`compact_messages` 摘要并重试(死配置 `compaction=True` 接活);⑤ **真 TODO 拆解** —— `update_plan` 工具 + `PlanUpdate` 事件,ActivityPanel 渲染真实 todo;⑥ **UI 诚实** —— 去掉内部"档位/tier"只显真实模型名、成本单价未知显 `$(N/A)` 而非假 `$0.000`、进行中阶段显 `…` 而非 `0.0s`、边缘光呼吸动画(终态告警色锁定不呼吸)。
 - **TUI 重设计(极简风 + 右侧诚实活动栏)**:argos-night 暗色主题、Markdown+语法高亮(杀围栏漏出)、user/assistant/系统角色区分、思考 spinner、verdict 三态着色;右侧诚实活动栏(模型/任务进度/工具/已签名回执/成本+缓存命中,Skills·MCP 诚实空态);ARGOS 启动 logo 画面;工作态阶段映射边缘光(颜色=真 phase/verdict,idle 灭,全彩虹为可选 party 模式);Input 描边、回合分隔、窄屏折叠面板。
-- **整机集成(Phase 6):** 装配层 `app_factory.py` 把 SQLite store / Seatbelt 沙箱 / capability broker / 模型分档 / Verifier / 自建 CodeAct loop 组装成 TUI 注入的 `loop_factory`(`AgentLoop` 暴露 `bus/store/sandbox/broker` 只读属性);`argos` 入口默认注入真 loop,无 key 时诚实落 demo 态(不假装能跑)。新增 CLI `--selftest`(不连网整机自检,打印 `verdicts=['passed'] → OK`)/`--project`/`--premium`/`--resume`。
+- **整机集成(Phase 6):** 装配层 `app_factory.py` 把 SQLite store / Seatbelt 沙箱 / capability broker / 模型分档 / Verifier / 自建 CodeAct loop 组装成 TUI 注入的 `loop_factory`(`AgentLoop` 暴露 `bus/store/sandbox/broker` 只读属性);`argos` 入口默认注入真 loop,无 key 时诚实落 demo 态(不假装能跑)。新增 CLI `--selftest`(不连网整机自检,打印 `verdicts=['passed'] → OK`)/`--project`/`--resume`。
 - **五条可证伪铁证 e2e(spec §9,`tests/e2e/`):** ① 便宜模型错改被 verify bounce 拦住、修好才翻 `passed`;② kill 中途经 `ArgosStore.replay` 重建、`/resume`(replay+重跑)续上;③ 中文(CJK)经 `recall`/`search` 命中且 reason 可解释;④ 沙箱外泄防线(读 `~/.ssh` 允许但写不出 workspace + 非 allowlist egress fail-closed,macOS Seatbelt);⑤ verify-loop P50/P99 延迟基线 + 超时降级断言。+ 整机贯通 e2e:四阶段不可跳 + 一份事件三用(run==persist==replay 逐事件一致)。用确定性 `ScriptedModelClient`(不连真 LLM,CI 可离线复现);真 LLM 烟测 `probe_real_llm.py`(CI skip)。
 - PyInstaller arm64 单 binary 打包(`packaging/argos.spec` + `build_arm64.sh` + `smoke_packaged.py` + smolagents/textual hooks),捆 sqlite-vec dylib,MLX 权重懒下载不进 binary,`console=True`(TUI 需终端)。
 - 80% 覆盖门(`--cov-fail-under=80`,实测 84%);打包 hook / 沙箱子进程 / 旧 server 诚实排除(理由在 pyproject)。
@@ -316,8 +317,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   collapsible `TaskSetup` for verify/project/guard settings. `AgentPanel` is
   lazy-loaded so the main bundle stays at 278 KB / 95 KB gzip; the markdown
   stack (~348 KB) only loads when the user opens chat. See
-  `docs/superpowers/specs/2026-06-02-agent-chat-redesign-design.md` and
-  `docs/superpowers/plans/2026-06-02-agent-chat-skeleton.md`.
+  `docs/superpowers/specs/2026-06-02-agent-chat-redesign-design.md` (archived, pre-pivot — not committed) and
+  `docs/superpowers/plans/2026-06-02-agent-chat-skeleton.md` (archived, pre-pivot — not committed).
 - **Real token streaming** — `agent.astream(..., stream_mode=["values","messages"])`
   emits a new `token` SSE event for each `AIMessageChunk` text delta; the
   `message` event is preserved as the authoritative finalization (frontend
@@ -343,7 +344,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   downstream rendering path handle the new event as a first-class stream.
 - Project-guide `CLAUDE.md` now mandates Chinese as the user-facing reply
   language.
-- **重大转向：删除 Tauri/React 桌面壳，Argos 重做成单 Python 进程的 Textual TUI 编码超级智能体**（设计见 `docs/superpowers/specs/2026-06-03-tui-superagent-design.md`）。
+- **重大转向：删除 Tauri/React 桌面壳，Argos 重做成单 Python 进程的 Textual TUI 编码超级智能体**（设计见 `docs/superpowers/specs/2026-06-03-tui-superagent-design.md`，archived, pre-pivot — not committed）。
 - Python 项目从 `agent/` 移到仓库根；新增 `argos` 命令入口与 Textual TUI 骨架。
 
 ### Removed

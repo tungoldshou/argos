@@ -2,9 +2,13 @@
 
 First off, thank you for considering contributing to Argos! 🎉
 
-Argos is a single-process Python TUI coding super-agent. We're a small project
-with a big ambition: make cheap models reliable through a verify hard-gate,
-honesty protocol, and OS-sandboxed executor.
+Argos — the hundred-eyed agent (百眼智能体) — runs as a background daemon kernel
+(argosd, Unix socket at ~/.argos/daemon.sock); clients attach as protocol clients.
+The terminal TUI is the current primary client (with an honest single inline-process
+fallback when the daemon is unavailable); a Tauri 2 desktop shell (desktop/) is an
+in-progress second client — v6 P6b walking skeleton, not yet shipped.
+Our ambition: make cheap models reliable through a verify hard-gate, honesty
+protocol, and OS-sandboxed executor.
 
 This guide covers how to file issues, submit PRs, run tests, and add new
 tools/skills.
@@ -71,7 +75,7 @@ uv run pytest              # run all tests
 ```
 
 Test categories:
-- `uv run pytest` — full suite (includes slow; 3224 tests)
+- `uv run pytest` — full suite (includes slow tests)
 - `uv run pytest -m "not slow"` — skip slow tests (real subprocess, real pyright)
 - `uv run pytest -m slow` — only slow tests
 - `uv run pytest -n auto --dist loadgroup` — parallel run via pytest-xdist (~100-150s vs 355s serial)
@@ -88,15 +92,15 @@ argos_agent/                # Main package
 ├── protocol/              # Shared protocol layer: Event dataclasses + EventBus (v6 P0)
 ├── capability/            # CapabilityRegistry — dynamic tool/skill registration (v6)
 ├── conductor/             # Conductor engine — autonomous trigger & scheduling (v6)
-├── intent/                # NL→Goal intent cards (v6)
-├── ledger/                # Behavior ledger — append-only audit log (v6)
+├── intent/                # NL→Goal IntentEngine → structured IntentCard
+├── ledger/                # Signed receipts JSONL + 3-state undo (Reversible)
 ├── perception/            # Computer-use executor (OS-level screen/mouse/keyboard) (v6)
 ├── sandbox/               # OS Seatbelt profiles, sandbox child
-├── tools/                 # 30 broker-gated tools (file, shell, web, browser, LSP, computer-use, …)
+├── tools/                 # Broker-gated tools (file, shell, web, browser, LSP, computer-use, …; count is dynamic via CapabilityRegistry at runtime)
 ├── tui/                   # Textual UI (app, widgets, commands)
 │   ├── widgets/           # ModalScreen widgets (tab_strip, activity_panel, …)
 │   └── events.py          # Compat shim → re-exports from protocol/events.py
-├── hooks/                 # Hooks system (5 events: PreToolUse, PostToolUse, ...)
+├── hooks/                 # Hooks system (5 events: PreToolUse, PostToolUse, Stop, UserPromptSubmit, SessionStart)
 ├── lsp/                   # LSP integration (pygls adapter + 6 lsp_* tools)
 ├── skills_runtime/        # AnalysisSkill runtime + 3 builtins (verify, security-review, simplify)
 ├── permissions/           # Smart approval (12 hard rules + soft rules)
@@ -106,7 +110,15 @@ argos_agent/                # Main package
 ├── routing/               # Per-task model routing + effort tiers
 ├── context/               # Context-window analyzer + proactive compaction
 ├── workflow/              # Dynamic workflows (subagents, fanout)
-└── skills.py              # Built-in skill recipes (markdown)
+├── skills.py              # Built-in skill recipes (markdown)
+├── learning/              # Post-run skill distillation + Dream nightly consolidation
+├── eval/                  # Self-eval harness (corpus / runner / compare)
+├── verify/                # Opt-in self-test sub-system (reviewer-role candidate tests)
+└── skills_curator/        # Skill discovery / install pipeline
+
+desktop/                    # Desktop shell (in-progress second client)
+├── shell/                 # Rust/Tauri 2 walking skeleton (v6 P6b, NOT yet shipped)
+└── sdk/                   # ACP TypeScript client SDK, zero runtime dependencies
 
 docs/                       # Specs + plans
 ├── superpowers/specs/      # Feature design specs (one per PR)
@@ -136,7 +148,7 @@ packaging/                  # PyInstaller + install.sh + Homebrew Cask
 
 ## Testing Requirements
 
-Per the project CLAUDE.md and `/rootfs/rules/common/testing.md`:
+Per the project CLAUDE.md conventions:
 
 - 80%+ coverage for new code
 - TDD: write failing test → impl → green

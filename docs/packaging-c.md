@@ -1,8 +1,10 @@
 # 打包 C 阶段 — PyPI + Linux/Windows + 全包管理(跨平台)
 
 > Road-map #13 / spec `2026-06-07-packaging-c-design.md` 的用户文档。
-> C 阶段把"用啥系统都能装上、升级快、可信源"做成现实,从 B 阶段(macOS arm64 only)
+> C 阶段把"用啥系统都能装上、升级快、可信源"做成现实,从 macOS arm64 only
 > 扩到 6 个 OS 通道。
+
+> **发布状态**: macOS arm64 已发布（v0.1.0）。Linux / Windows / PyPI / Homebrew tap / Nix 通道均为计划中，尚未正式发布。
 
 ## 各通道安装命令(按推荐顺序)
 
@@ -13,9 +15,9 @@ pip install argos-agent        # 或 uv tool install argos-agent
 argos --version                # 验证
 ```
 
-`pip install` 走 `argospkg` 也会同时进 PATH。
+`pip install` 安装两个入口点：`argos`（主命令）和 `argospkg`（打包辅助工具），均自动进 PATH。
 
-### 2. macOS arm64(B 阶段已有,沿用)
+### 2. macOS arm64(已发布 v0.1.0)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash
@@ -51,12 +53,12 @@ Expand-Archive argos.zip
 .\argos.exe --version
 ```
 
-### 5. Homebrew tap(Linux CLI / macOS GUI)
+### 5. Homebrew tap(Linux CLI / macOS TUI (.app wrapper))
 
 ```bash
 brew tap tungoldshou/argos
 brew install argos           # Linux CLI:AppImage
-brew install --cask argos    # macOS GUI:.app bundle
+brew install --cask argos    # macOS TUI (.app wrapper):.app bundle
 ```
 
 ### 6. Nix
@@ -72,7 +74,7 @@ nix profile install github:tungoldshou/argos#argos
 
 | 资产 | 通道 | 跑在 |
 |---|---|---|
-| `Argos-X.Y.Z-arm64-mac.tar.gz` | macOS GUI | macos-14 (GitHub Actions) |
+| `Argos-X.Y.Z-arm64-mac.tar.gz` | macOS TUI (.app wrapper) | macos-14 (GitHub Actions) |
 | `Argos-X.Y.Z-x86_64.AppImage` | Linux AppImage | ubuntu-24.04 |
 | `argos_X.Y.Z_amd64.deb` | apt 路线 | ubuntu-24.04 |
 | `argos-X.Y.Z-1.x86_64.rpm` | dnf 路线 | ubuntu-24.04(rpmbuild) |
@@ -82,14 +84,14 @@ nix profile install github:tungoldshou/argos#argos
 
 ## 升级
 
-- **PyPI**:`pip install --upgrade argos-agent`
-- **macOS GUI**:`brew upgrade --cask argos`,或重跑 `install.sh`
+- **PyPI**:`pip install --upgrade argos-agent` 或 `uv tool upgrade argos-agent`
+- **macOS TUI (.app wrapper)**:`brew upgrade --cask argos`,或重跑 `install.sh`
 - **Linux AppImage**:重下最新版替换原文件
 - **.deb**:`sudo apt-get install --only-upgrade argos-agent`(若装过)
 - **WinGet**:`winget upgrade tungoldshou.argos`
 - **Nix**:`nix profile upgrade`
 
-`argos self-update`(已存在,B 阶段):启动时 7 天缓存 background check GitHub latest,仅
+`argos self-update`(已存在):启动时 7 天缓存 background check GitHub latest,仅
 **提示**新版本不下载;用户主动跑升级。
 
 ## 已知限制(spec §1 风险 / §15 风险 + 未来 v1.1)
@@ -136,5 +138,5 @@ nix profile install github:tungoldshou/argos#argos
 
 - Spec:`docs/superpowers/specs/2026-06-07-packaging-c-design.md`
 - Plan:`docs/superpowers/plans/2026-06-07-packaging-c.md`
-- B 阶段(已发 v0.1.0)用户文档:`packaging/install.sh` + `packaging/argos.spec` + README
+- macOS arm64 v0.1.0 用户文档:`packaging/install.sh` + `packaging/argos.spec` + README
 - 上游项目:https://github.com/tungoldshou/argos

@@ -69,7 +69,7 @@ daemon 接 POST /runs,新建第 2 个 run,tab 条变 2 个:
 
 ## 2. 多 TUI 互斥(1 daemon ↔ N TUI)
 
-你可以在多个 ssh 会话 / tmux pane / tab 各开一个 `argos --with-daemon` 连同一 daemon:
+你可以在多个 ssh 会话 / tmux pane / tab 各开一个 `argos` 连同一 daemon:
 
 - **第 1 个连上的** = `owner`(全写权限,跟单 TUI 一样)
 - **第 2..N 个** = `observer`(只读,GET /runs /runs/{id} /events 都可,POST 全 403)
@@ -77,6 +77,8 @@ daemon 接 POST /runs,新建第 2 个 run,tab 条变 2 个:
 observer TUI 的 `/runs` 命令会显 `🔒 READ-ONLY 观察者`;focus / pause / cancel 全 403。
 
 owner 退出(TUI 关 / 网络断)→ **最旧 observer 自动 promote** 为新 owner,继续可用。
+
+> **前向兼容说明**:daemon 的 ACP session/owner-observer 协议是客户端无关的。正在开发中的桌面壳(Tauri 2,`desktop/`)将使用同一机制作为第二个客户端接入——届时 owner/observer/promote 语义不变。
 
 ## 3. Worktree 隔离
 
@@ -96,6 +98,8 @@ daemon 行为:
 - workspace 不是 git repo → `tempfile.mkdtemp(prefix=argos-<run_id>-, dir=~/.argos/worktrees)` 兜底
 - run 终态 → 自动 cleanup(失败静默)
 
+**每 run 持有独立的沙箱上下文**:daemon 通过 `build_run_stack()` 为每个 run 分配各自的 `SeatbeltExecutor`、`ApprovalGate`、`CapabilityBroker`——并发 run 之间不共享任何可变沙箱状态。
+
 `/runs {id} info` 显示 worktree_path 短名。
 
 ## 4. Cost tracking
@@ -112,7 +116,7 @@ daemon 行为:
 - `>= $1` → `$1.50` / `$10.12` (2 位小数)
 - `None` → `$N/A`
 
-## 5. 限制(D1 / D13)
+## 5. 限制
 
 - **最多 5 个并发 run**:超过 → 503 `busy: max_concurrent_runs_reached (max=5, active=5)`(直接拒,**不排队**)
 - **1 owner + N observer**:observer 写端点全 403
@@ -145,7 +149,7 @@ daemon 行为:
 | `/sessions` | POST | ✅ | ✅ |
 | `/sessions/{id}` | DELETE | (anyone) | (anyone) |
 
-## 8. 不做(v1.1 候选)
+## 8. 不做(当前未计划)
 
 - ❌ FIFO 排队(超 5 → 排队) — 本期直接拒
 - ❌ Tab 拖拽重排 — 顺序 = created_at
@@ -158,6 +162,7 @@ daemon 行为:
 
 - `argos_agent/daemon/registry.py` — RunRegistry
 - `argos_agent/daemon/worktree.py` — WorktreeManager
+- `argos_agent/git_worktree.py` — 底层 git worktree 原语(WorktreeManager 调用)
 - `argos_agent/daemon/sessions.py` — owner/observer + promote
 - `argos_agent/daemon/server.py` — 5 端点扩 + 503 拒
 - `argos_agent/daemon/worker.py` — cost 累加 + 终态 cleanup
