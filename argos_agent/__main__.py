@@ -53,6 +53,9 @@ def _build_parser() -> argparse.ArgumentParser:
     # #12:argos context 子命令
     from argos_agent.cli import context as _context_cli
     _context_cli.add_subparser(sub)
+    # T10:argos dream 子命令(夜间整合 + 记忆整理)
+    from argos_agent.cli import dream as _dream_cli
+    _dream_cli.add_subparser(sub)
     return p
 
 

@@ -36,6 +36,8 @@ from argos_agent.protocol.events import (  # noqa: F401
     IntentConfirmResponse,     # ← P4 新增(§7 意图引擎)
     ProactiveSuggestionEvent,  # ← P5b 新增(§9 自治面:conductor 主动建议)
     ComputerActionEvent,       # ← P6a 新增(§10 computer use:OS 级动作执行结果)
+    DreamProgressEvent,        # ← T10 新增(Dream 夜间整合进度)
+    DreamReportEvent,          # ← T10 新增(Dream 夜间整合结果汇总)
     Event,
     EventBus,
     _KIND_TO_CLASS,

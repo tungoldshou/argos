@@ -32,6 +32,7 @@ COMMAND_HELP: dict[str, str] = {
     "orders": "列出自治常驻指令(/orders)—conductor 自治面",
     "confirm": "确认 conductor 主动建议(/confirm <suggestion_id>)—自治面通电",
     "dismiss": "忽略 conductor 主动建议(/dismiss <suggestion_id>)",
+    "dream": "夜间整合:跑一轮 Dream(聚类综合+记忆整理);/dream status 看上次报告",
     "verify": "显式跑 verify_cmd(/verify [path])—用户复核 verify 门",
     "security-review": "安全审计(secrets + 依赖漏洞 + 危险 API)(/security-review [path])",
     "simplify": "代码重复 / 复杂度 / 死代码扫描(/simplify [path])",

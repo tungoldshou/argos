@@ -28,6 +28,8 @@ from argos_agent.tui.events import (
     CodeResult,
     CompactedEvent,
     ComputerActionEvent,  # ← P6a §10 computer use
+    DreamProgressEvent,   # ← T10 Dream 夜间整合进度
+    DreamReportEvent,     # ← T10 Dream 夜间整合结果汇总
     CostUpdate,
     Error,
     Escalation,
@@ -663,6 +665,8 @@ class ArgosApp(App):
             await self._routing_cmd(log, cmd.arg)
         elif cmd.name == "context":
             await self._context_cmd(log, cmd.arg)
+        elif cmd.name == "dream":
+            await self._dream_cmd(log, cmd.arg)
 
     async def _undo(self, log) -> None:
         """/undo:用本轮 run 起点的快照还原 workspace;不发 goal。"""
@@ -1681,6 +1685,84 @@ class ArgosApp(App):
         for line in format_table(b).split("\n"):
             await log.append_line(line, kind="info")
 
+    # ── T10 /dream 命令 ──────────────────────────────────────────────────
+
+    @staticmethod
+    def _fmt_dream_report(r: dict) -> str:
+        """把 Dream 报告 dict 格式化成一行摘要(复用于 /dream status 和 SSE dream_report)。"""
+        return (
+            f"Dream 完成  "
+            f"units={r.get('units_total', 0)}  "
+            f"promoted={r.get('promoted', 0)}  "
+            f"rejected={r.get('rejected', 0)}  "
+            f"skipped={r.get('skipped', 0)}  "
+            f"memory_merged={r.get('memory_merged', 0)}  "
+            f"memory_archived={r.get('memory_archived', 0)}"
+        )
+
+    async def _dream_cmd(self, log, arg: str) -> None:
+        """/dream [status]:夜间整合命令。
+
+        无参数 → POST /dream/run(daemon 模式);inline 模式诚实拒绝。
+        status → GET /dream/report,null → 诚实空态,有 → 渲染摘要一行。
+        """
+        import json as _json
+
+        sub = arg.strip().lower()
+
+        # ── inline 模式:诚实拒绝 ─────────────────────────────────────
+        if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
+            await log.append_line(
+                "Dream 需要 daemon 模式(当前 inline)。\n"
+                "提示:重启 Argos 让其自动连接 daemon,或检查 ~/.argos/daemon.sock。",
+                kind="system",
+            )
+            return
+
+        # ── status 子命令 → GET /dream/report ──────────────────────
+        if sub == "status":
+            try:
+                status, _, raw = await self._daemon_client._request(
+                    "GET", "/dream/report", session_id=self._daemon_session_id,
+                )
+                body = _json.loads(raw) if raw else {}
+            except Exception as e:  # noqa: BLE001
+                await log.append_line(f"/dream report 请求失败:{e}", kind="error")
+                return
+            if status == 200:
+                report = body.get("report")
+                if report is None:
+                    await log.append_line("暂无 Dream 报告(还没跑过夜间整合)。", kind="system")
+                else:
+                    await log.append_line(self._fmt_dream_report(report), kind="done")
+            else:
+                await log.append_line(f"/dream report 失败(HTTP {status})", kind="error")
+            return
+
+        # ── 无参数 → POST /dream/run ────────────────────────────────
+        try:
+            status, _, raw = await self._daemon_client._request(
+                "POST", "/dream/run", session_id=self._daemon_session_id,
+            )
+            body = _json.loads(raw) if raw else {}
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(f"/dream/run 请求失败:{e}", kind="error")
+            return
+
+        if status == 202:
+            await log.append_line(
+                "Dream 已启动,进度见活动栏。", kind="done",
+            )
+        elif status == 409:
+            await log.append_line("已有 Dream 在跑,请稍后再试。", kind="system")
+        elif status == 503:
+            msg = body.get("error") or body.get("state") or "无 worker key"
+            await log.append_line(f"Dream 启动失败:{msg}", kind="error")
+        else:
+            await log.append_line(
+                f"/dream/run 返回未知状态 HTTP {status}:{body}", kind="error"
+            )
+
     async def _routing_set(self, log, arg: str) -> None:
         """#11 /routing set <category> <tier>:原子改写 config.json。"""
         import os
@@ -2165,6 +2247,27 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         elif isinstance(ev, ComputerActionEvent):
             # P6a §10 computer use:OS 级动作执行结果 → 活动栏一行人话
             await self._on_computer_action(ev)
+        elif isinstance(ev, DreamProgressEvent):
+            # T10 Dream 夜间整合进度 → 活动栏一行
+            try:
+                detail = f" {ev.detail}" if ev.detail else ""
+                ap.append_line(f"[dream] {ev.stage}{detail}")
+            except Exception:  # noqa: BLE001 — 未 mount / 静默
+                pass
+        elif isinstance(ev, DreamReportEvent):
+            # T10 Dream 整合结果汇总 → 活动栏摘要一行
+            try:
+                summary_line = self._fmt_dream_report({
+                    "units_total": ev.units_total,
+                    "promoted": ev.promoted,
+                    "rejected": ev.rejected,
+                    "skipped": ev.skipped,
+                    "memory_merged": ev.memory_merged,
+                    "memory_archived": ev.memory_archived,
+                })
+                ap.append_line(summary_line)
+            except Exception:  # noqa: BLE001 — 未 mount / 静默
+                pass
         elif isinstance(ev, Escalation):
             await log.append_line(f"⚠︎ 卡住({ev.attempts} 轮):{ev.reason} — 最后失败:{ev.last_failure}", kind="escalation")
             self._set_border(glow.ERROR)

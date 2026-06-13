@@ -22,6 +22,7 @@ def test_known_commands_listed():
         "orders",   # P5b §9:列出自治常驻指令(/orders)—conductor 自治面
         "confirm",  # P5b §9:确认 conductor 建议(/confirm <suggestion_id>)—自治面
         "dismiss",  # P5b §9:忽略 conductor 建议(/dismiss <suggestion_id>)
+        "dream",    # T10:夜间整合 Dream(聚类综合+记忆整理;/dream status 看报告)
     }
 
 
