@@ -13,6 +13,8 @@ def token_estimate(text: str | None) -> tuple[int, str]:
     try:
         import tiktoken  # type: ignore[import-not-found]
         enc = tiktoken.get_encoding("cl100k_base")
-        return len(enc.encode(txt)), "estimate:tiktoken"
+        # min-1 不变量:tiktoken 对空串 encode()=0,必须 floor 成 1(与 chars4 分支一致),
+        # 否则 0 token 桶污染 sum(spec §5 误差诚实)。
+        return max(1, len(enc.encode(txt))), "estimate:tiktoken"
     except Exception:  # noqa: BLE001 — 没装/版本不兼容/任何异常都降级(spec D1 + §13)
         return max(1, len(txt) // 4), "estimate:chars4"
