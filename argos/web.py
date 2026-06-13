@@ -78,12 +78,45 @@ def active_search_host() -> str:
     return DDGS_HOST
 
 
+def _is_blocked_host(host: str) -> bool:
+    """#6 SSRF 防护:私网/保留/loopback/link-local/unspecified IP + localhost/云元数据名 → 拒。
+    egress 白名单是域名层第一防线;此处是 IP 层第二防线(直接 IP url / redirect 到 IP / 元数据端点)。
+    域名(非 IP 字面量)交 egress 白名单管;此处只拦 IP 字面量与已知内网名(不做 DNS 解析,避免
+    引入 DNS 依赖/时延;DNS rebinding 由 egress 白名单限制可达域名缓解)。"""
+    import ipaddress
+    h = (host or "").strip().lower().strip("[]")   # 去 IPv6 字面量括号
+    if h in ("localhost", "0.0.0.0", "metadata.google.internal", "metadata", ""):
+        return True
+    try:
+        ip = ipaddress.ip_address(h)
+    except ValueError:
+        return False   # 非 IP 字面量(域名):egress 白名单做主防护
+    return (ip.is_private or ip.is_loopback or ip.is_link_local
+            or ip.is_reserved or ip.is_multicast or ip.is_unspecified)
+
+
 def _http_get(url: str) -> str:
-    """抓一个 URL 的原始 HTML(只读、超时、跟随重定向上限)。"""
+    """抓一个 URL 的原始 HTML(只读、超时)。#6 SSRF:逐跳跟随 redirect(最多 5),每跳校验 host
+    非私网/保留(防白名单 host redirect 到内网/云元数据绕过 egress);命中即拒,不发该请求。"""
     import httpx
-    r = httpx.get(url, timeout=30, follow_redirects=True, headers={"User-Agent": "Argos/0.1"})
-    r.raise_for_status()
-    return r.text
+    from urllib.parse import urljoin, urlparse
+    cur = url
+    with httpx.Client(timeout=30, follow_redirects=False,
+                      headers={"User-Agent": "Argos/0.1"}) as client:
+        for _ in range(6):   # 初始 + 最多 5 跳 redirect
+            host = urlparse(cur).hostname or ""
+            if _is_blocked_host(host):
+                raise ValueError(f"SSRF 防护:拒绝访问私网/保留地址 {host!r}")
+            r = client.get(cur)
+            if r.is_redirect:
+                loc = str(r.headers.get("location") or "")
+                if not loc:
+                    break
+                cur = urljoin(str(r.url), loc)   # 相对 redirect 补全
+                continue
+            r.raise_for_status()
+            return r.text
+        raise ValueError("取页失败:redirect 跳数超限(>5)")
 
 
 def _trafilatura_extract(html: str) -> str | None:
