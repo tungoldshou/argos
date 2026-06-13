@@ -1,0 +1,388 @@
+"""CapabilityBroker —— host 侧特权动作边界(契约 §5 + spec §6.2/§6.5/§6.6).
+
+沙箱内 broker-gated 工具发 broker_call;host 侧本类:
+  ① egress 检查(网络类动作查 allowlist);
+  ② 审批拨盘裁决(ApprovalGate.request,按 ApprovalLevel);
+  ③ 批准 → 在 host 执行真副作用(shell/web 真实现);
+  ④ 签 Receipt(HMAC)→ 暴露 last_receipt(loop 据此投 ToolReceipt 事件 + 存 events);
+  ⑤ 返回结果灌回沙箱。
+拒绝/超时 → fail-closed 返回拒绝串(模型看到换路,不抛异常;沿用 approval.guarded_call 语义)。
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from argos.approval import ApprovalGate, ApprovalLevel
+from argos.tools import shell as _shell
+from argos.tools import web as _web
+from argos.tools.receipts import Receipt, ReceiptSigner
+from .egress import EgressPolicy
+
+if TYPE_CHECKING:
+    from argos.capability.registry import CapabilityRegistry
+
+# 网络类动作:request 前要查 egress。
+_NETWORK_ACTIONS: set[str] = {"web_search", "web_extract"}
+# 各 action 的风险与人类描述模板(审批弹窗用)。
+# C1:run_command 提到 high —— 任意 shell 执行,即便已关进 Seatbelt 也绝不静默放手。
+_RISK: dict[str, str] = {
+    "run_command": "high",
+    "web_search": "low",
+    "web_extract": "low",
+    # 计算机控制(浏览器):读类(导航/快照/截图)low;写类(点击/填表 = 可触发表单提交)medium。
+    "browser_navigate": "low",
+    "browser_snapshot": "low",
+    "browser_screenshot": "low",
+    "browser_click": "medium",
+    "browser_type": "medium",
+    # MCP 外部工具调用:第三方 server 能力不可预知 → medium,默认走审批。
+    "mcp_call": "medium",
+    # OS 级计算机控制:屏幕/鼠标是全局资源,Seatbelt 关不住 → 全部 high。
+    # 静态兜底:即便 registry=None(headless/旧测试路径),computer.* 仍受高风险管辖。
+    "computer.screenshot": "high",
+    "computer.click": "high",
+    "computer.double_click": "high",
+    "computer.type_text": "high",
+    "computer.key": "high",
+    "computer.scroll": "high",
+    "computer.open_app": "high",
+}
+# C1:这些 action 即便在 AUTO(YOLO)档也强制逐个确认 —— 永不静默执行 shell。
+_FORCE_CONFIRM_ACTIONS: set[str] = {"run_command"}
+
+
+@dataclass(frozen=True, slots=True)
+class BrokerResult:
+    value: Any
+    receipt: Receipt
+
+
+class CapabilityBroker:
+    def __init__(self, *, gate: ApprovalGate, egress: EgressPolicy,
+                 signer: ReceiptSigner, workspace: Path | None = None,
+                 mcp_manager: Any = None, browser_controller: Any = None,
+                 registry: "CapabilityRegistry | None" = None) -> None:
+        self._gate = gate
+        self._egress = egress
+        self._signer = signer
+        # host 侧 run_command 的工作目录 —— 必须与沙箱子进程(write_file 落地处)同一个 ws,
+        # 否则 --project 模式下 run_command 跑在默认 ~/.argos/workspace、write_file 落在项目目录
+        # → 脚本读不到刚写的文件(workspace 分叉 bug)。None 时回退 shell 自己的 _ws() 解析。
+        self._workspace = workspace
+        self.last_receipt: Receipt | None = None   # loop 读它投 ToolReceipt 事件
+        # per-session MCP/browser 实例(从 AppComponents 注入);None = fallback 到模块级单例
+        # (向后兼容测试/headless 路径)。
+        self._mcp_manager = mcp_manager
+        self._browser_controller = browser_controller
+        # P2 能力注册表(可选):None = 兼容旧路径,行为完全不变。
+        # 非 None 时:risk 查表优先走 registry.risk_table(),内置 _RISK 作 fallback 兜底;
+        # _execute 前先尝试 registry dispatch;LSP 等仅注册表知晓的能力方可通过 request()。
+        self._registry = registry
+
+    async def request(self, action: str, args: dict[str, Any]) -> Any:
+        """返回灌回沙箱的值(成功=工具串;拒绝=拒绝串)。副作用:签 Receipt 存 last_receipt。
+
+        唯一 gating 入口:egress → approval → host 执行 → 签 Receipt。沙箱侧只能经
+        executor 的 broker RPC 走到这里。_execute() 是内部裸执行,绝不可绕开本方法直接调
+        (那会跳过 egress/approval/receipt;见 _execute docstring)。
+
+        P2 registry 语义:
+        - registry 非 None 时,risk 先查 registry.risk_table(),内置 _RISK 作 fallback 兜底。
+        - action 既不在 registry 也不在内置 _RISK → fail-closed 拒(与旧语义一致)。
+        - action 在 registry 但不在 _RISK → 允许通过(修 LSP 动作被拒 bug)。
+        """
+        # ─── fail-closed:action 必须在 registry 或 _RISK 其中之一 ──────────────
+        # getattr 防御：object.__new__ 绕过 __init__ 的旧测试路径没有 _registry 属性
+        _reg = getattr(self, "_registry", None)
+        if _reg is not None:
+            _registry_risk = _reg.risk_table()
+            if action not in _registry_risk and action not in _RISK:
+                return f"错误:未知/不支持的特权动作 {action!r},拒绝。"
+        else:
+            _registry_risk = {}
+            if action not in _RISK:
+                return f"错误:未知/不支持的特权动作 {action!r},拒绝。"
+
+        # ① egress 检查(网络类,fail-closed)
+        # P2 egress manifest 驱动:当 registry 存在时,网络类动作集 = registry 中声明了
+        # egress_hosts 的能力名(含 "*")∪ 原 _NETWORK_ACTIONS 兜底集合。
+        # 无 registry 时 fallback 原 _NETWORK_ACTIONS(行为零变更)。
+        _network_actions = self._derive_network_actions()
+        if action in _network_actions:
+            host = _web.host_for(action, args)
+            # web_extract:校验目标 url 的 host;web_search:校验活跃 provider 的出口 host(I3)。
+            # 两者都 fail-closed —— host 不在白名单即拒,绝不静默放行。
+            if not self._egress.allowed(host):
+                return f"错误:egress 拒绝 —— {host!r} 不在允许出网名单。可让用户批准该域名后重试。"
+        # ② 审批拨盘
+        # C1:run_command 即便在 AUTO 档也强制逐个确认 —— 永不静默执行任意 shell。
+        level_override = (
+            ApprovalLevel.CONFIRM
+            if (action in _FORCE_CONFIRM_ACTIONS and self._gate.level is ApprovalLevel.AUTO)
+            else None
+        )
+        decision = await self._request_decision(action, args, level_override,
+                                                 registry_risk=_registry_risk)
+        if not decision.approved:
+            return (
+                f"用户拒绝执行该操作({decision.reason or '未提供原因'})。"
+                f"请尝试其他做法或向用户解释为什么需要它。"
+            )
+        # ③ host 执行真副作用
+        value, exit_code = self._execute(action, args, run_ctx=None, _gated=True)
+        # ④ 签 Receipt(HMAC,host 侧)
+        self.last_receipt = self._signer.sign(
+            action=action, args=args, result=value, exit_code=exit_code,
+        )
+        # ⑤ 灌回沙箱
+        return value
+
+    def _derive_network_actions(self) -> set[str]:
+        """P2 egress manifest 驱动:从 registry 派生需要 egress 检查的动作集合。
+
+        派生规则(spec §5 / 任务验收):
+          cap.egress_hosts 非空(含 "*")的能力名集合 ∪ 原 _NETWORK_ACTIONS 兜底集合。
+          无 registry 时 fallback = 原 _NETWORK_ACTIONS(行为零变更)。
+
+        设计保证:
+          · 内置 web_search / web_extract 在 builtins 里声明了 egress_hosts → 派生集合
+            包含它们(与原集合等价,硬回归测试验证)。
+          · 新注册能力只要在 manifest 里声明 egress_hosts 就自动进 egress 检查,无需改四处。
+          · registry=None 时返回 _NETWORK_ACTIONS(向后兼容;零破坏测试)。
+        """
+        _reg = getattr(self, "_registry", None)
+        if _reg is None:
+            return set(_NETWORK_ACTIONS)
+        try:
+            # 从 registry 收集所有声明了 egress_hosts 的能力名(含 "*" 通配)。
+            registry_egress: set[str] = set()
+            for name in _reg.names():
+                cap = _reg.get(name)
+                if cap.egress_hosts:  # 非空 tuple = 有出网声明
+                    registry_egress.add(name)
+            # ∪ 原硬编码集合(兜底:确保 registry 不完整时核心网络动作仍受 egress 管辖)。
+            return registry_egress | _NETWORK_ACTIONS
+        except Exception:  # noqa: BLE001 — registry 访问失败 fallback 原集合(fail-safe)
+            return set(_NETWORK_ACTIONS)
+
+    async def _request_decision(self, action: str, args: dict[str, Any],
+                                level_override: "ApprovalLevel | None",
+                                registry_risk: "dict[str, str] | None" = None):
+        """走审批拨盘。level_override 非 None 时临时降级(如 run_command 在 AUTO 档强制 CONFIRM),
+        裁决后恢复原档(避免污染整个 session)。
+
+        registry_risk:registry.risk_table() 快照(P2);None 或缺失时退回内置 _RISK。
+        优先级:registry_risk[action] > _RISK[action] > "medium" 默认。
+        """
+        _merged = {**_RISK, **(registry_risk or {})}
+        risk_val = _merged.get(action, "medium")
+        if level_override is None:
+            return await self._gate.request(
+                action, args, description=self._describe(action, args),
+                risk=risk_val,
+            )
+        saved = self._gate.level
+        self._gate.set_level(level_override)
+        try:
+            return await self._gate.request(
+                action, args, description=self._describe(action, args),
+                risk=risk_val,
+            )
+        finally:
+            self._gate.set_level(saved)
+
+    @property
+    def gate(self) -> ApprovalGate:
+        """host 侧暴露审批闸 —— loop._run_workflow 在异步态(非 exec_code 内)await gate.request,
+        TUI 据 WorkflowProposed.call_id 调 gate.respond 放行/拒绝。同 signer:沙箱拿不到。"""
+        return self._gate
+
+    @property
+    def signer(self) -> ReceiptSigner:
+        """host 侧暴露签名器 —— 供 Harness.accept_receipt 在投 ToolReceipt 前核验回执
+        (W2/§6.5)。broker 与 Harness/loop 同在 host 进程,沙箱拿到的只是 RPC stub,
+        故此暴露不泄露 key 给沙箱。"""
+        return self._signer
+
+    def take_receipt(self) -> Receipt | None:
+        """I2:返回并清空 last_receipt —— loop 每步调它,确保只在【本步新签了 Receipt】时
+        才投 ToolReceipt 事件;无新回执返回 None(防陈旧回执被反复重投/张冠李戴)。"""
+        rec = self.last_receipt
+        self.last_receipt = None
+        return rec
+
+    def _execute(self, action: str, args: dict[str, Any],
+                 run_ctx: Any = None, *, _gated: bool = False) -> tuple[Any, int | None]:
+        """⚠️ 内部裸执行 —— 仅供 request() 调用。绝不可从外部/测试直接调:
+        它跳过 egress 校验、审批裁决与 Receipt 签发,直接产生真副作用。
+        所有 broker-gated 动作必须经 request() 入口(它做完整 gating)。
+
+        _gated:keyword-only 哨兵。request() 管线内调用传 True。
+        registry dispatch 分支要求 _gated=True;否则 raise PermissionError(fail-closed,
+        防止同步桥/外部路径绕过 egress/审批/回执直接触发带 dispatch 的注册能力)。
+
+        P2 registry dispatch(优先级最高):
+        - registry.get(action) 存在 且 cap.dispatch 非 None → 调 cap.dispatch(args, run_ctx)。
+          (要求 _gated=True,否则 PermissionError)
+        - registry.get(action) 存在 但 dispatch=None → 走既有 if/elif 内置实现。
+        - action 不在 registry(含 registry=None 情况)→ 走既有 if/elif 内置实现。
+        """
+        # ─── P2:registry dispatch(cap 存在 + dispatch 非 None)────────────────
+        # getattr 防御：object.__new__ 绕过 __init__ 的旧测试路径没有 _registry 属性
+        _registry = getattr(self, "_registry", None)
+        if _registry is not None:
+            try:
+                cap = _registry.get(action)
+                if cap.dispatch is not None:
+                    if not _gated:
+                        raise PermissionError(
+                            f"dispatch 能力 {action!r} 只允许经 broker.request() 管线执行"
+                            "(egress/审批/回执不可旁路)"
+                        )
+                    result = cap.dispatch(args, run_ctx)
+                    return result, None
+                # cap 存在但 dispatch=None → fall through 到既有实现
+            except KeyError:
+                # 不在 registry → fall through 到既有实现
+                pass
+        # ─── 既有 if/elif 内置实现 ──────────────────────────────────────────
+        if action == "run_command":
+            return _shell.run_command(args.get("command", ""), workspace=self._workspace)
+        if action == "web_search":
+            return _web.web_search(args.get("query", ""), int(args.get("limit", 5))), None
+        if action == "web_extract":
+            return _web.web_extract(args.get("url", "")), None
+        # 计算机控制(浏览器):走注入的 BrowserController(或模块级单例 fallback);
+        # 独占线程跑 sync Playwright,绕开 asyncio loop 线程冲突;懒启动。
+        if action.startswith("browser_"):
+            if self._browser_controller is not None:
+                ctrl = self._browser_controller
+            else:
+                from argos import browser as _browser
+                ctrl = _browser.get_controller()
+            if action == "browser_navigate":
+                return ctrl.navigate(args.get("url", "")), None
+            if action == "browser_snapshot":
+                return ctrl.snapshot(int(args.get("max_chars", 4000))), None
+            if action == "browser_click":
+                return ctrl.click(args.get("selector", "")), None
+            if action == "browser_type":
+                return ctrl.type_text(args.get("selector", ""), args.get("text", "")), None
+            if action == "browser_screenshot":
+                return ctrl.screenshot(args.get("path", "screenshot.png")), None
+        # MCP 外部工具:转给注入的 McpManager(或模块级单例 fallback);
+        # 懒连 ~/.argos/mcp.json 的 stdio server。
+        if action == "mcp_call":
+            if self._mcp_manager is not None:
+                mgr = self._mcp_manager
+            else:
+                from argos import mcp_native
+                mgr = mcp_native.get_manager()
+            arguments = args.get("arguments")
+            if not isinstance(arguments, dict):
+                arguments = {}
+            return mgr.call(args.get("server", ""), args.get("tool", ""), arguments), None
+        # OS 级计算机控制(P6a §10):经 ComputerExecutor 执行真实系统调用。
+        # 诚实性:屏幕/鼠标是全局资源,Seatbelt 关不住;用"审批+Ledger+high risk"治理。
+        # ARGOS_COMPUTER_USE=1 未设置时 ComputerExecutor 自身返回诚实禁止消息。
+        if action.startswith("computer."):
+            from argos.perception.actions import ComputerAction
+            from argos.perception.executor import ComputerExecutor
+            # 将 broker action 名(如 "computer.click")映射到 ComputerAction.kind
+            kind = action[len("computer."):]   # "click" / "screenshot" / …
+            try:
+                ca = ComputerAction(
+                    kind=kind,  # type: ignore[arg-type]
+                    x=int(args["x"]) if "x" in args else None,
+                    y=int(args["y"]) if "y" in args else None,
+                    text=str(args["text"]) if "text" in args else None,
+                    app=str(args["app"]) if "app" in args else None,
+                )
+            except (ValueError, TypeError) as exc:
+                return f"computer 动作参数校验失败: {exc}", None
+            result = ComputerExecutor().dispatch(ca)
+            # 诚实返回:ok=True → 人话摘要;ok=False → 原因串(含权限指引)
+            return result.detail, (0 if result.ok else 1)
+        # LSP 工具派发(spec §2.8):host 侧 LspManager 派发到对应 language server。
+        if action.startswith("lsp_"):
+            from argos import lsp as _lsp
+            from argos.lsp.tools import (
+                lsp_definition_gated as _lsp_def,
+                lsp_references_gated as _lsp_ref,
+                lsp_hover_gated as _lsp_hov,
+                lsp_document_symbols_gated as _lsp_dsym,
+                lsp_workspace_symbols_gated as _lsp_wsym,
+                lsp_diagnostics_gated as _lsp_diag,
+            )
+            mgr = _lsp.get_manager()
+            workspace = self._workspace if self._workspace is not None else Path.cwd()
+            kwargs: dict = {"manager": mgr, "workspace": workspace}
+            if action == "lsp_definition":
+                return _lsp_def(
+                    server_name="python",
+                    file=args.get("file", ""),
+                    line=int(args.get("line", 1)),
+                    col=int(args.get("col", 1)),
+                    **kwargs,
+                ), None
+            if action == "lsp_references":
+                return _lsp_ref(
+                    server_name="python",
+                    file=args.get("file", ""),
+                    line=int(args.get("line", 1)),
+                    col=int(args.get("col", 1)),
+                    include_declaration=bool(args.get("include_declaration", True)),
+                    **kwargs,
+                ), None
+            if action == "lsp_hover":
+                return _lsp_hov(
+                    server_name="python",
+                    file=args.get("file", ""),
+                    line=int(args.get("line", 1)),
+                    col=int(args.get("col", 1)),
+                    **kwargs,
+                ), None
+            if action == "lsp_document_symbols":
+                return _lsp_dsym(
+                    server_name="python",
+                    file=args.get("file", ""),
+                    **kwargs,
+                ), None
+            if action == "lsp_workspace_symbols":
+                return _lsp_wsym(
+                    server_name="python",
+                    query=args.get("query", ""),
+                    **kwargs,
+                ), None
+            if action == "lsp_diagnostics":
+                return _lsp_diag(
+                    server_name="python",
+                    file=args.get("file", ""),
+                    **kwargs,
+                ), None
+        # 未知 action 已被 request 顶部挡掉;此处兜底诚实返回。
+        return f"错误:动作 {action!r} 暂未实现 host 执行。", None
+
+    @staticmethod
+    def _describe(action: str, args: dict[str, Any]) -> str:
+        if action == "run_command":
+            return f"执行命令 {args.get('command', '')}"
+        if action == "web_search":
+            return f"联网搜索 {args.get('query', '')}"
+        if action == "web_extract":
+            return f"取网页 {args.get('url', '')}"
+        if action == "browser_navigate":
+            return f"浏览器打开 {args.get('url', '')}"
+        if action == "browser_snapshot":
+            return "读取当前浏览器页面内容"
+        if action == "browser_screenshot":
+            return f"浏览器截图到 {args.get('path', 'screenshot.png')}"
+        if action == "browser_click":
+            return f"浏览器点击 {args.get('selector', '')}"
+        if action == "browser_type":
+            return f"浏览器在 {args.get('selector', '')} 填入文本"
+        if action == "mcp_call":
+            return f"调用 MCP 工具 {args.get('server', '')}/{args.get('tool', '')}"
+        return f"{action} {args}"
