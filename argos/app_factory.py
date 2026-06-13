@@ -417,6 +417,13 @@ def build_components(
         if cap.verify_hint
     }
 
+    # #9 沙箱外执行面诚实告知(兑现 CLAUDE.md "warned at startup"):lsp/hooks/mcp 在沙箱【外】
+    # 以子进程运行用户控制的代码,不受 Seatbelt 约束。仅当用户配了对应 config 才警告。
+    import logging as _logging
+    from argos.external_surfaces import external_surface_warnings
+    for _w in external_surface_warnings():
+        _logging.getLogger("argos.sandbox").warning("[沙箱外执行面] %s", _w)
+
     return AppComponents(
         store=store, broker=broker, verifier=verifier, model=model,
         sandbox=sandbox, gate=gate, config=loop_config, workspace=ws,
