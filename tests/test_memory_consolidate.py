@@ -167,6 +167,124 @@ def test_consolidate_skips_corrupt_lines_and_archive_file(tmp_path):
     assert "archive_existing" in archive_after, "archive.jsonl should not be rewritten by consolidate scan"
 
 
+# ── test (review#3): 同 key 异 value 合并 → older 进 archive,绝不硬删 ──────────
+def test_merge_different_value_archives_older_never_hard_delete(tmp_path):
+    """同 key 两条不同 value(一旧一新 ts)→ consolidate 后:
+    源文件只留 newer.value、archive.jsonl 含 older.value、use_count 累加。
+
+    回退验证:删掉 older 追加 archive 的代码,本测试必 FAIL(older.value 双双消失=硬删)。
+    """
+    now = time.time()
+    # 同 key、不同 value(auto.py key 粗粒度:同命令不同 stderr 合法同 key 异 value)
+    older = _entry(key="cmd", value="old_stderr", confidence=0.9, ts=now - 100, use_count=2)
+    newer = _entry(key="cmd", value="new_stderr", confidence=0.85, ts=now, use_count=1)
+
+    mem_dir = tmp_path / "memory"
+    tier_file = mem_dir / "user.jsonl"
+    _write_jsonl(tier_file, [older, newer])
+
+    rep: ConsolidationReport = consolidate(mem_dir, now=now)
+
+    assert rep.merged == 1, f"expected merged=1, got {rep.merged}"
+    assert rep.errors == 0
+
+    # 源文件只剩 newer.value(ts-新那条)
+    remaining = _read_jsonl(tier_file)
+    assert len(remaining) == 1, f"expected 1 survivor, got {len(remaining)}: {remaining}"
+    survivor = remaining[0]
+    assert survivor["value"] == "new_stderr", f"expected new_stderr, got {survivor['value']}"
+    assert survivor["use_count"] == 3, f"expected use_count=3, got {survivor['use_count']}"
+
+    # 核心断言:older.value 进了 archive.jsonl —— 永不硬删
+    archive_path = mem_dir / ARCHIVE_NAME
+    assert archive_path.exists(), "archive.jsonl 应存在(older 异 value 被归档)"
+    archived_values = [e.get("value") for e in _read_jsonl(archive_path)]
+    assert "old_stderr" in archived_values, (
+        f"older.value 必须落进 archive(永不硬删),实得: {archived_values}"
+    )
+
+
+# ── test (review#3): 纯重复(同 value)合并不归档,但 use_count 仍累加 ──────────
+def test_merge_same_value_no_archive_but_sums_use_count(tmp_path):
+    """同 key 同 value 的纯重复 → older 无需归档(无信息丢失),但 use_count 仍累加。"""
+    now = time.time()
+    older = _entry(key="dup", value="same", confidence=0.9, ts=now - 100, use_count=2)
+    newer = _entry(key="dup", value="same", confidence=0.85, ts=now, use_count=1)
+
+    mem_dir = tmp_path / "memory"
+    tier_file = mem_dir / "user.jsonl"
+    _write_jsonl(tier_file, [older, newer])
+
+    rep: ConsolidationReport = consolidate(mem_dir, now=now)
+
+    assert rep.merged == 1
+    assert rep.errors == 0
+
+    remaining = _read_jsonl(tier_file)
+    assert len(remaining) == 1
+    assert remaining[0]["use_count"] == 3, "纯重复也要累加 use_count"
+
+    # 纯重复无信息丢失 → 不归档
+    archive_path = mem_dir / ARCHIVE_NAME
+    if archive_path.exists():
+        assert _read_jsonl(archive_path) == [], "纯重复(同 value)不该产生归档"
+
+
+# ── test (review#3): 合并用 max 聚合 last_used_at,不因合并退化被误归档 ──────────
+def test_merge_uses_max_last_used_at(tmp_path):
+    """ts-旧条目 last_used_at 新、ts-新条目 last_used_at 旧 →
+    合并后 survivor.last_used_at = 较新那个(max),不因合并退化被误归档。
+
+    构造:ts-newer 那条 last_used_at 是 90 天前(若直接取它会被衰减归档);
+    ts-older 那条 last_used_at 是当下。max 聚合后 survivor 应活跃保留。
+    """
+    now = time.time()
+    ninety_days_ago = now - 86400 * 90
+    # ts 旧但最近用过(last_used_at 新)
+    older_ts_recent_use = _entry(
+        key="cmd",
+        value="old_stderr",
+        confidence=0.9,
+        ts=now - 100,
+        last_used_at=now,
+        use_count=2,
+    )
+    # ts 新但很久没用(last_used_at 旧)—— 内容取这条,但 last_used_at 必须被 max 救活
+    newer_ts_stale_use = _entry(
+        key="cmd",
+        value="new_stderr",
+        confidence=0.5,
+        ts=now,
+        last_used_at=ninety_days_ago,
+        use_count=1,
+    )
+
+    mem_dir = tmp_path / "memory"
+    tier_file = mem_dir / "user.jsonl"
+    _write_jsonl(tier_file, [older_ts_recent_use, newer_ts_stale_use])
+
+    rep: ConsolidationReport = consolidate(mem_dir, now=now)
+
+    assert rep.errors == 0
+    assert rep.merged == 1
+
+    remaining = _read_jsonl(tier_file)
+    assert len(remaining) == 1, (
+        f"survivor 不该因 last_used_at 退化被误归档,实得: {remaining}"
+    )
+    survivor = remaining[0]
+    # 内容仍取 ts-newer 那条
+    assert survivor["value"] == "new_stderr"
+    # last_used_at 取 max(两者) = now,而非 ts-newer 的 90 天前
+    assert survivor["last_used_at"] == now, (
+        f"last_used_at 应 max 聚合为 {now},实得 {survivor['last_used_at']}"
+    )
+    # confidence 也 max 聚合(0.9 而非 ts-newer 的 0.5)
+    assert survivor["confidence"] == 0.9, (
+        f"confidence 应 max 聚合为 0.9,实得 {survivor['confidence']}"
+    )
+
+
 # ── test 4: archive.jsonl 里的陈旧条目不被二次归档/删除(rglob skip 真起作用) ──
 def test_archive_stale_entry_not_re_archived_or_deleted(tmp_path):
     """archive.jsonl 预置一条 conf=0.7 但 90 天前的陈旧条目(若被扫描会再次触发归档)。
