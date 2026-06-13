@@ -720,16 +720,21 @@ class AgentLoop:
 
         顶层兜底:捕获 _drive 内任何未处理异常,挖异常链投 Error(spec §3.3 L5)。
         """
-        # 多模态门禁(spec §5 诚实不变量):发请求前若存在附件但 tier.multimodal=False
-        # → 抛诚实错误,不静默剥图,不假装看到。
+        # 视觉能力门(spec 2026-06-13):发请求前判定模型能否看图。能力靠"懒触发探针 + 缓存"
+        # 自发现(override→缓存→探针),探不出/看不了 → 诚实阻断,不静默剥图、不假装看到。
         if attachments:
             tier = getattr(getattr(self, "_model", None), "tier", None)
-            if tier is not None and not getattr(tier, "multimodal", False):
-                model_name = getattr(tier, "model", "当前模型")
-                raise ValueError(
-                    f"当前模型 {model_name!r} 不支持图像输入（multimodal=False）。"
-                    "请在 setup 配置一个多模态模型（如 claude-3-5-sonnet / gpt-4o）。"
+            if tier is not None:
+                from argos.core.vision_capability import (
+                    resolve_vision_capability, VisionCapabilityCache,
                 )
+                ok = await resolve_vision_capability(tier, self._model, VisionCapabilityCache())
+                if not ok:
+                    model_name = getattr(tier, "model", "当前模型")
+                    raise ValueError(
+                        f"当前模型 {model_name!r} 看不了图。请换一个支持视觉的模型,"
+                        "或在 config 给该 profile 设 multimodal override。"
+                    )
         self._reset_run_state()
         # 拍 workspace 快照(供 /undo 还原);失败不阻断 run,仅 _last_snapshot = None 走"/undo
         # 不可用"诚实降级路径。延迟 import 避免 core.snapshot ↔ runtime 之间未来的循环风险。
