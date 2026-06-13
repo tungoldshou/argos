@@ -904,15 +904,20 @@ def test_material_gate_import_failure_treated_as_no_material(tmp_path: Path, mon
 # ── T9: confirm 路由到 DreamPipeline(而非 create_run) ─────────────────────────
 
 class _FakeDreamPipeline:
-    """fake DreamPipeline:run() 返固定 DreamReport,is_running 可控。"""
+    """fake DreamPipeline:run() 返固定 DreamReport,is_running / cross_process_busy 可控。"""
 
-    def __init__(self, *, is_running: bool = False):
+    def __init__(self, *, is_running: bool = False, cross_busy: bool = False):
         self._is_running = is_running
+        self._cross_busy = cross_busy
         self.run_called = False
 
     @property
     def is_running(self) -> bool:
         return self._is_running
+
+    def cross_process_busy(self) -> bool:
+        # review#4:daemon _start_dream 预检另一进程是否持跨进程文件锁。
+        return self._cross_busy
 
     async def run(self):
         self.run_called = True
@@ -987,6 +992,44 @@ async def test_confirm_dream_busy_409(tmp_path: Path):
         )
         assert status == 409, f"已在跑应返 409,实得 {status}:{raw.decode()[:200]}"
         assert not fake.run_called, "busy 时不应再调 run"
+        # suggestion 仍 pending(没被消费,可稍后重试)
+        assert s.id in supervisor.pending_suggestions
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_confirm_dream_cross_process_busy_409(tmp_path: Path):
+    """另一进程(CLI)持跨进程文件锁(cross_process_busy=True)→ confirm dream 返 409,不跑。
+
+    review#4 回归守卫:若 daemon 不预检 cross_process_busy,会回 202 却没真跑
+    (run() 因跨进程锁异步返 None,客户端无感)。撤掉 _start_dream 里的
+    cross_process_busy 检查 → 本测试会得 202 + run_called=True → FAIL。
+    """
+    server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
+    # is_running=False(本进程没在跑)但 cross_busy=True(另一进程持锁)
+    fake = _FakeDreamPipeline(is_running=False, cross_busy=True)
+    server._dream_pipeline = fake
+
+    try:
+        sid = await _create_session(socket_path)
+        rec = server._sessions.get(sid)
+        if rec is not None:
+            import dataclasses
+            server._sessions._sessions[sid] = dataclasses.replace(rec, role="owner")
+
+        s = _make_dream_suggestion()
+        supervisor._pending[s.id] = s
+
+        status, raw = await _raw_req(
+            socket_path, "POST", f"/suggestions/{s.id}/confirm", session_id=sid,
+        )
+        assert status == 409, (
+            f"另一进程持锁应返 409,实得 {status}:{raw.decode()[:200]}"
+        )
+        # 让事件循环跑一拍,确认 pipeline.run 绝没被派生
+        await asyncio.sleep(0.02)
+        assert not fake.run_called, "跨进程忙时绝不能派生 run(否则 202 却没真跑)"
         # suggestion 仍 pending(没被消费,可稍后重试)
         assert s.id in supervisor.pending_suggestions
     finally:
@@ -1131,6 +1174,10 @@ async def test_start_dream_concurrent_race_at_most_one_202(tmp_path: Path):
         @property
         def is_running(self) -> bool:
             return self._is_running
+
+        def cross_process_busy(self) -> bool:
+            # review#4:无另一进程持锁 → False(本测试只验进程内 TOCTOU 守卫)。
+            return False
 
         async def run(self):
             nonlocal run_count

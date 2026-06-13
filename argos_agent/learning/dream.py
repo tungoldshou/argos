@@ -26,6 +26,71 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+# 锁文件名:从 candidates_root 派生(见 _lock_path_for)。两个进程(CLI + daemon)
+# 默认 candidates_root 相同 → 锁路径相同 → 跨进程互斥;测试注入 tmp 时锁随之隔离。
+DREAM_LOCK_NAME = ".dream.lock"
+
+# 哨兵:平台无 fcntl 或锁文件打不开时的"无文件锁"占位 fd(release 时忽略)。
+_NO_FCNTL_FD = -1
+
+
+def _lock_path_for(candidates_root: "Path") -> "Path":
+    """从 candidates_root 派生一个两进程都算得出的稳定锁路径。
+
+    用 candidates_root.parent —— 候选区父目录(默认 ~/.argos/learning)既稳定
+    又随测试注入的 tmp candidates_root 一起隔离,不会污染真实 ~/.argos。
+    """
+    return candidates_root.parent / DREAM_LOCK_NAME
+
+
+def _acquire_cross_process_lock(candidates_root: "Path") -> "int | None":
+    """抢一个跨进程文件锁(非阻塞)。
+
+    返回:
+    - fd(int)  —— 抢到锁;caller 负责在 finally 里 _release_cross_process_lock(fd)。
+    - None      —— 锁被另一进程持有(LOCK_NB 立刻失败)→ caller 应跳过本轮。
+
+    平台兜底:fcntl 仅 unix(本项目 macOS/linux 为主)。import 失败 → 降级为
+    "仅进程内锁",此处返回 None 会误判忙,故降级语义改为返回哨兵 -1(= 拿到
+    一个"无文件锁"的占位 fd,释放时 close 一个不存在的 fd 会被 finally 吞掉)。
+    为清晰起见用专门哨兵 _NO_FCNTL_FD,_release 见名识义直接忽略它。
+    """
+    try:
+        import fcntl
+    except ImportError:  # pragma: no cover — 非 unix 平台(本项目主线 macOS/linux)
+        log.warning("dream: 平台无 fcntl,降级为仅进程内锁(跨进程并发不防护)")
+        return _NO_FCNTL_FD
+
+    import os
+
+    lock_path = _lock_path_for(candidates_root)
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_WRONLY, 0o600)
+    except OSError as e:
+        # 锁文件本身打不开(目录权限等)→ 保守不阻断:降级为仅进程内锁。
+        log.warning("dream: 锁文件打开失败,降级仅进程内锁: %s", e)
+        return _NO_FCNTL_FD
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        # 已被另一进程持有 → 非阻塞失败。close fd(不持锁),返 None。
+        os.close(fd)
+        return None
+    return fd
+
+
+def _release_cross_process_lock(fd: "int | None") -> None:
+    """释放跨进程文件锁。flock 随 fd close 自动释放;哨兵/None 直接忽略。"""
+    if fd is None or fd == _NO_FCNTL_FD:
+        return
+    import os
+    try:
+        os.close(fd)   # close 即释放 flock(无需显式 LOCK_UN)
+    except OSError as e:  # noqa: BLE001 — 释放失败只记日志,不挂管道
+        log.warning("dream: 锁释放失败(已忽略): %s", e)
+
+
 SIM_THRESHOLD = 0.35       # goal+verify token Jaccard 阈值(宁可不合并)
 DEFAULT_MAX_UNITS = 3      # 每晚每车道整合单元上限(防失控烧 token)
 MAX_UNIT_SOURCES = 5       # 单个综合单元的源上限:超大簇截取前 5 个,余下留宿隔晚再整合
@@ -298,16 +363,45 @@ class DreamPipeline:
         """
         return self._lock is not None and self._lock.locked()
 
+    def cross_process_busy(self) -> bool:
+        """只读探针:另一进程(如 CLI)是否正持有跨进程 Dream 锁。
+
+        供 daemon 在派生 pipeline.run() 任务前预检 —— 否则 run() 因跨进程锁返
+        None 是异步发生的,daemon 已回 202 却没真跑(review#4:确认不要 202 却没跑)。
+        非阻塞:抢到立刻释放(run() 稍后会重抢);抢不到 → True(忙)。
+        本进程自己正持锁(is_running)时不算"另一进程忙",由 is_running 单独判定。
+        """
+        fd = _acquire_cross_process_lock(self._candidates_root)
+        if fd is None:
+            return True
+        _release_cross_process_lock(fd)
+        return False
+
     async def run(self) -> "DreamReport | None":
-        """跑一次完整 Dream。已有 Dream 在跑 → log + 返 None(单飞)。"""
+        """跑一次完整 Dream。已有 Dream 在跑 → log + 返 None。
+
+        两层单飞:
+        ① 进程内 asyncio.Lock —— 同进程两个 conductor tick 撞车防护;
+        ② 跨进程 fcntl 文件锁 —— CLI 与 daemon 是独立进程,asyncio.Lock 跨进程
+           不可见;无文件锁则两进程并发会撕裂写候选区/记忆(review#4)。
+        语义一致:任一层判定"已在跑" → 返 None(与既有单飞约定相同)。
+        """
         import asyncio
         if self._lock is None:
             self._lock = asyncio.Lock()
         if self._lock.locked():
-            log.info("dream: 已有整合在跑,跳过本次(单飞)")
+            log.info("dream: 已有整合在跑,跳过本次(进程内单飞)")
             return None
         async with self._lock:
-            return await self._run_locked()
+            # 进程内锁已持有 → 现在抢跨进程锁(另一进程可能正持有)。
+            lock_fd = _acquire_cross_process_lock(self._candidates_root)
+            if lock_fd is None:
+                log.info("dream: 另一进程的整合在跑,跳过本次(跨进程单飞)")
+                return None
+            try:
+                return await self._run_locked()
+            finally:
+                _release_cross_process_lock(lock_fd)
 
     async def _run_locked(self) -> "DreamReport":
         import time

@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,6 +19,15 @@ log = logging.getLogger(__name__)
 
 ARCHIVE_NAME = "archive.jsonl"
 DEFAULT_ARCHIVE_THRESHOLD = 0.2
+
+
+def _unique_tmp(target: Path) -> Path:
+    """同目录、进程+随机唯一的临时文件名(review#4:CLI/daemon 并发不撞 .tmp)。
+
+    形如 <target>.<pid>.<uuid>.tmp;replace 仍原子(同目录跨 inode rename)。
+    确定性 .tmp 后缀会被另一进程的同名 .tmp 覆盖 → 撕裂写损坏不可硬删的记忆。
+    """
+    return target.with_name(f"{target.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,7 +135,7 @@ def consolidate(
                     for e in archive_batch:
                         af.write(json.dumps(e, ensure_ascii=False) + "\n")
             new_lines = keep_raw + [json.dumps(e, ensure_ascii=False) for e in survivors]
-            tmp = f.with_suffix(".jsonl.tmp")
+            tmp = _unique_tmp(f)
             tmp.write_text(
                 "\n".join(new_lines) + ("\n" if new_lines else ""),
                 encoding="utf-8",

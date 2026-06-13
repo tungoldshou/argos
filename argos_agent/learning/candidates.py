@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,6 +26,15 @@ from argos_agent.memory.auto import _redact_secrets
 log = logging.getLogger(__name__)
 
 DEFAULT_ROOT = Path.home() / ".argos" / "learning" / "candidates"
+
+
+def _unique_tmp(target: Path) -> Path:
+    """同目录、进程+随机唯一的临时文件名(review#4:CLI/daemon 并发不撞 .tmp)。
+
+    形如 <target>.<pid>.<uuid>.tmp;replace 仍原子。确定性 .tmp 后缀会被另一
+    进程的同名 .tmp 互相覆盖 → 撕裂写损坏候选区 meta.json。
+    """
+    return target.with_name(f"{target.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,9 +86,10 @@ def save_candidate(cand: Any, *, root: Path, source_run: str,
                 "self_verified": bool(self_verified),
             }, ensure_ascii=False, indent=2)),
         ):
-            tmp = d / (fname + ".tmp")
+            target = d / fname
+            tmp = _unique_tmp(target)
             tmp.write_text(content, encoding="utf-8")
-            tmp.replace(d / fname)
+            tmp.replace(target)
         return d
     except Exception as e:  # noqa: BLE001 — 学习路径不挂主任务
         log.warning("candidates: save 失败(%s): %s", source_run, e)
@@ -125,7 +137,7 @@ def mark_consumed(cand_dir: Path, *, reason: str) -> bool:
         meta["consumed"] = True
         meta["consumed_reason"] = reason
         meta["consumed_at"] = time.time()
-        tmp = meta_path.parent / (meta_path.name + ".tmp")
+        tmp = _unique_tmp(meta_path)
         tmp.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(meta_path)
         return True

@@ -213,7 +213,7 @@ def run_dream(args: Any) -> int:
         return 1
 
     if report is None:
-        print("Dream 已在运行(单飞),跳过本次。")
+        print("另一个 Dream 正在运行(可能是 daemon 夜间整合),本次跳过。")
         return 0
 
     print(_fmt_report({

@@ -44,9 +44,17 @@ def _skill_md_path_for(skills_root: Path, name: str) -> Path:
 
 
 def _atomic_write_skill(skill_md: Path, content: str) -> None:
-    """原子写(同 install 约定:写 .tmp 后 rename,失败时旧文件完整)。"""
+    """原子写(同 install 约定:写 .tmp 后 rename,失败时旧文件完整)。
+
+    tmp 名带 pid+uuid(review#4):CLI 与 daemon 并发晋升同名技能时,确定性
+    .tmp 后缀会互相覆盖 → 撕裂写。replace 仍原子(同目录 rename)。
+    """
+    import os
+    import uuid
+
     skill_md.parent.mkdir(parents=True, exist_ok=True)
-    tmp = skill_md.with_suffix(skill_md.suffix + ".tmp")
+    tmp = skill_md.with_name(
+        f"{skill_md.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
     tmp.write_text(content, encoding="utf-8")
     tmp.replace(skill_md)
 

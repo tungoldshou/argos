@@ -1609,8 +1609,12 @@ class DaemonHTTPServer:
                 "daemon 未配置 API key，无法执行 Dream。请运行 `argos setup` 配置模型 key 后重启 daemon。",
             )
             return False
-        # 双重守卫：pipeline.is_running（锁已持有）|| _dream_starting（任务已派生但锁未持有）
-        if pipeline.is_running or self._dream_starting:
+        # 三重守卫：
+        #   pipeline.is_running   —— 本进程锁已持有(daemon 自己在跑)
+        #   self._dream_starting  —— 本进程任务已派生但协程尚未持锁(TOCTOU 窗口)
+        #   cross_process_busy()  —— 另一进程(CLI)正持跨进程文件锁(review#4):
+        #     否则 pipeline.run() 因跨进程锁返 None 是异步发生,daemon 已回 202 却没真跑。
+        if pipeline.is_running or self._dream_starting or pipeline.cross_process_busy():
             await self._send_error(
                 writer, 409, "dream_busy", "已有一次夜间整合在跑，请稍后再试。",
             )
