@@ -20,6 +20,10 @@ from textual import events
 from textual.message import Message
 from textual.widgets import Static, TextArea
 
+from argos.input.attachments import ImageAttachment, extract_image_paths, load_from_path
+
+_PASTE_THRESHOLD = 10000  # >10000 字符的粘贴折成占位 chip(对齐 Claude Code)
+
 # Rich Text 层无法引用 CSS $token 名,直接用 hex 值(与 theme.py 对应 token 保持同步)
 _EYE        = "#D9A85C"   # $eye:▸ 选中光标 / 选中项名
 _INK_DIM    = "#7E869C"   # $ink-dim:说明文字
@@ -31,10 +35,12 @@ class PromptArea(TextArea):
     """主输入框。Enter 提交;反斜杠续行;菜单可见时 ↑/↓/Tab/Enter 走 slash 菜单选择。"""
 
     class Submitted(Message):
-        """整段提交(Enter,且非续行、非空)。app 据此起 run / 分发 slash。"""
+        """整段提交(Enter,且非续行、非空)。app 据此起 run / 分发 slash。
+        attachments:提交时从粘贴/图片侧缓冲展开出的图片附件(默认空 = 纯文本提交)。"""
 
-        def __init__(self, text: str) -> None:
+        def __init__(self, text: str, attachments: list | None = None) -> None:
             self.text = text
+            self.attachments: list = list(attachments or [])
             super().__init__()
 
     class VoiceToggle(Message):
@@ -50,6 +56,47 @@ class PromptArea(TextArea):
         super().__init__(
             soft_wrap=True, show_line_numbers=False, tab_behavior="focus", compact=True, **kwargs
         )
+        # 粘贴管线侧缓冲:占位 token → 全文 / 图片附件(提交时展开)。
+        self._paste_store: dict[str, str] = {}
+        self._image_store: dict[str, ImageAttachment] = {}
+        self._paste_seq: int = 0
+        self._image_seq: int = 0
+
+    def _make_paste_token(self, text: str) -> str | None:
+        """超长粘贴 → 生成占位 token 并存全文;否则 None(调用方原样内联)。"""
+        if len(text) <= _PASTE_THRESHOLD:
+            return None
+        self._paste_seq += 1
+        lines = text.count("\n")
+        token = f"[粘贴文本 #{self._paste_seq} +{lines} 行]"
+        self._paste_store[token] = text
+        return token
+
+    def register_image(self, att: ImageAttachment) -> str:
+        """登记一张图片附件,返回占位 token([图片 #N])。供 app 的 Ctrl+V 动作调用。"""
+        self._image_seq += 1
+        token = f"[图片 #{self._image_seq}]"
+        self._image_store[token] = att
+        return token
+
+    def _expand_submission(self, text: str) -> tuple[str, list[ImageAttachment]]:
+        """提交时展开:粘贴占位符 → 全文;图片占位符 + 文本里的图片路径 → 附件列表。
+        图片占位符从文本中剔除(不进 goal 文本)。非法图片/读不了 → 诚实跳过。"""
+        out_text = text
+        for token, full in self._paste_store.items():
+            out_text = out_text.replace(token, full)
+        attachments: list[ImageAttachment] = []
+        for token, att in self._image_store.items():
+            if token in out_text:
+                attachments.append(att)
+                out_text = out_text.replace(token, "")
+        # 文本里直接写/拖进来的图片文件路径(attachments.load_from_path 用 ValueError 表非法)
+        for path in extract_image_paths(out_text):
+            try:
+                attachments.append(load_from_path(path))
+            except (ValueError, OSError):
+                pass  # 非图/读不了:诚实跳过(不附),文本保留路径原样
+        return out_text.strip(), attachments
 
     def _menu(self) -> "SlashMenu | None":
         try:
