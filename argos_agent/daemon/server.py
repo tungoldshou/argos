@@ -103,6 +103,12 @@ class DaemonHTTPServer:
         # 新建 pipeline 锁就失效 —— 必须复用同一实例(_get_dream_pipeline 缓存)。
         # 无 components/model → _get_dream_pipeline 返 None(诚实无 key 模式)。
         self._dream_pipeline = None
+        # TOCTOU 守卫:pipeline.is_running 只反映 run() 已持锁(锁在 create_task 派生
+        # 的协程体内部惰性获取)。两个并发请求都可能在 run() 协程被调度前读到
+        # is_running=False,各自 create_task 并返 202——违反"202=已启动"诚实铁律。
+        # _dream_starting 在 is_running 检查通过后、create_task 之前同步置 True
+        # (此处无 await,无法被抢占),done_callback 复位。
+        self._dream_starting: bool = False
 
     @property
     def registry(self):
@@ -1587,8 +1593,14 @@ class DaemonHTTPServer:
     async def _start_dream(self, writer):
         """启动一次 Dream（confirm 与 POST /dream/run 共用）。
 
-        返回 None 表示已发送响应（503/409/202）；caller 据此决定是否还需 pop suggestion。
-        return 值：202 时返 True（已启动），否则返 False（已发 503/409）。
+        返回 False 表示已发送错误响应（503/409），caller 不再追加任何响应。
+        返回 True 表示 pipeline 任务已被派生（诚实：create_task 已调用）。
+
+        TOCTOU 守卫：pipeline.is_running 只在 run() 协程体持锁后才为 True，
+        而 create_task 派生的协程要到事件循环下一拍才执行。两个并发请求都可能
+        在协程被调度前读到 is_running=False → 都发 202。为此在"检查通过"和
+        "create_task"之间（无 await，原子窗口）同步设置 self._dream_starting=True，
+        第二个请求看到 _dream_starting=True 就直接 409。done_callback 复位标志。
         """
         pipeline = self._get_dream_pipeline()
         if pipeline is None:
@@ -1597,13 +1609,20 @@ class DaemonHTTPServer:
                 "daemon 未配置 API key，无法执行 Dream。请运行 `argos setup` 配置模型 key 后重启 daemon。",
             )
             return False
-        # 先探锁：已在跑 → 409（避免 create_task 后被 run() 单飞静默吞掉，客户端无感）。
-        if pipeline.is_running:
+        # 双重守卫：pipeline.is_running（锁已持有）|| _dream_starting（任务已派生但锁未持有）
+        if pipeline.is_running or self._dream_starting:
             await self._send_error(
                 writer, 409, "dream_busy", "已有一次夜间整合在跑，请稍后再试。",
             )
             return False
-        asyncio.create_task(pipeline.run(), name="dream-run")
+        # 从检查通过到 create_task 之间无 await —— 单线程事件循环不可被抢占，原子。
+        self._dream_starting = True
+
+        def _reset_starting(_fut):
+            self._dream_starting = False
+
+        task = asyncio.create_task(pipeline.run(), name="dream-run")
+        task.add_done_callback(_reset_starting)
         return True
 
     async def _confirm_dream(self, writer, suggestion_id, s):

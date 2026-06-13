@@ -1100,3 +1100,84 @@ async def test_dream_report_endpoint_empty_and_nonempty(tmp_path: Path, monkeypa
         assert body["report"]["promoted"] == 1
     finally:
         await server.stop()
+
+
+# ── T9: TOCTOU 竞态守卫 ─────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_start_dream_concurrent_race_at_most_one_202(tmp_path: Path):
+    """TOCTOU 修复回归：两个几乎同时到达的 POST /dream/run 请求（或 confirm+run），
+    恰好只有一个拿到 202，另一个拿到 409 dream_busy。
+
+    复现路径：_dream_starting 守卫缺失时，两个并发请求都可能在 create_task 派生的
+    pipeline.run() 协程获得调度之前读到 is_running=False，各返 202（撒谎）。
+    修复后：第一个请求同步设置 _dream_starting=True，第二个请求在 is_running 仍为
+    False 的窗口期读到 _dream_starting=True → 409，保证"202=已启动"诚实铁律。
+    """
+    import asyncio
+
+    server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
+
+    # 使用可延迟的 fake pipeline：run() 在 yield 之前不置 is_running=True
+    # （模拟真实 DreamPipeline 的惰性锁初始化行为）。
+    run_count = 0
+
+    class _SlowFakePipeline:
+        """run() 加 yield 让另一个协程有机会插入；is_running 模拟锁未持有阶段。"""
+        def __init__(self):
+            self._is_running = False
+            self.run_called = 0
+
+        @property
+        def is_running(self) -> bool:
+            return self._is_running
+
+        async def run(self):
+            nonlocal run_count
+            run_count += 1
+            self.run_called += 1
+            self._is_running = True
+            await asyncio.sleep(0.02)   # 模拟实际工作，让另一个 coro 有机会跑
+            self._is_running = False
+            from argos_agent.learning.dream import DreamReport
+            return DreamReport(units_total=1, promoted=1)
+
+    fake = _SlowFakePipeline()
+    server._dream_pipeline = fake
+
+    try:
+        sid = await _create_session(socket_path)
+        rec = server._sessions.get(sid)
+        if rec is not None:
+            import dataclasses
+            server._sessions._sessions[sid] = dataclasses.replace(rec, role="owner")
+
+        # 并发发两个 /dream/run 请求
+        results = await asyncio.gather(
+            _raw_req(socket_path, "POST", "/dream/run", session_id=sid),
+            _raw_req(socket_path, "POST", "/dream/run", session_id=sid),
+        )
+
+        statuses = [r[0] for r in results]
+        bodies = [json.loads(r[1].decode()) for r in results]
+
+        count_202 = statuses.count(202)
+        count_409 = statuses.count(409)
+
+        assert count_202 == 1, (
+            f"并发两请求应恰好只有一个 202，实得 {statuses}。"
+            f"如果两个都是 202，说明 TOCTOU 守卫失效（_dream_starting 未置位）。"
+        )
+        assert count_409 == 1, (
+            f"另一个请求应返 409 dream_busy，实得 {statuses}。bodies={bodies}"
+        )
+
+        # 等待 run 任务完成（防止 dangling task 干扰其他测试）
+        await asyncio.sleep(0.05)
+
+        # 只有一次真实 run 被调用（pipeline 没被双跑）
+        assert fake.run_called == 1, (
+            f"pipeline.run 应只被调一次，实际调了 {fake.run_called} 次"
+        )
+    finally:
+        await server.stop()
