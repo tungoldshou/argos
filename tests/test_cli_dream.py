@@ -366,3 +366,96 @@ def test_cli_dream_has_key_promotion(tmp_path, monkeypatch, capsys):
     assert any("可参考" in g for g in b_side_goals), (
         f"B 侧 task.goal 应含 '可参考'（hint 前置），实得：{b_side_goals[:3]}"
     )
+
+
+# ── 8. EvalRunner 必须收到 loop_factory（Review High #1 回归钉）──────────────
+
+
+def test_cli_dream_eval_runner_receives_loop_factory(tmp_path, monkeypatch, capsys):
+    """CLI has-key 路径中 EvalRunner 构造必须传入非 None 的 loop_factory。
+
+    回归钉（Review High #1）：原实现 cli/dream.py:169 缺失 loop_factory 参数，
+    导致 runner.run() 直接返回 PASS_ERROR，A/B 两侧恒相等，晋升永不发生。
+
+    验证方式：用 spy 捕获 EvalRunner(...)  构造调用参数，断言 loop_factory is not None。
+    回退验证：把 loop_factory 传参从 cli/dream.py 删掉，此测试必须 FAIL。
+    """
+    from argos_agent.learning.candidates import save_candidate
+    from argos_agent.learning.distiller import SkillCandidate
+
+    # ── 最小目录体系（只需触发 has-key 分支到 EvalRunner 构造即可）────────────
+    candidates_root = tmp_path / "candidates"
+    skills_root = tmp_path / "skills"
+    dreams_dir = tmp_path / "dreams"
+    memory_dir = tmp_path / "memory"
+    ws = tmp_path / "ws"
+    ws.mkdir(parents=True)
+
+    # 种一个候选（让 pipeline 有材料可处理）
+    cand = SkillCandidate(
+        name="learned",
+        body_markdown="# fix\n\n```python\nprint('ok')\n```",
+        verify_cmd="true",
+        skill_md_path=Path("unused"),
+    )
+    save_candidate(cand, root=candidates_root, source_run="spy001aaaa11",
+                   workspace=str(ws), goal="fix connection timeout")
+
+    # ── spy：捕获 EvalRunner 构造参数 ─────────────────────────────────────
+    captured_kwargs: list[dict] = []
+
+    def _spy_eval_runner(*args, **kwargs):
+        captured_kwargs.append({"args": args, "kwargs": kwargs})
+        # 返回一个极简 fake runner（不需要真正跑 eval）
+        fake = MagicMock()
+        fake.run = MagicMock(return_value=MagicMock(pass_status="failed"))
+        return fake
+
+    # ── fake comps + build_run_stack ─────────────────────────────────────
+    fake_model = MagicMock()
+    fake_model.complete = AsyncMock(return_value="叙述文本")
+    fake_comps = MagicMock()
+    fake_comps.model = fake_model
+
+    # build_run_stack → 返回一个 RunStack-like fake，其 loop_factory 是可调用的
+    fake_run_stack = MagicMock()
+    fake_run_stack.loop_factory = MagicMock(return_value=MagicMock())  # 非 None
+
+    # ── monkeypatch ───────────────────────────────────────────────────────
+    monkeypatch.setattr("argos_agent.skills.USER_DIR", skills_root)
+    monkeypatch.setattr("argos_agent.cli.dream._DEFAULT_SKILLS_DIR", skills_root)
+    monkeypatch.setattr("argos_agent.learning.candidates.DEFAULT_ROOT", candidates_root)
+    monkeypatch.setattr("argos_agent.cli.dream._DEFAULT_CANDIDATES_DIR", candidates_root)
+    monkeypatch.setenv("ARGOS_DREAMS_DIR", str(dreams_dir))
+    monkeypatch.setenv("ARGOS_MEMORY_DIR", str(memory_dir))
+
+    monkeypatch.setattr("argos_agent.app_factory.build_components",
+                        MagicMock(return_value=fake_comps))
+    monkeypatch.setattr("argos_agent.app_factory.build_run_stack",
+                        MagicMock(return_value=fake_run_stack))
+    monkeypatch.setattr("argos_agent.eval.runner.EvalRunner", _spy_eval_runner)
+    monkeypatch.setattr("argos_agent.daemon.worktree.WorktreeManager",
+                        MagicMock(return_value=MagicMock()))
+
+    import importlib
+    import argos_agent.cli.dream as dream_mod
+    importlib.reload(dream_mod)
+
+    ns = argparse.Namespace()
+    ns.report = False
+    dream_mod.run_dream(ns)
+    capsys.readouterr()  # 不关心输出
+
+    # ── 核心断言：EvalRunner 必须被构造，且收到非 None 的 loop_factory ──────
+    assert len(captured_kwargs) >= 1, (
+        "EvalRunner 从未被构造；说明 has-key 分支未到达 runner 装配步骤。"
+    )
+    kw = captured_kwargs[0]["kwargs"]
+    assert "loop_factory" in kw, (
+        f"EvalRunner 构造缺少 loop_factory 关键字参数；实际 kwargs={list(kw.keys())}。"
+        "\n回退验证：把 loop_factory 传参从 cli/dream.py 删掉，此断言必须触发。"
+    )
+    assert kw["loop_factory"] is not None, (
+        "EvalRunner 收到的 loop_factory 是 None；"
+        "runner.run() 将直接返回 PASS_ERROR，A/B 晋升永不发生。"
+    )

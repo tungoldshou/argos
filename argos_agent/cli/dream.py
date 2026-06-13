@@ -141,38 +141,53 @@ def run_dream(args: Any) -> int:
     candidates_root = _DEFAULT_CANDIDATES_DIR
     skills_root = _DEFAULT_SKILLS_DIR
 
-    # 构建 narrate fn(调 model.complete)
+    # 构建 components（一次，narrate + runner_factory 共享）
+    from argos_agent.app_factory import build_components, build_run_stack
     try:
-        from argos_agent.app_factory import build_components
         comps = build_components()
-        model = comps.model
-
-        async def _narrate(prompt: str) -> str:
-            """异步叙述调用(pipeline 在 async 上下文里 await 调用)。"""
-            return await model.complete(
-                [{"role": "user", "content": prompt}],
-                system="你是知识提炼助手,只输出纯文字摘要,不输出代码。",
-            )
     except Exception:  # noqa: BLE001
-        _narrate = None
+        comps = None
+
+    # 构建 narrate fn(调 model.complete)
+    _narrate = None
+    if comps is not None:
+        try:
+            _model = comps.model
+
+            async def _narrate(prompt: str) -> str:
+                """异步叙述调用(pipeline 在 async 上下文里 await 调用)。"""
+                return await _model.complete(
+                    [{"role": "user", "content": prompt}],
+                    system="你是知识提炼助手,只输出纯文字摘要,不输出代码。",
+                )
+        except Exception:  # noqa: BLE001
+            _narrate = None
 
     # 构建 runner_factory(用于 A/B 晋升)
-    # Blocking-1 修复：B 侧必须用 HintedRunner 包裹，否则 b_passed ≤ a_passed 恒成立
-    # → 永远 no_improvement，CLI 永远晋升不了。照 daemon server.py:1564 范本。
-    try:
-        from argos_agent.app_factory import build_loop_factory
-        from argos_agent.eval.runner import EvalRunner
-        from argos_agent.daemon.worktree import WorktreeManager
-        from argos_agent.learning.dream import HintedRunner
-        eval_base = Path.home() / ".argos" / "dreams" / "eval"
-        wm = WorktreeManager(base_dir=eval_base / "worktrees")
-        base_runner = EvalRunner(worktree=wm, base_dir=eval_base)
+    # Review High #1 修复：EvalRunner 必须传入 loop_factory，否则 runner.run() 直接返回
+    # PASS_ERROR，A/B 两侧恒等，晋升永不发生。照 daemon server.py:1551-1565 范本。
+    _runner_factory = None
+    if comps is not None:
+        try:
+            from argos_agent.eval.runner import EvalRunner
+            from argos_agent.daemon.worktree import WorktreeManager
+            from argos_agent.learning.dream import HintedRunner
+            eval_base = Path.home() / ".argos" / "dreams" / "eval"
+            wm = WorktreeManager(base_dir=eval_base / "worktrees")
+            # per-run 隔离栈：提供真实 loop_factory（吞掉 model_tier，Dream 内不分档）
+            run_stack = build_run_stack(comps, workspace=None, session_id="dream-eval")
 
-        def _runner_factory(hint: str | None):
-            # hint 非空 → B 侧带经验；hint=None → A 侧裸跑（与 daemon 范本一致）
-            return HintedRunner(inner=base_runner, hint=hint) if hint else base_runner
-    except Exception:  # noqa: BLE001
-        _runner_factory = None
+            def _eval_loop_factory(model_tier: str):
+                return run_stack.loop_factory()
+
+            base_runner = EvalRunner(worktree=wm, base_dir=eval_base,
+                                     loop_factory=_eval_loop_factory)
+
+            def _runner_factory(hint: str | None):
+                # hint 非空 → B 侧带经验；hint=None → A 侧裸跑（与 daemon 范本一致）
+                return HintedRunner(inner=base_runner, hint=hint) if hint else base_runner
+        except Exception:  # noqa: BLE001
+            _runner_factory = None
 
     if _runner_factory is None:
         print("警告: 无法初始化 eval runner,跳过 A/B 晋升。")
