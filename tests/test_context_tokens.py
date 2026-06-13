@@ -6,31 +6,41 @@ from __future__ import annotations
 import sys
 import types
 
+import pytest
+
 from argos.context.tokens import token_estimate
 
 
+@pytest.fixture
+def no_tiktoken(monkeypatch):
+    """强制 tiktoken 不可用 → 测 chars4 fallback 路径。tiktoken 现已锁进 uv.lock 默认在场,
+    chars4 是 tiktoken 缺失时的兜底,须显式隔离 backend 才测得到(setitem None → import 抛)。"""
+    monkeypatch.setitem(sys.modules, "tiktoken", None)
+
+
 def test_estimate_empty_returns_min_one():
-    """空串 / None 兜底返 (1, method),防止 0 桶污染 sum。"""
-    assert token_estimate("") == (1, "estimate:chars4")
-    assert token_estimate(None) == (1, "estimate:chars4")  # type: ignore[arg-type]
+    """空串 / None 兜底返 (1, method),防止 0 桶污染 sum —— min-1 不变量与 backend 无关
+    (tiktoken encode('')=0 也必须被 floor 成 1)。"""
+    assert token_estimate("")[0] == 1
+    assert token_estimate(None)[0] == 1  # type: ignore[arg-type]
 
 
-def test_estimate_short_text_uses_chars4():
-    """11 字符 → 11//4=2,method=chars4。"""
+def test_estimate_short_text_uses_chars4(no_tiktoken):
+    """11 字符 → 11//4=2,method=chars4(tiktoken 隔离后走兜底)。"""
     tok, m = token_estimate("hello world")
     assert tok == 2
     assert m == "estimate:chars4"
 
 
-def test_estimate_long_text_uses_chars4():
-    """1000 字符 → 250。"""
+def test_estimate_long_text_uses_chars4(no_tiktoken):
+    """1000 字符 → 250(chars4 兜底)。"""
     tok, m = token_estimate("a" * 1000)
     assert tok == 250
     assert m == "estimate:chars4"
 
 
-def test_estimate_method_explicit_chars4():
-    """method 字段必含 'chars4'(可被表格扫到)。"""
+def test_estimate_method_explicit_chars4(no_tiktoken):
+    """method 字段必含 'chars4'(可被表格扫到;chars4 兜底路径)。"""
     _, m = token_estimate("abc")
     assert "chars4" in m
 
@@ -59,8 +69,8 @@ def test_estimate_tiktoken_missing_falls_back(monkeypatch):
     assert m == "estimate:chars4"
 
 
-def test_estimate_unicode_chinese():
-    """中文字符也走 chars4(不崩,method 标 estimate)。"""
+def test_estimate_unicode_chinese(no_tiktoken):
+    """中文字符也走 chars4(不崩,method 标 estimate;tiktoken 隔离后测兜底)。"""
     tok, m = token_estimate("你好世界")  # 4 字符(UTF-8 字节多,但 len 字符=4)
     assert tok == 1  # 4//4=1
     assert "chars4" in m

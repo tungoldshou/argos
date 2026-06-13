@@ -80,13 +80,15 @@ def test_analyze_four_buckets_independent(monkeypatch):
     assert b.tools.tokens > 0 or b.tools.method == "estimate:unavailable"
 
 
-def test_analyze_system_uses_build_system():
-    """system 桶走 _build_system + token_estimate;source 标 core/loop.py:471。"""
+def test_analyze_system_uses_build_system(monkeypatch):
+    """system 桶走 _build_system + token_estimate;source 标 core/loop.py:471。
+    隔离 tiktoken(现锁进 uv.lock 默认在场)→ 测确定的 chars4 数值(这测 wiring,非 tokenizer 精度)。"""
+    monkeypatch.setitem(sys.modules, "tiktoken", None)
     loop = _loop(sys_text="x" * 80)
     b = analyze(loop, store=loop.store, workspace=Path("."))
-    assert b.system.tokens == 20  # 80 // 4
+    assert b.system.tokens == 20  # 80 // 4(chars4 兜底)
     assert b.system.source == "core/loop.py:471"
-    assert b.system.method.startswith("estimate:")
+    assert b.system.method == "estimate:chars4"
 
 
 def test_analyze_memory_loads_four_scopes(monkeypatch):
