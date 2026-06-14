@@ -99,9 +99,31 @@ def _collect_events(loop: AgentLoop, goal: str) -> list:
 # ─── 测试 1：有 pytest 工作区且无 verify_cmd → 自动 L1 策略走门 ─────────────────
 
 def test_auto_l1_strategy_in_pytest_workspace(tmp_path: Path) -> None:
-    """有 conftest.py（pytest 信号）+ 无 verify_cmd → _pick_strategy_cmd 产 L1 pytest，
-    verifier 收到非 None 的 cmd（策略生效）。"""
+    """有 conftest.py（pytest 信号）+ agent 真改了代码（made_changes）+ 无 verify_cmd →
+    _pick_strategy_cmd 产 L1 pytest，verifier 收到非 None 的 cmd（策略生效）。
+
+    2026-06-14:策略推断加了 made_changes 守卫(对话/纯读不推断,防"你好"在有 pytest 的项目里
+    被推断成 pytest → bounce → 模型被迫"找测试")。故本测试模型须真写代码(write_file)触发
+    made_changes 才进策略推断 —— 这正符合策略推断本意:验证 agent 的【改动】。
+    """
     (tmp_path / "conftest.py").write_text("")  # pytest 信号
+
+    class _ImplementingModel:
+        """第一轮真写代码(made_changes=True),第二轮宣布完成 → 触发策略推断验证改动。"""
+        last_usage: dict = {}
+
+        def __init__(self) -> None:
+            self._i = 0
+
+        async def stream(self, messages, *, system="", system_dynamic=""):
+            scripts = [
+                "```python\nwrite_file('sort.py', 'def sort(x):\\n    return sorted(x)')\n```",
+                "实现完成。",
+            ]
+            t = scripts[min(self._i, len(scripts) - 1)]
+            self._i += 1
+            for ch in t:
+                yield ch
 
     verifier = _RecordingVerifier()
     loop = AgentLoop(
@@ -109,7 +131,7 @@ def test_auto_l1_strategy_in_pytest_workspace(tmp_path: Path) -> None:
         bus=EventBus(),
         sandbox=_FakeSandbox(),
         broker=None,
-        model=_CompletingModel(),
+        model=_ImplementingModel(),
         verifier=verifier,
         config=LoopConfig(verify_cmd=None, max_steps=5, max_rounds=1),
     )

@@ -281,6 +281,43 @@ async def test_conversational_reply_completes_without_nudge():
 
 
 @pytest.mark.asyncio
+async def test_conversation_does_not_infer_verify_strategy(monkeypatch):
+    """对话/纯读(made_changes=False)→ 绝不推断 verify 策略。
+
+    真机 bug(2026-06-14):'你好'在有 pyproject/tests 的项目里被 _pick_strategy_cmd 推断成
+    pytest → verify FAILED(no tests ran)→ bounce → 模型被迫'找测试',把一句问候变成跑
+    pytest+翻目录的任务。修:策略推断加 made_changes 守卫(只对真改过代码的任务推断)。
+    """
+    from argos.tui.events import EventBus
+
+    called = {"n": 0}
+
+    def _spy_pick(self, goal):
+        called["n"] += 1
+        return "pytest -q"  # 模拟在 argos 项目里被推断出 pytest
+
+    monkeypatch.setattr(AgentLoop, "_pick_strategy_cmd", _spy_pick)
+
+    class _HonestVerifier:
+        def verify(self, vc, *, attempts=1):
+            return Verdict.unverifiable(detail="(no test command)", tampered=[], attempts=attempts)
+
+    model = FakeModel(["你好！我是 Argos，请问有什么可以帮你？"])
+    loop = AgentLoop(
+        store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(),
+        broker=None, model=model, verifier=_HonestVerifier(),
+        config=LoopConfig(verify_cmd=None, max_steps=5),
+    )
+    phases: list[str] = []
+    async for ev in loop.run("你好", "s"):
+        if isinstance(ev, PhaseChange):
+            phases.append(ev.phase)
+    assert called["n"] == 0, "对话(made_changes=False)绝不该推断 verify 策略(否则被推断 pytest→bounce)"
+    assert model._i == 1, f"对话应一轮收尾,实际 {model._i} 次"
+    assert phases[-1] == "report", f"对话应诚实收尾到 report(NO_TEST),实际 {phases}"
+
+
+@pytest.mark.asyncio
 async def test_max_steps_exhaustion_still_walks_phase_gate():
     """回归(2026-06-09):max_steps 耗尽、模型从未说'完成'时,while 自然退出落到
     enter_phase('report')。harness 此时仍停在 act(idx=1)→ 跳到 report(idx=3)曾
