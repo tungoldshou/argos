@@ -131,7 +131,7 @@ share mutable state. The `ApprovalGate` from `build_components` is shared with t
 | `routing/` | per-task model routing (categorizer / resolver / router) + effort tiers |
 | `context/` | context-window analyzer, token counting, compaction threshold |
 | `ledger/` | behavior ledger — signed receipts persisted as human-readable JSONL under `~/.argos/ledger/`; `LedgerEntry`, `LedgerStore`, `summarize`, `build_entry`; three-state undo (`Reversible`) |
-| `intent/` | NL→Goal intent engine: `IntentEngine` parses free-form requests into structured `IntentCard` with echo-confirmation |
+| `intent/` | NL→Goal intent engine: `IntentEngine` parses free-form requests into structured `IntentCard` with echo-confirmation. **Off by default** (understand-then-act, like Claude Code/Cursor/Aider — confirmation lives at the side-effect layer, not a pre-action intent gate); opt in with `ARGOS_INTENT=1` |
 | `conductor/` | autonomous scheduling core — `ConductorEngine`, `StandingOrder`, cron-lite triggers, `ProactiveSuggestion` (always requires user confirmation); builtin-dream-nightly (03:00 cron) triggers Dream consolidation; orders stored under `~/.argos/conductor/` |
 | `perception/` | OS-level computer use (macOS): `ComputerExecutor` + `ComputerAction`; opt-in via `ARGOS_COMPUTER_USE=1` |
 | `learning/` | post-run skill distillation pipeline — only promotes verified (passed) runs; failed/unverifiable runs produce memory reflections only; Dream nightly consolidation (candidates → clustering → synthesis → A/B promotion → memory consolidate) |
@@ -163,7 +163,8 @@ share mutable state. The `ApprovalGate` from `build_components` is shared with t
   `runs/<id>.jsonl`, `runs/index.json`, `memory/`,
   `ledger/<run_id>.jsonl`, `conductor/orders.jsonl`,
   `daemon.sock`, `daemon.pid`.
-  `ARGOS_NO_MEMORY=1` opts out of auto-memory.
+  `ARGOS_NO_MEMORY=1` opts out of auto-memory. `ARGOS_INTENT=1` opts **in** to the NL→Goal
+  intent-confirmation gate (off by default — understand-then-act); `ARGOS_NO_INTENT=1` force-off.
 - **Daemon is always-on by default**: TUI probes `~/.argos/daemon.sock` at startup and
   auto-spawns `argosd` if not running; falls back to inline (single-process) mode only on
   failure. There is no `--with-daemon` flag — daemon is the default path. `ARGOS_NO_DAEMON=1`
