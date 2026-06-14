@@ -155,3 +155,11 @@ Each item: RED test → GREEN widget → wire `app.py` handler → full regressi
 - Data source: real backend fields over prototype demo shortcuts. _(user)_
 - Demo: new widgets wire to real paths only; no fakeloop alignment. _(user)_
 - Architecture: per-panel widget, reuse `InlineChoice` for decision cards. _(recommended)_
+- Computer-use trust policy: kept existing evaluator behaviour — only financial / payment / OTP
+  `computer.*` is force-confirmed; plain `computer.*` (click/screenshot/scroll) is allowed under
+  AUTO / Trust-Dial L4. Deliberate, documented deviation from README §16 ("all `computer.*`
+  confirm regardless of Trust Dial") for practicality — computer use is opt-in
+  (`ARGOS_COMPUTER_USE=1`) and the evaluator/tests intentionally encode this stance. _(user)_
+- TUI fail-safe (added, independent of the above): a financial-domain force-ask `computer.*`
+  is never silently bypassed by `_handle_approval`'s AUTO short-circuit — it always mounts
+  `HardConfirmCard`. _(adversarial review finding)_
