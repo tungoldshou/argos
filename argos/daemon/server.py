@@ -208,7 +208,12 @@ class DaemonHTTPServer:
             if method == "GET" and path == "/health":
                 return await self._handle_health(writer, headers)
             if method == "GET" and path == "/version":
-                return await self._send_json(writer, 200, {"daemon": "0.2.0", "protocol": 1})
+                # 动态上报本进程实际加载的 argos 版本 + 协议号(单一真源),供 TUI 握手识别陈旧 daemon。
+                from argos import __version__ as _argos_version
+                from argos.protocol import PROTOCOL_VERSION
+                return await self._send_json(
+                    writer, 200, {"daemon": _argos_version, "protocol": PROTOCOL_VERSION}
+                )
             if method == "POST" and path == "/sessions":
                 return await self._handle_create_session(writer)
             if method == "POST" and path.startswith("/sessions/") and path.endswith("/heartbeat"):

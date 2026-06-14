@@ -79,7 +79,11 @@ async def test_version_endpoint(tmp_path: Path):
         status, _, raw = await _req(socket_path, "GET", "/version")
         assert status == 200
         body = json.loads(raw.decode("utf-8"))
-        assert body["protocol"] == 1
+        from argos import __version__ as _argos_version
+        from argos.protocol import PROTOCOL_VERSION
+        assert body["protocol"] == PROTOCOL_VERSION
+        # daemon 版本须动态上报 argos.__version__(供 TUI probe 握手识别陈旧 daemon),不再硬编码。
+        assert body["daemon"] == _argos_version
     finally:
         await srv.stop()
         mgr.close()

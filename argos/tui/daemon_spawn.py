@@ -10,8 +10,14 @@ probe_or_spawn():
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
+import signal
 from pathlib import Path
+
+from argos import __version__ as _ARGOS_VERSION
+from argos.protocol import PROTOCOL_VERSION
 
 log = logging.getLogger(__name__)
 
@@ -43,16 +49,74 @@ async def _probe(socket_path: Path) -> bool:
         return False
 
 
+async def _daemon_version(socket_path: Path) -> dict | None:
+    """GET /version,返回解析后的 dict;不可达 / 非 200 / 解析失败 → None。"""
+    try:
+        from argos.daemon.client import DaemonClient
+        cli = DaemonClient(socket_path, timeout=_PROBE_TIMEOUT)
+        status, _, raw = await cli._request("GET", "/version")
+        if status != 200:
+            return None
+        return json.loads(raw.decode("utf-8"))
+    except Exception:  # noqa: BLE001 — 任何失败都视为"拿不到版本"(降级为陈旧)
+        return None
+
+
+def _is_compatible(ver: dict) -> bool:
+    """daemon 上报的版本 + 协议号是否与本 TUI 完全一致。缺字段 = 不兼容。"""
+    return (
+        isinstance(ver, dict)
+        and ver.get("daemon") == _ARGOS_VERSION
+        and ver.get("protocol") == PROTOCOL_VERSION
+    )
+
+
+def _pid_alive(pid: int) -> bool:
+    """薄包装(便于测试 monkeypatch);委托 pidfile.is_alive。"""
+    from argos.daemon.pidfile import is_alive
+    return is_alive(pid)
+
+
+def _kill_stale_daemon(socket_path: Path) -> None:
+    """杀掉 daemon.pid 记录的陈旧 daemon(best-effort)+ 清 pid/sock,为 spawn 新的让路。
+
+    安全:仅当 PID 仍存活才发 SIGTERM(防 PID 复用误杀);无论杀否都清 pid/sock 文件。
+    """
+    from argos.daemon.pidfile import read_pid, remove
+    pid_path = socket_path.parent / "daemon.pid"
+    pid = read_pid(pid_path)
+    if pid is not None and _pid_alive(pid):
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:  # 已退 / 无权限——忽略,继续清文件
+            pass
+    remove(pid_path)
+    try:
+        socket_path.unlink()
+    except FileNotFoundError:
+        pass
+
+
 async def probe_or_spawn(socket_path: Path) -> bool:
-    """探测 daemon socket；不可达时尝试拉起 argosd 子进程。
+    """探测 daemon socket；不可达 / 陈旧时尝试拉起新 argosd 子进程。
 
     返回 True  = daemon 已就绪（argosd 模式）。
     返回 False = daemon 不可用（inline fallback 模式）。
     """
-    # 1. 先探一次
+    # 1. 先探 health
     if await _probe(socket_path):
-        log.debug("daemon probe: socket alive at %s", socket_path)
-        return True
+        # 1b. 握手 /version:陈旧 / 不兼容 daemon 绝不静默复用——否则它跑过期代码,
+        #     run 会一启动就失败(如跨包改名后 sandbox child 模块找不到),TUI 却无限"思考中"。
+        ver = await _daemon_version(socket_path)
+        if _is_compatible(ver or {}):
+            log.debug("daemon probe: compatible daemon alive at %s", socket_path)
+            return True
+        log.warning(
+            "daemon probe: stale/incompatible daemon at %s (reported=%s, expected daemon=%s protocol=%s)"
+            " — killing it and respawning a fresh daemon",
+            socket_path, ver, _ARGOS_VERSION, PROTOCOL_VERSION,
+        )
+        _kill_stale_daemon(socket_path)
 
     # 2. 尝试拉起 argosd
     log.info("daemon probe: socket not ready, attempting to spawn argosd")

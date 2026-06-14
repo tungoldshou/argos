@@ -8,3 +8,9 @@
 - argos/tui/events.py 仍可用作兼容 shim（37 个测试文件 + TUI 内部不需要修改）
 - 新代码请 import argos.protocol.events
 """
+from __future__ import annotations
+
+# ACP 协议版本号——客户端(TUI)与 daemon 必须一致才兼容。
+# daemon /version 端点上报本值;TUI probe_or_spawn 握手时比对(不匹配 = 陈旧 daemon,杀旧起新)。
+# 协议帧格式 / SSE 事件 ABI 发生不兼容变更时 +1。
+PROTOCOL_VERSION: int = 1
