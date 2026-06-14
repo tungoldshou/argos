@@ -247,6 +247,40 @@ async def test_no_action_bounces_not_completes():
 
 
 @pytest.mark.asyncio
+async def test_conversational_reply_completes_without_nudge():
+    """聪明催(2026-06-14):实质对话答复(无代码块、不含'将做/完成'措辞)→ 一轮收尾,不催第二轮。
+
+    回归对照 test_no_action_bounces_not_completes:'我来修这几处。'(含'我来')仍催;
+    本测试'你好…'实质答复不催 → 模型只被调一次,直接进 verify/report。
+
+    用规范 verifier(无 verify_cmd → unverifiable,同真 Verifier 行为 verify_gate.py:72)——
+    本文件的 FakeVerifier 对 None 返 passed 不规范,会让无测任务误走 bounce。
+    """
+    from argos.tui.events import EventBus
+
+    class _HonestVerifier:
+        def verify(self, vc, *, attempts=1):
+            if vc is None:
+                return Verdict.unverifiable(detail="(no test command)", tampered=[], attempts=attempts)
+            return Verdict.passed(detail="[exit=0]", verify_cmd=vc, attempts=attempts)
+
+    model = FakeModel(["你好！我是 Argos，请问有什么可以帮你？"])
+    loop = AgentLoop(
+        store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(),
+        broker=None, model=model, verifier=_HonestVerifier(),
+        config=LoopConfig(verify_cmd=None, max_steps=5),
+    )
+    phases: list[str] = []
+    async for ev in loop.run("你好", "s"):
+        if isinstance(ev, PhaseChange):
+            phases.append(ev.phase)
+    assert model._i == 1, (
+        f"实质对话答复应一轮收尾(不催),实际调模型 {model._i} 次"
+    )
+    assert "verify" in phases and phases[-1] == "report"
+
+
+@pytest.mark.asyncio
 async def test_max_steps_exhaustion_still_walks_phase_gate():
     """回归(2026-06-09):max_steps 耗尽、模型从未说'完成'时,while 自然退出落到
     enter_phase('report')。harness 此时仍停在 act(idx=1)→ 跳到 report(idx=3)曾
