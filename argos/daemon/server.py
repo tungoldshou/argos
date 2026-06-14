@@ -212,7 +212,12 @@ class DaemonHTTPServer:
                 from argos import __version__ as _argos_version
                 from argos.protocol import PROTOCOL_VERSION
                 return await self._send_json(
-                    writer, 200, {"daemon": _argos_version, "protocol": PROTOCOL_VERSION}
+                    writer, 200, {
+                        "daemon": _argos_version, "protocol": PROTOCOL_VERSION,
+                        # started_at:daemon 进程启动时刻。TUI 握手据此 + 本地代码 mtime 判
+                        # "daemon 启动后代码是否改过"(dev 改码后旧 daemon 仍跑旧码 → 需重启)。
+                        "started_at": self._started_at,
+                    }
                 )
             if method == "POST" and path == "/sessions":
                 return await self._handle_create_session(writer)

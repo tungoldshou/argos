@@ -43,6 +43,35 @@ def test_is_compatible_rejects_missing_fields():
     assert daemon_spawn._is_compatible({"daemon": ARGOS_VERSION}) is False
 
 
+# ── dev 改码检测(版本号相同但代码改过 → 陈旧)─────────────────────────────────
+
+def test_is_compatible_detects_dev_code_change(monkeypatch):
+    """daemon started_at 早于代码 mtime(dev 改过码,版本号没变)→ 不兼容(需重启)。
+
+    这正是真机踩的坑:旧 daemon 与当前代码都 0.1.0,旧握手只比版本号 → 误判兼容复用。
+    """
+    monkeypatch.setattr(daemon_spawn, "_argos_code_mtime", lambda: 2000.0)
+    assert daemon_spawn._is_compatible(
+        {"daemon": ARGOS_VERSION, "protocol": PROTOCOL_VERSION, "started_at": 1000.0}
+    ) is False
+
+
+def test_is_compatible_accepts_daemon_newer_than_code(monkeypatch):
+    """daemon started_at 晚于代码 mtime(daemon 跑的就是当前码)→ 兼容,复用。"""
+    monkeypatch.setattr(daemon_spawn, "_argos_code_mtime", lambda: 1000.0)
+    assert daemon_spawn._is_compatible(
+        {"daemon": ARGOS_VERSION, "protocol": PROTOCOL_VERSION, "started_at": 2000.0}
+    ) is True
+
+
+def test_is_compatible_missing_started_at_falls_back_to_version(monkeypatch):
+    """started_at 缺失(更老的 daemon)→ 保守只按版本号判,不靠 mtime。"""
+    monkeypatch.setattr(daemon_spawn, "_argos_code_mtime", lambda: 9e9)
+    assert daemon_spawn._is_compatible(
+        {"daemon": ARGOS_VERSION, "protocol": PROTOCOL_VERSION}
+    ) is True
+
+
 # ── probe_or_spawn 握手控制流 ─────────────────────────────────────────────
 
 @pytest.mark.asyncio

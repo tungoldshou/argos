@@ -62,13 +62,47 @@ async def _daemon_version(socket_path: Path) -> dict | None:
         return None
 
 
+# dev 改码检测的小宽限(秒):防文件系统 mtime 与 time.time() 边界抖动误判。
+_MTIME_GRACE_S = 2.0
+
+
+def _argos_code_mtime() -> float:
+    """argos 包内所有 .py 的最大 mtime。dev 改码检测用:daemon 启动后任一 .py 更新过
+    → daemon 跑的是旧码 → 陈旧。异常(如打包环境路径异常)→ 返 0.0(降级为只按版本号判)。"""
+    try:
+        import argos
+        root = os.path.dirname(os.path.abspath(argos.__file__))
+        latest = 0.0
+        for dirpath, _dirs, files in os.walk(root):
+            for f in files:
+                if f.endswith(".py"):
+                    try:
+                        m = os.path.getmtime(os.path.join(dirpath, f))
+                        if m > latest:
+                            latest = m
+                    except OSError:
+                        pass
+        return latest
+    except Exception:  # noqa: BLE001 — 任何异常降级:不靠 mtime,只按版本号
+        return 0.0
+
+
 def _is_compatible(ver: dict) -> bool:
-    """daemon 上报的版本 + 协议号是否与本 TUI 完全一致。缺字段 = 不兼容。"""
-    return (
-        isinstance(ver, dict)
-        and ver.get("daemon") == _ARGOS_VERSION
-        and ver.get("protocol") == PROTOCOL_VERSION
-    )
+    """daemon 上报的版本 + 协议号是否与本 TUI 一致,且 daemon 启动后代码未改过。缺字段 = 不兼容。
+
+    版本号相同但 dev 改了码(版本不 bump)时,靠 started_at vs 本地代码 mtime 抓陈旧 daemon:
+    daemon 启动早于最新 .py → 它跑的是旧码 → 不兼容(杀重启)。started_at 缺失(更老的 daemon)
+    → 保守只按版本号判(本次已手动杀,后续 daemon 都会上报 started_at)。
+    """
+    if not (isinstance(ver, dict)
+            and ver.get("daemon") == _ARGOS_VERSION
+            and ver.get("protocol") == PROTOCOL_VERSION):
+        return False
+    started_at = ver.get("started_at")
+    if isinstance(started_at, (int, float)) and started_at > 0:
+        if _argos_code_mtime() > started_at + _MTIME_GRACE_S:
+            return False   # daemon 启动后代码改过 → 陈旧
+    return True
 
 
 def _pid_alive(pid: int) -> bool:
