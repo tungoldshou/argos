@@ -397,10 +397,13 @@ def build_components(
 
     router = ModelRouter(routing=routing_cfg, client_factory=_router_client_factory)
 
-    # P4 §7 IntentEngine:ARGOS_NO_INTENT=1 关闭(与 ARGOS_NO_MEMORY 同款风格)。
-    # 默认 intent.enabled=True 构造 IntentEngine;无 ARGOS_NO_INTENT 时激活。
+    # 方向 A(2026-06-14):intent 确认门【默认关】——理解即行动,确认只在副作用层
+    # (CapabilityBroker + ApprovalGate + Trust Dial + Seatbelt 沙箱)。调研显示主流 coding
+    # agent(Claude Code / Cursor / Aider / Codex / Copilot)一致"理解即行动",无一在每次
+    # 用户输入前强制回显结构化意图卡——前置意图门是 UX 摩擦且无安全收益(真门在副作用层)。
+    # 显式 ARGOS_INTENT=1 才启用 NL→Goal 意图确认(降级为可选);ARGOS_NO_INTENT=1 幂等强制关。
     _intent_engine = None
-    if not os.environ.get("ARGOS_NO_INTENT"):
+    if os.environ.get("ARGOS_INTENT") == "1" and not os.environ.get("ARGOS_NO_INTENT"):
         try:
             from argos.intent.engine import IntentEngine as _IE
             _intent_engine = _IE()
