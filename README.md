@@ -55,11 +55,14 @@ engineering problem, not a model problem**. Four design choices follow:
    operations (`rm -rf`, system paths, secret patterns) that **never
    bypasses** even at the most permissive AUTO level. The user is always
    the final reviewer for the actions that hurt most.
-4. A long-running daemon that auto-starts in the background lets 5+
-   minute tasks survive a closed terminal, a power loss, or a model
-   upgrade — state, checkpoints, and the event journal all live on
-   disk, so the next session picks up exactly where the last left off.
-   (Set `ARGOS_NO_DAEMON=1` to force single-process inline mode.)
+4. A long-running daemon that auto-starts in the background when the
+   `argosd` binary is on `PATH` lets 5+ minute tasks survive a closed
+   terminal, a power loss, or a model upgrade — state, checkpoints, and
+   the event journal all live on disk, so the next session picks up
+   exactly where the last left off. When `argosd` isn't on `PATH`
+   (the current packaged default ships only the single `argos` binary),
+   Argos falls back transparently to single-process inline mode.
+   (Set `ARGOS_NO_DAEMON=1` to force inline mode explicitly.)
 
 The result is a tool that lets a developer pick a cheap model, ship real
 work, and catch the lies.
@@ -246,10 +249,14 @@ visible diff of what the tool would do. `/yolo` is kept as an alias for
 
 A 7-state machine (`pending` / `running` / `paused` / `suspended` /
 `completed` / `failed` / `cancelled`) runs in a background daemon
-process (`argosd`) that Argos auto-detects and auto-starts at launch.
-If the daemon is unreachable, the TUI falls back transparently to
+process (`argosd`) that Argos auto-detects and auto-spawns at launch
+— provided the `argosd` binary is on `PATH`. If `argosd` is missing
+(e.g. the current packaged build ships only the `argos` binary, or a
+`uv run` checkout where the console script isn't installed) or the
+daemon is otherwise unreachable, the TUI falls back transparently to
 single-process inline mode (shown in the status bar). There is no
-`--with-daemon` flag; daemon mode is the default when available.
+`--with-daemon` flag; daemon mode is the default whenever `argosd`
+is available.
 
 Keyboard bindings on the TUI:
 
