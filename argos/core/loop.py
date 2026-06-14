@@ -1480,7 +1480,11 @@ class AgentLoop:
             # 取首个可执行候选走现有 run_verify_gate(白名单/verify_dir 隔离/篡改检测全保留)。
             # 显式 verify_cmd / propose_verify 永远优先于推断 —— 用户声明压倒推断。
             # ARGOS_NO_VERIFY_STRATEGY=1 关闭(回归旧行为)。
-            if (self._verify_cmd is None
+            # 策略推断只对【真改过代码】的任务(与上方 H2 verify_nudged 的 made_changes 守卫对齐)。
+            # 对话 / 纯读 / 问答(made_changes=False)绝不推断 verify —— 否则"你好"会在有 pytest 的项目里
+            # 被 _pick_strategy_cmd 推断成 pytest,跑空 verify 目录 no-tests 失败 → bounce → 模型被迫
+            # "找测试",把一句问候变成跑 pytest+翻目录的任务(2026-06-14 真机 bug)。
+            if (self._verify_cmd is None and made_changes
                     and not os.environ.get("ARGOS_NO_VERIFY_STRATEGY")):
                 self._verify_cmd = self._pick_strategy_cmd(goal)
 
