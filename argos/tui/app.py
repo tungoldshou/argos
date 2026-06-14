@@ -2504,7 +2504,9 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
           · daemon 模式 → InlineChoice 决定 → POST /runs/{id}/approval/{call_id}
           · inline 模式 → self.gate.respond(call_id, value)（原路径保留）
         """
-        if self.gate.level is ApprovalLevel.AUTO:
+        # computer.* 恒走硬确认:不受 AUTO/Trust Dial 降级(evaluator 已把金融域标 force-ask,
+        # TUI 不得用 AUTO 短路把它 respond always 绕过)。非 computer.* 在 AUTO 下仍直接 always。
+        if self.gate.level is ApprovalLevel.AUTO and not req.action.startswith("computer."):
             if self._with_daemon and self._daemon_client and self._daemon_session_id and self._daemon_run_id:
                 # daemon AUTO:直接 POST always(fire-and-forget)
                 self.run_worker(
