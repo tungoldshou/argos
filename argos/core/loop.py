@@ -122,6 +122,33 @@ def extract_code_block(text: str) -> str | None:
     return m.group(1).strip()
 
 
+# 0 动作守卫的"疑似偷懒"判定(2026-06-14):act 阶段模型无 ```python 代码块时,只有看起来
+# "声称要做 / 已完成却没真做"(空 / 含将做或完成措辞)才催一轮防伪完成;实质对话答复(问候 /
+# 问答 / 解释,不含这些措辞)→ 直接收尾,不白调一轮(对齐 Claude Code 等:对话理解即回)。
+_LAZY_CLAIM_ZH: tuple[str, ...] = (
+    "我来", "我先", "我会", "我将", "我去", "让我", "马上", "稍等", "正在", "接下来",
+    "完成了", "已完成", "已经完成", "做完了", "修复了", "改好了", "搞定", "处理好了",
+)
+_LAZY_CLAIM_EN: tuple[str, ...] = (
+    "i'll", "i will", "let me", "i'm going to", "i am going to", "i'll go",
+    "i've ", "i have ", "now i ", "fixed", "done.", "completed", "finished",
+)
+
+
+def _looks_like_lazy_claim(text: str) -> bool:
+    """模型无代码块时是否"疑似偷懒"(需催一轮)。
+
+    True  → 空 / 含"将做或声称完成"措辞但 0 动作(可能"说了没做"伪完成)→ 催。
+    False → 实质对话答复(问候 / 问答 / 解释)→ 直接收尾(对话秒回,不白调一轮)。
+    """
+    t = (text or "").strip()
+    if not t:
+        return True
+    low = t.lower()
+    return (any(kw in t for kw in _LAZY_CLAIM_ZH)
+            or any(kw in low for kw in _LAZY_CLAIM_EN))
+
+
 def extract_plan_todos(text: str) -> list[dict] | None:
     """从模型输出抽最后一次 update_plan([...]) 的 todos 列表字面量;无/解析失败则 None。
 
@@ -1421,7 +1448,10 @@ class AgentLoop:
             # —— 不得当"完成"收尾(防"说了没做"伪完成)。回灌催促,继续要它真执行。
             # 只催一轮(noaction_nudged 兜底):催过后第二次仍无代码块,允许它作为纯文字答复
             # 收尾(纯问答如"你好"本就无需动作;避免无限催促,max_steps 再兜底)。
-            if self._actions == 0 and not noaction_nudged:
+            # 聪明催(2026-06-14):仅当本轮无代码块输出"疑似偷懒"(空/声称要做或完成却 0 动作)
+            # 才催一轮防伪完成;实质对话答复(问候/问答/解释)直接收尾,不白调一轮(对话秒回)。
+            if (self._actions == 0 and not noaction_nudged
+                    and _looks_like_lazy_claim(text)):
                 noaction_nudged = True
                 messages.append({"role": "user", "content":
                     "你还没有产出任何 ```python 代码动作就停了。如果要做事,请输出代码块真正执行;"
