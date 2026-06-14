@@ -25,15 +25,18 @@ _DEFAULT_WS = Path(os.environ.get("ARGOS_WORKSPACE", Path.home() / ".argos" / "w
 _DEFAULT_VERIFY = Path(os.environ.get("ARGOS_VERIFY_DIR", Path.home() / ".argos" / "verify"))
 
 # 沙箱外文件快照剪枝目录(纯剪枝名集合,被 snapshot.py 复用);
-# 与 guard_project_tests 内的 _SKIP_DIRS 是兄弟集合(同名同根,VCS/虚拟环境/缓存),
-# 但 _SKIP_DIRS 更宽(为测试发现服务,多排 .tox/dist/build/.next/target/.argos/.idea/.vscode);
-# 快照场景下"少剪一点更安全"(误剪比漏剪代价高 —— 快照大一些可接受,丢文件不可逆)。
+# 与 guard_project_tests 内的 _SKIP_DIRS 是兄弟集合(VCS/虚拟环境/缓存/构建产物)。
+# 必须剪构建产物/依赖/索引:大项目若不剪,每次 run 起点拍快照会 tar 数 GB、阻塞十几秒
+# (2026-06-14 真机:workspace 5.2G,take 卡 11.4s tar 3.6GB,desktop/dist/build 占大头),
+# 且每轮一个 GB 级快照会爆盘。这些都是生成物(可重建),undo 无需还原 → 剪掉安全且必要。
 SNAPSHOT_PRUNE_DIRS: frozenset[str] = frozenset({
     ".git", ".hg", ".svn",
     ".venv", "venv", "env",
     "node_modules",
     "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache",
     ".argo-snapshots",
+    # 构建产物 / 索引 / 工具缓存(生成物,可重建;漏剪 = 快照数 GB + 起步卡十几秒):
+    "dist", "build", "target", ".next", ".nuxt", ".tox", ".codegraph", ".gradle",
 })
 
 
