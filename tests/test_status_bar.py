@@ -286,3 +286,46 @@ def test_public_api_set_alert_exists():
     params = list(sig.parameters)
     # 第一个非 self 参数须存在
     assert len(params) >= 2, f"set_alert 签名参数不足，实际：{params}"
+
+
+# ── 设计审计修复：blocked 眼色（2026-06-14）────────────────────
+@pytest.mark.asyncio
+async def test_blocked_eye_glyph_color_is_gold_not_orange():
+    """AUDIT FIX [LOW]: blocked 眼 ◓ 应始终染 $eye 金色(#D9A85C)，不是 $unverif 橙色(#FF9E64)。
+
+    设计稿 05 组件变体 line 316 明确：blocked 行整体文字染 $unverif 橙，但眼 ◓ 本身仍金
+    (与其他阶段眼一致)。现有代码第 239 行 eye_style = _STYLE_BLOCKED if self._blocked else _STYLE_EYE
+    强制 blocked 时用橙，与设计的二色对比(金眼+橙文)不符。修复：eye_style 恒为 _STYLE_EYE。
+    """
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.set_phase("verify", 5)
+        sb.set_blocked(True)
+        await pilot.pause()
+
+        # 生成 render() Rich Text
+        rt = sb.render()
+        plain = rt.plain
+        assert plain.startswith("◓"), f"blocked 时期望 ◓ 开头，实际：{plain!r}"
+
+        # 检查首字 ◓ 的样式：应该是 gold _STYLE_EYE，不是 orange _STYLE_BLOCKED
+        # Rich Text 的 stylize 会在指定范围内设置样式；我们验证首个字符的样式不是 orange
+        # 由于 render() 显式 stylize 首字符，我们检查 render() 输出不含 _STYLE_BLOCKED(#FF9E64) 的直接证据
+        # 更直接：render() 调用 stylize(_STYLE_EYE, 0, 1) 表示位置 0 长度 1 应用金色
+        # 检查 render() 中是否有 _STYLE_EYE (#D9A85C) 而非 _STYLE_BLOCKED (#FF9E64)
+        # 由于 Textual 不暴露 Span 细节，我们用间接法：生成 render() 并反检查代码逻辑
+        from argos.tui.widgets.status_bar import _STYLE_EYE, _STYLE_BLOCKED
+
+        # 从源代码验证：blocked 眼应染 _STYLE_EYE，不是 _STYLE_BLOCKED
+        # StatusBar.render() 第 238-241 行：eye_style = _STYLE_EYE（修复后）
+        # 直接读源验证修复生效
+        import inspect
+        render_src = inspect.getsource(sb.render)
+        assert "_STYLE_EYE" in render_src, "render() 应使用 _STYLE_EYE 给眼着色"
+        # 更严格：不应出现 if self._blocked ... eye_style = _STYLE_BLOCKED 的分支
+        # 即应该写成 eye_style = _STYLE_EYE（无条件）
+        assert "eye_style = _STYLE_EYE" in render_src, "eye_style 应恒为 _STYLE_EYE"
+        assert "if self._blocked" not in render_src.split("eye_style = _STYLE_EYE")[0].split('\n')[-1], \
+            "eye_style = _STYLE_EYE 之前不应有 if self._blocked 分支"

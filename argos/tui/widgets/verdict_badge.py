@@ -26,7 +26,7 @@ class VerdictBadge(Static):
     VerdictBadge.verdict-passed       { color: $pass; text-style: bold; }
     VerdictBadge.verdict-failed       { color: $fail; text-style: bold; }
     VerdictBadge.verdict-unverifiable { color: $unverif; }
-    VerdictBadge.verdict-self         { color: $pass-weak; }
+    VerdictBadge.verdict-self         { color: $pass-weak; text-style: italic; }
     """
 
     # reactive 仅做 CSS 类切换辅助,watch_status 保持契约语义
@@ -95,7 +95,7 @@ class VerdictBadge(Static):
             # ── failed ────────────────────────────────────────────
             # ◉ 注视实瞳,红 $fail bold,FAILED 大写,追加 ⤷ 重试注解
             line1 = f"◉ verify FAILED · {cmd} → {verdict.detail}"
-            line2 = f"  ⤷ 重试 {verdict.attempts} 次后仍 failed · {verdict.detail}"
+            line2 = f"  ⤷ 重试 {verdict.attempts} 次后仍 failed"
             self.render_text = f"{line1}\n{line2}"
             self._clear_all_classes()
             self.set_class(True, "verdict-failed")

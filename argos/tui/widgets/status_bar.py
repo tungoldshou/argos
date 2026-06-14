@@ -236,7 +236,7 @@ class StatusBar(Static):
 
         # 左眼着色（仅首字形）
         eye, _ = self._resolve_render_state()
-        eye_style = _STYLE_BLOCKED if self._blocked else _STYLE_EYE
+        eye_style = _STYLE_EYE
         if left.plain.startswith(eye):
             left.stylize(eye_style, 0, len(eye))
 

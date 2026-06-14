@@ -15,9 +15,24 @@ from __future__ import annotations
 import time
 from collections import deque
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import Static
+
+# Rich Text hex 颜色常量(与 theme.py token 一一对应)
+# DEFAULT_CSS 用 $token 名;Rich Text 渲染用以下 hex 常量(Rich 不解析 $token)
+_COL_PASS       = "#9ECE6A"  # $pass:       verdict passed(绿)
+_COL_PASS_WEAK  = "#73A857"  # $pass-weak:  self-verified 弱通过
+_COL_FAIL       = "#F7768E"  # $fail:       verdict failed(红)
+_COL_UNVERIF    = "#FF9E64"  # $unverif:    verdict unverifiable(橙)
+_COL_CYAN       = "#7DCFFF"  # $cyan:       缓存命中 sparkline(冷色=省钱)
+_COL_EYE        = "#D9A85C"  # $eye:        进度条填充段(金)
+_COL_INK_BRIGHT = "#ECEEF5"  # $ink-bright: 进行中条目
+_COL_INK        = "#C8CCDA"  # $ink:        正文
+_COL_INK_DIM    = "#7E869C"  # $ink-dim:    完成条目 / 百分比
+_COL_INK_FAINT  = "#525A73"  # $ink-faint:  待办条目
+_COL_INK_GHOST  = "#3A4055"  # $ink-ghost:  进度条空段
 
 from argos.hooks.events import HookFired
 from argos.lsp.events import LspServerEvent, LspDiagnosticEvent
@@ -217,7 +232,7 @@ class ActivityPanel(Vertical):
     def _sections(self) -> list[_Section]:
         return list(self.query(_Section))
 
-    def _set(self, idx: int, body: str) -> None:
+    def _set(self, idx: int, body: "str | Text") -> None:
         self._sections()[idx].update(body)
 
     # ── 事件入口(app._apply_event 调;签名全部保持)───────────────────
@@ -228,27 +243,44 @@ class ActivityPanel(Vertical):
         else:
             self._set(self._PROGRESS_IDX, self._render_phases())
 
-    def _render_phases(self) -> str:
-        lines = []
-        for p, e, s in self._phases:
+    def _render_phases(self) -> "str | Text":
+        # [FIX LOW] 进行中→$ink-bright, 完成→$ink-dim, 待办→$ink-faint
+        if not self._phases:
+            return "(待开始)"
+        t = Text()
+        for i, (p, e, s) in enumerate(self._phases):
             # 进行中(›,elapsed 还是 0.0)显 …;完成且无耗时显 —;否则显真实耗时。
             elapsed = "…" if s == "›" else (f"{e:.1f}s" if e else "—")
-            lines.append(f" {_PHASE_GLYPH.get(p, '◌')} {p:<7} {elapsed:>5} {s}")
-        return "\n".join(lines) if lines else "(待开始)"
-
-    def _render_todos(self) -> str:
-        # v3:emoji 已处决,改用字形词典字符(spec §3.3)
-        done = sum(1 for t in self._todos if t.get("status") == "completed")
-        lines = [f"进度 {done}/{len(self._todos)}"]
-        for t in self._todos:
-            status = t.get("status", "pending")
-            if status == "completed":
-                lines.append(f" ◕ {t.get('content', '')}")
-            elif status == "in_progress":
-                lines.append(f" ◉ {t.get('activeForm') or t.get('content', '')}")
+            line = f" {_PHASE_GLYPH.get(p, '◌')} {p:<7} {elapsed:>5} {s}"
+            if i > 0:
+                t.append("\n")
+            if s == "›":
+                # 进行中
+                t.append(line, style=_COL_INK_BRIGHT)
+            elif s == "✓":
+                # 已完成
+                t.append(line, style=_COL_INK_DIM)
             else:
-                lines.append(f" ◌ {t.get('content', '')}")
-        return "\n".join(lines)
+                # 待办/其他
+                t.append(line, style=_COL_INK_FAINT)
+        return t
+
+    def _render_todos(self) -> "str | Text":
+        # v3:emoji 已处决,改用字形词典字符(spec §3.3)
+        # [FIX LOW] 进行中→$ink-bright, 完成→$ink-dim, 待办→$ink-faint
+        done = sum(1 for todo in self._todos if todo.get("status") == "completed")
+        t = Text()
+        t.append(f"进度 {done}/{len(self._todos)}")
+        for todo in self._todos:
+            status = todo.get("status", "pending")
+            if status == "completed":
+                t.append(f"\n ◕ {todo.get('content', '')}", style=_COL_INK_DIM)
+            elif status == "in_progress":
+                content = todo.get("activeForm") or todo.get("content", "")
+                t.append(f"\n ◉ {content}", style=_COL_INK_BRIGHT)
+            else:
+                t.append(f"\n ◌ {todo.get('content', '')}", style=_COL_INK_FAINT)
+        return t
 
     def on_phase(self, phase: str, actions: int) -> None:
         now = time.time()
@@ -283,6 +315,13 @@ class ActivityPanel(Vertical):
         max_v = max(values) or 1
         return "".join(_SPARK[min(6, int(v * 6 / max_v))] for v in values)
 
+    @staticmethod
+    def _fmt_tokens(n: int) -> str:
+        """千分缩写:≥1000 → '{n/1000:.1f}k',否则原整数字串。与设计稿 ↑12.4k ↓3.1k 对齐。"""
+        if n >= 1000:
+            return f"{n / 1000:.1f}k"
+        return str(n)
+
     def on_cost(self, *, tokens_in: int, tokens_out: int, cost_usd: float | None,
                 elapsed_s: float, cache_read: int = 0, tier_name: str = "") -> None:
         cost = "$(N/A)" if cost_usd is None else f"${cost_usd:.3f}"
@@ -294,34 +333,63 @@ class ActivityPanel(Vertical):
         # 缓存 sparkline(机会点④):记录本次 cache_read 进历史,渲染 ▁▂▃▄▅▆▇
         self._cache_history.append(cache_read)
         spark = self._build_sparkline(list(self._cache_history))
-        cache_line = f"缓存命中 {cache_read} tok  {elapsed_s:.1f}s"
+        # [FIX LOW] token 计数千分缩写(设计稿 ↑12.4k ↓3.1k)
+        tok_in_str = self._fmt_tokens(tokens_in)
+        tok_out_str = self._fmt_tokens(tokens_out)
+        # [FIX MEDIUM] cache sparkline 整行染 $cyan(冷色=省钱语义)
+        t = Text()
+        t.append(f"↑{tok_in_str} ↓{tok_out_str}{tier_tag}  {cost}\n")
+        t.append(f"缓存命中 {cache_read} tok  {elapsed_s:.1f}s")
         if spark:
-            cache_line += f"\ncache {spark} {cache_read}"
-        self._set(self._COST_IDX, f"↑{tokens_in} ↓{tokens_out}{tier_tag}  {cost}\n"
-                                  f"{cache_line}")
+            t.append(f"\ncache {spark} {cache_read}", style=_COL_CYAN)
+        self._set(self._COST_IDX, t)
 
     def on_context(self, *, used: int, window: int) -> None:
         """上下文窗口用量。10 格进度条 + 百分比 + badge `[ctx N/M X%]`(spec §10.3);
         口径对齐 Claude Code:used 是【当前窗口占用】(input+cache),非会话累计成本。"""
         pct = 0 if not window else round(used * 100 / window)
         filled = min(10, max(0, round(pct / 10)))
-        bar = "▓" * filled + "░" * (10 - filled)
         win = f"{window // 1000}k" if window else "?"
         badge = f"[ctx {used:,}/{window:,} {pct}%]"
-        body = f"{self._model_label} · {win}\n{bar} {pct}%\n{badge}"
+        # [FIX MEDIUM] 进度条填充段染 $eye、空段染 $ink-ghost、百分比染 $ink-dim
+        t = Text()
+        t.append(f"{self._model_label} · {win}\n")
+        t.append("▓" * filled, style=_COL_EYE)
+        t.append("░" * (10 - filled), style=_COL_INK_GHOST)
+        t.append(f" {pct}%", style=_COL_INK_DIM)
+        t.append(f"\n{badge}")
         # 若有压缩/修剪行,追加(spec §4.8 a 机会点①)
         if self._compaction_line:
-            body += f"\n{self._compaction_line}"
-        self._set(self._CTX_IDX, body)
+            t.append(f"\n{self._compaction_line}")
+        self._set(self._CTX_IDX, t)
 
     def on_verdict(self, verdict) -> None:
         """VerifyVerdict 到达 → 'Verdict' 区段(verify/idle 视图可见)。
-        三态铁律:status 原样显示;self-verified 显式标注,绝不冒充用户级 verify。"""
+        三态铁律:status 原样显示;self-verified 显式标注,绝不冒充用户级 verify。
+        [FIX HIGH] 按状态注入 token 颜色:passed→$pass, failed→$fail,
+                   unverifiable→$unverif, self-verified→$pass-weak。
+        """
         cmd = getattr(verdict, "verify_cmd", None) or "—"
         detail = getattr(verdict, "detail", "") or ""
         status = getattr(verdict, "status", "?")
-        tag = " (self-verified)" if getattr(verdict, "self_verified", False) else ""
-        self._set(self._VERDICT_IDX, f"{status}{tag}\n{cmd}\n{detail}".strip())
+        self_verified = getattr(verdict, "self_verified", False)
+        tag = " (self-verified)" if self_verified else ""
+        # 状态 → 颜色映射(诚实三态铁律)
+        _status_color = {
+            "passed": _COL_PASS,
+            "failed": _COL_FAIL,
+            "unverifiable": _COL_UNVERIF,
+        }
+        if self_verified:
+            status_color = _COL_PASS_WEAK
+        else:
+            status_color = _status_color.get(status, _COL_INK)
+        t = Text()
+        t.append(f"{status}{tag}", style=status_color)
+        rest = f"\n{cmd}\n{detail}".rstrip()
+        if rest.strip():
+            t.append(rest)
+        self._set(self._VERDICT_IDX, t)
 
     def on_hook_fired(self, ev: HookFired) -> None:
         """单条 hook 触发结果。3 态:ok(dim) / fail(red 标记) / timeout(red 标记)。"""

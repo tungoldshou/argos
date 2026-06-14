@@ -56,7 +56,15 @@ from argos.tui.theme import ARGOS_NIGHT
 from argos.tui.widgets.activity_panel import ActivityPanel
 from argos.tui.widgets.code_action import CodeActionBlock
 from argos.tui.widgets.diff_view import DiffView
+from argos.tui.widgets.dream_report import DreamReportCard
+from argos.tui.widgets.hard_confirm_card import HardConfirmCard
 from argos.tui.widgets.inline_choice import InlineChoice, format_approval_title
+from argos.tui.widgets.intent_card_choice import IntentCardChoice
+from argos.tui.widgets.ledger_table import LedgerTable
+from argos.tui.widgets.orders_panel import OrdersPanel
+from argos.tui.widgets.orders_panel import ConductorSuggestionChoice
+from argos.tui.widgets.routing_table import RoutingTable
+from argos.tui.widgets.trust_dial import TrustDial
 from argos.tui.widgets.prompt import PromptArea, SlashMenu
 from argos.tui.widgets.splash import StartupSplash
 from argos.tui.widgets.status_bar import StatusBar
@@ -105,7 +113,7 @@ class ArgosApp(App):
         height: 1fr;
         display: block;
     }
-    #prompt { border: tall $eye-soft; }
+    #prompt { border: none; border-top: solid $hairline; background: $well; }
     ArgosApp.-narrow #activity { display: none; }
     """
 
@@ -236,12 +244,36 @@ class ArgosApp(App):
             parts.append("· ⏻ YOLO(Auto)")
         return "  ".join(parts)
 
+    def _resolve_trust_level(self):
+        """从 gate 反查当前 Trust 档位(单一真源,与 TopBar Trust 徽标 + /trust 共用)。
+
+        set_trust_level 存的原始档位优先(反向映射有损:L2 会被误报成 L1——不许对用户失真);
+        其次按 gate.level 反查;_ask_readonly=True 精确判 L0;兜底 L1。
+        """
+        from argos.permissions.trust_dial import TrustLevel
+        _map = {
+            ApprovalLevel.CONFIRM:      TrustLevel.L1_DANGEROUS_ONLY,
+            ApprovalLevel.ACCEPT_EDITS: TrustLevel.L3_SESSION_TRUSTED,
+            ApprovalLevel.AUTO:         TrustLevel.L4_AUTONOMOUS,
+            ApprovalLevel.OBSERVE:      TrustLevel.L0_EVERY_STEP,
+            ApprovalLevel.PROPOSE:      TrustLevel.L0_EVERY_STEP,  # PROPOSE 退化 L0
+        }
+        current = _map.get(self.gate.level, TrustLevel.L1_DANGEROUS_ONLY)
+        if getattr(self.gate, "_ask_readonly", False):
+            current = TrustLevel.L0_EVERY_STEP
+        stored = getattr(self.gate, "_trust_level", None)
+        if isinstance(stored, TrustLevel):
+            current = stored
+        return current
+
     def _refresh_topbar(self) -> None:
-        """状态变化(plan/YOLO/DEMO/key)→ TopBar 徽标对齐(诚实:全部来自真实状态)。"""
+        """状态变化(plan/YOLO/DEMO/key/trust)→ TopBar 徽标对齐(诚实:全部来自真实状态)。"""
         try:
+            tl = self._resolve_trust_level()
             self.query_one("#top-bar", TopBar).set_state(
                 plan_mode=self._plan_mode, yolo=self._yolo,
                 demo=self._demo, has_key=bool(config.active_key()),
+                trust_level=int(tl), trust_label=tl.label_human,
             )
         except Exception:  # noqa: BLE001 — 未 mount(测试直构)时静默,数据已在字段里
             pass
@@ -785,38 +817,16 @@ class ArgosApp(App):
             TrustLevel, escalation_warning, to_approval_semantics,
         )
 
-        # 计算当前 TrustLevel（从 gate.level 反查）
-        _level_to_trust: dict[ApprovalLevel, TrustLevel] = {
-            ApprovalLevel.CONFIRM:      TrustLevel.L1_DANGEROUS_ONLY,
-            ApprovalLevel.ACCEPT_EDITS: TrustLevel.L3_SESSION_TRUSTED,
-            ApprovalLevel.AUTO:         TrustLevel.L4_AUTONOMOUS,
-            ApprovalLevel.OBSERVE:      TrustLevel.L0_EVERY_STEP,
-            ApprovalLevel.PROPOSE:      TrustLevel.L0_EVERY_STEP,  # PROPOSE 退化 L0
-        }
-        current_trust = _level_to_trust.get(self.gate.level, TrustLevel.L1_DANGEROUS_ONLY)
-        # 若 gate 有 _ask_readonly=True 则更精确地判定为 L0
-        if getattr(self.gate, "_ask_readonly", False):
-            current_trust = TrustLevel.L0_EVERY_STEP
-        # set_trust_level 存的原始档位优先(反向映射有损:L2 会被误报成 L1 —— 不许对用户失真)
-        stored = getattr(self.gate, "_trust_level", None)
-        if isinstance(stored, TrustLevel):
-            current_trust = stored
+        # 计算当前 TrustLevel(单一真源,与 TopBar Trust 徽标共用)
+        current_trust = self._resolve_trust_level()
 
         # 无参数或 status → 显示状态
         if not arg or arg in ("status", "s"):
-            lines = [
-                f"当前信任档位：{current_trust.name}（{current_trust.label_human}）",
-                current_trust.description,
-            ]
-            # L0/L2 细粒度语义已接线:L0 连只读也问;L2 可逆自动放行/不可逆保守 ask。
-            lines += [
-                "",
-                "可用档位：",
-            ]
-            for lvl in TrustLevel:
-                marker = " ← 当前" if lvl is current_trust else ""
-                lines.append(f"  /trust {lvl.name.split('_')[0].lower()}  {lvl.label_human}{marker}")
-            await log.append_line("\n".join(lines), kind="system")
+            await log.append_line(
+                f"当前信任档位：{current_trust.name}（{current_trust.label_human}）\n{current_trust.description}",
+                kind="system",
+            )
+            await log.mount_block(TrustDial(current=current_trust))
             return
 
         # 解析目标档位
@@ -939,30 +949,9 @@ class ArgosApp(App):
             for e in visible
         )
 
-        lines = [f"行为账本 · run {run_id} · 共 {len(visible)} 条"]
-        for e in visible:
-            # 撤销状态标记
-            if e.undo_state == "available":
-                if e.undo_token and e.undo_token.startswith("file:"):
-                    state_mark = "[可撤·文件]"
-                else:
-                    state_mark = "[可撤]"
-            elif e.undo_state == "done":
-                state_mark = "[已撤]"
-            else:
-                state_mark = "[不可撤]"
-            # 风险标记
-            risk_mark = {"low": "", "medium": "[!]", "high": "[!!]"}.get(e.risk, "")
-            lines.append(f"  {e.seq:>3}. {state_mark}{risk_mark} {e.summary_human}")
-
-        if has_file_undo:
-            lines.append("")
-            lines.append(
-                "提示:文件条目支持粒度撤销 — 使用 daemon 端点 POST /runs/{id}/undo"
-                ' body {"entry_seq": N} 还原单个文件'
-            )
-
-        await log.append_line("\n".join(lines), kind="system")
+        widget = LedgerTable(entries=visible, run_id=run_id)
+        await log.mount_block(widget)
+        await log.append_line("每条回执签名 · summary 模板生成不调模型", kind="system")
 
     async def _retry(self, log) -> None:
         """/retry:重发本 session 最后一条 user 消息。busy / 空 / 无 store 诚实报。
@@ -1304,25 +1293,8 @@ class ArgosApp(App):
                 await log.append_line(f"读取本地 orders 失败:{e}", kind="error")
                 return
 
-        if not orders:
-            await log.append_line(
-                "无常驻指令。可通过 daemon POST /orders 添加（utterance/kind/schedule/trigger_glob/goal_template）。",
-                kind="system",
-            )
-            return
-
-        lines = [f"常驻指令（{len(orders)} 条）："]
-        for o in orders:
-            enabled = "✓" if o.get("enabled", True) else "✗"
-            kind = o.get("kind", "?")
-            trigger = o.get("schedule") or o.get("trigger_glob") or "(无触发条件)"
-            lines.append(
-                f" {enabled} [{kind}] {o.get('id', '')[:8]}…  "
-                f"{o.get('utterance', '')[:40]}  |  触发：{trigger}"
-            )
-        lines.append("")
-        lines.append("提示：conductor 建议到来时会在此栏出现「新建议」提示，可用 /confirm <id> 确认或 /dismiss <id> 忽略。")
-        await log.append_line("\n".join(lines), kind="system")
+        from argos.tui.widgets.transcript import Transcript
+        await self.query_one("#transcript", Transcript).mount_block(OrdersPanel(orders=orders))
 
     async def _confirm_suggestion_cmd(self, log, suggestion_id: str) -> None:
         """/confirm <suggestion_id>:用户确认 conductor 建议 → 通过 daemon 端点 create_run。
@@ -1414,23 +1386,27 @@ class ArgosApp(App):
     # ── TUI ProactiveSuggestionEvent 渲染 ────────────────────────────
 
     async def _on_proactive_suggestion(self, ev) -> None:
-        """ProactiveSuggestionEvent 渲染：transcript 一行人话 + 操作提示。
+        """ProactiveSuggestionEvent 渲染：ConductorSuggestionChoice 决策卡。
 
-        本期 TUI 只读展示（InlineChoice 确认流可后补）；
         真正的确认通过 POST /suggestions/{id}/confirm（daemon 端点）。
+        fail-closed：Esc = dismiss，绝不自动执行。
         """
-        from argos.tui.widgets.transcript import Transcript
+        def _decide(value: str, _feedback: str) -> None:
+            from argos.tui.widgets.transcript import Transcript as _Transcript
+            try:
+                _log = self.query_one("#transcript", _Transcript)
+            except Exception:  # noqa: BLE001
+                _log = None
+            if value == "confirm":
+                if _log is not None:
+                    self.run_worker(self._confirm_suggestion_cmd(_log, ev.suggestion_id), exclusive=False)
+            else:
+                if _log is not None:
+                    self.run_worker(self._dismiss_suggestion_cmd(_log, ev.suggestion_id), exclusive=False)
+            self._choice_done()
+
         try:
-            log = self.query_one("#transcript", Transcript)
-            sid_short = ev.suggestion_id[:8] if ev.suggestion_id else "?"
-            await log.append_line(
-                f"[自治建议] {ev.reason_human}\n"
-                f"  目标：{ev.goal}\n"
-                f"  建议 ID：{ev.suggestion_id}\n"
-                f"  → 确认：/confirm {sid_short}  忽略：/dismiss {sid_short}\n"
-                f"  （注：确认后在 worktree 隔离下以 L1 信任档运行，守护铁律不可绕过）",
-                kind="system",
-            )
+            await self._enqueue_choice(lambda: ConductorSuggestionChoice(ev=ev, on_decide=_decide))
         except Exception:  # noqa: BLE001
             pass
 
@@ -1712,31 +1688,9 @@ class ArgosApp(App):
                 "/routing 不可用(无 router 注入;demo/fake 模式)。",
                 kind="system")
             return
-        routing = router.routing
-        lines = ["[Argos routing]"]
-        lines.append(f"  default:        {routing.default}")
-        if routing.by_category:
-            lines.append("  by_category:")
-            for k, v in sorted(routing.by_category.items()):
-                lines.append(f"    {k:14}→ {v}")
-        if routing.by_tool:
-            lines.append("  by_tool:")
-            for k, v in sorted(routing.by_tool.items()):
-                lines.append(f"    {k:14}→ {v}")
-        if routing.tier_force_confirm:
-            lines.append(f"  tier_force_confirm: {routing.tier_force_confirm}")
-        lines.append("")
-        lines.append("[最近 10 步决策]")
-        hist = router.history()
-        if not hist:
-            lines.append("  (无;本 run 尚未调模型)")
-        else:
-            for d in hist:
-                lines.append(
-                    f"  step {d.step:3}  cat={d.category.value:13} "
-                    f"tool={d.tool or '-':14} → {d.tier:8} ({d.source})"
-                )
-        await log.append_line("\n".join(lines), kind="system")
+        widget = RoutingTable(routing=router.routing, history=router.history())
+        from argos.tui.widgets.transcript import Transcript
+        await self.query_one("#transcript", Transcript).mount_block(widget)
 
     async def _context_cmd(self, log, arg: str) -> None:
         """/context:看当前 LLM 上下文分桶(契约 §12;spec §10)。
@@ -1829,9 +1783,10 @@ class ArgosApp(App):
             return
 
         if status == 202:
-            await log.append_line(
-                "Dream 已启动,进度见活动栏。", kind="done",
-            )
+            # 诚实铁律:202 = 已启动(test_daemon_wiring 锁此契约);先发口头确认再挂整合卡。
+            await log.append_line("Dream 已启动 · 整合进度见下方。", kind="done")
+            self._dream_card = DreamReportCard()
+            await log.mount_block(self._dream_card)
         elif status == 409:
             await log.append_line("已有 Dream 在跑,请稍后再试。", kind="system")
         elif status == 503:
@@ -2331,26 +2286,48 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             # P6a §10 computer use:OS 级动作执行结果 → 活动栏一行人话
             await self._on_computer_action(ev)
         elif isinstance(ev, DreamProgressEvent):
-            # T10 Dream 夜间整合进度 → 活动栏一行
-            try:
-                detail = f" {ev.detail}" if ev.detail else ""
-                ap.append_line(f"[dream] {ev.stage}{detail}")
-            except Exception:  # noqa: BLE001 — 未 mount / 静默
-                pass
+            # T10 Dream 夜间整合进度 → DreamReportCard.append_stage（或回退 activity panel）
+            dream_card = getattr(self, "_dream_card", None)
+            if dream_card is not None:
+                try:
+                    dream_card.append_stage(ev.stage, ev.detail or "")
+                except Exception:  # noqa: BLE001 — 静默
+                    pass
+            else:
+                try:
+                    detail = f" {ev.detail}" if ev.detail else ""
+                    ap.append_line(f"[dream] {ev.stage}{detail}")
+                except Exception:  # noqa: BLE001 — 未 mount / 静默
+                    pass
         elif isinstance(ev, DreamReportEvent):
-            # T10 Dream 整合结果汇总 → 活动栏摘要一行
-            try:
-                summary_line = self._fmt_dream_report({
-                    "units_total": ev.units_total,
-                    "promoted": ev.promoted,
-                    "rejected": ev.rejected,
-                    "skipped": ev.skipped,
-                    "memory_merged": ev.memory_merged,
-                    "memory_archived": ev.memory_archived,
-                })
-                ap.append_line(summary_line)
-            except Exception:  # noqa: BLE001 — 未 mount / 静默
-                pass
+            # T10 Dream 整合结果汇总 → DreamReportCard.show_report（或回退 activity panel）
+            dream_card = getattr(self, "_dream_card", None)
+            if dream_card is not None:
+                try:
+                    dream_card.show_report({
+                        "units_total": ev.units_total,
+                        "promoted": ev.promoted,
+                        "rejected": ev.rejected,
+                        "skipped": ev.skipped,
+                        "memory_merged": ev.memory_merged,
+                        "memory_archived": ev.memory_archived,
+                        "report_path": ev.report_path,
+                    })
+                except Exception:  # noqa: BLE001 — 静默
+                    pass
+            else:
+                try:
+                    summary_line = self._fmt_dream_report({
+                        "units_total": ev.units_total,
+                        "promoted": ev.promoted,
+                        "rejected": ev.rejected,
+                        "skipped": ev.skipped,
+                        "memory_merged": ev.memory_merged,
+                        "memory_archived": ev.memory_archived,
+                    })
+                    ap.append_line(summary_line)
+                except Exception:  # noqa: BLE001 — 未 mount / 静默
+                    pass
         elif isinstance(ev, Escalation):
             await log.append_line(f"⚠︎ 卡住({ev.attempts} 轮):{ev.reason} — 最后失败:{ev.last_failure}", kind="escalation")
             self._set_border(glow.ERROR)
@@ -2567,6 +2544,18 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             )
             self._choice_done()
 
+        if req.action.startswith("computer."):
+            await self._enqueue_choice(lambda: HardConfirmCard(
+                action=req.action,
+                x=req.args.get("x"),
+                y=req.args.get("y"),
+                description=req.description,
+                on_decide=_decide,
+                text=req.args.get("text"),
+                app=req.args.get("app"),
+            ))
+            return
+
         await self._enqueue_choice(lambda: InlineChoice(
             title=format_approval_title(
                 risk=req.risk, trigger=getattr(req, "trigger", "") or "",
@@ -2655,19 +2644,19 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             self._choice_done()
 
         await self._enqueue_choice(lambda: InlineChoice(
-            title="Plan 审批",
+            title="◓ 计划已就绪 — 如何继续?",
             body=ev.plan_md,
             options=[
-                ("approve_start", "Approve and start"),
-                ("approve_accept_edits", "Approve and accept edits"),
-                ("keep_planning", "Keep planning"),
-                ("refine", "Refine with feedback"),
+                ("approve_start", "批准,开始执行"),
+                ("approve_accept_edits", "批准 + 自动接受编辑"),
+                ("keep_planning", "继续规划"),
+                ("refine", "补充反馈后再规划"),
             ],
             on_decide=_decide,
             escape_value=None,
             needs_input={"refine"},
             input_placeholder="补充对 plan 的反馈,Enter 提交,Esc 返回",
-            risk="low",
+            risk="plan",
         ))
 
     async def _daemon_plan_decision_post(self, call_id: str, action: str, feedback: str | None = None) -> None:
@@ -2719,8 +2708,20 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         )
 
         def _decide(value: str, _feedback: str) -> None:
-            confirmed = (value == "confirmed")
             call_id = getattr(self, "_current_intent_call_id", None) or ev.call_id
+            if value == "confirm":
+                confirmed = True
+            elif value == "edit":
+                confirmed = False
+                # 回填 prompt 输入框为 card goal（让用户修改后重发）
+                try:
+                    card_goal = ev.card_json.get("goal", "") if ev.card_json else ""
+                    if card_goal:
+                        self.query_one("#prompt").value = card_goal  # type: ignore[union-attr]
+                except Exception:  # noqa: BLE001
+                    pass
+            else:  # "cancel"
+                confirmed = False
             if _is_daemon:
                 self.run_worker(
                     self._daemon_intent_confirm_post(call_id, confirmed=confirmed),
@@ -2737,20 +2738,13 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             )
             self._choice_done()
 
-        # 正文 = confirmation_text;风险标签额外显示
-        body_parts = [ev.confirmation_text]
-        if ev.risk_flags:
-            body_parts.append(f"\n风险标签: {', '.join(ev.risk_flags)}")
-        body_text = "\n".join(body_parts)
-
-        await self._enqueue_choice(lambda: InlineChoice(
-            title="意图确认 — 请确认 Argos 对你的请求的理解",
-            body=body_text,
-            options=[("confirmed", "确认,继续执行"), ("cancel", "取消")],
+        choice = IntentCardChoice(
+            card_json=ev.card_json,
+            confirmation_text=ev.confirmation_text,
+            risk_flags=ev.risk_flags,
             on_decide=_decide,
-            escape_value="cancel",   # fail-closed:Esc = 取消
-            risk="medium" if ev.risk_flags else "low",
-        ))
+        )
+        await self._enqueue_choice(lambda: choice)
 
     async def _daemon_intent_confirm_post(self, call_id: str, *, confirmed: bool, revised_goal: str | None = None) -> None:
         """daemon 路径意图确认:POST /runs/{id}/intent_confirm。fail-soft(失败仅 log)。"""

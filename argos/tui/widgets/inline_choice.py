@@ -85,12 +85,15 @@ class InlineChoice(Vertical):
     InlineChoice { height: auto; margin: 0 0 1 0; padding: 1 2; background: $raise; border-left: thick $unverif; }
     InlineChoice.risk-low  { border-left: thick $hairline-lit; }
     InlineChoice.risk-high { border-left: thick $fail; }
+    InlineChoice.risk-plan { border-left: thick $plan; }
     InlineChoice #ic-title { text-style: bold; color: $unverif; }
     InlineChoice.risk-high #ic-title { color: $fail; }
+    InlineChoice.risk-plan #ic-title { color: $plan; }
     InlineChoice #ic-body { color: $ink-bright; }
     InlineChoice #ic-hint { color: $ink-faint; }
     InlineChoice #ic-input { display: none; }
     InlineChoice.-input-mode #ic-input { display: block; }
+    .ic-summary { color: $ink-faint; }
     """
 
     can_focus = True
@@ -124,7 +127,7 @@ class InlineChoice(Vertical):
         self._cursor = 0
         self._decided = False
         self._pending_value: str | None = None   # 进入反馈输入态时挂起的选项值
-        self.add_class(f"risk-{risk}" if risk in ("low", "high") else "risk-medium")
+        self.add_class(f"risk-{risk}" if risk in ("low", "high", "plan") else "risk-medium")
 
     # ── 渲染 ─────────────────────────────────────────────────────────
     def compose(self) -> ComposeResult:

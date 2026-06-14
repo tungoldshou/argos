@@ -9,7 +9,11 @@
 
 视觉规范(v3 spec §4.x, emoji 全处决):
   ◌ pending / ⏵ running / ⏸ paused / ⏹ suspended|cancelled /
-  ◕ completed / ◉ failed($fail 色)
+  ◕ completed / ◉ failed
+
+字形颜色规范(README §字形铁律):
+  非活跃 failed tab 的 ◉ 字形必须染 $fail (#F7768E),其余非活跃字形保持
+  widget 默认色 $ink-dim。活跃 tab 整段统一用 #ECEEF5 on #23263A。
 """
 from __future__ import annotations
 
@@ -26,9 +30,12 @@ _STATE_ICON = {
     "paused":    "⏸",   # 运行控制:暂停
     "suspended": "⏹",   # 运行控制:停止
     "completed": "◕",   # 阅毕眼
-    "failed":    "◉",   # 注视眼(红,$fail 色)
+    "failed":    "◉",   # 注视眼;非活跃时染 $fail (#F7768E),见 render()
     "cancelled": "⏹",   # 运行控制:停止
 }
+
+# Rich Text 层无法引用 CSS $token,用注释锚定对应 token
+_COL_FAIL = "#F7768E"   # $fail: verdict failed / 唯一的红
 
 
 def _format_cost(usd: float | None) -> str:
@@ -65,6 +72,7 @@ class TabStrip(Static):
         background: $well;
         color: $ink-dim;
         padding: 0 2;
+        border-bottom: solid $hairline;
     }
     TabStrip .tab-active {
         background: $raise-2;
@@ -117,18 +125,26 @@ class TabStrip(Static):
         """渲染 tab 条为 Rich markup 字符串。
 
         active tab 用底色块 $raise-2 + $ink-bright bold(v3 spec §4.x 裁决:不用 [reverse])。
+        非活跃 failed tab 的 ◉ 字形单独染 $fail(README §字形铁律 line 90:error ◉ 失败)。
         hex 值与 theme.py 中对应 token 对齐:
-          $raise-2 = #23263A, $ink-bright = #ECEEF5
+          $raise-2 = #23263A, $ink-bright = #ECEEF5, $fail = #F7768E
         Rich Text 层无法引用 CSS $token 名,直接用 hex。
         """
         if not self._tabs:
             return "(no runs)"
         parts = []
         for t in self._tabs:
-            seg = f"{t['icon']} {t['title']} {t['cost']}"
+            icon = t["icon"]
+            title = t["title"]
+            cost = t["cost"]
             if t["run_id"] == self._active:
-                # 底色块: bold + $ink-bright 字 + $raise-2 底;不用 [reverse]
-                seg = f"[bold #ECEEF5 on #23263A] {seg} [/bold #ECEEF5 on #23263A]"
+                # 活跃 tab: 整段 bold + $ink-bright 字 + $raise-2 底;不用 [reverse]
+                seg = f"[bold #ECEEF5 on #23263A] {icon} {title} {cost} [/bold #ECEEF5 on #23263A]"
+            elif t["state"] == "failed":
+                # 非活跃 failed tab: ◉ 字形染 $fail,其余保持 widget 默认 $ink-dim
+                seg = f"[{_COL_FAIL}]{icon}[/{_COL_FAIL}] {title} {cost}"
+            else:
+                seg = f"{icon} {title} {cost}"
             parts.append(seg)
         return "  ".join(parts)
 

@@ -3,7 +3,7 @@
 
 ⏺ python · step N      ← 橙 ⏺ + muted 标签
   <syntax 高亮代码>      ← 2 空格缩进;>8 行折叠为头 6 行 + "… +N 行"
-  ⎿ ✓ 结果              ← ✓ muted / ✗ 红;>12 行折叠
+  └ ◕ 结果              ← ◕ 阅毕眼 $pass / ◉ 红瞳 $fail;>12 行折叠
 """
 from __future__ import annotations
 

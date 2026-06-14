@@ -57,6 +57,8 @@ class SystemLine(Static):
 class AssistantMessage(Markdown):
     DEFAULT_CSS = """
     AssistantMessage { background: transparent; margin: 0 0 1 0; padding: 0 2; }
+    AssistantMessage .markdown--em { color: $ink-bright; }
+    AssistantMessage .markdown-strong { color: $ink-bright; }
     """
     def __init__(self) -> None:
         super().__init__("")

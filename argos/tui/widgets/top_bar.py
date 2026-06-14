@@ -31,12 +31,13 @@ _UNVERIF = "#FF9E64"    # $unverif:DEMO/未配key 橙
 
 # 眼系字形:phase → glyph(spec §3.1 词典)
 _PHASE_GLYPH: dict[str, str] = {
-    "idle":   "◌",   # U+25CC 空态
-    "plan":   "◔",   # U+25D4 扫视
-    "act":    "◉",   # U+25C9 注视
-    "verify": "❂",   # U+2742 聚焦
-    "report": "◕",   # U+25D5 阅毕
-    "done":   "◕",   # done 与 report 同形
+    "idle":    "◌",   # U+25CC 空态
+    "plan":    "◔",   # U+25D4 扫视
+    "act":     "◉",   # U+25C9 注视
+    "verify":  "❂",   # U+2742 聚焦
+    "report":  "◕",   # U+25D5 阅毕
+    "done":    "◕",   # done 与 report 同形
+    "blocked": "◓",   # U+25D3 审批/硬确认挂起 — $unverif 橙(字形铁律 README §字形铁律 line 85)
 }
 
 
@@ -54,6 +55,9 @@ class TopBar(Static):
         self._demo = True
         self._has_key = True
         self._phase = "idle"
+        # Trust 徽标状态(README §152/§188;默认无 trust 信息时不显示)
+        self._trust_level: int | None = None   # 0–4;None=未设置,不渲染 Trust 徽标
+        self._trust_label: str = ""            # e.g. "只有危险操作才问"
 
     def set_state(
         self, *,
@@ -62,8 +66,14 @@ class TopBar(Static):
         yolo: bool | None = None,
         demo: bool | None = None,
         has_key: bool | None = None,
+        trust_level: int | None = None,
+        trust_label: str | None = None,
     ) -> None:
-        """app 侧状态变化的单入口(任意子集更新);只重渲,不解析。"""
+        """app 侧状态变化的单入口(任意子集更新);只重渲,不解析。
+
+        trust_level: 0–4(L0 最宽松/L4 最严格);None=不更改当前值。
+        trust_label: 与 trust_level 配套的短描述(如 '只有危险操作才问')。
+        """
         if model_label is not None:
             self._model = model_label
         if plan_mode is not None:
@@ -74,6 +84,10 @@ class TopBar(Static):
             self._demo = bool(demo)
         if has_key is not None:
             self._has_key = bool(has_key)
+        if trust_level is not None:
+            self._trust_level = int(trust_level)
+        if trust_label is not None:
+            self._trust_label = trust_label
         self.refresh()
 
     def set_phase(self, phase: str) -> None:
@@ -90,6 +104,8 @@ class TopBar(Static):
         - demo → "DEMO 脚本演示"
         - 非 demo + 无 key → "未配 key"
         - 非 demo + 有 key → "LIVE"(契约6:has_key=False 绝不出现 LIVE)
+        - trust_level 已设置 → "L{n} · {label}"(最后,README §188 顺序:模式徽标+LIVE/DEMO+Trust)
+          L4 时前缀 '⏻ ':README §152 升 L4 顶栏亮红灯
         """
         out: list[str] = []
         if self._plan_mode:
@@ -103,6 +119,11 @@ class TopBar(Static):
         else:
             # has_key=True + demo=False → 真实运行,显示 LIVE
             out.append("LIVE")
+        # Trust 徽标排最后(README §188)
+        if self._trust_level is not None:
+            prefix = "⏻ " if self._trust_level == 4 else ""
+            label_part = f" · {self._trust_label}" if self._trust_label else ""
+            out.append(f"{prefix}L{self._trust_level}{label_part}")
         return out
 
     @property
@@ -113,26 +134,46 @@ class TopBar(Static):
     def render(self) -> Text:
         # 左侧:状态眼 + 品牌名 + 模型
         glyph = _PHASE_GLYPH.get(self._phase, "◌")
-        eye_color = _EYE_SOFT if self._phase == "idle" else _EYE
+        # blocked 相(◓)染 $unverif 橙;idle 染 $eye-soft 暗金;其余染 $eye 亮金
+        if self._phase == "blocked":
+            eye_color = _UNVERIF
+        elif self._phase == "idle":
+            eye_color = _EYE_SOFT
+        else:
+            eye_color = _EYE
         left = Text()
         left.append(f"{glyph} ", style=f"bold {eye_color}")
         left.append(f"Argos v{self._version}", style=f"bold {_INK_BRIGHT}")
         left.append(f" · {self._model}", style=_INK_DIM)
 
         # 右侧:徽标区(v3 颜色规则)
-        _badge_styles: dict[str, str] = {
+        # Trust 徽标动态颜色:L4 → $fail 红;L0–L3 → $eye-soft 暗金(README §152/§188)
+        right = Text()
+        for i, b in enumerate(self.badges()):
+            if i:
+                right.append("  ")
+            style = self._badge_style(b)
+            right.append(b, style=style)
+
+        width = self.size.width or 0
+        pad = max(1, width - left.cell_len - right.cell_len - 2)
+        return Text.assemble(left, " " * pad, right) if right.cell_len else left
+
+    def _badge_style(self, badge: str) -> str:
+        """返回徽标对应的 Rich style 字符串(单一真源,渲染与测试共用)。
+
+        固定徽标用字典查表;Trust 徽标(含 'L' 前缀或 '⏻' 前缀)按 level 动态着色。
+        """
+        _FIXED: dict[str, str] = {
             "plan":          _PLAN,
             "YOLO":          _FAIL,
             "DEMO 脚本演示": _UNVERIF,
             "未配 key":      _UNVERIF,
             "LIVE":          _PASS,
         }
-        right = Text()
-        for i, b in enumerate(self.badges()):
-            if i:
-                right.append("  ")
-            right.append(b, style=_badge_styles.get(b, _UNVERIF))
-
-        width = self.size.width or 0
-        pad = max(1, width - left.cell_len - right.cell_len - 2)
-        return Text.assemble(left, " " * pad, right) if right.cell_len else left
+        if badge in _FIXED:
+            return _FIXED[badge]
+        # Trust 徽标:L4(或含 '⏻')→ $fail 红;其余 → $eye-soft 暗金
+        if self._trust_level == 4:
+            return _FAIL
+        return _EYE_SOFT

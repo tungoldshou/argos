@@ -15,6 +15,7 @@ slash 菜单导航(TUI v2):菜单可见时 ↑/↓ 移动 ▸ 高亮,Tab/Enter �
 """
 from __future__ import annotations
 
+from rich.style import Style
 from rich.text import Text
 from textual import events
 from textual.message import Message
@@ -29,6 +30,7 @@ _EYE        = "#D9A85C"   # $eye:▸ 选中光标 / 选中项名
 _INK_DIM    = "#7E869C"   # $ink-dim:说明文字
 _INK_FAINT  = "#525A73"   # $ink-faint:键提示行
 _INK_BRIGHT = "#ECEEF5"   # $ink-bright:选中项名 bold
+_RAISE_2    = "#23263A"   # $raise-2:二级浮起 — slash 菜单选中行底色块
 
 
 class PromptArea(TextArea):
@@ -176,11 +178,6 @@ class SlashMenu(Static):
         margin: 0 2; padding: 0 1;
         background: $raise; border: round $hairline-lit;
     }
-    SlashMenu .menu-selected {
-        background: $raise-2;
-        color: $ink-bright;
-        text-style: bold;
-    }
     """
 
     def __init__(self, **kwargs) -> None:
@@ -220,19 +217,22 @@ class SlashMenu(Static):
     def _render_items(self) -> None:
         """渲染 slash 菜单条目。
 
-        选中行:▸ $eye bold + 名 $ink-bright bold;其余:无前缀 + 名 $ink-dim。
+        选中行:▸ $eye bold + 名 $ink-bright bold + 整行底色 $raise-2;
+        其余:无前缀 + 名 $ink-dim,无底色。
         说明文字 $ink-dim;键提示行 $ink-faint。
         """
         t = Text()
         for i, (name, desc) in enumerate(self._matches):
             cur = i == self._cursor
             if cur:
-                t.append("▸ ", style=f"bold {_EYE}")
-                t.append(f"/{name:<16}", style=f"bold {_INK_BRIGHT}")
+                # 整行(前缀 + 命令名 + 描述)都带 $raise-2 底色块,对齐设计「选中行高亮块」
+                t.append("▸ ", style=Style(color=_EYE, bgcolor=_RAISE_2, bold=True))
+                t.append(f"/{name:<16}", style=Style(color=_INK_BRIGHT, bgcolor=_RAISE_2, bold=True))
+                t.append(f" {desc}", style=Style(color=_INK_DIM, bgcolor=_RAISE_2))
             else:
                 t.append("  ", style=None)
                 t.append(f"/{name:<16}", style=_INK_DIM)
-            t.append(f" {desc}", style=_INK_DIM)
+                t.append(f" {desc}", style=_INK_DIM)
             t.append("\n")
         t.append("  ↑↓ 选择 · ↹ 补全 · ↵ 执行", style=_INK_FAINT)
         self.update(t)
