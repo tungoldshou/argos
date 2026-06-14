@@ -144,7 +144,7 @@ packaging/                  # PyInstaller + install.sh + Homebrew Cask
 - **No co-author trailer** in commits.
 - **Conventional commits** (feat/fix/refactor/docs/test/chore/perf/build/ci).
 - **English first** in code, comments, commit messages.
-- **Bilingual docs**: English primary, Chinese supplementary (in `.zh-CN.md`).
+- **Docs language**: docs and commits are English; Chinese docstrings/comments are the house norm in code.
 
 ## Testing Requirements
 

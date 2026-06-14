@@ -39,7 +39,7 @@ uv run argos dream --report   # show the latest Dream report
 uv run argos --selftest       # offline full-machine self-check (scripted model, real sandbox) — fast smoke
 uv run argos --demo           # FakeLoop success demo (no key needed)
 uv run argos --demo-fail      # FakeLoop escalation / honest-failure demo
-uv run argos --effort high    # per-run effort tier {low,medium,high} — raises step budget + approval level
+uv run argos --effort high    # per-run effort tier (low=8 steps/AUTO, medium=40/CONFIRM, high=80/CONFIRM)
 uv run argos --project PATH   # run in a user project directory
 python -m argos.daemon  # start the background daemon (Unix socket at ~/.argos/daemon.sock)
 uv run pytest                 # full suite; enforces --cov=argos --cov-fail-under=80

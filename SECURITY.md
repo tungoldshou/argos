@@ -35,7 +35,7 @@ Argos has several core moats (see [docs/argos-product-definition.md](docs/argos-
 2. **Verdict / VerdictStatus** — three-state result (`passed` / `failed` / `unverifiable`), fail-closed; defined in `argos/core/types.py`; Argos never fabricates a green result
 3. **OS Seatbelt** — agent code runs in a subprocess under a macOS Seatbelt profile, no network by default
 4. **CapabilityBroker + CapabilityRegistry** — every side effect passes egress-policy checks (derived from the per-process `CapabilityRegistry`) and receives an HMAC-signed receipt; each daemon run gets its own isolated `SeatbeltExecutor + ApprovalGate + CapabilityBroker` via `build_run_stack()`, so concurrent runs never share mutable state
-5. **Approval Gate / Trust Dial** — levels L0 (OBSERVE) through L4 (AUTO / `/yolo`); HARD RULES enforced in `permissions/` cannot be bypassed at any trust level
+5. **Approval Gate / Trust Dial** — two independent concepts: the `ApprovalLevel` approval dial (`argos/approval.py`: OBSERVE / PROPOSE / CONFIRM / AUTO, the `/yolo` end) and the `TrustLevel` autonomy dial (`argos/permissions/trust_dial.py`: L0_EVERY_STEP through L4_AUTONOMOUS). They are not the same scale — L0 is not OBSERVE. HARD RULES enforced in `permissions/` cannot be bypassed at any level on either dial
 
 ## Threat Model
 

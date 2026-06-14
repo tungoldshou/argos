@@ -141,6 +141,16 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - **bug5 桌面壳前端从未执行**:`index.html` 引用从未构建的 `../dist/main.js`(`tsc --noEmit` 不产物),'Initializing' 是写死文案,cargo/tsc 双绿但窗口是植物人 → `withGlobalTauri` 全局(零打包器正道)+ tsc 真产出进 `frontendDist` + 入库
   - **bug6 测试隔离洞**:真 daemon 在跑时 7 个 TUI 测试漏连用户内核(403/可能建真 run) → 测试隔离修复
 
+### Fixed (v0.1 honesty review batch)
+- Closed two P0 fake-green holes: the daemon main path now runs tamper detection (previously dead code in the daemon worker), and trivial verify commands (`echo ok`, `true`, `:`) can no longer pass the verify gate — they degrade to `unverifiable`.
+- The synchronous broker bridge now signs HMAC receipts and enforces the egress policy on every call, so governance/audit applies to the in-process path too (was bypassed).
+- `web_extract` now guards against SSRF: requests to private/loopback/link-local ranges and the cloud metadata endpoint are blocked, with a per-hop check on every redirect.
+- Daemon event sequence numbering is centralized so the SSE reconnect cursor stays consistent — reconnecting no longer drops or duplicates events.
+- Worker cancel now hard-cancels the run task (real interruption, not just a flag), and the per-run routing table is auto-evicted on terminal states (no more leak).
+- Token estimation honors a min-1-token invariant under tiktoken (non-empty text never counts as 0 tokens).
+- Daemon auto-spawn now passes `--socket-path` (was `--socket`, which exited rc=2 and silently forced inline mode).
+- Removed dead MLX embedder code path and the unused `mlx-embeddings` dependency.
+
 ## [0.1.0] - 2026-06-06
 
 ### Added
@@ -350,7 +360,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Removed
 - `src/`（React UI）、`src-tauri/`（Tauri 壳）、前端构建工具链（vite/pnpm/tsconfig）、FastAPI sidecar 启动脚本 `run_server.py`。
 
-## [0.1.0] — 2026-06-01
+## [0.1.0-pre] — 2026-06-01 (pre-pivot prototype)
 
 First packaged build (`Argos.app` + DMG, native arm64). Argos is a standalone
 general-purpose agent (Tauri shell + Python LangGraph sidecar), pivoted from the

@@ -99,12 +99,14 @@
 - **三类帧**：Event（内核→客户端广播；现有 Event union 升格，serialize/deserialize 已存在且有测试）、
   Command（客户端→内核：create_run/cancel/pause/resume/approval_response/plan_decision/setup_apply…）、
   RPC（幂等查询：list_runs/context_snapshot/capabilities/health）。
-- **版本协商**：首帧 `Hello{client_v, accepts}` → `Welcome{kernel_v, proto_v, capabilities}`；
-  不匹配明确拒绝并说明（诚实原则延伸到协议层，不静默降级）。
+  实现说明：v1 中 Command/RPC 不是独立帧类，而是对应 HTTP 端点（`POST /runs`、`POST /runs/{id}/cancel|pause|resume|plan_decision`、`GET /runs`、`GET /health` 等，见 `daemon/server.py`）；Event 经 SSE 流广播。
+- **版本协商**（设计预留，v1 未实现）：首帧 `Hello{client_v, accepts}` → `Welcome{kernel_v, proto_v, capabilities}`；
+  不匹配明确拒绝并说明（诚实原则延伸到协议层，不静默降级）。当前传输为普通 HTTP，无握手帧；版本只通过单向 `GET /version` 暴露。
 - **新事件**：`PlanDecisionRequest`（去掉 TUI 对 loop 对象的直接引用，机制与 ApprovalRequest 同构）、
   `MemoryRecallEvent`（修 store 穿透）、`ComputerActionEvent`、`LedgerEntryEvent`。
-- **Event 双层措辞**：每个事件带 `plain`（人话）/`technical`（技术）两份渲染源；
+- **Event 双层措辞**（设计预留，v1 未实现）：每个事件带 `plain`（人话）/`technical`（技术）两份渲染源；
   非开发者模式读 plain（"我检查过了，这步确实做成了 ✓"），开发者模式读 technical。TUI 视觉层零改动。
+  （当前 `argos/protocol/events.py` 无 `plain`/`technical` 字段。）
 - 传输：本地 Unix socket（沿用 DaemonHTTPServer）+ SSE fan-out；桌面端 sidecar 同 socket；
   未来远程必须加 token/HMAC 握手。
 

@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 """Argos PyInstaller spec —— arm64 单 binary(spec §10)。
 
-捆:Textual + smolagents + sqlite-vec(.dylib) + mlx-embeddings(代码,权重懒下载不进 binary)。
+捆:Textual + smolagents + sqlite-vec(.dylib)。MLX 权重懒下载不进 binary。
 不捆:MLX 模型权重(~300-600MB,首次用才下载到 ~/.cache,spec §5.4)。
 路径相对【仓库根】(build_arm64.sh 在仓库根跑 `pyinstaller packaging/argos.spec`)。
 """

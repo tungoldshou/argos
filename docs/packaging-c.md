@@ -8,10 +8,10 @@
 
 ## 各通道安装命令(按推荐顺序)
 
-### 1. PyPI(任何平台,推荐)
+### 1. PyPI(任何平台,推荐;计划中 #13,PyPI 未发布)
 
 ```bash
-pip install argos-agent        # 或 uv tool install argos-agent
+pip install argos-agent        # 或 uv tool install argos-agent(计划中 #13,PyPI 未发布)
 argos --version                # 验证
 ```
 
