@@ -59,7 +59,9 @@ async def probe_or_spawn(socket_path: Path) -> bool:
     try:
         proc = await asyncio.create_subprocess_exec(
             "argosd",
-            "--socket", str(socket_path),
+            # daemon argparse 只认 --socket-path(__main__.py);过去传 --socket → argosd rc=2
+            # 退出 → 永远落 inline。修正 flag 名,让 argosd 在 PATH 时能真正拉起。
+            "--socket-path", str(socket_path),
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
