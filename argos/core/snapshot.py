@@ -49,16 +49,21 @@ class RunSnapshot:
         # 延迟 import 避免循环(若后续 runtime 引到 core 任何东西)
         from argos.runtime import SNAPSHOT_PRUNE_DIRS
 
+        import os as _os
+
         tar_path.parent.mkdir(parents=True, exist_ok=True)
         partial = tar_path.with_suffix(tar_path.suffix + ".partial")
         with tarfile.open(partial, "w") as tf:
-            for p in sorted(workspace.rglob("*")):
-                if not p.is_file():
-                    continue
-                rel = p.relative_to(workspace)
-                if any(part in SNAPSHOT_PRUNE_DIRS for part in rel.parts):
-                    continue
-                tf.add(p, arcname=str(rel))
+            # os.walk + 原地剪枝:绝不【进入】prune 目录。旧实现用 rglob("*") 会先递归遍历
+            # .venv/dist/build/target 里几十万文件(即使后续 continue 跳过 add 也照样 walk),
+            # 大项目卡十几秒(2026-06-14 真机 11.4s)。原地裁 dirnames 让 os.walk 不下钻 → 快。
+            for dirpath, dirnames, filenames in _os.walk(workspace):
+                dirnames[:] = sorted(d for d in dirnames if d not in SNAPSHOT_PRUNE_DIRS)
+                for fn in sorted(filenames):
+                    p = Path(dirpath) / fn
+                    if not p.is_file():
+                        continue
+                    tf.add(p, arcname=str(p.relative_to(workspace)))
         partial.rename(tar_path)
         return cls(tar_path=tar_path)
 

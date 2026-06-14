@@ -34,15 +34,20 @@ def test_take_prunes_heavy_dirs(tmp_path: Path):
     ws = tmp_path / "ws"
     ws.mkdir()
     (ws / "keep.py").write_text("x")
-    for d in (".venv", "node_modules", "__pycache__", ".git"):
-        (ws / d).mkdir()
+    # 含构建产物/索引(2026-06-14:真机 desktop/dist/build 让快照卡 11s tar 3.6GB)。
+    pruned = (".venv", "node_modules", "__pycache__", ".git",
+              "dist", "build", "target", ".codegraph", ".tox", ".next")
+    for d in pruned:
+        (ws / d / "nested" / "deep").mkdir(parents=True)
         (ws / d / "junk.txt").write_text("junk")
+        # 嵌套深处:os.walk 原地剪枝绝不下钻,深处文件也不该被收(旧 rglob 会遍历它们 → 卡)。
+        (ws / d / "nested" / "deep" / "more.txt").write_text("more")
     snap = RunSnapshot.take(ws, tmp_path / "snap2.tar")
     with tarfile.open(snap.tar_path) as tf:
         names = tf.getnames()
     assert "keep.py" in names
-    for d in (".venv", "node_modules", "__pycache__", ".git"):
-        assert not any(n.startswith(f"{d}/") for n in names), f"应剪枝 {d}"
+    for d in pruned:
+        assert not any(n.startswith(f"{d}/") for n in names), f"应剪枝 {d}（含嵌套深处）"
 
 
 def test_take_skips_new_dirs_after_take(tmp_path: Path):
