@@ -67,3 +67,10 @@ def test_self_check_section():
     assert "编造工具计数" in HONESTY_SYSTEM
     # 自检在提示词末尾(汇报前最后过一遍)
     assert HONESTY_SYSTEM.rstrip().endswith("有 → 删掉)")
+
+
+def test_prompt_within_budget():
+    from argos.core.honesty import HONESTY_SYSTEM
+    # 防膨胀:新增段后整体不得无节制增长(廉价模型小上下文 + 稳定前缀走 cache)。
+    # CEILING 由 Task 7 实测设定(实测长度 N=3135, CEILING = round(N*1.10))。
+    assert len(HONESTY_SYSTEM) <= 3449   # round(3135 * 1.10)
