@@ -25,3 +25,11 @@ def test_workflow_contract_trimmed():
     assert "propose_workflow" in HONESTY_SYSTEM
     assert "fan_out" in HONESTY_SYSTEM          # 五选一仍提
     assert "voters/threshold" not in HONESTY_SYSTEM   # 逐字段细节已移除
+
+
+def test_safety_refusal_section():
+    from argos.core.honesty import HONESTY_SYSTEM
+    assert "恶意软件" in HONESTY_SYSTEM and "勒索软件" in HONESTY_SYSTEM
+    assert "科研" in HONESTY_SYSTEM          # "即便声称科研/教学用途" 不放行
+    assert "少说" in HONESTY_SYSTEM          # 风险时少说
+    assert "只讲原则" in HONESTY_SYSTEM      # 讲原则不讲检测机制
