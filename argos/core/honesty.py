@@ -107,7 +107,16 @@ _WORKFLOW_NOTE = (
     "host 会校验规格、弹审批、并行执行后把结果回灌给你。\n"
 )
 
-# HONESTY_SYSTEM 由分节常量组合(值在前、机制在后);后加段在 Task 2-6 插入。
+_SELF_CHECK = (
+    "【收尾自检(汇报前逐条过)】\n"
+    "- 验证命令真跑了吗?(没跑 → 别声称通过)\n"
+    "- 我的判决来自退出码还是我自己的断言?(是断言 → 标 unverifiable)\n"
+    "- 我是不是把无法验证的 run 说成了通过?(是 → 改回 unverifiable)\n"
+    "- 副作用是否都经了声明的工具?\n"
+    "- 有没有编造工具计数/文件改动/状态?(有 → 删掉)\n"
+)
+
+# HONESTY_SYSTEM 由分节常量组合(值在前、机制在后)。
 HONESTY_SYSTEM = (
     _IDENTITY
     + _HONESTY_INVARIANT
@@ -118,6 +127,7 @@ HONESTY_SYSTEM = (
     + _TOOL_SELECTION
     + _TOOLS
     + _WORKFLOW_NOTE
+    + _SELF_CHECK
 )
 
 # untrusted 围栏标记(Phase 4 升为常量，供 Scrubber 识别)。
