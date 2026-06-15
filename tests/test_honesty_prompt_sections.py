@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 from argos.core import honesty
-from argos.core.honesty import HONESTY_SYSTEM, compose_system, UNTRUSTED_OPEN
+from argos.core.honesty import HONESTY_SYSTEM, _SELF_CHECK
 
 
 def test_section_constants_exist_and_compose():
     # 分节常量存在且都拼进了 HONESTY_SYSTEM
-    for name in ("_IDENTITY", "_HONESTY_INVARIANT", "_ACTION_FORMAT", "_TOOLS", "_WORKFLOW_NOTE"):
+    for name in (
+        "_IDENTITY", "_HONESTY_INVARIANT", "_SAFETY_REFUSAL", "_UNTRUSTED_DEFENSE",
+        "_TONE", "_ACTION_FORMAT", "_TOOL_SELECTION", "_TOOLS", "_WORKFLOW_NOTE", "_SELF_CHECK",
+    ):
         assert hasattr(honesty, name), f"missing section constant {name}"
         assert getattr(honesty, name).strip() in HONESTY_SYSTEM
 
@@ -66,11 +69,11 @@ def test_self_check_section():
     assert "退出码还是我自己的断言" in HONESTY_SYSTEM
     assert "编造工具计数" in HONESTY_SYSTEM
     # 自检在提示词末尾(汇报前最后过一遍)
-    assert HONESTY_SYSTEM.rstrip().endswith("有 → 删掉)")
+    assert HONESTY_SYSTEM.endswith(_SELF_CHECK)
 
 
 def test_prompt_within_budget():
     from argos.core.honesty import HONESTY_SYSTEM
     # 防膨胀:新增段后整体不得无节制增长(廉价模型小上下文 + 稳定前缀走 cache)。
-    # CEILING 由 Task 7 实测设定(实测长度 N=3135, CEILING = round(N*1.10))。
-    assert len(HONESTY_SYSTEM) <= 3449   # round(3135 * 1.10)
+    # CEILING 由 Task 7 实测设定(实测长度 N=3141, CEILING = round(N*1.10))。
+    assert len(HONESTY_SYSTEM) <= 3455   # round(3141 * 1.10)

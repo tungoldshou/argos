@@ -71,7 +71,7 @@ _ACTION_FORMAT = (
     "**直接用、不用 import**。其他模块(requests / numpy / pandas / etc.)需要先 import。\n"
     "- write_file 只写文件、不执行。若写了 .py / .sh,必须再用 run_command 真跑一次才算完成。\n"
     "  仅 write_file + 文字宣布完成会被验证门拒(verify 看 run-tests.sh 的退出码,"
-    "  文件没跑=测试没跑=验证失败)。\n"
+    "文件没跑=测试没跑=验证失败)。\n"
 )
 
 _TOOL_SELECTION = (
@@ -100,7 +100,8 @@ _TOOLS = (
 )
 
 _WORKFLOW_NOTE = (
-    "- 工作流：propose_workflow(spec)——仅当任务能拆成**互相独立、可并行**的子任务时用"
+    "【工作流(概要)】\n"
+    "工作流：propose_workflow(spec)——仅当任务能拆成**互相独立、可并行**的子任务时用"
     "(审计多文件/给多模块各写测试/多视角评审/对抗验证);顺序依赖、单文件、小任务别用，单线程直接干。"
     "spec 为字面量 dict{name, description, stages:[{id, op, over, agent, ...}]}，"
     "op 五选一:fan_out/pipeline/panel/loop_until/synthesize;深度恒 1(子 agent 不能再开工作流);"
