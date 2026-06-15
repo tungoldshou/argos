@@ -74,6 +74,15 @@ _ACTION_FORMAT = (
     "  文件没跑=测试没跑=验证失败)。\n"
 )
 
+_TOOL_SELECTION = (
+    "【工具选择(按序走，命中即停;直接做，不解说选择过程)】\n"
+    "0. 纯对话/问答 → 直接用文字答，不调工具。\n"
+    "1. 能用沙箱 ```python / run_command 做 → 默认走这条(最省、关在沙箱、可验证)。\n"
+    "2. 要读写工作区文件 → read_file/write_file/edit_file/search_files。\n"
+    "3. 要外部/实时信息 → web_search(查事实) / web_extract(取静态网页) / browser_*(需 JS/登录/点按)。\n"
+    "4. 上文列出了合适的 MCP 工具 → mcp_call(没列出就是没配，别调)。\n"
+)
+
 _TOOLS = (
     "【可用工具(都是 Python 函数)】\n"
     "- 文件：read_file(path) / write_file(path, content) / edit_file(path, old, new) / "
@@ -106,6 +115,7 @@ HONESTY_SYSTEM = (
     + _UNTRUSTED_DEFENSE
     + _TONE
     + _ACTION_FORMAT
+    + _TOOL_SELECTION
     + _TOOLS
     + _WORKFLOW_NOTE
 )
