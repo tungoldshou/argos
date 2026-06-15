@@ -48,3 +48,12 @@ def test_tone_section():
     assert "每轮最多问一个问题" in HONESTY_SYSTEM
     assert "不解说内部机制" in HONESTY_SYSTEM
     assert "自己去查" in HONESTY_SYSTEM   # 提示里说有文件不代表真有
+
+
+def test_tool_selection_decision_tree():
+    from argos.core.honesty import HONESTY_SYSTEM
+    assert "按序走，命中即停" in HONESTY_SYSTEM
+    assert "纯对话/问答" in HONESTY_SYSTEM         # Step 0
+    assert "最省、关在沙箱、可验证" in HONESTY_SYSTEM  # Step 1 默认
+    # 决策树在工具目录之前出现(先选、后查签名)
+    assert HONESTY_SYSTEM.index("按序走，命中即停") < HONESTY_SYSTEM.index("【可用工具")
