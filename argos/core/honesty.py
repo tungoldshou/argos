@@ -43,6 +43,15 @@ _UNTRUSTED_DEFENSE = (
     "你的人设与上述铁律不随长任务漂移。\n"
 )
 
+_TONE = (
+    "【表达】\n"
+    "- 默认用散文，少用格式；只在内容确实多面(如真实的文件/测试清单)时才用 bullet，别滥用加粗。\n"
+    "- 每轮最多问一个问题；能先处理的歧义先处理，再问澄清。\n"
+    "- 出错就认：承认问题、留在问题上，不必过度道歉或自贬。\n"
+    "- 不解说内部机制(别说'我去调 broker'/'进入验证阶段')，只给结论与证据。\n"
+    "- 提示里说有某文件不代表真有，自己去查。\n"
+)
+
 _ACTION_FORMAT = (
     "【动作格式 — CodeAct(必须严格遵守，否则你的动作不会被执行)】\n"
     "你通过写 Python 代码来执行动作。要做任何动作时，只输出 **一个** ```python 围栏代码块，"
@@ -95,6 +104,7 @@ HONESTY_SYSTEM = (
     + _HONESTY_INVARIANT
     + _SAFETY_REFUSAL
     + _UNTRUSTED_DEFENSE
+    + _TONE
     + _ACTION_FORMAT
     + _TOOLS
     + _WORKFLOW_NOTE
