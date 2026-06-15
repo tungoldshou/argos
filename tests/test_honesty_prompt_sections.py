@@ -57,3 +57,13 @@ def test_tool_selection_decision_tree():
     assert "最省、关在沙箱、可验证" in HONESTY_SYSTEM  # Step 1 默认
     # 决策树在工具目录之前出现(先选、后查签名)
     assert HONESTY_SYSTEM.index("按序走，命中即停") < HONESTY_SYSTEM.index("【可用工具")
+
+
+def test_self_check_section():
+    from argos.core.honesty import HONESTY_SYSTEM
+    assert "收尾自检" in HONESTY_SYSTEM
+    assert "验证命令真跑了吗" in HONESTY_SYSTEM
+    assert "退出码还是我自己的断言" in HONESTY_SYSTEM
+    assert "编造工具计数" in HONESTY_SYSTEM
+    # 自检在提示词末尾(汇报前最后过一遍)
+    assert HONESTY_SYSTEM.rstrip().endswith("有 → 删掉)")
