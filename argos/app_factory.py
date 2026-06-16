@@ -250,6 +250,17 @@ def build_run_stack(
                 _dom_prober = DomProber(c.browser_controller)
             except Exception:  # noqa: BLE001 — 构造失败不阻断 run
                 pass
+        # 2d GUI 探针:仅 ARGOS_COMPUTER_USE 开时注入(GuiProber 经 ComputerExecutor 截图+OCR)。
+        # 未开 → None,GUI 验证 lane 跳过(行为同之前);ComputerExecutor 自身也会在未开时返禁止消息。
+        _gui_prober = None
+        import os as _os_gp
+        if _os_gp.environ.get("ARGOS_COMPUTER_USE"):
+            try:
+                from argos.verify.gui_probe import GuiProber
+                from argos.perception.executor import ComputerExecutor
+                _gui_prober = GuiProber(ComputerExecutor())
+            except Exception:  # noqa: BLE001 — 构造失败不阻断 run
+                pass
         return AgentLoop(
             store=c.store, bus=EventBus(), sandbox=sandbox,
             broker=broker, model=c.model, verifier=c.verifier, config=c.config,
@@ -259,6 +270,7 @@ def build_run_stack(
             mcp_manager=c.mcp_manager,
             intent_engine=c.intent_engine,  # P4 §7 意图引擎透传
             dom_prober=_dom_prober,          # A2 L3 DOM 探针（None=未接入）
+            gui_prober=_gui_prober,          # 2d GUI 探针（None=computer use 未开/未接入）
         )
 
     return RunStack(sandbox=sandbox, gate=gate, broker=broker, loop_factory=_loop_factory)

@@ -29,6 +29,7 @@ ALL_TOOL_NAMES: list[str] = [
     "read_file", "write_file", "edit_file", "search_files",
     "run_command", "web_search", "web_extract", "propose_verify",
     "propose_dom_verify",  # A2 L3 DOM 验证声明（与 propose_verify 同构，结果由 DomProber 判定）
+    "propose_gui_verify",  # 2d GUI 验证声明（截图+OCR 独立断言屏上文本，结果由 GuiProber 三态判定）
     "update_plan",
     "propose_workflow",
     # 计算机控制(浏览器)—— broker-gated,host 侧 sync Playwright 专线程执行。
@@ -309,6 +310,20 @@ def _propose_dom_verify_pure(
     return f"[已登记 DOM 验证: {', '.join(parts)}（host 侧 DomProber 收尾时断言，以三态为准）]"
 
 
+def _propose_gui_verify_pure(expected_text: str) -> str:
+    """声明用 GUI 探针验证电脑控制(OS 级)改动 —— 截图 + 独立 OCR 断言屏上应出现的文本。
+
+    与 propose_verify/propose_dom_verify 同构:沙箱是独立子进程,这里仅给登记回执;host loop
+    解析 propose_gui_verify(expected_text=...) 登记策略,收尾时由 GuiProber 在 host 侧截图 + OCR
+    独立断言(agent 碰不到),以 passed/failed/unverifiable 三态为准。OCR 用的是与你无关的确定性
+    识别(绝不反过来问你"成功没"——那是自证)。OCR/截图不可用 → unverifiable(诚实,不假装成功)。
+
+    Args:
+        expected_text: 操作完成后屏幕上应出现的文本(必填;声明式内容断言)。
+    """
+    return f"[已登记 GUI 验证: expected_text={expected_text!r}（host 侧 GuiProber 收尾时截图+OCR 断言，以三态为准）]"
+
+
 def _update_plan_pure(todos: list[dict]) -> str:
     """列出/更新任务的子任务清单(真 TODO 拆解,借 Claude Code TodoWrite)。
 
@@ -376,6 +391,7 @@ def _pure() -> dict[str, Any]:
         # 命名空间不含写工具(诚实 fail-closed:不能治理就不给写),只读工具仍在。
         "propose_verify": _propose_verify_pure,
         "propose_dom_verify": _propose_dom_verify_pure,  # A2 L3 DOM 验证桩（登记回执，真执行在 host）
+        "propose_gui_verify": _propose_gui_verify_pure,  # 2d GUI 验证桩（登记回执，host 侧 GuiProber 断言）
         "update_plan": _update_plan_pure,
         "propose_workflow": _propose_workflow_pure,
     }

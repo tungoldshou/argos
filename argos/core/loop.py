@@ -92,6 +92,10 @@ _PROPOSE_DOM_VERIFY = re.compile(
 _DOM_KW_URL = re.compile(r"""url\s*=\s*['"]([^'"]+)['"]""")
 _DOM_KW_SEL = re.compile(r"""selector\s*=\s*['"]([^'"]+)['"]""")
 _DOM_KW_EXP = re.compile(r"""expected_text\s*=\s*['"]([^'"]+)['"]""")
+# 2d GUI 验证:propose_gui_verify(expected_text=...) host 侧解析(与 propose_dom_verify 同构)。
+# 沙箱内调用仅返回登记回执;真断言在 host verify 阶段由 GuiProber 截图+OCR 独立执行。
+_PROPOSE_GUI_VERIFY = re.compile(r"propose_gui_verify\s*\(([^)]*)\)", re.DOTALL)
+_GUI_KW_EXP = re.compile(r"""expected_text\s*=\s*['"]([^'"]+)['"]""")
 _DOM_URL_ALLOWED = re.compile(r"^https?://", re.I)
 _DOM_PARAM_MAX = 500  # selector / expected_text 最大长度，防滥用
 
@@ -313,6 +317,7 @@ class AgentLoop:
         intent_engine: Any = None,  # P4 §7 IntentEngine | None;None=关闭,行为零变更
         capability_hints: dict[str, str] | None = None,  # P4 策略生成:registry verify_hint 聚合;None=空 dict
         dom_prober: Any = None,  # A2 L3 DOM 探针:DomProber | None;None=未接入,行为同现状(L3 跳过)
+        gui_prober: Any = None,  # 2d GUI 探针:GuiProber | None;None=未接入,GUI 验证 lane 跳过
     ) -> None:
         self._store = store
         self._bus = bus
@@ -340,6 +345,9 @@ class AgentLoop:
         # A2 Major-2:propose_dom_verify 声明时附带的 expected_text（可为空串）。
         # 与 _pending_l3_strategy 同生命周期（一起 reset/消费）；覆盖 capability_hints['dom_expected_text']。
         self._pending_dom_expected_text: str = ""
+        # 2d GUI 探针 + 挂起 expected_text(propose_gui_verify 声明时存;verify 阶段消费)。
+        self._gui_prober = gui_prober
+        self._pending_gui_expected_text: str = ""
         # P4 §7 意图确认挂起:call_id 注册表,与 _plan_call_registry 同构。
         # _intent_confirm_registry:call_id → asyncio.Event,respond_intent_confirm 唤醒 loop。
         # _intent_confirmed:确认结果(True=继续, False=取消);_intent_effective_goal:确认后目标。
@@ -444,6 +452,7 @@ class AgentLoop:
         # A2 L3:每轮重置挂起 L3 策略(防上轮残留泄漏)。
         self._pending_l3_strategy = None
         self._pending_dom_expected_text = ""
+        self._pending_gui_expected_text = ""   # 2d:每轮重置 GUI 验证声明
 
     def _on_propose_verify(self, cmd: str) -> bool:
         """agent 调 propose_verify('<cmd>') 时登记验证命令(host 侧;真执行在 verify 阶段)。
@@ -537,6 +546,26 @@ class AgentLoop:
             return True
         except Exception:  # noqa: BLE001 — fail-closed，任何异常静默忽略
             return False
+
+    def _on_propose_gui_verify(self, raw_args: str) -> bool:
+        """agent 调 propose_gui_verify(expected_text=...) 时登记 GUI 验证(2d,与 propose_dom_verify 同构)。
+
+        - 显式 verify_cmd 优先 → 忽略(不覆盖)。
+        - GuiProber 未注入(computer use 未开)→ 静默忽略(向后兼容,GUI lane 跳过)。
+        - expected_text 必填、≤500 字符;存 _pending_gui_expected_text,verify 阶段由 GuiProber
+          截图+OCR 独立断言(host 侧,沙箱碰不到)。
+        返回是否登记成功(False=被拒/忽略)。
+        """
+        if self._verify_cmd is not None and self._verify_cmd.strip():
+            return False
+        if self._gui_prober is None:
+            return False
+        exp_m = _GUI_KW_EXP.search(raw_args)
+        expected_text = exp_m.group(1).strip() if exp_m else ""
+        if not expected_text or len(expected_text) > _DOM_PARAM_MAX:
+            return False
+        self._pending_gui_expected_text = expected_text
+        return True
 
     def respond_plan_decision(
         self, call_id: str, action: str, feedback: str | None = None,
@@ -739,6 +768,50 @@ class AgentLoop:
             verdict = Verdict.failed(detail=detail, verify_cmd=label, attempts=attempt)
 
         # 投 VerifyVerdict 事件（走既有账本/TUI 路径）
+        await self._harness.bus.emit(_VV(verdict=verdict))
+        return verdict
+
+    async def _run_gui_probe_verdict(self, expected_text: str, *, attempt: int) -> "Verdict":
+        """2d GUI 探针:调 GuiProber(截图 + 独立 OCR),返三态 Verdict,投 VerifyVerdict。
+
+        安全不变量(与 DOM 探针同构):
+          · error 非空 → unverifiable(OCR/截图不可用/异常,绝不假装 passed)。
+          · found=True → passed(屏上确认含 expected_text,带 OCR 摘录)。
+          · found=False + error 空 → failed(真实证据:屏上未命中,回灌 bounce)。
+        GuiProber.probe 同步(截图+OCR),用 to_thread 包避免阻塞 event loop。
+        """
+        import asyncio as _asyncio
+        from argos.core.types import Verdict
+        from argos.protocol.events import VerifyVerdict as _VV
+
+        label = f"gui_assert:{expected_text[:40]}"
+        try:
+            result = await _asyncio.to_thread(self._gui_prober.probe, expected_text)
+        except Exception as exc:  # noqa: BLE001 — fail-closed
+            class _R:  # noqa: N801 — 局部哨兵
+                found = False
+                text_excerpt = ""
+                error = f"GUI 探针线程异常:{type(exc).__name__}: {exc}"
+            result = _R()  # type: ignore[assignment]
+
+        if result.error:
+            verdict = Verdict(
+                status="unverifiable",
+                detail=f"[GUI 探针] 屏上文本断言无法机检(unverifiable):{result.error}",
+                verify_cmd=label, attempts=attempt,
+            )
+        elif result.found:
+            excerpt = result.text_excerpt[:200] if result.text_excerpt else "(无摘录)"
+            verdict = Verdict.passed(
+                detail=f"[GUI 探针] 屏上确认含 {expected_text!r}。OCR 摘录:{excerpt}",
+                verify_cmd=label, attempts=attempt,
+            )
+        else:
+            verdict = Verdict.failed(
+                detail=(f"[GUI 探针] 屏上未找到 {expected_text!r}(OCR 未命中)。"
+                        "请检查 GUI 操作是否已生效。"),
+                verify_cmd=label, attempts=attempt,
+            )
         await self._harness.bus.emit(_VV(verdict=verdict))
         return verdict
 
@@ -1295,6 +1368,11 @@ class AgentLoop:
             for dm in _PROPOSE_DOM_VERIFY.finditer(text):
                 self._on_propose_dom_verify(dm.group(1))
 
+            # 2d:抓 propose_gui_verify(expected_text=...) → 存 _pending_gui_expected_text;
+            # verify 阶段由 GuiProber 截图+OCR 独立断言(host 侧,沙箱碰不到)。
+            for gm in _PROPOSE_GUI_VERIFY.finditer(text):
+                self._on_propose_gui_verify(gm.group(1))
+
             # 拒登记回灌:H1 伪命令(永远是) + W5 桥接 verify 锁(默认开,关需 ARGSOS_BRIDGE_VERIFY_LOCK=0)。
             if self._verify_rejected is not None:
                 if getattr(self, "_verify_rejected_fstring", False):
@@ -1560,6 +1638,12 @@ class AgentLoop:
                 )
                 self._pending_l3_strategy = None  # 已消费，清空
                 self._pending_dom_expected_text = ""  # 同步清空
+            elif self._pending_gui_expected_text and self._verify_cmd is None:
+                # 2d GUI 验证 lane:截图+OCR 独立断言屏上文本(无 shell 命令,与 DOM 探针同构)。
+                verdict = await self._run_gui_probe_verdict(
+                    self._pending_gui_expected_text, attempt=self._fail_count + 1
+                )
+                self._pending_gui_expected_text = ""  # 已消费，清空
             else:
                 # W2:run_verify_gate 跑 verifier 出三态 Verdict,投 VerifyVerdict;真问题超
                 # max_rounds 时它自己投 Escalation。loop 据返回的 verdict 决定 break / bounce。
