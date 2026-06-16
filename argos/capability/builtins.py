@@ -57,8 +57,9 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
     """返回所有内置能力 manifest（dispatch=None → 由 broker 既有 if/elif 执行）。
 
     包含：
-    - 纯沙箱工具（read_file/write_file/edit_file/search_files）—— risk=low，沙箱内直接跑，
-      不经 broker.request 审批；登记 manifest 是为了让 registry.names() 计入工具计数。
+    - 只读纯沙箱工具（read_file/search_files）—— risk=low，沙箱内直接跑，不经 broker.request。
+    - 文件写（write_file/edit_file）—— risk=medium，broker gate-only：host 跑 hard-path/密钥 +
+      签回执后返回放行哨兵,真正落盘留在 Seatbelt 子进程(item 3)。
     - 计划/验证/工作流（update_plan/propose_verify/propose_workflow）—— 沙箱内登记回执，
       host loop 解析后在 host 侧处理；dispatch=None。
     - shell/网络/浏览器/MCP/LSP —— broker-gated，经 broker.request gating 管线。
