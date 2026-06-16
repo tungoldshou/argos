@@ -1151,7 +1151,9 @@ class ArgosApp(App):
             ("计算机控制(浏览器)", [n for n in names if n.startswith("browser_")]),
             ("外部工具", ["mcp_call"]),
             ("LSP 语言服务器", [n for n in names if n.startswith("lsp_")]),
-            ("OS 级控制(P6a)", [n for n in names if n.startswith("computer.")]),
+            # 模型可见名=下划线(ALL_TOOL_NAMES 路径);registry.names() 仍点号 —— 两者都归此组。
+            ("OS 级控制(P6a)", [n for n in names
+                                if n.startswith("computer.") or n.startswith("computer_")]),
             ("编排(工作流)", ["propose_workflow"]),
         ]
         lines = [f"共 {len(names)} 个工具:"]
