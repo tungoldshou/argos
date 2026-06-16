@@ -76,6 +76,29 @@ failures are the known pre-existing Docker test and a parallel-flake of the slow
   already-gated tools. When item 3 lands, file writes get the same interactive approval for free.
 - Synchronous evaluator hard-rules on the no-loop fallback path (item-3-style): the fallback still skips
   `evaluate()`; acceptable (zero regression, and the real path now has full approval).
-- `_execute` runs on the main loop (blocks it during the actual command, after approval) — same blocking
-  profile as before for command execution; threading `_execute` too is a later optimization.
+- `_execute` runs on the main loop (blocks it during the actual command, *after* approval). The loop is now
+  free *during exec* (model code + child I/O run off-loop) but still blocks for the command's own duration —
+  so a slow `run_command` on the daemon's shared loop still stalls other runs for that command's duration.
+  Threading `_execute` too is the natural next optimization (matters most when computer-use, which can be
+  slow, lands).
 - Computer-use reachability + vision loop + coordinate scaling (the original Phase-2 slice) — now unblocked.
+
+## 7. Adversarial review + fixes (opus, 2026-06-15)
+
+Verdict **SHIP** — deadlock-freedom validated end-to-end (real loop + concurrent responder: approve
+executes + receipt, deny refuses, no deadlock). Two Important cancel-path defects found and **fixed**:
+
+- **Slow teardown on cancel-mid-approval.** A cancelled run leaves the child parked mid-`broker_call`, so
+  `SeatbeltExecutor.close()`'s `proc.wait` always timed out → 5s synchronous stall (stalling *all* concurrent
+  daemon runs on the shared loop). Fix: reduced `proc.wait` timeout 5s → 1s (`executor.py`). (Threading
+  `close()` off-loop was considered but rejected — `await` in a generator `finally` under cancellation is
+  fragile; bounding the timeout is the safe fix.)
+- **Orphaned approval leak.** `run_coroutine_threadsafe(request())` is an independent task that doesn't
+  cancel with the run, so an in-flight approval stayed `pending` until its 60s timeout. Fix: `run()`'s
+  `finally` now calls `broker.gate.cancel_all()` (existing machinery) to settle orphans immediately
+  (per-run gate → doesn't touch concurrent runs). Verified by `test_cancel_mid_approval_settles_orphan`.
+
+Tests added beyond the unit/spike layer: `tests/e2e/test_approval_bridge_e2e.py` (slow) drives the **real
+executor → `broker_call` → bridge → interactive approval** path (approve-executes + cancel-settles-orphan),
+via a new `gated=True` option on the `build_real_loop` fixture; plus an AUTO-force-confirm unit test. Full
+suite: 4124 passed, coverage 81.59% (only the known pre-existing Docker failure).

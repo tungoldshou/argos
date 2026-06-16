@@ -55,7 +55,7 @@ def build_real_loop(store, in_project, requires_sandbox):
     """
     created: list = []
 
-    def _make(scripts, *, verify_cmd=None, level=ApprovalLevel.AUTO, max_rounds=3):
+    def _make(scripts, *, verify_cmd=None, level=ApprovalLevel.AUTO, max_rounds=3, gated=False):
         gate = ApprovalGate(level=level)
         broker = CapabilityBroker(
             gate=gate,
@@ -63,10 +63,16 @@ def build_real_loop(store, in_project, requires_sandbox):
             signer=ReceiptSigner(key=b"e2e-key"),
         )
 
-        # 同步 broker_handler 桥(exec_code 阻塞等 broker_reply;AUTO 档直接 _execute)。
-        def broker_handler(action, args):
-            value, _exit = broker._execute(action, args)
-            return value
+        if gated:
+            # 生产同步桥:request_blocking(host_loop 由 loop.run() 自动注入)→ 完整 gating +
+            # ②交互审批。用于断言"沙箱工具调用真经审批闸"(否则下面快路径绕过 gating)。
+            def broker_handler(action, args):
+                return broker.request_blocking(action, args)
+        else:
+            # 旧 e2e 快路径:直调 _execute(无 gating),保留既有用例行为。
+            def broker_handler(action, args):
+                value, _exit = broker._execute(action, args)
+                return value
 
         # 平台感知:macOS → Seatbelt,Linux → bwrap/unshare。
         sandbox = select_backend()(broker_handler=broker_handler)

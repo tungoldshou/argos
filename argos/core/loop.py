@@ -819,6 +819,15 @@ class AgentLoop:
         finally:
             if self._broker is not None and hasattr(self._broker, "set_host_loop"):
                 self._broker.set_host_loop(None)   # 清空,避免跨 run 复用陈旧 loop 引用
+                # cancel 中途断在审批上时,经 run_coroutine_threadsafe 起的 request() 是独立
+                # task,不随 run 取消 → 孤儿审批会 pending 到 60s 超时。cancel_all 立即以 deny
+                # 收尾本 run 残留挂起(per-run gate,不影响其它并发 run)。
+                gate = getattr(self._broker, "gate", None)
+                if gate is not None and hasattr(gate, "cancel_all"):
+                    try:
+                        gate.cancel_all()
+                    except Exception:  # noqa: BLE001 — 收尾清理失败不掩盖主异常
+                        pass
             self._sandbox.close()
 
     async def _enter_phase(self, phase: str) -> AsyncIterator["Event"]:

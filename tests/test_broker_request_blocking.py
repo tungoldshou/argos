@@ -69,6 +69,23 @@ async def test_request_blocking_denied_returns_refusal(monkeypatch):
     assert br.last_receipt is None
 
 
+@pytest.mark.asyncio
+async def test_request_blocking_force_confirms_run_command_under_auto(monkeypatch):
+    """AUTO 档下 run_command 仍被 _FORCE_CONFIRM 经桥强制弹审批(不静默跑 shell)。"""
+    def fake_run(command, *, workspace=None):
+        return ("ran", 0)
+    monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
+
+    br = _broker(level=ApprovalLevel.AUTO)
+    br.set_host_loop(asyncio.get_running_loop())
+    worker = asyncio.create_task(
+        asyncio.to_thread(br.request_blocking, "run_command", {"command": "ls"})
+    )
+    assert await _respond_first_pending(br.gate, "once"), \
+        "AUTO 档 run_command 未被 force-confirm(桥旁路了 _FORCE_CONFIRM?)"
+    assert await worker == "ran"
+
+
 def test_request_blocking_fallback_no_host_loop(monkeypatch):
     """host_loop 未设(headless/旧路径)→ 回退 execute_sync(无交互审批,零回归;仍签回执)。"""
     def fake_run(command, *, workspace=None):
