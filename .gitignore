@@ -2,6 +2,9 @@
 .DS_Store
 *.log
 
+# transient Seatbelt sandbox profile written at runtime
+.argos_sandbox.sb
+
 # local env (dev keys — never commit)
 .env.local
 .env*.local
