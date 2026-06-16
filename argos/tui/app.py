@@ -83,10 +83,12 @@ _BASE_SUBTITLE = "百眼智能体"
 
 
 def _app_version() -> str:
-    """TopBar 显示用版本(单一来源 importlib.metadata,与 splash 同口径)。"""
+    """TopBar 显示用版本(单一来源 argos.__version__ ← pyproject/VERSION,与 splash 同口径)。
+    不能用 version("argos") —— 分发名是 "argos-agent",查 "argos" 必 PackageNotFoundError 回退
+    "0.x"(2026-06-16 真机:顶栏显示 v0.x 的根因)。argos.__version__ 已做 argos-agent + VERSION 兜底。"""
     try:
-        from importlib.metadata import version
-        return version("argos")
+        from argos import __version__
+        return __version__
     except Exception:  # noqa: BLE001
         return "0.x"
 

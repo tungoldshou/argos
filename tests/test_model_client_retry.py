@@ -130,6 +130,53 @@ async def test_stream_429_exhausted_key_not_reused_immediately(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_stream_transport_error_then_200_retries(monkeypatch):
+    """传输层断连(RemoteProtocolError「Server disconnected without sending a response」)
+    = transient 网络抖动,不是 HTTP 状态码错误 → 此前只 except HTTPStatusError,该错误裸抛把
+    丑陋链式 traceback 甩给用户、run 当场死(2026-06-16 真机 bug)。应像 5xx 一样退避重试。"""
+    tier = ModelTier(name="worker", model="m", base_url="https://api.x/anthropic", max_tokens=4096)
+    pool = CredentialPool(["key-a"])
+    call_count = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+        return _ok_response("已恢复")
+
+    from argos.core import recovery
+    monkeypatch.setattr(recovery, "jittered_backoff", lambda attempt, **kw: 0.0)
+
+    client = ModelClient(tier=tier, pool=pool, transport=httpx.MockTransport(handler))
+    chunks = [c async for c in client.stream([{"role": "user", "content": "hi"}], system="S")]
+    assert "".join(chunks) == "已恢复", f"传输断连应退避重试到成功,实际 chunks={chunks}"
+    assert call_count["n"] == 2, f"应重试 1 次(1×断连 + 1×200),实际 {call_count['n']}"
+
+
+@pytest.mark.asyncio
+async def test_stream_transport_error_persistent_raises_after_max_attempts(monkeypatch):
+    """持续传输断连 → max_attempts(3) 后抛(不无限重试、不假装成功)。"""
+    tier = ModelTier(name="worker", model="m", base_url="https://api.x/anthropic", max_tokens=4096)
+    pool = CredentialPool(["key-a"])
+    call_count = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+
+    from argos.core import recovery
+    monkeypatch.setattr(recovery, "jittered_backoff", lambda attempt, **kw: 0.0)
+
+    client = ModelClient(tier=tier, pool=pool, transport=httpx.MockTransport(handler))
+    with pytest.raises(httpx.TransportError):
+        async for _ in client.stream([{"role": "user", "content": "hi"}], system="S"):
+            pass
+    assert call_count["n"] == 3, (
+        f"持续传输断连应在 max_attempts(3) 后抛,实际调用 {call_count['n']} 次"
+    )
+
+
+@pytest.mark.asyncio
 async def test_stream_429_persistent_raises_after_max_attempts(monkeypatch):
     """持续 429 直到 max attempts → 抛最后一次 429(不无限重试、不撒谎说成 200)。"""
     tier = ModelTier(name="worker", model="m", base_url="https://api.x/anthropic", max_tokens=4096)

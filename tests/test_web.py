@@ -39,6 +39,29 @@ def test_ddgs_normalizes_hits(monkeypatch):
     assert out["results"][0] == {"title": "A", "url": "http://a", "snippet": "ba"}
 
 
+def test_ddgs_search_times_out_instead_of_hanging(monkeypatch):
+    """ddgs 9.x 库本身无超时参数 → 网络卡死会无限挂起,拖到 smolagents 执行器超时才以丑陋
+    traceback 收场(2026-06-16 真机:查天气 117s 后 TimeoutError)。_ddgs_search 必须用硬截止
+    时间兜底:超时即返回诚实错误,而不是挂死。"""
+    import threading
+    entered = threading.Event()
+
+    class HangingDDGS:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def text(self, query, max_results):
+            entered.set()
+            threading.Event().wait(5.0)   # 模拟卡死的网络请求(永远等不到的事件超时返回)
+            return []
+
+    monkeypatch.setattr(web, "_DDGS", HangingDDGS)
+    monkeypatch.setattr(web, "_DDGS_TIMEOUT_S", 0.2)
+    out = web._ddgs_search("成都明天天气", 5)
+    assert entered.wait(1.0), "应真的进了搜索线程"
+    assert out["success"] is False
+    assert "超时" in out["error"], out
+
+
 def test_extract_uses_trafilatura(monkeypatch):
     monkeypatch.setattr(web, "_http_get", lambda url: "<html><body><p>hello world</p></body></html>")
     monkeypatch.setattr(web, "_trafilatura_extract", lambda html: "hello world")

@@ -22,8 +22,9 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 try:
-    from importlib.metadata import version as _v
-    _VERSION = _v("argos")
+    # 单一来源 argos.__version__(查分发名 "argos-agent" + VERSION 文件兜底)。
+    # 不能用 version("argos") —— 分发名非 "argos",必 PackageNotFoundError 回退占位符。
+    from argos import __version__ as _VERSION
 except Exception:  # noqa: BLE001
     _VERSION = "0.x"
 

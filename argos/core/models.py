@@ -146,12 +146,25 @@ class ModelClient:
             # 本次 stream 的 usage 清零;边流边抓 usage 帧。
             self.last_usage = {"input_tokens": 0, "output_tokens": 0,
                                "cache_read": 0, "cache_creation": 0}
+            yielded_any = False  # 本次尝试是否已吐过 delta(决定传输断连能否安全重试)
             try:
                 async for delta in self._stream_one_attempt(
                     cred, messages, system, system_dynamic,
                 ):
+                    yielded_any = True
                     yield delta
                 return  # 成功,不再 retry
+            except httpx.TransportError:
+                # 传输层错误(RemoteProtocolError「Server disconnected without sending a
+                # response」/ ConnectError / ReadTimeout 等)= transient 网络抖动,不是 HTTP 状态码
+                # 错误,不会被下面的 HTTPStatusError 捕获 → 此前直接裸抛,把丑陋链式 traceback 甩给
+                # 用户、run 当场死(2026-06-16 真机 bug:agnes-flash 断连)。像 5xx 一样退避重试。
+                # 安全:仅在本次尝试【尚未 yield 过任何 delta】时重试 —— 否则重发会重复已输出文本。
+                # 最后一次仍失败 / 已部分输出 → 抛(不撒谎、不死循环、不重复)。
+                if yielded_any or attempt >= max_attempts - 1:
+                    raise
+                await asyncio.sleep(recovery.jittered_backoff(attempt))
+                continue
             except httpx.HTTPStatusError as e:
                 status = e.response.status_code
                 body = e.response.text or ""
