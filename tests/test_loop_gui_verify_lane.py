@@ -60,6 +60,13 @@ def test_ignored_without_expected_text():
     assert loop._on_propose_gui_verify("") is False
 
 
+def test_ignored_when_expected_text_too_trivial():
+    # 单字符断言几乎必命中任意屏幕 → 反平凡门槛拒登记(防伪造 passed)。
+    loop = _loop(gui_prober=_FakeProber(None))
+    assert loop._on_propose_gui_verify("expected_text='e'") is False
+    assert loop._pending_gui_expected_text == ""
+
+
 # ── _run_gui_probe_verdict:三态映射 ──────────────────────────────────────
 @pytest.mark.asyncio
 async def test_verdict_passed_when_found():
