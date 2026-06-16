@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -80,6 +81,12 @@ class CapabilityBroker:
         # 非 None 时:risk 查表优先走 registry.risk_table(),内置 _RISK 作 fallback 兜底;
         # _execute 前先尝试 registry dispatch;LSP 等仅注册表知晓的能力方可通过 request()。
         self._registry = registry
+        # 同步桥交互审批:run 起点由 AgentLoop 注入 host event loop;broker_handler 在
+        # exec_code 工作线程里据此把 request() 提交回主循环(主循环此刻空闲 → 交互审批能 await)。
+        # None = 无 host loop(headless/旧测试)→ request_blocking 回退 execute_sync。
+        self._host_loop: Any = None
+        # 桥阻塞上限:gate.request 自身 60s 超时,300s 是安全上界(防主循环异常死等)。
+        self._bridge_timeout: float = 300.0
 
     async def request(self, action: str, args: dict[str, Any]) -> Any:
         """返回灌回沙箱的值(成功=工具串;拒绝=拒绝串)。副作用:签 Receipt 存 last_receipt。
@@ -173,6 +180,31 @@ class CapabilityBroker:
             action=action, args=args, result=value, exit_code=exit_code,
         )
         return value, exit_code
+
+    def set_host_loop(self, loop: Any) -> None:
+        """注入/清空 run 的 host event loop(同步桥交互审批用)。AgentLoop 在 run 起点设、
+        finally 清。None = request_blocking 回退 execute_sync(无交互审批,保兼容)。"""
+        self._host_loop = loop
+
+    def request_blocking(self, action: str, args: dict[str, Any]) -> Any:
+        """同步桥入口(broker_handler 在 exec_code 工作线程里调用):把 request() 提交回
+        host_loop 阻塞等结果 —— 完整 gating(egress + 交互审批 + 执行 + 回执)。
+
+        - host_loop 已设 → run_coroutine_threadsafe(request) + 阻塞等。exec_code 已被
+          AgentLoop 移进工作线程,主循环此刻空闲 → gate.request 能 await 用户、TUI 能渲染审批卡。
+        - host_loop 未设(headless/旧测试)→ 回退 execute_sync(egress + 执行 + 回执,跳过②交互
+          审批)。行为同改造前,零回归。
+        - 桥异常/超时 → fail-closed 返回拒绝串(模型看到换路,不抛;绝不静默放行)。
+        """
+        loop = self._host_loop
+        if loop is None:
+            value, _exit = self.execute_sync(action, args)
+            return value
+        try:
+            fut = asyncio.run_coroutine_threadsafe(self.request(action, args), loop)
+            return fut.result(timeout=self._bridge_timeout)
+        except Exception as exc:  # noqa: BLE001 — 桥异常 fail-closed 拒
+            return f"错误:审批桥异常({type(exc).__name__}),默认拒绝。"
 
     def _derive_network_actions(self) -> set[str]:
         """P2 egress manifest 驱动:从 registry 派生需要 egress 检查的动作集合。
