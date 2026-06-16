@@ -122,6 +122,47 @@ async def test_verify_phase_emitted_before_verdict():
         assert verify_phase_idx < verdict_idx, "PhaseChange('verify') 必须在 VerifyVerdict 之前(W1)"
 
 
+# ── 人性化:对话轮不走验证门,工程轮照走(2026-06-16 用户反馈)──────────────────
+
+
+@pytest.mark.asyncio
+async def test_conversational_turn_skips_verify_ceremony():
+    """纯对话(无代码块、没改任何东西、无 verify_cmd)→ 像 Claude Code 一样直接答复:
+    不投 VerifyVerdict、不显示"完成。未机检验证"。验证门是给工程改动的护城河,闲聊不该走。"""
+    loop = _loop(["你好！我是 Argos，有什么可以帮你的？"])   # 一段纯文字,无 ```python
+    events = []
+    async for ev in loop.run("你好", "s"):
+        events.append(ev)
+    assert not [e for e in events if isinstance(e, VerifyVerdict)], "对话轮不该投验证判决"
+    tokens = "".join(e.text for e in events if isinstance(e, TokenDelta))
+    assert "未机检验证" not in tokens, f"对话轮不该显示未机检验证完成行,实际:{tokens!r}"
+    assert "本轮结束" not in tokens, f"对话轮不该显示任务完成行,实际:{tokens!r}"
+    # 四阶段铁律仍守:plan→…→report 都在(只是 verify 静默)。
+    phases = [e.phase for e in events if isinstance(e, PhaseChange)]
+    assert phases[0] == "plan" and phases[-1] == "report"
+
+
+@pytest.mark.asyncio
+async def test_engineering_turn_still_runs_verify_gate():
+    """改了代码(write_file → made_changes=True)→ 仍走完整验证门(护城河分毫不减):必有 VerifyVerdict。"""
+    scripts = ["```python\nwrite_file('a.txt','hi')\n```", "完成了。"]
+    loop = _loop(scripts)   # verify_cmd=None,但 made_changes=True → 非对话轮 → 仍投判决
+    events = []
+    async for ev in loop.run("写个文件", "s"):
+        events.append(ev)
+    assert [e for e in events if isinstance(e, VerifyVerdict)], "工程改动必须投验证判决(护城河)"
+
+
+@pytest.mark.asyncio
+async def test_explicit_verify_cmd_turn_runs_gate_even_without_changes():
+    """用户显式声明了 verify_cmd → 即使本轮没改东西也照走验证门(用户声明压倒对话判别)。"""
+    loop = _loop(["我看看就好。"], verify_cmd="echo ok")   # 无代码块,但有显式 verify_cmd
+    events = []
+    async for ev in loop.run("检查一下", "s"):
+        events.append(ev)
+    assert [e for e in events if isinstance(e, VerifyVerdict)], "声明了 verify_cmd 必须投判决"
+
+
 # ── 反馈接线回归(本轮修复:真模式"回车像没反应"根因)────────────────────────────
 
 
@@ -204,8 +245,10 @@ async def test_cost_none_for_unknown_model_not_fake_zero():
 
 @pytest.mark.asyncio
 async def test_loop_emits_visible_completion_line_no_test():
-    """回归:无 verify_cmd 的诚实完成必须在 transcript 可见(此前只写进 DB,UI 一片空白)。"""
-    model = FakeModel(["```python\nx=1\n```", "完成。"])
+    """回归:无 verify_cmd 但【真改了东西】的工程任务,诚实完成("未机检验证")必须在 transcript
+    可见(此前只写进 DB,UI 一片空白)。注:脚本用 write_file(made_changes=True)才是工程任务 —
+    纯执行/读问答(不改文件)现在按对话轮直接答复、不显示完成判决行(2026-06-16 人性化)。"""
+    model = FakeModel(["```python\nwrite_file('a.txt','x')\n```", "完成。"])
     loop = _loop_with(model, verify_cmd=None)
     texts = [ev.text for ev in [e async for e in loop.run("g", "s")]
              if isinstance(ev, TokenDelta)]

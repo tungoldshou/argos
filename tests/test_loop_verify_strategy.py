@@ -30,6 +30,23 @@ class _CompletingModel:
             yield ch
 
 
+class _ImplementingModel:
+    """第一轮真写代码(made_changes=True),第二轮宣布完成 —— 触发策略推断验证【改动】。
+    策略推断/verify 门只对工程改动生效(纯对话/纯读问答 2026-06-16 起直接答复不走门),
+    故策略降级测试须用本模型(真改东西)才能跑到推断+降级链。"""
+    last_usage: dict = {}
+
+    def __init__(self) -> None:
+        self._i = 0
+
+    async def stream(self, messages, *, system="", system_dynamic=""):
+        scripts = ["```python\nwrite_file('impl.py', 'x = 1')\n```", "实现完成。"]
+        t = scripts[min(self._i, len(scripts) - 1)]
+        self._i += 1
+        for ch in t:
+            yield ch
+
+
 class _FakeSandbox:
     def spawn(self, *, workspace, namespace, allow_workflow=True, read_only=False): ...
     def exec_code(self, code): return ExecResult(stdout="", value_repr="", exc="")
@@ -72,14 +89,17 @@ def _make_loop(
     verify_cmd: str | None = None,
     max_steps: int = 5,
     capability_hints: dict[str, str] | None = None,
+    model=None,
 ) -> AgentLoop:
-    """构造最小 AgentLoop（不跑真模型/真沙箱）。"""
+    """构造最小 AgentLoop（不跑真模型/真沙箱）。
+    model 默认 _CompletingModel(不改东西);测策略推断/降级须传 _ImplementingModel(made_changes=True),
+    否则会被【对话轮直接答复】短路、跑不到推断(2026-06-16 人性化)。"""
     return AgentLoop(
         store=_FakeStore(),
         bus=EventBus(),
         sandbox=_FakeSandbox(),
         broker=None,
-        model=_CompletingModel(),
+        model=model or _CompletingModel(),
         verifier=verifier or _RecordingVerifier(),
         config=LoopConfig(verify_cmd=verify_cmd, max_steps=max_steps, max_rounds=1),
         capability_hints=capability_hints,
@@ -183,7 +203,7 @@ def test_blacklisted_strategy_cmd_degrades_to_no_test(tmp_path: Path, monkeypatc
 
     (tmp_path / "conftest.py").write_text("")
     verifier = _RecordingVerifier()
-    loop = _make_loop(verifier=verifier)
+    loop = _make_loop(verifier=verifier, model=_ImplementingModel())  # 真改东西才进策略推断
     loop._workspace = tmp_path
 
     events = _collect_events(loop, "implement feature")
@@ -218,7 +238,7 @@ def test_trivial_cmd_in_strategy_degrades_gracefully(tmp_path: Path, monkeypatch
     monkeypatch.setattr(_strat_mod, "generate", lambda *a, **kw: _echo_then_l5)
 
     verifier = _RecordingVerifier()
-    loop = _make_loop(verifier=verifier)
+    loop = _make_loop(verifier=verifier, model=_ImplementingModel())  # 真改东西才进策略推断
     loop._workspace = tmp_path
 
     _collect_events(loop, "implement feature")
@@ -248,7 +268,7 @@ def test_non_allowlisted_cmd_in_strategy_degrades_gracefully(tmp_path: Path, mon
     monkeypatch.setattr(_strat_mod, "generate", lambda *a, **kw: _curl_then_l5)
 
     verifier = _RecordingVerifier()
-    loop = _make_loop(verifier=verifier)
+    loop = _make_loop(verifier=verifier, model=_ImplementingModel())  # 真改东西才进策略推断
     loop._workspace = tmp_path
 
     _collect_events(loop, "implement feature")
@@ -336,7 +356,7 @@ def test_no_verify_strategy_env_disables_generation(tmp_path: Path, monkeypatch)
 
     (tmp_path / "conftest.py").write_text("")
     verifier = _RecordingVerifier()
-    loop = _make_loop(verifier=verifier)
+    loop = _make_loop(verifier=verifier, model=_ImplementingModel())  # 真改东西才进策略推断分支
     loop._workspace = tmp_path
 
     events = _collect_events(loop, "implement a sort function")

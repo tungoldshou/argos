@@ -162,7 +162,7 @@ async def test_no_passed_without_reverify_after_compaction():
     store.ensure_session("s", title="t", model="worker", system_snapshot="")
     for i in range(12):
         store.append_message("s", role="user", content=f"历史{i} " + "y" * 50)
-    model = _DoneModel(used=90_000)   # 触发整体压缩
+    model = _ImplementingDoneModel(used=90_000)   # 触发整体压缩 + 真改代码(工程任务才进 verify)
     loop = _mk_loop(store, model, _NoCmdVerifier(), max_steps=3, compact_threshold=0.8)
     events = [ev async for ev in loop.run("目标X", "s")]
     assert loop._compacted is True, "应发生过压缩"
@@ -209,6 +209,22 @@ class _DoneModel:
 
     async def stream(self, messages, *, system, system_dynamic=None):
         for ch in "完成。":
+            yield ch
+
+
+class _ImplementingDoneModel(_DoneModel):
+    """高占用触发整体压缩 + 第一轮真写代码(made_changes=True)→ 工程任务进 verify 重验。
+    压缩信任防御(压缩后不重验不可标 passed)只对【工程改动】有意义;纯对话/纯读问答现在
+    直接答复不走 verify(2026-06-16 人性化),故该防御测试须用本模型(真改东西)。"""
+    def __init__(self, used: int) -> None:
+        super().__init__(used)
+        self._i = 0
+
+    async def stream(self, messages, *, system, system_dynamic=None):
+        scripts = ["```python\nwrite_file('a.txt', 'x')\n```", "完成。"]
+        t = scripts[min(self._i, len(scripts) - 1)]
+        self._i += 1
+        for ch in t:
             yield ch
 
 

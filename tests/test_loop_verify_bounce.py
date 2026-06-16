@@ -48,9 +48,17 @@ class NonConformingPassedVerifier:
 
 
 class CompletingModel:
-    """每次 stream 均返回无代码块文本("宣布完成")。"""
+    """第一轮真写代码(made_changes=True),第二轮宣布完成 —— 触发 verify 门跑非规范 verifier。
+    注:验证门是给【工程改动】的;纯对话/纯读问答现在直接答复不走门(2026-06-16 人性化),
+    故防御纵深测试须真改东西才进门 —— 这正是该守护要覆盖的场景。"""
+    def __init__(self):
+        self._i = 0
+
     async def stream(self, messages, *, system, system_dynamic=None):
-        for ch in "任务完成了。":
+        scripts = ["```python\nwrite_file('out.txt', 'done')\n```", "任务完成了。"]
+        t = scripts[min(self._i, len(scripts) - 1)]
+        self._i += 1
+        for ch in t:
             yield ch
 
 

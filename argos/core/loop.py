@@ -1296,6 +1296,7 @@ class AgentLoop:
         escalated = False
         noaction_nudged = False   # 0 动作守卫:只催一轮,催过后第二次无代码块允许纯文字收尾(防死循环)。
         made_changes = False      # H2:本轮是否真发生过写操作(write_file/edit_file)。
+        conversational_done = False  # 人性化:纯对话/纯读问答轮 → 跳过验证门展示(report 不加完成判决行)。
         verify_nudged = False     # H2:改了代码却没声明验证 → 只催一轮(防误催纯读/无限催)。
         compactions = 0           # 上下文压缩次数上限,防压缩仍溢出时无限重试。
         text = ""                 # 在 while 外初始化:max_steps=0 等边界下收尾仍能安全 text.strip()
@@ -1622,6 +1623,22 @@ class AgentLoop:
             async for ev in self._enter_phase("verify"):
                 yield ev
 
+            # 人性化(2026-06-16 用户反馈):纯对话 / 纯读问答 —— 本轮没改任何东西
+            # (made_changes=False)、没声明 verify_cmd、没探针 lane —— 像 Claude Code 一样直接
+            # 好好答复,不走验证门那套:不跑 gate、不投 VerifyVerdict、report 也不显示
+            # "完成。未机检验证"。验证门是给【工程改动】的护城河,没改东西就没什么可验;硬走一遍
+            # 只会把"你好"渲染成带判决的任务(啰嗦、像把闲聊当活干)。
+            # 安全不变量:任何真改动(write_file/edit_file → made_changes)、用户显式声明的
+            # verify_cmd、或探针 lane(propose_dom/gui_verify)都会让 conversational=False →
+            # 工程任务护城河分毫不减。四阶段铁律仍守:verify/report 两 phase 照常进(只是 verify 静默)。
+            if (not made_changes and self._verify_cmd is None
+                    and self._pending_l3_strategy is None
+                    and not self._pending_gui_expected_text):
+                conversational_done = True
+                last_verdict = None
+                report_note = ""
+                break
+
             # P4 策略生成:verify_cmd is None 且未 propose_verify → 按确定性规则推断验证策略,
             # 取首个可执行候选走现有 run_verify_gate(白名单/verify_dir 隔离/篡改检测全保留)。
             # 显式 verify_cmd / propose_verify 永远优先于推断 —— 用户声明压倒推断。
@@ -1864,7 +1881,9 @@ class AgentLoop:
             yield ev
         # 可见完成行(诚实反映结局):此前完成只翻 phase + 一条写进 DB 看不见的备注,UI 一片空白
         # 像"没反应"。这里显式打一行,让用户看到本轮真的跑完了及结果。
-        if escalated:
+        if conversational_done:
+            done = ""   # 纯对话/纯读问答:只给答复本身,不加任何完成判决行(像 Claude Code 直接答)
+        elif escalated:
             done = "⚠️ 未能在限定轮内通过验证,已如实上报(见上方升级提示)。\n"
         elif report_note:
             done = f"✅ 完成。{report_note}\n"   # 无测任务:诚实标"未机检验证 (no test command)"
@@ -1900,7 +1919,8 @@ class AgentLoop:
                             not_found=h.not_found, stop_reason=h.stop_reason,
                             error=h.error)
         # Stop 非 0 不阻塞
-        yield TokenDelta(text=done)
+        if done:   # 对话轮 done="" → 不投空完成行,答复本身已在 act 阶段流式给出
+            yield TokenDelta(text=done)
 
     async def _run_workflow(self, raw_spec: dict, messages: list) -> "AsyncIterator[Event]":
         """校验 spec → WorkflowProposed(预览)→ 审批(await gate,异步态不死锁)→ 引擎异步跑 →
