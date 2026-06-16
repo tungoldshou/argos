@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import os
+import threading
 
 # 延迟/可 monkeypatch 的间接层:测试替换这些符号即可,不碰真网。
 try:
@@ -15,13 +16,20 @@ try:
 except Exception:  # pragma: no cover - 包缺失时降级,运行期给出诚实错误
     _DDGS = None
 
+# ddgs 9.x 库本身【无任何超时参数】(实测 9.14.4 源码 0 处 timeout)→ 网络卡死会无限挂起,
+# 拖到 sandbox 子进程 smolagents 执行器超时才以丑陋 traceback 收场(2026-06-16 真机:查天气
+# 117s 后 TimeoutError)。Tavily 路径有 timeout=60、extract 有 timeout=30,唯独免费 DDGS 没护栏。
+# 用 daemon 线程 + 硬截止时间兜底:超时即返回诚实错误;卡死的是 daemon 线程,不阻塞解释器退出。
+_DDGS_TIMEOUT_S = 20.0
+
 
 def _ddgs_search(query: str, limit: int) -> dict:
-    """免费 DuckDuckGo 搜索(无需 key)。归一化为 {title,url,snippet}。"""
+    """免费 DuckDuckGo 搜索(无需 key)。归一化为 {title,url,snippet};带硬超时兜底(防卡死)。"""
     if _DDGS is None:
         return {"success": False, "error": "ddgs 包不可用,无法免费搜索;可配置 TAVILY_API_KEY 升级。"}
-    try:
-        results = []
+
+    def _blocking() -> list[dict]:
+        results: list[dict] = []
         with _DDGS() as client:
             for i, hit in enumerate(client.text(query, max_results=max(1, int(limit)))):
                 if i >= max(1, int(limit)):
@@ -31,9 +39,25 @@ def _ddgs_search(query: str, limit: int) -> dict:
                     "url": str(hit.get("href") or hit.get("url") or ""),
                     "snippet": str(hit.get("body", "")),
                 })
-        return {"success": True, "results": results}
-    except Exception as e:  # noqa: BLE001
-        return {"success": False, "error": f"DuckDuckGo 搜索失败:{e}"}
+        return results
+
+    box: dict[str, object] = {}
+
+    def _target() -> None:
+        try:
+            box["results"] = _blocking()
+        except Exception as e:  # noqa: BLE001 — 错误作为数据回传主线程(ReAct:让 agent 看到失败)
+            box["error"] = e
+
+    t = threading.Thread(target=_target, daemon=True)
+    t.start()
+    t.join(_DDGS_TIMEOUT_S)
+    if t.is_alive():
+        return {"success": False,
+                "error": f"DuckDuckGo 搜索超时(>{int(_DDGS_TIMEOUT_S)}s);可配置 TAVILY_API_KEY 升级。"}
+    if "error" in box:
+        return {"success": False, "error": f"DuckDuckGo 搜索失败:{box['error']}"}
+    return {"success": True, "results": box.get("results", [])}
 
 
 def _tavily_search(query: str, limit: int) -> dict:
