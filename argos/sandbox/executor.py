@@ -82,7 +82,10 @@ class SeatbeltExecutor:
             return
         try:
             self._send({"op": "close"})
-            self._proc.wait(timeout=5)
+            # 1s(原 5s):cancel 中途断在 broker_call 时,子进程 parked 等 broker_reply,
+            # 收不到 {"op":"close"} → wait 必超时再 kill。短超时把"卡满 5s"压到 ≤1s
+            # (正常关闭子进程在读循环里即时退出,这条超时只在 parked 情况触发)。
+            self._proc.wait(timeout=1)
         except Exception:  # noqa: BLE001
             self._proc.kill()
         finally:
