@@ -42,13 +42,13 @@ _RISK: dict[str, str] = {
     "mcp_call": "medium",
     # OS 级计算机控制:屏幕/鼠标是全局资源,Seatbelt 关不住 → 全部 high。
     # 静态兜底:即便 registry=None(headless/旧测试路径),computer.* 仍受高风险管辖。
-    "computer.screenshot": "high",
-    "computer.click": "high",
-    "computer.double_click": "high",
-    "computer.type_text": "high",
-    "computer.key": "high",
-    "computer.scroll": "high",
-    "computer.open_app": "high",
+    "computer_screenshot": "high",
+    "computer_click": "high",
+    "computer_double_click": "high",
+    "computer_type_text": "high",
+    "computer_key": "high",
+    "computer_scroll": "high",
+    "computer_open_app": "high",
 }
 # C1:这些 action 即便在 AUTO(YOLO)档也强制逐个确认 —— 永不静默执行 shell。
 _FORCE_CONFIRM_ACTIONS: set[str] = {"run_command"}
@@ -354,11 +354,11 @@ class CapabilityBroker:
         # OS 级计算机控制(P6a §10):经 ComputerExecutor 执行真实系统调用。
         # 诚实性:屏幕/鼠标是全局资源,Seatbelt 关不住;用"审批+Ledger+high risk"治理。
         # ARGOS_COMPUTER_USE=1 未设置时 ComputerExecutor 自身返回诚实禁止消息。
-        if action.startswith("computer."):
+        if action.startswith("computer_"):
             from argos.perception.actions import ComputerAction
             from argos.perception.executor import ComputerExecutor
-            # 将 broker action 名(如 "computer.click")映射到 ComputerAction.kind
-            kind = action[len("computer."):]   # "click" / "screenshot" / …
+            # 将 broker action 名(如 "computer_click")映射到 ComputerAction.kind
+            kind = action[len("computer_"):]   # "click" / "screenshot" / …
             try:
                 ca = ComputerAction(
                     kind=kind,  # type: ignore[arg-type]

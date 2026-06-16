@@ -5,7 +5,7 @@
   2. check_computer_open_app:命中支付/银行 app 词表 → 返回规则名。
   3. check_computer_hard_rules:总入口按 action 路由。
   4. 非命中场景返回 None(无误报)。
-  5. evaluator.evaluate 在 computer.type_text/computer.open_app 命中时 → ask + hard_rule 前缀触发。
+  5. evaluator.evaluate 在 computer_type_text/computer_open_app 命中时 → ask + hard_rule 前缀触发。
   6. autonomy.classify 将 hard_rule:computer_* 视为不可降级(RED,不被 preauth 降)。
   7. conductor 自治路径(trust≤L1)下命中 → 拒绝并诚实说明原因。
 """
@@ -142,30 +142,30 @@ def test_open_app_non_payment_no_hit(app: str, desc: str):
 # ── 3. check_computer_hard_rules —— 总入口路由 ────────────────────────────────
 
 def test_check_hard_rules_type_text_routes_correctly():
-    """computer.type_text + 金融文本 → 总入口返回规则名。"""
+    """computer_type_text + 金融文本 → 总入口返回规则名。"""
     rule = check_computer_hard_rules(
-        "computer.type_text", {"text": "CVV: 123"}
+        "computer_type_text", {"text": "CVV: 123"}
     )
     assert rule == "computer_type_financial_pattern"
 
 
 def test_check_hard_rules_open_app_routes_correctly():
-    """computer.open_app + 支付 app → 总入口返回规则名。"""
+    """computer_open_app + 支付 app → 总入口返回规则名。"""
     rule = check_computer_hard_rules(
-        "computer.open_app", {"app": "支付宝"}
+        "computer_open_app", {"app": "支付宝"}
     )
     assert rule == "computer_open_payment_app"
 
 
 def test_check_hard_rules_screenshot_returns_none():
-    """computer.screenshot → 无词表规则,返回 None。"""
-    rule = check_computer_hard_rules("computer.screenshot", {})
+    """computer_screenshot → 无词表规则,返回 None。"""
+    rule = check_computer_hard_rules("computer_screenshot", {})
     assert rule is None
 
 
 def test_check_hard_rules_click_returns_none():
-    """computer.click → 无词表规则,返回 None。"""
-    rule = check_computer_hard_rules("computer.click", {"x": 100, "y": 200})
+    """computer_click → 无词表规则,返回 None。"""
+    rule = check_computer_hard_rules("computer_click", {"x": 100, "y": 200})
     assert rule is None
 
 
@@ -182,9 +182,9 @@ def _empty_config() -> PermissionsConfig:
 
 
 def test_evaluator_type_text_financial_returns_ask_with_hard_rule_trigger():
-    """evaluator: computer.type_text + 金融文本 → ask + trigger 以 hard_rule: 开头。"""
+    """evaluator: computer_type_text + 金融文本 → ask + trigger 以 hard_rule: 开头。"""
     meta = evaluate(
-        "computer.type_text",
+        "computer_type_text",
         {"text": "password: supersecret123"},
         gate_level=ApprovalLevel.AUTO,
         config=_empty_config(),
@@ -199,9 +199,9 @@ def test_evaluator_type_text_financial_returns_ask_with_hard_rule_trigger():
 
 
 def test_evaluator_open_payment_app_returns_ask_with_hard_rule_trigger():
-    """evaluator: computer.open_app + 支付 app → ask + trigger 以 hard_rule: 开头。"""
+    """evaluator: computer_open_app + 支付 app → ask + trigger 以 hard_rule: 开头。"""
     meta = evaluate(
-        "computer.open_app",
+        "computer_open_app",
         {"app": "Alipay"},
         gate_level=ApprovalLevel.AUTO,
         config=_empty_config(),
@@ -212,9 +212,9 @@ def test_evaluator_open_payment_app_returns_ask_with_hard_rule_trigger():
 
 
 def test_evaluator_computer_screenshot_non_financial_auto_approve():
-    """evaluator: computer.screenshot(无词表规则) + AUTO → approve(走 default 档)。"""
+    """evaluator: computer_screenshot(无词表规则) + AUTO → approve(走 default 档)。"""
     meta = evaluate(
-        "computer.screenshot",
+        "computer_screenshot",
         {},
         gate_level=ApprovalLevel.AUTO,
         config=_empty_config(),
@@ -224,9 +224,9 @@ def test_evaluator_computer_screenshot_non_financial_auto_approve():
 
 
 def test_evaluator_computer_type_text_normal_auto_approve():
-    """evaluator: computer.type_text + 普通文本 → approve(AUTO 档,无词表命中)。"""
+    """evaluator: computer_type_text + 普通文本 → approve(AUTO 档,无词表命中)。"""
     meta = evaluate(
-        "computer.type_text",
+        "computer_type_text",
         {"text": "hello world"},
         gate_level=ApprovalLevel.AUTO,
         config=_empty_config(),
@@ -237,7 +237,7 @@ def test_evaluator_computer_type_text_normal_auto_approve():
 # ── 5. autonomy.classify:hard_rule:computer_* 不可降级 ────────────────────────
 
 def test_autonomy_classify_computer_financial_not_demotable():
-    """autonomy.classify:computer.type_text 金融文本 → RED,即便 preauth 也不降级(铁律)。"""
+    """autonomy.classify:computer_type_text 金融文本 → RED,即便 preauth 也不降级(铁律)。"""
     from argos.permissions.autonomy import classify, AutonomyPolicy
 
     # 尝试用 preauth 降级
@@ -246,7 +246,7 @@ def test_autonomy_classify_computer_financial_not_demotable():
     )
 
     zone, reason = classify(
-        action="computer.type_text",
+        action="computer_type_text",
         args={"text": "CVV: 123"},
         reversible=False,          # computer.* 不可逆 → 直接 RED(优先级1)
         verdict=None,
@@ -269,7 +269,7 @@ def test_autonomy_classify_hard_rule_computer_not_preauth_demotable():
 
     # reversible=True 让优先级1不触发,看 hard_rule 路径
     zone, reason = classify(
-        action="computer.type_text",
+        action="computer_type_text",
         args={"text": "CVV: 123"},
         reversible=True,           # 假设场景:看 hard_rule 路径
         verdict=None,
@@ -326,13 +326,13 @@ def test_autonomy_conductor_computer_high_risk_is_red():
 
     # 逐个验证所有 computer.* 高危动作在自治路径下均被拒
     computer_actions = [
-        ("computer.screenshot", {}),
-        ("computer.click", {"x": 100, "y": 200}),
-        ("computer.double_click", {"x": 100, "y": 200}),
-        ("computer.type_text", {"text": "some text"}),
-        ("computer.key", {"text": "command+c"}),
-        ("computer.scroll", {"x": 100, "y": 200, "text": "3"}),
-        ("computer.open_app", {"app": "Finder"}),
+        ("computer_screenshot", {}),
+        ("computer_click", {"x": 100, "y": 200}),
+        ("computer_double_click", {"x": 100, "y": 200}),
+        ("computer_type_text", {"text": "some text"}),
+        ("computer_key", {"text": "command+c"}),
+        ("computer_scroll", {"x": 100, "y": 200, "text": "3"}),
+        ("computer_open_app", {"app": "Finder"}),
     ]
     for action, args in computer_actions:
         zone, reason = classify(
@@ -351,7 +351,7 @@ def test_autonomy_conductor_computer_high_risk_is_red():
 
 
 def test_autonomy_conductor_computer_type_text_financial_is_red():
-    """conductor 自治路径:computer.type_text + 金融文本 → RED(不可被 preauth 降级)。
+    """conductor 自治路径:computer_type_text + 金融文本 → RED(不可被 preauth 降级)。
 
     验证 evaluator hard_rule 触发 → autonomy.classify → RED,
     即便 conductor 试图 preauth 降级也无效(护城河铁律)。
@@ -366,20 +366,20 @@ def test_autonomy_conductor_computer_type_text_financial_is_red():
     )
 
     zone, reason = classify(
-        action="computer.type_text",
+        action="computer_type_text",
         args={"text": "CVV: 999"},
-        reversible=False,   # computer.type_text 不可逆 → 优先级1 直接 RED
+        reversible=False,   # computer_type_text 不可逆 → 优先级1 直接 RED
         verdict=None,
         config=config,
         policy=policy,
     )
     assert zone == Zone.RED, (
-        f"computer.type_text 金融文本在自治路径下应 RED(preauth 无效),得到 {zone.value!r}"
+        f"computer_type_text 金融文本在自治路径下应 RED(preauth 无效),得到 {zone.value!r}"
     )
 
 
 def test_autonomy_conductor_computer_open_payment_app_is_red():
-    """conductor 自治路径:computer.open_app + 支付 app → RED。
+    """conductor 自治路径:computer_open_app + 支付 app → RED。
 
     额外验证 check_computer_hard_rules 命中支付/银行 app 时,
     完整的 evaluator → autonomy.classify 管线正确拒绝。
@@ -391,13 +391,13 @@ def test_autonomy_conductor_computer_open_payment_app_is_red():
     policy = AutonomyPolicy()
 
     zone, reason = classify(
-        action="computer.open_app",
+        action="computer_open_app",
         args={"app": "支付宝"},
-        reversible=False,   # computer.open_app 不可逆 → 优先级1 RED
+        reversible=False,   # computer_open_app 不可逆 → 优先级1 RED
         verdict=None,
         config=config,
         policy=policy,
     )
     assert zone == Zone.RED, (
-        f"computer.open_app 支付宝在自治路径下应 RED,得到 {zone.value!r}"
+        f"computer_open_app 支付宝在自治路径下应 RED,得到 {zone.value!r}"
     )

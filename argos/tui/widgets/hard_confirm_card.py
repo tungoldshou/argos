@@ -73,7 +73,7 @@ class HardConfirmCard(InlineChoice):
     公开构造签名::
 
         HardConfirmCard(
-            action: str,            # 能力名,如 'computer.click'
+            action: str,            # 能力名,如 'computer_click'
             x: int | None,          # ComputerAction.x
             y: int | None,          # ComputerAction.y
             description: str,       # ApprovalRequest.description(人话)

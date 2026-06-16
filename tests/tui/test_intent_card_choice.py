@@ -313,7 +313,7 @@ class TestRiskPills:
 
     def test_computer_action_flag_is_fail(self):
         """computer.* flag 永远是 $fail(不可逆,无论信任级别)。"""
-        result = _risk_pills(("computer.click",))
+        result = _risk_pills(("computer_click",))
         spans = [
             s for s in result._spans
             if s.style and _COL_FAIL.lower() in str(s.style).lower()
@@ -373,8 +373,8 @@ class TestHighIrreversibleFlags:
         """computer.* 前缀动态检测,不要求字面出现在集合内。"""
         # _risk_pills 测试已覆盖;此处确认 _HIGH_IRREVERSIBLE_FLAGS 或前缀逻辑存在
         from argos.tui.widgets.intent_card_choice import _is_high_irreversible
-        assert _is_high_irreversible("computer.screenshot")
-        assert _is_high_irreversible("computer.type_text")
+        assert _is_high_irreversible("computer_screenshot")
+        assert _is_high_irreversible("computer_type_text")
         assert not _is_high_irreversible("send_message")
 
 

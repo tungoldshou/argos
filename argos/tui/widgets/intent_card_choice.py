@@ -73,7 +73,7 @@ _SUMMARY_MAP: dict[str, str] = {
 
 def _is_high_irreversible(flag: str) -> bool:
     """判断 flag 是否属于高危不可逆集合(含 computer.* 前缀)。"""
-    return flag in _HIGH_IRREVERSIBLE_FLAGS or flag.startswith("computer.")
+    return flag in _HIGH_IRREVERSIBLE_FLAGS or flag.startswith("computer_")
 
 
 def _eaw_len(s: str) -> int:

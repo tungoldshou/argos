@@ -137,7 +137,7 @@ def evaluate(
     # open_app  命中支付/银行词表     → 强制 ask(CONFIRM)。
     # 注意:这里返回 "ask"(而非 "deny")——目的是强制人工确认,不是彻底拒绝。
     # autonomy 层 + broker 层需把 trigger.startswith("hard_rule:computer_") 视为不可降级。
-    if action.startswith("computer."):
+    if action.startswith("computer_"):
         computer_rule = check_computer_hard_rules(action, args)
         if computer_rule is not None:
             return DecisionMeta(

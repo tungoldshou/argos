@@ -1153,7 +1153,7 @@ class ArgosApp(App):
             ("LSP 语言服务器", [n for n in names if n.startswith("lsp_")]),
             # 模型可见名=下划线(ALL_TOOL_NAMES 路径);registry.names() 仍点号 —— 两者都归此组。
             ("OS 级控制(P6a)", [n for n in names
-                                if n.startswith("computer.") or n.startswith("computer_")]),
+                                if n.startswith("computer_")]),
             ("编排(工作流)", ["propose_workflow"]),
         ]
         lines = [f"共 {len(names)} 个工具:"]
@@ -2508,7 +2508,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         """
         # computer.* 恒走硬确认:不受 AUTO/Trust Dial 降级(evaluator 已把金融域标 force-ask,
         # TUI 不得用 AUTO 短路把它 respond always 绕过)。非 computer.* 在 AUTO 下仍直接 always。
-        if self.gate.level is ApprovalLevel.AUTO and not req.action.startswith("computer."):
+        if self.gate.level is ApprovalLevel.AUTO and not req.action.startswith("computer_"):
             if self._with_daemon and self._daemon_client and self._daemon_session_id and self._daemon_run_id:
                 # daemon AUTO:直接 POST always(fire-and-forget)
                 self.run_worker(
@@ -2548,7 +2548,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             )
             self._choice_done()
 
-        if req.action.startswith("computer."):
+        if req.action.startswith("computer_"):
             await self._enqueue_choice(lambda: HardConfirmCard(
                 action=req.action,
                 x=req.args.get("x"),

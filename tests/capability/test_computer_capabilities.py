@@ -4,7 +4,7 @@
   1. register_builtins 后,所有 computer.* 能力均在 registry 中。
   2. 所有 computer.* 能力 kind="computer", risk="high", reversible=False。
   3. verify_hint 诚实写"GUI 动作无机检通道,验证走 L5 留痕"。
-  4. computer.screenshot 的 verify_hint 含"screenshot 永不单独产出 passed"(红线)。
+  4. computer_screenshot 的 verify_hint 含"screenshot 永不单独产出 passed"(红线)。
   5. 四线管辖:computer 动作经 broker.request → 审批触发(high 档) → HMAC 回执 → Ledger
      reversible=no/undo_state=impossible。
 """
@@ -23,13 +23,13 @@ from argos.tools.receipts import ReceiptSigner
 
 # 所有预期的 computer.* 能力名
 _EXPECTED_COMPUTER_CAPS = (
-    "computer.screenshot",
-    "computer.click",
-    "computer.double_click",
-    "computer.type_text",
-    "computer.key",
-    "computer.scroll",
-    "computer.open_app",
+    "computer_screenshot",
+    "computer_click",
+    "computer_double_click",
+    "computer_type_text",
+    "computer_key",
+    "computer_scroll",
+    "computer_open_app",
 )
 
 
@@ -114,11 +114,11 @@ def test_computer_cap_has_honest_verify_hint(name: str):
 
 
 def test_screenshot_verify_hint_contains_vlm_redline():
-    """computer.screenshot 的 verify_hint 必须含 VLM 红线声明。"""
+    """computer_screenshot 的 verify_hint 必须含 VLM 红线声明。"""
     reg = _make_registry_with_builtins()
-    cap = reg.get("computer.screenshot")
+    cap = reg.get("computer_screenshot")
     assert "screenshot 永不单独产出 passed" in cap.verify_hint, (
-        f"computer.screenshot verify_hint 缺少 VLM 红线声明: {cap.verify_hint!r}"
+        f"computer_screenshot verify_hint 缺少 VLM 红线声明: {cap.verify_hint!r}"
     )
 
 
@@ -168,11 +168,11 @@ async def test_computer_action_triggers_approval_request():
     gate.request = fake_gate_request  # type: ignore[method-assign]
 
     broker = CapabilityBroker(gate=gate, egress=egress, signer=signer, registry=reg)
-    result = await broker.request("computer.screenshot", {})
+    result = await broker.request("computer_screenshot", {})
 
     # 审批被调用(四线第一线)
-    assert approval_calls, "computer.screenshot 未触发审批(四线第一线缺失)"
-    assert approval_calls[0]["action"] == "computer.screenshot"
+    assert approval_calls, "computer_screenshot 未触发审批(四线第一线缺失)"
+    assert approval_calls[0]["action"] == "computer_screenshot"
     assert approval_calls[0]["risk"] == "high", (
         f"审批 risk 应为 high,得到 {approval_calls[0]['risk']!r}"
     )
@@ -217,14 +217,14 @@ async def test_computer_action_hmac_receipt_signed_on_approval():
     )
     with patch.object(ComputerExecutor, "dispatch", return_value=fake_result), \
          patch.dict(os.environ, {"ARGOS_COMPUTER_USE": "1"}):
-        await broker.request("computer.screenshot", {})
+        await broker.request("computer_screenshot", {})
 
     receipt = broker.last_receipt
     assert receipt is not None, (
-        "computer.screenshot 获批后未签 HMAC 回执(四线第二线缺失)\n"
+        "computer_screenshot 获批后未签 HMAC 回执(四线第二线缺失)\n"
         "提示:broker._execute 缺 computer.* 分支会导致此断言失败"
     )
-    assert receipt.action == "computer.screenshot"
+    assert receipt.action == "computer_screenshot"
     # 验证签名有效(不可伪造性)
     assert signer.verify(receipt), "HMAC 回执签名校验失败(不可伪造性)"
 
@@ -232,10 +232,10 @@ async def test_computer_action_hmac_receipt_signed_on_approval():
 # ── 5. Ledger 条目:reversible=no / undo_state=impossible ─────────────────────
 
 @pytest.mark.parametrize("action", [
-    "computer.screenshot",
-    "computer.click",
-    "computer.type_text",
-    "computer.open_app",
+    "computer_screenshot",
+    "computer_click",
+    "computer_type_text",
+    "computer_open_app",
 ])
 def test_ledger_entry_for_computer_action_reversible_impossible(action: str):
     """computer.* 动作 → build_entry 自动分类 reversible='no'/undo_state='impossible'。
