@@ -216,8 +216,28 @@ def _make_gated(broker: Any) -> dict[str, Any]:
     def lsp_diagnostics_gated(file: str) -> str:
         return broker.request(action="lsp_diagnostics", args={"file": file})
 
+    # 文件写 —— broker-gated(gate-only):先问 broker 要 host 侧治理裁决(hard-path/密钥/回执),
+    # 放行(收到哨兵)后由本包装在【沙箱子进程内】真正落盘(写留在 Seatbelt,Codex 式自动应用)。
+    def write_file_gated(path: str, content: str) -> str:
+        verdict = broker.request(action="write_file", args={"path": path, "content": content})
+        if verdict == files.WRITE_APPROVED_SENTINEL:
+            return files.write_file(path, content)
+        return verdict
+
+    def edit_file_gated(path: str, old: str, new: str, all_occurrences: bool = False) -> str:
+        # content=new 让 evaluator 密钥检测命中替换后的新文本(evaluator 看 content 字段)。
+        verdict = broker.request(action="edit_file", args={
+            "path": path, "old": old, "new": new,
+            "all_occurrences": all_occurrences, "content": new,
+        })
+        if verdict == files.WRITE_APPROVED_SENTINEL:
+            return files.edit_file(path, old, new, all_occurrences)
+        return verdict
+
     return {
         "run_command": run_command_gated,
+        "write_file": write_file_gated,
+        "edit_file": edit_file_gated,
         "web_search": web_search_gated,
         "web_extract": web_extract_gated,
         "browser_navigate": browser_navigate_gated,
@@ -351,9 +371,9 @@ def _set_module_broker(broker: Any) -> None:
 def _pure() -> dict[str, Any]:
     return {
         "read_file": files.read_file,
-        "write_file": files.write_file,
-        "edit_file": files.edit_file,
         "search_files": files.search_files,
+        # write_file/edit_file 已移到 _make_gated(broker-gated gate-only):无 broker 的纯沙箱
+        # 命名空间不含写工具(诚实 fail-closed:不能治理就不给写),只读工具仍在。
         "propose_verify": _propose_verify_pure,
         "propose_dom_verify": _propose_dom_verify_pure,  # A2 L3 DOM 验证桩（登记回执，真执行在 host）
         "update_plan": _update_plan_pure,

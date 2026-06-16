@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from argos.approval import ApprovalGate, ApprovalLevel
+from argos.tools import files as _files
 from argos.tools import shell as _shell
 from argos.tools import web as _web
 from argos.tools.receipts import Receipt, ReceiptSigner
@@ -49,9 +50,16 @@ _RISK: dict[str, str] = {
     "computer_key": "high",
     "computer_scroll": "high",
     "computer_open_app": "high",
+    # 文件写:gate-only(host 跑 hard-path/密钥 + 签回执;落盘在 Seatbelt 子进程)。registry
+    # 已声明它们,这里给无 registry 的 fallback 路径(headless/旧测试)也认得 → fail-closed 不误拒。
+    # risk 与 builtins 注册值一致(medium),否则 test_builtin_risk_table_matches_broker_RISK 失败。
+    "write_file": "medium",
+    "edit_file": "medium",
 }
 # C1:这些 action 即便在 AUTO(YOLO)档也强制逐个确认 —— 永不静默执行 shell。
 _FORCE_CONFIRM_ACTIONS: set[str] = {"run_command"}
+# 文件写:broker 只做 host 侧 gate-only 治理(hard-path/密钥/回执),真正落盘留在 Seatbelt 子进程。
+_FILE_WRITE_ACTIONS: set[str] = {"write_file", "edit_file"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +123,10 @@ class CapabilityBroker:
             if action not in _RISK:
                 return f"错误:未知/不支持的特权动作 {action!r},拒绝。"
 
+        # 文件写:gate-only 治理(host 裁决 + 回执;落盘留 Seatbelt 子进程)。非网络,跳过 egress。
+        if action in _FILE_WRITE_ACTIONS:
+            return self._gate_only_write(action, args)
+
         # ① egress 检查(网络类,fail-closed)
         # P2 egress manifest 驱动:当 registry 存在时,网络类动作集 = registry 中声明了
         # egress_hosts 的能力名(含 "*")∪ 原 _NETWORK_ACTIONS 兜底集合。
@@ -168,6 +180,10 @@ class CapabilityBroker:
         _registry_risk = _reg.risk_table() if _reg is not None else {}
         if action not in _registry_risk and action not in _RISK:
             return f"错误:未知/不支持的特权动作 {action!r},拒绝。", 1
+        # 文件写:gate-only 治理(无 host_loop 的回退路径也走同款 hard-path/密钥/回执)。
+        if action in _FILE_WRITE_ACTIONS:
+            val = self._gate_only_write(action, args)
+            return val, (0 if val == _files.WRITE_APPROVED_SENTINEL else 1)
         # ① egress 检查(网络类,fail-closed)
         if action in self._derive_network_actions():
             host = _web.host_for(action, args)
@@ -289,6 +305,30 @@ class CapabilityBroker:
         art = self.last_computer_artifact
         self.last_computer_artifact = None
         return art
+
+    def _gate_only_write(self, action: str, args: dict[str, Any]) -> Any:
+        """文件写 gate-only 治理:host 侧跑同步 hard-path 拒 + 密钥检测,签回执,返回放行哨兵;
+        真正落盘留在 Seatbelt 子进程(Codex 式 workspace-write 自动应用)。request()/execute_sync()
+        对 write_file/edit_file 都走这里,不进 _execute(broker 绝不替子进程写文件)。
+
+        - evaluator decision==deny(系统路径命中 hard-path 拒名单)→ 拒,不签回执(无副作用)。
+        - secret_pattern 命中 → fail-closed 拒(同步路径无法 await 确认;诚实告知模型),不签回执。
+        - 其余(含因档位/软规则本应 ask 的)→ 自动放行:签回执(治理铁证)+ 返回放行哨兵。
+          (与 run_command 同步桥跳过②审批一致 = Codex 式自动应用;绝不把普通写当 deny。)
+        """
+        meta = self._gate.evaluate_sync(action, args)
+        if meta is not None:
+            if meta.decision == "deny":
+                return meta.reason or f"{action} 被硬规则拒绝。"
+            if meta.secret_pattern or (meta.trigger or "").startswith("secret:"):
+                return (
+                    f"⚠ 可能含密钥({meta.secret_pattern or '?'})—— 已拒绝写入。"
+                    "请去掉密钥后重试,或请用户显式放行该写入。"
+                )
+        self.last_receipt = self._signer.sign(
+            action=action, args=args, result=_files.WRITE_APPROVED_SENTINEL, exit_code=0,
+        )
+        return _files.WRITE_APPROVED_SENTINEL
 
     def _execute(self, action: str, args: dict[str, Any],
                  run_ctx: Any = None, *, _gated: bool = False) -> tuple[Any, int | None]:
@@ -444,6 +484,11 @@ class CapabilityBroker:
                     file=args.get("file", ""),
                     **kwargs,
                 ), None
+        # 文件写:host 侧"执行" = gate-only 放行哨兵(真正落盘在 Seatbelt 子进程的 wrapper 内)。
+        # 正常路径 request()/execute_sync() 已在入口拦截 write_file 做完整 hard-path/密钥/回执治理,
+        # 不会走到这里;此分支兜底直调 _execute 的路径(如旧 e2e ungated broker_handler)。
+        if action in _FILE_WRITE_ACTIONS:
+            return _files.WRITE_APPROVED_SENTINEL, 0
         # 未知 action 已被 request 顶部挡掉;此处兜底诚实返回。
         return f"错误:动作 {action!r} 暂未实现 host 执行。", None
 

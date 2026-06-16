@@ -14,6 +14,11 @@ from pathlib import Path
 
 WORKSPACE = Path(os.environ.get("ARGOS_WORKSPACE", Path.home() / ".argos" / "workspace")).resolve()
 
+# host→child 放行哨兵:broker 对一次文件写做完 gate-only 治理(hard-path/密钥)并签回执后,
+# 把它回灌给沙箱子进程;子进程内的 write_file/edit_file 包装识别到它才真正落盘(写留在 Seatbelt 内,
+# Codex 式 workspace-write 自动应用)。含 NUL,绝不与正常工具返回串/文件内容碰撞。
+WRITE_APPROVED_SENTINEL = "\x00__ARGOS_WRITE_APPROVED__\x00"
+
 
 def _ws() -> Path:
     """当前生效 workspace:project 模式用 runtime,否则用模块默认(沿用旧 tools._ws)。"""
