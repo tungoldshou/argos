@@ -87,6 +87,9 @@ class CapabilityBroker:
         self._host_loop: Any = None
         # 桥阻塞上限:gate.request 自身 60s 超时,300s 是安全上界(防主循环异常死等)。
         self._bridge_timeout: float = 300.0
+        # 计算机控制截图工件(path, size):computer_screenshot 执行后 stash;loop 取它把
+        # 截图当图像挂到下一条反馈消息回给模型(视觉回路)。None = 本步无新截图。
+        self.last_computer_artifact: tuple[str, tuple | None] | None = None
 
     async def request(self, action: str, args: dict[str, Any]) -> Any:
         """返回灌回沙箱的值(成功=工具串;拒绝=拒绝串)。副作用:签 Receipt 存 last_receipt。
@@ -280,6 +283,13 @@ class CapabilityBroker:
         self.last_receipt = None
         return rec
 
+    def take_computer_artifact(self) -> "tuple[str, tuple | None] | None":
+        """返回并清空 last_computer_artifact —— loop 每步调它,只在【本步新拍了截图】时拿到
+        (path, size),据此把截图当图像挂到下一条反馈消息(视觉回路);无新截图返回 None。"""
+        art = self.last_computer_artifact
+        self.last_computer_artifact = None
+        return art
+
     def _execute(self, action: str, args: dict[str, Any],
                  run_ctx: Any = None, *, _gated: bool = False) -> tuple[Any, int | None]:
         """⚠️ 内部裸执行 —— 仅供 request() 调用。绝不可从外部/测试直接调:
@@ -370,6 +380,11 @@ class CapabilityBroker:
             except (ValueError, TypeError) as exc:
                 return f"computer 动作参数校验失败: {exc}", None
             result = ComputerExecutor().dispatch(ca)
+            # 截图:stash 工件(path, size)供 loop 取去挂图像(视觉回路)。非截图动作不动。
+            if result.ok and getattr(result, "artifact_path", None):
+                self.last_computer_artifact = (
+                    result.artifact_path, getattr(result, "size", None),
+                )
             # 诚实返回:ok=True → 人话摘要;ok=False → 原因串(含权限指引)
             return result.detail, (0 if result.ok else 1)
         # LSP 工具派发(spec §2.8):host 侧 LspManager 派发到对应 language server。
