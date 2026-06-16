@@ -836,6 +836,30 @@ class AgentLoop:
         for ev in self._hbus.drain():
             yield ev
 
+    def _maybe_attach_screenshot(self, fb_msg: dict, shot: "tuple | None") -> None:
+        """计算机控制视觉回路:多模态模型 → 把本步截图(path, size)当图像挂到反馈消息
+        (core.protocols.payload 逐消息物化为 image block)。非多模态 / 无截图 / 读图失败 →
+        诚实降级为纯文本(不挂图、不改 content;提示词已要求模型看不清就说 unverifiable)。
+
+        2c:成功挂图时,在 content 里告知截图像素尺寸 —— 模型按这张图的像素空间给点击坐标。
+        """
+        if shot is None:
+            return
+        tier = getattr(self._model, "tier", None)
+        if tier is None or not getattr(tier, "multimodal", False):
+            return
+        try:
+            from argos.input.attachments import load_from_path
+            path, size = shot
+            fb_msg["attachments"] = [load_from_path(path)]
+            if size and tuple(size) != (0, 0):
+                fb_msg["content"] = (
+                    f"{fb_msg['content']}\n"
+                    f"[截图 {size[0]}x{size[1]} 像素;点击坐标请用这张图的像素坐标]"
+                )
+        except Exception as exc:  # noqa: BLE001 — 读图失败诚实降级纯文本(不阻断 run)
+            __import__("logging").getLogger(__name__).debug("screenshot attach skipped: %s", exc)
+
     def _tool_signatures_block(self) -> str:
         """工具签名提示(本 PR 新增 3 工具的签名,模型调用时不会因签名漂移跑错)。
 
@@ -1455,6 +1479,9 @@ class AgentLoop:
                     new_receipt = self._broker.take_receipt()
                     if new_receipt is not None and self._harness.accept_receipt(new_receipt):
                         yield ToolReceipt(receipt=new_receipt)
+                # 计算机控制视觉回路:本步若新拍了截图,取工件(path, size)留给下方反馈消息挂成图像。
+                if self._broker is not None and hasattr(self._broker, "take_computer_artifact"):
+                    self._pending_screenshot = self._broker.take_computer_artifact()
                 # 工作流提议:agent 本段调了 propose_workflow({...}) → 异步态校验+审批+引擎执行+结果回灌。
                 raw_spec = extract_workflow_spec(text)
                 if raw_spec is not None:
@@ -1467,7 +1494,11 @@ class AgentLoop:
                     # 锚机制:每个 act step 把当前 todos 摘要回灌(随执行结果一起),
                     # 防长任务在多步后丢失目标/漏更状态。
                     feedback += "\n\n" + self._todos_summary(self._todos)
-                messages.append({"role": "user", "content": feedback})
+                _fb_msg: dict = {"role": "user", "content": feedback}
+                _shot = getattr(self, "_pending_screenshot", None)
+                self._pending_screenshot = None
+                self._maybe_attach_screenshot(_fb_msg, _shot)
+                messages.append(_fb_msg)
                 step += 1
                 continue
 
