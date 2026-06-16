@@ -96,6 +96,10 @@ _DOM_KW_EXP = re.compile(r"""expected_text\s*=\s*['"]([^'"]+)['"]""")
 # 沙箱内调用仅返回登记回执;真断言在 host verify 阶段由 GuiProber 截图+OCR 独立执行。
 _PROPOSE_GUI_VERIFY = re.compile(r"propose_gui_verify\s*\(([^)]*)\)", re.DOTALL)
 _GUI_KW_EXP = re.compile(r"""expected_text\s*=\s*['"]([^'"]+)['"]""")
+# 反平凡 expected_text:过短的断言(如单字符 'e')几乎必命中任意屏幕 OCR,会被用来伪造 passed
+# (agent 同时选断言又控屏)。最小长度门槛(类比 propose_verify 拒 echo/true/: 的平凡命令)。
+# GUI:过短 → 拒登记;DOM:过短 → 当作未提供(走弱证据路径,最高 unverifiable,不产 passed)。
+_PROBE_EXPECTED_MIN = 3
 _DOM_URL_ALLOWED = re.compile(r"^https?://", re.I)
 _DOM_PARAM_MAX = 500  # selector / expected_text 最大长度，防滥用
 
@@ -520,6 +524,10 @@ class AgentLoop:
         url = url_m.group(1).strip() if url_m else ""
         selector = sel_m.group(1).strip() if sel_m else "body"
         expected_text = exp_m.group(1).strip() if exp_m else ""
+        # 反平凡:过短的 expected_text 几乎必命中,会被用来伪造 passed → 当作未提供
+        # (走弱证据路径,最高 unverifiable,不产 passed)。
+        if expected_text and len(expected_text) < _PROBE_EXPECTED_MIN:
+            expected_text = ""
 
         # url 校验：必须 http(s)，拒其余协议（file://, ftp://…）
         if not url or not _DOM_URL_ALLOWED.match(url):
@@ -562,7 +570,9 @@ class AgentLoop:
             return False
         exp_m = _GUI_KW_EXP.search(raw_args)
         expected_text = exp_m.group(1).strip() if exp_m else ""
-        if not expected_text or len(expected_text) > _DOM_PARAM_MAX:
+        # 反平凡 + 防滥用:过短(几乎必命中,可伪造 passed)或过长 → 拒登记。
+        if (not expected_text or len(expected_text) < _PROBE_EXPECTED_MIN
+                or len(expected_text) > _DOM_PARAM_MAX):
             return False
         self._pending_gui_expected_text = expected_text
         return True
@@ -1632,18 +1642,24 @@ class AgentLoop:
             #   · error 非空 → unverifiable（诚实）；error 空 found=False → failed（真实证据）；
             #     found=True → passed（用户级，走既有 break/report 路径）。
             #   · 显式 verify_cmd 不会到达此分支（_verify_cmd is None 才走策略生成）。
+            # 探针 lane 标记:DOM/GUI 探针产出的 passed 是用户级机检判决,但 verify_cmd 仍为 None,
+            # 下方完成 break 原本要求 verify_cmd 非空 → 探针 passed 会被漏判而 bounce。此标记让
+            # 探针 passed 也能正常收尾(failed/unverifiable 仍走既有 bounce / NO_TEST 路径)。
+            _probe_lane_verdict = False
             if self._pending_l3_strategy is not None and self._verify_cmd is None:
                 verdict = await self._run_dom_probe_verdict(
                     self._pending_l3_strategy, attempt=self._fail_count + 1
                 )
                 self._pending_l3_strategy = None  # 已消费，清空
                 self._pending_dom_expected_text = ""  # 同步清空
+                _probe_lane_verdict = True
             elif self._pending_gui_expected_text and self._verify_cmd is None:
                 # 2d GUI 验证 lane:截图+OCR 独立断言屏上文本(无 shell 命令,与 DOM 探针同构)。
                 verdict = await self._run_gui_probe_verdict(
                     self._pending_gui_expected_text, attempt=self._fail_count + 1
                 )
                 self._pending_gui_expected_text = ""  # 已消费，清空
+                _probe_lane_verdict = True
             else:
                 # W2:run_verify_gate 跑 verifier 出三态 Verdict,投 VerifyVerdict;真问题超
                 # max_rounds 时它自己投 Escalation。loop 据返回的 verdict 决定 break / bounce。
@@ -1732,7 +1748,7 @@ class AgentLoop:
             # 路径走 unverifiable / bounce 才是真问题信号,而不是被"自验证"遮蔽。
             from argos.core.honesty import trust_passed_after_compaction
             if (getattr(verdict, "is_user_verified", False)
-                    and self._verify_cmd is not None
+                    and (self._verify_cmd is not None or _probe_lane_verdict)
                     and trust_passed_after_compaction(
                         compacted=self._compacted,
                         reverified=self._reverified_since_compact)):
