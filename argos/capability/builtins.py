@@ -123,6 +123,14 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             verify_hint="检查 L3 DOM 验证策略已登记（host 侧 DomProber 收尾时执行三态断言）",
         ),
         Capability(
+            name="propose_gui_verify",
+            kind="tool",
+            risk="low",
+            reversible=True,
+            visibility="all",
+            verify_hint="检查 GUI 验证已登记（host 侧 GuiProber 收尾时截图+OCR 三态断言）",
+        ),
+        Capability(
             name="propose_workflow",
             kind="tool",
             risk="low",
