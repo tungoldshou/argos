@@ -1024,6 +1024,12 @@ class AgentLoop:
         except Exception:  # noqa: BLE001 — MCP 连接/读取失败诚实降级为无 MCP
             pass
 
+        # 计算机控制文档段:仅 ARGOS_COMPUTER_USE 开启时注入(默认不占预算,也不在未开能力时诱导盲点)。
+        import os as _os_cu
+        if _os_cu.environ.get("ARGOS_COMPUTER_USE"):
+            from argos.core.honesty import COMPUTER_USE_PROMPT
+            safe = safe + "\n\n" + COMPUTER_USE_PROMPT
+
         if not self._cfg.recall:
             return (safe, "")
 
