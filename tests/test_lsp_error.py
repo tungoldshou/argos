@@ -96,8 +96,8 @@ def test_tools_registered_in_all_tool_names():
     for name in ("lsp_definition", "lsp_references", "lsp_hover",
                  "lsp_document_symbols", "lsp_workspace_symbols", "lsp_diagnostics"):
         assert name in ALL_TOOL_NAMES
-    for name in ("computer.screenshot", "computer.click", "computer.double_click",
-                 "computer.type_text", "computer.key", "computer.scroll", "computer.open_app"):
+    for name in ("computer_screenshot", "computer_click", "computer_double_click",
+                 "computer_type_text", "computer_key", "computer_scroll", "computer_open_app"):
         assert name in ALL_TOOL_NAMES
     assert len(ALL_TOOL_NAMES) == 30  # stt_transcribe 是宿主进程能力非沙箱工具,不计入(propose_dom_verify 加入后 +1)
 

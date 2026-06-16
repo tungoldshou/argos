@@ -34,7 +34,7 @@ async def test_tools_lists_real_29_tools_grouped():
         assert "browser_navigate" in txt          # 计算机控制分组真出现(浏览器)
         assert "mcp_call" in txt                   # 外部工具分组真出现
         assert "lsp_definition" in txt             # LSP 工具分组真出现
-        assert "computer.screenshot" in txt        # OS 级控制分组真出现
+        assert "computer_screenshot" in txt        # OS 级控制分组真出现(可调用名=下划线)
 
 
 @pytest.mark.asyncio

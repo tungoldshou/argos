@@ -22,9 +22,9 @@ def test_all_tool_names_exact():
         "mcp_call",
         "lsp_definition", "lsp_references", "lsp_hover",
         "lsp_document_symbols", "lsp_workspace_symbols", "lsp_diagnostics",
-        # P6a §10 computer use
-        "computer.screenshot", "computer.click", "computer.double_click",
-        "computer.type_text", "computer.key", "computer.scroll", "computer.open_app",
+        # P6a §10 computer use(模型可见名=合法标识符;broker action 内部仍 "computer.*")
+        "computer_screenshot", "computer_click", "computer_double_click",
+        "computer_type_text", "computer_key", "computer_scroll", "computer_open_app",
     ]
 
 
@@ -38,8 +38,8 @@ def test_all_tool_names_count_is_29():
                  "browser_type", "browser_screenshot", "mcp_call",
                  "lsp_definition", "lsp_references", "lsp_hover",
                  "lsp_document_symbols", "lsp_workspace_symbols", "lsp_diagnostics",
-                 "computer.screenshot", "computer.click", "computer.double_click",
-                 "computer.type_text", "computer.key", "computer.scroll", "computer.open_app"):
+                 "computer_screenshot", "computer_click", "computer_double_click",
+                 "computer_type_text", "computer_key", "computer_scroll", "computer_open_app"):
         assert callable(ns[name]), f"{name} 不可调用(谎报)"
 
 

@@ -42,8 +42,10 @@ ALL_TOOL_NAMES: list[str] = [
     "lsp_document_symbols", "lsp_workspace_symbols", "lsp_diagnostics",
     # computer use(P6a §10)—— OS 级控制;屏幕/鼠标是全局资源,Seatbelt 关不住;
     # 全部 risk=high + reversible=False + hard CONFIRM(四线管辖)。
-    "computer.screenshot", "computer.click", "computer.double_click",
-    "computer.type_text", "computer.key", "computer.scroll", "computer.open_app",
+    # 模型可见名用合法 Python 标识符(下划线):沙箱 ```python 块里 computer_click(...) 才调得动。
+    # broker 内部 action 仍是 "computer.*"(点号),由各 wrapper 映射;两套命名互不串。
+    "computer_screenshot", "computer_click", "computer_double_click",
+    "computer_type_text", "computer_key", "computer_scroll", "computer_open_app",
 ]
 
 
@@ -224,13 +226,14 @@ def _make_gated(broker: Any) -> dict[str, Any]:
         "browser_type": browser_type_gated,
         "browser_screenshot": browser_screenshot_gated,
         "mcp_call": mcp_call_gated,
-        "computer.screenshot": computer_screenshot_gated,
-        "computer.click": computer_click_gated,
-        "computer.double_click": computer_double_click_gated,
-        "computer.type_text": computer_type_text_gated,
-        "computer.key": computer_key_gated,
-        "computer.scroll": computer_scroll_gated,
-        "computer.open_app": computer_open_app_gated,
+        # 模型可见名=合法标识符(下划线);wrapper 内部仍发 broker action "computer.*"(点号)。
+        "computer_screenshot": computer_screenshot_gated,
+        "computer_click": computer_click_gated,
+        "computer_double_click": computer_double_click_gated,
+        "computer_type_text": computer_type_text_gated,
+        "computer_key": computer_key_gated,
+        "computer_scroll": computer_scroll_gated,
+        "computer_open_app": computer_open_app_gated,
         "lsp_definition": lsp_definition_gated,
         "lsp_references": lsp_references_gated,
         "lsp_hover": lsp_hover_gated,
@@ -395,7 +398,10 @@ def build_child_namespace(
     # 真正兑现审批预览里的「只读」承诺(否则显示「只读」但实际仍能写,是审批所见即所跑的假承诺)。
     if read_only:
         for _t in ("write_file", "edit_file", "run_command",
-                   "browser_click", "browser_type", "mcp_call"):
+                   "browser_click", "browser_type", "mcp_call",
+                   # OS 级写动作:read 作用域必须剔除(computer_screenshot 是只读观察,保留)。
+                   "computer_click", "computer_double_click", "computer_type_text",
+                   "computer_key", "computer_scroll", "computer_open_app"):
             ns.pop(_t, None)
     return ns
 
