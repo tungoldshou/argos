@@ -15,7 +15,10 @@ Three pillars carry the design:
   check command (`pytest`, `cargo test`, `ruff`, `tsc`, `mypy`, …) returns
   zero. The agent must *declare* how its work will be verified before the
   gate trusts it, and a three-state verdict (`passed` / `failed` /
-  `unverifiable`) prevents fake-greens.
+  `unverifiable`) prevents fake-greens. The same gate reaches GUI work: for
+  opt-in computer control the agent declares the expected on-screen result and
+  an **independent** screen-check (screenshot + OCR) renders the verdict —
+  never the model grading its own homework.
 - **An honesty protocol.** Argos would rather say "I don't know" than ship
   a lie. Failed checks bounce the actual error back to the agent; an
   unverifiable task is *unverifiable*, not passed. Every action the agent
@@ -23,8 +26,12 @@ Three pillars carry the design:
   journal you can replay.
 - **An OS-level sandbox.** macOS Seatbelt confines the agent at the kernel
   boundary — no network by default, writes only inside the declared
-  workspace. Approval gates sit on top for the destructive paths the
-  user wants to opt into.
+  workspace. File writes route through a capability broker that runs a
+  hard-path denylist (`/etc`, `~/.ssh`, …) + secret detection and signs a
+  receipt for every one. Approval gates sit on top for the destructive paths
+  the user opts into — including opt-in OS-level **computer control** (the
+  agent sees the screen and drives the mouse/keyboard, `ARGOS_COMPUTER_USE=1`,
+  macOS), where every action is human-gated and logged to the receipt chain.
 
 Built in Python on Textual. A background daemon kernel runs the work and
 survives a closed terminal; the TUI attaches as a protocol client — and a
