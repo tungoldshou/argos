@@ -796,6 +796,13 @@ class AgentLoop:
             runtime.guard_project_tests()
         except Exception:  # noqa: BLE001 — 守护快照失败不阻断 run(诚实降级:此 run 无篡改检测)
             pass
+        # 同步桥交互审批:注入本 run 的 host event loop。broker_handler 据此把沙箱工具调用的
+        # request()(完整 gating + ②交互审批)提交回主循环;exec_code 已移进工作线程 → 主循环空闲。
+        if self._broker is not None and hasattr(self._broker, "set_host_loop"):
+            try:
+                self._broker.set_host_loop(asyncio.get_running_loop())
+            except RuntimeError:  # 理论上不会:run 必在运行中的 loop 内被 async for 消费
+                pass
         try:
             async for ev in self._drive(goal, session_id, attachments=attachments):
                 self._store.append_event(session_id, ev)
@@ -810,6 +817,8 @@ class AgentLoop:
             self._store.append_event(session_id, err)
             yield err
         finally:
+            if self._broker is not None and hasattr(self._broker, "set_host_loop"):
+                self._broker.set_host_loop(None)   # 清空,避免跨 run 复用陈旧 loop 引用
             self._sandbox.close()
 
     async def _enter_phase(self, phase: str) -> AsyncIterator["Event"]:
@@ -1331,7 +1340,10 @@ class AgentLoop:
                     step += 1
                     continue   # 不调 exec_code,走下一轮
                 yield CodeAction(code=code, step=step)
-                result = self._sandbox.exec_code(code)
+                # exec_code 移进工作线程:释放事件循环,broker_handler 才能把工具调用的交互审批
+                # request() 提交回主循环(主循环此刻空闲,gate 能 await 用户 + TUI 能渲染审批卡)。
+                # 沙箱单 run 串行 exec(executor 非线程安全),to_thread 不引入并发。
+                result = await asyncio.to_thread(self._sandbox.exec_code, code)
                 self._actions += 1
                 # H2:记录本轮是否真发生写操作(host 侧解析代码块,同 propose_verify 路径)。
                 # 用于"改了代码却没声明验证"的一次性催促,纯读/问答任务不触发。

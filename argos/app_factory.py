@@ -158,13 +158,12 @@ def _make_gate_broker_sandbox(
         mcp_manager=mcp_manager, browser_controller=browser_controller,
         registry=registry,
     )
-    # 同步 broker_handler 桥走 broker.execute_sync:exec_code 阻塞等 broker_reply,无法 await
-    # gate。execute_sync 做 request() 的所有同步步骤——fail-closed + egress 校验 + 真执行 +
-    # Receipt 签发——只跳过②交互审批(需 await,留 v1.1)。真硬边界仍是 Seatbelt(网络系统级
-    # OFF、写限 workspace);egress 第二防线与签名回执现在在同步桥路径也生效(#3 治理地基)。
+    # 同步 broker_handler 桥:broker.request_blocking 把 request() 提交回 AgentLoop 在 run 起点
+    # 注入的 host event loop。AgentLoop 已把 exec_code 移进工作线程,主循环此刻空闲 → 完整 gating
+    # (egress + ②交互审批 + 执行 + 回执)在沙箱工具路径上真正生效(补 06-14 审计的治理空心化洞)。
+    # host_loop 未注入(headless/旧测试)→ request_blocking 内部回退 execute_sync(无交互审批,零回归)。
     def broker_handler(action: str, args: dict) -> object:
-        value, _exit = broker.execute_sync(action, args)
-        return value
+        return broker.request_blocking(action, args)
 
     # 沙箱由 loop.run() 自己 spawn/close(每轮一个子进程),此处只构造,不预 spawn。
     sandbox = SeatbeltExecutor(broker_handler=broker_handler)
