@@ -14,6 +14,9 @@ def test_read_only_namespace_strips_mutating_tools():
 
 
 def test_full_scope_keeps_mutating_tools():
-    ns = tools.build_child_namespace(broker=None)  # 默认 read_only=False
-    # broker=None 时 broker-gated 工具(run_command 等)不注入,但纯沙箱写工具(write_file/edit_file)仍在。
+    class _Stub:
+        def request(self, action, args):
+            return "ok"
+    ns = tools.build_child_namespace(broker=_Stub())  # 默认 read_only=False
+    # write_file/edit_file 现为 broker-gated(gate-only):broker 在场时注入(无 broker 不给写=诚实)。
     assert "write_file" in ns and "edit_file" in ns

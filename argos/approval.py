@@ -288,6 +288,12 @@ class ApprovalGate:
         except Exception:  # noqa: BLE001 — Smart approval 出错绝不阻塞调用方
             return None
 
+    def evaluate_sync(self, action: str, args: dict[str, Any]) -> "DecisionMeta | None":
+        """同步暴露 evaluator 决策(hard → secret → soft → level),供 broker 对文件写做
+        gate-only 治理(hard-path 系统路径拒 + 密钥检测),无需 await。
+        None = evaluator 不可用(import/config 坏)→ 调用方退回既有语义,绝不阻塞。"""
+        return self._evaluate(action, args)
+
     def _audit(
         self, *, action: str, args: dict[str, Any], decision: str, trigger: str,
         by: str, risk: str, secret_pattern: str | None = None,

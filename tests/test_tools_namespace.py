@@ -58,8 +58,10 @@ def test_allowed_cmds_and_git_readonly_present():
 def test_child_namespace_pure_tools_are_raw_functions():
     ns = tools.build_child_namespace(broker=None)
     assert ns["read_file"] is files.read_file
-    assert ns["write_file"] is files.write_file
     assert ns["search_files"] is files.search_files
+    # write_file/edit_file 已改为 broker-gated(gate-only),不再是纯沙箱原函数,
+    # 无 broker 时不注入(诚实 fail-closed:不能治理就不给写)。
+    assert "write_file" not in ns and "edit_file" not in ns
 
 
 def test_child_namespace_gated_tools_call_broker():
