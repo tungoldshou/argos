@@ -34,13 +34,13 @@ _IRREVERSIBLE_ACTIONS = frozenset({
     "browser_fill", "fill", "type",
     "browser_screenshot", "screenshot",
     # OS 级计算机控制(P6a §10):屏幕/鼠标动作不可撤销 —— 诚实协议,不假装可回滚。
-    "computer.screenshot",
-    "computer.click",
-    "computer.double_click",
-    "computer.type_text",
-    "computer.key",
-    "computer.scroll",
-    "computer.open_app",
+    "computer_screenshot",
+    "computer_click",
+    "computer_double_click",
+    "computer_type_text",
+    "computer_key",
+    "computer_scroll",
+    "computer_open_app",
 })
 
 

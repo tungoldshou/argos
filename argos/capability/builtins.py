@@ -187,7 +187,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
         #   verify_hint 诚实写"GUI 动作无机检通道,验证走 L5 留痕"——
         #   截图/VLM 永不单独产出 passed(spec §10 红线)。
         Capability(
-            name="computer.screenshot",
+            name="computer_screenshot",
             kind="computer",
             risk="high",
             reversible=False,
@@ -195,7 +195,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             verify_hint="GUI 动作无机检通道,验证走 L5 留痕;screenshot 永不单独产出 passed",
         ),
         Capability(
-            name="computer.click",
+            name="computer_click",
             kind="computer",
             risk="high",
             reversible=False,
@@ -203,7 +203,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             verify_hint="GUI 动作无机检通道,验证走 L5 留痕",
         ),
         Capability(
-            name="computer.double_click",
+            name="computer_double_click",
             kind="computer",
             risk="high",
             reversible=False,
@@ -211,7 +211,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             verify_hint="GUI 动作无机检通道,验证走 L5 留痕",
         ),
         Capability(
-            name="computer.type_text",
+            name="computer_type_text",
             kind="computer",
             risk="high",
             reversible=False,
@@ -219,7 +219,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             verify_hint="GUI 动作无机检通道,验证走 L5 留痕;金融/验证码模式命中强制 CONFIRM",
         ),
         Capability(
-            name="computer.key",
+            name="computer_key",
             kind="computer",
             risk="high",
             reversible=False,
@@ -227,7 +227,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             verify_hint="GUI 动作无机检通道,验证走 L5 留痕",
         ),
         Capability(
-            name="computer.scroll",
+            name="computer_scroll",
             kind="computer",
             risk="high",
             reversible=False,
@@ -235,7 +235,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             verify_hint="GUI 动作无机检通道,验证走 L5 留痕",
         ),
         Capability(
-            name="computer.open_app",
+            name="computer_open_app",
             kind="computer",
             risk="high",
             reversible=False,

@@ -42,8 +42,8 @@ ALL_TOOL_NAMES: list[str] = [
     "lsp_document_symbols", "lsp_workspace_symbols", "lsp_diagnostics",
     # computer use(P6a §10)—— OS 级控制;屏幕/鼠标是全局资源,Seatbelt 关不住;
     # 全部 risk=high + reversible=False + hard CONFIRM(四线管辖)。
-    # 模型可见名用合法 Python 标识符(下划线):沙箱 ```python 块里 computer_click(...) 才调得动。
-    # broker 内部 action 仍是 "computer.*"(点号),由各 wrapper 映射;两套命名互不串。
+    # 单一规范名 = 合法 Python 标识符(下划线):沙箱 ```python 块里 computer_click(...) 才调得动;
+    # broker action / _RISK / registry / 回执 / ledger 全用同名(不再有点号/下划线两套)。
     "computer_screenshot", "computer_click", "computer_double_click",
     "computer_type_text", "computer_key", "computer_scroll", "computer_open_app",
 ]
@@ -177,25 +177,25 @@ def _make_gated(broker: Any) -> dict[str, Any]:
     # 全部 risk=high + reversible=False + hard CONFIRM;
     # Seatbelt 关不住屏幕/鼠标资源,用"审批+Ledger+高 risk"治理。
     def computer_screenshot_gated() -> str:
-        return broker.request(action="computer.screenshot", args={})
+        return broker.request(action="computer_screenshot", args={})
 
     def computer_click_gated(x: int, y: int) -> str:
-        return broker.request(action="computer.click", args={"x": x, "y": y})
+        return broker.request(action="computer_click", args={"x": x, "y": y})
 
     def computer_double_click_gated(x: int, y: int) -> str:
-        return broker.request(action="computer.double_click", args={"x": x, "y": y})
+        return broker.request(action="computer_double_click", args={"x": x, "y": y})
 
     def computer_type_text_gated(text: str) -> str:
-        return broker.request(action="computer.type_text", args={"text": text})
+        return broker.request(action="computer_type_text", args={"text": text})
 
     def computer_key_gated(key: str) -> str:
-        return broker.request(action="computer.key", args={"text": key})
+        return broker.request(action="computer_key", args={"text": key})
 
     def computer_scroll_gated(x: int, y: int, dy: int = 3) -> str:
-        return broker.request(action="computer.scroll", args={"x": x, "y": y, "text": str(dy)})
+        return broker.request(action="computer_scroll", args={"x": x, "y": y, "text": str(dy)})
 
     def computer_open_app_gated(app: str) -> str:
-        return broker.request(action="computer.open_app", args={"app": app})
+        return broker.request(action="computer_open_app", args={"app": app})
 
     # LSP 工具 —— broker-gated:host 侧 LspManager.request(...)
     # 走 broker.action="lsp_*" 派发,host broker._execute 调 manager

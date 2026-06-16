@@ -218,7 +218,7 @@ def is_argos_own_env(path: str) -> bool:
 
 
 # ── 非开发者 computer use HARD RULES(P6a §10 / CLAUDE.md §2)────────────────
-# 适用于 computer.type_text 和 computer.open_app 动作的非开发者域强制确认规则。
+# 适用于 computer_type_text 和 computer_open_app 动作的非开发者域强制确认规则。
 # 规则可配但【默认集不可删】(hard 语义:无论 Trust Dial 档位,这些场景永远要求用户在场确认)。
 # conductor 自治 run(trust≤L1)下直接拒并诚实说明"此类操作必须人在场确认"。
 
@@ -269,9 +269,9 @@ _PAYMENT_APP_PATTERN: Final[re.Pattern[str]] = re.compile(
 
 
 def check_computer_type_text(text: str) -> str | None:
-    """computer.type_text 文本命中金融/验证码模式 → 返回规则名;无命中 → None。
+    """computer_type_text 文本命中金融/验证码模式 → 返回规则名;无命中 → None。
 
-    用途:评估器(evaluator)在判断 computer.type_text 动作时调此函数。
+    用途:评估器(evaluator)在判断 computer_type_text 动作时调此函数。
     命中 → hard CONFIRM(Trust Dial L4 下仍必须问;conductor 自治直接拒)。
 
     规则基于文本内容模式,不做语义推断(诚实边界:无法识别目标 App 语义)。
@@ -282,7 +282,7 @@ def check_computer_type_text(text: str) -> str | None:
 
 
 def check_computer_open_app(app: str) -> str | None:
-    """computer.open_app 的 app 名命中支付/银行 app 词表 → 返回规则名;无命中 → None。
+    """computer_open_app 的 app 名命中支付/银行 app 词表 → 返回规则名;无命中 → None。
 
     命中 → hard CONFIRM(不论 Trust Dial 档位,开启支付/银行类 app 永远要用户在场确认)。
     """
@@ -298,18 +298,18 @@ def check_computer_hard_rules(action: str, args: dict) -> str | None:
     调用方(evaluator/broker)据返回值决定是否强制 CONFIRM 或在自治路径中直接拒。
 
     Args:
-        action: broker action 字符串(如 "computer.type_text" / "computer.open_app")
+        action: broker action 字符串(如 "computer_type_text" / "computer_open_app")
         args:   动作参数 dict
 
     适用场景:
-        · computer.type_text → 检查 text 字段的金融/验证码模式
-        · computer.open_app  → 检查 app 字段的支付/银行词表
+        · computer_type_text → 检查 text 字段的金融/验证码模式
+        · computer_open_app  → 检查 app 字段的支付/银行词表
         · 其他 computer.* 动作 → 目前无词表规则,返 None(无命中)
     """
-    if action == "computer.type_text":
+    if action == "computer_type_text":
         text = args.get("text", "") or ""
         return check_computer_type_text(str(text))
-    if action == "computer.open_app":
+    if action == "computer_open_app":
         app = args.get("app", "") or ""
         return check_computer_open_app(str(app))
     return None
