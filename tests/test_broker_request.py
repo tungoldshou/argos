@@ -93,10 +93,20 @@ async def test_denied_returns_fail_closed_string_not_raise():
 
 
 @pytest.mark.asyncio
-async def test_web_extract_egress_denied_host():
+async def test_web_extract_allows_public_denies_internal():
+    """web_extract 目标 URL 由 agent 动态选(egress_hosts="*")→ 放行任意【公网】host(不再卡白名单),
+    私网/回环/云元数据仍被 SSRF 硬挡(2026-06-18 用户拍板)。出网问责靠 SSRF+审批+回执,非静态白名单。"""
     br = _broker(level=ApprovalLevel.AUTO, search_hosts={"duckduckgo.com"})
-    res = await br.request("web_extract", {"url": "https://evil.example.com/x"})
-    assert "egress" in res or "不在允许" in res   # 越白名单 → 拒绝串
+    # 公网 host:egress 裁决层放行(不打真网,只验裁决)
+    assert br._egress_deny_reason("web_extract", {"url": "https://news.example.com/x"}) is None
+    # 私网/回环/云元数据:egress 裁决层即拒(SSRF 第一层)
+    for bad in ("http://169.254.169.254/latest/meta-data/", "http://127.0.0.1:8080/admin",
+                "http://10.0.0.5/", "http://metadata.google.internal/"):
+        assert br._egress_deny_reason("web_extract", {"url": bad}) is not None, bad
+    # 端到端:私网 url 经 request() 被拒,不触发网络、不签回执
+    res = await br.request("web_extract", {"url": "http://169.254.169.254/"})
+    assert "SSRF" in res or "私网" in res or "内网" in res
+    assert br.last_receipt is None
 
 
 @pytest.mark.asyncio

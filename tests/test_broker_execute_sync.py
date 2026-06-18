@@ -38,12 +38,14 @@ def test_execute_sync_signs_receipt(monkeypatch):
 
 
 def test_execute_sync_enforces_egress():
-    """同步桥路径也走 egress fail-closed —— host 不在白名单即拒,绝不裸执行旁路(防 SSRF/外泄)。"""
+    """同步桥路径也走出网 fail-closed —— 绝不裸执行旁路(防 SSRF/外泄,6448 治理修复)。
+    web_extract 到云元数据端点 → SSRF 硬挡(2026-06-18 起 web_extract 放行公网、只拒内网,
+    故文案是 SSRF 而非白名单;关键不变量不变:内网端点经同步桥仍被拒、不签回执)。"""
     br = _broker()
     value, exit_code = br.execute_sync(
         "web_extract", {"url": "http://169.254.169.254/latest/meta-data/"}
     )
-    assert "egress 拒绝" in str(value)   # 内网元数据端点被拒
+    assert "SSRF" in str(value) or "内网" in str(value) or "egress 拒绝" in str(value)  # 内网元数据端点被拒
     assert br.take_receipt() is None     # 被拒不签回执(无副作用)
 
 

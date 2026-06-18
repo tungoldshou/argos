@@ -1,9 +1,11 @@
 """铁证④(spec §9 / §6):沙箱外泄防线 + egress fail-closed(可证伪,沙箱部分 macOS-only)。
 
 诚实修正:Seatbelt profile 放宽 file-read*(读 ~/.ssh 允许,见 test_sandbox_fs_confinement),
-故外泄向量是【越界写】+【网络】而非【读】。本铁证证:读到的密钥写不出 workspace、
-非白名单网络被 broker fail-closed 拒;workspace 内合法 IO 正常。
-若沙箱形同虚设(密钥能写出 / 能连任意外网)→ 本测试红,纵深防线证伪。
+故外泄向量是【越界写】+【网络】而非【读】。本铁证证:读到的密钥写不出 workspace;
+网络出口 fail-closed —— web_search 锁定 provider 白名单,web_extract 放行任意【公网】host
+但私网/回环/云元数据被 SSRF 硬挡(2026-06-18 用户拍板:出网问责靠 SSRF+每次签回执+审批拨盘,
+不靠静态白名单 —— 否则 agent 连搜索结果页都打不开)。workspace 内合法 IO 正常。
+若沙箱形同虚设(密钥能写出 / 能连内网元数据)→ 本测试红,纵深防线证伪。
 """
 import sys
 from pathlib import Path
@@ -71,11 +73,18 @@ def test_egress_policy_denies_non_allowlisted_host():
 
 
 @pytest.mark.asyncio
-async def test_broker_denies_network_to_non_allowlisted():
-    """broker-gated web_extract 到非白名单域 → fail-closed 拒绝串(不真发请求,spec §6.4)。"""
+async def test_broker_web_extract_blocks_internal_allows_public():
+    """web_extract 出网策略(2026-06-18 用户拍板):目标 URL 由 agent 动态选 → 放行任意【公网】host,
+    但私网/回环/保留/云元数据被 SSRF fail-closed 硬挡(不真发请求)。出网问责靠 SSRF(内网零信任)
+    + 每次签 HMAC 回执 + 审批拨盘,不再靠静态白名单。web_search 的固定 provider 白名单不受影响。"""
     gate = ApprovalGate(level=ApprovalLevel.AUTO)
     egress = EgressPolicy(llm_hosts={"api.minimaxi.com"}, search_hosts={"duckduckgo.com"}, mcp_hosts=set())
     broker = CapabilityBroker(gate=gate, egress=egress, signer=ReceiptSigner(key=b"k"))
-    out = await broker.request("web_extract", {"url": "https://evil.example.com/x"})
-    assert isinstance(out, str)
-    assert "egress" in out or "不在允许" in out  # 越白名单 → fail-closed 拒绝串(不真抓)
+    # 私网/回环/云元数据 → SSRF fail-closed 拒(不真发请求、不签回执)
+    for bad in ("http://169.254.169.254/latest/meta-data/", "http://127.0.0.1/admin",
+                "http://10.0.0.5/x", "http://metadata.google.internal/"):
+        out = await broker.request("web_extract", {"url": bad})
+        assert isinstance(out, str) and ("SSRF" in out or "私网" in out or "内网" in out), bad
+        assert broker.last_receipt is None, "被 SSRF 拒不签回执"
+    # 公网 host → egress 层放行(只验裁决,不打真网;实际取页由 _http_get 逐跳再校验)
+    assert broker._egress_deny_reason("web_extract", {"url": "https://news.example.com/a"}) is None

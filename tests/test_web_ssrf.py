@@ -3,7 +3,20 @@
 此处是 IP 层第二防线(直接 IP url / redirect 到 IP / 云元数据)。"""
 from __future__ import annotations
 
+from argos.tools.web import extract_url_blocked
 from argos.web import _is_blocked_host, extract
+
+
+def test_extract_url_blocked_allows_public_denies_internal():
+    """broker 对 web_extract 的出网判据:任意公网 URL 放行,私网/回环/保留/云元数据 + 无法解析 → 拒。
+    URL 可带 scheme/端口/路径,也可裸 host。"""
+    for ok in ("https://news.example.com/a?x=1", "http://example.com", "example.com/page",
+               "https://93.184.216.34/"):
+        assert extract_url_blocked(ok) is False, ok
+    for bad in ("http://169.254.169.254/latest/meta-data/", "http://127.0.0.1:8080/admin",
+                "http://10.0.0.5/", "http://192.168.1.1/", "http://metadata.google.internal/",
+                "http://localhost:9000/", ""):
+        assert extract_url_blocked(bad) is True, bad
 
 
 def test_blocks_cloud_metadata_endpoint():
