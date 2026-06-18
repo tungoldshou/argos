@@ -102,6 +102,8 @@ def evaluate(
     workspace: str | Path | None = None,
     ask_readonly: bool = False,
     reversible_lookup: "Callable[[str], bool | None] | None" = None,
+    low_risk_auto: bool = False,
+    risk: str = "medium",
 ) -> DecisionMeta:
     """串联 hard → soft deny → soft allow → soft ask → per-tool → default(spec D15 锁)。
 
@@ -248,7 +250,15 @@ def evaluate(
     if lvl == "auto":
         base = DecisionMeta(decision="approve", trigger=f"level:{lvl}", reason=f"default {lvl}")
     elif lvl in ("confirm", "propose", "accept_edits"):
-        base = DecisionMeta(decision="ask", trigger=f"level:{lvl}", reason=f"default {lvl}")
+        # L1「只有危险操作才问」:默认决策处对【低危】动作(registry risk=low,如 web_search/
+        # web_extract/read_file/search_files 只读)自动放行,中/高危仍 ask。仅 low_risk_auto(trust dial
+        # L1 置)且非 L0(ask_readonly)且 lvl==confirm 时生效;普通 CONFIRM 不置 → 行为不变。
+        # hard/soft deny/ask、secret、per-tool 都在前面已返回,不受此影响(2026-06-18 修)。
+        if low_risk_auto and not ask_readonly and lvl == "confirm" and risk == "low":
+            base = DecisionMeta(decision="approve", trigger="trust:L1 低危放行",
+                                reason="L1:低风险动作自动放行(只有危险操作才问)")
+        else:
+            base = DecisionMeta(decision="ask", trigger=f"level:{lvl}", reason=f"default {lvl}")
     elif lvl == "observe":
         return DecisionMeta(decision="deny", trigger=f"level:{lvl}", reason=f"default {lvl}")
     else:

@@ -23,6 +23,35 @@ def test_decision_kind_and_approved():
     assert Decision(kind="always").approved is True
 
 
+def test_l1_low_risk_auto_approve_evaluator():
+    """L1「只有危险操作才问」(2026-06-18 修):评估器默认决策处对【低危】动作自动放行,中/高危仍 ask。
+    仅 low_risk_auto=True(trust dial L1 置)时生效;普通 CONFIRM(False)低危照旧 ask(行为不变)。"""
+    from argos.permissions import get_config
+    from argos.permissions.evaluator import evaluate
+    cfg = get_config()
+    low = evaluate("web_search", {"query": "x"}, gate_level="confirm", config=cfg,
+                   low_risk_auto=True, risk="low")
+    assert low.decision == "approve", low
+    med = evaluate("write_file", {"path": "a.txt", "content": "x"}, gate_level="confirm",
+                   config=cfg, low_risk_auto=True, risk="medium")
+    assert med.decision == "ask", med
+    plain = evaluate("web_search", {"query": "x"}, gate_level="confirm", config=cfg,
+                     low_risk_auto=False, risk="low")
+    assert plain.decision == "ask", plain
+
+
+@pytest.mark.asyncio
+async def test_gate_l1_auto_approves_low_risk_no_prompt():
+    """gate.set_trust_level(L1) 后,低危动作经 request() 直接放行、不挂起(查天气这类免打扰)。"""
+    from argos.permissions.trust_dial import TrustLevel
+    gate = ApprovalGate()
+    gate.set_trust_level(TrustLevel.L1_DANGEROUS_ONLY)
+    dec = await gate.request("web_search", {"query": "成都天气"},
+                             description="联网搜索", risk="low", timeout=0.5)
+    assert dec.approved is True, dec
+    assert gate.pending() == [], "L1 低危动作不应挂起审批(应自动放行)"
+
+
 @pytest.mark.asyncio
 async def test_request_then_respond_once():
     gate = ApprovalGate(level=ApprovalLevel.CONFIRM)

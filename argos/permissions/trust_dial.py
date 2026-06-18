@@ -126,7 +126,10 @@ def to_approval_semantics(level: TrustLevel) -> dict[str, Any]:
             "description": "危险才问：高风险操作暂停，低风险自动放行",
             "reversible_check": False,
             "ask_readonly": False,
-            # 触发条件：risk == "high" 或 evaluator 命中 hard/soft-ask
+            # low_risk_auto：兑现"低风险自动放行"——evaluator 默认决策处对 registry risk=low 的动作
+            # (web_search/web_extract/read_file/search_files 等只读)自动放行,不弹卡;中/高危照旧 ask。
+            # 仅 L1 置 True;普通 CONFIRM(未经 trust dial)不置,行为不变(2026-06-18 修)。
+            "low_risk_auto": True,
         }
 
     if level is TrustLevel.L2_IRREVERSIBLE_ONLY:

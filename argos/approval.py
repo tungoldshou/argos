@@ -129,6 +129,9 @@ class ApprovalGate:
         self._ask_readonly: bool = False
         self._reversible_check: bool = False
         self._reversible_lookup: "Callable[[str], bool | None] | None" = None
+        # L1「只有危险操作才问」语义:低危(registry risk=low)动作在默认决策处自动放行。
+        # 仅 set_trust_level(L1) 置 True;普通 CONFIRM 档(未走 trust dial)保持 False → 行为不变。
+        self._low_risk_auto: bool = False
 
     def set_level(self, level: ApprovalLevel) -> None:
         self.level = level
@@ -155,6 +158,8 @@ class ApprovalGate:
         self._ask_readonly: bool = bool(sem.get("ask_readonly", False))
         # L2 reversible_check 语义：True → evaluator 调用 _reversible_lookup 查表。
         self._reversible_check: bool = bool(sem.get("reversible_check", False))
+        # L1 low_risk_auto 语义：True → evaluator 默认决策处对低危动作自动放行（中/高危仍 ask）。
+        self._low_risk_auto: bool = bool(sem.get("low_risk_auto", False))
         # 存原始档位供 /trust status 精确回读(反向映射 ApprovalLevel→TrustLevel 有损:
         # L0/L1/L2 都落在 CONFIRM,status 会把 L2 误报成 L1 —— 对用户撒谎,不允许)。
         self._trust_level = trust
@@ -214,8 +219,8 @@ class ApprovalGate:
         evaluator 调用包 try/except:Smart approval 模块出错 → 退回原审批语义(legacy
         fast-path),不让 evaluator bug 阻塞调用方。
         """
-        # 1) Smart approval 评估(spec 2026-06-06 §2.6)
-        eval_meta = self._evaluate(action, args)
+        # 1) Smart approval 评估(spec 2026-06-06 §2.6)。risk 透传:L1 低危自动放行据此判定。
+        eval_meta = self._evaluate(action, args, risk=risk)
         if eval_meta is not None:
             if eval_meta.decision == "approve":
                 self._audit(
@@ -290,10 +295,12 @@ class ApprovalGate:
             return Decision(kind="deny", reason="审批超时,默认拒绝")
 
     # ── Smart approval 内部 helper(spec 2026-06-06 §2.6) ──────────────
-    def _evaluate(self, action: str, args: dict[str, Any]) -> "DecisionMeta | None":
+    def _evaluate(self, action: str, args: dict[str, Any],
+                  risk: str = "medium") -> "DecisionMeta | None":
         """跑 evaluator;模块出错(import / config 坏)→ 返 None 退回 legacy 语义。
         优先使用注入的 permissions_config(per-session);无注入则 fallback 到模块级单例。
-        L0/L2 语义标志(ask_readonly/_reversible_check/_reversible_lookup)经参数透传。
+        L0/L1/L2 语义标志(ask_readonly / low_risk_auto / _reversible_check / _reversible_lookup)经参数透传。
+        risk:动作风险(broker 从 registry/_RISK 查得后传入)——L1 低危自动放行据此判定。
         """
         try:
             from argos.permissions import evaluate, get_config
@@ -305,6 +312,8 @@ class ApprovalGate:
                 workspace=self._workspace,
                 ask_readonly=getattr(self, "_ask_readonly", False),
                 reversible_lookup=rl,
+                low_risk_auto=getattr(self, "_low_risk_auto", False),
+                risk=risk,
             )
         except Exception:  # noqa: BLE001 — Smart approval 出错绝不阻塞调用方
             return None
