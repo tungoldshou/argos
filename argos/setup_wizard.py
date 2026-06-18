@@ -2,6 +2,7 @@
 CLI 交互(run)注入 reader/writer/client 工厂。密钥进 .env(0600),设置进 config.json。"""
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
@@ -185,6 +186,10 @@ class ProbeResult:
 
 
 _PROBE_PROMPT = "请只用一个 ```python 代码块输出:print('ok')。不要任何其它文字。"
+# 连通测试硬超时:ModelClient 自身 timeout=300s 且 stream() 还重试 3 次 → 填错 base_url
+# (端口开着但不回流:misrouted proxy / Ollama 模型没加载)会让向导卡"正在连通测试…"近 900s。
+# 20s 够冷启动首 token,又把 typo/卡死端点的等待收敛到可接受范围(2026-06-18 排查 #7)。
+_PROBE_TIMEOUT_S = 20.0
 
 
 async def probe_connection(*, protocol: str, base_url: str, model: str, api_key: str | None,
@@ -203,9 +208,15 @@ async def probe_connection(*, protocol: str, base_url: str, model: str, api_key:
     from argos.core.honesty import HONESTY_SYSTEM, compose_system, format_untrusted
     from argos.core.loop import extract_code_block
     system = compose_system(HONESTY_SYSTEM, untrusted=format_untrusted(skill_bodies=[], memory_lines=[]))
-    try:
-        out = "".join([c async for c in client.stream(
+    async def _collect() -> str:
+        return "".join([c async for c in client.stream(
             [{"role": "user", "content": _PROBE_PROMPT}], system=system)])
+    try:
+        out = await asyncio.wait_for(_collect(), timeout=_PROBE_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        return ProbeResult(False, False, "不行",
+                           f"连接超时({int(_PROBE_TIMEOUT_S)}s 无回流):端点可达但未响应,"
+                           "检查 base_url 是否正确、模型是否已加载。")
     except Exception as e:  # noqa: BLE001 — 连通失败如实报(含状态码/真因)
         detail = str(e)
         return ProbeResult(False, False, "不行", f"连不上 / 端点报错:{detail[:200]}")
