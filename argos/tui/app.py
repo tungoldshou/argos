@@ -377,6 +377,14 @@ class ArgosApp(App):
             )
         except Exception:  # noqa: BLE001 — 未 mount 或测试场景:静默
             pass
+        # gate「需交互审批」带外回调:inline 模式下,broker-gated 工具的审批在 exec_code(已挪进
+        # to_thread)中经桥发起,此刻 loop 事件生成器阻塞在 await、yield 不出 ApprovalRequest → 旧路径
+        # TUI 永远收不到、不 mount 审批卡 → 工具干等到超时(2026-06-18 真机:run_command/web_search
+        # 全卡 30s)。此回调让 gate 在 ask 时直接把卡送到 TUI。daemon 路径不靠它(走 SSE)。
+        try:
+            self.gate.set_ask_listener(self._on_gate_ask)
+        except Exception:  # noqa: BLE001
+            pass
         # workspace 注入(诚实:_workspace 是 host 启动时计算好的工作目录;evaluator 据此跑边界)
         try:
             self.gate.set_workspace(str(self._workspace))
@@ -2508,6 +2516,26 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             escape_value="deny",   # fail-closed:不明确批准即不放行
             risk="medium",
         ))
+
+    def _on_gate_ask(self, call_id: str, payload: dict) -> None:
+        """gate 进 ask 路径(broker 工具桥,call_id 为 gate 自生成)→ 构造 ApprovalRequest 并 mount
+        审批卡。在 host_loop(Textual loop)线程上被同步调用(经 request_blocking 的
+        run_coroutine_threadsafe),故用 run_worker 调度异步 _handle_approval。
+        修 2026-06-18:此前 inline 模式 broker-gated 工具需审批时永远不弹卡、干等到超时。"""
+        from argos.protocol.events import ApprovalRequest
+        try:
+            req = ApprovalRequest(
+                call_id=call_id,
+                action=str(payload.get("action", "")),
+                args=payload.get("args", {}) or {},
+                description=str(payload.get("description", "")),
+                risk=payload.get("risk", "low"),
+                trigger=str(payload.get("trigger", "")),
+                secret_pattern=payload.get("secret_pattern"),
+            )
+            self.run_worker(self._handle_approval(req), exclusive=False)
+        except Exception:  # noqa: BLE001 — mount 失败不得拖死 gate 的 ask
+            pass
 
     async def _handle_approval(self, req: ApprovalRequest) -> None:
         """Auto 档不渲染直接 always;否则流内 mount InlineChoice(契约 §6.3),回调里 respond。

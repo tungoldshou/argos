@@ -37,6 +37,37 @@ async def test_request_approval_blocks_then_resolves():
 
 
 @pytest.mark.asyncio
+async def test_ask_listener_fires_for_tool_ask_only():
+    """2026-06-18 修:gate 进 ask 路径且 call_id 为自生成(= broker 工具桥)→ 同步触发 ask_listener,
+    让 inline TUI mount 审批卡(exec_code 在 to_thread 时 loop 阻塞、yield 不出 ApprovalRequest →
+    旧路径永不弹卡 → 工具干等超时)。调用方预传 call_id(workflow/plan/intent)不触发,避免重复卡。"""
+    gate = approval.ApprovalGate()
+    seen: list = []
+    gate.set_ask_listener(lambda cid, payload: seen.append((cid, payload)))
+
+    task = asyncio.create_task(
+        gate.request("write_file", {"path": "x.py"}, description="写文件", risk="low", timeout=0.5)
+    )
+    await asyncio.sleep(0)
+    assert len(seen) == 1, "工具 ask 应触发 ask_listener(让 TUI mount 卡)"
+    cid, payload = seen[0]
+    assert payload["action"] == "write_file" and payload["args"] == {"path": "x.py"}
+    assert cid == gate.pending()[0].call_id
+    gate.respond(cid, "once")
+    await task
+
+    seen.clear()
+    task2 = asyncio.create_task(
+        gate.request("write_file", {"path": "y.py"}, description="写文件", risk="low",
+                     timeout=0.5, call_id="precid000001")
+    )
+    await asyncio.sleep(0)
+    assert seen == [], "调用方预传 call_id 的 ask 不应触发带外回调(避免和 loop 自投事件重复)"
+    gate.respond("precid000001", "once")
+    await task2
+
+
+@pytest.mark.asyncio
 async def test_deny_returns_false():
     gate = approval.ApprovalGate()
     request_task = asyncio.create_task(
