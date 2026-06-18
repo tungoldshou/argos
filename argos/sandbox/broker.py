@@ -204,6 +204,18 @@ class CapabilityBroker:
             deny = self._egress_deny_reason(action, args)
             if deny is not None:
                 return (f"错误:{deny}", 1)
+        # ①b 计算机控制金融/验证码硬规则:声明"任何档位均不可降级"的人在场确认,过去只在 request()
+        # 的异步审批路径(_request_decision→gate→evaluator)生效。同步桥(workflow 子 agent 走 AUTO、
+        # 不注入 host_loop)直落 _execute → 该硬规则被悄悄绕过(2026-06-18 排查 #11)。同步桥无法交互审批,
+        # 故 fail-closed 拒,而不是静默执行支付/银行 app 或键入卡号/OTP。镜像 _gate_only_write 的 host 侧裁决。
+        if action.startswith("computer_"):
+            from argos.permissions.hard_rules import check_computer_hard_rules
+            _rule = check_computer_hard_rules(action, args)
+            if _rule:
+                return (
+                    f"错误:计算机控制命中非开发者域硬规则({_rule}),需人在场确认;"
+                    "同步桥(子 agent AUTO)无法交互审批 → fail-closed 拒绝。", 1
+                )
         # ③ host 执行真副作用(② 交互审批跳过 —— 同步桥无法 await)
         value, exit_code = self._execute(action, args, run_ctx=None)
         # ④ 签 Receipt(HMAC,host 侧):沙箱工具调用现在真有签名回执 + 可审计

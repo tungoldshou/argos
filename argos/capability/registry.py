@@ -88,6 +88,11 @@ class CapabilityRegistry:
         """返回所有已注册能力名（按注册顺序，Python 3.7+ dict 有序）。"""
         return tuple(self._caps.keys())
 
+    def callable_names(self) -> tuple[str, ...]:
+        """返回【模型在沙箱里真正可调用】的能力名（排除 sandbox_callable=False 的宿主专属能力，
+        如 stt_transcribe）。/tools 据此诚实计数(数量 = 真实可调用工具数)。"""
+        return tuple(n for n, c in self._caps.items() if c.sandbox_callable)
+
     def by_kind(self, kind: "KindName") -> tuple["Capability", ...]:
         """返回指定 kind 的所有能力（按注册顺序）。"""
         return tuple(c for c in self._caps.values() if c.kind == kind)

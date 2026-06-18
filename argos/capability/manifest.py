@@ -35,6 +35,9 @@ class Capability:
         verify_hint   — 该能力产物的机检建议（喂验证梯子 L2/L3；空串=无提示）。
         visibility    — "all" 对所有用户可见；"developer" 仅开发者可见（LSP 等）。
         dispatch      — host 侧执行 Callable；None=由 broker 既有路径（if/elif）处理的内置能力。
+        sandbox_callable — True=模型在沙箱命名空间里有可调用包装（绝大多数工具）；
+                       False=宿主进程专属能力（如 stt_transcribe 语音转写，沙箱外跑、模型调不动）。
+                       /tools 计数据此排除不可调用能力，兑现"数量 = 真实可调用工具数"的诚实承诺。
     """
     name: str
     kind: KindName
@@ -45,6 +48,7 @@ class Capability:
     verify_hint: str = ""
     visibility: VisibilityName = "all"
     dispatch: Callable[..., Any] | None = None
+    sandbox_callable: bool = True
 
     def __post_init__(self) -> None:
         """基础不变式：name 不可为空串。"""

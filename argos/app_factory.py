@@ -39,7 +39,7 @@ from argos.permissions.config import PermissionsConfig, get_config as _permissio
 from argos.capability import CapabilityRegistry, register_builtins
 from argos.sandbox.broker import CapabilityBroker
 from argos.sandbox.egress import EgressPolicy
-from argos.sandbox.executor import SeatbeltExecutor
+from argos.sandbox.executor import SeatbeltExecutor, select_backend
 from argos.tools.receipts import ReceiptSigner
 from argos.protocol.events import EventBus
 
@@ -166,7 +166,10 @@ def _make_gate_broker_sandbox(
         return broker.request_blocking(action, args)
 
     # 沙箱由 loop.run() 自己 spawn/close(每轮一个子进程),此处只构造,不预 spawn。
-    sandbox = SeatbeltExecutor(broker_handler=broker_handler)
+    # 按平台选后端:macOS → SeatbeltExecutor(不变);Linux → 现成的 bwrap/unshare 后端;
+    # 都无 → 干净的 RuntimeError(被 __main__ 接住降级),而不是每个任务都甩
+    # raw FileNotFoundError: /usr/bin/sandbox-exec(2026-06-18 排查 #2)。
+    sandbox = select_backend()(broker_handler=broker_handler)
     return gate, broker, sandbox
 
 

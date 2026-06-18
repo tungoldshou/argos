@@ -111,12 +111,17 @@ class SubAgentFactory:
             # role 接管:read_only 从 preset 取(覆盖 tool_scope 派生)。role 不填时 read_only
             # 仍由 tool_scope 决定 —— 见下方 read_only 表达式(短路 on None)。
             derived_read_only = role_preset.read_only
+            # 角色白名单(权威):透传给沙箱 → 命名空间 = 可用 ∩ 白名单(物理剔除其余),兑现
+            # spec.py:45 承诺。修 explorer 拿到未声明的 web/浏览器/截屏、reviewer 声明的 run_command
+            # 被 read_only 误剥(2026-06-18 排查 #6)。无 role 时为 None,仍走旧 read_only 派生。
+            derived_allowlist: "list[str] | None" = list(role_preset.tool_allowlist)
             max_steps = role_preset.max_steps
             # system_prompt 走 user 段前缀注入:把角色上下文拼到 user goal 最前(loop._drive
             # 看到的 user message 已含角色引导,等效 system 块对齐)。不动 loop.py 签名。
             prompt = f"[角色:{role_preset.name}]\n{role_preset.system_prompt}\n\n---\n\n{prompt}"
         else:
             derived_read_only = (task.tool_scope == "read")
+            derived_allowlist = None
             max_steps = _DEFAULT_MAX_STEPS
         model = self.model_factory(task.model)
         # 启动审批已覆盖整张 workflow 的意图 → 子 agent AUTO 跑(逐工具不再打断)。
@@ -166,6 +171,7 @@ class SubAgentFactory:
                 verify_dir=workdir,
                 allow_workflow=False,   # 深度护栏:子 agent 沙箱不含 propose_workflow
                 read_only=derived_read_only,  # role 派生 / 旧 tool_scope 派生(向后兼容)
+                tool_allowlist=derived_allowlist,  # 角色白名单(权威 ∩);None=走 read_only 派生
             )
             try:
                 async for ev in loop.run(prompt, session_id=agent_id):
