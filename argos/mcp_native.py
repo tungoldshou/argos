@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import subprocess
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -47,6 +49,11 @@ class _StdioServer:
         self._lock = threading.Lock()
         self.tools: list[McpTool] = []
         self.error: str | None = None
+        # 后台读线程把 server stdout 逐行喂进队列;_rpc 用 queue.get(timeout) 兜底。
+        # 否则 readline() 是无界阻塞:server"活着但不吭声"时(常见 MCP 挂法),按行 deadline
+        # 检查永不触发,整个 run(daemon 路径连 host loop)冻死(2026-06-18 排查 #3)。
+        self._rx: "queue.Queue[str | None]" = queue.Queue()
+        self._reader: threading.Thread | None = None
 
     # ── 连接 + 握手(initialize → initialized → tools/list)──────────────────────
     def connect(self) -> bool:
@@ -64,6 +71,9 @@ class _StdioServer:
         except Exception as e:  # noqa: BLE001
             self.error = f"启动失败:{type(e).__name__}: {e}"
             return False
+        # 启动后台读线程(daemon):阻塞 readline 留在线程里,主路径只 queue.get(timeout)。
+        self._reader = threading.Thread(target=self._reader_loop, daemon=True)
+        self._reader.start()
         try:
             init = self._rpc("initialize", {
                 "protocolVersion": "2024-11-05",
@@ -112,19 +122,39 @@ class _StdioServer:
                     pass
             self._proc = None
 
+    def _reader_loop(self) -> None:
+        """后台:逐行读 server stdout 喂进队列;EOF/异常 → 投 None 哨兵。
+        阻塞 readline 关在本线程,_rpc 永不直接 readline(避免无界挂起)。"""
+        stdout = self._proc.stdout if self._proc is not None else None
+        if stdout is None:
+            self._rx.put(None)
+            return
+        try:
+            for line in stdout:   # 阻塞按行读,直到 EOF(server 退出)
+                self._rx.put(line)
+        except Exception:  # noqa: BLE001 — 进程被杀/管道断 → 当 EOF 处理
+            pass
+        finally:
+            self._rx.put(None)   # EOF 哨兵,叫醒等待中的 _rpc
+
     # ── 同步 JSON-RPC 帧(newline-delimited)──────────────────────────────────────
     def _rpc(self, method: str, params: dict[str, Any], *, timeout: float) -> dict[str, Any]:
         with self._lock:
             self._id += 1
             rid = self._id
             self._send({"jsonrpc": "2.0", "id": rid, "method": method, "params": params})
-            # 读到匹配 id 的响应(跳过通知/不相关行)。简化:阻塞读行,直到拿到本 id。
-            assert self._proc is not None and self._proc.stdout is not None
-            import time
+            # 从队列读匹配 id 的响应(跳过通知/不相关行)。queue.get(timeout=remaining) 保证
+            # server"活着但不吭声"时也按 timeout 兜底,而非无界 readline(2026-06-18 排查 #3)。
             deadline = time.time() + timeout
-            while time.time() < deadline:
-                line = self._proc.stdout.readline()
-                if not line:
+            while True:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    raise TimeoutError(f"{method} 超时({timeout}s):server 无响应")
+                try:
+                    line = self._rx.get(timeout=remaining)
+                except queue.Empty:
+                    raise TimeoutError(f"{method} 超时({timeout}s):server 无响应")
+                if line is None:
                     raise RuntimeError("server stdout 关闭(进程可能已退出)")
                 line = line.strip()
                 if not line:
@@ -135,7 +165,6 @@ class _StdioServer:
                     continue  # 非 JSON 行(server 噪声)跳过
                 if msg.get("id") == rid:
                     return msg
-            raise TimeoutError(f"{method} 超时({timeout}s)")
 
     def _notify(self, method: str, params: dict[str, Any]) -> None:
         with self._lock:

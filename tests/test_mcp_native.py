@@ -67,6 +67,53 @@ def test_zero_config_is_honest(tmp_path):
     mgr.close()
 
 
+# 应答握手但对 tools/call 永不回应的 server(模拟"活着但沉默"——常见 MCP 挂法)。
+_SILENT_CALL_SERVER = textwrap.dedent('''
+    import sys, json
+    def send(obj):
+        sys.stdout.write(json.dumps(obj) + "\\n"); sys.stdout.flush()
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        msg = json.loads(line); mid = msg.get("id"); method = msg.get("method")
+        if method == "initialize":
+            send({"jsonrpc":"2.0","id":mid,"result":{"protocolVersion":"2024-11-05",
+                  "capabilities":{},"serverInfo":{"name":"silent","version":"1"}}})
+        elif method == "notifications/initialized":
+            pass
+        elif method == "tools/list":
+            send({"jsonrpc":"2.0","id":mid,"result":{"tools":[
+                  {"name":"hang","description":"never replies","inputSchema":{"type":"object"}}]}})
+        # tools/call:故意永不回应(server 活着但沉默)
+''')
+
+
+def test_silent_server_call_times_out_not_hangs(tmp_path, monkeypatch):
+    """#3 排查修复:server 应答握手却对 tools/call 永不回应(活着但沉默)→ call() 必须按
+    _CALL_TIMEOUT_S 超时返回诚实错误,而不是无界 readline 冻死 run(及 daemon 路径的 host loop)。"""
+    import time
+
+    import argos.mcp_native as mcp_native
+    monkeypatch.setattr(mcp_native, "_CALL_TIMEOUT_S", 0.5)
+    server = tmp_path / "silent_server.py"
+    server.write_text(_SILENT_CALL_SERVER, encoding="utf-8")
+    cfg = tmp_path / "mcp.json"
+    cfg.write_text(json.dumps({
+        "servers": {"silent": {"command": sys.executable, "args": [str(server)]}}
+    }), encoding="utf-8")
+    mgr = McpManager(config_path=cfg)
+    try:
+        assert len(mgr.list_tools()) == 1, "握手应成功(initialize/tools/list 正常应答)"
+        t0 = time.time()
+        out = mgr.call("silent", "hang", {})
+        dt = time.time() - t0
+        assert "超时" in out or "TimeoutError" in out, out
+        assert dt < 5.0, f"应在 ~0.5s 超时,实际 {dt:.1f}s —— 无界挂起未修复"
+    finally:
+        mgr.close()
+
+
 # ── ② 真 server 端到端 ────────────────────────────────────────────────────────
 def test_real_echo_server_end_to_end(tmp_path):
     cfg = _write_echo_config(tmp_path)

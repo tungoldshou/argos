@@ -81,11 +81,14 @@ ROLE_PRESETS: dict[str, _RolePreset] = {
     ),
     "planner": _RolePreset(
         name="planner",
-        tool_allowlist=_ROLE_READ_TOOLS | frozenset({"propose_workflow"}),
+        # 子 agent 一律 allow_workflow=False(深度守卫),propose_workflow 必被剥出命名空间;
+        # 故不放进 allowlist、提示也不叫它用 —— 否则模型跟着提示调 propose_workflow 会 NameError
+        # (2026-06-18 排查 #9)。planner 的产出就是一段纯方案,不是工作流草稿。
+        tool_allowlist=_ROLE_READ_TOOLS,
         system_prompt=(
             "你处于 planner(规划)角色。\n"
             "- 只产方案不执行;沙箱工具在 plan mode 会被 dispatcher 拦(plan mode 守卫见 plan_mode.py)。\n"
-            "- 你的产出 = 一段可被父 agent 审阅的方案(可用 propose_workflow 提一份工作流草稿)。\n"
+            "- 你的产出 = 一段可被父 agent 审阅的方案(纯文字步骤/取舍,不要调用工作流工具)。\n"
             "- 不要假装执行了什么 —— 沙箱是独立子进程,parent 拿不到你的本地状态。"
         ),
         max_steps=8,

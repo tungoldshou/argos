@@ -65,45 +65,57 @@ class DaemonClient:
         for k, v in headers.items():
             req_lines.append(f"{k}: {v}")
         raw = ("\r\n".join(req_lines) + "\r\n\r\n").encode("latin-1") + payload
-        reader, writer = await asyncio.open_unix_connection(str(self._socket_path))
-        try:
-            writer.write(raw)
-            await writer.drain()
-            # 读 status line
-            status_line = await reader.readline()
-            if not status_line:
-                raise DaemonError("empty response")
+
+        async def _roundtrip() -> tuple[int, dict[str, str], bytes]:
+            reader, writer = await asyncio.open_unix_connection(str(self._socket_path))
             try:
-                _, status_str, _ = status_line.decode("latin-1").rstrip("\r\n").split(" ", 2)
-                status = int(status_str)
-            except (ValueError, UnicodeDecodeError) as e:
-                raise DaemonError(f"bad status line: {e}")
-            # 读 headers
-            resp_headers: dict[str, str] = {}
-            while True:
-                line = await reader.readline()
-                if line in (b"\r\n", b"\n", b""):
-                    break
+                writer.write(raw)
+                await writer.drain()
+                # 读 status line
+                status_line = await reader.readline()
+                if not status_line:
+                    raise DaemonError("empty response")
                 try:
-                    k, v = line.decode("latin-1").rstrip("\r\n").split(":", 1)
-                    resp_headers[k.strip().lower()] = v.strip()
-                except ValueError:
-                    continue
-            # 读 body
-            cl = resp_headers.get("content-length")
-            body_bytes = b""
-            if cl:
+                    _, status_str, _ = status_line.decode("latin-1").rstrip("\r\n").split(" ", 2)
+                    status = int(status_str)
+                except (ValueError, UnicodeDecodeError) as e:
+                    raise DaemonError(f"bad status line: {e}")
+                # 读 headers
+                resp_headers: dict[str, str] = {}
+                while True:
+                    line = await reader.readline()
+                    if line in (b"\r\n", b"\n", b""):
+                        break
+                    try:
+                        k, v = line.decode("latin-1").rstrip("\r\n").split(":", 1)
+                        resp_headers[k.strip().lower()] = v.strip()
+                    except ValueError:
+                        continue
+                # 读 body
+                cl = resp_headers.get("content-length")
+                body_bytes = b""
+                if cl:
+                    try:
+                        body_bytes = await reader.readexactly(int(cl))
+                    except (ValueError, asyncio.IncompleteReadError):
+                        pass
+                return status, resp_headers, body_bytes
+            finally:
                 try:
-                    body_bytes = await reader.readexactly(int(cl))
-                except (ValueError, asyncio.IncompleteReadError):
+                    writer.close()
+                    await writer.wait_closed()
+                except Exception:  # noqa: BLE001
                     pass
-            return status, resp_headers, body_bytes
-        finally:
-            try:
-                writer.close()
-                await writer.wait_closed()
-            except Exception:  # noqa: BLE001
-                pass
+
+        # 整个往返受 self._timeout 硬约束:daemon 接了 socket 却卡死/半写时,无界 readline/
+        # readexactly 会让"思考中…"永远转(daemon 是默认运行路径)。超时抛 DaemonError,
+        # 让上层 try/except 接住并诚实降级 —— 而不是冻住界面(2026-06-18 排查 #1)。
+        try:
+            return await asyncio.wait_for(_roundtrip(), timeout=self._timeout)
+        except asyncio.TimeoutError:
+            raise DaemonError(
+                f"daemon 无响应(超过 {self._timeout:.0f}s):{method} {path} —— 可能繁忙或卡死"
+            )
 
     def _parse_json(self, status: int, body: bytes) -> dict:
         try:

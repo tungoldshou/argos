@@ -50,8 +50,9 @@ def test_cloud_whisper_uses_injected_client():
         class audio:
             class transcriptions:
                 @staticmethod
-                def create(model, file):
+                def create(model, file, **kw):   # 真 SDK 收 timeout 等 kwargs
                     assert model == "whisper-1"
+                    assert kw.get("timeout") == 60   # 硬超时已传(防卡住转圈)
                     return _Resp()
 
     cw = CloudWhisper(api_key="k", base_url=None, model="whisper-1", client=_FakeClient())

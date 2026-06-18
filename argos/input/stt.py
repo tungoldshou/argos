@@ -106,8 +106,10 @@ class CloudWhisper:
         wav = _pcm16_wav_bytes(audio, samplerate)
         client = self._get_client()
         try:
+            # 显式 timeout:OpenAI SDK 默认 read=600s,卡住的上传/连接会让"转写中…"转近 10 分钟。
+            # 60s 够正常转写,超时则经下方 except 转成诚实 SttError(2026-06-18 排查 #8)。
             resp = client.audio.transcriptions.create(
-                model=self._model, file=("audio.wav", io.BytesIO(wav)),
+                model=self._model, file=("audio.wav", io.BytesIO(wav)), timeout=60,
             )
         except Exception as e:  # noqa: BLE001
             raise SttError(f"云端转写失败:{e}") from e

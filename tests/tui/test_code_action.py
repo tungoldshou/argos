@@ -85,6 +85,32 @@ def test_code_action_block_ok_false_glyph():
     assert '└' in text_arg, f"Expected └ branch glyph, got: {text_arg}"
 
 
+def test_traceback_shows_real_cause_not_internal_frames():
+    """#5(2026-06-18):沙箱内代码报错的裸 traceback → 头条显示最后一行(真正的 异常类型: 消息),
+    内部帧折叠在后;而不是旧逻辑折"前 8 行"恰好全是 smolagents/concurrent.futures 内部帧、
+    真错因被埋到看不见(正是截图那条)。"""
+    block = CodeActionBlock(code="print(undefined)", step=1)
+    tb = (
+        "Traceback (most recent call last):\n"
+        '  File ".../smolagents/local_python_executor.py", line 311, in wrapper\n'
+        "    result = future.result(timeout=timeout_seconds)\n"
+        '  File ".../concurrent/futures/_base.py", line 458, in result\n'
+        "    raise TimeoutError()\n"
+        "InterpreterError: The variable `undefined` is not defined"
+    )
+    import unittest.mock as mock
+    mock_result_widget = mock.MagicMock()
+    with mock.patch.object(block, 'query_one', return_value=mock_result_widget):
+        block.set_result(stdout="", value_repr="", exc=tb, ok=False)
+    text = mock_result_widget.update.call_args_list[0][0][0]
+    # 真错因(最后一行)出现在头条
+    assert "InterpreterError: The variable `undefined` is not defined" in text, text
+    # 内部帧被折叠,不逐帧展示
+    assert "内部堆栈已折叠" in text, text
+    # smolagents/concurrent 内部路径不再露出(已折叠)
+    assert "local_python_executor.py" not in text, text
+
+
 def test_css_class_ok_false_set_correctly():
     """watch_ok(False) 应设置 ok-false CSS class 以触发 $fail 着色。"""
     block = CodeActionBlock(code="x = 1", step=1)

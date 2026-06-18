@@ -66,9 +66,17 @@ class CodeActionBlock(Vertical):
         if value_repr:
             body += f"\n[返回值] {value_repr}"
         text = body.strip() or ("执行完成" if ok else "执行异常")
-        # 折叠长输出(头尾各留,中间省略)
         lines = text.splitlines()
-        if len(lines) > 12:
+        # 裸 traceback(沙箱内代码报错)→ 把最后一行【真正的 异常类型: 消息】当头条,内部帧折在其后。
+        # 否则旧逻辑折"前 8 行"恰好全是 smolagents/concurrent.futures 内部帧,真错因被埋到看不见
+        # (2026-06-18 排查 #5,正是截图那条 TimeoutError)。完整 exc 仍经 CodeResult 喂给模型,本处只管展示。
+        if not ok and text.startswith("Traceback (most recent call last):"):
+            nonempty = [ln for ln in lines if ln.strip()]
+            headline = nonempty[-1] if nonempty else text
+            hidden = max(0, len(lines) - 1)
+            text = headline if hidden == 0 else f"{headline}\n… ({hidden} 行内部堆栈已折叠)"
+        # 折叠长输出(头尾各留,中间省略)
+        elif len(lines) > 12:
             text = "\n".join(lines[:8]) + f"\n… +{len(lines) - 8} 行"
         # ◕ 阅毕眼(ok=True,$pass);◉ 红瞳(ok=False,$fail)
         glyph = "◕" if ok else "◉"
