@@ -111,6 +111,12 @@ class ApprovalGate:
         # 决策回调(TUI ActivityPanel 接入):接 (action, decision_str, trigger)。
         # 默认空 lambda(headless / 测试无 UI)→ 不抛。
         self._decision_listener: Callable[[str, str, str], None] | None = None
+        # 「需要交互审批」带外回调(2026-06-18 修):gate 进 ask 路径时同步调 fn(call_id, ask_payload)。
+        # inline 模式下,broker-gated 工具的审批在 exec_code(已挪进 to_thread)中经桥发起,此刻
+        # loop 的事件生成器正阻塞在 await,yield 不出 ApprovalRequest → TUI 收不到、永远不 mount
+        # 审批卡 → 工具干等到超时。此回调是带外通道:让 TUI 直接 mount 卡。仅对【gate 自生成 call_id】
+        # 的 ask 触发(工具桥);调用方预传 call_id 的(workflow/plan/intent)已由 loop 自投事件,不重复。
+        self._ask_listener: Callable[[str, dict[str, Any]], None] | None = None
         # per-session 注入实例(为多 run 并发铺路):由 build_components 传入;
         # None = fallback 到模块级单例(向后兼容测试/headless 路径)。
         self._permissions_config: Any | None = permissions_config
@@ -182,6 +188,13 @@ class ApprovalGate:
         decision_str ∈ {approved, denied, asked}。None = 取消监听(headless / 测试默认)。"""
         self._decision_listener = fn
 
+    def set_ask_listener(self, fn: "Callable[[str, dict[str, Any]], None] | None") -> None:
+        """带外「需交互审批」回调:gate 进 ask 路径且 call_id 为本 gate 自生成(= 工具桥,
+        非 workflow/plan/intent 预传)时,同步调 fn(call_id, ask_payload)。inline 模式 TUI 据此
+        mount 审批卡(exec_code 在 to_thread 中,loop 生成器阻塞、yield 不出 ApprovalRequest)。
+        None = 取消(headless / daemon 路径不用此通道,走 SSE)。"""
+        self._ask_listener = fn
+
     def pending(self) -> list[_Pending]:
         return list(self._pending.values())
 
@@ -245,6 +258,7 @@ class ApprovalGate:
         # 4) ask:挂起等 respond
         # call_id 可由调用方预生成(如工作流提议先投 WorkflowProposed 携带 call_id,TUI 据它放行);
         # 未传则自生成,向后兼容。
+        _caller_supplied_call_id = call_id is not None   # workflow/plan/intent 预传 → loop 已自投事件
         call_id = call_id or uuid.uuid4().hex[:12]
         loop = asyncio.get_running_loop()
         fut: asyncio.Future[Decision] = loop.create_future()
@@ -262,6 +276,13 @@ class ApprovalGate:
             created_at=time.time(), future=fut, loop=loop,
         )
         self._notify("asked", action, ask_trigger)
+        # 带外 mount 审批卡:仅对 gate 自生成 call_id 的 ask(= broker 工具桥)触发 —— 调用方预传
+        # call_id 的(workflow/plan/intent)已由 loop 自投事件 mount 过,避免重复弹卡(2026-06-18 修)。
+        if not _caller_supplied_call_id and self._ask_listener is not None:
+            try:
+                self._ask_listener(call_id, dict(ask_payload))
+            except Exception:  # noqa: BLE001 — 监听器(UI)出错不得阻塞 gate 决策
+                pass
         try:
             return await asyncio.wait_for(fut, timeout=timeout)
         except asyncio.TimeoutError:
