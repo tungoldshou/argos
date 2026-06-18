@@ -99,6 +99,23 @@ class CapabilityBroker:
         # 截图当图像挂到下一条反馈消息回给模型(视觉回路)。None = 本步无新截图。
         self.last_computer_artifact: tuple[str, tuple | None] | None = None
 
+    def _egress_deny_reason(self, action: str, args: dict[str, Any]) -> str | None:
+        """网络类动作的出网裁决(fail-closed)。允许 → None;拒绝 → 人类可读原因(不含"错误:"前缀)。
+        request() 与同步桥 execute_sync() 共用,保证两条路径裁决一致(6323 SSRF 修复要求)。
+
+        · web_extract:目标 URL 由 agent 动态选(能力清单声明 egress_hosts=("*"))→ 放行任意
+          【公网】host,只硬挡私网/回环/保留/云元数据(SSRF)。出网控制不靠静态白名单,而靠
+          SSRF 双层防护(此处 + _http_get 内逐跳)+ 审批拨盘 + 每次签 HMAC 回执(全程留痕)。
+        · 其余网络动作(web_search 等):维持固定 provider 白名单 fail-closed —— host 不在白名单即拒。"""
+        host = _web.host_for(action, args)
+        if action == "web_extract":
+            if _web.extract_url_blocked(args.get("url", "")):
+                return f"SSRF 防护拒绝私网/保留/内网地址(web_extract 仅允许公网 URL):{host!r}"
+            return None
+        if not self._egress.allowed(host):
+            return f"egress 拒绝 —— {host!r} 不在允许出网名单。可让用户批准该域名后重试。"
+        return None
+
     async def request(self, action: str, args: dict[str, Any]) -> Any:
         """返回灌回沙箱的值(成功=工具串;拒绝=拒绝串)。副作用:签 Receipt 存 last_receipt。
 
@@ -133,11 +150,9 @@ class CapabilityBroker:
         # 无 registry 时 fallback 原 _NETWORK_ACTIONS(行为零变更)。
         _network_actions = self._derive_network_actions()
         if action in _network_actions:
-            host = _web.host_for(action, args)
-            # web_extract:校验目标 url 的 host;web_search:校验活跃 provider 的出口 host(I3)。
-            # 两者都 fail-closed —— host 不在白名单即拒,绝不静默放行。
-            if not self._egress.allowed(host):
-                return f"错误:egress 拒绝 —— {host!r} 不在允许出网名单。可让用户批准该域名后重试。"
+            deny = self._egress_deny_reason(action, args)
+            if deny is not None:
+                return f"错误:{deny}"
         # ② 审批拨盘
         # C1:run_command 即便在 AUTO 档也强制逐个确认 —— 永不静默执行任意 shell。
         level_override = (
@@ -184,14 +199,11 @@ class CapabilityBroker:
         if action in _FILE_WRITE_ACTIONS:
             val = self._gate_only_write(action, args)
             return val, (0 if val == _files.WRITE_APPROVED_SENTINEL else 1)
-        # ① egress 检查(网络类,fail-closed)
+        # ① egress 检查(网络类,fail-closed)—— 同步桥与 request() 走同一裁决(6323 SSRF 修复保持一致)
         if action in self._derive_network_actions():
-            host = _web.host_for(action, args)
-            if not self._egress.allowed(host):
-                return (
-                    f"错误:egress 拒绝 —— {host!r} 不在允许出网名单。可让用户批准该域名后重试。",
-                    1,
-                )
+            deny = self._egress_deny_reason(action, args)
+            if deny is not None:
+                return (f"错误:{deny}", 1)
         # ③ host 执行真副作用(② 交互审批跳过 —— 同步桥无法 await)
         value, exit_code = self._execute(action, args, run_ctx=None)
         # ④ 签 Receipt(HMAC,host 侧):沙箱工具调用现在真有签名回执 + 可审计

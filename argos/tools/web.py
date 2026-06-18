@@ -43,3 +43,16 @@ def host_for(action: str, args: dict) -> str:
     if action == "web_search":
         return web.active_search_host()   # I3:解析活跃 provider host,broker fail-closed 校验
     return ""
+
+
+def extract_url_blocked(url: str) -> bool:
+    """web_extract 的出网判据:目标 URL 的 host 是否被 SSRF 防护拒(私网/回环/保留/云元数据)。
+    web_extract 的目标由 agent 动态选(能力清单声明 egress_hosts=("*"))→ 放行任意【公网】host,
+    只硬挡内网/元数据(此处是 broker 边界第一层;_http_get 内逐跳再校验是第二层)。
+    无法解析出 host → fail-closed 视为被拒。"""
+    from urllib.parse import urlparse
+    u = url if "://" in (url or "") else f"http://{url}"
+    host = (urlparse(u).hostname or "").strip()
+    if not host:
+        return True   # 解析不出 host → 拒(fail-closed)
+    return web._is_blocked_host(host)
