@@ -315,6 +315,7 @@ class AgentLoop:
         verify_dir: Path | None = None,
         allow_workflow: bool = True,
         read_only: bool = False,
+        tool_allowlist: "list[str] | None" = None,  # 角色子 agent 的工具白名单(权威);None=旧 read_only 派生
         workflow_engine_factory: Callable[[], object] | None = None,
         router: Any = None,    # #11 per-task routing(契约 §11):ModelRouter | None
         mcp_manager: Any = None,  # per-session McpManager 实例(AppComponents 注入;None=模块级单例 fallback)
@@ -334,6 +335,7 @@ class AgentLoop:
         self._verify_dir = verify_dir or Path.home() / ".argos" / "verify"
         self._allow_workflow = allow_workflow  # 子 agent spawn 时传 False,深度护栏去 propose_workflow
         self._read_only = read_only  # tool_scope=read 时传 True,剔除写工具兑现「只读」承诺
+        self._tool_allowlist = tool_allowlist  # 角色白名单(权威):非 None 时 spawn 传给沙箱做 ∩
         self._mcp_manager = mcp_manager  # per-session MCP 管理器(None=fallback 到模块级单例)
         # 工作流引擎工厂:None=未接入(诚实回错,不崩 run);非 None=act 段抓到 propose_workflow 后
         # 在异步态校验+审批+异步跑引擎+结果回灌(每次提议 new 一个引擎,RAII 不复用状态)。
@@ -867,9 +869,16 @@ class AgentLoop:
             "M8 安全不变量:loop spawn 的 namespace 绝不可携带 __authorized_imports__"
             "(smolagents 把 '*' 当 allow-all,模型可控会绕过 AST 限制层)。"
         )
-        self._sandbox.spawn(workspace=self._workspace, namespace=spawn_namespace,
-                            allow_workflow=self._allow_workflow,
-                            read_only=self._read_only)
+        # tool_allowlist 仅在【角色子 agent】非 None 时传(它们走真后端,签名已支持);父 agent 恒 None
+        # → 不传该 kwarg,保持对既有测试 FakeSandbox.spawn(无此参数)的兼容。对真后端而言
+        # 不传 == 传 None(默认值),行为等价。
+        _spawn_kwargs: dict = dict(
+            workspace=self._workspace, namespace=spawn_namespace,
+            allow_workflow=self._allow_workflow, read_only=self._read_only,
+        )
+        if self._tool_allowlist is not None:
+            _spawn_kwargs["tool_allowlist"] = self._tool_allowlist
+        self._sandbox.spawn(**_spawn_kwargs)
         # 头号护城河洞修复:project_mode 下 verify_dir==workspace,agent 技术上能改"评判自己的
         # 测试"。run 起始(agent 动手前)快照既有测试指纹 → detect_tampering 见改/删即判篡改,
         # verify 据此判 unverifiable(诚实)。沙箱模式靠 VERIFY_DIR 隔离,guard_project_tests 自返 0。

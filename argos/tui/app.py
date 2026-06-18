@@ -74,7 +74,7 @@ from argos.tui.widgets.top_bar import TopBar
 from argos.tui.widgets.transcript import Transcript
 from argos.tui.widgets.verdict_badge import VerdictBadge
 from argos.input.recorder import Recorder, RecorderError
-from argos.input.stt import make_transcriber, SttError
+from argos.input.stt import LocalWhisper, make_transcriber, SttError
 from argos.input.stt_config import load_stt_config
 from argos.input.clipboard_image import read_clipboard_image, ClipboardError
 from argos.tui.widgets.workflow_panel import WorkflowPanel
@@ -221,6 +221,7 @@ class ArgosApp(App):
         self._voice_recording: bool = False
         self._voice_recorder = None
         self._voice_transcriber = None
+        self._stt_warmed = False   # 首次本地转写可能要懒下载模型权重 → 首次用更诚实的标签(排查 #4)
         self.sub_title = self._compose_subtitle()
 
     @staticmethod
@@ -551,12 +552,19 @@ class ArgosApp(App):
         except RecorderError as e:
             await log.append_line(f"⚠︎ 录音失败:{e}", kind="error")
             return
-        await log.show_thinking("转写中…")
+        transcriber = self._get_transcriber()
+        # 首次使用本地语音:权重可能要从 HuggingFace 懒下载(约数百 MB),静默"转写中…"会像卡死。
+        # 首次本地转写给更诚实的标签(可能下载),日常转写照旧"转写中…"(2026-06-18 排查 #4)。
+        first_local = (not self._stt_warmed) and isinstance(transcriber, LocalWhisper)
+        await log.show_thinking(
+            "首次使用·加载语音模型(若未缓存需下载约数百 MB,请稍候)…" if first_local else "转写中…"
+        )
         try:
-            text = await asyncio.to_thread(self._get_transcriber().transcribe, audio)
+            text = await asyncio.to_thread(transcriber.transcribe, audio)
         except SttError as e:
             await log.append_line(f"⚠︎ 转写失败:{e}", kind="error")
             return
+        self._stt_warmed = True
         if text:
             self.query_one("#prompt", PromptArea).insert(text)
 

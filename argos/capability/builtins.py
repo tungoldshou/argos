@@ -171,6 +171,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             reversible=True,
             egress_hosts=_STT_EGRESS,
             visibility="all",
+            sandbox_callable=False,   # 宿主进程语音转写,沙箱外跑、无命名空间包装 → 不计入 /tools 可调用数
         ),
         # ── 浏览器（计算机控制）────────────────────────────────────────────
         Capability(name="browser_navigate",   kind="browser", risk="low",  reversible=True,  visibility="all"),

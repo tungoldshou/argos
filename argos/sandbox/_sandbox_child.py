@@ -55,13 +55,18 @@ def _build_namespace(
     broker: _BrokerStub,
     allow_workflow: bool = True,
     read_only: bool = False,
+    tool_allowlist: "list[str] | None" = None,
 ) -> dict[str, Any]:
     """子进程内构造工具命名空间。纯沙箱工具直接用 tools.files 的原函数;
     broker-gated 工具用调 broker 的薄包装。
     allow_workflow=False 时去掉 propose_workflow(子 agent 深度护栏)。
-    read_only=True 时剔除写工具(tool_scope=read 真正强制只读)。"""
+    tool_allowlist 非 None 时为角色白名单(权威):命名空间 = 可用 ∩ 白名单(覆盖 read_only 派生);
+    read_only=True(且无白名单)时剔除写工具(旧 tool_scope=read 路径强制只读)。"""
     from argos.tools import build_child_namespace
-    return build_child_namespace(broker, allow_workflow=allow_workflow, read_only=read_only)
+    return build_child_namespace(
+        broker, allow_workflow=allow_workflow, read_only=read_only,
+        tool_allowlist=tool_allowlist,
+    )
 
 
 def main() -> None:
@@ -84,8 +89,9 @@ def main() -> None:
                     imports = list(imports) + [_need]
             allow_workflow = msg.get("allow_workflow", True)
             read_only = msg.get("read_only", False)
+            tool_allowlist = msg.get("tool_allowlist")   # None=无角色白名单(走 read_only 派生)
             executor = LocalPythonExecutor(additional_authorized_imports=imports)
-            executor.send_tools(_build_namespace(broker, allow_workflow, read_only))
+            executor.send_tools(_build_namespace(broker, allow_workflow, read_only, tool_allowlist))
             # T7:agent 普遍用 os.path / sys.exit / pathlib 不写 import 会 NameError;
             # 预注入 stdlib 到 executor 命名空间(已经过 authorized_imports 白名单审查,
             # 这些 stdlib 放行对攻击面无可见扩张 —— 不会让 agent 联网 / 写非 workspace 路径)。

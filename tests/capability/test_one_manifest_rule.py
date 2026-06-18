@@ -201,15 +201,19 @@ def test_get_tool_names_without_registry_returns_static():
     assert result == list(ALL_TOOL_NAMES)
 
 
-def test_get_tool_names_with_registry_returns_registry_names():
-    """get_tool_names(registry) 返回 registry.names()，不依赖静态表。"""
+def test_get_tool_names_with_registry_returns_callable_names():
+    """get_tool_names(registry) 返回 registry.callable_names()(诚实计数):排除宿主专属、
+    沙箱不可调用的能力(stt_transcribe),但含全部真可调用内置工具。不依赖静态表。"""
     reg = CapabilityRegistry()
     register_builtins(reg)
     result = get_tool_names(reg)
-    assert result == list(reg.names())
-    # 断言包含全部内置能力（含 lsp_* 和纯沙箱工具）
+    assert result == list(reg.callable_names())
+    # 断言包含全部内置可调用能力（含 lsp_* 和纯沙箱工具）
     for expected in ALL_TOOL_NAMES:
         assert expected in result, f"{expected!r} 应在 registry 派生结果中"
+    # 宿主专属能力(sandbox_callable=False)不计入可调用数(诚实:数量 = 真实可调用工具数)
+    assert "stt_transcribe" in reg.names(), "stt_transcribe 仍在 registry(清单完整)"
+    assert "stt_transcribe" not in result, "stt_transcribe 不可调用,不应计入 /tools"
 
 
 def test_get_tool_names_registry_includes_new_cap():

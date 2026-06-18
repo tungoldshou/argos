@@ -24,6 +24,30 @@ def _broker(workspace=None):
     return CapabilityBroker(gate=gate, egress=egress, signer=signer, workspace=workspace)
 
 
+def test_execute_sync_blocks_financial_computer_hard_rule():
+    """#11 排查修复:计算机控制的金融/验证码硬规则声明"任何档位均不可降级"的人在场确认,
+    过去只在 request() 异步审批路径生效。同步桥(workflow 子 agent AUTO)直落 _execute → 被绕过。
+    现 execute_sync 对 computer_* 命中硬规则时 fail-closed 拒(无法交互审批),且不签回执、不真执行。"""
+    br = _broker()
+    # 开支付/银行 app → 拒(拒绝串 + 不签回执 == 没到 _execute)
+    val, code = br.execute_sync("computer_open_app", {"app": "支付宝"})
+    assert code == 1 and "硬规则" in val and "fail-closed" in val, val
+    assert br.take_receipt() is None, "被硬规则拒不签回执(证明未真执行)"
+    # 键入卡号(16 位)→ 拒
+    val2, code2 = br.execute_sync("computer_type_text", {"text": "4111 1111 1111 1111"})
+    assert code2 == 1 and "硬规则" in val2, val2
+    assert br.take_receipt() is None
+
+
+def test_execute_sync_allows_benign_computer_action(monkeypatch):
+    """非金融 computer_* 动作(如开普通 app)不被该硬规则拦 —— 仅金融/验证码场景 fail-closed。
+    monkeypatch _execute 隔离真 ComputerExecutor(CI 无显示/辅助权限)。"""
+    br = _broker()
+    monkeypatch.setattr(br, "_execute", lambda action, args, run_ctx=None, _gated=False: ("opened", 0))
+    val, code = br.execute_sync("computer_open_app", {"app": "Calculator"})
+    assert "硬规则" not in str(val) and val == "opened", val   # 未命中金融规则 → 放行到 _execute
+
+
 def test_execute_sync_signs_receipt(monkeypatch):
     """同步桥执行后必须签发 Receipt(治理铁证),loop take_receipt → ToolReceipt → ledger 落盘。
     过去裸 _execute 不签 → ledger 对沙箱工具基本为空。"""

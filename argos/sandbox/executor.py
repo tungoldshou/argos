@@ -39,7 +39,8 @@ class SeatbeltExecutor:
         self._workspace: Path | None = None
 
     def spawn(self, *, workspace: Path, namespace: dict[str, Any],
-              allow_workflow: bool = True, read_only: bool = False) -> None:
+              allow_workflow: bool = True, read_only: bool = False,
+              tool_allowlist: "list[str] | None" = None) -> None:
         self._workspace = workspace
         # 子进程 tools/files.py 的 write_file 牢笼按 ARGOS_WORKSPACE 解析(模块级 WORKSPACE)。
         # 必须把它对齐到本次 spawn 的 workspace —— 否则写会落到继承自父进程的 env 默认目录
@@ -51,7 +52,8 @@ class SeatbeltExecutor:
         )
         authorized = namespace.get("__authorized_imports__") or None
         self._send({"op": "init", "authorized_imports": authorized,
-                    "allow_workflow": allow_workflow, "read_only": read_only})
+                    "allow_workflow": allow_workflow, "read_only": read_only,
+                    "tool_allowlist": list(tool_allowlist) if tool_allowlist is not None else None})
         msg = self._recv()
         if not msg or msg.get("type") != "init_ok":
             raise RuntimeError(f"sandbox init 失败:{msg!r};stderr={self._drain_stderr()}")

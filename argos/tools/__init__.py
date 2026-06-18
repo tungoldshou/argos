@@ -70,7 +70,9 @@ def get_tool_names(
     """
     if registry is not None:
         try:
-            return list(registry.names())
+            # 诚实计数:只数模型在沙箱里【真正可调用】的工具,排除宿主专属能力(如 stt_transcribe,
+            # 语音转写在沙箱外跑、无命名空间包装)。否则 /tools 报的数 > 真实可调用数,违反诚实铁律。
+            return list(registry.callable_names())
         except Exception:   # noqa: BLE001 — 防御性降级，不因 registry 异常崩
             pass
     return list(ALL_TOOL_NAMES)
@@ -411,6 +413,7 @@ def build_child_namespace(
     *,
     allow_workflow: bool = True,
     read_only: bool = False,
+    tool_allowlist: "list[str] | tuple[str, ...] | frozenset[str] | None" = None,
 ) -> dict[str, Any]:
     """【沙箱子进程侧】命名空间:纯沙箱原函数 + 调 _broker(RPC stub)的 broker-gated 包装.
 
@@ -430,9 +433,19 @@ def build_child_namespace(
     # 父 agent(默认 True)必须保留它,否则在沙箱里调 propose_workflow 会 NameError。
     if not allow_workflow:
         ns.pop("propose_workflow", None)
-    # 只读作用域强制:tool_scope=read 的子 agent 剔除一切会改动文件/系统/外部状态的工具,
-    # 真正兑现审批预览里的「只读」承诺(否则显示「只读」但实际仍能写,是审批所见即所跑的假承诺)。
-    if read_only:
+    if tool_allowlist is not None:
+        # 角色白名单是【权威】:命名空间 = 可用工具 ∩ 白名单 → 物理剔除其余(兑现 spec.py:45 的承诺,
+        # 此前 build_child_namespace 根本不收 allowlist、从未做交集 → 角色声明与实际工具分叉:
+        # explorer 声明只读却拿到 web/浏览器/截屏,reviewer 声明的 run_command 反被 read_only 误剥)。
+        # 白名单已编码该角色完整作用域(只读角色的白名单本就不含写工具),故不再叠加 read_only 剥离
+        # —— 否则 reviewer 的 run_command 仍会被 read_only 干掉(2026-06-18 排查 #6)。
+        allow = set(tool_allowlist)
+        for _t in list(ns):
+            if _t not in allow:
+                ns.pop(_t, None)
+    elif read_only:
+        # 无角色白名单(旧 tool_scope 派生路径):read 作用域剔除一切会改动文件/系统/外部状态的工具,
+        # 真正兑现审批预览里的「只读」承诺(否则显示「只读」但实际仍能写,是审批所见即所跑的假承诺)。
         for _t in ("write_file", "edit_file", "run_command",
                    "browser_click", "browser_type", "mcp_call",
                    # OS 级写动作:read 作用域必须剔除(computer_screenshot 是只读观察,保留)。

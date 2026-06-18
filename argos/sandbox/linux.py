@@ -125,7 +125,8 @@ class _BaseLinuxExecutor:
         self._workspace: Path | None = None
 
     def spawn(self, *, workspace: Path, namespace: dict[str, Any],
-              allow_workflow: bool = True, read_only: bool = False) -> None:
+              allow_workflow: bool = True, read_only: bool = False,
+              tool_allowlist: "list[str] | None" = None) -> None:
         if _AVAILABLE_BACKEND is None:
             raise RuntimeError(
                 "无可用 Linux 沙箱后端(bwrap / unshare 都不在 PATH);"
@@ -153,7 +154,8 @@ class _BaseLinuxExecutor:
         import json
         authorized = namespace.get("__authorized_imports__") or None
         self._send({"op": "init", "authorized_imports": authorized,
-                    "allow_workflow": allow_workflow, "read_only": read_only})
+                    "allow_workflow": allow_workflow, "read_only": read_only,
+                    "tool_allowlist": list(tool_allowlist) if tool_allowlist is not None else None})
         msg = self._recv()
         if not msg or msg.get("type") != "init_ok":
             raise RuntimeError(f"sandbox init 失败:{msg!r};stderr={self._drain_stderr()}")
