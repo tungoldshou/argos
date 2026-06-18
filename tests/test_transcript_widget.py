@@ -53,6 +53,32 @@ async def test_append_token_streams_into_one_assistant_bubble_stripping_fences()
 
 
 @pytest.mark.asyncio
+async def test_append_token_survives_concurrent_finalize_during_mount():
+    """回归(2026-06-18):append_token 的 await(remove/mount)期间被并发 finalize_response()
+    清空 self._current → 旧代码 self._current.feed 会 'NoneType'.feed 崩掉整个 TUI worker
+    (真机:查天气,工具修好后 streaming 走更远才暴露)。现重建 + 局部引用喂,不崩。"""
+    app = _Harness()
+    async with app.run_test() as pilot:
+        t = app.query_one("#t", Transcript)
+        orig_mount = t.mount
+        calls = {"n": 0}
+
+        async def _racing_mount(*a, **kw):
+            res = await orig_mount(*a, **kw)
+            calls["n"] += 1
+            if calls["n"] == 1:
+                t.finalize_response()   # 仅首次 mount 期间并发清空 _current(模拟一次性竞态)
+            return res
+
+        t.mount = _racing_mount  # type: ignore[assignment]
+        # 旧代码此处抛 AttributeError('NoneType'.feed) 并崩 worker;现应平稳完成。
+        await t.append_token("```")
+        await pilot.pause()
+        # 没崩、文本进了某个 assistant 气泡。
+        assert list(app.query(AssistantMessage)), "应至少有一个 assistant 气泡(未崩)"
+
+
+@pytest.mark.asyncio
 async def test_finalize_response_starts_new_bubble():
     app = _Harness()
     async with app.run_test() as pilot:

@@ -117,7 +117,17 @@ class Transcript(VerticalScroll):
             self._current = AssistantMessage()
             if self.is_attached:
                 await self.mount(self._current)
-        self._current.feed(text)
+        # 防御:上面的 await(sp.remove / mount)会让出事件循环,期间并发的 finalize_response()
+        # (show_thinking / append_line / mount_block 都会调,清 self._current=None)可能把它清空 →
+        # 直接 self._current.feed 会 'NoneType' has no attribute 'feed' 崩掉整个 TUI worker
+        # (2026-06-18 真机:工具修好后模型 streaming 走得更远才暴露此潜伏竞态)。重建后再喂。
+        if self._current is None:
+            self._current = AssistantMessage()
+            if self.is_attached:
+                await self.mount(self._current)
+        target = self._current   # 局部引用:即便重建后再被并发清空,也喂进有效气泡而非 None
+        if target is not None:
+            target.feed(text)
         if self.is_attached:
             self._stick_to_bottom()
 
