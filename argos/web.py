@@ -16,22 +16,33 @@ try:
 except Exception:  # pragma: no cover - 包缺失时降级,运行期给出诚实错误
     _DDGS = None
 
-# ddgs 9.x 库本身【无任何超时参数】(实测 9.14.4 源码 0 处 timeout)→ 网络卡死会无限挂起,
-# 拖到 sandbox 子进程 smolagents 执行器超时才以丑陋 traceback 收场(2026-06-16 真机:查天气
-# 117s 后 TimeoutError)。Tavily 路径有 timeout=60、extract 有 timeout=30,唯独免费 DDGS 没护栏。
-# 用 daemon 线程 + 硬截止时间兜底:超时即返回诚实错误;卡死的是 daemon 线程,不阻塞解释器退出。
+# ── 免费、免 key 的多引擎兜底(用户没配 Tavily / 单引擎被限流时的容错核心)──────────────
+# ddgs 9.x 不是"只有 DuckDuckGo":它是【多引擎元搜索】。backend="auto" 会并发查
+# DuckDuckGo / Bing / Brave / Google / Mojeek / Yandex / Startpage / Wikipedia 等十余个引擎
+# 并【聚合】结果 —— 单个引擎挂了(实测 DuckDuckGo 常被限流返回 "No results")不影响整体,
+# 其它引擎自动补位。这就是【没有 Tavily key 也不花一分钱】的联网搜索:不替任何用户付费。
+# 两道超时护栏:
+#   · _DDGS_ENGINE_TIMEOUT_S → 传给 ddgs 库构造器,库内每个引擎/批次的软超时(够慢引擎返回,
+#     实测 Bing ~3s、Brave ~1.5s,8s 留足余量又不拖沓);
+#   · _DDGS_TIMEOUT_S → 外层 daemon 线程的硬截止,最终兜底防库内极端挂死。必须 < sandbox 子进程
+#     smolagents 执行器的 30s 上限(2026-06-16 真机:旧版无护栏,卡死 117s 后甩 TimeoutError)。
 _DDGS_TIMEOUT_S = 20.0
+_DDGS_ENGINE_TIMEOUT_S = 8
 
 
 def _ddgs_search(query: str, limit: int) -> dict:
-    """免费 DuckDuckGo 搜索(无需 key)。归一化为 {title,url,snippet};带硬超时兜底(防卡死)。"""
+    """免 key 多引擎元搜索(backend=auto:DuckDuckGo/Bing/Brave/Google/… 聚合)。
+    归一化为 {title,url,snippet};库内软超时 + 外层 daemon 线程硬超时双护栏(防卡死)。"""
     if _DDGS is None:
         return {"success": False, "error": "ddgs 包不可用,无法免费搜索;可配置 TAVILY_API_KEY 升级。"}
 
     def _blocking() -> list[dict]:
         results: list[dict] = []
-        with _DDGS() as client:
-            for i, hit in enumerate(client.text(query, max_results=max(1, int(limit)))):
+        # backend="auto":并发多引擎 + 聚合,单引擎被限流时其它引擎补位(免 key 兜底的关键)。
+        with _DDGS(timeout=_DDGS_ENGINE_TIMEOUT_S) as client:
+            for i, hit in enumerate(
+                client.text(query, max_results=max(1, int(limit)), backend="auto")
+            ):
                 if i >= max(1, int(limit)):
                     break
                 results.append({
@@ -54,9 +65,12 @@ def _ddgs_search(query: str, limit: int) -> dict:
     t.join(_DDGS_TIMEOUT_S)
     if t.is_alive():
         return {"success": False,
-                "error": f"DuckDuckGo 搜索超时(>{int(_DDGS_TIMEOUT_S)}s);可配置 TAVILY_API_KEY 升级。"}
+                "error": f"联网搜索超时(>{int(_DDGS_TIMEOUT_S)}s,已并发试 DuckDuckGo/Bing/Brave/"
+                         "Google 等免费引擎均无响应);稍后重试,或配置 TAVILY_API_KEY 升级。"}
     if "error" in box:
-        return {"success": False, "error": f"DuckDuckGo 搜索失败:{box['error']}"}
+        return {"success": False,
+                "error": f"联网搜索暂不可用(免费引擎均未返回:{box['error']});"
+                         "稍后重试,或配置 TAVILY_API_KEY 升级。"}
     return {"success": True, "results": box.get("results", [])}
 
 
