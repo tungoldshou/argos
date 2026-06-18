@@ -30,13 +30,35 @@ def test_search_uses_tavily_when_key_set(monkeypatch):
 
 def test_ddgs_normalizes_hits(monkeypatch):
     class FakeDDGS:
+        def __init__(self, **kw): pass                       # 真 DDGS 构造器收 timeout 等
         def __enter__(self): return self
         def __exit__(self, *a): return False
-        def text(self, query, max_results): return [{"title": "A", "href": "http://a", "body": "ba"}]
+        def text(self, query, **kw): return [{"title": "A", "href": "http://a", "body": "ba"}]
     monkeypatch.setattr(web, "_DDGS", FakeDDGS)
     out = web._ddgs_search("q", 5)
     assert out["success"] is True
     assert out["results"][0] == {"title": "A", "url": "http://a", "snippet": "ba"}
+
+
+def test_ddgs_uses_multi_engine_auto_and_timeout(monkeypatch):
+    """免 key 兜底的核心:ddgs 用 backend='auto' 并发多引擎(DuckDuckGo 被限流时
+    Bing/Brave/Google/Wikipedia 自动补位、聚合结果),且给库构造器传 timeout(库内硬超时)。
+    这就是【用户没配 Tavily 时不花一分钱】的容错来源 —— ddgs 9.x 本就是多引擎元搜索。"""
+    seen: dict = {}
+
+    class FakeDDGS:
+        def __init__(self, **kw): seen["ctor"] = kw
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def text(self, query, **kw):
+            seen["text"] = kw
+            return [{"title": "A", "href": "http://a", "body": "b"}]
+
+    monkeypatch.setattr(web, "_DDGS", FakeDDGS)
+    out = web._ddgs_search("q", 3)
+    assert out["success"] is True
+    assert seen["text"].get("backend") == "auto", "必须显式多引擎 auto(免 key 兜底)"
+    assert "timeout" in seen["ctor"], "必须给 ddgs 库传 timeout(库内每引擎硬超时)"
 
 
 def test_ddgs_search_times_out_instead_of_hanging(monkeypatch):
@@ -47,9 +69,10 @@ def test_ddgs_search_times_out_instead_of_hanging(monkeypatch):
     entered = threading.Event()
 
     class HangingDDGS:
+        def __init__(self, **kw): pass
         def __enter__(self): return self
         def __exit__(self, *a): return False
-        def text(self, query, max_results):
+        def text(self, query, **kw):
             entered.set()
             threading.Event().wait(5.0)   # 模拟卡死的网络请求(永远等不到的事件超时返回)
             return []
