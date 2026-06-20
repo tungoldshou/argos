@@ -46,6 +46,30 @@ def test_search_files_content(ws):
     assert "d.py" in out and "foo" in out
 
 
+def test_search_files_by_name_glob_and_skips_heavy_dirs(ws):
+    """2026-06-20:search_files 改纯 Python(rg 在沙箱里挂死)。files 模式按 glob 找文件名;
+    content/files 都跳过 .git/.venv/node_modules 等重/隐藏目录(原地剪枝)。"""
+    (ws / "app.py").write_text("needle = 1\n")
+    (ws / "readme.md").write_text("hi\n")
+    (ws / ".git").mkdir()
+    (ws / ".git" / "x.py").write_text("needle in git\n")
+    out_f = files.search_files("*.py", target="files")
+    assert "app.py" in out_f and "readme.md" not in out_f
+    assert "x.py" not in out_f          # .git 被剪枝
+    out_c = files.search_files("needle", target="content")
+    assert "app.py" in out_c
+    assert ".git" not in out_c          # 隐藏/重目录不搜
+
+
+def test_search_files_skips_binary(ws):
+    """二进制文件(非 UTF-8)被跳过,不崩、不污染结果。"""
+    (ws / "code.py").write_text("target_token\n")
+    (ws / "blob.bin").write_bytes(b"\x00\x01target_token\xff\xfe")
+    out = files.search_files("target_token", target="content")
+    assert "code.py" in out
+    assert "blob.bin" not in out
+
+
 def test_read_file_offset_limit(ws):
     (ws / "lines.txt").write_text("a\nb\nc\nd\ne\n")
     r = files.read_file("lines.txt", offset=2, limit=2)
