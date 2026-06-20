@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from . import files
-from .shell import ALLOWED_CMDS, GIT_READONLY_SUBCMDS
+from .shell import ALLOWED_CMDS
 
 # ── workspace / verify-dir 模块级常量(test_tools.py 会 monkeypatch.setattr 这里) ──────
 WORKSPACE: Path = Path(os.environ.get("ARGOS_WORKSPACE",
@@ -80,7 +80,7 @@ def get_tool_names(
 __all__ = [
     "build_namespace", "build_child_namespace",
     "ALL_TOOL_NAMES", "get_tool_names",
-    "ALLOWED_CMDS", "GIT_READONLY_SUBCMDS",
+    "ALLOWED_CMDS",
     "WORKSPACE", "VERIFY_DIR",
     # workspace 牢笼 helpers(files.py / shell 路径解析共用)
     "_ws", "_vd", "_safe_path",

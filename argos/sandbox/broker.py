@@ -60,8 +60,9 @@ _RISK: dict[str, str] = {
 # 历史上 run_command 即便 AUTO 也被强制逐条确认("永不静默执行任意 shell")。但 L4/YOLO 的承诺是
 # "全自治(HARD RULES 仍拦)"——逐条确认让 YOLO 名不副实(用户反馈"太鸡肋",2026-06-20)。现清空:
 # YOLO 下 run_command 自动跑;危险命令仍被 evaluator 的 check_hard_shell 硬拦(rm -rf/dd/mkfs 等),
-# 且命令受 ALLOWED_CMDS 白名单 + Seatbelt 沙箱双重约束。低于 AUTO 的档位 run_command 照常按档审批
-# (L1 危险才问 / L0 每步问 …)。集合保留(空):将来若有动作需"AUTO 也强制确认",加进来即可。
+# 且命令受 Seatbelt 沙箱约束(网络默认 OFF、写牢笼、凭据读拒;无命令名白名单 —— 2026-06-20 重设)。
+# 低于 AUTO 的档位 run_command 照常按档审批(L1 危险才问 / L0 每步问 …)。集合保留(空):将来若有
+# 动作需"AUTO 也强制确认",加进来即可。
 _FORCE_CONFIRM_ACTIONS: set[str] = set()
 # 文件写:broker 只做 host 侧 gate-only 治理(hard-path/密钥/回执),真正落盘留在 Seatbelt 子进程。
 _FILE_WRITE_ACTIONS: set[str] = {"write_file", "edit_file"}
@@ -174,7 +175,14 @@ class CapabilityBroker:
                 f"请尝试其他做法或向用户解释为什么需要它。"
             )
         # ③ host 执行真副作用
-        value, exit_code = self._execute(action, args, run_ctx=None, _gated=True)
+        # 出网阀(2026-06-20):run_command 走到这步 = 已批准。命令若需联网(pip install / git push /
+        # curl …),用 allow_network=True 的 Seatbelt profile 跑(临时开网);否则牢笼网络默认 OFF。
+        # Cautious 下联网命令不被"牢笼内自动放行"短路(evaluator 已排除)→ 这里的批准是用户真点的;
+        # Autonomous 下 evaluator 直接 approve → 自动开网(Codex YOLO);写牢笼+凭据读拒始终在。
+        _allow_net = (action == "run_command"
+                      and _shell.command_needs_network(args.get("command", "")))
+        value, exit_code = self._execute(action, args, run_ctx=None, _gated=True,
+                                         allow_network=_allow_net)
         # ④ 签 Receipt(HMAC,host 侧)
         self.last_receipt = self._signer.sign(
             action=action, args=args, result=value, exit_code=exit_code,
@@ -361,7 +369,8 @@ class CapabilityBroker:
         return _files.WRITE_APPROVED_SENTINEL
 
     def _execute(self, action: str, args: dict[str, Any],
-                 run_ctx: Any = None, *, _gated: bool = False) -> tuple[Any, int | None]:
+                 run_ctx: Any = None, *, _gated: bool = False,
+                 allow_network: bool = False) -> tuple[Any, int | None]:
         """⚠️ 内部裸执行 —— 仅供 request() 调用。绝不可从外部/测试直接调:
         它跳过 egress 校验、审批裁决与 Receipt 签发,直接产生真副作用。
         所有 broker-gated 动作必须经 request() 入口(它做完整 gating)。
@@ -396,7 +405,9 @@ class CapabilityBroker:
                 pass
         # ─── 既有 if/elif 内置实现 ──────────────────────────────────────────
         if action == "run_command":
-            return _shell.run_command(args.get("command", ""), workspace=self._workspace)
+            # allow_network 由 gating 层(request)在审批通过后传入:命令需联网且已批准 → 开网阀。
+            return _shell.run_command(args.get("command", ""), workspace=self._workspace,
+                                      allow_network=allow_network)
         if action == "web_search":
             return _web.web_search(args.get("query", ""), int(args.get("limit", 5))), None
         if action == "web_extract":
@@ -525,7 +536,10 @@ class CapabilityBroker:
     @staticmethod
     def _describe(action: str, args: dict[str, Any]) -> str:
         if action == "run_command":
-            return f"执行命令 {args.get('command', '')}"
+            cmd = args.get("command", "")
+            if _shell.command_needs_network(cmd):
+                return f"执行命令(需联网,将临时开出网阀){cmd}"
+            return f"执行命令 {cmd}"
         if action == "web_search":
             return f"联网搜索 {args.get('query', '')}"
         if action == "web_extract":

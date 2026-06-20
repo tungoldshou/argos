@@ -68,6 +68,22 @@ def _gate_level_str(level: ApprovalLevel | str | None) -> str:
     return str(level)
 
 
+def _run_command_needs_net(args: dict[str, Any]) -> bool:
+    """run_command 是否需要联网(pip/npm/git push/curl…)。Cautious 下这类命令不走"牢笼内自动
+    放行"短路 —— 开网是越牢笼墙的升级,须在审批层弹"出网阀"卡问用户。延迟 import 避免
+    permissions ↔ tools 形成 import 环(命中后 sys.modules 缓存,后续为 dict 查找)。"""
+    if not isinstance(args, dict):
+        return False
+    cmd = args.get("command") or args.get("cmd")  # broker 用 command;部分调用用 cmd(与 _arg_str 一致)
+    if not isinstance(cmd, str):
+        return False
+    try:
+        from argos.tools.shell import command_needs_network
+        return command_needs_network(cmd)
+    except Exception:  # noqa: BLE001 — 探测失败保守按"不需网络"(不误升级为 ask)
+        return False
+
+
 def _check_hard_path_write(args: dict[str, Any], *, workspace: str | Path | None) -> DecisionMeta | None:
     """write_file / edit_file 的目标路径系统前缀命中 → deny。"""
     path = args.get("path") or args.get("file") or args.get("filepath")
@@ -256,8 +272,14 @@ def evaluate(
         # 只在【牢笼墙】问:出网越界(egress)、越界写、hard-rule/金融。这就是"牢笼内自动跑、只在墙问"
         # (Codex/Claude Code 的丝滑来源,2026-06-20 重设)。仅 low_risk_auto 且非 L0 且 lvl==confirm 时
         # 生效;裸 CONFIRM(测试)不置标志 → 行为不变。中/高危且非沙箱命令(浏览器写/mcp 等)仍 ask。
-        if (low_risk_auto and not ask_readonly and lvl == "confirm"
-                and (risk == "low" or action == "run_command")):
+        # 出网阀(2026-06-20):需联网的 run_command(pip install / git push / curl…)不走"牢笼内
+        # 自动放行"——开网是越牢笼墙的升级,Cautious 下须弹卡问用户(approve 后 broker 临时开网)。
+        # 持久化的 always 规则在前面 soft_allow 段已先放行,不受此排除影响。
+        _cautious_cage_ok = (
+            risk == "low"
+            or (action == "run_command" and not _run_command_needs_net(args))
+        )
+        if low_risk_auto and not ask_readonly and lvl == "confirm" and _cautious_cage_ok:
             base = DecisionMeta(decision="approve", trigger="trust:cautious 牢笼内放行",
                                 reason="Cautious:牢笼内动作自动放行(只在牢笼墙/危险操作问)")
         else:
