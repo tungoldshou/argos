@@ -31,6 +31,12 @@ class RoutingConfig:
     def is_force_confirm(self, tier: str) -> bool:
         return tier in self.tier_force_confirm
 
+    def is_active(self) -> bool:
+        """是否配置了任何实际路由行为。否则 router 纯 no-op(每步 categorize+select 都解析到
+        default tier、无 force-confirm),不必构造 —— loop 走原路径,省掉每步路由开销(Phase 4.4)。"""
+        return bool(self.by_category or self.by_tool or self.tier_force_confirm
+                    or self.default != "default")
+
 
 def load_routing(config_dir: Path) -> RoutingConfig:
     """从 config_dir/config.json 读 routing 段;缺则 safe default(零破坏 spec D17)。"""

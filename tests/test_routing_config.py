@@ -88,3 +88,28 @@ def test_routing_config_is_force_confirm():
     cfg = RoutingConfig(tier_force_confirm=["strong"])
     assert cfg.is_force_confirm("strong") is True
     assert cfg.is_force_confirm("cheap") is False
+
+
+def test_routing_config_is_active_default_false():
+    """Phase 4.4:纯 default RoutingConfig 不活跃 → app_factory 不构造 router(loop 走原路径)。"""
+    assert RoutingConfig().is_active() is False
+
+
+@pytest.mark.parametrize("cfg", [
+    RoutingConfig(by_category={"file_edit": "cheap"}),
+    RoutingConfig(by_tool={"run_command": "strong"}),
+    RoutingConfig(tier_force_confirm=["strong"]),
+    RoutingConfig(default="strong"),
+])
+def test_routing_config_is_active_when_configured(cfg):
+    """配了 by_category / by_tool / tier_force_confirm / 非默认 default → 活跃。"""
+    assert cfg.is_active() is True
+
+
+def test_build_components_router_none_when_routing_inactive(monkeypatch, tmp_path):
+    """默认配置(无 routing 段)→ build_components 不构造 router(router=None,省每步路由)。"""
+    monkeypatch.setenv("ARGOS_NO_DAEMON", "1")
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))  # 空配置目录 = 无 routing 段
+    from argos.app_factory import build_components
+    c = build_components()
+    assert c.router is None, "无路由表时 router 应为 None(Phase 4.4 opt-in)"
