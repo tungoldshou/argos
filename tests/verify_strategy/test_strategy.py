@@ -384,6 +384,24 @@ class TestProbeWorkspace:
         facts = probe_workspace(tmp_path)
         assert facts.has_pytest
 
+    def test_pyproject_only_no_pytest(self, tmp_path: Path) -> None:
+        """Phase 5.2:纯 pyproject.toml（无测试文件）不算 has_pytest —— 否则在没测试的项目里
+        推 pytest 会收集 0 个、以退出码 5 误判失败。"""
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n')
+        assert probe_workspace(tmp_path).has_pytest is False
+
+    def test_pyproject_plus_test_files_is_pytest(self, tmp_path: Path) -> None:
+        """有可收集的测试文件（tests/test_*.py）→ has_pytest=True（弱信号 + 真测试）。"""
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n')
+        (tmp_path / "tests").mkdir()
+        (tmp_path / "tests" / "test_thing.py").write_text("def test_a():\n    assert True\n")
+        assert probe_workspace(tmp_path).has_pytest is True
+
+    def test_top_level_test_file_is_pytest(self, tmp_path: Path) -> None:
+        """顶层 test_*.py 也算 has_pytest（pytest 默认能收集）。"""
+        (tmp_path / "test_top.py").write_text("def test_a():\n    assert True\n")
+        assert probe_workspace(tmp_path).has_pytest is True
+
     def test_detects_cargo(self, tmp_path: Path) -> None:
         (tmp_path / "Cargo.toml").write_text("[package]\nname = 'x'\nversion = '0.1.0'")
         facts = probe_workspace(tmp_path)
