@@ -83,8 +83,21 @@ Add a read-denylist for credential dirs to the Seatbelt profile **before** the e
 **Phase 4 — delete the dead weight (pure subtraction).**
 Cut: `intent/` + ARGOS_INTENT (disavowed, off); `suggest_escalation`/`EscalationSuggestion`/`_SUGGEST_THRESHOLD` (dead); empty `_FORCE_CONFIRM_ACTIONS` + branch; make per-step routing opt-in (skip categorize/select when tier maps empty; keep `effort.py`); replace `conductor/` engine with a launchd/cron or daemon-timer for nightly Dream.
 
+  *Status (2026-06-20):*
+  - ✅ **`suggest_escalation` machinery** deleted (folded into Phase 3 — zero production callers).
+  - ✅ **`_FORCE_CONFIRM_ACTIONS`** set + dead `level_override` branch + unused `ApprovalLevel` import removed (commit `dc28ee0`-adjacent).
+  - ✅ **per-step routing is opt-in** — `RoutingConfig.is_active()` gates router construction; `router=None` (the original loop path) when no routing table is configured.
+  - ✅ **`intent/` + ARGOS_INTENT** deleted end to end (package, widget, protocol events, daemon route, loop registry, TUI handlers, TS SDK mirror, tests, docs; −2880 lines).
+  - ⊘ **`conductor/` → launchd/cron — DECLINED.** On inspection the premise doesn't hold: the conductor is *already* a daemon-internal `asyncio` tick loop with a zero-dependency cron-lite parser — i.e. the spec's preferred "daemon-timer" option, not an external dependency. OS launchd/cron would be *less* portable (three platform mechanisms), add fragility, and lose the in-process ProactiveSuggestion / standing-order feature it also powers. Keeping the lean, framework-free, cross-platform daemon-timer is the correct call.
+
 **Phase 5 — harden + reduce surface (follow-up).**
 Collapse broker dual gating into a shared `_preflight(action,args)` called by both `request()` and `execute_sync()`. Make `_pick_strategy_cmd` infer pytest only when collectable tests exist for changed files. Feature-flag WorkflowSpec DSL + best-of-N + fanout off the default path (keep `git_worktree`). Trim `HONESTY_SYSTEM` prose. (Lower priority: halve auto-memory to 2 tiers; defer nightly Dream synthesis.)
+
+  *Status (2026-06-20):*
+  - ✅ **broker `_preflight`** — request()/execute_sync() now share one `_preflight(action,args)` (action-validation + file-write gate-only + egress); a parity test locks that the two paths can't diverge. (The real correctness win — closes the sync-bridge governance-divergence the audit flagged.)
+  - ✅ **`_pick_strategy_cmd` / pytest** — `probe_workspace` only flags `has_pytest` when collectable test files exist (deliberate `pytest.ini`/`conftest.py` still count); fixes the "pyproject.toml-only project → pytest exits 5 → false failure" bug.
+  - ✅ **workflows off the default path** (`ARGOS_WORKFLOWS=1` opt-in) — `WORKFLOW_PROMPT` moved out of the baked `HONESTY_SYSTEM`, injected conditionally like `COMPUTER_USE_PROMPT`. This *is* the real prompt trim (default stable prompt 3141 → 2923 chars) — no risky prose-nitpicking of the honesty invariants.
+  - ⊘ **auto-memory 4→2 tiers — DEFERRED** (the spec's own "lower priority"). The 4-tier model works and recall / consolidation / Dream all depend on tier identity; halving it is a semantic change to a working subsystem with real regression risk and marginal benefit. Not worth it now.
 
 **Docs:** reframe README/docs as a Claude Code/Codex-style coding agent; drop the cheap-model-verify-governance headline.
 
