@@ -126,6 +126,29 @@ def test_load_bad_regex_skipped_not_raises(tmp_path, monkeypatch):
     assert len(cfg.allow) == 1  # 只 1 条好的
 
 
+def test_wildcard_matcher_loads_and_matches(tmp_path, monkeypatch):
+    """2026-06-20 修:'*'(与 '')是 _matcher_match 的全匹配哨兵,不是正则 —— 加载时必须保留,
+    不能因 re.compile('*') 失败被当"坏 regex"丢弃。这是"总是允许"对非 run_command 工具
+    (web_search/run_workflow 等)持久化的 matcher,否则 Phase 1 的假 always 对它们复发。"""
+    from argos.permissions import config as _cfg
+    p = tmp_path / "permissions.json"
+    p.write_text(json.dumps({
+        "version": 1,
+        "allow": [
+            {"tool": "web_search", "matcher": "*"},   # 整工具放行哨兵
+            {"tool": "run_workflow", "matcher": ""},  # 空串同义
+        ],
+    }))
+    monkeypatch.setattr(_cfg, "CONFIG_PATH", p)
+    cfg = _cfg.load()
+    assert len(cfg.allow) == 2, "'*' / '' 全匹配哨兵不应被当坏 regex 丢弃"
+    assert cfg.match_allow("web_search", "任意 query") is not None
+    assert cfg.match_allow("run_workflow", "anything") is not None
+    # 真坏 regex 仍被拒(哨兵放行不削弱安全校验)
+    assert _cfg._is_safe_regex("(unclosed") is False
+    assert _cfg._is_safe_regex("a" * 300) is False   # 超长仍拒
+
+
 def test_reload_config_keeps_old_on_failure(tmp_path, monkeypatch):
     """坏配置 reload → 保旧 + 报错。"""
     from argos.permissions.config import reload_config as _reload
