@@ -1,7 +1,8 @@
 """铁证④(spec §9 / §6):沙箱外泄防线 + egress fail-closed(可证伪,沙箱部分 macOS-only)。
 
-诚实修正:Seatbelt profile 放宽 file-read*(读 ~/.ssh 允许,见 test_sandbox_fs_confinement),
-故外泄向量是【越界写】+【网络】而非【读】。本铁证证:读到的密钥写不出 workspace;
+Seatbelt profile 放宽 file-read* 用于 import/读项目,但凭据目录/密钥文件读已被 deny
+(Phase 0,2026-06-20:~/.ssh/~/.aws/~/.argos/.env 等,见 test_sandbox_fs_confinement)。
+外泄向量是【越界写】+【网络】+【凭据读】三道都挡。本铁证证:写不出 workspace;
 网络出口 fail-closed —— web_search 锁定 provider 白名单,web_extract 放行任意【公网】host
 但私网/回环/云元数据被 SSRF 硬挡(2026-06-18 用户拍板:出网问责靠 SSRF+每次签回执+审批拨盘,
 不靠静态白名单 —— 否则 agent 连搜索结果页都打不开)。workspace 内合法 IO 正常。

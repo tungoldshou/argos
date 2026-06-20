@@ -33,8 +33,31 @@ def _temp_roots() -> list[str]:
     return sorted(roots)
 
 
+# 凭据目录/文件:Seatbelt 后匹配覆盖前面 (allow file-read*),故在其后 deny 这些路径的读。
+# 网络 OFF 时读这些无法外泄,但一旦开"出网阀"(egress valve),全盘可读就成了真外泄风险
+# ("能读 ~/.ssh 就已经game over" —— 2026 prompt-injection 共识)。开阀前先堵读侧(Phase 0)。
+# 注意:只 deny ~/.argos 下的密钥【文件】,不 deny ~/.argos 目录本身 —— 默认工作区在
+# ~/.argos/workspace,整目录 deny 会读不了工作区。
+_CRED_DENY_DIRS = (
+    ".ssh", ".aws", ".gnupg", ".kube", ".docker", ".azure",
+    ".config/gh", ".config/gcloud",
+)
+_CRED_DENY_FILES = (
+    ".netrc", ".pgpass", ".git-credentials", ".npmrc", ".pypirc",
+    ".argos/.env", ".argos/config.json", ".argos/mcp.json",
+)
+
+
+def _credential_read_denies() -> str:
+    """凭据目录(subpath)+ 密钥文件(literal)的读 deny 规则文本。"""
+    home = Path.home()
+    parts = "".join(f'\n  (subpath "{home / d}")' for d in _CRED_DENY_DIRS)
+    parts += "".join(f'\n  (literal "{home / f}")' for f in _CRED_DENY_FILES)
+    return f"(deny file-read*{parts})\n"
+
+
 def build_profile(*, workspace: Path) -> str:
-    """生成 deny-all Seatbelt profile 文本。workspace 子树 + temp 可写,网络全拒。"""
+    """生成 deny-all Seatbelt profile 文本。workspace 子树 + temp 可写,网络全拒,凭据目录读拒。"""
     ws = str(workspace.resolve())
     write_subpaths = [ws, *(_temp_roots())]
     write_rules = "".join(f'\n  (subpath "{p}")' for p in write_subpaths)
@@ -50,6 +73,8 @@ def build_profile(*, workspace: Path) -> str:
         "(allow ipc-posix-shm)\n"
         # —— 读放宽(import 库/读项目)——
         "(allow file-read*)\n"
+        # —— 但凭据目录/密钥文件读拒(后匹配覆盖上面的全盘读;开出网阀前的前置安全)——
+        + _credential_read_denies() +
         # —— 写牢笼:仅 workspace + temp ——
         f"(allow file-write*{write_rules})\n"
         # —— 网络全拒(关键安全不变量)——

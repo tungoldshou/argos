@@ -40,5 +40,25 @@ def test_profile_allows_temp_and_reads():
 def test_profile_workspace_outside_not_writable():
     ws = Path("/tmp/argos_ws")
     prof = seatbelt.build_profile(workspace=ws)
-    # 一个明确越界目录不应出现在 write subpath 白名单里
-    assert "/Users/zc/.ssh" not in prof
+    home_ssh = str(Path.home() / ".ssh")
+    # ~/.ssh 不应在【写白名单】里(写牢笼只含 workspace+temp)。
+    # 注:Phase 0 起 ~/.ssh 会出现在【读 deny】块,故只检查 write-allow 段。
+    write_block = prof.split("(allow file-write*")[1]
+    assert home_ssh not in write_block
+
+
+def test_profile_denies_credential_reads():
+    """Phase 0(2026-06-20):全盘可读基线上,凭据目录/密钥文件读被 deny(开出网阀前的前置安全)。
+    Seatbelt 后匹配覆盖:(deny file-read* 凭据...) 在 (allow file-read*) 之后。"""
+    prof = seatbelt.build_profile(workspace=Path.home() / ".argos" / "workspace")
+    home = Path.home()
+    # deny 块在 allow file-read* 之后、allow file-write* 之前
+    assert "(allow file-read*)" in prof
+    deny_block = prof.split("(allow file-read*)")[1].split("(allow file-write*")[0]
+    assert "(deny file-read*" in deny_block
+    for d in (".ssh", ".aws", ".gnupg", ".kube", ".docker", ".azure"):
+        assert str(home / d) in deny_block, f"凭据目录 {d} 应被读 deny"
+    for f in (".netrc", ".git-credentials", ".argos/.env", ".argos/config.json"):
+        assert str(home / f) in deny_block, f"密钥文件 {f} 应被读 deny"
+    # 工作区目录本身绝不能在读 deny 块里(否则读不了工作区)
+    assert str(home / ".argos" / "workspace") not in deny_block
