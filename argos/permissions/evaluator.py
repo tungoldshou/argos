@@ -250,13 +250,16 @@ def evaluate(
     if lvl == "auto":
         base = DecisionMeta(decision="approve", trigger=f"level:{lvl}", reason=f"default {lvl}")
     elif lvl in ("confirm", "propose", "accept_edits"):
-        # L1「只有危险操作才问」:默认决策处对【低危】动作(registry risk=low,如 web_search/
-        # web_extract/read_file/search_files 只读)自动放行,中/高危仍 ask。仅 low_risk_auto(trust dial
-        # L1 置)且非 L0(ask_readonly)且 lvl==confirm 时生效;普通 CONFIRM 不置 → 行为不变。
-        # hard/soft deny/ask、secret、per-tool 都在前面已返回,不受此影响(2026-06-18 修)。
-        if low_risk_auto and not ask_readonly and lvl == "confirm" and risk == "low":
-            base = DecisionMeta(decision="approve", trigger="trust:L1 低危放行",
-                                reason="L1:低风险动作自动放行(只有危险操作才问)")
+        # Cautious(L1「只有危险操作才问」,默认档):自动放行【牢笼内】的动作 —— 低危只读
+        # (web_search/web_extract/read_file/search_files)+ run_command(沙箱命令:Seatbelt 关在
+        # 牢笼里、网络 OFF、写caged、凭据读拒;危险命令 rm -rf 等已在前面 hard_rule 步 deny)。
+        # 只在【牢笼墙】问:出网越界(egress)、越界写、hard-rule/金融。这就是"牢笼内自动跑、只在墙问"
+        # (Codex/Claude Code 的丝滑来源,2026-06-20 重设)。仅 low_risk_auto 且非 L0 且 lvl==confirm 时
+        # 生效;裸 CONFIRM(测试)不置标志 → 行为不变。中/高危且非沙箱命令(浏览器写/mcp 等)仍 ask。
+        if (low_risk_auto and not ask_readonly and lvl == "confirm"
+                and (risk == "low" or action == "run_command")):
+            base = DecisionMeta(decision="approve", trigger="trust:cautious 牢笼内放行",
+                                reason="Cautious:牢笼内动作自动放行(只在牢笼墙/危险操作问)")
         else:
             base = DecisionMeta(decision="ask", trigger=f"level:{lvl}", reason=f"default {lvl}")
     elif lvl == "observe":

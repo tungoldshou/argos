@@ -83,6 +83,20 @@ def _hash_payload(payload: dict[str, Any]) -> str:
     return json.dumps(payload, sort_keys=True, ensure_ascii=False)
 
 
+def _derive_allow_matcher(action: str, args: dict[str, Any]) -> tuple[str, str]:
+    """从一次「总是允许」派生持久 allow 规则的 (tool, matcher)。matcher 走 re.search 语义。
+    - run_command → 命令首词(二进制):'pytest -q' → matcher=re.escape('pytest'),匹配含 pytest 的命令。
+      宽是安全的:评估器先跑 hard rule(rm -rf 等)再 soft_allow,危险命令仍被兜底拦。
+    - 其它工具 → matcher='*'(整工具放行 = 用户'别再问这个工具了')。"""
+    import re as _re
+    if action == "run_command":
+        cmd = str((args or {}).get("command", "")).strip()
+        toks = cmd.split()
+        if toks:
+            return action, _re.escape(toks[0])
+    return action, "*"
+
+
 class ApprovalGate:
     """每个 session 一个实例。契约 §6.3:level 拨盘 + respond 速选(1=deny 2=once 3=session 4=always)。
     保留旧的跨 loop 唤醒、超时 fail-closed、session 缓存语义。
@@ -358,7 +372,9 @@ class ApprovalGate:
 
     def respond(self, call_id: str, decision: DecisionKind) -> bool:
         """TUI ApprovalModal 速选(1=deny 2=once 3=session 4=always)回灌。
-        session/always 把 payload 加进 session 缓存(always 在本 session 内等价 session)。"""
+        session → 加 session 缓存(本 session 不再问);always → 额外【持久化】一条 pattern allow 规则
+        到 permissions.json,跨 session 再不问(像 Claude Code 的'总是允许';此前 always==session 是假持久,
+        点了下次还问 —— 2026-06-20 修)。"""
         p = self._pending.pop(call_id, None)
         if p is None:
             return False
@@ -368,6 +384,17 @@ class ApprovalGate:
             self._session_approvals[key] = _SessionApproval(
                 payload_hash=key, approved_at=time.time(),
             )
+        if decision == "always":
+            try:
+                from argos.permissions import config as _pcfg
+                tool, matcher = _derive_allow_matcher(
+                    str(p.payload.get("action", "")), p.payload.get("args") or {},
+                )
+                if _pcfg.save_allow_rule(tool, matcher):
+                    # 热更新本 gate 的 config,让持久规则【本 session】就立即生效(评估器 soft_allow 命中)。
+                    self._permissions_config = _pcfg.get_config()
+            except Exception:  # noqa: BLE001 — 持久化失败不阻塞审批(session 缓存仍覆盖本 session)
+                pass
         self._settle(p, Decision(kind=decision))
         return True
 
