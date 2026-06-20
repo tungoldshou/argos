@@ -70,20 +70,20 @@ async def test_request_blocking_denied_returns_refusal(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_request_blocking_force_confirms_run_command_under_auto(monkeypatch):
-    """AUTO 档下 run_command 仍被 _FORCE_CONFIRM 经桥强制弹审批(不静默跑 shell)。"""
+async def test_request_blocking_run_command_auto_runs_under_yolo(monkeypatch):
+    """2026-06-20:YOLO(AUTO)下 run_command 经桥【自动跑】、不再逐条弹审批(兑现"全自治";
+    危险命令仍被 HARD RULES 拦)。此前 _FORCE_CONFIRM 把它强制弹卡,YOLO 名不副实"太鸡肋"。"""
     def fake_run(command, *, workspace=None):
         return ("ran", 0)
     monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
 
     br = _broker(level=ApprovalLevel.AUTO)
     br.set_host_loop(asyncio.get_running_loop())
-    worker = asyncio.create_task(
+    value = await asyncio.create_task(
         asyncio.to_thread(br.request_blocking, "run_command", {"command": "ls"})
     )
-    assert await _respond_first_pending(br.gate, "once"), \
-        "AUTO 档 run_command 未被 force-confirm(桥旁路了 _FORCE_CONFIRM?)"
-    assert await worker == "ran"
+    assert value == "ran"
+    assert br.gate.pending() == [], "YOLO 下经桥的 run_command 不应挂起审批"
 
 
 def test_request_blocking_fallback_no_host_loop(monkeypatch):

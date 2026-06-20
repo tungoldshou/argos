@@ -54,34 +54,30 @@ def test_broker_workspace_defaults_none_back_compat(monkeypatch):
     assert captured["workspace"] is None
 
 
-async def _approve_pending_confirm(gate: ApprovalGate, kind: str = "once") -> None:
-    """C1:run_command 即便 AUTO 也强制 CONFIRM → 它会挂起等 respond。
-    本 helper 轮询 pending 并回 once 放行(模拟用户点'允许')。
-
-    xdist 并行时 worker 可能负载高,用较长轮询窗口(最多 5s)防止在极端 CPU 争抢下因
-    1s 超时窗口耗尽而误失败。每次 sleep 极短(5ms)不影响正常情况响应时间。
-    """
-    for _ in range(1000):   # 最多 5s(1000 × 5ms);正常 <100ms 就拿到
-        pend = gate.pending()
-        if pend:
-            gate.respond(pend[0].call_id, kind)
-            return
-        await asyncio.sleep(0.005)
-
-
 @pytest.mark.asyncio
-async def test_run_command_executes_and_signs_after_confirm():
-    """C1:run_command 在 AUTO 档也强制确认;用户确认后才执行 + 签 Receipt。"""
+async def test_run_command_auto_runs_at_yolo():
+    """L4/YOLO(AUTO)兑现"全自治":run_command 自动执行、无需逐条确认,仍签 Receipt
+    (2026-06-20:此前 _FORCE_CONFIRM 把 AUTO 强制降 CONFIRM,YOLO 名不副实;HARD RULES 仍拦危险命令)。"""
     br = _broker(level=ApprovalLevel.AUTO)
-    approver = asyncio.create_task(_approve_pending_confirm(br._gate))
-    res = await br.request("run_command", {"command": "echo hi"})
-    await approver
+    res = await br.request("run_command", {"command": "echo hi"})   # 自动放行,无需 approver
     assert isinstance(res, str)
     assert "hi" in res and "exit_code=0" in res
+    assert br._gate.pending() == [], "YOLO 下 run_command 不应挂起审批"
     # 副产物:签了 Receipt(broker 暴露最近回执供 loop 投事件)
     rec = br.last_receipt
     assert rec is not None and rec.action == "run_command"
     assert br._signer.verify(rec) is True
+
+
+@pytest.mark.asyncio
+async def test_dangerous_run_command_still_blocked_at_yolo():
+    """YOLO 自动放行 run_command,但 HARD RULES 仍拦危险命令(rm -rf 等)——不自动跑、不签回执。
+    "全自治(HARD RULES 仍拦)"的后半句铁律不松(2026-06-20)。"""
+    br = _broker(level=ApprovalLevel.AUTO)
+    res = await br.request("run_command", {"command": "rm -rf /"})
+    assert isinstance(res, str)
+    assert "拒绝" in res or "硬规则" in res or "deny" in res.lower(), res
+    assert br.last_receipt is None, "被硬规则拦的危险命令不应执行/签回执"
 
 
 @pytest.mark.asyncio
@@ -183,9 +179,7 @@ async def test_network_action_denied_at_observe_through_request():
 async def test_take_receipt_returns_and_clears():
     """I2:take_receipt() 返回并清空 last_receipt(loop 据此投 per-step ToolReceipt)。"""
     br = _broker(level=ApprovalLevel.AUTO)
-    approver = asyncio.create_task(_approve_pending_confirm(br._gate))
-    await br.request("run_command", {"command": "echo hi"})
-    await approver
+    await br.request("run_command", {"command": "echo hi"})   # YOLO 自动放行
     assert br.last_receipt is not None
     rec = br.take_receipt()
     assert rec is not None and rec.action == "run_command"
@@ -194,25 +188,23 @@ async def test_take_receipt_returns_and_clears():
 
 
 @pytest.mark.asyncio
-async def test_run_command_forced_confirm_even_in_auto():
-    """C1:run_command 在 AUTO 档也强制确认 —— 没有挂起的 respond 就超时 fail-closed 拒。
-    用极短 timeout 经 gate 验证它确实进了 CONFIRM 等待(而非 AUTO 立即放行)。"""
-    import argos.sandbox.broker as _bk
+async def test_run_command_not_force_confirmed_at_yolo():
+    """2026-06-20:YOLO(AUTO)下 run_command 不再被强制降 CONFIRM —— gate.request 在 AUTO 档被调用,
+    兑现"全自治"(危险命令由 evaluator 的 HARD RULES 拦,见 test_dangerous_run_command_still_blocked_at_yolo)。"""
     gate = ApprovalGate(level=ApprovalLevel.AUTO)
     egress = EgressPolicy(llm_hosts=set(), search_hosts={"duckduckgo.com"}, mcp_hosts=set())
     signer = ReceiptSigner(key=b"k")
     br = CapabilityBroker(gate=gate, egress=egress, signer=signer)
 
-    # monkeypatch gate.request 记录它被调用时的 level —— 应是 CONFIRM 而非 AUTO。
+    # monkeypatch gate.request 记录它被调用时的 level —— 应保持 AUTO(不再被 force 降 CONFIRM)。
     seen = {}
 
     async def fake_request(action, args, *, description, risk, timeout=60.0):
         seen["level"] = gate.level
         from argos.approval import Decision
-        return Decision(kind="deny", reason="测试拒绝")
+        return Decision(kind="once", reason="测试放行")
 
     gate.request = fake_request  # type: ignore[assignment]
-    res = await br.request("run_command", {"command": "echo hi"})
-    assert seen["level"] is ApprovalLevel.CONFIRM, "run_command 在 AUTO 档应被强制降到 CONFIRM"
-    assert gate.level is ApprovalLevel.AUTO, "裁决后应恢复原档,不污染 session"
-    assert "拒绝" in res
+    await br.request("run_command", {"command": "echo hi"})
+    assert seen["level"] is ApprovalLevel.AUTO, "YOLO 下 run_command 不应被强制降 CONFIRM,应保持 AUTO 自动放行"
+    assert gate.level is ApprovalLevel.AUTO, "裁决后档位不变"
