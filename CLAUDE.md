@@ -165,6 +165,10 @@ share mutable state. The `ApprovalGate` from `build_components` is shared with t
   `daemon.sock`, `daemon.pid`.
   `ARGOS_NO_MEMORY=1` opts out of auto-memory. `ARGOS_INTENT=1` opts **in** to the NL→Goal
   intent-confirmation gate (off by default — understand-then-act); `ARGOS_NO_INTENT=1` force-off.
+  `ARGOS_WORKFLOWS=1` opts **in** to Dynamic Workflows (`propose_workflow`/fan-out/best-of-N): the
+  `WORKFLOW_PROMPT` section is injected and the model is steered to use it. Off by default — the
+  default agent isn't burdened with workflow complexity (the `propose_workflow` tool stays callable,
+  it's just not advertised in the system prompt).
 - **Daemon is always-on by default**: TUI probes `~/.argos/daemon.sock` at startup and
   auto-spawns `argosd` if not running; falls back to inline (single-process) mode only on
   failure. There is no `--with-daemon` flag — daemon is the default path. `ARGOS_NO_DAEMON=1`

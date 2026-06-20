@@ -9,7 +9,7 @@ def test_section_constants_exist_and_compose():
     # 分节常量存在且都拼进了 HONESTY_SYSTEM
     for name in (
         "_IDENTITY", "_HONESTY_INVARIANT", "_SAFETY_REFUSAL", "_UNTRUSTED_DEFENSE",
-        "_TONE", "_ACTION_FORMAT", "_TOOL_SELECTION", "_TOOLS", "_WORKFLOW_NOTE", "_SELF_CHECK",
+        "_TONE", "_ACTION_FORMAT", "_TOOL_SELECTION", "_TOOLS", "_SELF_CHECK",
     ):
         assert hasattr(honesty, name), f"missing section constant {name}"
         assert getattr(honesty, name).strip() in HONESTY_SYSTEM
@@ -23,11 +23,15 @@ def test_honesty_invariant_preserved():
     assert "web_search" in HONESTY_SYSTEM and "browser_navigate" in HONESTY_SYSTEM
 
 
-def test_workflow_contract_trimmed():
-    # propose_workflow 仍提及,但长契约已裁短(不再含逐字 stages 字段表)
-    assert "propose_workflow" in HONESTY_SYSTEM
-    assert "fan_out" in HONESTY_SYSTEM          # 五选一仍提
-    assert "voters/threshold" not in HONESTY_SYSTEM   # 逐字段细节已移除
+def test_workflow_section_off_default_path():
+    # Phase 5.3(2026-06-20):工作流段【默认不进系统提示】—— 重型编排默认 agent 用不上。
+    # WORKFLOW_PROMPT 仍存在(供 ARGOS_WORKFLOWS=1 时 loop 条件注入),但不在基础 HONESTY_SYSTEM 里。
+    from argos.core.honesty import WORKFLOW_PROMPT
+    assert "propose_workflow" not in HONESTY_SYSTEM   # 默认提示不再提工作流
+    assert "fan_out" not in HONESTY_SYSTEM
+    assert "propose_workflow" in WORKFLOW_PROMPT       # 内容保留在可注入段里
+    assert "fan_out" in WORKFLOW_PROMPT                # 五选一仍在
+    assert "voters/threshold" not in WORKFLOW_PROMPT   # 逐字段细节早已移除
 
 
 def test_safety_refusal_section():
