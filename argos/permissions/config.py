@@ -32,9 +32,15 @@ class PermissionsConfigError(Exception):
 
 
 def _is_safe_regex(matcher: str) -> bool:
-    """防 ReDoS:长度 > 256 / ReDoS 模式 → False。"""
+    """防 ReDoS:长度 > 256 / ReDoS 模式 → False。
+
+    "*" 与 "" 是 _matcher_match 的【全匹配哨兵】(整工具放行),不是正则 —— 直接放行,
+    不送 re.compile(否则 re.compile("*") 抛 'nothing to repeat',导致"总是允许"对非 run_command
+    工具持久化的 matcher='*' 规则在加载时被静默丢弃 = Phase 1 的假"always"对这些工具复发)。"""
     if not isinstance(matcher, str):
         return False
+    if matcher in ("", "*"):
+        return True
     if len(matcher) > 256:
         return False
     for pat in _REDOS_PATTERNS:
