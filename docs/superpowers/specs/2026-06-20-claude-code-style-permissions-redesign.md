@@ -97,6 +97,12 @@ Collapse broker dual gating into a shared `_preflight(action,args)` called by bo
   - ✅ **broker `_preflight`** — request()/execute_sync() now share one `_preflight(action,args)` (action-validation + file-write gate-only + egress); a parity test locks that the two paths can't diverge. (The real correctness win — closes the sync-bridge governance-divergence the audit flagged.)
   - ✅ **`_pick_strategy_cmd` / pytest** — `probe_workspace` only flags `has_pytest` when collectable test files exist (deliberate `pytest.ini`/`conftest.py` still count); fixes the "pyproject.toml-only project → pytest exits 5 → false failure" bug.
   - ✅ **workflows off the default path** (`ARGOS_WORKFLOWS=1` opt-in) — `WORKFLOW_PROMPT` moved out of the baked `HONESTY_SYSTEM`, injected conditionally like `COMPUTER_USE_PROMPT`. This *is* the real prompt trim (default stable prompt 3141 → 2923 chars) — no risky prose-nitpicking of the honesty invariants.
+  - ✅ **`_approval_level_override` dead-write fixed** (post-review #4). The override the loop set for
+    strong-tier force-confirm (spec §11) and approve_accept_edits was never read — the guarantee never
+    fired. The loop now `push_override_semantics` / `pop_override_semantics` on the gate around
+    `exec_code`: CONFIRM disables the cage auto-pass (so a strong-tier step actually asks), ACCEPT_EDITS
+    keeps the cage-permissive semantics. (Was flagged pre-existing/out-of-scope in the review; owner
+    asked to fix it.)
   - ⊘ **auto-memory 4→2 tiers — DEFERRED** (the spec's own "lower priority"). The 4-tier model works and recall / consolidation / Dream all depend on tier identity; halving it is a semantic change to a working subsystem with real regression risk and marginal benefit. Not worth it now.
 
 **Docs:** reframe README/docs as a Claude Code/Codex-style coding agent; drop the cheap-model-verify-governance headline.

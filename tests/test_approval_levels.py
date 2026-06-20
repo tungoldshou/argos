@@ -133,3 +133,42 @@ async def test_session_decision_caches():
     # 同 action+args 第二次:session 缓存命中,立即放行(不再挂起)
     d2 = await gate.request("web_search", {"query": "x"}, description="搜 x", risk="low", timeout=0.2)
     assert d2.approved is True
+
+
+def test_override_semantics_force_confirm_overrides_cautious_autopass():
+    """review #4 修:strong-tier 强制确认(override=CONFIRM)真生效 —— 把 Cautious 牢笼自动放行的
+    run_command 升格为 ask;pop 后还原。此前 loop._approval_level_override 只写不读(死写),
+    强制确认形同虚设(spec §11 保证落空)。"""
+    from argos.permissions.trust_dial import TrustLevel
+    gate = ApprovalGate()
+    gate.set_trust_level(TrustLevel.L1_DANGEROUS_ONLY)  # Cautious
+    assert gate.evaluate_sync("run_command", {"command": "pytest -q"}).decision == "approve"
+    snap = gate.push_override_semantics(ApprovalLevel.CONFIRM)
+    assert gate.level is ApprovalLevel.CONFIRM and gate._low_risk_auto is False
+    assert gate.evaluate_sync("run_command", {"command": "pytest -q"}).decision == "ask"
+    gate.pop_override_semantics(snap)
+    assert gate._low_risk_auto is True
+    assert gate.evaluate_sync("run_command", {"command": "pytest -q"}).decision == "approve"
+
+
+def test_override_semantics_accept_edits_loosens_to_cage_autopass():
+    """approve_accept_edits(override=ACCEPT_EDITS)维持牢笼放行:从 paranoid(每步问)放宽到沙箱命令自动批。"""
+    from argos.permissions.trust_dial import TrustLevel
+    gate = ApprovalGate()
+    gate.set_trust_level(TrustLevel.L0_EVERY_STEP)  # paranoid:连只读也问
+    assert gate.evaluate_sync("run_command", {"command": "pytest -q"}).decision == "ask"
+    snap = gate.push_override_semantics(ApprovalLevel.ACCEPT_EDITS)
+    assert gate.evaluate_sync("run_command", {"command": "pytest -q"}).decision == "approve"
+    gate.pop_override_semantics(snap)
+    assert gate.evaluate_sync("run_command", {"command": "pytest -q"}).decision == "ask"
+
+
+def test_loop_applies_override_around_exec_code():
+    """review #4:loop 在 exec_code 前后 push/pop override 语义(把死写接通)。"""
+    import inspect
+    from argos.core.loop import AgentLoop
+    src = inspect.getsource(AgentLoop._drive) if hasattr(AgentLoop, "_drive") else inspect.getsource(AgentLoop.run)
+    # 源码里 act 段须引用 push_override_semantics(消费 _approval_level_override)
+    full = inspect.getsource(AgentLoop)
+    assert "push_override_semantics" in full
+    assert "pop_override_semantics" in full

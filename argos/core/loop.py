@@ -1404,7 +1404,19 @@ class AgentLoop:
                 # exec_code 移进工作线程:释放事件循环,broker_handler 才能把工具调用的交互审批
                 # request() 提交回主循环(主循环此刻空闲,gate 能 await 用户 + TUI 能渲染审批卡)。
                 # 沙箱单 run 串行 exec(executor 非线程安全),to_thread 不引入并发。
-                result = await asyncio.to_thread(self._sandbox.exec_code, code)
+                # review #4:本步若有 _approval_level_override(strong-tier 强制确认 / approve_accept_edits),
+                # exec 期间把 gate 切到该语义,exec 后还原 —— 此前 override 只写不读(死写),强档强制确认
+                # 等于没生效。gate 在 host(非沙箱),工具调用经 broker 同步桥提交回主循环的 gate.request。
+                _ovr_gate = getattr(self._broker, "gate", None) if self._broker is not None else None
+                _ovr_snap = None
+                if _ovr_gate is not None and self._approval_level_override is not None \
+                        and hasattr(_ovr_gate, "push_override_semantics"):
+                    _ovr_snap = _ovr_gate.push_override_semantics(self._approval_level_override)
+                try:
+                    result = await asyncio.to_thread(self._sandbox.exec_code, code)
+                finally:
+                    if _ovr_snap is not None:
+                        _ovr_gate.pop_override_semantics(_ovr_snap)
                 self._actions += 1
                 # H2:记录本轮是否真发生写操作(host 侧解析代码块,同 propose_verify 路径)。
                 # 用于"改了代码却没声明验证"的一次性催促,纯读/问答任务不触发。
