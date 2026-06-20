@@ -91,6 +91,21 @@ class WorkspaceFacts:
     csv_output: bool = False
 
 
+def _has_test_files(path: Path) -> bool:
+    """是否存在可被 pytest 收集的测试文件（test_*.py / *_test.py）。
+    顶层 glob + 常见测试目录（tests/ test/）惰性 rglob，取首个命中即停 —— 只读、省时。"""
+    for pat in ("test_*.py", "*_test.py"):
+        if next(path.glob(pat), None) is not None:
+            return True
+    for d in ("tests", "test"):
+        tdir = path / d
+        if tdir.is_dir():
+            for pat in ("test_*.py", "*_test.py"):
+                if next(tdir.rglob(pat), None) is not None:
+                    return True
+    return False
+
+
 def probe_workspace(path: Path) -> WorkspaceFacts:
     """只读扫描工作区，返回 WorkspaceFacts。不创建文件，不修改任何状态。
 
@@ -103,8 +118,10 @@ def probe_workspace(path: Path) -> WorkspaceFacts:
     def _exists(*names: str) -> bool:
         return any((path / n).exists() for n in names)
 
-    # pytest 信号：pytest.ini / setup.cfg[tool:pytest] / pyproject.toml / conftest.py
-    has_pytest = _exists("pytest.ini", "conftest.py") or _exists("pyproject.toml") or _exists("setup.cfg")
+    # pytest 信号（Phase 5.2，2026-06-20）：deliberate 测试设施（pytest.ini / conftest.py）直接算；
+    # 弱信号（pyproject.toml / setup.cfg）单独不算 —— 几乎每个现代 Python 项目都有 pyproject.toml，
+    # 但没测试时推 pytest 会收集 0 个测试、以退出码 5 误判失败。只在【真有可收集的测试文件】时才算。
+    has_pytest = _exists("pytest.ini", "conftest.py") or _has_test_files(path)
     has_cargo = _exists("Cargo.toml")
     has_package_json = _exists("package.json")
     has_makefile = _exists("Makefile", "makefile", "GNUmakefile")
