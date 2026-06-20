@@ -159,6 +159,34 @@ class ApprovalGate:
     def set_level(self, level: ApprovalLevel) -> None:
         self.level = level
 
+    def push_override_semantics(self, level: "ApprovalLevel") -> tuple:
+        """临时覆盖审批语义并返回还原快照(loop act 段用,2026-06-20 review #4)。
+
+        此前 loop._approval_level_override 设了却从不作用于 gate(死写)→ spec §11"strong tier 强制
+        确认"与 approve_accept_edits 都不生效。本方法把 override 真正落到 gate 的有效语义上:
+          · CONFIRM(strong-tier 强制确认)→ level=CONFIRM 且【关掉牢笼自动放行】(low_risk_auto=False、
+            ask_readonly=False)→ 本步 risky 动作逐个问;仅设 level 不够,因 Cautious 的 low_risk_auto
+            仍会把 run_command/写自动放行,强制确认形同虚设。
+          · ACCEPT_EDITS(approve_accept_edits)→ 维持牢笼放行语义(= Cautious:写/沙箱命令自动批),
+            比基础档更宽松而非更严。
+        返回 (level, low_risk_auto, ask_readonly, reversible_check) 快照,用 pop_override_semantics 还原。"""
+        snap = (self.level, self._low_risk_auto, self._ask_readonly, self._reversible_check)
+        if level is ApprovalLevel.CONFIRM:
+            self.level = ApprovalLevel.CONFIRM
+            self._low_risk_auto = False
+            self._ask_readonly = False
+        elif level is ApprovalLevel.ACCEPT_EDITS:
+            self.level = ApprovalLevel.CONFIRM
+            self._low_risk_auto = True
+            self._ask_readonly = False
+        else:
+            self.level = level
+        return snap
+
+    def pop_override_semantics(self, snap: tuple) -> None:
+        """还原 push_override_semantics 的快照。"""
+        self.level, self._low_risk_auto, self._ask_readonly, self._reversible_check = snap
+
     def set_trust_level(self, trust: "Any") -> None:
         """将 TrustLevel 映射到 ApprovalLevel 并写入 gate（Trust Dial 接线入口）。
 
