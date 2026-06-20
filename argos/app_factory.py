@@ -426,7 +426,11 @@ def build_components(
             t, k = tier, key
         return ModelClient(tier=t, pool=CredentialPool([k] or ["_missing_"]))
 
-    router = ModelRouter(routing=routing_cfg, client_factory=_router_client_factory)
+    # Phase 4.4(2026-06-20):per-step routing 改为 opt-in —— 仅在真配了路由表(routing_cfg.is_active())
+    # 时才构造 router;否则 router=None,loop 走原路径(不每步 categorize+select,省开销)。绝大多数用户
+    # 没配 routing 段 → default config → router=None。effort 档(routing/effort.py)与此无关,不受影响。
+    router = (ModelRouter(routing=routing_cfg, client_factory=_router_client_factory)
+              if routing_cfg.is_active() else None)
 
     # 方向 A(2026-06-14):intent 确认门【默认关】——理解即行动,确认只在副作用层
     # (CapabilityBroker + ApprovalGate + Trust Dial + Seatbelt 沙箱)。调研显示主流 coding
