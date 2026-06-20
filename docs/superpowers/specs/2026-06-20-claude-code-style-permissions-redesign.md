@@ -62,6 +62,24 @@ Add a read-denylist for credential dirs to the Seatbelt profile **before** the e
 
 **Phase 3 — collapse the dial.** 5 levels → 3 modes (1:1 ApprovalLevel mapping). Hide L0 as `/trust paranoid`. Move "irreversible-always-confirm" to a HARD-rule. Update status line + cycling.
 
+  *Done (2026-06-20):* User-facing surface is now 3 modes — **Cautious** (default, =L1) / **Trusted**
+  (=L3) / **Autonomous** (=L4). Added `mode_name` + `TRUST_CYCLE` + `next_in_cycle` to `trust_dial.py`;
+  bare `/trust` cycles Cautious→Trusted→Autonomous (Claude-Code Shift+Tab feel); `/trust status` shows
+  without switching; `/trust paranoid` selects the hidden L0; mode names + `l0–l4`/`auto` accepted as
+  args. Status display + dial header show the mode name. Folded in Phase 4's dead-code removal:
+  deleted `suggest_escalation` / `EscalationSuggestion` / `_SUGGEST_THRESHOLD` (zero production callers).
+  Fixed a test-isolation bug Phase 1 surfaced: an autouse fixture now isolates `permissions.config`
+  (`_config` singleton + `CONFIG_PATH`) so tests can't pollute each other or the user's real
+  `~/.argos/permissions.json`.
+
+  *Deliberate deviations (lower risk, same user-facing result):* the `TrustLevel` L0–L4 enum and its
+  `ApprovalLevel` mapping + reversible plumbing are **kept internally** (not torn out) — L2 is simply
+  unadvertised/deprecated and the existing destructive-shell / system-path / financial HARD-rules
+  already provide the "don't silently do irreversible things" protection, so no new blanket
+  irreversible-confirm rule was added (it would re-introduce friction the redesign is removing). The
+  5-row dial **widget** is left intact (header now names the mode) rather than rebuilt to 3 rows —
+  that visual teardown is deferred until it can be verified against a live TUI.
+
 **Phase 4 — delete the dead weight (pure subtraction).**
 Cut: `intent/` + ARGOS_INTENT (disavowed, off); `suggest_escalation`/`EscalationSuggestion`/`_SUGGEST_THRESHOLD` (dead); empty `_FORCE_CONFIRM_ACTIONS` + branch; make per-step routing opt-in (skip categorize/select when tier maps empty; keep `effort.py`); replace `conductor/` engine with a launchd/cron or daemon-timer for nightly Dream.
 

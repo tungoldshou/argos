@@ -4,9 +4,10 @@
 - 五档映射表逐项（to_approval_semantics 每档的 approval_level + 关键字段）
 - hard_rules_immune 契约：任何档位映射结果 hard_rules_immune 字段为 True
 - escalation_warning：升档必非空 / 降档必为空串 / 等档为空
-- suggest_escalation：阈值准确 / 返回值永远带警示文案 / L4 不触发 / None 时不返回
+- 3-mode 用户面向层（2026-06-20 重设）：mode_name / TRUST_CYCLE / next_in_cycle
 - L4 语义里 to_approval_semantics 不含绕过 hard rules 的字段（hard_rules_immune=True）
-- EscalationSuggestion.warning 不得为空的契约断言
+
+注：历史的 suggest_escalation / EscalationSuggestion（无生产调用方）已删除（Phase 4 减法）。
 """
 from __future__ import annotations
 
@@ -14,10 +15,10 @@ import pytest
 
 from argos.permissions.trust_dial import (
     TrustLevel,
-    EscalationSuggestion,
+    TRUST_CYCLE,
     hard_rules_immune,
     escalation_warning,
-    suggest_escalation,
+    next_in_cycle,
     to_approval_semantics,
 )
 
@@ -240,179 +241,47 @@ class TestEscalationWarning:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# suggest_escalation：阈值 / 带警示文案 / 边界条件
+# 3-mode 用户面向层（2026-06-20 重设）：mode_name / TRUST_CYCLE / next_in_cycle
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _make_history(action: str, approved_count: int, kind: str | None = None) -> list[dict]:
-    """辅助：生成 approved_count 次同类操作历史。"""
-    entry = {"action": action, "decision": "approved"}
-    if kind:
-        entry["kind"] = kind
-    return [entry] * approved_count
+class TestThreeModeLayer:
+    """Cautious(L1) / Trusted(L3) / Autonomous(L4) 三个可见模式 + 循环。"""
 
+    def test_mode_names_for_visible_modes(self):
+        assert TrustLevel.L1_DANGEROUS_ONLY.mode_name == "Cautious"
+        assert TrustLevel.L3_SESSION_TRUSTED.mode_name == "Trusted"
+        assert TrustLevel.L4_AUTONOMOUS.mode_name == "Autonomous"
 
-class TestSuggestEscalation:
-    """suggest_escalation 测试。"""
+    def test_mode_name_paranoid_and_deprecated(self):
+        assert TrustLevel.L0_EVERY_STEP.mode_name == "Paranoid"        # 隐藏档
+        assert TrustLevel.L2_IRREVERSIBLE_ONLY.mode_name == "Irreversible-only"
 
-    def test_below_threshold_returns_none(self):
-        """连续 < 5 次不触发建议。"""
-        history = _make_history("write_file", 4)
-        result = suggest_escalation(history, current_level=TrustLevel.L0_EVERY_STEP)
-        assert result is None
+    @pytest.mark.parametrize("level", list(TrustLevel))
+    def test_mode_name_nonempty(self, level: TrustLevel):
+        assert level.mode_name, f"{level} mode_name 不得为空"
 
-    def test_exactly_threshold_returns_suggestion(self):
-        """连续恰好 5 次触发建议。"""
-        history = _make_history("write_file", 5)
-        result = suggest_escalation(history, current_level=TrustLevel.L0_EVERY_STEP)
-        assert result is not None
-
-    def test_above_threshold_returns_suggestion(self):
-        """连续 > 5 次也触发建议。"""
-        history = _make_history("run_command", 10)
-        result = suggest_escalation(history, current_level=TrustLevel.L0_EVERY_STEP)
-        assert result is not None
-
-    def test_suggestion_always_has_nonempty_warning(self):
-        """建议对象 warning 字段必须非空（设计 §6 红线）。"""
-        history = _make_history("write_file", 5)
-        result = suggest_escalation(history, current_level=TrustLevel.L0_EVERY_STEP)
-        assert result is not None
-        assert result.warning, f"EscalationSuggestion.warning 不得为空，实际: {result.warning!r}"
-
-    def test_suggestion_level_not_exceed_l3(self):
-        """建议档位不超过 L3（不主动建议 L4 全自治）。"""
-        history = _make_history("write_file", 100)
-        result = suggest_escalation(history, current_level=TrustLevel.L2_IRREVERSIBLE_ONLY)
-        assert result is not None
-        assert result.suggested_level <= TrustLevel.L3_SESSION_TRUSTED, (
-            f"建议档位不应超过 L3，实际: {result.suggested_level}"
+    def test_cycle_is_three_visible_modes(self):
+        assert TRUST_CYCLE == (
+            TrustLevel.L1_DANGEROUS_ONLY,
+            TrustLevel.L3_SESSION_TRUSTED,
+            TrustLevel.L4_AUTONOMOUS,
         )
+        # 隐藏/弃用档不在环上
+        assert TrustLevel.L0_EVERY_STEP not in TRUST_CYCLE
+        assert TrustLevel.L2_IRREVERSIBLE_ONLY not in TRUST_CYCLE
 
-    def test_at_l3_no_suggestion(self):
-        """当前已是 L3，不应再建议（不主动推向 L4）。"""
-        history = _make_history("write_file", 100)
-        result = suggest_escalation(history, current_level=TrustLevel.L3_SESSION_TRUSTED)
-        assert result is None, f"L3 不应触发升档建议，实际: {result}"
+    def test_next_in_cycle_wraps_three_modes(self):
+        assert next_in_cycle(TrustLevel.L1_DANGEROUS_ONLY) is TrustLevel.L3_SESSION_TRUSTED
+        assert next_in_cycle(TrustLevel.L3_SESSION_TRUSTED) is TrustLevel.L4_AUTONOMOUS
+        assert next_in_cycle(TrustLevel.L4_AUTONOMOUS) is TrustLevel.L1_DANGEROUS_ONLY
 
-    def test_at_l4_no_suggestion(self):
-        """当前已是 L4，不应触发建议。"""
-        history = _make_history("write_file", 100)
-        result = suggest_escalation(history, current_level=TrustLevel.L4_AUTONOMOUS)
-        assert result is None, f"L4 不应触发升档建议，实际: {result}"
+    def test_next_in_cycle_normalizes_offcycle_levels(self):
+        # 退出隐藏 Paranoid → Cautious 起步；弃用 L2 → Trusted。
+        assert next_in_cycle(TrustLevel.L0_EVERY_STEP) is TrustLevel.L1_DANGEROUS_ONLY
+        assert next_in_cycle(TrustLevel.L2_IRREVERSIBLE_ONLY) is TrustLevel.L3_SESSION_TRUSTED
 
-    def test_empty_history_returns_none(self):
-        result = suggest_escalation([], current_level=TrustLevel.L0_EVERY_STEP)
-        assert result is None
-
-    def test_custom_threshold(self):
-        """自定义阈值=3，3 次即触发。"""
-        history = _make_history("read_file", 3)
-        result = suggest_escalation(
-            history, current_level=TrustLevel.L0_EVERY_STEP, threshold=3
-        )
-        assert result is not None
-
-    def test_custom_threshold_not_reached(self):
-        """自定义阈值=3，2 次不触发。"""
-        history = _make_history("read_file", 2)
-        result = suggest_escalation(
-            history, current_level=TrustLevel.L0_EVERY_STEP, threshold=3
-        )
-        assert result is None
-
-    def test_trigger_count_correct(self):
-        """trigger_count 应反映实际连续允许次数。"""
-        history = _make_history("write_file", 7)
-        result = suggest_escalation(history, current_level=TrustLevel.L0_EVERY_STEP)
-        assert result is not None
-        assert result.trigger_count == 7
-
-    def test_denied_breaks_consecutive_count(self):
-        """被拒绝的操作中断连续计数，连续计数从 0 重新开始。"""
-        # 4 次批准 + 1 次拒绝 + 4 次批准 = 最大连续 4，不足 5 次
-        history = (
-            _make_history("write_file", 4)
-            + [{"action": "write_file", "decision": "denied"}]
-            + _make_history("write_file", 4)
-        )
-        result = suggest_escalation(history, current_level=TrustLevel.L0_EVERY_STEP)
-        assert result is None, "中断后连续计数重置，不应触发建议"
-
-    def test_different_actions_counted_separately(self):
-        """不同类操作分别计数，同类才叠加。"""
-        history = (
-            _make_history("write_file", 3)
-            + _make_history("run_command", 3)
-        )
-        # 各 3 次，不足 5，不应触发
-        result = suggest_escalation(history, current_level=TrustLevel.L0_EVERY_STEP)
-        assert result is None
-
-    def test_kind_field_used_for_grouping(self):
-        """有 kind 字段时按 kind 分组（而非 action）。"""
-        # 不同 action 但同一 kind，共 5 次
-        history = [
-            {"action": "write_file",  "kind": "file_ops", "decision": "approved"},
-            {"action": "edit_file",   "kind": "file_ops", "decision": "approved"},
-            {"action": "write_file",  "kind": "file_ops", "decision": "approved"},
-            {"action": "delete_file", "kind": "file_ops", "decision": "approved"},
-            {"action": "edit_file",   "kind": "file_ops", "decision": "approved"},
-        ]
-        result = suggest_escalation(history, current_level=TrustLevel.L0_EVERY_STEP)
-        assert result is not None, "同 kind 累计 5 次应触发建议"
-
-    def test_suggestion_from_level_matches_current(self):
-        """建议的 from_level 应等于传入的 current_level。"""
-        history = _make_history("write_file", 5)
-        result = suggest_escalation(history, current_level=TrustLevel.L1_DANGEROUS_ONLY)
-        assert result is not None
-        assert result.from_level is TrustLevel.L1_DANGEROUS_ONLY
-
-    def test_suggestion_contains_reason(self):
-        """建议对象的 reason 字段应非空（含触发说明）。"""
-        history = _make_history("write_file", 5)
-        result = suggest_escalation(history, current_level=TrustLevel.L0_EVERY_STEP)
-        assert result is not None
-        assert result.reason, "reason 字段不得为空"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# EscalationSuggestion 契约断言
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestEscalationSuggestionContract:
-    """EscalationSuggestion 自身契约测试。"""
-
-    def test_empty_warning_raises(self):
-        """warning 为空串时 __post_init__ 应抛 ValueError。"""
-        with pytest.raises(ValueError, match="warning"):
-            EscalationSuggestion(
-                from_level=TrustLevel.L0_EVERY_STEP,
-                suggested_level=TrustLevel.L1_DANGEROUS_ONLY,
-                warning="",   # 空串 → 应抛
-                reason="test",
-                trigger_count=5,
-            )
-
-    def test_valid_suggestion_no_error(self):
-        """合法的 EscalationSuggestion 不应抛异常。"""
-        s = EscalationSuggestion(
-            from_level=TrustLevel.L0_EVERY_STEP,
-            suggested_level=TrustLevel.L1_DANGEROUS_ONLY,
-            warning="⚠ 测试警示",
-            reason="测试",
-            trigger_count=5,
-        )
-        assert s.warning == "⚠ 测试警示"
-
-    def test_frozen_immutable(self):
-        """EscalationSuggestion 是 frozen dataclass，不可修改。"""
-        s = EscalationSuggestion(
-            from_level=TrustLevel.L0_EVERY_STEP,
-            suggested_level=TrustLevel.L1_DANGEROUS_ONLY,
-            warning="⚠ 测试",
-            reason="测试",
-            trigger_count=5,
-        )
-        with pytest.raises((AttributeError, TypeError)):
-            s.warning = "new"  # type: ignore[misc]
+    def test_full_cycle_returns_to_start(self):
+        lvl = TrustLevel.L1_DANGEROUS_ONLY
+        for _ in range(len(TRUST_CYCLE)):
+            lvl = next_in_cycle(lvl)
+        assert lvl is TrustLevel.L1_DANGEROUS_ONLY

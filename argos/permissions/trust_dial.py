@@ -5,9 +5,13 @@
 **红线约束**（来自设计评审团）：
 - HARD RULES 永不被拨盘降级：任何档位下 hard_rules_immune() 均返回 True。
 - 升档(拨盘数值变大)必须返回非空警示文案；降档返回空串。
-- 拨盘建议(suggest_escalation)绝不静默自动升档，只返回带警示的建议对象。
 - 纯核心模型：不依赖 TUI / approval.py 实例；approval.py 的 ApprovalLevel 只作
   映射目标，读值不修改。
+
+2026-06-20 重设(Claude Code/Codex 风):用户面向收敛为 3 个模式 —— Cautious(默认,=L1)/
+Trusted(=L3)/Autonomous(=L4),bare `/trust` 在三者间循环;L0 隐藏为 /trust paranoid,
+L2 弃用(不可逆保护并入 hard rule)。内部仍保留 L0-L4 枚举与 ApprovalLevel 映射。
+历史的 suggest_escalation/EscalationSuggestion(无生产调用方)已删除。
 
 集成依赖注记：approval.py ApprovalLevel 枚举值（v 字段）用于 to_approval_semantics 映射，
 只读取枚举成员，不修改该文件。
@@ -15,7 +19,6 @@
 from __future__ import annotations
 
 import enum
-from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -43,6 +46,46 @@ class TrustLevel(enum.IntEnum):
     def description(self) -> str:
         """档位完整说明（TUI 设置页/帮助文本用）。"""
         return _DESCRIPTIONS[self]
+
+    @property
+    def mode_name(self) -> str:
+        """3-mode 用户面向名(2026-06-20 重设,Claude Code/Codex 风):
+        L1→Cautious / L3→Trusted / L4→Autonomous 是三个可见档;L0→Paranoid 隐藏档
+        (/trust paranoid);L2→Irreversible-only 已弃用(语义由 hard rule 覆盖)。"""
+        return _MODE_NAMES[self]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3-mode 用户面向层(L1/L3/L4 = 三个可见模式;L0 隐藏;L2 弃用)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_MODE_NAMES: dict[TrustLevel, str] = {
+    TrustLevel.L0_EVERY_STEP:        "Paranoid",            # 隐藏:/trust paranoid
+    TrustLevel.L1_DANGEROUS_ONLY:    "Cautious",            # 默认
+    TrustLevel.L2_IRREVERSIBLE_ONLY: "Irreversible-only",   # 弃用(语义并入 hard rule)
+    TrustLevel.L3_SESSION_TRUSTED:   "Trusted",
+    TrustLevel.L4_AUTONOMOUS:        "Autonomous",
+}
+
+# 三个可见模式的循环顺序(bare `/trust` 依次切换;Claude Code Shift+Tab 式)。
+# L0(Paranoid)与 L2(弃用)不在环上 —— 只能显式 /trust paranoid / 隐藏别名进入。
+TRUST_CYCLE: tuple[TrustLevel, ...] = (
+    TrustLevel.L1_DANGEROUS_ONLY,
+    TrustLevel.L3_SESSION_TRUSTED,
+    TrustLevel.L4_AUTONOMOUS,
+)
+
+
+def next_in_cycle(level: TrustLevel) -> TrustLevel:
+    """返回循环中的下一个可见模式(Cautious→Trusted→Autonomous→Cautious)。
+    不在环上的档(L0 Paranoid / L2 弃用)先归一到环:L0→Cautious 起步,L2→Trusted。"""
+    if level not in TRUST_CYCLE:
+        # 归一:退出隐藏/弃用档时进入最接近的可见模式。
+        if level is TrustLevel.L0_EVERY_STEP:
+            return TrustLevel.L1_DANGEROUS_ONLY
+        return TrustLevel.L3_SESSION_TRUSTED
+    idx = TRUST_CYCLE.index(level)
+    return TRUST_CYCLE[(idx + 1) % len(TRUST_CYCLE)]
 
 
 # 人话标签表（独立字典，枚举定义后填充）
@@ -235,113 +278,4 @@ def escalation_warning(from_level: TrustLevel, to_level: TrustLevel) -> str:
         f"这意味着更多操作将自动执行，减少中断。"
         f"HARD RULES 仍然强制拦截危险操作，但确认频率降低意味着错误操作被发现前可能已执行。"
         f"确认后该设置在本会话内生效。"
-    )
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# EscalationSuggestion —— 建议对象（永远带警示文案）
-# ─────────────────────────────────────────────────────────────────────────────
-
-@dataclass(frozen=True, slots=True)
-class EscalationSuggestion:
-    """拨盘升档建议（由 suggest_escalation 返回）。
-
-    **红线**（设计 §6）：该对象只是建议，永不自动升档；
-    必须由用户显式确认才能生效。``warning`` 字段不得为空串。
-    """
-    from_level: TrustLevel
-    suggested_level: TrustLevel
-    warning: str        # 永不为空 —— TUI 必须展示
-    reason: str         # 触发理由（"同类操作已连续允许 N 次"）
-    trigger_count: int  # 触发计数（供 TUI 渲染"已允许 N 次"）
-
-    def __post_init__(self) -> None:
-        # 契约断言：warning 不得为空（防御性校验，正常路径不会触发）
-        if not self.warning:
-            raise ValueError("EscalationSuggestion.warning 不得为空（设计 §6 红线）")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# suggest_escalation：基于历史的升档建议（绝不静默自动升档）
-# ─────────────────────────────────────────────────────────────────────────────
-
-# 连续允许同类操作 N 次后触发建议
-_SUGGEST_THRESHOLD = 5
-
-
-def suggest_escalation(
-    history: list[dict[str, Any]],
-    *,
-    current_level: TrustLevel = TrustLevel.L0_EVERY_STEP,
-    threshold: int = _SUGGEST_THRESHOLD,
-) -> EscalationSuggestion | None:
-    """分析操作历史，若同类操作连续 ≥ threshold 次被允许，返回升档建议；否则返回 None。
-
-    Args:
-        history: 操作历史列表，每项为 dict，含字段：
-            - ``action``（str）：工具/能力名称。
-            - ``decision``（str）：``"approved"`` / ``"denied"`` / ``"asked"``。
-            - ``kind``（可选 str）：操作分类（无则用 action 本身）。
-        current_level: 当前 TrustLevel，低于 L4 时才触发建议。
-        threshold: 连续允许次数阈值（默认 5）。
-
-    Returns:
-        EscalationSuggestion（永远带非空 warning）或 None。
-
-    **红线**：
-    - 本函数只返回建议，绝不执行升档。
-    - 返回的建议对象 warning 字段必须非空（由 EscalationSuggestion.__post_init__ 断言）。
-    - 建议等级不得超过 L3_SESSION_TRUSTED（不主动建议 L4 全自治）。
-    """
-    if not history:
-        return None
-
-    # 已是最高档（L4）或次高档（L3）→ 无需建议
-    if current_level >= TrustLevel.L3_SESSION_TRUSTED:
-        return None
-
-    # 统计各类操作的连续允许计数
-    # "同类" = history 中 kind 字段相同（无 kind 则用 action）
-    consecutive_counts: dict[str, int] = {}
-    for entry in history:
-        if not isinstance(entry, dict):
-            continue
-        decision = entry.get("decision", "")
-        kind = entry.get("kind") or entry.get("action", "")
-        if not kind:
-            continue
-        if decision == "approved":
-            consecutive_counts[kind] = consecutive_counts.get(kind, 0) + 1
-        # 被拒绝则重置（只算连续）
-        elif decision == "denied":
-            consecutive_counts[kind] = 0
-
-    # 找最高连续允许计数
-    if not consecutive_counts:
-        return None
-
-    top_kind = max(consecutive_counts, key=lambda k: consecutive_counts[k])
-    top_count = consecutive_counts[top_kind]
-
-    if top_count < threshold:
-        return None
-
-    # 建议升到下一档（不超过 L3）
-    next_level_value = min(int(current_level) + 1, int(TrustLevel.L3_SESSION_TRUSTED))
-    next_level = TrustLevel(next_level_value)
-
-    warning = escalation_warning(current_level, next_level)
-    # escalation_warning 对升档必返非空；此处双保险
-    if not warning:
-        warning = (
-            f"⚠ 你正在考虑从「{current_level.label_human}」升级到「{next_level.label_human}」。"
-            f"确认操作将减少中断，但也意味着减少了人工确认机会。"
-        )
-
-    return EscalationSuggestion(
-        from_level=current_level,
-        suggested_level=next_level,
-        warning=warning,
-        reason=f"操作类别「{top_kind}」已连续被允许 {top_count} 次（阈值 {threshold}）",
-        trigger_count=top_count,
     )

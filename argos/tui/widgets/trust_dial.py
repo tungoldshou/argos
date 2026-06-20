@@ -105,9 +105,11 @@ class TrustDial(Static):
         t = Text()
 
         # ── 第 1 行:标题 ──────────────────────────────────────────────────
+        # 3-mode 名为主(Cautious/Trusted/Autonomous),括号内保留 Lx 短名(诚实可追溯)。
         short = self._current.name.split("_")[0]  # "L0" / "L1" / ...
         t.append("信任拨盘 · 当前 ", style=_COL_INK)
-        t.append(short, style=f"bold {_COL_INK_BRIGHT}")
+        t.append(self._current.mode_name, style=f"bold {_COL_INK_BRIGHT}")
+        t.append(f"（{short}）", style=_COL_INK)
         t.append("\n")
 
         # ── 第 2–6 行:五行拨盘 ────────────────────────────────────────────

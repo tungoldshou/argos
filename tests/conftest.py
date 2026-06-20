@@ -138,6 +138,29 @@ def _reset_skills_registry():
 
 
 @pytest.fixture(autouse=True)
+def _reset_permissions_config(tmp_path, monkeypatch):
+    """测试隔离:permissions.config 单例 + CONFIG_PATH 双重隔离。
+
+    两个坑(Phase 1 让"always"真持久化后双双显形):
+      1) _config 模块级缓存:有的测试 monkeypatch CONFIG_PATH 后调 reload_config(),把单例换成
+         tmp 配置(可能含 run_command/^pytest allow),monkeypatch 只回滚路径不回滚单例 → 污染下一个
+         测试(默认 gate / get_config 会误把 pytest 命令 soft_allow 成 approve)。
+      2) 真实 ~/.argos/permissions.json:走"always"审批的测试(如 daemon p3 circuit)若不隔离
+         CONFIG_PATH,会把 action_b/run_workflow 等测试动作真写进用户的配置文件。
+    把 CONFIG_PATH 指到本测试独占的 tmp 文件(默认不存在 → 读空配置),既杜绝读真实配置、也杜绝
+    写脏用户文件。需要测真持久化的用例自己 monkeypatch CONFIG_PATH 到自备 tmp(在 fixture 之后生效,
+    覆盖此默认)。"""
+    try:
+        from argos.permissions import config as _pcfg
+        monkeypatch.setattr(_pcfg, "CONFIG_PATH", tmp_path / "permissions.json", raising=False)
+        _pcfg._reset_config()
+        yield
+        _pcfg._reset_config()
+    except ImportError:
+        yield
+
+
+@pytest.fixture(autouse=True)
 def _neutralize_mcp_singleton(monkeypatch):
     """测试隔离:绝不让 loop._build_system 连真实 ~/.argos/mcp.json 里的 MCP server
     (那会 spawn npx、联网下包、拖慢/污染测试,且让系统提示断言不稳)。把进程内单例的

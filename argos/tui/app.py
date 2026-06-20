@@ -687,8 +687,8 @@ class ArgosApp(App):
             await log.append_line(f"未知命令 /{cmd.name}")
             return
         if cmd.name == "yolo":
-            # /yolo 是 /trust l4 的别名（保留命令，直接生效；提示新用法）。
-            # 与 /trust l4 不同：/yolo 不弹升档确认（历史合约；用户明确输入即表示确认）。
+            # /yolo 是 /trust autonomous 的别名（保留命令，直接生效；提示新用法）。
+            # 与 /trust autonomous 不同：/yolo 不弹升档确认（历史合约；用户明确输入即表示确认）。
             self.gate.set_trust_level(
                 __import__("argos.permissions.trust_dial", fromlist=["TrustLevel"]).TrustLevel.L4_AUTONOMOUS
             )
@@ -696,8 +696,8 @@ class ArgosApp(App):
             self.sub_title = self._compose_subtitle()
             self._refresh_topbar()
             await log.append_line(
-                "已切换到 L4_AUTONOMOUS（全自治/YOLO）——顶栏显示 ⏻ YOLO 标记。"
-                " 提示：新用法为 /trust l4。",
+                "已切换到 Autonomous（全自治/YOLO）——顶栏显示 ⏻ YOLO 标记。"
+                " 提示：新用法为 /trust autonomous（或无参数 /trust 循环切换）。",
             )
         elif cmd.name == "trust":
             await self._trust_cmd(log, (cmd.arg or "").strip().lower())
@@ -824,49 +824,61 @@ class ArgosApp(App):
             )
 
     async def _trust_cmd(self, log, arg: str) -> None:
-        """/trust [l0|l1|l2|l3|l4|status]:Trust Dial 拨盘操作。
+        """/trust [cautious|trusted|autonomous|paranoid|status]:信任模式(3-mode)。
 
-        无参数或 status → 显示当前档位 + 五档人话说明。
-        /trust l0-l4 → 切换档位;升档必须先渲染 escalation_warning 并经 InlineChoice 确认。
-        降档直接生效（收紧权限，无需确认）。
-        /yolo 是 /trust l4 的别名（旧兼容命令，提示新用法）。
+        无参数 → 在 3 个模式间循环(Cautious→Trusted→Autonomous→…，Claude Code Shift+Tab 式)。
+        /trust status → 只显示当前模式 + 拨盘,不切换。
+        /trust cautious|trusted|autonomous → 切到指定模式;升档先渲染 escalation_warning 经确认。
+        /trust paranoid → 隐藏的"每一步都问"档(L0)。降档直接生效(收紧权限,无需确认)。
+        /yolo 是 /trust autonomous 的别名(旧兼容命令)。l0-l4 仍作隐藏别名保留。
         """
         from argos.permissions.trust_dial import (
-            TrustLevel, escalation_warning, to_approval_semantics,
+            TrustLevel, escalation_warning, next_in_cycle, to_approval_semantics,
         )
 
         # 计算当前 TrustLevel(单一真源,与 TopBar Trust 徽标共用)
         current_trust = self._resolve_trust_level()
 
-        # 无参数或 status → 显示状态
-        if not arg or arg in ("status", "s"):
+        # status → 只显示状态,不切换
+        if arg in ("status", "s"):
             await log.append_line(
-                f"当前信任档位：{current_trust.name}（{current_trust.label_human}）\n{current_trust.description}",
+                f"当前信任模式：{current_trust.mode_name}（{current_trust.label_human}）\n{current_trust.description}",
                 kind="system",
             )
             await log.mount_block(TrustDial(current=current_trust))
             return
 
-        # 解析目标档位
-        _arg_map: dict[str, TrustLevel] = {
-            "l0": TrustLevel.L0_EVERY_STEP,
-            "l1": TrustLevel.L1_DANGEROUS_ONLY,
-            "l2": TrustLevel.L2_IRREVERSIBLE_ONLY,
-            "l3": TrustLevel.L3_SESSION_TRUSTED,
-            "l4": TrustLevel.L4_AUTONOMOUS,
-        }
-        target_trust = _arg_map.get(arg)
-        if target_trust is None:
-            await log.append_line(
-                f"未知档位 '{arg}'。用法：/trust [l0|l1|l2|l3|l4|status]",
-                kind="system",
-            )
-            return
+        # 无参数 → 循环到下一个可见模式(Cautious→Trusted→Autonomous→…)
+        if not arg:
+            target_trust = next_in_cycle(current_trust)
+        else:
+            # 解析目标模式:3-mode 名为主,l0-l4 / paranoid / auto 为隐藏别名。
+            _arg_map: dict[str, TrustLevel] = {
+                "cautious": TrustLevel.L1_DANGEROUS_ONLY,
+                "trusted": TrustLevel.L3_SESSION_TRUSTED,
+                "autonomous": TrustLevel.L4_AUTONOMOUS,
+                "auto": TrustLevel.L4_AUTONOMOUS,
+                "paranoid": TrustLevel.L0_EVERY_STEP,
+                # 隐藏别名(向后兼容)
+                "l0": TrustLevel.L0_EVERY_STEP,
+                "l1": TrustLevel.L1_DANGEROUS_ONLY,
+                "l2": TrustLevel.L2_IRREVERSIBLE_ONLY,
+                "l3": TrustLevel.L3_SESSION_TRUSTED,
+                "l4": TrustLevel.L4_AUTONOMOUS,
+            }
+            target_trust = _arg_map.get(arg)
+            if target_trust is None:
+                await log.append_line(
+                    f"未知模式 '{arg}'。用法：/trust [cautious|trusted|autonomous|paranoid|status]"
+                    "（无参数则循环切换）",
+                    kind="system",
+                )
+                return
 
         # 同档位：无需操作
         if target_trust is current_trust:
             await log.append_line(
-                f"当前已是 {target_trust.name}（{target_trust.label_human}），无需切换。",
+                f"当前已是 {target_trust.mode_name}（{target_trust.label_human}），无需切换。",
                 kind="system",
             )
             return
@@ -878,14 +890,14 @@ class ArgosApp(App):
             self.sub_title = self._compose_subtitle()
             self._refresh_topbar()
             await log.append_line(
-                f"已切换到 {target_trust.name}（{target_trust.label_human}）。",
+                f"已切换到 {target_trust.mode_name}（{target_trust.label_human}）。",
                 kind="done",
             )
             return
 
         # 升档：必须展示警示并等用户 InlineChoice 确认
         warning_text = escalation_warning(current_trust, target_trust)
-        target_name = target_trust.name
+        target_name = target_trust.mode_name
         target_label = target_trust.label_human
 
         def _on_trust_confirm(value: str, _feedback: str) -> None:
