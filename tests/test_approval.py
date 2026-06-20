@@ -37,6 +37,47 @@ async def test_request_approval_blocks_then_resolves():
 
 
 @pytest.mark.asyncio
+async def test_always_persists_pattern_allow_rule(tmp_path, monkeypatch):
+    """Phase 1(2026-06-20):respond('always') 把一条 pattern allow 规则【持久化】进 permissions.json,
+    跨 session 再不问 —— 此前 always==session 是假持久(点了下次还问)。run_command 派生二进制 matcher;
+    危险命令仍被 hard rule 兜底拦(allow 不越 hard)。"""
+    import argos.permissions.config as pcfg
+    pj = tmp_path / "permissions.json"
+    monkeypatch.setattr(pcfg, "CONFIG_PATH", pj)
+    monkeypatch.setattr(pcfg, "_config", None, raising=False)
+
+    gate = approval.ApprovalGate()   # 裸 CONFIRM → run_command 会 ask
+    task = asyncio.create_task(
+        gate.request("run_command", {"command": "pytest -q"},
+                     description="跑测试", risk="medium", timeout=0.5)
+    )
+    await asyncio.sleep(0)
+    cid = gate.pending()[0].call_id
+    assert gate.respond(cid, "always") is True
+    await task
+
+    # 1) 真持久化到 permissions.json 的 allow[]
+    import json
+    data = json.loads(pj.read_text(encoding="utf-8"))
+    assert any(e.get("tool") == "run_command" and "pytest" in e.get("matcher", "")
+               for e in data.get("allow", [])), data
+
+    # 2) 新评估器读该 config:pytest 命令 soft_allow → approve(跨 session 生效)
+    from argos.permissions.evaluator import evaluate
+    cfg = pcfg.load(pj)
+    assert evaluate("run_command", {"command": "pytest tests/x.py"},
+                    gate_level="confirm", config=cfg, risk="medium").decision == "approve"
+    # 3) 不同二进制(git)不被覆盖 → 仍 ask
+    assert evaluate("run_command", {"command": "git status"},
+                    gate_level="confirm", config=cfg, risk="medium").decision == "ask"
+    # 4) 危险命令即便首词匹配也被 hard rule 拦(allow 不越 hard)
+    pcfg.save_allow_rule("run_command", "rm", path=pj)
+    cfg2 = pcfg.load(pj)
+    assert evaluate("run_command", {"command": "rm -rf /"},
+                    gate_level="confirm", config=cfg2, risk="medium").decision == "deny"
+
+
+@pytest.mark.asyncio
 async def test_ask_listener_fires_for_tool_ask_only():
     """2026-06-18 修:gate 进 ask 路径且 call_id 为自生成(= broker 工具桥)→ 同步触发 ask_listener,
     让 inline TUI mount 审批卡(exec_code 在 to_thread 时 loop 阻塞、yield 不出 ApprovalRequest →

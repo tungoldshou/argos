@@ -230,3 +230,45 @@ def reload_config(path: Path | None = None) -> PermissionsConfig:
         raise
     _config = new_cfg
     return _config
+
+
+def save_allow_rule(tool: str, matcher: str, path: Path | None = None) -> bool:
+    """把一条 allow 规则 {tool, matcher} 追加进 permissions.json 并落盘 + 热更新模块单例。
+    「总是允许」的真持久化:批一次该 (tool, matcher) pattern,以后(跨 session)再不问。
+    幂等(同规则不重复加);缺文件 → 新建 version=1 骨架;坏 JSON → 不 clobber(返回 False,
+    避免丢用户其它配置)。返回是否已使该规则生效。
+
+    安全:allow 规则【不能】越过 hard rule —— 评估器先跑 hard(rm -rf/系统路径/密钥)再 soft_allow,
+    所以即便 matcher 较宽(如 run_command 匹配二进制名),危险命令仍被 hard rule 兜底拦。"""
+    p = path or CONFIG_PATH
+    raw: dict = {}
+    if p.exists():
+        try:
+            loaded = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 — 坏 JSON:不覆盖
+            return False
+        if not isinstance(loaded, dict):
+            return False
+        raw = loaded
+    raw.setdefault("version", 1)
+    allow_list = raw.get("allow")
+    if not isinstance(allow_list, list):
+        allow_list = []
+    exists = any(isinstance(e, dict) and e.get("tool") == tool and e.get("matcher") == matcher
+                 for e in allow_list)
+    if not exists:
+        allow_list.append({"tool": tool, "matcher": matcher})
+        raw["allow"] = allow_list
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            tmp = p.with_name(p.name + ".tmp")
+            tmp.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.replace(p)
+        except OSError:
+            return False
+    # 热更新模块单例,让规则本 session 立即生效(否则要重启才生效)。
+    try:
+        reload_config(p)
+    except PermissionsConfigError:
+        pass
+    return True

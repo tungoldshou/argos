@@ -150,6 +150,23 @@ def _make_gate_broker_sandbox(
     None = 兼容旧路径,行为完全不变。
     """
     gate = ApprovalGate(approval_level, permissions_config=perm_config, audit_log=perm_audit)
+    # 产品默认走 trust 语义,不是裸 ApprovalLevel —— 否则 low_risk_auto 等侧旗永远是 False,
+    # 开箱默认变成"啥都问"的纯 CONFIRM(2026-06-20 排查:这正是核心鸡肋,L1 低危放行从没在
+    # 默认下生效过)。按 approval_level 映射到对应 TrustLevel 并 set_trust_level,把侧旗点亮:
+    # CONFIRM→Cautious(L1:读/牢笼内写/沙箱命令自动放行,只在牢笼墙问)。裸 ApprovalGate(CONFIRM)
+    # (测试直建,不经此)仍是纯 CONFIRM,不受影响。
+    try:
+        from argos.permissions.trust_dial import TrustLevel
+        _al_to_trust = {
+            ApprovalLevel.CONFIRM: TrustLevel.L1_DANGEROUS_ONLY,
+            ApprovalLevel.ACCEPT_EDITS: TrustLevel.L3_SESSION_TRUSTED,
+            ApprovalLevel.AUTO: TrustLevel.L4_AUTONOMOUS,
+            ApprovalLevel.OBSERVE: TrustLevel.L0_EVERY_STEP,
+            ApprovalLevel.PROPOSE: TrustLevel.L0_EVERY_STEP,
+        }
+        gate.set_trust_level(_al_to_trust.get(approval_level, TrustLevel.L1_DANGEROUS_ONLY))
+    except Exception:  # noqa: BLE001 — trust dial 不可用 → 退回裸 ApprovalLevel(零回归)
+        pass
     # broker 一次构造,包含全部依赖(mcp/browser/registry 随即传入)。
     # workspace 传给 broker:host 侧 run_command 与沙箱子进程 write_file 用同一个 ws,
     # 杜绝 --project 模式下两者分叉(run_command 落默认 workspace、write_file 落项目目录)。

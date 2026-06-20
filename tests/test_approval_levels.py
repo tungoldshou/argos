@@ -40,6 +40,39 @@ def test_l1_low_risk_auto_approve_evaluator():
     assert plain.decision == "ask", plain
 
 
+def test_cautious_auto_passes_sandboxed_run_command():
+    """Phase 1(2026-06-20)「牢笼内自动跑」:Cautious(low_risk_auto)下 run_command(沙箱命令)
+    自动放行 —— Seatbelt 关在牢笼里、网络 OFF、写caged;危险命令(rm -rf)仍在 hard_rule 步 deny。
+    裸 CONFIRM(测试直建,无 trust 语义)不受影响,run_command 照旧 ask。"""
+    from argos.permissions import get_config
+    from argos.permissions.evaluator import evaluate
+    cfg = get_config()
+
+    def ev(action, args, low, risk="medium"):
+        return evaluate(action, args, gate_level="confirm", config=cfg,
+                        low_risk_auto=low, risk=risk).decision
+
+    # Cautious:安全 run_command 自动放行,危险命令仍 deny
+    assert ev("run_command", {"command": "pytest -q"}, low=True) == "approve"
+    assert ev("run_command", {"command": "rm -rf /"}, low=True) == "deny"
+    # 非沙箱中危(浏览器写/mcp)仍 ask —— 它们不在牢笼里
+    assert ev("browser_click", {}, low=True) == "ask"
+    assert ev("mcp_call", {}, low=True) == "ask"
+    # 裸 CONFIRM(low_risk_auto=False):run_command 照旧 ask(不动既有 CONFIRM 语义)
+    assert ev("run_command", {"command": "pytest -q"}, low=False) == "ask"
+
+
+def test_build_components_default_gate_is_cautious():
+    """Phase 1:产品默认档(build_components,不传 approval_level)= Cautious —— gate.level=CONFIRM
+    且 low_risk_auto ON(此前默认是裸 CONFIRM、low_risk_auto=False,导致开箱'啥都问')。"""
+    import os
+    os.environ.setdefault("ARGOS_NO_DAEMON", "1")
+    from argos.app_factory import build_components
+    c = build_components()
+    assert c.gate.level is ApprovalLevel.CONFIRM
+    assert getattr(c.gate, "_low_risk_auto", False) is True, "默认档应是 Cautious(low_risk_auto ON)"
+
+
 @pytest.mark.asyncio
 async def test_gate_l1_auto_approves_low_risk_no_prompt():
     """gate.set_trust_level(L1) 后,低危动作经 request() 直接放行、不挂起(查天气这类免打扰)。"""
