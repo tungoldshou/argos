@@ -4,75 +4,73 @@
 > kernel with pluggable clients — the terminal TUI today, a desktop shell
 > in progress.
 
-Argos is named for **Argus Panoptes**, the hundred-eyed guardian of Greek
-myth: the watchman who never slept with every eye at once and could not be
-deceived. That is the design. Argos is an agent for engineers who want
-**reliable, verifiable work from cheap models** — without the lying.
+Argos is a **coding agent you run in your terminal** — the same lineage as
+Claude Code and Codex: a CodeAct loop that reads your code, writes and edits
+files, runs commands, searches the web, and drives a browser, all inside an
+**OS-level sandbox that's on by default**. It is named for **Argus Panoptes**,
+the hundred-eyed guardian of Greek myth — the watchman who never slept and
+could not be deceived.
 
-Three pillars carry the design:
+What makes it pleasant to use:
 
-- **A verify hard-gate.** No task is marked "done" until a real, user-defined
-  check command (`pytest`, `cargo test`, `ruff`, `tsc`, `mypy`, …) returns
-  zero. The agent must *declare* how its work will be verified before the
-  gate trusts it, and a three-state verdict (`passed` / `failed` /
-  `unverifiable`) prevents fake-greens. The same gate reaches GUI work: for
-  opt-in computer control the agent declares the expected on-screen result and
-  an **independent** screen-check (screenshot + OCR) renders the verdict —
-  never the model grading its own homework.
-- **An honesty protocol.** Argos would rather say "I don't know" than ship
-  a lie. Failed checks bounce the actual error back to the agent; an
-  unverifiable task is *unverifiable*, not passed. Every action the agent
-  takes leaves a signed receipt; every event is persisted to a JSONL
-  journal you can replay.
-- **An OS-level sandbox.** macOS Seatbelt confines the agent at the kernel
-  boundary — no network by default, writes only inside the declared
-  workspace. File writes route through a capability broker that runs a
-  hard-path denylist (`/etc`, `~/.ssh`, …) + secret detection and signs a
-  receipt for every one. Approval gates sit on top for the destructive paths
-  the user opts into — including opt-in OS-level **computer control** (the
-  agent sees the screen and drives the mouse/keyboard, `ARGOS_COMPUTER_USE=1`,
-  macOS), where every action is human-gated and logged to the receipt chain.
+- **A sandbox you don't have to think about.** macOS Seatbelt confines the
+  agent at the kernel boundary — no network by default, writes caged to your
+  workspace, credential files (`~/.ssh`, `~/.aws`, …) unreadable. Because the
+  cage *is* the boundary, Argos runs commands and edits inside it without
+  nagging you (Codex's "auto-run inside the sandbox", Claude Code's "~84%
+  fewer prompts"). It asks only at the cage wall: opening network for a
+  `pip install` / `git push`, writing outside the workspace, or a destructive
+  command.
+- **A permission model that gets out of the way.** Three modes — **Cautious**
+  (default), **Trusted**, **Autonomous** — cycle with `/trust`. A small set of
+  HARD rules (`rm -rf`, system paths, secret writes, financial computer-use)
+  never bypasses, even in Autonomous. No five-level dial, no per-command
+  allowlist; the OS does the heavy lifting.
+- **Model-agnostic.** Bring any Anthropic-Messages or OpenAI-compatible
+  endpoint — both first-class. `argos setup` probes the connection and the
+  CodeAct format for you.
+
+And, quietly, it keeps itself honest: a verify gate reads an exit code rather
+than the model's word for "done" (three-state `passed` / `failed` /
+`unverifiable`, never a fake-green), every privileged action leaves a signed
+receipt, and every event is persisted to a replayable JSONL journal. These run
+in the background — you don't have to manage them.
 
 Built in Python on Textual. A background daemon kernel runs the work and
 survives a closed terminal; the TUI attaches as a protocol client — and a
-Tauri desktop shell is an in-progress second client — with an honest
-single-process fallback when the daemon is unavailable. Model-agnostic
-(Anthropic-Messages and OpenAI-compatible endpoints are both first-class).
-Designed to make honest results cheap, not to make a single model cleverer.
+Tauri desktop shell is an in-progress second client — with a single-process
+fallback when the daemon is unavailable.
 
 ---
 
 ## Why Argos
 
-Cheap models fail in two painful ways: they get the work wrong, **and** they
-say "done" anyway. The first problem gets better with every new model
-release; the second is structural — it's a politeness failure, not a
-capability failure, and a cleverer model often lies more smoothly.
+A coding agent should get out of your way when it's safe to, and stop you when
+it isn't. Argos is built around four choices that make that real:
 
-We built Argos around the assumption that **trustworthy output is an
-engineering problem, not a model problem**. Four design choices follow:
+1. **The sandbox is the default, not an opt-in.** The agent works inside a
+   kernel-level cage (Seatbelt) with no network and writes caged to your
+   workspace. That's the convergent 2026 norm — Codex and Cursor ship it by
+   default — and it's what lets Argos auto-run inside the cage instead of
+   prompting on every step.
+2. **Permissions are three modes, not a maze.** Cautious / Trusted /
+   Autonomous, cycled with `/trust`. A handful of HARD rules (`rm -rf`, system
+   paths, secret writes, financial computer-use) never bypass, even in
+   Autonomous — the user stays the final reviewer for the actions that hurt
+   most.
+3. **"Done" is an exit code, not a sentence.** When the agent changes code, a
+   verify gate runs your check (`pytest`, `cargo test`, `tsc`, …) and reads the
+   result; an unverifiable task is flagged *unverifiable*, never a fake-green.
+   It runs quietly in the background — it doesn't turn a plain chat into a
+   ceremony.
+4. **A daemon that survives a closed terminal.** When the `argosd` binary is on
+   `PATH` it auto-starts in the background, so 5+ minute tasks outlive a closed
+   terminal or a power loss — state, checkpoints, and the event journal live on
+   disk. When it isn't (the packaged default ships only `argos`), Argos falls
+   back transparently to single-process inline mode. (`ARGOS_NO_DAEMON=1`
+   forces inline.)
 
-1. The verify gate turns "is it done?" from a sentence the model writes
-   into an exit code a harness reads. A model can bluff the user, but
-   not `subprocess.run()`.
-2. The honesty protocol makes "I don't know" a first-class outcome —
-   escalation paths to the human, never a fake completion, every
-   unverifiable step flagged in the activity panel.
-3. The smart-approval system puts a hard wall in front of destructive
-   operations (`rm -rf`, system paths, secret patterns) that **never
-   bypasses** even at the most permissive AUTO level. The user is always
-   the final reviewer for the actions that hurt most.
-4. A long-running daemon that auto-starts in the background when the
-   `argosd` binary is on `PATH` lets 5+ minute tasks survive a closed
-   terminal, a power loss, or a model upgrade — state, checkpoints, and
-   the event journal all live on disk, so the next session picks up
-   exactly where the last left off. When `argosd` isn't on `PATH`
-   (the current packaged default ships only the single `argos` binary),
-   Argos falls back transparently to single-process inline mode.
-   (Set `ARGOS_NO_DAEMON=1` to force inline mode explicitly.)
-
-The result is a tool that lets a developer pick a cheap model, ship real
-work, and catch the lies.
+The result is a normal coding agent that's smooth to drive and hard to fool.
 
 ---
 
@@ -235,22 +233,26 @@ AUTO (`/yolo`) approval level does not silently flip it on.
 
 ### Smart approval
 
-Five Trust Dial levels (L0 `every-step` / L1 `dangerous-only` /
-L2 `irreversible-only` / L3 `session-trusted` / L4 `autonomous`) are
-configurable per session via `/trust`, but **certain hard rules never
-bypass** even at L4:
+Three modes — **Cautious** (default) / **Trusted** / **Autonomous** — cycle
+with `/trust` (bare `/trust` advances to the next; `/trust status` shows the
+current). Cautious auto-runs everything inside the sandbox cage and asks only
+at the cage wall; Trusted remembers the session's approved patterns;
+Autonomous stops asking entirely. A hidden `/trust paranoid` confirms every
+step. Whatever the mode, **certain hard rules never bypass**, even in
+Autonomous:
 
 - Destructive shell operations (`rm -rf`, system paths, format
   commands).
 - Writes outside the declared workspace.
 - Reads or writes matching secret patterns (private keys, credential
   files, anything in `~/.ssh`).
-- Outbound network access to non-allowlisted hosts.
+- Opening network for a command (`pip install`, `git push`, `curl`) — an
+  "egress valve" the agent must pass before the cage lets traffic out.
 
 The approval modal itself is a real keyboard-driven inline prompt, not a
 decorative pause: `1` deny, `2` once, `3` session, `4` always, with a
 visible diff of what the tool would do. `/yolo` is kept as an alias for
-`/trust l4`.
+`/trust autonomous`.
 
 ### Long-running daemon
 
@@ -329,9 +331,9 @@ Big tasks that can be split — refactor + test, fan-out search, panel
 review — are expressed as a declarative `WorkflowSpec` (`name`,
 `description`, `stages`) and run by a host-side deterministic engine.
 The agent *proposes* the spec; the engine *runs* it. The split keeps
-the model from writing brittle orchestration code (cheap models are
-better at JSON than at Python async) while keeping the user in the
-approval loop.
+the model from writing brittle orchestration code (models are generally
+better at emitting JSON than at hand-rolling Python async) while keeping
+the user in the approval loop.
 
 Five shapes are supported:
 
@@ -363,19 +365,20 @@ Every signed receipt is distilled into a human-readable ledger entry
 (`argos/ledger/`) — what happened, whether it is reversible, and
 its undo state. `/ledger` shows the full ledger for the current run.
 
-The Trust Dial (`argos/permissions/trust_dial.py`) replaces the
-legacy four-level approval knob with five named levels (L0–L4) that
-speak in plain language: "every step", "dangerous only", "irreversible
-only", "session-trusted", "autonomous". HARD RULES are immune to every
-level. Escalation from a lower to a higher level always surfaces an
-explicit warning; the dial never silently self-upgrades.
+The Trust Dial (`argos/permissions/trust_dial.py`) presents three plain-language
+modes — **Cautious** / **Trusted** / **Autonomous** — that `/trust` cycles
+through; a hidden `paranoid` mode confirms every step. HARD RULES are immune to
+every mode. Escalating to a more permissive mode always surfaces an explicit
+warning; the dial never silently self-upgrades. (Internally these map onto the
+ApprovalLevel `CONFIRM` / `ACCEPT_EDITS` / `AUTO` semantics.)
 
-### Intent confirmation loop
+### Intent confirmation loop (opt-in, off by default)
 
-Before starting a run, the intent engine (`argos/intent/`)
-parses the user's natural-language goal into a structured `IntentCard`
-and surfaces it for a brief confirmation. This catches
-"translation-error = source drift" before any tool is called.
+Argos defaults to **understand-then-act**, like Claude Code / Cursor / Aider:
+confirmation lives at the side-effect layer (the approval gate), not as a
+pre-action intent prompt. Opt in with `ARGOS_INTENT=1` and the intent engine
+(`argos/intent/`) parses the user's natural-language goal into a structured
+`IntentCard` for a brief confirmation before the run starts.
 
 ### Conductor (autonomous face)
 
@@ -464,8 +467,8 @@ Slash commands live in the TUI. Tab completion is built in.
 | `/cost` | Per-round cost and cache statistics. |
 | `/resume` | Reattach to the previous session. |
 | `/clear` | Start a new session (clears context). |
-| `/trust` | View or set the Trust Dial level (`/trust [l0\|l1\|l2\|l3\|l4\|status]`). L0 = confirm every step; L4 = full auto; HARD RULES always enforced. Replaces `/yolo`. |
-| `/yolo` | Legacy alias for `/trust l4`. |
+| `/trust` | Cycle / set the trust mode (`/trust [cautious\|trusted\|autonomous\|paranoid\|status]`; bare `/trust` advances to the next mode). Cautious = ask only at the cage wall; autonomous = full auto; paranoid = confirm every step. HARD RULES always enforced. Replaces `/yolo`. |
+| `/yolo` | Legacy alias for `/trust autonomous`. |
 | `/undo` | Roll back all file changes made in this run to the run start-point snapshot. |
 | `/ledger` | View the behaviour ledger for the current run: human-readable entries and undo state. |
 | `/retry` | Resend the last user message. |
