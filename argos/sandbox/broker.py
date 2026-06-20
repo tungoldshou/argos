@@ -57,7 +57,12 @@ _RISK: dict[str, str] = {
     "edit_file": "medium",
 }
 # C1:这些 action 即便在 AUTO(YOLO)档也强制逐个确认 —— 永不静默执行 shell。
-_FORCE_CONFIRM_ACTIONS: set[str] = {"run_command"}
+# 历史上 run_command 即便 AUTO 也被强制逐条确认("永不静默执行任意 shell")。但 L4/YOLO 的承诺是
+# "全自治(HARD RULES 仍拦)"——逐条确认让 YOLO 名不副实(用户反馈"太鸡肋",2026-06-20)。现清空:
+# YOLO 下 run_command 自动跑;危险命令仍被 evaluator 的 check_hard_shell 硬拦(rm -rf/dd/mkfs 等),
+# 且命令受 ALLOWED_CMDS 白名单 + Seatbelt 沙箱双重约束。低于 AUTO 的档位 run_command 照常按档审批
+# (L1 危险才问 / L0 每步问 …)。集合保留(空):将来若有动作需"AUTO 也强制确认",加进来即可。
+_FORCE_CONFIRM_ACTIONS: set[str] = set()
 # 文件写:broker 只做 host 侧 gate-only 治理(hard-path/密钥/回执),真正落盘留在 Seatbelt 子进程。
 _FILE_WRITE_ACTIONS: set[str] = {"write_file", "edit_file"}
 
@@ -154,7 +159,8 @@ class CapabilityBroker:
             if deny is not None:
                 return f"错误:{deny}"
         # ② 审批拨盘
-        # C1:run_command 即便在 AUTO 档也强制逐个确认 —— 永不静默执行任意 shell。
+        # _FORCE_CONFIRM_ACTIONS 现为空(见定义处):L4/YOLO 下不再把任何动作从 AUTO 强制升 CONFIRM,
+        # 兑现"全自治(HARD RULES 仍拦)"。机制保留,将来如需可重新登记。
         level_override = (
             ApprovalLevel.CONFIRM
             if (action in _FORCE_CONFIRM_ACTIONS and self._gate.level is ApprovalLevel.AUTO)
