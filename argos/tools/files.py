@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
 from pathlib import Path
 
 WORKSPACE = Path(os.environ.get("ARGOS_WORKSPACE", Path.home() / ".argos" / "workspace")).resolve()
@@ -171,28 +170,86 @@ def edit_file(path: str, old: str, new: str, all_occurrences: bool = False) -> s
     return f"已编辑 {path}(1 处,模糊匹配)。"
 
 
+# 搜索改纯 Python(os.walk + re),不再 shell 出 rg —— rg 在 Seatbelt 沙箱里会挂死,且
+# profile 的 (allow signal (target self)) 让子进程杀不掉它,subprocess.run 的超时也兜不住 →
+# 整个 exec 永久卡死(2026-06-20 真机:search_files 卡 30+ 分钟)。纯 Python 终止可控,
+# 再加内部 deadline 自兜底(不依赖 smolagents 中断 —— 它的 shutdown(wait=True) 会被卡住的线程拖死)。
+_SEARCH_DEADLINE_S = 20.0
+# 原地剪枝的重目录(性能 + 噪声;与 rg 默认忽略 .gitignore/隐藏一致的精简版)。
+_SEARCH_SKIP_DIRS = {
+    ".git", ".venv", "venv", "node_modules", "__pycache__", ".argos",
+    ".mypy_cache", ".pytest_cache", ".ruff_cache", "dist", "build",
+    ".next", "target", ".idea", ".vscode", ".tox", ".cache",
+}
+_SEARCH_MAX_FILE_BYTES = 2_000_000   # 跳过 >2MB 的大/二进制文件
+
+
 def search_files(pattern: str, target: str = "content", file_glob: str = "", limit: int = 50) -> str:
-    """在 workspace 内搜索:target='content' 用正则搜文件正文(带行号);
-    target='files' 按 glob(如 '*.py')找文件名。"""
+    """在 workspace 内搜索(纯 Python,沙箱内不挂、带内部时限):
+    target='content' 用正则搜文件正文(带行号);target='files' 按 glob(如 '*.py')找文件名。"""
+    import fnmatch
+    import time
     ws = _ws()
     ws.mkdir(parents=True, exist_ok=True)
-    if target == "files":
-        cmd = ["rg", "--files", "-g", pattern]
-    else:
-        cmd = ["rg", "--line-number", "--no-heading"]
-        if file_glob:
-            cmd += ["-g", file_glob]
-        cmd += [pattern]
-    try:
-        r = subprocess.run(cmd, cwd=ws, capture_output=True, text=True, timeout=30)
-    except subprocess.TimeoutExpired:
-        return "错误:搜索超时(30s)。"
-    except Exception as e:  # noqa: BLE001
-        return f"错误:搜索失败 {e}"
-    out = (r.stdout or "").strip()
-    if not out:
-        return "没有匹配。"
-    lines = out.splitlines()
-    if len(lines) > limit:
-        return "\n".join(lines[:limit]) + f"\n…(共 {len(lines)} 行,已截断前 {limit})"
+    deadline = time.time() + _SEARCH_DEADLINE_S
+    results: list[str] = []
+    truncated = timed_out = False
+
+    rx = None
+    if target != "files":
+        try:
+            rx = re.compile(pattern)
+        except re.error as e:
+            return f"错误:正则非法 {e}"
+
+    for root, dirs, names in os.walk(ws):
+        # 原地剪枝:跳过重目录 + 隐藏目录(与 rg 默认一致),性能 + 降噪。
+        dirs[:] = [d for d in dirs if d not in _SEARCH_SKIP_DIRS and not d.startswith(".")]
+        if time.time() > deadline:
+            timed_out = True
+            break
+        for fn in names:
+            fp = os.path.join(root, fn)
+            rel = os.path.relpath(fp, ws)
+            if target == "files":
+                pat = pattern or "*"
+                if fnmatch.fnmatch(fn, pat) or fnmatch.fnmatch(rel, pat):
+                    results.append(rel)
+                    if len(results) >= limit:
+                        truncated = True
+                        break
+                continue
+            # content 搜索:file_glob 过滤(空=全搜)
+            if file_glob and not (fnmatch.fnmatch(fn, file_glob) or fnmatch.fnmatch(rel, file_glob)):
+                continue
+            try:
+                if os.path.getsize(fp) > _SEARCH_MAX_FILE_BYTES:
+                    continue
+                with open(fp, "r", encoding="utf-8") as f:   # 二进制 → UnicodeDecodeError → 跳过
+                    for i, line in enumerate(f, 1):
+                        if rx.search(line):
+                            results.append(f"{rel}:{i}:{line.rstrip()}")
+                            if len(results) >= limit:
+                                truncated = True
+                                break
+            except (OSError, UnicodeDecodeError):
+                continue
+            if truncated:
+                break
+            if time.time() > deadline:
+                timed_out = True
+                break
+        if truncated or timed_out:
+            break
+
+    if not results:
+        return "搜索超时(部分目录未扫完,无匹配)。" if timed_out else "没有匹配。"
+    out = "\n".join(results)
+    tail = []
+    if truncated:
+        tail.append(f"已截断前 {limit}")
+    if timed_out:
+        tail.append(f"超时 {int(_SEARCH_DEADLINE_S)}s,结果可能不完整")
+    if tail:
+        out += "\n…(" + ";".join(tail) + ")"
     return out
