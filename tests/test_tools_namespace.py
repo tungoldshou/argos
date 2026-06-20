@@ -49,11 +49,9 @@ class _FakeStub:
         return f"FAKE[{action}]"
 
 
-def test_allowed_cmds_and_git_readonly_present():
+def test_allowed_cmds_verify_whitelist_present():
+    # ALLOWED_CMDS 现仅供 verify_cmd 首词白名单(run_command 已无命令名门禁,2026-06-20 重设)。
     assert {"python", "pytest", "git", "rg"} <= tools.ALLOWED_CMDS
-    assert {"status", "diff", "log"} <= tools.GIT_READONLY_SUBCMDS
-    # 危险子命令不在只读集
-    assert "push" not in tools.GIT_READONLY_SUBCMDS
 
 
 def test_child_namespace_pure_tools_are_raw_functions():

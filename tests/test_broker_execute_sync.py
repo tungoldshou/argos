@@ -51,7 +51,7 @@ def test_execute_sync_allows_benign_computer_action(monkeypatch):
 def test_execute_sync_signs_receipt(monkeypatch):
     """同步桥执行后必须签发 Receipt(治理铁证),loop take_receipt → ToolReceipt → ledger 落盘。
     过去裸 _execute 不签 → ledger 对沙箱工具基本为空。"""
-    def fake_run(command, *, workspace=None):
+    def fake_run(command, *, workspace=None, allow_network=False):
         return ("ok", 0)
     monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
     br = _broker()

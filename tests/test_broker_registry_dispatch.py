@@ -110,7 +110,7 @@ def test_execute_fallthrough_when_dispatch_none(monkeypatch):
     """cap.dispatch=None → broker._execute 走内置 run_command 实现。"""
     captured: dict = {}
 
-    def fake_run(command, *, workspace=None):
+    def fake_run(command, *, workspace=None, allow_network=False):
         captured["cmd"] = command
         return ("ok", 0)
 
@@ -134,7 +134,7 @@ def test_execute_fallthrough_when_not_in_registry(monkeypatch):
     """action 不在 registry → _execute fall through 到 if/elif 内置实现。"""
     captured: dict = {}
 
-    def fake_run(command, *, workspace=None):
+    def fake_run(command, *, workspace=None, allow_network=False):
         captured["cmd"] = command
         return ("ok", 0)
 
@@ -169,8 +169,9 @@ async def test_lsp_action_allowed_via_registry(monkeypatch):
     br = CapabilityBroker(gate=gate, egress=egress, signer=signer, registry=reg)
 
     # monkeypatch broker._execute 的 LSP 分支（不启动真 pyright）
-    # _gated 是 keyword-only 参数，fake 需接受以兼容修复 1 的签名
-    def fake_execute(action: str, args: dict, run_ctx=None, *, _gated: bool = False):
+    # _gated / allow_network 是 keyword-only 参数，fake 需接受以兼容当前签名
+    def fake_execute(action: str, args: dict, run_ctx=None, *,
+                     _gated: bool = False, allow_network: bool = False):
         if action.startswith("lsp_"):
             return f"lsp_result:{action}", None
         raise AssertionError(f"未预期的 action: {action}")

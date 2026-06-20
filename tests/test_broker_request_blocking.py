@@ -33,7 +33,7 @@ async def _respond_first_pending(gate, kind: str) -> bool:
 @pytest.mark.asyncio
 async def test_request_blocking_bridges_to_interactive_approval(monkeypatch):
     """host_loop 已设:request_blocking 在工作线程提交 request() 回主循环,主循环 respond 后放行执行。"""
-    def fake_run(command, *, workspace=None):
+    def fake_run(command, *, workspace=None, allow_network=False):
         return ("ran:" + command, 0)
     monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
 
@@ -52,7 +52,7 @@ async def test_request_blocking_bridges_to_interactive_approval(monkeypatch):
 @pytest.mark.asyncio
 async def test_request_blocking_denied_returns_refusal(monkeypatch):
     """拒绝 → 返回拒绝串、不执行、不签回执(无副作用)。"""
-    def fake_run(command, *, workspace=None):
+    def fake_run(command, *, workspace=None, allow_network=False):
         return ("SHOULD-NOT-RUN", 0)
     monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
 
@@ -73,7 +73,7 @@ async def test_request_blocking_denied_returns_refusal(monkeypatch):
 async def test_request_blocking_run_command_auto_runs_under_yolo(monkeypatch):
     """2026-06-20:YOLO(AUTO)下 run_command 经桥【自动跑】、不再逐条弹审批(兑现"全自治";
     危险命令仍被 HARD RULES 拦)。此前 _FORCE_CONFIRM 把它强制弹卡,YOLO 名不副实"太鸡肋"。"""
-    def fake_run(command, *, workspace=None):
+    def fake_run(command, *, workspace=None, allow_network=False):
         return ("ran", 0)
     monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
 
@@ -88,7 +88,7 @@ async def test_request_blocking_run_command_auto_runs_under_yolo(monkeypatch):
 
 def test_request_blocking_fallback_no_host_loop(monkeypatch):
     """host_loop 未设(headless/旧路径)→ 回退 execute_sync(无交互审批,零回归;仍签回执)。"""
-    def fake_run(command, *, workspace=None):
+    def fake_run(command, *, workspace=None, allow_network=False):
         return ("ran:" + command, 0)
     monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
 

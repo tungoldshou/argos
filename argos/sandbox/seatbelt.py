@@ -56,11 +56,14 @@ def _credential_read_denies() -> str:
     return f"(deny file-read*{parts})\n"
 
 
-def build_profile(*, workspace: Path) -> str:
-    """生成 deny-all Seatbelt profile 文本。workspace 子树 + temp 可写,网络全拒,凭据目录读拒。"""
+def build_profile(*, workspace: Path, allow_network: bool = False) -> str:
+    """生成 deny-all Seatbelt profile 文本。workspace 子树 + temp 可写,凭据目录读拒。
+    allow_network=False(默认)→ 网络全拒(安全默认);True → 网络放行(出网阀:broker 经审批/
+    Autonomous 决定后才用,跑 pip install/git push 这类联网命令;写牢笼+凭据读拒仍在)。"""
     ws = str(workspace.resolve())
     write_subpaths = [ws, *(_temp_roots())]
     write_rules = "".join(f'\n  (subpath "{p}")' for p in write_subpaths)
+    net_rule = "(allow network*)\n" if allow_network else "(deny network*)\n"
     return (
         "(version 1)\n"
         "(deny default)\n"
@@ -77,8 +80,8 @@ def build_profile(*, workspace: Path) -> str:
         + _credential_read_denies() +
         # —— 写牢笼:仅 workspace + temp ——
         f"(allow file-write*{write_rules})\n"
-        # —— 网络全拒(关键安全不变量)——
-        "(deny network*)\n"
+        # —— 网络:默认全拒(关键安全不变量);出网阀放行时改 (allow network*) ——
+        + net_rule
     )
 
 
@@ -87,17 +90,16 @@ def wrap_command(profile_path: str, argv: list[str]) -> list[str]:
     return ["/usr/bin/sandbox-exec", "-f", profile_path, *argv]
 
 
-def confined_argv(*, workspace: Path, argv: list[str]) -> list[str]:
-    """把任意 argv 用本模块的 Seatbelt profile(网络 OFF、写牢笼 workspace+temp、读放宽)
-    包成 sandbox-exec argv。profile 写到 workspace 内的 .argos_run.sb(workspace 可写,
-    符合 profile 自身约束)。run_command(C1)用它把 host 子进程关进同一沙箱:
-    网络外泄不可能(deny network*),越界写被挡(write 仅 workspace+temp),
-    但 pytest/python/本地构建仍能跑(无需网络、读放宽能 import venv)。
+def confined_argv(*, workspace: Path, argv: list[str], allow_network: bool = False) -> list[str]:
+    """把任意 argv 用本模块的 Seatbelt profile(写牢笼 workspace+temp、凭据读拒)包成 sandbox-exec argv。
+    profile 写到 workspace 内的 .argos_run.sb。run_command 用它把 host 子进程关进沙箱:越界写被挡、
+    凭据读拒;allow_network=False(默认)网络外泄不可能,True(出网阀经审批)放行联网命令。
+    pytest/python/本地构建无需网络照常跑(读放宽能 import venv)。
 
     macOS only —— 调用方须先确认 sys.platform == 'darwin'(非 darwin 无 sandbox-exec)。
     """
     workspace.mkdir(parents=True, exist_ok=True)
-    prof = build_profile(workspace=workspace)
+    prof = build_profile(workspace=workspace, allow_network=allow_network)
     prof_file = workspace / ".argos_run.sb"
     prof_file.write_text(prof, encoding="utf-8")
     return wrap_command(str(prof_file), argv)

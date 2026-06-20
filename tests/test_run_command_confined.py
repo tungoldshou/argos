@@ -4,8 +4,9 @@
   · 网络外泄不可能 —— deny network*(OS 级,不是 arg-inspection)。
   · 越界写被挡 —— file-write* 仅 workspace+temp。
   · 正常 in-workspace 命令仍能跑(pytest/python/ls/构建无需网络)。
-另:防御纵深 —— python/node 内联 eval(-c/-e)与 npx 任意包执行被 arg-inspection 拒;
-   run_command 风险升 high,AUTO 档也强制确认(永不静默执行 shell)。
+2026-06-20 重设:run_command 不再有命令名白名单 / arg-inspection 拒绝(Codex/Claude Code 模型)——
+   边界是 OS 沙箱,任意命令(含 python -c / npx)都能跑,但外联被沙箱挡、越界写被挡、危险命令由
+   评估器 hard rule 在审批层先拦。
 """
 from __future__ import annotations
 
@@ -79,28 +80,20 @@ def test_ls_in_workspace_works(ws):
     assert "marker.txt" in out
 
 
-def test_python_inline_eval_rejected(ws):
-    """防御纵深:python3 -c 内联 eval 被 arg-inspection 拒(不进沙箱执行)。"""
+def test_python_inline_eval_runs_but_network_contained(ws):
+    """2026-06-20 重设:python3 -c 内联 eval 不再被名字/arg 拒,直接在牢笼里跑 —— 真边界是 OS 沙箱:
+    内联代码试图外联仍被 deny network* 挡死。区别于旧行为(arg 拒 → code=None);现在真执行(code!=None)。"""
     out, code = shell.run_command(
-        "python3 -c \"import urllib.request; urllib.request.urlopen('http://evil/')\""
+        "python3 -c \"import urllib.request;"
+        " urllib.request.urlopen('http://1.1.1.1', timeout=3); print('NETOK')\""
     )
-    assert code is None  # arg 校验失败 → exit_code=None
-    assert "内联" in out or "-c" in out
+    assert "NETOK" not in out, "内联 eval 外联竟成功——网络没真关!"
+    assert code is not None and code != 0, f"应真跑(非 arg 拒)且因网络被挡而非零: {out!r}"
 
 
-def test_node_inline_eval_rejected(ws):
-    out, code = shell.run_command("node -e \"require('http')\"")
-    assert code is None
-    assert "内联" in out or "-e" in out
-
-
-def test_python_stdin_rejected(ws):
-    out, code = shell.run_command("python3 -")
-    assert code is None
-    assert "stdin" in out or "内联" in out or "-" in out
-
-
-def test_npx_arbitrary_package_rejected(ws):
-    out, code = shell.run_command("npx some-arbitrary-pkg")
-    assert code is None
-    assert "npx" in out
+def test_inline_eval_no_longer_name_rejected(ws):
+    """旧防御纵深(python -c / node -e / npx 任意包 → arg 拒)已移除:边界改由 OS 沙箱承担。
+    用一条纯本地 python -c(无网络、无越界写)验证它真在牢笼里跑通,而非被名字拒。"""
+    out, code = shell.run_command("python3 -c \"print(6 * 7)\"")
+    assert code == 0, out
+    assert "42" in out

@@ -25,7 +25,7 @@ def test_broker_passes_workspace_to_run_command(monkeypatch, tmp_path):
     落项目目录,脚本读不到刚写的文件)。"""
     captured = {}
 
-    def fake_run(command, *, workspace=None):
+    def fake_run(command, *, workspace=None, allow_network=False):
         captured["workspace"] = workspace
         return ("ok", 0)
 
@@ -42,7 +42,7 @@ def test_broker_workspace_defaults_none_back_compat(monkeypatch):
     """不传 workspace 时维持旧行为:workspace=None 传给 shell(由 shell._ws() 解析)。"""
     captured = {}
 
-    def fake_run(command, *, workspace=None):
+    def fake_run(command, *, workspace=None, allow_network=False):
         captured["workspace"] = workspace
         return ("ok", 0)
 

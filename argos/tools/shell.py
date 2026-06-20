@@ -1,17 +1,14 @@
 """broker-gated shell 工具的 host 侧真实现(契约 §4).
 
-C1 安全修复(spec §6.2/§6.3):run_command 曾在 host 侧无约束跑 subprocess(全网络 +
-能读写 workspace 外),是一个可被 `python3 -c "...urlopen(...read('~/.ssh/id_rsa'))"`
-利用的外泄原语。现三层防御:
-  ① OS 沙箱(真边界):macOS 上把子进程关进 executor 同款 Seatbelt profile —— 网络全拒
-     (deny network*)、写仅 workspace+temp、读放宽。pytest/python/本地构建仍能跑(无需网络),
-     但网络外泄不可能、越界写被挡。
-  ② arg-inspection(纵深):拒 python/node 内联 eval(-c/-e/--eval/- stdin)与 npx 任意包执行,
-     不出厂一个显眼的内联 eval 原语(真边界仍是 OS 沙箱)。
-  ③ 白名单 + git 只读校验(沿用旧 tools.py,6/2 git RCE fix 已并入)。
-
-权衡(MVP 可接受,见 CHANGELOG):network OFF 下合法联网命令(pip install / git fetch|push /
-npm install)会被拒 —— 这是安全默认值;"显式批准联网的命令"路径留作后续。
+2026-06-20 重设(Codex/Claude Code 模型):run_command 不再有命令名白名单 / arg-inspection ——
+那些在牢笼之上的层是鸡肋摩擦。**唯一边界是 OS 沙箱**,任意命令都能跑进去:
+  · macOS 上把子进程关进 executor 同款 Seatbelt profile —— 默认网络全拒(deny network*)、
+    写仅 workspace+temp、凭据目录读拒、其余读放宽。pytest/python/本地构建/python -c 照常跑,
+    但网络外泄不可能、越界写被挡、读不到 ~/.ssh 等密钥。
+  · 危险命令(rm -rf / 等)由评估器 hard rule(permissions/)在【审批层】先拦,不靠命令名单。
+  · 联网命令(pip install / git push / curl …)默认在牢笼里失败;经"出网阀"审批(Cautious 弹卡、
+    Autonomous 自动)后用 allow_network=True 的 profile 跑 —— command_needs_network() 供 broker
+    判定是否要走这条阀。
 """
 from __future__ import annotations
 
@@ -23,100 +20,68 @@ from pathlib import Path
 from ..sandbox import seatbelt
 from .files import _ws
 
-# 沿用旧 tools.py 的白名单(契约 §4 要求"沿用现值")。
+# ALLOWED_CMDS:**verify 命令**白名单(verify_gate / self_test / eval 用它限制 verify_cmd 的首 token,
+# 防 agent 声明任意命令当"验证")。**run_command 不再用它做名字级门禁** —— 那层在 2026-06-20 重设
+# 里砍掉了(Codex/Claude Code 模型:边界是 OS 沙箱,不是命令名单;危险命令由评估器 hard rule 在
+# 审批层先拦)。保留此集仅供 verify 侧;勿在 run_command 复用。
 ALLOWED_CMDS: set[str] = {
     "node", "npm", "pnpm", "npx", "tsc", "eslint", "prettier",
     "python", "python3", "pytest", "ruff", "mypy",
     "cargo", "rustc", "go", "git", "ls", "cat", "grep", "rg", "echo", "pwd",
 }
-GIT_READONLY_SUBCMDS: set[str] = {
-    "status", "diff", "log", "show", "branch", "ls-files", "rev-parse",
-    "describe", "blame", "shortlog", "tag", "rev-list", "cat-file", "show-ref",
+
+# 联网命令首词(broker 据此决定要不要走"出网阀":Cautious 弹卡问、Autonomous 自动)。
+# 沙箱默认网络 OFF,这些命令在牢笼里会失败;经审批后用 allow_network profile 跑(出网阀)。
+NETWORK_BINARIES: set[str] = {
+    "pip", "pip3", "npm", "pnpm", "yarn", "npx", "curl", "wget", "ssh", "scp",
+    "brew", "rsync", "ping", "nc", "telnet",
 }
-# 解释器内联 eval / stdin 求值标志 —— 出厂即拒(纵深;真边界是 OS 沙箱)。
-_INTERPRETER_EVAL_FLAGS: dict[str, set[str]] = {
-    "python": {"-c", "-e", "--eval"},
-    "python3": {"-c", "-e", "--eval"},
-    "node": {"-e", "--eval", "-p", "--print", "--eval-string"},
+# git 的联网子命令(push/fetch/pull/clone/remote/submodule 需要网络)。
+_GIT_NETWORK_SUBCMDS: set[str] = {
+    "push", "pull", "fetch", "clone", "remote", "submodule", "ls-remote", "archive",
 }
 
 
-def _validate_git(parts: list[str]) -> str | None:
-    """git 专用校验(M6:意图显式化)。
-    RCE 向量 = 子命令【之前】的全局选项(`git -c core.sshCommand=… status` /
-    `git --exec-path=…`)。故:
-      ① 扫到第一个非 `-` token 作子命令;在它之前出现任何 `-` 开头的 token → 拒(全局选项注入)。
-      ② 子命令必须在只读白名单。
-      ③ 子命令【之后】的旗标(如 `git show --stat`)是该子命令的局部选项,安全放行。"""
-    rest = parts[1:]
-    if not rest:
-        return "错误:git 需要一个子命令。"
-    subcmd: str | None = None
-    for tok in rest:
-        if tok.startswith("-"):
-            # 子命令尚未出现 → 这是全局选项(RCE 向量),拒。
-            return f"错误:git 全局选项 {tok!r} 不被允许(防 `git -c …` 参数注入执行任意命令)。"
-        subcmd = tok
-        break
-    if subcmd is None:                      # 理论上不可达(rest 非空且无非选项 token)
-        return "错误:git 需要一个子命令。"
-    if subcmd not in GIT_READONLY_SUBCMDS:
-        return (
-            f"错误:git 子命令 {subcmd!r} 不被允许。只放行只读子命令:"
-            f"{', '.join(sorted(GIT_READONLY_SUBCMDS))}"
-            "(push/pull/fetch/clone/remote/config/submodule 等被禁)。"
-        )
-    return None
+def command_needs_network(command: str) -> bool:
+    """启发式:这条命令是否需要网络(供 broker 决定是否走出网阀)。
+    NETWORK_BINARIES 首词,或 git 的联网子命令。不精确无妨 —— 误判只是多/少弹一次出网卡。"""
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return False
+    if not parts:
+        return False
+    bin_name = Path(parts[0]).name
+    if bin_name in NETWORK_BINARIES:
+        return True
+    if bin_name == "git":
+        for tok in parts[1:]:
+            if not tok.startswith("-"):
+                return tok in _GIT_NETWORK_SUBCMDS
+    return False
 
 
-def _validate_interpreter_args(bin_name: str, parts: list[str]) -> str | None:
-    """纵深:拒解释器内联 eval(-c/-e/--eval)、python stdin(裸 `-`)、npx 任意包执行。
-    OS 沙箱才是真边界,但不出厂一个显眼的内联 eval 原语。"""
-    args = parts[1:]
-    eval_flags = _INTERPRETER_EVAL_FLAGS.get(bin_name)
-    if eval_flags is not None:
-        for tok in args:
-            if tok in eval_flags:
-                return (
-                    f"错误:{bin_name} 内联求值标志 {tok!r} 不被允许 —— 请把代码写进 workspace "
-                    "内的脚本文件再执行(沙箱里跑脚本是安全的)。"
-                )
-            if bin_name in ("python", "python3") and tok == "-":
-                return "错误:python 从 stdin 求值(裸 `-`)不被允许 —— 请用 workspace 内的脚本文件。"
-    if bin_name == "npx":
-        return (
-            "错误:npx 执行任意包不被允许(等价拉取并运行任意代码)。"
-            "请用已声明的本地依赖 / 脚本,或让用户显式批准。"
-        )
-    return None
+def run_command(command: str, *, workspace: Path | None = None,
+                allow_network: bool = False) -> tuple[str, int | None]:
+    """host 侧执行命令,子进程关进 Seatbelt(写牢笼 workspace+temp、凭据读拒;默认网络 OFF)。
+    返回 (输出串, exit_code)。exit_code 供 Receipt 用;解析失败时 exit_code=None。
 
-
-def run_command(command: str, *, workspace: Path | None = None) -> tuple[str, int | None]:
-    """host 侧执行白名单命令,子进程关进 Seatbelt(网络 OFF + 写牢笼 workspace)。
-    返回 (输出串, exit_code)。exit_code 供 Receipt 用;校验失败/解析失败时 exit_code=None。
-    workspace 缺省由 files._ws() 解析;遗留 LangChain 路径显式传它自己的 _ws() 保持隔离。"""
+    无命令名白名单(2026-06-20 重设,Codex/Claude Code 模型):边界是 OS 沙箱 —— 任意命令都能跑,
+    但越界写被挡、凭据读拒、危险命令(rm -rf 等)由评估器 hard rule 在审批层先拦。
+    allow_network=True 时用网络放行的 profile(broker 经"出网阀"审批/Autonomous 决定后传)。
+    workspace 缺省由 files._ws() 解析。"""
     try:
         parts = shlex.split(command)
     except ValueError as e:
         return f"错误:命令解析失败 {e}", None
     if not parts:
         return "错误:空命令。", None
-    bin_name = Path(parts[0]).name
-    if bin_name not in ALLOWED_CMDS:
-        return f"错误:命令 {bin_name!r} 不在白名单。允许:{', '.join(sorted(ALLOWED_CMDS))}", None
-    if bin_name == "git":
-        git_err = _validate_git(parts)
-        if git_err:
-            return git_err, None
-    interp_err = _validate_interpreter_args(bin_name, parts)
-    if interp_err:
-        return interp_err, None
     ws = workspace if workspace is not None else _ws()
     ws.mkdir(parents=True, exist_ok=True)
-    # C1:macOS 上把子进程关进 Seatbelt(网络 OFF、写仅 workspace+temp);非 darwin 退回裸跑
-    # (Seatbelt 仅 macOS;打包目标平台 = macOS,Linux 上 run_command 仅供测试且无 OS 边界)。
+    # macOS 上把子进程关进 Seatbelt(写仅 workspace+temp、凭据读拒;allow_network 决定网络);
+    # 非 darwin 退回裸跑(Seatbelt 仅 macOS;打包目标 = macOS)。
     if sys.platform == "darwin":
-        argv = seatbelt.confined_argv(workspace=ws, argv=parts)
+        argv = seatbelt.confined_argv(workspace=ws, argv=parts, allow_network=allow_network)
     else:
         argv = parts
     try:
