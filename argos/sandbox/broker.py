@@ -116,43 +116,43 @@ class CapabilityBroker:
             return f"egress 拒绝 —— {host!r} 不在允许出网名单。可让用户批准该域名后重试。"
         return None
 
+    def _preflight(self, action: str, args: dict[str, Any]
+                   ) -> "tuple[tuple[Any, int | None] | None, dict[str, str]]":
+        """两条 gating 路径(request / execute_sync)共享的【同步前置】—— 单一真源,杜绝分叉漏检:
+          ① fail-closed:action 必须在 registry 或内置 _RISK 之一(LSP 等仅在 registry 的动作也放行)。
+          ② 文件写 gate-only:host 裁决 hard-path/密钥 + 签回执,落盘留 Seatbelt 子进程。
+          ③ egress 检查:网络类动作查 allowlist/SSRF(manifest 驱动)。
+
+        返回 (terminal, registry_risk):
+          · terminal=(value, exit_code) → 前置已得最终结果,调用方直接返回(不再继续执行)。
+          · terminal=None → 放行,调用方继续各自后续(request:交互审批 + 出网阀执行;
+            execute_sync:computer 硬规则 fail-closed + 执行)。
+        registry_risk 透传给 request 的审批步(risk 表快照)。"""
+        # getattr 防御：object.__new__ 绕过 __init__ 的旧测试路径没有 _registry 属性
+        _reg = getattr(self, "_registry", None)
+        registry_risk = _reg.risk_table() if _reg is not None else {}
+        if action not in registry_risk and action not in _RISK:
+            return (f"错误:未知/不支持的特权动作 {action!r},拒绝。", 1), registry_risk
+        if action in _FILE_WRITE_ACTIONS:
+            val = self._gate_only_write(action, args)
+            return (val, (0 if val == _files.WRITE_APPROVED_SENTINEL else 1)), registry_risk
+        if action in self._derive_network_actions():
+            deny = self._egress_deny_reason(action, args)
+            if deny is not None:
+                return (f"错误:{deny}", 1), registry_risk
+        return None, registry_risk
+
     async def request(self, action: str, args: dict[str, Any]) -> Any:
         """返回灌回沙箱的值(成功=工具串;拒绝=拒绝串)。副作用:签 Receipt 存 last_receipt。
 
-        唯一 gating 入口:egress → approval → host 执行 → 签 Receipt。沙箱侧只能经
-        executor 的 broker RPC 走到这里。_execute() 是内部裸执行,绝不可绕开本方法直接调
+        唯一 gating 入口:_preflight(action 合法性/文件写/egress)→ approval → host 执行 → 签 Receipt。
+        沙箱侧只能经 executor 的 broker RPC 走到这里。_execute() 是内部裸执行,绝不可绕开本方法直接调
         (那会跳过 egress/approval/receipt;见 _execute docstring)。
-
-        P2 registry 语义:
-        - registry 非 None 时,risk 先查 registry.risk_table(),内置 _RISK 作 fallback 兜底。
-        - action 既不在 registry 也不在内置 _RISK → fail-closed 拒(与旧语义一致)。
-        - action 在 registry 但不在 _RISK → 允许通过(修 LSP 动作被拒 bug)。
         """
-        # ─── fail-closed:action 必须在 registry 或 _RISK 其中之一 ──────────────
-        # getattr 防御：object.__new__ 绕过 __init__ 的旧测试路径没有 _registry 属性
-        _reg = getattr(self, "_registry", None)
-        if _reg is not None:
-            _registry_risk = _reg.risk_table()
-            if action not in _registry_risk and action not in _RISK:
-                return f"错误:未知/不支持的特权动作 {action!r},拒绝。"
-        else:
-            _registry_risk = {}
-            if action not in _RISK:
-                return f"错误:未知/不支持的特权动作 {action!r},拒绝。"
-
-        # 文件写:gate-only 治理(host 裁决 + 回执;落盘留 Seatbelt 子进程)。非网络,跳过 egress。
-        if action in _FILE_WRITE_ACTIONS:
-            return self._gate_only_write(action, args)
-
-        # ① egress 检查(网络类,fail-closed)
-        # P2 egress manifest 驱动:当 registry 存在时,网络类动作集 = registry 中声明了
-        # egress_hosts 的能力名(含 "*")∪ 原 _NETWORK_ACTIONS 兜底集合。
-        # 无 registry 时 fallback 原 _NETWORK_ACTIONS(行为零变更)。
-        _network_actions = self._derive_network_actions()
-        if action in _network_actions:
-            deny = self._egress_deny_reason(action, args)
-            if deny is not None:
-                return f"错误:{deny}"
+        # ── ①②③ 共享前置(与 execute_sync 同源)── terminal 命中即返(只取 value,exit_code 给同步桥用)。
+        terminal, _registry_risk = self._preflight(action, args)
+        if terminal is not None:
+            return terminal[0]
         # ② 审批拨盘(L4/YOLO 不再把任何动作从 AUTO 强制升 CONFIRM —— 全自治,HARD RULES 仍拦)。
         decision = await self._request_decision(action, args, registry_risk=_registry_risk)
         if not decision.approved:
@@ -190,20 +190,10 @@ class CapabilityBroker:
         request() 的审批,同步桥给不了),不在此放行;内置 if/elif 工具(run_command/web_*/...)
         正常执行并补 egress + 回执。
         """
-        # fail-closed:action 必须已知(registry 或 _RISK 之一),与 request() 顶部同源。
-        _reg = getattr(self, "_registry", None)
-        _registry_risk = _reg.risk_table() if _reg is not None else {}
-        if action not in _registry_risk and action not in _RISK:
-            return f"错误:未知/不支持的特权动作 {action!r},拒绝。", 1
-        # 文件写:gate-only 治理(无 host_loop 的回退路径也走同款 hard-path/密钥/回执)。
-        if action in _FILE_WRITE_ACTIONS:
-            val = self._gate_only_write(action, args)
-            return val, (0 if val == _files.WRITE_APPROVED_SENTINEL else 1)
-        # ① egress 检查(网络类,fail-closed)—— 同步桥与 request() 走同一裁决(6323 SSRF 修复保持一致)
-        if action in self._derive_network_actions():
-            deny = self._egress_deny_reason(action, args)
-            if deny is not None:
-                return (f"错误:{deny}", 1)
+        # ── ①②③ 共享前置(与 request() 同源 _preflight:action 合法性 + 文件写 gate-only + egress)──
+        terminal, _registry_risk = self._preflight(action, args)
+        if terminal is not None:
+            return terminal
         # ①b 计算机控制金融/验证码硬规则:声明"任何档位均不可降级"的人在场确认,过去只在 request()
         # 的异步审批路径(_request_decision→gate→evaluator)生效。同步桥(workflow 子 agent 走 AUTO、
         # 不注入 host_loop)直落 _execute → 该硬规则被悄悄绕过(2026-06-18 排查 #11)。同步桥无法交互审批,

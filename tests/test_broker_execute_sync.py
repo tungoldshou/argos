@@ -79,3 +79,29 @@ def test_execute_sync_rejects_unknown_action():
     value, _ = br.execute_sync("frobnicate", {})
     assert "未知" in str(value) or "拒绝" in str(value)
     assert br.take_receipt() is None
+
+
+@pytest.mark.asyncio
+async def test_preflight_parity_request_vs_execute_sync():
+    """Phase 5.1:request() 与 execute_sync() 共享同一 _preflight —— 两条路对 action 合法性、
+    文件写 gate-only、egress 的裁决不会分叉(治理审计点:同步桥曾旁路这些检查)。
+    用同一 broker 跑两条路,断言【最终值】一致(execute_sync 多带 exit_code,request 只取值)。"""
+    import asyncio
+
+    async def via_request(br, action, args):
+        return await br.request(action, args)
+
+    def via_sync(br, action, args):
+        val, _code = br.execute_sync(action, args)
+        return val
+
+    # 1) 未知动作:两条路都 fail-closed 拒,且拒绝串一致
+    br = _broker()
+    r1 = await via_request(br, "no_such_action", {})
+    s1 = via_sync(_broker(), "no_such_action", {})
+    assert "未知" in r1 and r1 == s1
+
+    # 2) egress 越界(非 allowlist host 的 web_extract → SSRF/allowlist 拒):两条路一致拒
+    r2 = await via_request(_broker(), "web_extract", {"url": "http://169.254.169.254/latest/"})
+    s2 = via_sync(_broker(), "web_extract", {"url": "http://169.254.169.254/latest/"})
+    assert "错误" in r2 and r2 == s2, (r2, s2)
