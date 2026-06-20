@@ -1,6 +1,6 @@
 """Hard shell rules 铁证(spec §2.2,D1 锁 regex + 白+黑双层)。
 
-12 条 hard shell rule,每条至少 3 case:deny / 不 deny(合法变种)/ alias 顺序变种。
+13 条 hard shell rule,每条至少 3 case:deny / 不 deny(合法变种)/ alias 顺序变种。
 """
 from __future__ import annotations
 
@@ -19,9 +19,34 @@ def _home(p: str) -> str:
     return str(Path(p).expanduser())
 
 
-def test_hard_shell_rules_count_is_12():
-    """spec §2.2 锁:exhaustive list,exactly 12 条,逐条铁证。"""
-    assert len(HARD_SHELL_RULES) == 12
+def test_hard_shell_rules_count_is_13():
+    """spec §2.2 锁:exhaustive list,exactly 13 条,逐条铁证。"""
+    assert len(HARD_SHELL_RULES) == 13
+
+
+@pytest.mark.parametrize("cmd", [
+    "git -c core.sshCommand=/tmp/evil.sh fetch origin",
+    "git -c core.fsmonitor=/tmp/x status",
+    "git -c core.pager=/tmp/x log",
+    "git -c alias.x='!sh -c whoami' x",
+    "git -c protocol.ext.allow=always clone ext::sh -c whoami",
+    "git --exec-path=/tmp/evil status",
+    "git clone --upload-pack='sh -c whoami' git://h/r",
+    "git push --receive-pack='sh -c id' origin",
+    "git -c core.HooksPath=/tmp/hooks commit -m x",
+])
+def test_git_config_exec_denied(cmd):
+    """Phase 2 删了 _validate_git,git config 驱动执行的 RCE 向量改由 hard rule 兜底拦(2026-06-20 review #3)。"""
+    assert check_hard_shell(cmd) == "git_config_exec", cmd
+
+
+@pytest.mark.parametrize("cmd", [
+    "git status", "git -c user.name=zc commit -m x", "git -c color.ui=auto log",
+    "git push origin main", "git fetch --all", "git clone https://h/r.git",
+])
+def test_git_benign_not_denied(cmd):
+    """良性 git(含良性 -c user.name/color.ui、普通 push/fetch/clone)不被 git_config_exec 误拦。"""
+    assert check_hard_shell(cmd) is None, cmd
 
 
 def test_hard_shell_rules_are_frozen():

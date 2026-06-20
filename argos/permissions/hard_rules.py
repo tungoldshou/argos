@@ -1,6 +1,6 @@
-"""12 条 hard shell rule + 系统路径 denylist + workspace 边界(spec §2.2 / §2.3)。
+"""13 条 hard shell rule + 系统路径 denylist + workspace 边界(spec §2.2 / §2.3)。
 
-- HARD_SHELL_RULES:不可绕过的 shell 模式铁证(deny list 12 条)
+- HARD_SHELL_RULES:不可绕过的 shell 模式铁证(deny list 13 条)
 - HARD_PATH_DENYLIST:系统路径前缀 tuple(写 /etc, ~/.ssh, ~/.aws 等拒)
 - is_workspace_path:workspace 边界 host 侧 check(D14)
 - is_env_file:workspace 内 .env 走"软 allow 可显式 trust"路径
@@ -43,7 +43,7 @@ def _is_private_host(url: str) -> bool:
         return False
 
 
-# 12 条 hard shell rule(spec §2.2,exhaustive list)
+# 13 条 hard shell rule(spec §2.2,exhaustive list)
 HARD_SHELL_RULES: Final[tuple[HardShellRule, ...]] = (
     HardShellRule(
         name="rm_rf_root",
@@ -120,11 +120,24 @@ HARD_SHELL_RULES: Final[tuple[HardShellRule, ...]] = (
         ),
         reason="Refusing python -c with os.system/subprocess/exec/eval",
     ),
+    HardShellRule(
+        # git 的 config 驱动执行原语:`-c core.sshCommand/fsmonitor/pager/editor/hooksPath=…`、
+        # `-c alias.x=!cmd`、`-c key=!cmd`、`--exec-path`、`--upload-pack`、`--receive-pack` 都能
+        # 让 git 跑任意命令(2026-06-20:Phase 2 删了旧 _validate_git,这里以 hard rule 兜底补回)。
+        # 仅命中已知 RCE 向量,放过良性 `git -c user.name=…` 等。
+        name="git_config_exec",
+        pattern=re.compile(
+            r"(?i)\bgit\b[^\n]*?"
+            r"(?:-c\s+(?:core\.(?:sshcommand|fsmonitor|pager|editor|hookspath)|protocol\.ext|alias\.|[\w.]+\s*=\s*!)"
+            r"|--exec-path|--upload-pack|--receive-pack|\bext::)"
+        ),
+        reason="Refusing git config-driven exec (-c core.sshCommand/fsmonitor/pager/editor/hooksPath/alias, --exec-path/--upload-pack/--receive-pack)",
+    ),
 )
 
 
 def check_hard_shell(cmd: str) -> str | None:
-    """对 run_command 命令字符串跑 12 条 hard rule。
+    """对 run_command 命令字符串跑 13 条 hard rule。
     命中(非 allowlist 局部放宽)→ 返 rule name;无命中 → None。
 
     curl_pipe_sh / wget_pipe_bash 走 host 私有 CIDR allowlist(D1 锁)。"""

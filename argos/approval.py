@@ -85,15 +85,24 @@ def _hash_payload(payload: dict[str, Any]) -> str:
 
 def _derive_allow_matcher(action: str, args: dict[str, Any]) -> tuple[str, str]:
     """从一次「总是允许」派生持久 allow 规则的 (tool, matcher)。matcher 走 re.search 语义。
-    - run_command → 命令首词(二进制):'pytest -q' → matcher=re.escape('pytest'),匹配含 pytest 的命令。
-      宽是安全的:评估器先跑 hard rule(rm -rf 等)再 soft_allow,危险命令仍被兜底拦。
+    - run_command → 锚定的【二进制 + 子命令】:'git status' → '^git\\s+status(\\s|$)';
+      'pip install x' → '^pip\\s+install(\\s|$)';'pytest -q'(次词是 flag)→ '^pytest(\\s|$)'。
+      为什么不只取首词(2026-06-20 review #2/#6):裸 'git' 子串会让"总是允许 git status"悄悄放行
+      'git push'(外泄)/ 'git config'(改身份)/ 'git remote add'(指向攻击者),且这些联网子命令会
+      被自动开出网阀——授权范围远超用户看到的 'git status'。check_hard_shell 也不拦 git 子命令。
+      锚定到二进制+子命令把授权收窄到用户真正批准的那类命令;子串误配('mygit' 命中 'git')也一并堵死。
     - 其它工具 → matcher='*'(整工具放行 = 用户'别再问这个工具了')。"""
     import re as _re
     if action == "run_command":
         cmd = str((args or {}).get("command", "")).strip()
         toks = cmd.split()
         if toks:
-            return action, _re.escape(toks[0])
+            parts = [_re.escape(toks[0])]
+            # 多路复用二进制(git/npm/pip/docker/…)按"二进制+首个非 flag 子命令"锚定;次词是 flag
+            # (-x)或无次词 → 仅锚定二进制(pytest/ls 这类非多路复用,放行同二进制各调用是合理的)。
+            if len(toks) > 1 and not toks[1].startswith("-"):
+                parts.append(_re.escape(toks[1]))
+            return action, "^" + r"\s+".join(parts) + r"(\s|$)"
     return action, "*"
 
 

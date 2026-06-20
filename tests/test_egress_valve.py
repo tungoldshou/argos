@@ -159,3 +159,33 @@ def test_profile_network_toggle(tmp_path):
     for prof in (off, on):
         assert "(deny file-read*" in prof          # 凭据读拒块
         assert str(tmp_path.resolve()) in prof      # workspace 可写
+
+
+# ── review #2/#6:"always allow git status" 不得泄漏到 git push/config(锚定二进制+子命令) ──
+def test_always_matcher_is_scoped_not_bare_binary():
+    """review #2:respond('always') 派生的 matcher 锚定到【二进制+子命令】,而非裸首词。
+    '总是允许 git status' 绝不能悄悄放行 git push(外泄)/ git config(改身份)。"""
+    from argos.approval import _derive_allow_matcher
+    from argos.permissions.config import _matcher_match
+    _, m = _derive_allow_matcher("run_command", {"command": "git status"})
+    assert _matcher_match(m, "git status -s")            # 同类放行
+    assert not _matcher_match(m, "git push origin main")  # 联网外泄子命令不放行
+    assert not _matcher_match(m, "git config --global user.email x")
+    assert not _matcher_match(m, "git remote add evil http://e")
+    assert not _matcher_match(m, "mygit-helper run")      # 子串误配也堵死(#6)
+
+
+def test_always_git_status_does_not_auto_approve_git_push():
+    """端到端:持久化 'git status' 的 always 规则后,git push 仍不被 soft_allow,走出网阀(ask)。"""
+    from argos.approval import _derive_allow_matcher
+    from argos.permissions.evaluator import evaluate
+    tool, matcher = _derive_allow_matcher("run_command", {"command": "git status"})
+    cfg = _cfg(allow=[RuleEntry(tool=tool, matcher=matcher)])
+    # git status → soft_allow 放行
+    assert evaluate("run_command", {"command": "git status"},
+                    gate_level=ApprovalLevel.CONFIRM, config=cfg,
+                    low_risk_auto=True, risk="high").decision == "approve"
+    # git push → 不命中该规则 → 联网命令走出网阀 ask(不被静默放行 + 自动开网)
+    assert evaluate("run_command", {"command": "git push origin main"},
+                    gate_level=ApprovalLevel.CONFIRM, config=cfg,
+                    low_risk_auto=True, risk="high").decision == "ask"
