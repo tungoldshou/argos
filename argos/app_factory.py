@@ -105,8 +105,6 @@ class AppComponents:
     audit_log: AuditLog | None = None
     # P2 能力注册表:进程级单注册表,broker/run_stack 共享;None = 兼容旧路径。
     registry: CapabilityRegistry | None = None
-    # P4 §7 IntentEngine:进程级复用;None = 关闭(ARGOS_NO_INTENT=1 或未配置时)。
-    intent_engine: Any = None
     # P4 策略生成:从 registry.verify_hint 聚合的 capability hints 字典;空 dict = 无提示。
     # 格式:{cap_name: verify_hint_str, ...}；generate() 只消费已知 key(pytest_cmd 等),
     # 其余 key 静默忽略(generate 已测试 test_unknown_hints_ignored)。
@@ -288,7 +286,6 @@ def build_run_stack(
             workflow_engine_factory=c.workflow_engine_factory,
             router=c.router,
             mcp_manager=c.mcp_manager,
-            intent_engine=c.intent_engine,  # P4 §7 意图引擎透传
             dom_prober=_dom_prober,          # A2 L3 DOM 探针（None=未接入）
             gui_prober=_gui_prober,          # 2d GUI 探针（None=computer use 未开/未接入）
         )
@@ -432,19 +429,6 @@ def build_components(
     router = (ModelRouter(routing=routing_cfg, client_factory=_router_client_factory)
               if routing_cfg.is_active() else None)
 
-    # 方向 A(2026-06-14):intent 确认门【默认关】——理解即行动,确认只在副作用层
-    # (CapabilityBroker + ApprovalGate + Trust Dial + Seatbelt 沙箱)。调研显示主流 coding
-    # agent(Claude Code / Cursor / Aider / Codex / Copilot)一致"理解即行动",无一在每次
-    # 用户输入前强制回显结构化意图卡——前置意图门是 UX 摩擦且无安全收益(真门在副作用层)。
-    # 显式 ARGOS_INTENT=1 才启用 NL→Goal 意图确认(降级为可选);ARGOS_NO_INTENT=1 幂等强制关。
-    _intent_engine = None
-    if os.environ.get("ARGOS_INTENT") == "1" and not os.environ.get("ARGOS_NO_INTENT"):
-        try:
-            from argos.intent.engine import IntentEngine as _IE
-            _intent_engine = _IE()
-        except Exception:  # noqa: BLE001 — intent 模块故障诚实降级为 None(不崩启动)
-            pass
-
     # P4 策略生成:从 registry 聚合所有非空 verify_hint 字段 → capability_hints 字典。
     # 格式是 {能力名: verify_hint 人话文本}，仅用于 rationale 展示与 generate() 的
     # pytest_cmd / verify_file 键消费；dom_selector / dom_url / dom_expected_text 这三个
@@ -472,7 +456,6 @@ def build_components(
         permissions_config=perm_config,
         audit_log=perm_audit,
         registry=registry,   # P2 能力注册表(进程级单注册表)
-        intent_engine=_intent_engine,  # P4 §7 意图引擎
         capability_hints=_capability_hints,  # P4 策略生成 verify_hint 聚合
     )
 
@@ -487,7 +470,6 @@ def build_loop_factory(c: AppComponents) -> Callable[[], AgentLoop]:
             workflow_engine_factory=c.workflow_engine_factory,
             router=c.router,          # #11 per-task routing 透传(spec §10)
             mcp_manager=c.mcp_manager,  # per-session McpManager 注入(P1 去全局)
-            intent_engine=c.intent_engine,  # P4 §7 意图引擎透传
             capability_hints=c.capability_hints,  # P4 策略生成 verify_hint 聚合透传
         )
     return factory
