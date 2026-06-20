@@ -1505,7 +1505,11 @@ class AgentLoop:
                 if self._broker is not None and hasattr(self._broker, "take_computer_artifact"):
                     self._pending_screenshot = self._broker.take_computer_artifact()
                 # 工作流提议:agent 本段调了 propose_workflow({...}) → 异步态校验+审批+引擎执行+结果回灌。
-                raw_spec = extract_workflow_spec(text)
+                # Phase 5.3(review #9):工作流默认 off,仅 ARGOS_WORKFLOWS=1 时才 dispatch —— 否则即便
+                # 模型(训练先验/被污染的导入技能)凭空吐 propose_workflow,host 也不跑工作流机器(对称于
+                # 提示词不再宣传它);未开时当普通无副作用文本走常规 feedback。
+                raw_spec = (extract_workflow_spec(text)
+                            if __import__("os").environ.get("ARGOS_WORKFLOWS") else None)
                 if raw_spec is not None:
                     async for ev in self._run_workflow(raw_spec, messages):
                         yield ev

@@ -48,11 +48,31 @@ _CRED_DENY_FILES = (
 )
 
 
+def _resolved_and_raw(p: Path) -> set[str]:
+    """一条路径的【未解析】+【解析后】两种字符串形式(对齐 _temp_roots 的双写)。
+    resolve() 对不存在路径在 3.12 仍可用 —— 它解析存在的软链父级,把不存在的尾段原样保留,
+    这正是我们要的:HOME 或凭据子目录是软链时,拿到内核 canonicalize 后的真实路径。"""
+    return {str(p), str(p.resolve())}
+
+
 def _credential_read_denies() -> str:
-    """凭据目录(subpath)+ 密钥文件(literal)的读 deny 规则文本。"""
+    """凭据目录(subpath)+ 密钥文件(literal)的读 deny 规则文本。
+
+    macOS Seatbelt 在匹配 (subpath ...)/(literal ...) 前会 canonicalize(解析软链)被访问路径。
+    若 HOME 本身是软链(如 /Users/alice -> /Volumes/data/alice),或某凭据子目录/文件被软链
+    (chezmoi/yadm/stow 等 dotfile 管理器常见,如 ~/.ssh -> /other/path),仅 emit 未解析路径会让
+    deny 前缀匹配不到内核规范化后的真实路径,而 (allow file-read*) 仍生效 → 凭据反而可读;
+    出网阀(allow_network=True)一开就是真外泄路径。故每条都把【未解析】与【解析后】两种形式都
+    emit(对齐 _temp_roots 的双写),无论内核按哪种匹配都堵住。"""
     home = Path.home()
-    parts = "".join(f'\n  (subpath "{home / d}")' for d in _CRED_DENY_DIRS)
-    parts += "".join(f'\n  (literal "{home / f}")' for f in _CRED_DENY_FILES)
+    subpaths: set[str] = set()
+    for d in _CRED_DENY_DIRS:
+        subpaths |= _resolved_and_raw(home / d)
+    literals: set[str] = set()
+    for f in _CRED_DENY_FILES:
+        literals |= _resolved_and_raw(home / f)
+    parts = "".join(f'\n  (subpath "{s}")' for s in sorted(subpaths))
+    parts += "".join(f'\n  (literal "{s}")' for s in sorted(literals))
     return f"(deny file-read*{parts})\n"
 
 

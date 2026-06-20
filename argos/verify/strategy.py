@@ -93,16 +93,28 @@ class WorkspaceFacts:
 
 def _has_test_files(path: Path) -> bool:
     """是否存在可被 pytest 收集的测试文件（test_*.py / *_test.py）。
-    顶层 glob + 常见测试目录（tests/ test/）惰性 rglob，取首个命中即停 —— 只读、省时。"""
+    顶层 glob + 常见测试目录（tests/ test/）。用 os.walk(followlinks=False) 而非 rglob：
+    不跟软链（避免 tests/ 下的循环软链在 3.12 把探针挂死，2026-06-20 review #8），且 walk 目录数
+    封顶 —— 只读、省时、命中即停。"""
+    import os as _os
+
+    def _is_test(name: str) -> bool:
+        return (name.startswith("test_") and name.endswith(".py")) or name.endswith("_test.py")
+
     for pat in ("test_*.py", "*_test.py"):
         if next(path.glob(pat), None) is not None:
             return True
     for d in ("tests", "test"):
         tdir = path / d
-        if tdir.is_dir():
-            for pat in ("test_*.py", "*_test.py"):
-                if next(tdir.rglob(pat), None) is not None:
-                    return True
+        if not tdir.is_dir():
+            continue
+        walked = 0
+        for _root, _dirs, files in _os.walk(tdir):  # followlinks=False(默认）→ 无软链环
+            if any(_is_test(fn) for fn in files):
+                return True
+            walked += 1
+            if walked >= 500:   # 防御:超大非测试树扫够即停(测试通常第一层就命中)
+                break
     return False
 
 

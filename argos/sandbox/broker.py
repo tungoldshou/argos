@@ -133,6 +133,16 @@ class CapabilityBroker:
         registry_risk = _reg.risk_table() if _reg is not None else {}
         if action not in registry_risk and action not in _RISK:
             return (f"错误:未知/不支持的特权动作 {action!r},拒绝。", 1), registry_risk
+        # ①a run_command 危险命令 hard rule(2026-06-20 review #1):两条路都拦。
+        # 此前 check_hard_shell 只在 request() 的异步审批路径(evaluator)里跑;execute_sync(workflow
+        # 子 agent / 无 host_loop 回退)直落 _execute → rm -rf/curl|sh/git -c <hook> 等在 sync 桥旁路。
+        # 且非 darwin run_command 裸跑(无 Seatbelt)。放进 _preflight 让所有路径 fail-closed 一致拦死,
+        # 兑现 broker/shell docstring "危险命令仍被 check_hard_shell 兜底拦" 的承诺。
+        if action == "run_command":
+            from argos.permissions.hard_rules import check_hard_shell
+            _rule = check_hard_shell(str(args.get("command", "")))
+            if _rule is not None:
+                return (f"错误:命令命中危险硬规则({_rule}),拒绝执行。", 1), registry_risk
         if action in _FILE_WRITE_ACTIONS:
             val = self._gate_only_write(action, args)
             return (val, (0 if val == _files.WRITE_APPROVED_SENTINEL else 1)), registry_risk
