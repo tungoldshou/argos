@@ -101,15 +101,6 @@ _TOOLS = (
     "需要实时或你不掌握的外部信息时，先用 web_search 去查，不要凭空说'我没法联网/获取'。\n"
 )
 
-_WORKFLOW_NOTE = (
-    "【工作流(概要)】\n"
-    "工作流：propose_workflow(spec)——仅当任务能拆成**互相独立、可并行**的子任务时用"
-    "(审计多文件/给多模块各写测试/多视角评审/对抗验证);顺序依赖、单文件、小任务别用，单线程直接干。"
-    "spec 为字面量 dict{name, description, stages:[{id, op, over, agent, ...}]}，"
-    "op 五选一:fan_out/pipeline/panel/loop_until/synthesize;深度恒 1(子 agent 不能再开工作流);"
-    "host 会校验规格、弹审批、并行执行后把结果回灌给你。\n"
-)
-
 _SELF_CHECK = (
     "【收尾自检(汇报前逐条过)】\n"
     "- 验证命令真跑了吗?(没跑 → 别声称通过)\n"
@@ -129,8 +120,19 @@ HONESTY_SYSTEM = (
     + _ACTION_FORMAT
     + _TOOL_SELECTION
     + _TOOLS
-    + _WORKFLOW_NOTE
     + _SELF_CHECK
+)
+
+# 工作流段:Phase 5.3(2026-06-20)起【默认不进系统提示】—— 工作流(propose_workflow/fan_out/…)是
+# 重型编排,普通编码任务用不上;默认 agent 不该被它的复杂度拖累。仅 ARGOS_WORKFLOWS=1 时由
+# loop._build_system_pair 注入(propose_workflow 工具仍在命名空间,只是默认不诱导模型用它)。
+WORKFLOW_PROMPT = (
+    "【工作流(概要)】\n"
+    "工作流：propose_workflow(spec)——仅当任务能拆成**互相独立、可并行**的子任务时用"
+    "(审计多文件/给多模块各写测试/多视角评审/对抗验证);顺序依赖、单文件、小任务别用，单线程直接干。"
+    "spec 为字面量 dict{name, description, stages:[{id, op, over, agent, ...}]}，"
+    "op 五选一:fan_out/pipeline/panel/loop_until/synthesize;深度恒 1(子 agent 不能再开工作流);"
+    "host 会校验规格、弹审批、并行执行后把结果回灌给你。\n"
 )
 
 # 计算机控制文档段:仅 ARGOS_COMPUTER_USE=1 时由 loop._build_system_pair 注入(默认不占预算,

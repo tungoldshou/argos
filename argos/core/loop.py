@@ -1145,6 +1145,10 @@ class AgentLoop:
         if _os_cu.environ.get("ARGOS_COMPUTER_USE"):
             from argos.core.honesty import COMPUTER_USE_PROMPT
             safe = safe + "\n\n" + COMPUTER_USE_PROMPT
+        # 工作流段:Phase 5.3 起默认不进提示(重型编排,普通任务用不上);仅 ARGOS_WORKFLOWS=1 注入。
+        if _os_cu.environ.get("ARGOS_WORKFLOWS"):
+            from argos.core.honesty import WORKFLOW_PROMPT
+            safe = safe + "\n\n" + WORKFLOW_PROMPT
 
         if not self._cfg.recall:
             return (safe, "")
