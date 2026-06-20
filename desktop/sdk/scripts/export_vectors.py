@@ -321,27 +321,6 @@ def _build_vectors() -> list[dict]:
         },
     )
 
-    # ── IntentConfirmRequest ────────────────────────────────────────────────
-    _v(
-        PE.IntentConfirmRequest(
-            call_id="aabbcc112233",
-            confirmation_text="我理解你要删除 build 文件夹，对吗？",
-            risk_flags=("irreversible",),
-            card_json={"goal": "删除 build 文件夹", "risk_flags": ["irreversible"]},
-        ),
-        {
-            "call_id": "aabbcc112233",
-            "confirmation_text": "我理解你要删除 build 文件夹，对吗？",
-            "risk_flags": ["irreversible"],
-        },
-    )
-
-    # ── IntentConfirmResponse ──────────────────────────────────────────────
-    _v(
-        PE.IntentConfirmResponse(call_id="aabbcc112233", confirmed=True, revised_goal=None),
-        {"call_id": "aabbcc112233", "confirmed": True, "revised_goal": None},
-    )
-
     # ── ProactiveSuggestionEvent ────────────────────────────────────────────
     _v(
         PE.ProactiveSuggestionEvent(

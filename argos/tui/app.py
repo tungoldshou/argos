@@ -36,7 +36,6 @@ from argos.tui.events import (
     Event,
     EventBus,
     FileDiff,
-    IntentConfirmRequest,  # ← P4 §7
     MemoryRecallEvent,
     PhaseChange,
     PlanDecisionRequest,
@@ -59,7 +58,6 @@ from argos.tui.widgets.diff_view import DiffView
 from argos.tui.widgets.dream_report import DreamReportCard
 from argos.tui.widgets.hard_confirm_card import HardConfirmCard
 from argos.tui.widgets.inline_choice import InlineChoice, format_approval_title
-from argos.tui.widgets.intent_card_choice import IntentCardChoice
 from argos.tui.widgets.ledger_table import LedgerTable
 from argos.tui.widgets.orders_panel import OrdersPanel
 from argos.tui.widgets.orders_panel import ConductorSuggestionChoice
@@ -215,8 +213,6 @@ class ArgosApp(App):
         # v6 P3b §4:当前 plan 决策的 call_id(PlanDecisionRequest 事件到达时设置)。
         # _handle_plan_rendered 据此路由 respond_plan_decision / POST plan_decision。
         self._current_plan_call_id: str | None = None
-        # P4 §7:当前意图确认的 call_id(IntentConfirmRequest 事件到达时设置)。
-        self._current_intent_call_id: str | None = None
         # 语音输入状态(Task 5 voice input):录音/转写/注入循环。
         self._voice_recording: bool = False
         self._voice_recorder = None
@@ -2003,7 +1999,6 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             await sp.remove()
         self._step_blocks = {}  # 每轮独立,杜绝跨轮 step 串台。
         self._current_plan_call_id = None  # 每轮清 plan call_id(不跨轮泄漏)。
-        self._current_intent_call_id = None  # P4 §7:每轮清 intent call_id(不跨轮泄漏)。
         self.query_one("#activity", ActivityPanel).reset_run()  # 每轮起手清活动栏(进度/工具/回执)。
         # UserPromptSubmit hook fire(spec §2.5:TUI 端触发,不在 loop 内)
         try:
@@ -2294,11 +2289,6 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             # inline 路径:loop.respond_plan_decision(call_id,...) 唤醒 loop。
             # daemon 路径:POST /plan_decision(call_id 由此携带,不再需要 ExitPlanMode)。
             self._current_plan_call_id = ev.call_id
-        elif isinstance(ev, IntentConfirmRequest):
-            # P4 §7:意图确认请求 — 复用 InlineChoice 渲染,确认/取消两项。
-            # call_id 记录到 _current_intent_call_id;_handle_intent_confirm 据此路由。
-            self._current_intent_call_id = ev.call_id
-            await self._handle_intent_confirm(ev)
         elif isinstance(ev, MemoryRecallEvent):
             # v6 §4 ACP:loop 投记忆召回事件,TUI 据此渲染"记忆召回 N 条"行。
             # 替换原来 _announce_memory_recall 对 loop._store 的直接访问(store 穿透修)。
@@ -2730,90 +2720,3 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         except Exception as e:  # noqa: BLE001
             import logging as _log
             _log.getLogger(__name__).warning("daemon plan_decision POST failed: %s", e)
-
-    async def _handle_intent_confirm(self, ev: "IntentConfirmRequest") -> None:
-        """P4 §7 意图确认:复用 InlineChoice 渲染(确认/取消两项)。
-
-        inline 模式 → loop.respond_intent_confirm(call_id, confirmed)
-        daemon 模式 → POST /runs/{id}/intent_confirm
-
-        fail-closed:Esc 或队列超时 = 取消(confirmed=False)。
-        YOLO(AUTO)模式 → 直接确认,不弹 UI。
-        """
-        loop = self._current_loop
-
-        # YOLO:直接确认,不渲染
-        if self.gate.level is ApprovalLevel.AUTO:
-            call_id = ev.call_id
-            if self._with_daemon and self._daemon_client and self._daemon_session_id and self._daemon_run_id:
-                self.run_worker(
-                    self._daemon_intent_confirm_post(call_id, confirmed=True),
-                    exclusive=False,
-                )
-            elif loop is not None and hasattr(loop, "respond_intent_confirm"):
-                loop.respond_intent_confirm(call_id, True)
-            return
-
-        _is_daemon = (
-            self._with_daemon
-            and self._daemon_client is not None
-            and self._daemon_session_id is not None
-            and self._daemon_run_id is not None
-        )
-
-        def _decide(value: str, _feedback: str) -> None:
-            call_id = getattr(self, "_current_intent_call_id", None) or ev.call_id
-            if value == "confirm":
-                confirmed = True
-            elif value == "edit":
-                confirmed = False
-                # 回填 prompt 输入框为 card goal（让用户修改后重发）
-                try:
-                    card_goal = ev.card_json.get("goal", "") if ev.card_json else ""
-                    if card_goal:
-                        self.query_one("#prompt").value = card_goal  # type: ignore[union-attr]
-                except Exception:  # noqa: BLE001
-                    pass
-            else:  # "cancel"
-                confirmed = False
-            if _is_daemon:
-                self.run_worker(
-                    self._daemon_intent_confirm_post(call_id, confirmed=confirmed),
-                    exclusive=False,
-                )
-            elif loop is not None and hasattr(loop, "respond_intent_confirm"):
-                loop.respond_intent_confirm(call_id, confirmed)
-            self.run_worker(
-                self.query_one("#transcript", Transcript).append_line(
-                    f"意图确认:{'已确认' if confirmed else '已取消'}",
-                    kind="system",
-                ),
-                exclusive=False,
-            )
-            self._choice_done()
-
-        choice = IntentCardChoice(
-            card_json=ev.card_json,
-            confirmation_text=ev.confirmation_text,
-            risk_flags=ev.risk_flags,
-            on_decide=_decide,
-        )
-        await self._enqueue_choice(lambda: choice)
-
-    async def _daemon_intent_confirm_post(self, call_id: str, *, confirmed: bool, revised_goal: str | None = None) -> None:
-        """daemon 路径意图确认:POST /runs/{id}/intent_confirm。fail-soft(失败仅 log)。"""
-        if not self._daemon_client or not self._daemon_session_id or not self._daemon_run_id:
-            return
-        try:
-            body: dict = {"call_id": call_id, "confirmed": confirmed}
-            if revised_goal:
-                body["revised_goal"] = revised_goal
-            await self._daemon_client._request(
-                "POST",
-                f"/runs/{self._daemon_run_id}/intent_confirm",
-                session_id=self._daemon_session_id,
-                body=body,
-            )
-        except Exception as e:  # noqa: BLE001
-            import logging as _log
-            _log.getLogger(__name__).warning("daemon intent_confirm POST failed: %s", e)

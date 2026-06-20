@@ -25,7 +25,6 @@ import type {
   CreateSessionResponse,
   ApprovalBody,
   PlanDecisionBody,
-  IntentConfirmBody,
 } from "./types.js";
 import { parseEnvelope, parseEvent } from "./parse.js";
 
@@ -417,22 +416,6 @@ export class DaemonClient {
   ): Promise<{ call_id: string; action: string; state: string }> {
     return jsonRequest(
       this.socketPath, "POST", `/runs/${runId}/plan_decision`,
-      this.sessionId, body,
-    );
-  }
-
-  // ── Intent confirm ────────────────────────────────────────────────
-
-  /**
-   * POST /runs/{id}/intent_confirm — respond to an IntentConfirmRequest (P4 §7).
-   * Mirrors server.py _handle_intent_confirm line ~798.
-   */
-  async intentConfirm(
-    runId: string,
-    body: IntentConfirmBody,
-  ): Promise<{ call_id: string; confirmed: boolean; state: string }> {
-    return jsonRequest(
-      this.socketPath, "POST", `/runs/${runId}/intent_confirm`,
       this.sessionId, body,
     );
   }

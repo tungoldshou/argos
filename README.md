@@ -372,13 +372,9 @@ every mode. Escalating to a more permissive mode always surfaces an explicit
 warning; the dial never silently self-upgrades. (Internally these map onto the
 ApprovalLevel `CONFIRM` / `ACCEPT_EDITS` / `AUTO` semantics.)
 
-### Intent confirmation loop (opt-in, off by default)
-
-Argos defaults to **understand-then-act**, like Claude Code / Cursor / Aider:
-confirmation lives at the side-effect layer (the approval gate), not as a
-pre-action intent prompt. Opt in with `ARGOS_INTENT=1` and the intent engine
-(`argos/intent/`) parses the user's natural-language goal into a structured
-`IntentCard` for a brief confirmation before the run starts.
+Argos follows **understand-then-act**, like Claude Code / Cursor / Aider — there
+is no pre-action intent-confirmation prompt; confirmation lives at the
+side-effect layer (the approval gate).
 
 ### Conductor (autonomous face)
 

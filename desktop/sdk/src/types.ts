@@ -299,22 +299,6 @@ export interface LedgerEntryEventData {
   undo_state: "available" | "done" | "impossible";
 }
 
-/** protocol/events.py IntentConfirmRequest line ~250 (P4 §7) */
-export interface IntentConfirmRequestData {
-  call_id: string;
-  confirmation_text: string;
-  /** JSON serializes tuple as array; clients receive string[] */
-  risk_flags: string[];
-  card_json: Record<string, unknown>;
-}
-
-/** protocol/events.py IntentConfirmResponse line ~269 (P4 §7) */
-export interface IntentConfirmResponseData {
-  call_id: string;
-  confirmed: boolean;
-  revised_goal: string | null;
-}
-
 /** protocol/events.py ProactiveSuggestionEvent line ~283 (P5b §9)
  *
  * INVARIANT: requires_confirmation is ALWAYS true at the protocol level.
@@ -381,8 +365,6 @@ export type EventKind =
   | "compacted"
   | "pruned"
   | "ledger_entry"
-  | "intent_confirm_request"
-  | "intent_confirm_response"
   | "proactive_suggestion"
   | "computer_action";
 
@@ -415,8 +397,6 @@ export type TypedEvent =
   | ({ kind: "compacted" } & CompactedEventData)
   | ({ kind: "pruned" } & PrunedEventData)
   | ({ kind: "ledger_entry" } & LedgerEntryEventData)
-  | ({ kind: "intent_confirm_request" } & IntentConfirmRequestData)
-  | ({ kind: "intent_confirm_response" } & IntentConfirmResponseData)
   | ({ kind: "proactive_suggestion" } & ProactiveSuggestionEventData)
   | ({ kind: "computer_action" } & ComputerActionEventData);
 
@@ -458,8 +438,3 @@ export interface PlanDecisionBody {
   feedback?: string;
 }
 
-export interface IntentConfirmBody {
-  call_id: string;
-  confirmed: boolean;
-  revised_goal?: string | null;
-}

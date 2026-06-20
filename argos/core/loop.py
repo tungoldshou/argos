@@ -50,7 +50,6 @@ from argos.protocol.events import (
     CodeAction, CodeResult, CostUpdate, Error, Event, PhaseChange,
     MemoryRecallEvent, PlanDecisionRequest, PlanRendered, PlanUpdate,
     TokenDelta, ToolReceipt,
-    IntentConfirmRequest,  # ← P4 §7 意图引擎
 )
 from argos.protocol.events import EventBus
 from argos import hooks as _hooks
@@ -293,9 +292,6 @@ class LoopConfig:
     # context rot 持续相关性修剪激进度(0=不修剪;0<a<0.66 折叠过期工具输出;
     # a>=0.66 另折叠被取代旧计划/死路错误)。优先修剪而非整体压缩(spec 2026-06-07)。
     prune_aggressiveness: float = 0.5
-    # P4 §7 意图确认超时(秒):超时 fail-closed → 取消 run,诚实投 Error。
-    # 默认 120s,给用户足够时间阅读确认文本;ARGOS_INTENT_CONFIRM_TIMEOUT 可覆盖。
-    intent_confirm_timeout_s: float = 120.0
 
 
 class AgentLoop:
@@ -319,7 +315,6 @@ class AgentLoop:
         workflow_engine_factory: Callable[[], object] | None = None,
         router: Any = None,    # #11 per-task routing(契约 §11):ModelRouter | None
         mcp_manager: Any = None,  # per-session McpManager 实例(AppComponents 注入;None=模块级单例 fallback)
-        intent_engine: Any = None,  # P4 §7 IntentEngine | None;None=关闭,行为零变更
         capability_hints: dict[str, str] | None = None,  # P4 策略生成:registry verify_hint 聚合;None=空 dict
         dom_prober: Any = None,  # A2 L3 DOM 探针:DomProber | None;None=未接入,行为同现状(L3 跳过)
         gui_prober: Any = None,  # 2d GUI 探针:GuiProber | None;None=未接入,GUI 验证 lane 跳过
@@ -340,7 +335,6 @@ class AgentLoop:
         # 工作流引擎工厂:None=未接入(诚实回错,不崩 run);非 None=act 段抓到 propose_workflow 后
         # 在异步态校验+审批+异步跑引擎+结果回灌(每次提议 new 一个引擎,RAII 不复用状态)。
         self._workflow_engine_factory = workflow_engine_factory
-        self._intent_engine = intent_engine  # P4 §7:IntentEngine | None;None=关闭
         # P4 策略生成:registry verify_hint 聚合(app_factory 透传);None 退空 dict(零变更)。
         self._capability_hints: dict[str, str] = capability_hints or {}
         # A2 L3 DOM 探针:DomProber | None;None=未接入,_pick_strategy_cmd 跳过 L3(向后兼容)。
@@ -354,12 +348,6 @@ class AgentLoop:
         # 2d GUI 探针 + 挂起 expected_text(propose_gui_verify 声明时存;verify 阶段消费)。
         self._gui_prober = gui_prober
         self._pending_gui_expected_text: str = ""
-        # P4 §7 意图确认挂起:call_id 注册表,与 _plan_call_registry 同构。
-        # _intent_confirm_registry:call_id → asyncio.Event,respond_intent_confirm 唤醒 loop。
-        # _intent_confirmed:确认结果(True=继续, False=取消);_intent_effective_goal:确认后目标。
-        self._intent_confirm_registry: dict[str, asyncio.Event] = {}
-        self._intent_confirmed: bool = False
-        self._intent_effective_goal: str | None = None
         self._actions = 0
         self._fail_count = 0
         self._started = 0.0
@@ -451,10 +439,6 @@ class AgentLoop:
         self._plan_decision = None
         self._plan_decision_event = asyncio.Event()
         self._approval_level_override = None
-        # P4 §7:每轮重置意图确认状态(防上轮残留泄漏到新轮)。
-        self._intent_confirm_registry = {}
-        self._intent_confirmed = False
-        self._intent_effective_goal = None
         # A2 L3:每轮重置挂起 L3 策略(防上轮残留泄漏)。
         self._pending_l3_strategy = None
         self._pending_dom_expected_text = ""
@@ -601,26 +585,6 @@ class AgentLoop:
             return False
         # 清注册表条目(ExitPlanMode 已 set _plan_decision_event,loop 会唤醒)。
         self._plan_call_registry.pop(call_id, None)
-        return True
-
-    def respond_intent_confirm(
-        self, call_id: str, confirmed: bool, revised_goal: str | None = None,
-    ) -> bool:
-        """P4 §7:daemon/TUI 路径回传意图确认决策,唤醒挂起的 _run_intent_preparse。
-
-        与 respond_plan_decision 同构:校验 call_id → 写 _intent_confirmed/_intent_effective_goal
-        → set event 唤醒 loop。返回 True = 成功路由;False = call_id 不在注册表(超时已清/非法)。
-        fail-closed:call_id 无效 → 返 False,不做任何状态更改。
-        """
-        ev = self._intent_confirm_registry.get(call_id)
-        if ev is None:
-            return False
-        self._intent_confirmed = confirmed
-        if confirmed and revised_goal and revised_goal.strip():
-            self._intent_effective_goal = revised_goal.strip()
-        # 清注册表条目,set event 唤醒 loop 内的 wait_for
-        self._intent_confirm_registry.pop(call_id, None)
-        ev.set()
         return True
 
     @staticmethod
@@ -1206,50 +1170,6 @@ class AgentLoop:
                             elapsed_ms=h.elapsed_ms, timed_out=h.timed_out,
                             not_found=h.not_found, stop_reason=h.stop_reason,
                             error=h.error)
-        # ── P4 §7 意图预解析(IntentEngine 接线) ──────────────────────────────
-        # intent_engine=None → 跳过(行为零变更,100% 向后兼容)。
-        # 非 None → parse(goal, model) → IntentCard;confirmation_required=True → 挂起。
-        # 超时 fail-closed:取消本次 run,诚实投 Error(不擅自执行不确定意图)。
-        # 确认后 effective_goal 替换 goal 进入后续四阶段。
-        if self._intent_engine is not None:
-            try:
-                import dataclasses as _dc
-                from argos.intent.engine import IntentEngine as _IE
-                _card = await self._intent_engine.parse(goal, self._model)
-                if _card.confirmation_required:
-                    _call_id = __import__("os").urandom(6).hex()  # 12 hex
-                    _wait_ev = asyncio.Event()
-                    self._intent_confirm_registry[_call_id] = _wait_ev
-                    _confirmation_text = _IE.render_confirmation(_card)
-                    yield IntentConfirmRequest(
-                        call_id=_call_id,
-                        confirmation_text=_confirmation_text,
-                        risk_flags=_card.risk_flags,
-                        card_json=_dc.asdict(_card),
-                    )
-                    # 挂起等用户确认,超时 fail-closed
-                    _timeout_s = float(getattr(self._cfg, "intent_confirm_timeout_s", 120.0))
-                    try:
-                        await asyncio.wait_for(_wait_ev.wait(), timeout=_timeout_s)
-                    except asyncio.TimeoutError:
-                        self._intent_confirm_registry.pop(_call_id, None)
-                        yield Error(message="意图确认超时,已取消本次执行(fail-closed)。")
-                        return
-                    if not self._intent_confirmed:
-                        yield Error(message="用户取消了本次执行。")
-                        return
-                    if self._intent_effective_goal:
-                        goal = self._intent_effective_goal
-                    else:
-                        goal = _card.goal
-                else:
-                    goal = _card.goal
-            except Exception as _ie_exc:  # noqa: BLE001
-                # 意图引擎故障 → 诚实降级:用原 goal 继续(不挂起,不假装解析成功)
-                __import__("logging").getLogger(__name__).warning(
-                    "IntentEngine 故障,诚实降级用原 goal 继续: %s", _ie_exc,
-                )
-
         # ── plan ──
         async for ev in self._enter_phase("plan"):
             yield ev

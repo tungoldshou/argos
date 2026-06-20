@@ -16,7 +16,6 @@ const KNOWN_KINDS = new Set([
     "lsp_server_event", "lsp_diagnostic_event",
     "skill_run_start", "skill_run_end",
     "compacted", "pruned", "ledger_entry",
-    "intent_confirm_request", "intent_confirm_response",
     "proactive_suggestion",
     "computer_action",
 ]);

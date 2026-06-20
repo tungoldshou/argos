@@ -81,7 +81,7 @@ async def test_always_persists_pattern_allow_rule(tmp_path, monkeypatch):
 async def test_ask_listener_fires_for_tool_ask_only():
     """2026-06-18 修:gate 进 ask 路径且 call_id 为自生成(= broker 工具桥)→ 同步触发 ask_listener,
     让 inline TUI mount 审批卡(exec_code 在 to_thread 时 loop 阻塞、yield 不出 ApprovalRequest →
-    旧路径永不弹卡 → 工具干等超时)。调用方预传 call_id(workflow/plan/intent)不触发,避免重复卡。"""
+    旧路径永不弹卡 → 工具干等超时)。调用方预传 call_id(workflow/plan)不触发,避免重复卡。"""
     gate = approval.ApprovalGate()
     seen: list = []
     gate.set_ask_listener(lambda cid, payload: seen.append((cid, payload)))

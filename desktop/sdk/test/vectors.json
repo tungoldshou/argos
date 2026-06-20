@@ -313,26 +313,6 @@
     }
   },
   {
-    "kind": "intent_confirm_request",
-    "serialized": "{\"kind\": \"intent_confirm_request\", \"data\": {\"call_id\": \"aabbcc112233\", \"confirmation_text\": \"我理解你要删除 build 文件夹，对吗？\", \"risk_flags\": [\"irreversible\"], \"card_json\": {\"goal\": \"删除 build 文件夹\", \"risk_flags\": [\"irreversible\"]}}}",
-    "expected_data": {
-      "call_id": "aabbcc112233",
-      "confirmation_text": "我理解你要删除 build 文件夹，对吗？",
-      "risk_flags": [
-        "irreversible"
-      ]
-    }
-  },
-  {
-    "kind": "intent_confirm_response",
-    "serialized": "{\"kind\": \"intent_confirm_response\", \"data\": {\"call_id\": \"aabbcc112233\", \"confirmed\": true, \"revised_goal\": null}}",
-    "expected_data": {
-      "call_id": "aabbcc112233",
-      "confirmed": true,
-      "revised_goal": null
-    }
-  },
-  {
     "kind": "proactive_suggestion",
     "serialized": "{\"kind\": \"proactive_suggestion\", \"data\": {\"suggestion_id\": \"abc123def456\", \"order_id\": \"order001\", \"goal\": \"检查昨天的日志\", \"reason_human\": \"定时触发（09:00）：每天早上检查日志\", \"suggested_at\": 1700000000.0, \"requires_confirmation\": true, \"action\": \"run\"}}",
     "expected_data": {

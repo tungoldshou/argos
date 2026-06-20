@@ -27,8 +27,6 @@ ALL_EVENT_KINDS = {
     "plan_decision_request",  # v6 §4 ACP:plan 决策请求事件(去 TUI 对 loop 直接引用)
     "memory_recall",          # v6 §4 ACP:记忆召回结果事件(修 store 穿透)
     "ledger_entry",           # P3b §6 行为账本:每条 ToolReceipt 沉淀为可读账本条目
-    "intent_confirm_request",   # P4 §7 意图引擎:确认挂起请求
-    "intent_confirm_response",  # P4 §7 意图引擎:用户确认/取消响应
     "proactive_suggestion",     # P5b §9 自治面:conductor 主动建议事件
     "computer_action",          # P6a §10 computer use:OS 级动作执行结果
     "dream_progress",           # T10 Dream 夜间整合进度(daemon → client SSE)

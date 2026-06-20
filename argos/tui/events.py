@@ -32,8 +32,6 @@ from argos.protocol.events import (  # noqa: F401
     PlanDecisionRequest,
     MemoryRecallEvent,
     LedgerEntryEvent,          # ← P3b 新增(§6 行为账本)
-    IntentConfirmRequest,      # ← P4 新增(§7 意图引擎)
-    IntentConfirmResponse,     # ← P4 新增(§7 意图引擎)
     ProactiveSuggestionEvent,  # ← P5b 新增(§9 自治面:conductor 主动建议)
     ComputerActionEvent,       # ← P6a 新增(§10 computer use:OS 级动作执行结果)
     DreamProgressEvent,        # ← T10 新增(Dream 夜间整合进度)
