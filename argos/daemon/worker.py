@@ -29,12 +29,14 @@ import asyncio
 import dataclasses
 import json
 import logging
+import os
 import time
 import traceback as tb_mod
 from pathlib import Path
 from typing import AsyncIterator, Any
 
 from argos.daemon.manager import RunManager
+from argos.daemon.state_machine import TERMINAL_STATES
 import argos.runtime as _runtime
 from argos.i18n import t as _t
 
@@ -246,6 +248,8 @@ class RunWorker:
         self._message_count = 0
         self._current_phase = "act"
         self._task: asyncio.Task | None = None
+        # 看门狗:ARGOS_RUN_TIMEOUT_S 超时 → 硬取消卡死的 loop(opt-in,默认关)。
+        self._watchdog: asyncio.Task | None = None
         # #5b 扩展(向后兼容,None 时 noop)
         self._registry = registry
         self._worktree = worktree
@@ -325,6 +329,8 @@ class RunWorker:
         _rt_ctx = _runtime.RunContext(workspace=_ws_path, verify_dir=_ws_path, project_mode=True)
         _rt_token = _runtime.set_context(_rt_ctx)
         try:
+            # 看门狗:仅当 ARGOS_RUN_TIMEOUT_S 设定(>0)才启;超时硬取消卡死的 loop。
+            self._watchdog = self._maybe_start_watchdog()
             # DaemonApprovalGate 包装:真 gate 存在且尚未包装时加 timeout fail-closed。
             # P3:timeout_s 来自 create_run approval_timeout_s 参数(默认 60s),支持可配。
             # 已是 DaemonApprovalGate(测试预包装路径)则跳过,避免双重包装。
@@ -442,6 +448,13 @@ class RunWorker:
                     traceback=tb_mod.format_exc(), step=self._step_count,
                 )
         finally:
+            # 看门狗收尾:正常结束则取消(避免孤儿 sleep task)。
+            if self._watchdog is not None:
+                self._watchdog.cancel()
+                self._watchdog = None
+            # 终态广播:run 此刻必为终态 → fanout 一条 state_change,让 SSE 订阅者立即醒来
+            # 关流(免等 server 2s keepalive tick)。fanout 仅 put_nowait 不挂起,取消中调用安全。
+            await self._emit_terminal_signal()
             # per-run runtime context 归还(协程退出后 contextvar 恢复到 None)。
             _runtime.reset(_rt_token)
             # per-run sandbox 清理:RunStack.close() 关沙箱子进程,不留孤儿。
@@ -453,6 +466,55 @@ class RunWorker:
                     log.warning("worker: run_stack_close failed for %s: %s", self.run_id, _e)
             # #5b 终态收尾:release slot + worktree cleanup + registry cleanup
             await self._post_terminal_cleanup()
+
+    def _maybe_start_watchdog(self) -> "asyncio.Task | None":
+        """opt-in 看门狗:ARGOS_RUN_TIMEOUT_S 秒后硬取消本 run(防真·死循环/卡死 stream)。
+
+        默认关闭(未设/<=0/非法 → None,不启)。这是墙钟上限,不区分暂停时间 —— 仅供"宁可
+        误杀也不永挂"的运行环境显式开启;交互式默认场景靠 SSE 终态关流(B1)自愈即可。
+        """
+        raw = os.environ.get("ARGOS_RUN_TIMEOUT_S", "").strip()
+        if not raw:
+            return None
+        try:
+            timeout_s = float(raw)
+        except ValueError:
+            return None
+        if timeout_s <= 0:
+            return None
+        return asyncio.create_task(self._watchdog_timer(timeout_s))
+
+    async def _watchdog_timer(self, timeout_s: float) -> None:
+        """睡 timeout_s 后硬取消 run;被 finally cancel(正常结束)则静默退出。"""
+        try:
+            await asyncio.sleep(timeout_s)
+        except asyncio.CancelledError:
+            return
+        log.warning(
+            "worker: run %s 超过看门狗超时 %.1fs,硬取消", self.run_id, timeout_s
+        )
+        self.request_hard_cancel()
+
+    async def _emit_terminal_signal(self) -> None:
+        """run 收尾时广播终态 state_change → SSE 订阅者立即醒来关流(B1 的即时性补充)。
+
+        run 此刻应已是终态(completed/failed/cancelled);非终态(防御性)则跳过。
+        fail-soft:广播失败仅 log,不阻断收尾。
+        """
+        try:
+            entry = self._manager.index.get(self.run_id)
+            state = entry.state if entry is not None else None
+            if state not in TERMINAL_STATES:
+                return
+            await self._manager.fanout(self.run_id, {
+                "kind": "state_change",
+                "from": "running",
+                "to": state,
+                "reason": "terminal",
+                "ts": time.time(),
+            })
+        except Exception as e:  # noqa: BLE001
+            log.warning("worker: 终态广播失败 for %s: %s", self.run_id, e)
 
     async def _maybe_append_ledger(self, ev_dict: dict) -> None:
         """P3b §6:从 tool_receipt 事件 dict 构建 LedgerEntry 并落盘 + 广播 LedgerEntryEvent。
