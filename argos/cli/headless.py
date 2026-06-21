@@ -65,13 +65,18 @@ def run_exec(args) -> int:
     effective_ws = getattr(args, "project", None) or os.getcwd()
     level = ApprovalLevel.AUTO if getattr(args, "auto", False) else ApprovalLevel.ACCEPT_EDITS
 
+    # effort 从全局 --effort 透传(`argos --effort high exec ...`);缺省 medium。此前硬编 MEDIUM → 被忽略。
+    try:
+        _effort = EffortLevel(getattr(args, "effort", None) or EffortLevel.MEDIUM.value)
+    except ValueError:
+        _effort = EffortLevel.MEDIUM
     try:
         components = build_components(
             workspace=effective_ws,
             model_override=getattr(args, "model", None),
             approval_level=level,
             verify_cmd=getattr(args, "verify_cmd", None),
-            effort=EffortLevel.MEDIUM,
+            effort=_effort,
         )
     except RuntimeError as e:  # 无 key → 诚实退出,不假装能跑
         print(f"argos exec: {e}", file=sys.stderr)
@@ -101,6 +106,9 @@ def run_exec(args) -> int:
                 state["phase_text"] = []   # 新阶段重置 → 末尾留下最后阶段(report)的文本作 result
             elif isinstance(ev, VerifyVerdict):
                 state["verdict"] = ev.verdict.status
+                # 诚实:区分用户级 passed 与"自验证(较弱)"passed —— 绝不让 self_verified 的弱通过
+                # 在 CI/脚本表面冒充强验证(Verdict.is_user_verified 的同一防火墙语义)。
+                state["self_verified"] = bool(getattr(ev.verdict, "self_verified", False))
             elif isinstance(ev, CostUpdate):
                 if ev.cost_usd is not None:
                     state["cost"] = ev.cost_usd   # CostUpdate 是会话累计 → 取最后一个
@@ -121,12 +129,13 @@ def run_exec(args) -> int:
 
     result_text = "".join(state["phase_text"]).strip() or "".join(state["all_text"]).strip()
     verdict = state["verdict"]
+    self_verified = bool(state.get("self_verified", False))
     is_error = bool(state["error"]) or bool(state["escalation"]) or verdict in ("failed", "unverifiable")
 
     if state["error"]:
         code = 1
     elif verdict == "passed":
-        code = 0
+        code = 0   # self_verified 的弱通过也算通过(它真跑过),但下方 out_verdict 标注区分
     elif verdict in ("failed", "unverifiable"):
         code = 1
     elif state["escalation"]:
@@ -134,10 +143,14 @@ def run_exec(args) -> int:
     else:
         code = 0   # 无声明验证而完成(NO_TEST)= 诚实完成
 
+    # 对外暴露的 verdict 标签:self_verified 的 passed 标成 'passed_self',不冒充用户级强 passed。
+    out_verdict = "passed_self" if (verdict == "passed" and self_verified) else verdict
+
     if getattr(args, "as_json", False):
         print(json.dumps({
             "result": result_text,
-            "verdict": verdict,
+            "verdict": out_verdict,
+            "self_verified": self_verified,
             "session_id": session_id,
             "cost_usd": state["cost"],
             "is_error": is_error,
@@ -151,8 +164,9 @@ def run_exec(args) -> int:
             print(f"\n[escalation] {state['escalation']}", file=sys.stderr)
         if state["error"]:
             print(f"\n[error] {state['error']}", file=sys.stderr)
-        _label = {"passed": "✓ passed", "failed": "✗ failed",
-                  "unverifiable": "? unverifiable"}.get(verdict or "", "· 无声明验证(honest no-test)")
+        _label = {"passed": "✓ passed", "passed_self": "✓ passed (自验证/较弱)",
+                  "failed": "✗ failed",
+                  "unverifiable": "? unverifiable"}.get(out_verdict or "", "· 无声明验证(honest no-test)")
         print(f"[verify] {_label}", file=sys.stderr)
 
     return code
