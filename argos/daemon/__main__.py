@@ -27,6 +27,31 @@ from argos.i18n import t
 
 log = logging.getLogger(__name__)
 
+_LOG_FORMAT = "%(asctime)s %(name)s %(levelname)s %(message)s"
+_RUN_LOG_MAX_BYTES = 2_000_000   # daemon.log 单文件上限(~2MB),防长跑 daemon 无限增长
+_RUN_LOG_BACKUPS = 3             # 保留的轮转备份数(daemon.log.1 .. .3)
+
+
+def _build_log_handlers(socket_path) -> list[logging.Handler]:
+    """daemon 结构化日志走有界轮转的 daemon.log(与 TUI 截获的 daemon-boot.log 分离)。
+
+    建不了文件 handler(目录不可写等)时回退 stderr——绝不让日志配置挡住 daemon 启动。
+    """
+    run_log = Path(socket_path).expanduser().parent / "daemon.log"
+    try:
+        from logging.handlers import RotatingFileHandler
+        run_log.parent.mkdir(parents=True, exist_ok=True)
+        fh = RotatingFileHandler(
+            run_log,
+            maxBytes=_RUN_LOG_MAX_BYTES,
+            backupCount=_RUN_LOG_BACKUPS,
+            encoding="utf-8",
+        )
+        fh.setFormatter(logging.Formatter(_LOG_FORMAT))
+        return [fh]
+    except Exception:  # noqa: BLE001 — 文件不可写等 → 回退 stderr
+        return [logging.StreamHandler()]
+
 
 def _default_runs_dir() -> Path:
     return Path.home() / ".argos" / "runs"
@@ -389,9 +414,12 @@ def main() -> int:
 
     args = p.parse_args()
 
+    # daemon 运行日志走有界轮转的 daemon.log;启动期的 print/traceback 仍走 stdout/stderr,
+    # 由 TUI spawn 重定向到独立的 daemon-boot.log(职责分离,见 tui/daemon_spawn.py)。
     logging.basicConfig(
         level=getattr(logging, args.log_level.upper()),
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        format=_LOG_FORMAT,
+        handlers=_build_log_handlers(args.socket_path),
     )
 
     pid_path = Path(args.pid_path).expanduser()
