@@ -27,6 +27,51 @@ if TYPE_CHECKING:
 
 # 网络类动作:request 前要查 egress。
 _NETWORK_ACTIONS: set[str] = {"web_search", "web_extract"}
+
+
+def _resolve_lsp_server(
+    *,
+    file: "str | None",
+    manager: "Any",
+) -> "str | None":
+    """根据文件扩展名从 LspManager 配置中解析对应 server 名。
+
+    原 bug:broker._execute 的 LSP 分支全部硬编 server_name="python",导致
+    任何非 Python 语言服务器配置了也永远路由不到。
+
+    修复策略:
+      - file 非 None:取扩展名,查 LspConfig.get_servers_for_filetype(ext),
+        返回第一个未 disabled 的 server name。
+      - file is None(如 lsp_workspace_symbols 无目标文件):返回配置的第一个
+        未 disabled server。
+      - 无匹配 server → 返回 None(调用方返 clear error JSON,不静默路由到错误 server)。
+
+    参数:
+      file    — 目标文件路径字符串(可含路径前缀);或 None。
+      manager — LspManager 实例(需有 .config 属性 LspConfig)。
+
+    返回:
+      str  — 第一个匹配 server 的名字。
+      None — 无匹配或无配置。
+    """
+    try:
+        cfg = manager.config
+    except AttributeError:
+        return None
+
+    if file is not None:
+        ext = Path(file).suffix  # e.g. ".py", ".rs", ""
+        if ext:
+            matches = cfg.get_servers_for_filetype(ext)
+            if matches:
+                return matches[0][0]
+        return None
+    else:
+        # 无文件:返回第一个未 disabled 的 server
+        for name, sc in cfg.servers.items():
+            if not sc.disabled:
+                return name
+        return None
 # 各 action 的风险与人类描述模板(审批弹窗用)。
 # C1:run_command 提到 high —— 任意 shell 执行,即便已关进 Seatbelt 也绝不静默放手。
 _RISK: dict[str, str] = {
@@ -175,6 +220,13 @@ class CapabilityBroker:
         # curl …),用 allow_network=True 的 Seatbelt profile 跑(临时开网);否则牢笼网络默认 OFF。
         # Cautious 下联网命令不被"牢笼内自动放行"短路(evaluator 已排除)→ 这里的批准是用户真点的;
         # Autonomous 下 evaluator 直接 approve → 自动开网(Codex YOLO);写牢笼+凭据读拒始终在。
+        # 出网阀是一个【全开/全关的审批 gate】,不是 per-host 过滤器 —— 要诚实说清(2026-06-21 修):
+        # OS 沙箱(Seatbelt `(allow network*)` / bwrap net ns)只能"开网或不开网",host 无法按目标
+        # host 过滤一个子进程的出站连接。所以批准一条联网 run_command = 该子进程获得【完整】网络访问
+        # (写牢笼 workspace+temp、凭据目录读拒仍在,限制外泄面;但能连任意 host)。此前这里调
+        # parse_network_host()→egress.allow() 制造"只放行 a.com"的假象 —— 那个 allowlist 在 run_command
+        # 路径上【从不被查】(run_command 无 egress_hosts,不进 _egress_deny_reason),纯属安全剧场,已删。
+        # egress allowlist 仍对真正按 host 走的能力(web_search/web_extract/MCP)生效,见 _egress_deny_reason。
         _allow_net = (action == "run_command"
                       and _shell.command_needs_network(args.get("command", "")))
         value, exit_code = self._execute(action, args, run_ctx=None, _gated=True,
@@ -434,7 +486,9 @@ class CapabilityBroker:
                 )
             except (ValueError, TypeError) as exc:
                 return f"computer 动作参数校验失败: {exc}", None
-            result = ComputerExecutor().dispatch(ca)
+            # auto_detect_scale=True:真实 dispatch 路径惰性探测 Retina backing scale,
+            # 让点击/滚动坐标(物理像素)正确换算为 AppleScript 逻辑点(2x 屏不再偏移)。
+            result = ComputerExecutor(auto_detect_scale=True).dispatch(ca)
             # 截图:stash 工件(path, size)供 loop 取去挂图像(视觉回路)。非截图动作不动。
             if result.ok and getattr(result, "artifact_path", None):
                 self.last_computer_artifact = (
@@ -444,6 +498,7 @@ class CapabilityBroker:
             return result.detail, (0 if result.ok else 1)
         # LSP 工具派发(spec §2.8):host 侧 LspManager 派发到对应 language server。
         if action.startswith("lsp_"):
+            import json as _json
             from argos import lsp as _lsp
             from argos.lsp.tools import (
                 lsp_definition_gated as _lsp_def,
@@ -457,46 +512,70 @@ class CapabilityBroker:
             workspace = self._workspace if self._workspace is not None else Path.cwd()
             kwargs: dict = {"manager": mgr, "workspace": workspace}
             if action == "lsp_definition":
+                file = args.get("file", "")
+                sname = _resolve_lsp_server(file=file, manager=mgr)
+                if sname is None:
+                    return _json.dumps({"error": f"no lsp server configured for {Path(file).suffix or file!r}"}), None
                 return _lsp_def(
-                    server_name="python",
-                    file=args.get("file", ""),
+                    server_name=sname,
+                    file=file,
                     line=int(args.get("line", 1)),
                     col=int(args.get("col", 1)),
                     **kwargs,
                 ), None
             if action == "lsp_references":
+                file = args.get("file", "")
+                sname = _resolve_lsp_server(file=file, manager=mgr)
+                if sname is None:
+                    return _json.dumps({"error": f"no lsp server configured for {Path(file).suffix or file!r}"}), None
                 return _lsp_ref(
-                    server_name="python",
-                    file=args.get("file", ""),
+                    server_name=sname,
+                    file=file,
                     line=int(args.get("line", 1)),
                     col=int(args.get("col", 1)),
                     include_declaration=bool(args.get("include_declaration", True)),
                     **kwargs,
                 ), None
             if action == "lsp_hover":
+                file = args.get("file", "")
+                sname = _resolve_lsp_server(file=file, manager=mgr)
+                if sname is None:
+                    return _json.dumps({"error": f"no lsp server configured for {Path(file).suffix or file!r}"}), None
                 return _lsp_hov(
-                    server_name="python",
-                    file=args.get("file", ""),
+                    server_name=sname,
+                    file=file,
                     line=int(args.get("line", 1)),
                     col=int(args.get("col", 1)),
                     **kwargs,
                 ), None
             if action == "lsp_document_symbols":
+                file = args.get("file", "")
+                sname = _resolve_lsp_server(file=file, manager=mgr)
+                if sname is None:
+                    return _json.dumps({"error": f"no lsp server configured for {Path(file).suffix or file!r}"}), None
                 return _lsp_dsym(
-                    server_name="python",
-                    file=args.get("file", ""),
+                    server_name=sname,
+                    file=file,
                     **kwargs,
                 ), None
             if action == "lsp_workspace_symbols":
+                # workspace/symbol は file なし:設定済み最初の server を使う
+                sname = _resolve_lsp_server(file=None, manager=mgr)
+                if sname is None:
+                    return _json.dumps({"error": "no lsp server configured"}), None
                 return _lsp_wsym(
-                    server_name="python",
+                    server_name=sname,
                     query=args.get("query", ""),
                     **kwargs,
                 ), None
             if action == "lsp_diagnostics":
+                file = args.get("file", "")
+                sname = _resolve_lsp_server(file=file, manager=mgr)
+                if sname is None:
+                    return _json.dumps({"error": f"no lsp server configured for {Path(file).suffix or file!r}"}), None
                 return _lsp_diag(
-                    server_name="python",
-                    file=args.get("file", ""),
+                    server_name=sname,
+                    file=file,
                     **kwargs,
                 ), None
         # 文件写:host 侧"执行" = gate-only 放行哨兵(真正落盘在 Seatbelt 子进程的 wrapper 内)。

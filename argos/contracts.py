@@ -19,57 +19,57 @@ from typing import Literal
 Domain = Literal["rest-api", "db-schema", "state-machine", "config", "generic", "none"]
 
 # ── 各领域的"必检约定"骨架(便宜模型会漏的形式约定 = 护城河知识)──────────────
-REST_API = """[C1] 主键 id 的类型与格式(如 string/UUIDv4)
-[C2] JSON 字段命名风格(snake_case 或 camelCase,全局统一)
-[C3] 时间字段命名与格式(字段名、类型、时区,如 created_at/updated_at, ISO8601 UTC Z)
-[C4] 状态/完成标志:枚举字段 与 布尔字段 只选一个,另一个禁用
-[C5] 上条选定字段:数据模型持久化它;若枚举则列全取值且所有写端点接受
-[C6] 并发控制令牌字段名;数据模型持久化、写操作校验;冲突时状态码
-[C7] 统一响应封装:单条/列表格式(含状态/错误码字段,封装字段不进持久层)
-[C8] 错误格式(统一一种,含数字 code 与 message)
-[C9] 字段长度上限;超长状态码
-[C10] 接口-数据模型对齐自检:每个端点的请求/响应字段集 + 数据模型字段集,确认无悬空"""
+REST_API = """[C1] Primary key id type and format (e.g. string/UUIDv4)
+[C2] JSON field naming convention (snake_case or camelCase — globally consistent)
+[C3] Timestamp field names and format (field name, type, timezone — e.g. created_at/updated_at, ISO 8601 UTC Z)
+[C4] Status/completion flag: choose exactly one of enum field vs. boolean field; the other is forbidden
+[C5] The chosen field from [C4]: persisted in the data model; if enum, all valid values listed and accepted by every write endpoint
+[C6] Optimistic concurrency token field name; persisted in the data model, validated on writes; status code on conflict
+[C7] Unified response envelope: format for single-item and list responses (including status/error code fields; envelope fields must not be persisted)
+[C8] Error format (exactly one structure, containing a numeric code and a message)
+[C9] Maximum field length limits; status code when a value exceeds the limit
+[C10] Interface-to-data-model alignment check: for every endpoint, verify that its request/response field set matches the data model field set — no dangling references"""
 
-DB_SCHEMA = """[D1] 表/列命名风格(全局统一)
-[D2] 主键策略(自增BIGINT / UUID / ULID,所有表统一)
-[D3] 外键命名约定,且类型与被引用主键完全一致
-[D4] 时间戳列(列名、类型如 TIMESTAMPTZ、时区,所有表统一)
-[D5] 软删除策略(deleted_at 还是物理删除;若用,所有查询过滤)
-[D6] 金额/精度类型(NUMERIC(p,s) 或整数分,禁 FLOAT 存钱)
-[D7] 枚举落库方式(CHECK / 枚举表 / 原生 ENUM,统一一种)
-[D8] 字符串长度与字符集
-[D9] 跨表引用完整性自检:每个外键(子表.列→父表.列)类型一致、父表先建、无环"""
+DB_SCHEMA = """[D1] Table and column naming convention (globally consistent)
+[D2] Primary key strategy (auto-increment BIGINT / UUID / ULID — consistent across all tables)
+[D3] Foreign key naming convention; foreign key type must exactly match the referenced primary key type
+[D4] Timestamp columns (column name, type such as TIMESTAMPTZ, timezone — consistent across all tables)
+[D5] Soft-delete strategy (deleted_at column vs. hard delete; if used, all queries must filter on it)
+[D6] Monetary/precision type (NUMERIC(p,s) or integer cents; FLOAT is forbidden for money)
+[D7] Enum storage strategy (CHECK constraint / lookup table / native ENUM — exactly one approach)
+[D8] String length limits and character set
+[D9] Cross-table referential integrity check: for every foreign key (child_table.col → parent_table.col), verify type consistency, parent table is created first, and there are no cycles"""
 
-STATE_MACHINE = """[S1] 状态集合(完整列出,全局唯一命名)
-[S2] 事件/动作命名(时态统一)
-[S3] 初始状态、终止状态集
-[S4] 合法转移表:(当前状态,事件)→新状态,穷举
-[S5] 非法转移处理(返回什么错误/状态码,统一)
-[S6] 幂等性:同事件重复触发的行为(忽略/报错/重放,统一)
-[S7] 守卫/前置条件命名与语义
-[S8] 转移闭合性自检:每个非终止状态对每个事件都有定义(转移或显式拒绝)"""
+STATE_MACHINE = """[S1] Complete state set (exhaustively listed, globally unique names)
+[S2] Event/action naming convention (consistent tense)
+[S3] Initial state and set of terminal states
+[S4] Valid transition table: (current_state, event) → new_state, exhaustively enumerated
+[S5] Invalid transition handling (error type and status code to return — consistent)
+[S6] Idempotency: behavior when the same event is triggered again (ignore / error / replay — consistent)
+[S7] Guard/precondition naming and semantics
+[S8] Transition closure check: every non-terminal state has a defined response (transition or explicit rejection) for every event"""
 
-CONFIG = """[F1] 键命名风格(全局统一)
-[F2] 嵌套层级约定(按模块/按环境,统一)
-[F3] 布尔/数值/时长的类型与单位(如时长统一秒还是 "30s")
-[F4] 默认值标注方式
-[F5] 环境变量覆盖规则(前缀、大小写、优先级)
-[F6] 密钥/敏感项处理(禁明文)
-[F7] 键命名空间自检:无同名异义键、无层级冲突"""
+CONFIG = """[F1] Key naming convention (globally consistent)
+[F2] Nesting structure convention (by module or by environment — consistent)
+[F3] Type and unit for booleans, numbers, and durations (e.g. durations uniformly in seconds or "30s")
+[F4] How default values are annotated
+[F5] Environment variable override rules (prefix, case, precedence)
+[F6] Secret/sensitive key handling (plaintext is forbidden)
+[F7] Key namespace check: no duplicate keys with different meanings, no structural hierarchy conflicts"""
 
-GENERIC = """[G1] 标识符命名风格(全局统一)
-[G2] 关键字段的数据类型与格式、单位
-[G3] 时间/日期表示(统一格式与时区)
-[G4] 枚举/状态取值(完整列出,统一命名)
-[G5] 错误/异常表示(统一一种结构)
-[G6] 模块间接口对齐自检:各产出的对外契约(字段/签名/数据形状)类型一致、无悬空、无重名"""
+GENERIC = """[G1] Identifier naming convention (globally consistent)
+[G2] Data type, format, and unit for all key fields
+[G3] Date/time representation (consistent format and timezone)
+[G4] Enum/status values (exhaustively listed, consistently named)
+[G5] Error/exception representation (exactly one structure)
+[G6] Cross-module interface alignment check: every output's public contract (fields / signatures / data shapes) is type-consistent, has no dangling references, and has no naming collisions"""
 
 _TEMPLATES: dict[str, tuple[str, str]] = {
     "rest-api": ("REST API", REST_API),
-    "db-schema": ("数据库 Schema", DB_SCHEMA),
-    "state-machine": ("状态机", STATE_MACHINE),
-    "config": ("配置文件", CONFIG),
-    "generic": ("通用结构化", GENERIC),
+    "db-schema": ("Database Schema", DB_SCHEMA),
+    "state-machine": ("State Machine", STATE_MACHINE),
+    "config": ("Config", CONFIG),
+    "generic": ("Generic", GENERIC),
 }
 
 # 关键词分类(0 成本兜底)。命中多个按 rest>schema>状态机>config 优先。
@@ -109,9 +109,10 @@ def contract_for(goal: str) -> tuple[Domain, str | None]:
         return dom, None
     label, body = _TEMPLATES[dom]
     text = (
-        f"\n\n【结构化工程任务({label})—— 必须先把下列形式约定逐条定死再写代码,"
-        f"全局统一、不留歧义,这能让产出可直接组装、避免字段/类型/命名打架】:\n{body}\n"
-        f"先在产出里明确这些约定,再实现。"
+        f"\n\n[Structured Engineering Task ({label})] Before writing any code, you MUST lock down "
+        f"each of the following formal conventions one by one — globally consistent, no ambiguity. "
+        f"This ensures all outputs are directly composable and eliminates field/type/naming conflicts:\n{body}\n"
+        f"State these conventions explicitly in your output first, then implement."
     )
     return dom, text
 

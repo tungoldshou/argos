@@ -471,5 +471,9 @@ def build_loop_factory(c: AppComponents) -> Callable[[], AgentLoop]:
             router=c.router,          # #11 per-task routing 透传(spec §10)
             mcp_manager=c.mcp_manager,  # per-session McpManager 注入(P1 去全局)
             capability_hints=c.capability_hints,  # P4 策略生成 verify_hint 聚合透传
+            # P0 护城河:inline 路径(无 daemon worker 外部 set_context)→ 让 run() 自建 project 上下文
+            # (verify_dir==workspace,篡改可见)。否则 inline 下篡改检测哑、verify 跑错目录。daemon 走
+            # build_run_stack(不开此开关),worker.py 仍自管上下文 → 行为零变更。
+            manage_runtime_context=True, project_mode=True,
         )
     return factory

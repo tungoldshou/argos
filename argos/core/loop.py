@@ -266,11 +266,12 @@ def _env_context(workspace: Path) -> str:
     import platform
     from datetime import date
     return (
-        "\n\n【运行环境】\n"
-        f"- 工作目录(相对路径都相对它解析):{workspace}\n"
-        f"- 操作系统:{platform.system()} {platform.machine()}\n"
-        f"- 今天日期:{date.today().isoformat()}\n"
-        "以上为已知事实,无需用代码现场探测(如 os.getcwd / pathlib.Path.cwd / pwd)。"
+        "\n\n<environment>\n"
+        f"- Working directory (relative paths resolve against it): {workspace}\n"
+        f"- OS: {platform.system()} {platform.machine()}\n"
+        f"- Today: {date.today().isoformat()}\n"
+        "These are known facts — don't probe them at runtime (os.getcwd / pathlib.Path.cwd / pwd).\n"
+        "</environment>"
     )
 
 
@@ -318,6 +319,8 @@ class AgentLoop:
         capability_hints: dict[str, str] | None = None,  # P4 策略生成:registry verify_hint 聚合;None=空 dict
         dom_prober: Any = None,  # A2 L3 DOM 探针:DomProber | None;None=未接入,行为同现状(L3 跳过)
         gui_prober: Any = None,  # 2d GUI 探针:GuiProber | None;None=未接入,GUI 验证 lane 跳过
+        manage_runtime_context: bool = False,  # inline 路径自建 runtime 上下文(daemon 在 worker 外部自设;此开关给 inline)
+        project_mode: bool = False,  # managed 时建立的上下文是否 project 模式(verify_dir==workspace,篡改可见)
     ) -> None:
         self._store = store
         self._bus = bus
@@ -348,6 +351,12 @@ class AgentLoop:
         # 2d GUI 探针 + 挂起 expected_text(propose_gui_verify 声明时存;verify 阶段消费)。
         self._gui_prober = gui_prober
         self._pending_gui_expected_text: str = ""
+        # P0 护城河:inline 路径(build_loop_factory)恒 verify_dir==workspace,却此前从不 set_context →
+        # runtime.current() 落默认沙盒(project_mode=False)→ guard_project_tests 返 0、verify 跑错目录。
+        # managed=True 时 run() 起始自建上下文,与 daemon worker.py 的 set_context 对称。daemon 路径
+        # (build_run_stack)不开此开关 → worker 仍自管,行为零变更。
+        self._manage_runtime_context = manage_runtime_context
+        self._project_mode = project_mode
         self._actions = 0
         self._fail_count = 0
         self._started = 0.0
@@ -818,6 +827,16 @@ class AgentLoop:
                         "或在 config 给该 profile 设 multimodal override。"
                     )
         self._reset_run_state()
+        # P0 护城河:inline 路径自建 runtime 上下文(daemon 在 worker.py 外部自设;inline 此前漏设 →
+        # project_mode=False → guard_project_tests 返 0、verify 跑默认 ~/.argos/verify 而非用户项目)。
+        # 必须早于下面的 guard_project_tests / spawn / verify(它们都读 runtime.current())。set-and-leave:
+        # inline 单 session 每次 run 起始都重设,无跨 run 残留风险;daemon 不开此开关,行为零变更。
+        if self._manage_runtime_context:
+            from argos import runtime as _rt
+            _rt.set_context(_rt.RunContext(
+                workspace=self._workspace, verify_dir=self._verify_dir,
+                project_mode=self._project_mode,
+            ))
         # 拍 workspace 快照(供 /undo 还原);失败不阻断 run,仅 _last_snapshot = None 走"/undo
         # 不可用"诚实降级路径。延迟 import 避免 core.snapshot ↔ runtime 之间未来的循环风险。
         self._last_snapshot = None
@@ -923,13 +942,14 @@ class AgentLoop:
         顺序锁死——若改了位置,先看 spec §12.1。
         """
         return (
-            "\n\n## 工具签名速查(本会话新签名)\n"
-            "- read_file(path, offset: int = 0, limit: int | None = None)\n"
-            "  · offset=起始行号(0-based),limit=读多少行(None=读到 EOF)\n"
-            "- edit_file(path, old, new, all_occurrences: bool = False)\n"
-            "  · all_occurrences=False(默认)=唯一匹配;True=替换全部(上限 1000 处)\n"
-            "· 沙箱命令 /undo 还原本轮 run 起点的文件改动(不发)\n"
-            "· 沙箱命令 /retry 重发本会话最后一条 user 消息(忙时先 Esc)\n"
+            "\n\n<tool_signatures>\n"
+            "- read_file(path, offset: int = 0, limit: int | None = None) "
+            "— offset = start line (0-based), limit = how many lines (None = to EOF)\n"
+            "- edit_file(path, old, new, all_occurrences: bool = False) "
+            "— all_occurrences=False (default) = unique match; True = replace all (max 1000)\n"
+            "- slash /undo reverts this run's file changes; /retry resends your last "
+            "message (press Esc first if busy).\n"
+            "</tool_signatures>"
         )
 
     async def _maybe_proactive_compact(self, session_id: str, step: int) -> AsyncIterator["Event"]:
@@ -1113,6 +1133,16 @@ class AgentLoop:
         if _os_cu.environ.get("ARGOS_WORKFLOWS"):
             from argos.core.honesty import WORKFLOW_PROMPT
             safe = safe + "\n\n" + WORKFLOW_PROMPT
+        # LSP 工具段:仅当用户显式创建了 ~/.argos/lsp.json 且 servers 非空才注入 ——
+        # load() 在文件不存在时返回内置默认(含 python server),所以必须先检查文件是否存在,
+        # 否则对所有默认用户都会注入 LSP 段(与注释声称的"仅用户配置时"相悖)。
+        try:
+            from argos.lsp.config import LSP_CONFIG_PATH as _LSP_CONFIG_PATH, load as _load_lsp
+            if _LSP_CONFIG_PATH.exists() and _load_lsp().servers:
+                from argos.core.honesty import LSP_TOOLS
+                safe = safe + "\n\n" + LSP_TOOLS
+        except Exception:  # noqa: BLE001 — LSP 配置读取失败诚实降级为不注入(不阻断 run)
+            pass
 
         if not self._cfg.recall:
             return (safe, "")
@@ -1520,14 +1550,21 @@ class AgentLoop:
                 # Phase 5.3(review #9):工作流默认 off,仅 ARGOS_WORKFLOWS=1 时才 dispatch —— 否则即便
                 # 模型(训练先验/被污染的导入技能)凭空吐 propose_workflow,host 也不跑工作流机器(对称于
                 # 提示词不再宣传它);未开时当普通无副作用文本走常规 feedback。
-                raw_spec = (extract_workflow_spec(text)
-                            if __import__("os").environ.get("ARGOS_WORKFLOWS") else None)
-                if raw_spec is not None:
-                    async for ev in self._run_workflow(raw_spec, messages):
+                _wf_on = bool(__import__("os").environ.get("ARGOS_WORKFLOWS"))
+                _wf_spec = (extract_workflow_spec(text) if "propose_workflow" in text else None)
+                if _wf_spec is not None and _wf_on:
+                    async for ev in self._run_workflow(_wf_spec, messages):
                         yield ev
                     step += 1
                     continue   # 工作流结果已作为 feedback 回灌,跳过常规 exec feedback
                 feedback = self._feedback(result)
+                if _wf_spec is not None and not _wf_on:
+                    # 诚实纠偏:工作流默认关闭时 host 不 dispatch,但沙箱 _propose_workflow_pure 回执仍说
+                    # "待审批后执行"(沙箱子进程不知道 host 的开关)—— 不纠偏会让模型空等一个不会跑的工作流。
+                    feedback = (
+                        "[note] 工作流未启用(ARGOS_WORKFLOWS 未设),你的 propose_workflow 不会被执行;"
+                        "请直接单线程完成任务,不要等待它运行。\n" + feedback
+                    )
                 if self._todos:
                     # 锚机制:每个 act step 把当前 todos 摘要回灌(随执行结果一起),
                     # 防长任务在多步后丢失目标/漏更状态。

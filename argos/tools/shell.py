@@ -5,10 +5,13 @@
   · macOS 上把子进程关进 executor 同款 Seatbelt profile —— 默认网络全拒(deny network*)、
     写仅 workspace+temp、凭据目录读拒、其余读放宽。pytest/python/本地构建/python -c 照常跑,
     但网络外泄不可能、越界写被挡、读不到 ~/.ssh 等密钥。
+  · Linux 上用 bwrap(优先)或 unshare 提供等价牢笼;都不可用时 honest-refuse —— 拒绝裸跑。
   · 危险命令(rm -rf / 等)由评估器 hard rule(permissions/)在【审批层】先拦,不靠命令名单。
   · 联网命令(pip install / git push / curl …)默认在牢笼里失败;经"出网阀"审批(Cautious 弹卡、
     Autonomous 自动)后用 allow_network=True 的 profile 跑 —— command_needs_network() 供 broker
     判定是否要走这条阀。
+
+非 darwin/linux 平台(Windows 等)目前不支持 —— honest-refuse 返回明确错误。
 """
 from __future__ import annotations
 
@@ -40,6 +43,17 @@ NETWORK_BINARIES: set[str] = {
 _GIT_NETWORK_SUBCMDS: set[str] = {
     "push", "pull", "fetch", "clone", "remote", "submodule", "ls-remote", "archive",
 }
+
+
+def _linux_available_backend() -> str | None:
+    """探测 Linux 沙箱后端(可被测试 monkeypatch):bwrap 优先,unshare 次之,都无则 None。
+    仅在 sys.platform == 'linux' 的路径里被调用。"""
+    import shutil
+    if shutil.which("bwrap"):
+        return "bwrap"
+    if shutil.which("unshare"):
+        return "unshare"
+    return None
 
 
 def command_needs_network(command: str) -> bool:
@@ -78,12 +92,36 @@ def run_command(command: str, *, workspace: Path | None = None,
         return "错误:空命令。", None
     ws = workspace if workspace is not None else _ws()
     ws.mkdir(parents=True, exist_ok=True)
-    # macOS 上把子进程关进 Seatbelt(写仅 workspace+temp、凭据读拒;allow_network 决定网络);
-    # 非 darwin 退回裸跑(Seatbelt 仅 macOS;打包目标 = macOS)。
+    # ── 平台別沙箱路由 ──────────────────────────────────────────────────────
+    # macOS: Seatbelt(sandbox-exec)写牢笼 workspace+temp,凭据读拒,网络默认 OFF。
+    # Linux: bwrap(优先)或 unshare;都不可用时 honest-refuse —— 拒绝裸跑(P0 修复)。
+    # 其他平台(Windows 等):暂不支持 → honest-refuse。
     if sys.platform == "darwin":
         argv = seatbelt.confined_argv(workspace=ws, argv=parts, allow_network=allow_network)
+    elif sys.platform == "linux":
+        backend = _linux_available_backend()
+        if backend is None:
+            return (
+                "错误:no sandbox backend available on this platform"
+                " (bwrap / unshare not found in PATH)"
+                " — refusing to run shell command uncaged."
+                " Install bwrap (bubblewrap) or unshare and retry.",
+                1,
+            )
+        from ..sandbox.linux import _bwrap_argv, _unshare_argv
+        # allow_network 必须穿透到 Linux cage —— 否则出网阀在 Linux 完全失效:bwrap/unshare 恒
+        # 断网,approved 的 pip/curl/git push 静默失败(2026-06-21 修)。darwin 走 seatbelt 已 honor。
+        if backend == "bwrap":
+            argv = _bwrap_argv(workspace=ws, child_argv=parts, allow_network=allow_network)
+        else:
+            argv = _unshare_argv(workspace=ws, child_argv=parts, allow_network=allow_network)
     else:
-        argv = parts
+        return (
+            f"错误:no sandbox backend available on platform {sys.platform!r}"
+            " — refusing to run shell command uncaged."
+            " Argos supports macOS (Seatbelt) and Linux (bwrap/unshare) only.",
+            1,
+        )
     try:
         r = subprocess.run(argv, cwd=ws, capture_output=True, text=True, timeout=60)
     except subprocess.TimeoutExpired:
