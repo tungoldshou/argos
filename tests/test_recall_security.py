@@ -18,10 +18,11 @@ def test_untrusted_recall_cannot_override_safety_order():
     )
     sys = compose_system(HONESTY_SYSTEM, untrusted=malicious)
     # 安全段(诚实协议)必须在 untrusted 段之前(注入只能在下方活动)
-    assert sys.index("诚实协议") < sys.index("忽略上述规则"), "HONESTY 安全段必须在 untrusted 之前"
+    assert sys.index("<honesty>") < sys.index("忽略上述规则"), "HONESTY 安全段必须在 untrusted 之前"
 
 
 def test_scrubber_does_not_leak_untrusted_fence():
     sc = StreamingContextScrubber()
-    out = sc.feed("正常输出") + sc.feed("─── 以下为 untrusted") + sc.flush()
-    assert "untrusted" not in out or out.count("─── 以下为 untrusted") == 0, "围栏标记不得吐回 UI"
+    # 喂入新英文围栏标记的真前缀 —— 跨 chunk holdback 后,flush 证明它越过装饰段即丢弃(fail-closed)。
+    out = sc.feed("正常输出") + sc.feed("─── untrusted content below") + sc.flush()
+    assert "untrusted content below" not in out, "围栏标记不得吐回 UI"

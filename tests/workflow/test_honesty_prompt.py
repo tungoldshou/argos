@@ -16,9 +16,9 @@ def test_workflow_prompt_carries_propose_workflow_and_ops():
 
 def test_workflow_prompt_independence_and_depth():
     s = WORKFLOW_PROMPT
-    assert "独立" in s          # 何时用:互相独立的子任务
+    assert "independent" in s          # 何时用:互相独立的子任务(全英文化后断言英文)
     # 深度恒 1 / 子 agent 不能再开工作流
-    assert ("深度" in s) or ("子 agent" in s and "工作流" in s)
+    assert ("depth is fixed at 1" in s) or ("sub-agents can't open workflows" in s)
 
 
 def test_workflow_section_absent_from_default_honesty():

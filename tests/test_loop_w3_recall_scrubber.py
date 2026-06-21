@@ -83,7 +83,7 @@ async def test_w3_no_store_recall_degrades_to_honesty_only(monkeypatch):
     assert model.systems, "模型没被调用"
     # 诚实降级:无 store.recall 且无 skill 命中 → 安全段(HONESTY + 环境块),不夹 untrusted 围栏。
     assert model.systems[0].startswith(HONESTY_SYSTEM)
-    assert "【运行环境】" in model.systems[0]   # 环境块属可信安全段,始终注入
+    assert "<environment>" in model.systems[0]   # 环境块属可信安全段,始终注入
     assert UNTRUSTED_OPEN not in model.systems[0]
 
 
@@ -103,9 +103,9 @@ async def test_env_context_injected_into_safe_segment(monkeypatch, tmp_path):
         pass
     sys_prompt = model.systems[0]
     assert sys_prompt.startswith(HONESTY_SYSTEM)        # 安全段仍在最前
-    assert "【运行环境】" in sys_prompt
+    assert "<environment>" in sys_prompt
     assert str(tmp_path) in sys_prompt                   # 真实 workspace 路径已喂
-    assert "无需用代码现场探测" in sys_prompt            # 明示别跑 os.getcwd/pwd
+    assert "don't probe them at runtime" in sys_prompt   # 明示别跑 os.getcwd/pwd
     assert UNTRUSTED_OPEN not in sys_prompt              # 环境块是可信段,不在围栏内
 
 
@@ -169,7 +169,7 @@ async def test_contract_injected_for_structured_task(monkeypatch):
         pass
     sys_prompt = model.systems[0]
     assert sys_prompt.startswith(HONESTY_SYSTEM)
-    assert "结构化工程任务" in sys_prompt and "[C1]" in sys_prompt   # REST 契约 checklist 注入
+    assert "Structured Engineering Task" in sys_prompt and "[C1]" in sys_prompt   # REST 契约 checklist 注入
 
 
 @pytest.mark.asyncio

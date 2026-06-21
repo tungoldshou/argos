@@ -12,10 +12,10 @@ from argos.core.honesty import (
 
 
 def test_honesty_system_content_preserved():
-    # 搬迁不丢内容:诚实协议三条 + 工具声明仍在。
-    assert "诚实协议" in HONESTY_SYSTEM
+    # 搬迁不丢内容:诚实协议三条 + 工具声明仍在(全英文化后断言英文)。
+    assert "<honesty>" in HONESTY_SYSTEM
     assert "web_search" in HONESTY_SYSTEM
-    assert "退出码" in HONESTY_SYSTEM
+    assert "exit code" in HONESTY_SYSTEM
 
 
 def test_compose_system_locks_order():

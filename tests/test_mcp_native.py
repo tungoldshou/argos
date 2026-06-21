@@ -125,7 +125,7 @@ def test_real_echo_server_end_to_end(tmp_path):
         assert "echo back" in tools[0].description
         # tools_summary 给系统提示用(含 server/tool + 描述)。
         summary = mgr.tools_summary()
-        assert "echo/echo" in summary and "可用 MCP 工具" in summary
+        assert "echo/echo" in summary and "Available MCP tools" in summary
         # 真调用 → 走完整 JSON-RPC 往返,server 回 ECHO:hello。
         out = mgr.call("echo", "echo", {"text": "hello"})
         assert out == "ECHO:hello"
