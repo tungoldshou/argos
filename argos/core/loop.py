@@ -121,6 +121,22 @@ _PROPOSE_WORKFLOW = re.compile(r"propose_workflow\(", re.DOTALL)
 # 但纵深的一层被废)。spawn 一律传这个空 dict 的副本,不接受调用方注入。
 _FIXED_SPAWN_NAMESPACE: dict[str, Any] = {}
 
+# 单次工具输出回灌上限(head+tail 保留)。每个 CodeAct 步把整条工具 stdout 当 user 消息追加进
+# messages,而 messages 每步全量重发 → 病态大输出(冗长 build log、run_command dump)会逐步累加、
+# 每步重复计费(2026-06-22 真机:查天气 ↑77.7k)。此上限 > web_extract 自身 8000 截断,故正常
+# 取页/搜索结果原样通过,只兜底真正病态的大输出。
+_FEEDBACK_MAX_CHARS = 10000
+
+
+def _clamp_feedback(out: str, limit: int = _FEEDBACK_MAX_CHARS) -> str:
+    """大输出 head+tail 截断后回灌(报错/栈多在尾部,故首尾都保留);短输出原样返回。"""
+    if len(out) <= limit:
+        return out
+    head = out[: limit * 2 // 3]
+    tail = out[-(limit // 3):]
+    elided = len(out) - len(head) - len(tail)
+    return f"{head}\n…[{elided} chars elided]…\n{tail}"
+
 
 def extract_code_block(text: str) -> str | None:
     """从模型输出抽第一个 Python 代码块;无则 None。"""
@@ -1411,11 +1427,17 @@ class AgentLoop:
             self._tok_in += int(usage.get("input_tokens") or 0)
             self._tok_out += int(usage.get("output_tokens") or 0)
             self._cache_read += int(usage.get("cache_read") or 0)
-            # 上下文窗口占用 = 本次调用【输入侧】token(input + cache),是【当前窗口】真实占用
+            # 上下文窗口占用 = 本次调用【输入侧】真实满 prompt token,是【当前窗口】真实占用
             # (对齐 Claude Code 口径),与上面 _tok_in 的【会话累计】是两个不同的数,不可混。
-            context_used = (int(usage.get("input_tokens") or 0)
-                            + int(usage.get("cache_read") or 0)
-                            + int(usage.get("cache_creation") or 0))
+            # 优先用 protocol 写的 context_total(口径无关:OpenAI 的 prompt_tokens 已含缓存,不能再加;
+            # Anthropic 的 input 不含缓存,需相加 —— 两者都在各自 capture_usage 算好)。缺则回退老式相加。
+            _ctx_total = usage.get("context_total")
+            if _ctx_total is not None:
+                context_used = int(_ctx_total)
+            else:
+                context_used = (int(usage.get("input_tokens") or 0)
+                                + int(usage.get("cache_read") or 0)
+                                + int(usage.get("cache_creation") or 0))
             # 成本:用已就绪的定价表算【会话累计】成本(此前硬编码 None → 永远 $(N/A) 是 bug)。
             # 模型不在 PRICING(用户自带模型且未配单价)→ 回退 None,UI 诚实显 $(N/A),
             # 而非 cost_of 对未知模型返回的 0.0(那会让 $(N/A) 变成失真的恒 $0.000)。
@@ -2123,6 +2145,7 @@ class AgentLoop:
         out = result.stdout
         if result.value_repr:
             out += _t_fb("loop.exec.value_repr", value_repr=result.value_repr)
+        out = _clamp_feedback(out)   # 病态大输出 head+tail 截断,防每步全量回灌撑爆输入 token
         return _t_fb("loop.exec.result", out=out) if out.strip() else _t_fb("loop.exec.no_output")
 
 

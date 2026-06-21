@@ -148,6 +148,12 @@ class AnthropicProtocol:
                 last_usage["cache_read"] = int(u.get("cache_read_input_tokens") or 0)
             if u.get("cache_creation_input_tokens") is not None:
                 last_usage["cache_creation"] = int(u.get("cache_creation_input_tokens") or 0)
+            # context_total = 真实满 prompt 大小。Anthropic 口径:input_tokens 不含缓存,故三者相加。
+            last_usage["context_total"] = (
+                int(u.get("input_tokens") or 0)
+                + int(u.get("cache_read_input_tokens") or 0)
+                + int(u.get("cache_creation_input_tokens") or 0)
+            )
         elif t == "message_delta":
             u = obj.get("usage") or {}
             if u.get("input_tokens") is not None:
@@ -208,6 +214,9 @@ class OpenAIProtocol:
             return
         if u.get("prompt_tokens") is not None:
             last_usage["input_tokens"] = int(u.get("prompt_tokens") or 0)
+            # context_total = 真实满 prompt 大小。OpenAI 口径:prompt_tokens 【已含】 cached_tokens,
+            # 故 prompt_tokens 本身即满 prompt —— 不能再加 cache_read,否则缓存部分被重复计(上下文 % 高估)。
+            last_usage["context_total"] = int(u.get("prompt_tokens") or 0)
         if u.get("completion_tokens") is not None:
             last_usage["output_tokens"] = int(u.get("completion_tokens") or 0)
         details = u.get("prompt_tokens_details") or {}
