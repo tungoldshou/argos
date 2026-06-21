@@ -55,6 +55,23 @@ def test_anthropic_text_delta_and_usage():
     assert u["input_tokens"] == 65 and u["output_tokens"] == 41
 
 
+def test_anthropic_captures_output_tokens_from_message_start():
+    """保真修复:output_tokens 也从 message_start 捕获(Anthropic 规范该帧含此字段)。
+
+    此前只在 message_delta 抓 output —— 第三方 Anthropic 兼容端点若那帧形态不标准/缺字段,
+    该轮 output 静默记 0,累计被低估(真机 agnes-2.0-flash:输入 37.9k 但输出仅 174)。
+    从两帧都抓 = 最大化诚实提取;标准端点 message_delta 的累积值仍覆盖 message_start 初值。
+    """
+    p = AnthropicProtocol()
+    u = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0, "cache_creation": 0}
+    p.capture_usage({"type": "message_start", "message": {"usage": {
+        "input_tokens": 100, "output_tokens": 7}}}, u)
+    assert u["output_tokens"] == 7   # 不再只在 message_delta 抓
+    # message_delta 的累积值仍覆盖 message_start 初值(标准流:最终 output 在 message_delta)
+    p.capture_usage({"type": "message_delta", "usage": {"output_tokens": 523}}, u)
+    assert u["output_tokens"] == 523
+
+
 def test_modelclient_selects_protocol_by_tier():
     from argos.core.models import ModelClient
     mc = ModelClient.__new__(ModelClient)

@@ -253,6 +253,33 @@ async def test_narrow_mode_includes_cost_and_ctx():
         assert "ctx 34%" in t
 
 
+@pytest.mark.asyncio
+async def test_cost_unknown_renders_na_not_shell_form():
+    """成本未知 → render_text 含 'N/A',不再含 shell 样 '$(N/A)'(真机右侧/底栏观感修复)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.set_cost(tokens_in=100, tokens_out=50, cost_usd=None, elapsed_s=1.0)
+        await pilot.pause()
+        t = sb.render_text
+        assert "N/A" in t, f"未知成本应显 N/A,实际:{t!r}"
+        assert "$(N/A)" not in t, f"不应再用 shell 样 $(N/A),实际:{t!r}"
+
+
+@pytest.mark.asyncio
+async def test_token_flow_has_unit():
+    """token 段带 'tok' 单位 + 方向箭头(修真机裸数字 ↑37.9k ↓174 无单位)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sb = app.query_one("#sb", StatusBar)
+        sb.set_cost(tokens_in=37900, tokens_out=174, cost_usd=0.0, elapsed_s=1.0)
+        await pilot.pause()
+        t = sb.render_text
+        assert "↑37.9k" in t and "↓174" in t and "tok" in t, f"实际:{t!r}"
+
+
 # ── 动作计数文字（v3 §4.9 a："动作" 而非 ⚙）──────────────────────
 @pytest.mark.asyncio
 async def test_action_count_label():
@@ -267,6 +294,14 @@ async def test_action_count_label():
         assert "动作7" in t, f"期望'动作7'，实际：{t!r}"
         # ⚙ 是处决字形
         assert "⚙" not in t, f"⚙ 是处决字形，不应出现：{t!r}"
+
+
+def test_action_label_en_has_space():
+    """EN 文案 'action {n}' 数字与词之间有空格 —— 修真机里 'action0' 像标识符的观感。
+    (ZH '动作{n}' 按 CJK 习惯不加空格,保持不变 —— 见 test_action_count_label。)"""
+    from argos.locales.tui_app import EN
+    assert EN["tui.statusbar.action"].format(n=0) == "action 0"
+    assert EN["tui.statusbar.action"].format(n=7) == "action 7"
 
 
 # ── set_blocked / set_alert 签名存在性（公开 API 门禁）──────────────

@@ -53,7 +53,7 @@ EN: dict[str, str] = {
     "tui.statusbar.hints":        "Esc interrupt · \\↵ newline · ^B background · ^O right panel · ^V paste image · ^C/^D quit",
     "tui.statusbar.blocked_label": "approval pending",
     "tui.statusbar.plan_mode":    "[plan mode]",
-    "tui.statusbar.action":       "action{n}",
+    "tui.statusbar.action":       "action {n}",
 
     # ── daemon / inline system notes (app.py _setup_daemon_mode) ─────────────
     "tui.daemon.unavailable": "daemon unavailable, switched to single-process mode (background / cross-session resume unavailable).",

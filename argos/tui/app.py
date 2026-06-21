@@ -209,6 +209,7 @@ class ArgosApp(App):
         self._daemon_client = None     # type: ignore[var-annotated]
         self._daemon_session_id: str | None = None
         self._daemon_run_id: str | None = None   # 当前 run 在 daemon 里的 run_id
+        self._daemon_hb_timer = None             # 会话心跳保活计时器(set_interval 句柄)
         self._last_esc_time: float = 0.0          # 双 Esc 检测(1.5s 内第二次 = cancel)
         self._last_ctrl_c_time: float = 0.0       # 双 Ctrl+C 检测(1.5s 内第二次 = quit)
         # 输入历史环形缓冲(#20):存最近 N 条 goal/slash 提交,↑/↓ 回填输入框
@@ -482,6 +483,67 @@ class ArgosApp(App):
             self.query_one("#status-bar", StatusBar).set_kernel_mode("argosd")
         except Exception:  # noqa: BLE001
             pass
+        # 会话保活:起周期心跳,远低于 daemon 30s TTL —— 否则空闲 >30s 会话被回收,
+        # 下一次 run 撞 401 missing_session(真机 2026-06-22:天气查询后敲 'hello' 连续两条红)。
+        self._start_daemon_heartbeat()
+
+    # ── daemon 会话自愈(2026-06-22:修 401 missing_session 不自愈)──────────────
+    _DAEMON_HB_INTERVAL_S: float = 10.0   # 心跳周期(<< daemon HEARTBEAT_TIMEOUT_S=30s)
+
+    def _start_daemon_heartbeat(self) -> None:
+        """起会话心跳保活 worker(幂等)。未 mount(测试直构)时 set_interval 失败静默。"""
+        if self._daemon_hb_timer is not None:
+            return
+        try:
+            self._daemon_hb_timer = self.set_interval(
+                self._DAEMON_HB_INTERVAL_S, self._daemon_heartbeat_tick
+            )
+        except Exception:  # noqa: BLE001 — 未 mount / 测试场景:无运行中的事件循环
+            self._daemon_hb_timer = None
+
+    async def _daemon_heartbeat_tick(self) -> None:
+        """一次心跳:给 daemon 续命。会话已被回收(missing_session)→ 重建一个,
+        使下一次 run 不再撞 401。其余错误静默(下次 run 会如实暴露问题)。"""
+        if not self._with_daemon or self._daemon_client is None or self._daemon_session_id is None:
+            return
+        from argos.daemon.client import DaemonError
+        from argos.daemon.protocol import CODE_MISSING_SESSION
+        try:
+            await self._daemon_client.heartbeat(self._daemon_session_id)
+        except DaemonError as e:
+            if e.code == CODE_MISSING_SESSION:
+                try:
+                    self._daemon_session_id = await self._daemon_client.create_session()
+                except Exception:  # noqa: BLE001 — 重建失败:下次 run 路径会再尝试 + 诚实报错
+                    pass
+        except Exception:  # noqa: BLE001 — 网络抖动等:静默,不打扰用户
+            pass
+
+    async def _daemon_create_run(self, goal: str, attachments: list | None) -> str:
+        """create_run,会话过期(missing_session)时透明重握手并重试一次。
+
+        单 TUI 场景安全:daemon 在 _require_session 顶部先 reap 掉过期 owner,
+        新建会话即成为 owner(不会卡在 observer 只读)。非 missing_session 错误原样上抛。"""
+        from argos.daemon.client import DaemonError
+        from argos.daemon.protocol import CODE_MISSING_SESSION
+        assert self._daemon_client is not None
+        assert self._daemon_session_id is not None
+        try:
+            return await self._daemon_client.create_run(
+                self._daemon_session_id, goal=goal,
+                workspace=str(self._workspace), approval_level="confirm",
+                attachments=attachments or [],
+            )
+        except DaemonError as e:
+            if e.code != CODE_MISSING_SESSION:
+                raise
+            # 会话被回收 → 重建后重试一次(透明自愈,用户无感)
+            self._daemon_session_id = await self._daemon_client.create_session()
+            return await self._daemon_client.create_run(
+                self._daemon_session_id, goal=goal,
+                workspace=str(self._workspace), approval_level="confirm",
+                attachments=attachments or [],
+            )
 
     # ── 工作态边缘光(spec §工作态边缘光) ─────────────────────────────────
     def _set_border(self, color) -> None:
@@ -2178,15 +2240,9 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         assert self._daemon_client is not None
         assert self._daemon_session_id is not None
 
-        # 创建 run
+        # 创建 run(会话过期时 _daemon_create_run 透明重握手重试一次 —— 修 401 不自愈)
         try:
-            run_id = await self._daemon_client.create_run(
-                self._daemon_session_id,
-                goal=goal,
-                workspace=str(self._workspace),
-                approval_level="confirm",
-                attachments=attachments or [],
-            )
+            run_id = await self._daemon_create_run(goal, attachments)
         except Exception as e:  # noqa: BLE001
             await log.append_line(t("tui.run.create_failed", err=e), kind="error")
             self._run_active = False

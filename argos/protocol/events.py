@@ -105,7 +105,7 @@ class CostUpdate:
     kind = "cost_update"
     tokens_in: int
     tokens_out: int
-    cost_usd: float | None    # 单价未知诚实置 None(不编造成本);渲染为 $(N/A)
+    cost_usd: float | None    # 单价未知诚实置 None(不编造成本);渲染为 $N/A
     elapsed_s: float
     cache_read: int = 0
     context_used: int = 0     # 当前窗口占用 token(输入侧 input+cache),供上下文用量条;非会话累计
