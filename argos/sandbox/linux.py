@@ -61,7 +61,9 @@ def _bwrap_argv(workspace: Path, child_argv: list[str], *,
         "--unshare-pid",       # PID 命名空间
         "--unshare-ipc",       # IPC 命名空间
         "--unshare-uts",       # UTS 命名空间
-        "--unshare-user-uid",  # 用户命名空间(bwrap 自动 map root)
+        "--unshare-user",      # 用户命名空间(预存在 bug 修复 2026-06-21:--unshare-user-uid
+                               # 不是合法 bwrap 选项,真 Linux 上 init 必失败 "Unknown option";
+                               # 正确是 --unshare-user,unprivileged 下 bwrap 自动建 uid/gid map)
         "--die-with-parent",   # 父进程退出则子进程死
     ]
     if not allow_network:
