@@ -125,9 +125,12 @@ EN: dict[str, str] = {
     "widget.mcp_unconfigured": "not configured",
     "widget.mcp_configured": "{n} configured",
     "widget.cache_hit_line": "cache hit {cache_read} tok  {elapsed_s:.1f}s",
+    "widget.cache_idle_line": "cache —  {elapsed_s:.1f}s",
     "widget.compacted_line": "↯ compacted -{reduction_pct:.0f}% · {before}→{after} entries",
     "widget.pruned_line": "↯ pruned {removed} entries · {before}→{after}",
     "widget.memory_recall": "◌ recalled {hits} entries",
+    "widget.run_active": "⏵ {label}",
+    "widget.verdict_no_check": "◌ read-only · no machine check",
     "widget.run_suspended": "(suspended {suspended})",
 
     # activity_panel view header
@@ -386,9 +389,12 @@ ZH: dict[str, str] = {
     "widget.mcp_unconfigured": "未配置",
     "widget.mcp_configured": "{n} 个已配置",
     "widget.cache_hit_line": "缓存命中 {cache_read} tok  {elapsed_s:.1f}s",
+    "widget.cache_idle_line": "缓存 —  {elapsed_s:.1f}s",
     "widget.compacted_line": "↯ 已压缩 -{reduction_pct:.0f}% · {before}→{after} 条",
     "widget.pruned_line": "↯ 已修剪 {removed} 条 · {before}→{after}",
     "widget.memory_recall": "◌ 召回 {hits} 条",
+    "widget.run_active": "⏵ {label}",
+    "widget.verdict_no_check": "◌ 只读 · 无机检",
     "widget.run_suspended": "(suspended {suspended})",
 
     # activity_panel view header

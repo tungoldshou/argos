@@ -85,8 +85,12 @@ EN: dict[str, str] = {
     ),
     "web.tavily_failed": "Tavily search failed: {exc}",
     "web.ssrf_blocked": "SSRF protection: access to private/reserved address {host!r} denied",
-    "web.redirect_limit": "Fetch failed: redirect limit exceeded (>5)",
-    "web.fetch_failed": "Fetch failed: {exc}",
+    "web.redirect_limit": "redirect limit exceeded (>5)",
+    "web.fetch_failed": "{exc}",
+    "web.fetch_transient": (
+        "transient TLS/connection error on {host} ({exc}) — often clears on retry; "
+        "if it persists, try a different source URL"
+    ),
 
     # ── argos/browser.py ──────────────────────────────────────────────────────
 
@@ -175,8 +179,11 @@ ZH: dict[str, str] = {
     ),
     "web.tavily_failed": "Tavily 搜索失败:{exc}",
     "web.ssrf_blocked": "SSRF 防护:拒绝访问私网/保留地址 {host!r}",
-    "web.redirect_limit": "取页失败:redirect 跳数超限(>5)",
-    "web.fetch_failed": "取页失败:{exc}",
+    "web.redirect_limit": "redirect 跳数超限(>5)",
+    "web.fetch_failed": "{exc}",
+    "web.fetch_transient": (
+        "{host} 瞬时 TLS/连接错误({exc})—— 通常重试即好;若持续,换个来源 URL"
+    ),
 
     # ── argos/browser.py ──────────────────────────────────────────────────────
 

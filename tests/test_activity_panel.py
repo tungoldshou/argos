@@ -499,3 +499,78 @@ async def test_activity_panel_reset_run_clears_lsp_log():
         assert ap._lsp_diag_cache
         ap.reset_run()
         assert ap._lsp_diag_cache == {}
+
+
+@pytest.mark.asyncio
+async def test_run_section_shows_active_run_not_none():
+    """C1(2026-06-22 真机:active run 期间 Run 段显 '(none)')。
+    on_run_active 应让 Run 段显当前 run 标签,而非诚实空态。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.reset_run()
+        ap.on_run_active("查成都今天天气")
+        await pilot.pause()
+        run_sec = str(ap._sections()[ap._RUN_IDX].content)
+        assert "查成都今天天气" in run_sec, f"Run 段应显活跃 run,实际:{run_sec!r}"
+        assert "(无)" not in run_sec and "(none)" not in run_sec
+
+
+@pytest.mark.asyncio
+async def test_run_active_label_truncated():
+    app = _H()
+    async with app.run_test() as pilot:
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.on_run_active("x" * 80)
+        await pilot.pause()
+        run_sec = str(ap._sections()[ap._RUN_IDX].content)
+        assert "…" in run_sec and len(run_sec) < 60
+
+
+@pytest.mark.asyncio
+async def test_verdict_no_check_fallback_for_conversational_run():
+    """C3:纯对话/只读 run 不投 VerifyVerdict → 收尾给诚实 '无机检' 兜底,不是误导性 '(none)'。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.reset_run()
+        ap.on_run_end()                       # 全程无 on_verdict
+        await pilot.pause()
+        verdict_sec = str(ap._sections()[ap._VERDICT_IDX].content)
+        assert "无机检" in verdict_sec, f"应诚实兜底,实际:{verdict_sec!r}"
+        assert verdict_sec.strip() not in ("◌ (无)", "◌ (none)")
+
+
+@pytest.mark.asyncio
+async def test_verdict_kept_when_run_was_verified():
+    """有真实 verdict 的 run:收尾不得用兜底覆盖真实裁决。"""
+    class _V:
+        status = "passed"; verify_cmd = "pytest"; detail = ""; self_verified = False; no_test = False
+    app = _H()
+    async with app.run_test() as pilot:
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.reset_run()
+        ap.on_verdict(_V())
+        ap.on_run_end()
+        await pilot.pause()
+        verdict_sec = str(ap._sections()[ap._VERDICT_IDX].content)
+        assert "passed" in verdict_sec
+        assert "无机检" not in verdict_sec
+
+
+@pytest.mark.asyncio
+async def test_cost_hides_cache_hit_zero_until_cache_seen():
+    """D2:非缓存 provider(cache_read 恒 0)不显误导性 'cache hit 0';真见过缓存后才切回完整行。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.on_cost(tokens_in=77000, tokens_out=400, cost_usd=None, elapsed_s=68.8, cache_read=0)
+        await pilot.pause()
+        cost_sec = str(ap._sections()[ap._COST_IDX].content)
+        assert "命中 0" not in cost_sec and "hit 0" not in cost_sec, f"不应显 cache hit 0:{cost_sec!r}"
+        assert "缓存" in cost_sec   # 仍有中性缓存行
+        # 一旦真见过缓存命中 → 切回完整 "缓存命中 N"
+        ap.on_cost(tokens_in=77000, tokens_out=400, cost_usd=None, elapsed_s=70.0, cache_read=512)
+        await pilot.pause()
+        cost_sec2 = str(ap._sections()[ap._COST_IDX].content)
+        assert "512" in cost_sec2 and "命中" in cost_sec2

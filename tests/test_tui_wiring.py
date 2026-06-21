@@ -50,7 +50,10 @@ async def test_run_goal_drives_widgets_from_events():
         badge = app.query_one(VerdictBadge)
         assert badge.status == "passed"
         bar = app.query_one("#status-bar", StatusBar)
-        assert bar.phase == "report"
+        # C2(2026-06-22):run 收尾后 phase 复位 idle —— 不再粘在 'report' 与右栏 idle 互相矛盾。
+        # 事件确实驱动过各 widget 由上面的 CodeActionBlock/DiffView/VerdictBadge(passed) 佐证;
+        # 成本数据收尾后仍保留(mark_run_end 只复位 phase/actions,不清成本)。
+        assert bar.phase == "idle"
         assert "$0.013" in bar.render_text
         assert "12.4k" in bar.render_text
 

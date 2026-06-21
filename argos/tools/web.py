@@ -9,10 +9,11 @@ from argos import web
 from argos.i18n import t
 
 _EXTRACT_COMPRESS_THRESHOLD = 6000
+_SNIPPET_MAX = 300   # 每条结果摘要上限:折叠换行 + 截断,防垃圾长摘要每步全量回灌撑爆输入 token
 
 
 def web_search(query: str, limit: int = 5) -> str:
-    """联网搜索,返回若干结果(标题+链接+摘要)。"""
+    """联网搜索,返回若干结果(标题+链接+摘要)。摘要折行+截断(web_extract 早有截断,这里对齐)。"""
     res = web.search(query, limit)
     if not res.get("success"):
         return t("tools.web.search_failed", error=res.get("error") or t("tools.web.unknown_error"))
@@ -21,7 +22,10 @@ def web_search(query: str, limit: int = 5) -> str:
         return t("tools.web.search_no_results")
     lines = []
     for i, r in enumerate(results, 1):
-        lines.append(f"{i}. {r.get('title', '')}\n   {r.get('url', '')}\n   {r.get('snippet', '')}")
+        snippet = " ".join(str(r.get("snippet") or "").split())   # 折叠所有空白/换行为单空格
+        if len(snippet) > _SNIPPET_MAX:
+            snippet = snippet[:_SNIPPET_MAX] + "…"
+        lines.append(f"{i}. {r.get('title', '')}\n   {r.get('url', '')}\n   {snippet}")
     return "\n".join(lines)
 
 

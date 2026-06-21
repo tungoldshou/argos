@@ -496,3 +496,29 @@ async def test_loop_completion_line_en_verified(monkeypatch):
     finally:
         _catalog.cache_clear()
     # 真实 Verifier 在 verify_cmd=None 时返 unverifiable,见 test_loop_runs_code_and_emits_events。
+
+
+# ── #9:工具输出回灌通用截断(2026-06-22:run_command 等大输出每步全量重发撑爆输入 token)──
+
+def test_clamp_feedback_passes_short_through():
+    from argos.core.loop import _clamp_feedback
+    assert _clamp_feedback("hello world") == "hello world"
+
+
+def test_clamp_feedback_head_tail_truncates_large():
+    from argos.core.loop import _clamp_feedback, _FEEDBACK_MAX_CHARS
+    big = "A" * 8000 + "B" * 8000
+    out = _clamp_feedback(big)
+    assert len(out) < len(big), "大输出必须被截断"
+    assert out.startswith("A") and out.rstrip().endswith("B"), "首尾都应保留"
+    assert "elided" in out, "应有省略标记(ASCII,无 i18n 泄漏)"
+    assert len(out) <= _FEEDBACK_MAX_CHARS + 64
+
+
+def test_feedback_clamps_pathological_stdout():
+    from argos.core.loop import AgentLoop
+    class _R:
+        ok = True; stdout = "X" * 50000; value_repr = ""; exc = None
+    fb = AgentLoop._feedback(_R())
+    assert len(fb) < 20000, "病态大 stdout 回灌必须被截断"
+    assert "elided" in fb
