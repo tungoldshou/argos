@@ -19,6 +19,13 @@ import os
 import sys
 import uuid
 
+# 延迟导入:config 模块在 headless 路径之外也能独立运行;延迟导入防循环。
+# ConfigError 用于捕获无效 --model profile 时的精确错误,避免裸 traceback。
+try:
+    from argos.config import ConfigError as _ConfigError
+except ImportError:  # 离线 / 打包裁剪场景
+    _ConfigError = RuntimeError  # type: ignore[assignment,misc]
+
 
 def add_subparser(sub) -> None:
     """注册 `argos exec` 子命令(由 __main__._build_parser 调用)。"""
@@ -35,6 +42,8 @@ def add_subparser(sub) -> None:
                    help="声明验证命令(退出码裁决;等价 agent 的 propose_verify)")
     p.add_argument("--project", metavar="PATH", help="在指定项目目录干活(默认当前目录)")
     p.add_argument("--model", metavar="NAME", help="本次用指定 config profile(默认当前 active)")
+    p.add_argument("--quiet", action="store_true",
+                   help="不向 stderr 打印进度;仅输出最终结果(适合严格的 CI stdout 捕获)")
     p.set_defaults(func=run_exec)
 
 
@@ -55,12 +64,44 @@ def run_exec(args) -> int:
         print("argos exec: 缺少任务描述(传 positional 参数或经 stdin 提供)。", file=sys.stderr)
         return 2
 
+    # CONTRACT C (#17):在进入 build_components 之前,提前拒绝 trivial verify 命令,
+    # 节省 4 轮模型往返 —— 用户会立刻得到明确的错误,而非等 N 分钟后看 unverifiable。
+    _verify_cmd_arg = getattr(args, "verify_cmd", None)
+    if _verify_cmd_arg:
+        try:
+            from argos.core.types import TRIVIAL_VERIFY_BINS
+            import shlex as _shlex
+            from pathlib import Path as _Path
+            _bin = _Path(_shlex.split(_verify_cmd_arg)[0]).name
+            if _bin in TRIVIAL_VERIFY_BINS:
+                print(
+                    f"argos exec: --verify '{_verify_cmd_arg}' 是 trivial 命令"
+                    f"(永远通过,不验证任何事)—— 拒绝受理,绝不假绿。"
+                    f" 请改用真实测试命令(如 pytest / cargo test / tsc --noEmit)。",
+                    file=sys.stderr,
+                )
+                return 2
+        except Exception:  # noqa: BLE001 — 预检失败不阻断执行;让 Verifier 自行处理
+            pass
+
     from argos.app_factory import build_components, build_loop_factory
+    # 惰性导入真正的 ConfigError:模块级 `from argos.config import ConfigError`(line 25)在
+    # 全量套件的循环导入时序下可能拿到半初始化的 argos.config 而 fallback 成 RuntimeError,
+    # 导致 `except (RuntimeError, _ConfigError)` 退化成接不住 ConfigError。run_exec 被调用时
+    # 所有模块已完整加载,此处导入必拿到真类 → 无效 --model 稳定走 exit 2 而非裸 traceback。
+    from argos.config import ConfigError
     from argos.approval import ApprovalLevel
     from argos.protocol.events import (
         CostUpdate, Error, Escalation, PhaseChange, TokenDelta, VerifyVerdict,
     )
     from argos.routing.effort import EffortLevel
+
+    quiet = bool(getattr(args, "quiet", False))
+
+    def _progress(msg: str) -> None:
+        """向 stderr 打印进度行(--quiet 时静默)。stdout 始终保持干净。"""
+        if not quiet:
+            print(msg, file=sys.stderr, flush=True)
 
     effective_ws = getattr(args, "project", None) or os.getcwd()
     level = ApprovalLevel.AUTO if getattr(args, "auto", False) else ApprovalLevel.ACCEPT_EDITS
@@ -75,10 +116,10 @@ def run_exec(args) -> int:
             workspace=effective_ws,
             model_override=getattr(args, "model", None),
             approval_level=level,
-            verify_cmd=getattr(args, "verify_cmd", None),
+            verify_cmd=_verify_cmd_arg,
             effort=_effort,
         )
-    except RuntimeError as e:  # 无 key → 诚实退出,不假装能跑
+    except (RuntimeError, ConfigError) as e:  # 无 key / 无效 profile → 诚实退出,不假装能跑
         print(f"argos exec: {e}", file=sys.stderr)
         print("argos exec: 运行 `argos setup` 接入模型,或配置环境变量。", file=sys.stderr)
         return 2
@@ -92,9 +133,17 @@ def run_exec(args) -> int:
     loop = build_loop_factory(components)()
     session_id = "exec-" + uuid.uuid4().hex[:8]
 
+    _progress(f"[argos exec] 开始: {prompt[:80]}{'…' if len(prompt) > 80 else ''}")
+
     state: dict = {
         "phase_text": [], "all_text": [], "verdict": None, "cost": None,
         "escalation": None, "error": None,
+        "step": 0,
+    }
+
+    # 阶段名称中→英映射(进度行给 CI 用户看,英文更通用)
+    _PHASE_LABEL: dict[str, str] = {
+        "plan": "plan", "act": "act", "verify": "verify", "report": "report",
     }
 
     async def _drive() -> None:
@@ -104,18 +153,23 @@ def run_exec(args) -> int:
                 state["all_text"].append(ev.text)
             elif isinstance(ev, PhaseChange):
                 state["phase_text"] = []   # 新阶段重置 → 末尾留下最后阶段(report)的文本作 result
+                label = _PHASE_LABEL.get(getattr(ev, "phase", ""), getattr(ev, "phase", "?"))
+                _progress(f"[argos exec] phase → {label}")
             elif isinstance(ev, VerifyVerdict):
                 state["verdict"] = ev.verdict.status
                 # 诚实:区分用户级 passed 与"自验证(较弱)"passed —— 绝不让 self_verified 的弱通过
                 # 在 CI/脚本表面冒充强验证(Verdict.is_user_verified 的同一防火墙语义)。
                 state["self_verified"] = bool(getattr(ev.verdict, "self_verified", False))
+                _progress(f"[argos exec] verify → {ev.verdict.status}")
             elif isinstance(ev, CostUpdate):
                 if ev.cost_usd is not None:
                     state["cost"] = ev.cost_usd   # CostUpdate 是会话累计 → 取最后一个
             elif isinstance(ev, Escalation):
                 state["escalation"] = getattr(ev, "message", None) or getattr(ev, "reason", "") or "agent escalated"
+                _progress(f"[argos exec] escalation: {state['escalation']}")
             elif isinstance(ev, Error):
                 state["error"] = ev.message
+                _progress(f"[argos exec] error: {state['error']}")
 
     try:
         asyncio.run(_drive())

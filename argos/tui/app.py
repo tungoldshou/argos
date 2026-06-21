@@ -125,15 +125,18 @@ class ArgosApp(App):
     # 这里仍显式声明作双保险。与 on_mount 的手动 focus 一致。
     AUTO_FOCUS = "#prompt"
 
-    # Esc 打断当前任务(对齐 Claude Code):取消正在跑的 run。模型推理/等待这类 await 点能即时
-    # 中断;若卡在同步 exec_code(命令/浏览器动作占住事件循环)则需等该动作返回后才落地(诚实:
-    # 不假装能瞬间杀掉同步子进程)。idle 时按 Esc 无副作用。
+    # Esc / Ctrl+C 打断当前任务(对齐 Claude Code / all major agent CLIs):
+    #   · ctrl+c → interrupt(打断当前 run;idle 时第一次无副作用,第二次 1.5s 内退出)
+    #   · ctrl+d → quit(确定性退出,无论是否有 run)
+    #   · escape → interrupt(同 ctrl+c;收起菜单 / 打断二合一)
+    # 这与 Claude Code / shell 约定一致:Ctrl+C 是"打断/中断",Ctrl+D 是"退出/EOF"。
     # `Ctrl+B` 后台化(daemon 模式):把当前 run 推到 daemon → state=suspended(可跨 session 续)。
     BINDINGS = [
-        ("ctrl+c", "quit", "退出"),
+        ("ctrl+c", "ctrl_c", "打断/退出"),       # 打断 run;双击退出(同 Claude Code)
+        ("ctrl+d", "quit", "退出"),               # 确定性退出(同 shell EOF)
         ("escape", "interrupt", "打断"),
         ("ctrl+b", "background", "后台"),
-        ("ctrl+o", "cycle_panel", "右栏视图"),   # TUI v2:智能切手动 pin/循环
+        ("ctrl+o", "cycle_panel", "右栏视图"),    # TUI v2:智能切手动 pin/循环
         ("ctrl+v", "paste_image", "贴图"),        # 读剪贴板图片 → [图片 #N] chip
         # #5b T7:tab 切换(放在 Ctrl+1..5 子绑定,tab_strip widget 自己处理)
     ]
@@ -206,6 +209,10 @@ class ArgosApp(App):
         self._daemon_session_id: str | None = None
         self._daemon_run_id: str | None = None   # 当前 run 在 daemon 里的 run_id
         self._last_esc_time: float = 0.0          # 双 Esc 检测(1.5s 内第二次 = cancel)
+        self._last_ctrl_c_time: float = 0.0       # 双 Ctrl+C 检测(1.5s 内第二次 = quit)
+        # 输入历史环形缓冲(#20):存最近 N 条 goal/slash 提交,↑/↓ 回填输入框
+        self._input_history: list[str] = []
+        self._input_history_max: int = 50
         # TUI v2 行内审批队列:同屏最多一个活动 InlineChoice,其余 FIFO 排队
         #(并发 ApprovalRequest 不互踩;前一个决策落定后再 mount 下一个)。
         self._choice_active = False
@@ -418,11 +425,23 @@ class ArgosApp(App):
 
         ready = await probe_or_spawn(socket_path)
         if not ready:
-            # inline fallback 模式
+            # inline fallback 模式(daemon 尝试拉起但失败/超时)
             self._kernel_mode = "inline"
             self._with_daemon = False
             try:
                 self.query_one("#status-bar", StatusBar).set_kernel_mode("inline(单进程)")
+            except Exception:  # noqa: BLE001
+                pass
+            # #30:尝试拉起 daemon 失败后,在 transcript 落一条系统说明(诚实标注)。
+            # ARGOS_NO_DAEMON=1 明确关闭时不显示(那是用户主动选择 inline,不是 fallback)。
+            try:
+                self.run_worker(
+                    self.query_one("#transcript", Transcript).append_line(
+                        "daemon 不可用,已切换到单进程模式(后台化 / 跨会话续跑不可用)。",
+                        kind="system",
+                    ),
+                    exclusive=False,
+                )
             except Exception:  # noqa: BLE001
                 pass
             return
@@ -439,6 +458,17 @@ class ArgosApp(App):
             self._with_daemon = False
             try:
                 self.query_one("#status-bar", StatusBar).set_kernel_mode("inline(单进程)")
+            except Exception:  # noqa: BLE001
+                pass
+            # #30:session 创建失败也属于 daemon 不可用,同样落说明行
+            try:
+                self.run_worker(
+                    self.query_one("#transcript", Transcript).append_line(
+                        "daemon 不可用,已切换到单进程模式(后台化 / 跨会话续跑不可用)。",
+                        kind="system",
+                    ),
+                    exclusive=False,
+                )
             except Exception:  # noqa: BLE001
                 pass
             return
@@ -656,10 +686,26 @@ class ArgosApp(App):
         menu = self.query_one("#slash-menu", SlashMenu)
         menu.show_matches(match_commands(event.text_area.text))
 
+    def _push_input_history(self, text: str) -> None:
+        """将提交的文本压入输入历史环形缓冲(去重最近一条;容量 _input_history_max)。"""
+        t = text.strip()
+        if not t:
+            return
+        # 避免连续重复
+        if self._input_history and self._input_history[-1] == t:
+            return
+        self._input_history.append(t)
+        if len(self._input_history) > self._input_history_max:
+            self._input_history.pop(0)
+
     def handle_input(self, text: str, attachments: list | None = None) -> None:
         """slash 走分发;否则当 goal(可带图片 attachments)。同步入口(测试可直接调)。
 
-        Transcript 落行是 async,故 slash 分发与"任务进行中"提示都包成 worker(测试 pause 后可见)。"""
+        Transcript 落行是 async,故 slash 分发与"任务进行中"提示都包成 worker(测试 pause 后可见)。
+        非空提交(goal 或 slash)都压入输入历史环形缓冲,供 ↑/↓ 历史导航回填。"""
+        # 提交时压历史(slash 和 goal 都记;/retry /clear 等单次偶用的命令也记,方便重试)
+        if text.strip():
+            self._push_input_history(text)
         cmd = parse_slash(text)
         if cmd is None:
             if text.strip():
@@ -735,8 +781,18 @@ class ArgosApp(App):
         elif cmd.name == "help":
             from argos.tui.commands import COMMAND_HELP
             lines = ["命令(打 / 也会就地列出,Tab 补全):"]
-            lines += [f" · /{name:<8} {desc}" for name, desc in COMMAND_HELP.items()]
-            lines.append("快捷键:Esc 打断当前任务 · 行尾 \\ + 回车 换行 · ^C 退出")
+            lines += [f" · /{name:<16} {desc}" for name, desc in COMMAND_HELP.items()]
+            lines.append(
+                "快捷键:\n"
+                "  Esc / Ctrl+C   打断当前任务\n"
+                "  Ctrl+C (空闲)  连按两次退出\n"
+                "  Ctrl+D         退出\n"
+                "  Ctrl+B         后台化当前 run(daemon 模式)\n"
+                "  Ctrl+O         循环切换右栏视图\n"
+                "  Ctrl+V         从剪贴板粘贴图片\n"
+                "  行尾 \\ + 回车  插入换行(多行输入)\n"
+                "  ↑ / ↓          浏览输入历史"
+            )
             await log.append_line("\n".join(lines), kind="system")
         elif cmd.name == "tools":
             await self._show_tools(log)
@@ -749,6 +805,10 @@ class ArgosApp(App):
             await self._undo(log)
         elif cmd.name == "ledger":
             await self._ledger_cmd(log)
+        elif cmd.name == "journal":
+            await self._journal_cmd(log, cmd.arg)
+        elif cmd.name == "setup":
+            await self._setup_cmd(log)
         elif cmd.name == "retry":
             await self._retry(log)
         elif cmd.name == "plan":
@@ -977,11 +1037,55 @@ class ArgosApp(App):
 
         widget = LedgerTable(entries=visible, run_id=run_id)
         await log.mount_block(widget)
-        await log.append_line("每条回执签名 · summary 模板生成不调模型", kind="system")
+        journal_path = Path.home() / ".argos" / "ledger" / f"{run_id}.jsonl"
+        await log.append_line(
+            f"每条回执签名 · summary 模板生成不调模型\n"
+            f"journal: {journal_path}  (/journal {run_id} 查路径)",
+            kind="system",
+        )
+
+    async def _setup_cmd(self, log) -> None:
+        """/setup:显示配置向导入口。TUI 内无法直接运行 argos setup(它是交互式 CLI);
+        诚实告知路径,让用户退出后运行。"""
+        await log.append_line(
+            "配置向导\n"
+            "  退出 TUI 后运行:\n"
+            "    argos setup\n"
+            "  向导会引导你填写 provider、API key,并做连通性测试,\n"
+            "  结果写入 ~/.argos/.env 和 ~/.argos/config.json。\n"
+            "  也可手动编辑 ~/.argos/.env 添加 ANTHROPIC_API_KEY=... 等环境变量。",
+            kind="system",
+        )
+
+    async def _journal_cmd(self, log, arg: str) -> None:
+        """/journal [run_id]:显示账本 JSONL 的绝对路径。
+
+        有 run_id → 显示指定 run 的路径;无参数 → 显示当前 run 的路径(若有)。
+        任意情况下都只打路径,不尝试读文件内容(避免在 TUI 里输出大量 JSONL)。
+        """
+        ledger_dir = Path.home() / ".argos" / "ledger"
+        run_id = arg.strip() or getattr(self, "_daemon_run_id", None) or getattr(self, "_run_id", None)
+        if run_id:
+            journal_path = ledger_dir / f"{run_id}.jsonl"
+            await log.append_line(
+                f"账本 JSONL: {journal_path}\n"
+                f"  查看:cat {journal_path}\n"
+                f"  实时跟踪:tail -f {journal_path}",
+                kind="system",
+            )
+        else:
+            await log.append_line(
+                f"账本目录: {ledger_dir}\n"
+                "  当前会话暂无 run_id(未起 run 或非 daemon 模式)。\n"
+                "  用法:/journal <run_id>",
+                kind="system",
+            )
 
     async def _retry(self, log) -> None:
         """/retry:重发本 session 最后一条 user 消息。busy / 空 / 无 store 诚实报。
 
+        改进:若 _input_history 有记录,先把上一条 goal 回填到输入框(#20 历史导航),
+        再执行 start_run。
         实现简化:demo 模式(FakeLoop,无 store)下诚实报"当前 store 不支持"——
         真模式需要 build_components 把 store 注入到 App(self._store 字段),
         那是更大装配改动,留作下一 PR。
@@ -989,8 +1093,24 @@ class ArgosApp(App):
         if self._run_active:  # busy 守卫(实际字段是 _run_active,非 _busy)
             await log.append_line("先 Esc 打断当前任务,再 /retry。", kind="system")
             return
-        # store 临时获取:走 loop_factory 拿一个临时 loop 借 .store 属性
-        # (实际应通过 build_components 注入;这是 demo 模式下的临时方案)
+        # 优先从输入历史取上一条(最近提交的 goal/slash;不需要 store):
+        # 找最后一条非 slash(非 / 开头)的历史条目作为 retry goal。
+        last_goal: str | None = None
+        for entry in reversed(getattr(self, "_input_history", []) or []):
+            if not entry.startswith("/"):
+                last_goal = entry
+                break
+        if last_goal:
+            # 回填输入框(#20)
+            try:
+                prompt_widget = self.query_one("#prompt", PromptArea)
+                prompt_widget._refill(last_goal)
+                prompt_widget.reset_history_nav()
+            except Exception:  # noqa: BLE001
+                pass
+            await self.start_run(last_goal)
+            return
+        # 无历史:降级到 store 路径(原有逻辑)
         loop = self._loop_factory() if self._loop_factory is not None else None
         store = getattr(loop, "store", None) if loop is not None else None
         if store is None or not hasattr(store, "get_messages"):
@@ -1290,9 +1410,11 @@ class ArgosApp(App):
                 from argos.tui.widgets.tab_strip import _format_cost
                 cost = _format_cost(info.get("cost_usd"))
                 wt = info.get("worktree_path") or "(none)"
+                journal_path = Path.home() / ".argos" / "ledger" / f"{run_id}.jsonl"
                 await log.append_line(
                     f"{run_id}: state={info.get('state')}  events={info.get('events_count')}  "
-                    f"cost={cost}  worktree={wt}",
+                    f"cost={cost}  worktree={wt}\n"
+                    f"  journal: {journal_path}",
                     kind="system",
                 )
             except Exception as e:  # noqa: BLE001
@@ -2221,16 +2343,26 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 await log.mount_block(badge)
             badge.show(ev.verdict)
             ap.on_verdict(ev.verdict)   # 右栏 Verdict 区段(verify/idle 视图)同步
-            # E4 防火墙:self_verified=True 的 passed 用 warning 橙而非 success 绿
-            self._set_border(glow.verdict_color_self_aware(
-                ev.verdict.status,
-                self_verified=bool(getattr(ev.verdict, "self_verified", False)),
-            ))
-            if ev.verdict.status in ("failed", "unverifiable"):
-                # 锁定告警色(边框 + StatusBar -alert),后续 report 阶段色/眼不得覆盖(陷阱2)
-                # unverifiable 锁橙(真相不确定)而非红——三态语义纯度
-                self._set_terminal_glow(
-                    True, kind="warn" if ev.verdict.status == "unverifiable" else "fail")
+            # CONTRACT A:no_test==True = 仅因无 verify_cmd 而未机检,不是真实错误/篡改。
+            # no_test 态用中性 idle 边框 + 不锁 StatusBar 告警色(绝不染橙/红)。
+            # 只有"genuine unverifiable"(tamper/timeout/declared-but-failed) 才锁橙。
+            _is_no_test = bool(getattr(ev.verdict, "no_test", False))
+            if _is_no_test:
+                # 中性收尾:边框回 idle,不锁 glow(诚实:没跑验证≠失败)
+                from argos.tui import glow as _glow_mod
+                self._set_border(_glow_mod.IDLE_BORDER)
+                self._set_terminal_glow(False)
+            else:
+                # E4 防火墙:self_verified=True 的 passed 用 warning 橙而非 success 绿
+                self._set_border(glow.verdict_color_self_aware(
+                    ev.verdict.status,
+                    self_verified=bool(getattr(ev.verdict, "self_verified", False)),
+                ))
+                if ev.verdict.status in ("failed", "unverifiable"):
+                    # 锁定告警色(边框 + StatusBar -alert),后续 report 阶段色/眼不得覆盖(陷阱2)
+                    # unverifiable 锁橙(真相不确定)而非红——三态语义纯度
+                    self._set_terminal_glow(
+                        True, kind="warn" if ev.verdict.status == "unverifiable" else "fail")
         elif isinstance(ev, CostUpdate):
             bar.set_cost(
                 tokens_in=ev.tokens_in, tokens_out=ev.tokens_out,
@@ -2280,7 +2412,8 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 f"◕ 工作流「{ev.name}」完成:{ev.synthesis}", kind="done")
         elif isinstance(ev, ToolReceipt):
             # 回执进活动栏面板的"回执"区 + 工具计数,不再进 transcript(Task 10)。
-            ap.on_receipt(ev.receipt.action)
+            # #6:把 HMAC 签名前 8 字符一并传入,让"已签名"成为可见、可证伪的事实而非空标签。
+            ap.on_receipt(ev.receipt.action, ev.receipt.sig[:8])
         elif isinstance(ev, ApprovalRequest):
             await self._handle_approval(ev)
         elif isinstance(ev, PlanRendered):
@@ -2363,6 +2496,40 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             await log.append_line(f"◉ 错误:{ev.message}{chain}", kind="error")
             self._set_border(glow.ERROR)
             self._set_terminal_glow(True)   # 告警锁色 + StatusBar -alert(陷阱2)
+
+    def action_ctrl_c(self) -> None:
+        """Ctrl+C:打断当前 run(同 Esc);idle 时 1.5s 内连按两次才退出。
+
+        行为设计(对齐 Claude Code / Cursor / Aider 惯例):
+          · 有 run 在跑 → 打断 run(同 action_interrupt);不退出
+          · idle(无 run)且 1.5s 内第二次 → 退出(友好的双击退出,防误触)
+          · idle 且首次 → transcript 提示"再按一次 Ctrl+C 退出",记录时间戳
+        用户也可随时 Ctrl+D 确定性退出。
+        """
+        import time
+        now = time.time()
+        # 有 run 在跑 → 转发到打断逻辑(不退出)
+        if self._run_active:
+            self.action_interrupt()
+            self._last_ctrl_c_time = 0.0  # 打断后重置退出计时
+            return
+        # idle:双击检测
+        if (now - self._last_ctrl_c_time) < 1.5:
+            self._last_ctrl_c_time = 0.0
+            self.exit()
+            return
+        # 首次:提示
+        self._last_ctrl_c_time = now
+        try:
+            self.run_worker(
+                self.query_one("#transcript", Transcript).append_line(
+                    "再按一次 Ctrl+C 退出(或 Ctrl+D 直接退出)。",
+                    kind="system",
+                ),
+                exclusive=False,
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     def action_interrupt(self) -> None:
         """Esc:打断当前 run(daemon 模式 = step-boundary pause,legacy = 整 run kill)。

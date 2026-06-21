@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from argos.tui.widgets.tab_strip import TabStrip, _STATE_ICON, _format_cost, _COL_FAIL
+from argos.tui.widgets.tab_strip import TabStrip, _STATE_ICON, _format_cost, _COL_FAIL, _truncate, _cell_len
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -204,3 +204,82 @@ class TestFormatCost:
 
     def test_over_dollar(self):
         assert _format_cost(1.23) == "$1.23"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# finding #33: CJK-safe truncation (cell width, not len)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCjkTruncation:
+    """finding #33: _truncate 按 cell 宽度截断,CJK 字符占 2 cell。"""
+
+    def test_ascii_truncation_unchanged(self):
+        """纯 ASCII 字符串截断行为与旧 len() 一致。"""
+        assert _truncate("hello", 10) == "hello"   # 无需截断
+        result = _truncate("a" * 30, 24)
+        assert result.endswith("…")
+        assert _cell_len(result) <= 24
+
+    def test_cjk_title_truncates_by_cell_width(self):
+        """中文 tab 标题按 cell 宽度截断(每字 2 cell)。"""
+        # 13 个中文字符 = 26 cells; 限 24 → 须截断
+        title = "这是一个很长的中文任务名称标题"
+        result = _truncate(title, 24)
+        assert result.endswith("…"), f"CJK 截断结果须以 … 结尾: {result!r}"
+        assert _cell_len(result) <= 24, (
+            f"截断后 cell_len={_cell_len(result)} 超过 24: {result!r}"
+        )
+
+    def test_cjk_short_title_not_truncated(self):
+        """短中文标题(cell_len <= 24)不被截断。"""
+        title = "短任务"  # 3 字符 = 6 cells
+        assert _truncate(title, 24) == title
+
+    def test_mixed_cjk_ascii_truncation(self):
+        """中英混合字符串按 cell 宽度正确截断。"""
+        title = "Task-任务执行-2026"  # 混合
+        result = _truncate(title, 24)
+        assert _cell_len(result) <= 24
+
+    def test_update_tabs_truncates_cjk_correctly(self):
+        """update_tabs() 对 CJK goal 的截断结果 cell_len <= 24。"""
+        strip = TabStrip()
+        long_cjk = "中" * 15  # 30 cells, 远超 24
+        strip.update_tabs([{
+            "run_id": "r1", "goal": long_cjk,
+            "state": "running", "cost_usd": None,
+        }])
+        tab = strip.get_tabs()[0]
+        assert _cell_len(tab["title"]) <= 24, (
+            f"tab 标题 cell_len={_cell_len(tab['title'])} 超过 24"
+        )
+        assert tab["title"].endswith("…")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# finding #26: CJK-safe click hit-test
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCjkClickHitTest:
+    """finding #26: on_click 用 cell_len 而非 len() 计算 tab 宽度区间。"""
+
+    def test_cell_len_imported(self):
+        """_cell_len 可从 tab_strip 模块导入(证明已引入 rich.cells)。"""
+        assert callable(_cell_len)
+
+    def test_cjk_title_cell_len_is_double_ascii(self):
+        """中文字符 cell_len == 2 × len()(每字占 2 cell)。"""
+        title = "任务"
+        assert _cell_len(title) == 4
+        assert len(title) == 2
+
+    def test_truncate_uses_cell_len_for_cjk(self):
+        """_truncate 产生的结果 cell_len <= n, 而 len() 可能 < n(CJK 仍正确截断)。"""
+        title = "中" * 12   # 12 chars = 24 cells: 恰好在边界
+        result = _truncate(title, 24)
+        # 恰好 24 cells → 无需截断
+        assert result == title
+        title_overflow = "中" * 13  # 26 cells > 24 → 必须截断
+        result2 = _truncate(title_overflow, 24)
+        assert _cell_len(result2) <= 24
+        assert result2.endswith("…")

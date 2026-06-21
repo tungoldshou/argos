@@ -43,7 +43,7 @@ ARGOS_NIGHT = Theme(
         "ink-bright": "#ECEEF5",   # bold:assistant 强调/verdict/当前阶段
         "ink":        "#C8CCDA",   # normal:散文正文(默认阅读层)
         "ink-dim":    "#7E869C",   # normal:次要/元信息/工具名/step 号
-        "ink-faint":  "#525A73",   # normal:键提示/占位符/空态/计数
+        "ink-faint":  "#6B7494",   # normal:键提示/占位符/空态/计数(finding #27:从 #525A73 升至 ~3.5:1 对比度)
         "ink-ghost":  "#3A4055",   # normal:折叠提示/未激活树枝
 
         # ── 金系 3 档(chrome 强调)──

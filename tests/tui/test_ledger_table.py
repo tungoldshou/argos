@@ -189,6 +189,10 @@ class TestColumnHeaders:
         """列头含 '撤销'。"""
         assert "撤销" in self._render()
 
+    def test_col_sig_header(self):
+        """finding #6:列头含 '签名'(第 6 列,使签名声明可伪证)。"""
+        assert "签名" in self._render()
+
     def test_hairline_rule_present(self):
         """列头下有 '─' 发丝分隔线。"""
         assert "─" in self._render()
@@ -396,9 +400,9 @@ class TestUndoStateColumn:
         assert any("7E869C" in s.upper() or "7e869c" in s.lower() for s in spans)
 
     def test_undo_impossible_color_ink_faint(self):
-        """undo_state='impossible' → $ink-faint (#525A73)（灰掉，诚实不可撤销）。"""
+        """undo_state='impossible' → $ink-faint (#6B7494)（灰掉，诚实不可撤销; finding #27 升对比度）。"""
         spans = self._spans_hex("impossible")
-        assert any("525A73" in s.upper() or "525a73" in s.lower() for s in spans)
+        assert any("6B7494" in s.upper() or "6b7494" in s.lower() for s in spans)
 
     def test_undo_sentinel_dash_for_unknown(self):
         """undo_state 为未知值时 → 渲染 '—' em-dash sentinel，$ink-faint。"""
@@ -470,8 +474,9 @@ class TestHexConstants:
         assert m._COL_INK_DIM.upper() == "#7E869C"
 
     def test_col_ink_faint(self):
+        # finding #27: 升至 #6B7494(对比度从 ~2.7 升至 ~3.5:1)
         m = self._mod()
-        assert m._COL_INK_FAINT.upper() == "#525A73"
+        assert m._COL_INK_FAINT.upper() == "#6B7494"
 
     def test_col_pass(self):
         m = self._mod()
@@ -516,8 +521,8 @@ class TestHonestyInvariants:
         assert any("F7768E" in h.upper() for h in spans_hex)
         # reversible no → $fail
         assert any("F7768E" in h.upper() for h in spans_hex)
-        # undo impossible → $ink-faint
-        assert any("525A73" in h.upper() for h in spans_hex)
+        # undo impossible → $ink-faint (finding #27: #6B7494)
+        assert any("6B7494" in h.upper() for h in spans_hex)
 
     def test_error_never_rendered_as_success(self):
         """risk=high + reversible=no 不渲染任何 $pass (#9ECE6A) green。"""
@@ -569,14 +574,16 @@ class TestHonestyInvariants:
         assert any("FF9E64" in h for h in spans_hex), "med risk unverif missing"
         assert any("F7768E" in h for h in spans_hex), "high risk fail missing"
 
-    def test_receipt_sig_not_in_per_row_render(self):
-        """receipt_sig 不出现在每行数据列（仅在 footer 文字中引用，不作列渲染）。"""
+    def test_receipt_sig_visible_in_per_row_render(self):
+        """finding #6:receipt_sig 前 8 字符必须出现在每行数据(使"已签名"声明可伪证)。"""
         LedgerTable = _import_widget()
         e = _make_entry(receipt_sig="deadbeefcafe0000")
         w = LedgerTable(entries=[e], run_id=e.run_id)
         text = w.rendered_text
-        # receipt_sig 的 16 字符不应逐行渲染到 table body
-        assert "deadbeefcafe0000" not in text
+        # 前 8 字符应出现在 table body(完整 16 字符不一定全显示)
+        assert "deadbeef" in text, (
+            f"receipt_sig 前 8 字符未出现在 table body — 签名声明不可伪证: {text!r}"
+        )
 
     def test_empty_ledger_zero_count(self):
         """空账本 → 0 条（诚实空态）。"""

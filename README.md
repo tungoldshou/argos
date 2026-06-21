@@ -81,9 +81,9 @@ Needs Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
-uv run argos              # launch the Argos TUI
 uv run argos setup        # interactive wizard: pick a provider, paste a key,
                           # connection + CodeAct-format probe (real request)
+uv run argos              # launch the Argos TUI
 uv run argos --selftest   # offline full-machine self-check, prints verdicts
 uv run pytest -q          # run the test suite
 ```
@@ -100,6 +100,21 @@ Without an API key, `argos` falls back to an honest demo state — it does
 > PyPI, and platform packages are **infrastructure in progress (stage #13)**
 > and will 404 until those artifacts are published. The only path that works
 > today is cloning and running via `uv`.
+
+### Platform support
+
+| Platform | Sandbox backend | Write cage | Notes |
+|---|---|---|---|
+| **macOS** | Apple Seatbelt (`sandbox-exec`) | Full kernel-level confinement | Recommended; `argosd` daemon supported |
+| **Linux** | `bwrap` (preferred) or `unshare` fallback | `bwrap`: strong; `unshare` fallback: **weaker write cage** — filesystem namespace only, no seccomp | `bwrap` requires bubblewrap ≥ 0.3; `unshare` is a best-effort fallback |
+| **Windows** | Not supported | — | No sandbox backend; `argos` will raise `RuntimeError` at startup |
+
+> **Linux unshare note.** When `bwrap` is unavailable, Argos falls back to a
+> Linux user-namespace unshare sandbox. This provides basic process isolation
+> but the write cage is weaker than bwrap's bind-mount confinement: a
+> determined agent could reach paths outside the declared workspace via
+> `/proc` or bind mounts. Use `bwrap` (`sudo apt install bubblewrap`) for
+> a stronger guarantee.
 
 ### From source (the path that works today)
 
@@ -533,6 +548,30 @@ The trust-outs that remain (and the user is told about each):
   CONFIRM, every action), the ledger, and the audit trail. Every
   computer-use action is `risk=high + reversible=False`. Only enable
   this if you are willing to watch what the agent does.
+---
+
+## Uninstall
+
+Stop the daemon if it is running, then remove all Argos state:
+
+```bash
+# Stop the background daemon (if running)
+pkill -f argosd || true
+
+# Remove all Argos state: config, runs, memory, ledger, conductor orders
+rm -rf ~/.argos
+
+# If installed from source via uv, remove the checkout:
+# rm -rf /path/to/argos
+
+# If installed as a uv tool:
+# uv tool uninstall argos-agent
+```
+
+After `rm -rf ~/.argos` the next `uv run argos` will start with a clean
+state. The `~/.argos/.env` file (holding your API key) is removed as part
+of `~/.argos`; remove it separately if you stored it elsewhere.
+
 ---
 
 ## License

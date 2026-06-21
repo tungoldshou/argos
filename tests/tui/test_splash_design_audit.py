@@ -115,8 +115,8 @@ class TestComposeTextColorMarkup:
         )
 
     def test_ink_faint_hex_matches_theme(self) -> None:
-        """_COL_INK_FAINT 必须等于 theme.py $ink-faint = #525A73。"""
-        assert _COL_INK_FAINT == "#525A73", f"Expected #525A73, got {_COL_INK_FAINT}"
+        """_COL_INK_FAINT 必须等于 theme.py $ink-faint。finding #27: 升至 #6B7494。"""
+        assert _COL_INK_FAINT == "#6B7494", f"Expected #6B7494 (finding #27), got {_COL_INK_FAINT}"
 
     def test_no_key_badge_uses_ink_dim_not_pass(self) -> None:
         """无 key 时徽标用 $ink-dim,绝不含 LIVE 也绝不含 $pass 颜色。"""

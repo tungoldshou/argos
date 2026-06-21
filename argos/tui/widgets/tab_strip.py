@@ -22,6 +22,12 @@ from textual.containers import Horizontal
 from textual.message import Message
 from textual.widgets import Static
 
+try:
+    from rich.cells import cell_len as _cell_len
+except ImportError:  # pragma: no cover — Rich 版本极端回退
+    def _cell_len(text: str) -> int:  # type: ignore[misc]
+        return len(text)
+
 
 # v3 spec §4.x: emoji 全处决，改用等宽安全字形(EAW=N)
 _STATE_ICON = {
@@ -50,9 +56,22 @@ def _format_cost(usd: float | None) -> str:
 
 
 def _truncate(text: str, n: int) -> str:
-    if len(text) <= n:
+    """按 cell 宽度截断(finding #33:CJK 字符占 2 cell,len() 会低估宽度)。
+
+    n 是最大 cell 宽度。超出时从末尾逐字回退,保证输出 cell_len <= n-1 + 1(省略号)。
+    """
+    if _cell_len(text) <= n:
         return text
-    return text[: n - 1] + "…"
+    # 逐字符回退,直到 cell_len(prefix) + 1(省略号) <= n
+    result: list[str] = []
+    used = 0
+    for ch in text:
+        ch_w = _cell_len(ch)
+        if used + ch_w + 1 > n:  # +1 为省略号留位
+            break
+        result.append(ch)
+        used += ch_w
+    return "".join(result) + "…"
 
 
 class TabActivated(Message):
@@ -151,19 +170,22 @@ class TabStrip(Static):
     # ── 鼠标 + 键盘 ────────────────────────────────────────────────
 
     def on_click(self, event) -> None:
-        """点击 tab → 找最近 run_id → 派消息。"""
+        """点击 tab → 找最近 run_id → 派消息。
+
+        hit-test 用 cell 宽度而非 len()(finding #26:CJK tab 标题 click 偏移错误)。
+        """
         x = event.x - 2   # padding 2(v3 spec §4.x)
         if x < 0 or not self._tabs:
             return
-        # 算每个 tab 的 x 区间
+        # 算每个 tab 的 x 区间(按 cell_len 而非 str len)
         offset = 0
         for t in self._tabs:
             seg = f"{t['icon']} {t['title']} {t['cost']}"
-            seg_len = len(seg)
-            if offset <= x < offset + seg_len:
+            seg_width = _cell_len(seg)
+            if offset <= x < offset + seg_width:
                 self.post_message(TabActivated(t["run_id"]))
                 return
-            offset += seg_len + 2   # 2 空格分隔
+            offset += seg_width + 2   # 2 空格分隔(两个 ASCII 空格 = 2 cells)
 
     def action_select_tab(self, idx: int) -> None:
         if 0 <= idx < len(self._tabs):

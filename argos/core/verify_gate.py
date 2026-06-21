@@ -36,6 +36,32 @@ def _self_test_enabled() -> bool:
     return os.environ.get("ARGOS_SELF_TEST", "").strip().lower() in ("1", "true", "yes")
 
 
+def is_trivial_verify(cmd: str) -> bool:
+    """CONTRACT C §17:可导入的平凡验证命令谓词。
+
+    True = cmd 的第一个 token 是 TRIVIAL_VERIFY_BINS 中永远通过、什么都不验证的命令
+    (echo/true/false/:/ls/pwd/cat …),即此命令无法作为有效的验证门。
+
+    用途:
+      · Verifier.verify() 内部已经用此集拦截平凡命令 → unverifiable;
+      · CLI exec 入口可在调用 Verifier 前 fail-fast 给出友好提示。
+    示例::
+
+        >>> is_trivial_verify("echo ok")
+        True
+        >>> is_trivial_verify("pytest -q tests/")
+        False
+    """
+    cmd = (cmd or "").strip()
+    if not cmd:
+        return False
+    try:
+        bin_name = Path(shlex.split(cmd)[0]).name
+    except (ValueError, IndexError):
+        return False
+    return bin_name in TRIVIAL_VERIFY_BINS
+
+
 class Verifier:
     """称'完成'必过 verify_cmd；三态裁决；篡改优先；超时降级(契约 §6 Verifier)。
 
@@ -85,16 +111,17 @@ class Verifier:
                 tampered=tampered, attempts=attempts,
             )
 
-        # 无 verify_cmd:无 self-test 旁路 → 仍走诚实 unverifiable(HONESTY 规则 1)。
+        # 无 verify_cmd:无 self-test 旁路 → 诚实无测完成(CONTRACT A §5:no_check)。
         if not verify_cmd:
             # self-test 旁路:opt-in + 注入 generator → 试造测试。
             if _self_test_enabled() and self._test_generator is not None:
                 verdict = self._try_self_test(attempts=attempts)
                 if verdict is not None:
                     return verdict
-            # 关闭 / 没 generator / 旁路失败 → 诚实 unverifiable。
-            return Verdict.unverifiable(
-                detail="(无 verify_cmd，未做机检验证)", tampered=[], attempts=attempts,
+            # 关闭 / 没 generator / 旁路失败 → 诚实无测标记(no_test=True)。
+            # status 仍 'unverifiable',升级/诚实路径不变;UI 据 no_test 渲染中性色。
+            return Verdict.no_check(
+                detail="(无 verify_cmd，未做机检验证)", attempts=attempts,
             )
 
         # P0 防假绿(canonical 门):trivial 命令(echo/true/cat/ls/pwd...)什么都不验证。

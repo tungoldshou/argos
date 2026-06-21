@@ -33,6 +33,19 @@ def verdict_color_self_aware(status: str, self_verified: bool = False) -> Color:
     return verdict_color(status)
 
 
+def verdict_border_color(verdict) -> Color:
+    """从 Verdict 对象派生边框光颜色(CONTRACT A)。
+
+    no_test==True:无机检态返回 IDLE_BORDER 中性灰,绝不染橙警告色。
+    真 unverifiable(篡改/超时等):返回 WARNING 暖橙(三重冗余:◔ + 橙 + 文字)。
+    其余态:按 status / self_verified 正常映射。
+    """
+    # CONTRACT A:no_test 字段由 CORE 添加;getattr 防御性兼容旧 Verdict 对象。
+    if getattr(verdict, "no_test", False):
+        return IDLE_BORDER   # 中性灰 — 无机检不是警告,只是"未配 verify"
+    return verdict_color_self_aware(verdict.status, getattr(verdict, "self_verified", False))
+
+
 def breathe(color: Color, t: float) -> Color:
     """t∈[0,1] 正弦相位 → 在 color 与略暗之间插值(呼吸)。"""
     import math

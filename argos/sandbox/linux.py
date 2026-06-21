@@ -261,6 +261,32 @@ class UnshareExecutor(_BaseLinuxExecutor):
     backend = "unshare"
 
 
+# ── 后端摘要(Contract D:供 TUIAPP/CLI 显示沙箱强度)───────────────
+def sandbox_backend_summary() -> tuple[str, bool]:
+    """返回 (backend_name, is_weak_cage)。
+
+    - darwin / seatbelt → ("seatbelt", False)   —— 强:OS 内核 Seatbelt + workspace 写牢笼
+    - linux + bwrap     → ("bwrap", False)       —— 强:挂载/用户/网络命名空间全隔离
+    - linux + unshare   → ("unshare", True)      —— 弱:无 mount namespace,写牢笼仅靠 --chdir
+    - 都不可用          → ("none", True)          —— 无沙箱(调用前应已 RuntimeError,此为防御)
+
+    消费方约定(TUIAPP/CLI):
+      is_weak_cage=True  → 显示警告标记(例:⚠ unshare 轻量牢笼)
+      is_weak_cage=False → 正常显示(例:✓ seatbelt / bwrap 强隔离)
+    """
+    import sys as _sys
+    if _sys.platform == "darwin":
+        return ("seatbelt", False)
+    if _sys.platform == "linux":
+        if _AVAILABLE_BACKEND == "bwrap":
+            return ("bwrap", False)
+        if _AVAILABLE_BACKEND == "unshare":
+            return ("unshare", True)
+        return ("none", True)
+    # 其他平台(win32 等):无沙箱
+    return ("none", True)
+
+
 # ── 平台 + 工具探测选择 ─────────────────────────────
 def select_backend():
     """按平台 + 工具可用性选后端类(macOS → SeatbeltExecutor,Linux → bwrap/unshare)。

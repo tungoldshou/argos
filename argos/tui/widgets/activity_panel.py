@@ -31,7 +31,7 @@ _COL_EYE        = "#D9A85C"  # $eye:        进度条填充段(金)
 _COL_INK_BRIGHT = "#ECEEF5"  # $ink-bright: 进行中条目
 _COL_INK        = "#C8CCDA"  # $ink:        正文
 _COL_INK_DIM    = "#7E869C"  # $ink-dim:    完成条目 / 百分比
-_COL_INK_FAINT  = "#525A73"  # $ink-faint:  待办条目
+_COL_INK_FAINT  = "#6B7494"  # $ink-faint:  待办条目(finding #27 升对比度)
 _COL_INK_GHOST  = "#3A4055"  # $ink-ghost:  进度条空段
 
 from argos.hooks.events import HookFired
@@ -106,7 +106,7 @@ class ActivityPanel(Vertical):
         self._phases: list[tuple[str, float, str]] = []   # (phase, elapsed, status)
         self._phase_start = 0.0
         self._tool_counts: dict[str, int] = {}
-        self._receipts: list[str] = []
+        self._receipts: list[tuple[str, str]] = []  # (action, sig_display[:8])
         self._todos: list[dict] = []   # 真 TODO 拆解(update_plan);非空时"任务进度"区改渲染它
         self._hook_log: deque[HookFired] = deque(maxlen=50)   # spec §2.4 最多 50
         self._lsp_servers: dict[str, str] = {}
@@ -128,7 +128,7 @@ class ActivityPanel(Vertical):
         yield _Section("模型", self._model_label)
         yield _Section("任务进度", "(待开始)")
         yield _Section("工具", "本轮 0 调用")
-        yield _Section("回执(已签名)", "◌ (无)")
+        yield _Section("回执", "◌ (无)")
         yield _Section("Run", "◌ (无)")
         yield _Section("Skill Catalog", self._skill_catalog_summary())
         yield _Section("MCP", self._mcp_summary())
@@ -297,13 +297,22 @@ class ActivityPanel(Vertical):
         self._todos = list(todos or [])
         self._render_progress()
 
-    def on_receipt(self, action: str) -> None:
+    def on_receipt(self, action: str, sig: str = "") -> None:
+        """记录一条工具回执。sig 为 HMAC 签名前 8 字符截断(finding #6:使签名声明可伪证)。
+
+        sig 为空字符串时显示 '—'(诚实占位,而非假装已签名)。
+        """
         self._tool_counts[action] = self._tool_counts.get(action, 0) + 1
         tools = "\n".join(f"  {a} ×{n}" for a, n in self._tool_counts.items())
         self._set(self._TOOLS_IDX, f"本轮调用:\n{tools}" if tools else "本轮 0 调用")
-        self._receipts.append(action)
-        # v3:回执区段不用收据 emoji(已处决),改纯文字 + 空间符
-        self._set(self._RECEIPT_IDX, "\n".join(f"  {a}" for a in self._receipts[-6:]))
+        # _receipts 存 (action, sig_display) 对
+        sig_display = (sig[:8] if sig else "—")
+        self._receipts.append((action, sig_display))
+        # 回执区段:每行「action  sig[:8]」,最多显示最近 6 条(finding #6)
+        self._set(
+            self._RECEIPT_IDX,
+            "\n".join(f"  {a}  {s}" for a, s in self._receipts[-6:]),
+        )
 
     # ── 缓存 sparkline 辅助(spec §4.8 a 机会点④)─────────────────────────
     @staticmethod

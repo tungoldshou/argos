@@ -18,6 +18,10 @@ def _make_app(*, run_active: bool, loop_factory, session_id: str = "sess-test") 
     app._session_id = session_id
     app._run_active = run_active
     app._loop_factory = loop_factory
+    # #20 输入历史(retry 先查历史再回退 store);__new__ 跳过了 __init__,显式补这两个字段,
+    # 与真实 __init__ 一致(空历史 → retry 走 store 回退路径)。
+    app._input_history = []
+    app._input_history_max = 50
     return app
 
 

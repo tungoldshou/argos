@@ -43,7 +43,7 @@ _STYLE_BLOCKED  = "#FF9E64"   # $unverif：用户阻塞
 _STYLE_INK_DIM  = "#7E869C"   # $ink-dim：数据段
 _STYLE_INK_FAINT = "#525A73"  # $ink-faint：键提示
 
-_HINTS = "Esc 打断 · \\↵ 换行 · ^C 退出"
+_HINTS = "Esc 打断 · \\↵ 换行 · ^B 后台 · ^O 右栏 · ^V 贴图 · ^C/^D 退出"
 
 
 def _k(n: int) -> str:

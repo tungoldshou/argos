@@ -53,7 +53,7 @@ class _FakeComponents:
 
 def _args(**kw):
     ns = argparse.Namespace(prompt="do the thing", as_json=False, auto=False,
-                            verify_cmd=None, project="/tmp", model=None)
+                            verify_cmd=None, project="/tmp", model=None, quiet=False)
     for k, v in kw.items():
         setattr(ns, k, v)
     return ns
@@ -209,3 +209,82 @@ def test_build_components_runtime_error_exit_2(monkeypatch):
         raise RuntimeError("未配置 API key")
     monkeypatch.setattr("argos.app_factory.build_components", _boom)
     assert headless.run_exec(_args(prompt="x")) == 2
+
+
+def test_build_components_config_error_exit_2(monkeypatch, capsys):
+    """#8: --model nope → ConfigError → 干净 exit 2,不打 traceback。"""
+    from argos.config import ConfigError
+
+    def _boom(**kw):
+        raise ConfigError("profile 'nope' 不存在(可用:[default])")
+
+    monkeypatch.setattr("argos.app_factory.build_components", _boom)
+    code = headless.run_exec(_args(prompt="x", model="nope"))
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "不存在" in err
+    # 不应有 traceback
+    assert "Traceback" not in err
+
+
+def test_trivial_verify_cmd_exits_2_fast(monkeypatch, capsys):
+    """#17 CONTRACT C: trivial --verify echo exits 2 without calling build_components."""
+    called = {}
+
+    def _boom(**kw):
+        called["build"] = True
+        raise AssertionError("不该到达 build_components")
+
+    monkeypatch.setattr("argos.app_factory.build_components", _boom)
+    code = headless.run_exec(_args(prompt="x", verify_cmd="echo ok"))
+    assert code == 2
+    assert not called, "build_components should NOT have been called for trivial verify"
+    err = capsys.readouterr().err
+    assert "trivial" in err
+
+
+def test_trivial_verify_cmd_true_exits_2(monkeypatch, capsys):
+    """#17: 'true' 也是 trivial。"""
+    def _should_not_be_called(**kw):
+        raise AssertionError("build_components should not be called for trivial verify cmd")
+
+    monkeypatch.setattr("argos.app_factory.build_components", _should_not_be_called)
+    code = headless.run_exec(_args(prompt="x", verify_cmd="true"))
+    assert code == 2
+
+
+def test_progress_lines_go_to_stderr_not_stdout(monkeypatch, capsys):
+    """#16: 进度行(phase / verify)走 stderr;stdout 只有最终结果。"""
+    events = [
+        PhaseChange(phase="plan", actions=0),
+        PhaseChange(phase="act", actions=1),
+        TokenDelta(text="output here"),
+        PhaseChange(phase="report", actions=0),
+        VerifyVerdict(verdict=Verdict.passed("[exit_code=0]", "pytest", 1)),
+    ]
+    _wire(monkeypatch, events)
+    code = headless.run_exec(_args(prompt="x"))
+    assert code == 0
+    out, err = capsys.readouterr()
+    # 进度行在 stderr
+    assert "phase" in err
+    # stdout 只有 result 文本(不含 phase 进度)
+    assert "phase →" not in out
+
+
+def test_quiet_flag_suppresses_progress(monkeypatch, capsys):
+    """--quiet 时 stderr 不出进度行,stdout 仍有结果。"""
+    events = [
+        PhaseChange(phase="plan", actions=0),
+        PhaseChange(phase="act", actions=1),
+        TokenDelta(text="result"),
+        PhaseChange(phase="report", actions=0),
+        VerifyVerdict(verdict=Verdict.passed("[exit_code=0]", "pytest", 1)),
+    ]
+    _wire(monkeypatch, events)
+    code = headless.run_exec(_args(prompt="x", quiet=True))
+    assert code == 0
+    out, err = capsys.readouterr()
+    # --quiet: 进度行全沉默(只留 verify 最终行)
+    assert "phase →" not in err
+    assert "result" in out

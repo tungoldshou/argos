@@ -187,6 +187,36 @@ async def test_take_receipt_returns_and_clears():
     assert br.take_receipt() is None        # 再取无新回执
 
 
+# ── egress 拒绝消息诚实性(#9)────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_egress_deny_message_does_not_mention_nonexistent_allow_command(monkeypatch):
+    """/allow 命令不存在;egress 拒绝消息不应引用它,应指引用户用 /trust autonomous 或 config.json。"""
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    br = _broker(level=ApprovalLevel.AUTO, search_hosts={"someother.example"})
+    res = await br.request("web_search", {"query": "test"})
+    # 消息应包含 egress 拒绝关键字
+    assert "egress" in res or "不在允许" in res
+    # 不应提示不存在的 /allow 命令
+    assert "/allow" not in res, f"错误消息引用了不存在的 /allow 命令:{res!r}"
+    # 应提供真实可用的补救途径
+    assert "/trust" in res or "config.json" in res, (
+        f"消息未提供真实可用的补救途径:{res!r}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_egress_deny_reason_message_format(monkeypatch):
+    """_egress_deny_reason 直接返回的消息格式检查(不经 request 路径)。"""
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    br = _broker(level=ApprovalLevel.AUTO, search_hosts={"someother.example"})
+    reason = br._egress_deny_reason("web_search", {"query": "test"})
+    assert reason is not None, "期望 egress 拒绝原因"
+    assert "/allow" not in reason, f"拒绝理由引用了不存在的 /allow 命令:{reason!r}"
+    assert "/trust" in reason or "config.json" in reason, (
+        f"拒绝理由未提供真实可用的补救途径:{reason!r}"
+    )
+
+
 @pytest.mark.asyncio
 async def test_run_command_not_force_confirmed_at_yolo():
     """2026-06-20:YOLO(AUTO)下 run_command 不再被强制降 CONFIRM —— gate.request 在 AUTO 档被调用,

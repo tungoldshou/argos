@@ -384,6 +384,46 @@ class ArgosStore:
             for r in rows
         ]
 
+    async def arecall(self, goal: str, *, k: int = 3, sim_min: float = 0.4
+                      ) -> list[tuple["MemoryRecord", str]]:
+        """#4 异步 recall:嵌入器 aembed 存在时用 AsyncClient 非阻塞召回;否则退 to_thread。
+
+        主路径:OpenAIEmbedder.aembed → 协程不阻塞事件循环。
+        降级路径:aembed 失败/不可用 → asyncio.to_thread(self.recall, goal) → 同步 FTS5 走线程池。
+        ARGOS_NO_MEMORY=1 或无 embedder → 同 recall 直接走 FTS5 降级。
+        """
+        import asyncio
+        if not goal.strip():
+            return []
+        recs = self._load_memories(limit=200)
+        if not recs:
+            return []
+        # 主路径:embedder 有 aembed(OpenAIEmbedder) → 全程异步
+        if self._embedder is not None and hasattr(self._embedder, "aembed"):
+            try:
+                goal_emb = (await self._embedder.aembed([goal]))[0]  # type: ignore[attr-defined]
+                texts = [self._index_text(r) for r in recs]
+                rec_embs = await self._embedder.aembed(texts)  # type: ignore[attr-defined]
+                scored: list[tuple[float, "MemoryRecord"]] = [
+                    (self._cosine(goal_emb, e), r) for e, r in zip(rec_embs, recs)
+                ]
+                scored.sort(key=lambda x: x[0], reverse=True)
+                out: list[tuple["MemoryRecord", str]] = []
+                for sim, r in scored[:k]:
+                    if sim < sim_min:
+                        continue
+                    parts = [f"goal 相似 {sim:.2f}"]
+                    if r.verdict:
+                        parts.append(f"verdict={r.verdict}")
+                    if r.model:
+                        parts.append(f"模型 {r.model}")
+                    out.append((r, "命中：" + " + ".join(parts)))
+                return out
+            except Exception:
+                pass  # 任何 aembed 失败 → 降级 to_thread(recall)
+        # 降级:同步 recall 在线程池里跑(FTS5 字面或同步 embed),不阻塞主循环
+        return await asyncio.to_thread(self.recall, goal, k=k, sim_min=sim_min)
+
     def recall(self, goal: str, *, k: int = 3, sim_min: float = 0.4
                ) -> list[tuple["MemoryRecord", str]]:
         """诚实召回(spec §5.6):(记录, 为什么召回)。embedding 不可用 → 降级 LIKE,reason 标注。"""

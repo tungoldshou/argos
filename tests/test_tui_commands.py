@@ -23,6 +23,8 @@ def test_known_commands_listed():
         "confirm",  # P5b §9:确认 conductor 建议(/confirm <suggestion_id>)—自治面
         "dismiss",  # P5b §9:忽略 conductor 建议(/dismiss <suggestion_id>)
         "dream",    # T10:夜间整合 Dream(聚类综合+记忆整理;/dream status 看报告)
+        "setup",    # 2026-06-21 #3:无 key 引导(/setup → 提示退出后运行 argos setup)
+        "journal",  # 2026-06-21 #7:显示账本 JSONL 路径(/journal [run_id])—让可篡改账本可发现
     }
 
 

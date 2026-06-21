@@ -49,6 +49,9 @@ class Verdict:
     attempts: int
     tampered: list[str] = field(default_factory=list)
     self_verified: bool = False
+    no_test: bool = False  # CONTRACT A §5:True = 用户没配 verify_cmd 的诚实无测标记。
+    # 注意:no_test=True 时 status 仍是 'unverifiable',升级/报告路径不变;
+    # 仅供 UI(verdict_badge/glow)区分「真无法验证」与「用户本就无测」,渲染中性色而非橙警。
 
     @staticmethod
     def passed(detail: str, verify_cmd: str | None, attempts: int) -> "Verdict":
@@ -83,4 +86,18 @@ class Verdict:
         return Verdict(
             status="unverifiable", detail=detail, verify_cmd=None,
             attempts=attempts, tampered=list(tampered),
+        )
+
+    @staticmethod
+    def no_check(detail: str, attempts: int) -> "Verdict":
+        """无 verify_cmd 的诚实完成标记(CONTRACT A §5)。
+
+        status='unverifiable'(升级/诚实链路不变),但 no_test=True 让 UI 侧
+        渲染为中性/暗淡态(○ 未机检 · 无 verify),而非真实无法验证时的橙色警告。
+        仅用于「用户本就没配 verify_cmd、任务主动无测」路径,不得用于篡改/超时/
+        命令声明但验证失败等有意义的 unverifiable 情形。
+        """
+        return Verdict(
+            status="unverifiable", detail=detail, verify_cmd=None,
+            attempts=attempts, tampered=[], no_test=True,
         )
