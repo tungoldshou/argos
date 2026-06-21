@@ -30,6 +30,7 @@ from urllib.parse import parse_qs, urlsplit
 from argos.app_factory import build_run_stack
 from argos.daemon.conductor_supervisor import CONDUCTOR_RUN_ID
 from argos.daemon.manager import RunManager
+from argos.daemon.state_machine import TERMINAL_STATES
 from argos.i18n import t
 from argos.daemon.protocol import (
     CODE_BAD_REQUEST, CODE_BUSY, CODE_INTERNAL, CODE_INVALID_TRANSITION,
@@ -1681,10 +1682,17 @@ class DaemonHTTPServer:
         # 感知延迟与空转写之间的平衡(本地 socket,写开销可忽略)。
         q = self._manager.subscribe(run_id)
         try:
+            # run 在订阅建立时已是终态(快对话:replay 已发完全部事件)→ 立即收尾关流。
+            # client(DaemonClient / DaemonEventSource)靠 EOF 判 run 完成,server 必须关流。
+            if self._run_is_terminal(run_id):
+                return
             while True:
                 try:
                     ev = await asyncio.wait_for(q.get(), timeout=2.0)
                 except asyncio.TimeoutError:
+                    # 队列空闲:run 已终态 → 关流(让 client EOF)。否则发 keepalive 续命。
+                    if self._run_is_terminal(run_id):
+                        break
                     try:
                         writer.write(b": keepalive\n\n")
                         await writer.drain()
@@ -1695,6 +1703,9 @@ class DaemonHTTPServer:
                     await self._send_sse_event(writer, ev)
                 except (ConnectionResetError, BrokenPipeError):
                     break
+                # 终态事件已发出且队列排空 → 关流,让 client 立即 EOF(免等下个 keepalive tick)。
+                if q.empty() and self._run_is_terminal(run_id):
+                    break
         except (ConnectionResetError, BrokenPipeError, asyncio.CancelledError):
             pass
         finally:
@@ -1703,6 +1714,11 @@ class DaemonHTTPServer:
                 writer.close()
             except Exception:  # noqa: BLE001
                 pass
+
+    def _run_is_terminal(self, run_id: str) -> bool:
+        """run 是否已进入终态(completed/failed/cancelled)—— SSE 关流判据。"""
+        run = self._manager.get_run(run_id)
+        return run is not None and run.state in TERMINAL_STATES
 
     async def _send_sse_event(self, writer, ev: dict):
         kind = ev.get("kind", "message")
