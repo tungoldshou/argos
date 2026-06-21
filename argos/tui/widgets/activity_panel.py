@@ -34,6 +34,7 @@ _COL_INK_DIM    = "#7E869C"  # $ink-dim:    完成条目 / 百分比
 _COL_INK_FAINT  = "#6B7494"  # $ink-faint:  待办条目(finding #27 升对比度)
 _COL_INK_GHOST  = "#3A4055"  # $ink-ghost:  进度条空段
 
+from argos.i18n import t as t_
 from argos.hooks.events import HookFired
 from argos.lsp.events import LspServerEvent, LspDiagnosticEvent
 from argos.skills_runtime.events import SkillRunStart, SkillRunEnd
@@ -125,20 +126,20 @@ class ActivityPanel(Vertical):
 
     def compose(self) -> ComposeResult:
         yield Static(self._header_text(), id="view-header", markup=False)
-        yield _Section("模型", self._model_label)
-        yield _Section("任务进度", "(待开始)")
-        yield _Section("工具", "本轮 0 调用")
-        yield _Section("回执", "◌ (无)")
-        yield _Section("Run", "◌ (无)")
-        yield _Section("Skill Catalog", self._skill_catalog_summary())
-        yield _Section("MCP", self._mcp_summary())
-        yield _Section("Hook", "◌ (无)")
-        yield _Section("LSP", "◌ (无)")
-        yield _Section("Skill", self._skill_summary())
-        yield _Section("Approval", "◌ (无)")
-        yield _Section("Verdict", "◌ (无)")
-        yield _Section("成本 + 缓存", "↑0 ↓0  $0.000\n缓存命中 0 tok  0.0s")
-        yield _Section("上下文", "")
+        yield _Section(t_("widget.section_model"), self._model_label)
+        yield _Section(t_("widget.section_progress"), t_("widget.progress_pending"))
+        yield _Section(t_("widget.section_tools"), t_("widget.tools_zero"))
+        yield _Section(t_("widget.section_receipt"), t_("widget.empty"))
+        yield _Section(t_("widget.section_run"), t_("widget.empty"))
+        yield _Section(t_("widget.section_skill_catalog"), self._skill_catalog_summary())
+        yield _Section(t_("widget.section_mcp"), self._mcp_summary())
+        yield _Section(t_("widget.section_hook"), t_("widget.empty"))
+        yield _Section(t_("widget.section_lsp"), t_("widget.empty"))
+        yield _Section(t_("widget.section_skill"), self._skill_summary())
+        yield _Section(t_("widget.section_approval"), t_("widget.empty"))
+        yield _Section(t_("widget.section_verdict"), t_("widget.empty"))
+        yield _Section(t_("widget.section_cost"), "↑0 ↓0  $0.000\n" + t_("widget.cache_hit_line", cache_read=0, elapsed_s=0.0))
+        yield _Section(t_("widget.section_context"), "")
 
     def on_mount(self) -> None:
         self._apply_view()
@@ -147,7 +148,7 @@ class ActivityPanel(Vertical):
     def _header_text(self) -> str:
         # v3 spec §4.8:pinned 标记用 * 而非 emoji
         pin = " *" if self._pinned else ""
-        return f"── {self._view}{pin} ──"
+        return t_("widget.view_header", view=self._view, pin=pin)
 
     def _apply_view(self) -> None:
         """按当前视图切区段可见性(数据照常更新,只动 display)。"""
@@ -206,8 +207,8 @@ class ActivityPanel(Vertical):
             from argos import skills
             enabled = [s for s in skills.load_all() if s.enabled]
             if not enabled:
-                return "无可用"
-            return f"{len(enabled)} 个可用(按任务召回)"
+                return t_("widget.skills_none")
+            return t_("widget.skills_available", n=len(enabled))
         except Exception:  # noqa: BLE001
             return "—"
 
@@ -220,14 +221,14 @@ class ActivityPanel(Vertical):
 
             from argos.mcp_native import CONFIG_PATH
             if not CONFIG_PATH.exists():
-                return "未配置"
+                return t_("widget.mcp_unconfigured")
             cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8")) or {}
             servers = cfg.get("servers") or {}
             enabled = [n for n, s in servers.items()
                        if isinstance(s, dict) and s.get("enabled", True)]
-            return f"{len(enabled)} 个已配置" if enabled else "未配置"
+            return t_("widget.mcp_configured", n=len(enabled)) if enabled else t_("widget.mcp_unconfigured")
         except Exception:  # noqa: BLE001
-            return "未配置"
+            return t_("widget.mcp_unconfigured")
 
     def _sections(self) -> list[_Section]:
         return list(self.query(_Section))
@@ -246,7 +247,7 @@ class ActivityPanel(Vertical):
     def _render_phases(self) -> "str | Text":
         # [FIX LOW] 进行中→$ink-bright, 完成→$ink-dim, 待办→$ink-faint
         if not self._phases:
-            return "(待开始)"
+            return t_("widget.progress_pending")
         t = Text()
         for i, (p, e, s) in enumerate(self._phases):
             # 进行中(›,elapsed 还是 0.0)显 …;完成且无耗时显 —;否则显真实耗时。
@@ -270,7 +271,7 @@ class ActivityPanel(Vertical):
         # [FIX LOW] 进行中→$ink-bright, 完成→$ink-dim, 待办→$ink-faint
         done = sum(1 for todo in self._todos if todo.get("status") == "completed")
         t = Text()
-        t.append(f"进度 {done}/{len(self._todos)}")
+        t.append(t_("widget.progress_todo", done=done, total=len(self._todos)))
         for todo in self._todos:
             status = todo.get("status", "pending")
             if status == "completed":
@@ -304,7 +305,7 @@ class ActivityPanel(Vertical):
         """
         self._tool_counts[action] = self._tool_counts.get(action, 0) + 1
         tools = "\n".join(f"  {a} ×{n}" for a, n in self._tool_counts.items())
-        self._set(self._TOOLS_IDX, f"本轮调用:\n{tools}" if tools else "本轮 0 调用")
+        self._set(self._TOOLS_IDX, t_("widget.tools_this_run", tools=tools) if tools else t_("widget.tools_zero"))
         # _receipts 存 (action, sig_display) 对
         sig_display = (sig[:8] if sig else "—")
         self._receipts.append((action, sig_display))
@@ -348,7 +349,7 @@ class ActivityPanel(Vertical):
         # [FIX MEDIUM] cache sparkline 整行染 $cyan(冷色=省钱语义)
         t = Text()
         t.append(f"↑{tok_in_str} ↓{tok_out_str}{tier_tag}  {cost}\n")
-        t.append(f"缓存命中 {cache_read} tok  {elapsed_s:.1f}s")
+        t.append(t_("widget.cache_hit_line", cache_read=cache_read, elapsed_s=elapsed_s))
         if spark:
             t.append(f"\ncache {spark} {cache_read}", style=_COL_CYAN)
         self._set(self._COST_IDX, t)
@@ -415,7 +416,7 @@ class ActivityPanel(Vertical):
             else:
                 tag = f"fail (exit {h.returncode}, {h.elapsed_ms}ms)"
             lines.append(f" {h.event_name}:{cmd_short} {tag}")
-        self._set(self._HOOK_IDX, "\n".join(lines) if lines else "(无)")
+        self._set(self._HOOK_IDX, "\n".join(lines) if lines else t_("widget.empty"))
 
     # ── LSP(spec §2.7):4 态 + 变化检测 dedup ─────────────────────────
     def on_lsp_server_event(self, ev: LspServerEvent) -> None:
@@ -437,7 +438,7 @@ class ActivityPanel(Vertical):
             else:   # exit / unknown
                 tag = status
             lines.append(f" · LSP {name}: {tag}")
-        self._set(self._LSP_IDX, "\n".join(lines) if lines else "(无)")
+        self._set(self._LSP_IDX, "\n".join(lines) if lines else t_("widget.empty"))
 
     def on_lsp_diagnostic_event(self, ev: LspDiagnosticEvent) -> None:
         """诊断推送事件:仅当 count 变化时更新活动栏(spec §2.7 dedup)。"""
@@ -458,25 +459,25 @@ class ActivityPanel(Vertical):
         self._cache_history.clear()
         self._compaction_line = ""
         # v3 空态:一律 ◌ (无) + $ink-faint(spec §4.8)
-        self._set(self._PROGRESS_IDX, "(待开始)")
-        self._set(self._TOOLS_IDX, "本轮 0 调用")
-        self._set(self._RECEIPT_IDX, "◌ (无)")
-        self._set(self._HOOK_IDX, "◌ (无)")
-        self._set(self._LSP_IDX, "◌ (无)")
-        self._set(self._SKILL_IDX, "◌ (无)")
-        self._set(self._RUN_IDX, "◌ (无)")
-        self._set(self._APPROVAL_IDX, "◌ (无)")
-        self._set(self._VERDICT_IDX, "◌ (无)")
+        self._set(self._PROGRESS_IDX, t_("widget.progress_pending"))
+        self._set(self._TOOLS_IDX, t_("widget.tools_zero"))
+        self._set(self._RECEIPT_IDX, t_("widget.empty"))
+        self._set(self._HOOK_IDX, t_("widget.empty"))
+        self._set(self._LSP_IDX, t_("widget.empty"))
+        self._set(self._SKILL_IDX, t_("widget.empty"))
+        self._set(self._RUN_IDX, t_("widget.empty"))
+        self._set(self._APPROVAL_IDX, t_("widget.empty"))
+        self._set(self._VERDICT_IDX, t_("widget.empty"))
 
     # ── Run 段(spec §2.6 b/c 段)──────────────────────────────────
     def on_run_summary(self, *, active: int, paused: int, suspended: int, history: int) -> None:
         """渲染 'Run' 区段:⏵N active / ⏸N paused / ⏹N history。"""
         if active == 0 and paused == 0 and suspended == 0 and history == 0:
-            self._set(self._RUN_IDX, "◌ (无)")
+            self._set(self._RUN_IDX, t_("widget.empty"))
         else:
             self._set(
                 self._RUN_IDX,
-                f"⏵{active}  ⏸{paused}  ⏹{history}\n(suspended {suspended})",
+                f"⏵{active}  ⏸{paused}  ⏹{history}\n" + t_("widget.run_suspended", suspended=suspended),
             )
 
     def snapshot_text(self) -> str:
@@ -501,7 +502,7 @@ class ActivityPanel(Vertical):
     def _skill_summary(self) -> str:
         """'Skill' 区段(singular)渲染:start + end 配对成行(对位 Hook 区段)."""
         if not self._skill_runs:
-            return "(无)"
+            return t_("widget.empty")
         lines: list[str] = []
         pending_starts: dict[str, SkillRunStart] = {}
         for ev in self._skill_runs:
@@ -541,7 +542,7 @@ class ActivityPanel(Vertical):
 
     def _approval_summary(self) -> str:
         if not self._approval_log and not any(self._approval_count.values()):
-            return "◌ (无)"
+            return t_("widget.empty")
         ok = self._approval_count.get("ok", 0)
         ask = self._approval_count.get("ask", 0)
         deny = self._approval_count.get("deny", 0)
@@ -560,7 +561,7 @@ class ActivityPanel(Vertical):
 
         签名:on_compacted(before, after, reduction_pct) — P9 接线约定。
         """
-        self._compaction_line = f"↯ 已压缩 -{reduction_pct:.0f}% · {before}→{after} 条"
+        self._compaction_line = t_("widget.compacted_line", reduction_pct=reduction_pct, before=before, after=after)
         # 若上下文区已有内容,立即刷新;否则等下次 on_context 调用时追加。
         try:
             secs = self._sections()
@@ -578,7 +579,7 @@ class ActivityPanel(Vertical):
 
         签名:on_pruned(before, after, removed) — P9 接线约定。
         """
-        self._compaction_line = f"↯ 已修剪 {removed} 条 · {before}→{after}"
+        self._compaction_line = t_("widget.pruned_line", removed=removed, before=before, after=after)
         try:
             secs = self._sections()
             if secs and len(secs) > self._CTX_IDX:
@@ -595,6 +596,6 @@ class ActivityPanel(Vertical):
         签名:on_memory_recall(hits) — P9 接线约定。
         """
         if hits > 0:
-            self._set(self._RUN_IDX, f"◌ 召回 {hits} 条")
+            self._set(self._RUN_IDX, t_("widget.memory_recall", hits=hits))
         else:
-            self._set(self._RUN_IDX, "◌ (无)")
+            self._set(self._RUN_IDX, t_("widget.empty"))

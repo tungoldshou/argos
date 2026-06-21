@@ -252,9 +252,11 @@ async def test_loop_emits_visible_completion_line_no_test():
     loop = _loop_with(model, verify_cmd=None)
     texts = [ev.text for ev in [e async for e in loop.run("g", "s")]
              if isinstance(ev, TokenDelta)]
+    from argos.i18n import t as _t
     assert texts, "应有 TokenDelta"
-    assert "完成" in texts[-1], "末尾应有可见完成行"
-    assert "未机检验证" in texts[-1], "无测任务应诚实标注未机检验证"
+    assert _t("loop.report_note.no_test") in texts[-1], "末尾应有可见完成行含无测标注"
+    # legacy zh assertion (also covered via _t lookup above)
+    assert "no test command" in texts[-1], "末尾应诚实标注 no test command"
 
 
 @pytest.mark.asyncio
@@ -264,7 +266,8 @@ async def test_loop_completion_line_says_verified_when_passed():
     loop = _loop_with(model, verify_cmd="echo ok")
     texts = [ev.text for ev in [e async for e in loop.run("g", "s")]
              if isinstance(ev, TokenDelta)]
-    assert texts and "验证通过" in texts[-1], "通过的任务完成行应明示验证通过"
+    from argos.i18n import t as _t
+    assert texts and _t("loop.done.verified") in "".join(texts), "通过的任务完成行应含验证通过标注"
 
 
 def test_codeact_contract_in_honesty_system():
@@ -452,4 +455,44 @@ async def test_max_steps_bailout_without_verify_cmd_honest_completion():
     # FakeVerifier 没配 verify_cmd 也返 passed → 但 Harness.is_honest_completion
     # 只判 verify_cmd is None + unverifiable。这里 FakeVerifier 没区分是 FakeVerifier
     # 的弱点(它把 None 也当 passed)—— 我们只断言"事件被投出"。
+
+
+# ── i18n EN locale: completion line surfaces in English ──────────────────────
+
+
+@pytest.mark.asyncio
+async def test_loop_completion_line_en_no_test(monkeypatch):
+    """ARGOS_LANG=en: no-test completion line renders English ('unverified')."""
+    monkeypatch.setenv("ARGOS_LANG", "en")
+    from argos.i18n import _catalog
+    _catalog.cache_clear()
+    try:
+        model = FakeModel(["```python\nwrite_file('a.txt','x')\n```", "Done."])
+        loop = _loop_with(model, verify_cmd=None)
+        texts = [ev.text for ev in [e async for e in loop.run("g", "s")]
+                 if isinstance(ev, TokenDelta)]
+        full = "".join(texts)
+        assert "unverified" in full, f"EN no-test label should say 'unverified', got: {full[-200:]!r}"
+        assert "no test command" in full, f"EN label should contain 'no test command', got: {full[-200:]!r}"
+    finally:
+        _catalog.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_loop_completion_line_en_verified(monkeypatch):
+    """ARGOS_LANG=en: verified completion line renders English ('verification passed')."""
+    monkeypatch.setenv("ARGOS_LANG", "en")
+    from argos.i18n import _catalog
+    _catalog.cache_clear()
+    try:
+        model = FakeModel(["```python\nx=1\n```", "Done."])
+        loop = _loop_with(model, verify_cmd="echo ok")
+        texts = [ev.text for ev in [e async for e in loop.run("g", "s")]
+                 if isinstance(ev, TokenDelta)]
+        full = "".join(texts)
+        assert "verification passed" in full, (
+            f"EN verified label should say 'verification passed', got: {full[-200:]!r}"
+        )
+    finally:
+        _catalog.cache_clear()
     # 真实 Verifier 在 verify_cmd=None 时返 unverifiable,见 test_loop_runs_code_and_emits_events。

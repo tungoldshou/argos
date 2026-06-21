@@ -22,6 +22,7 @@ from pathlib import Path
 
 from ..sandbox import seatbelt
 from .files import _ws
+from argos.i18n import t
 
 # ALLOWED_CMDS:**verify 命令**白名单(verify_gate / self_test / eval 用它限制 verify_cmd 的首 token,
 # 防 agent 声明任意命令当"验证")。**run_command 不再用它做名字级门禁** —— 那层在 2026-06-20 重设
@@ -87,9 +88,9 @@ def run_command(command: str, *, workspace: Path | None = None,
     try:
         parts = shlex.split(command)
     except ValueError as e:
-        return f"错误:命令解析失败 {e}", None
+        return t("tools.shell.parse_error", exc=e), None
     if not parts:
-        return "错误:空命令。", None
+        return t("tools.shell.empty_command"), None
     ws = workspace if workspace is not None else _ws()
     ws.mkdir(parents=True, exist_ok=True)
     # ── 平台別沙箱路由 ──────────────────────────────────────────────────────
@@ -101,13 +102,7 @@ def run_command(command: str, *, workspace: Path | None = None,
     elif sys.platform == "linux":
         backend = _linux_available_backend()
         if backend is None:
-            return (
-                "错误:no sandbox backend available on this platform"
-                " (bwrap / unshare not found in PATH)"
-                " — refusing to run shell command uncaged."
-                " Install bwrap (bubblewrap) or unshare and retry.",
-                1,
-            )
+            return t("tools.shell.no_backend_linux"), 1
         from ..sandbox.linux import _bwrap_argv, _unshare_argv
         # allow_network 必须穿透到 Linux cage —— 否则出网阀在 Linux 完全失效:bwrap/unshare 恒
         # 断网,approved 的 pip/curl/git push 静默失败(2026-06-21 修)。darwin 走 seatbelt 已 honor。
@@ -116,18 +111,13 @@ def run_command(command: str, *, workspace: Path | None = None,
         else:
             argv = _unshare_argv(workspace=ws, child_argv=parts, allow_network=allow_network)
     else:
-        return (
-            f"错误:no sandbox backend available on platform {sys.platform!r}"
-            " — refusing to run shell command uncaged."
-            " Argos supports macOS (Seatbelt) and Linux (bwrap/unshare) only.",
-            1,
-        )
+        return t("tools.shell.no_backend_platform", platform=sys.platform), 1
     try:
         r = subprocess.run(argv, cwd=ws, capture_output=True, text=True, timeout=60)
     except subprocess.TimeoutExpired:
-        return "错误:命令超时(60s)。", None
+        return t("tools.shell.timeout"), None
     except Exception as e:  # noqa: BLE001
-        return f"错误:执行失败 {e}", None
+        return t("tools.shell.exec_failed", exc=e), None
     out = (r.stdout or "")[-3000:]
     err = (r.stderr or "")[-2000:]
     text = f"[exit_code={r.returncode}]\n--- stdout ---\n{out}\n--- stderr ---\n{err}".strip()

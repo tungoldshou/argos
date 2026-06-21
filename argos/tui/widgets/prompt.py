@@ -21,6 +21,7 @@ from textual import events
 from textual.message import Message
 from textual.widgets import Static, TextArea
 
+from argos.i18n import t as _t
 from argos.input.attachments import ImageAttachment, extract_image_paths, load_from_path
 
 _PASTE_THRESHOLD = 10000  # >10000 字符的粘贴折成占位 chip(对齐 Claude Code)
@@ -74,14 +75,14 @@ class PromptArea(TextArea):
             return None
         self._paste_seq += 1
         lines = text.count("\n")
-        token = f"[粘贴文本 #{self._paste_seq} +{lines} 行]"
+        token = _t("tui.prompt.paste_token", n=self._paste_seq, lines=lines)
         self._paste_store[token] = text
         return token
 
     def register_image(self, att: ImageAttachment) -> str:
         """登记一张图片附件,返回占位 token([图片 #N])。供 app 的 Ctrl+V 动作调用。"""
         self._image_seq += 1
-        token = f"[图片 #{self._image_seq}]"
+        token = _t("tui.prompt.image_token", n=self._image_seq)
         self._image_store[token] = att
         return token
 
@@ -297,7 +298,7 @@ class SlashMenu(Static):
                 t.append(f"/{name:<16}", style=_INK_DIM)
                 t.append(f" {desc}", style=_INK_DIM)
             t.append("\n")
-        t.append("  ↑↓ 选择 · ↹ 补全 · ↵ 执行", style=_INK_FAINT)
+        t.append(_t("tui.slash_menu.nav_hint"), style=_INK_FAINT)
         self.update(t)
 
     def hide(self) -> None:

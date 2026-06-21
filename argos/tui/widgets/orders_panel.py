@@ -30,6 +30,7 @@ from textual.containers import Vertical
 from textual.widgets import Static
 
 from argos.conductor.orders import StandingOrder
+from argos.i18n import t
 from argos.protocol.events import ProactiveSuggestionEvent
 from argos.tui.widgets.inline_choice import InlineChoice
 
@@ -104,11 +105,11 @@ class OrdersPanel(Vertical):
 
     def _empty_state_text(self) -> str:
         """诚实空态文本——绝不注入虚假样本。"""
-        return "无常驻指令"
+        return t("widget.orders_empty")
 
     def _footer_left(self) -> str:
         """footer 左侧精确文本。"""
-        return "cron-lite 调度 · 文件触发监视"
+        return t("widget.orders_footer_left")
 
     def _footer_right(self) -> str:
         """footer 右侧精确文本。"""
@@ -220,7 +221,8 @@ class ConductorSuggestionChoice(InlineChoice):
     """
 
     # ◔ = U+25D4 CIRCLE WITH UPPER RIGHT QUADRANT BLACK（§12 spec 扫描四分眼）
-    _TITLE = "◔ 主动建议 · 待确认"
+    # Title is resolved at __init__ time via t() to respect ARGOS_LANG.
+    _TITLE_KEY = "widget.conductor_title"
 
     def __init__(
         self,
@@ -237,25 +239,25 @@ class ConductorSuggestionChoice(InlineChoice):
         #   Line 3: 诚实铁律行（requires_confirmation 永远 True）
         body = (
             f"{ev.reason_human}\n"
-            f"建议执行 → {ev.goal}\n"
-            f"requires_confirmation = true · 绝不自动执行"
+            f"{t('widget.conductor_body_suggest', goal=ev.goal)}\n"
+            f"{t('widget.conductor_body_confirm_invariant')}"
         )
 
         # 选项：1 确认执行（confirm），2 忽略（dismiss）
         # label 包含 sid8 以及 /confirm /dismiss 命令提示（视觉稿格式）
         options: list[tuple[str, str]] = [
-            ("confirm", f"确认执行  /confirm {sid8}"),
-            ("dismiss", f"忽略      /dismiss {sid8}"),
+            ("confirm", t("widget.conductor_option_confirm", sid8=sid8)),
+            ("dismiss", t("widget.conductor_option_dismiss", sid8=sid8)),
         ]
 
         super().__init__(
-            title=self._TITLE,
+            title=t(self._TITLE_KEY),
             body=body,
             options=options,
             on_decide=on_decide,
             escape_value="dismiss",     # Esc = fail-closed = 忽略
             risk="medium",              # 边框继承为 $plan，由 DEFAULT_CSS 覆盖
-            action_label="主动建议",
+            action_label=t("widget.conductor_action_label"),
             **kwargs,
         )
 
@@ -264,4 +266,4 @@ class ConductorSuggestionChoice(InlineChoice):
 
     def _hint_text(self) -> str:
         """覆盖 hint：Esc = 忽略（不是"拒绝"）。"""
-        return "↑↓ 选择 · ↵ 确认 · 数字直选 · Esc 忽略"
+        return t("widget.conductor_hint")

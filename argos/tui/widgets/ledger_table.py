@@ -34,6 +34,7 @@ from __future__ import annotations
 from rich.text import Text
 from textual.widgets import Static
 
+from argos.i18n import t as t_
 from argos.ledger.entry import LedgerEntry
 
 # ── Rich Text 颜色常量（对应 ARGOS_NIGHT token，用于 Rich Text 渲染）──────────
@@ -163,18 +164,18 @@ class LedgerTable(Static):
 
         # ── 1. Header line ──────────────────────────────────────────────
         # 「行为账本 · run {run_id} · {N} 条」in $ink
-        t.append(f"行为账本 · run {self._run_id} · {n} 条", style=_COL_INK)
+        t.append(t_("ledger.header", run_id=self._run_id, n=n), style=_COL_INK)
         t.append("\n")
 
         # ── 2. Column header row in $ink-faint ─────────────────────────
         # EXACT header cell texts per spec(含第 6 列签名,finding #6):
         # seq  动作 · 人话  风险  可逆  撤销  签名
-        seq_h    = "seq "    # 4 chars
-        action_h = "动作 · 人话"
-        risk_h   = "  风险 "     # right-padded
-        rev_h    = "  可逆  "
-        undo_h   = "  撤销      "
-        sig_h    = "  签名"
+        seq_h    = t_("ledger.col_seq")
+        action_h = t_("ledger.col_action")
+        risk_h   = t_("ledger.col_risk")
+        rev_h    = t_("ledger.col_rev")
+        undo_h   = t_("ledger.col_undo")
+        sig_h    = t_("ledger.col_sig")
         t.append(seq_h, style=_COL_INK_FAINT)
         t.append(action_h, style=_COL_INK_FAINT)
         t.append(risk_h, style=_COL_INK_FAINT)

@@ -6,6 +6,7 @@ import asyncio
 import pytest
 
 from argos.approval import ApprovalGate, ApprovalLevel
+from argos.i18n import t
 from argos.sandbox.broker import BrokerResult, CapabilityBroker
 from argos.sandbox.egress import EgressPolicy
 from argos.tools.receipts import ReceiptSigner
@@ -76,7 +77,7 @@ async def test_dangerous_run_command_still_blocked_at_yolo():
     br = _broker(level=ApprovalLevel.AUTO)
     res = await br.request("run_command", {"command": "rm -rf /"})
     assert isinstance(res, str)
-    assert "拒绝" in res or "硬规则" in res or "deny" in res.lower(), res
+    assert "拒绝" in res or "硬规则" in res or "deny" in res.lower() or "denied" in res.lower(), res
     assert br.last_receipt is None, "被硬规则拦的危险命令不应执行/签回执"
 
 
@@ -85,7 +86,7 @@ async def test_denied_returns_fail_closed_string_not_raise():
     br = _broker(level=ApprovalLevel.OBSERVE)  # OBSERVE → 一律 deny
     res = await br.request("run_command", {"command": "echo hi"})
     assert isinstance(res, str)
-    assert "拒绝" in res    # fail-closed 拒绝串,不抛异常
+    assert "拒绝" in res or "denied" in res.lower()    # fail-closed 拒绝串,不抛异常
 
 
 @pytest.mark.asyncio
@@ -109,7 +110,7 @@ async def test_web_extract_allows_public_denies_internal():
 async def test_unknown_action_rejected():
     br = _broker(level=ApprovalLevel.AUTO)
     res = await br.request("rm_rf_everything", {})
-    assert "未知" in res or "不支持" in res
+    assert "未知" in res or "不支持" in res or "unknown" in res.lower() or "unsupported" in res.lower()
 
 
 @pytest.mark.asyncio
@@ -171,7 +172,7 @@ async def test_network_action_denied_at_observe_through_request():
     证明 egress→approval→receipt 真把网络动作 gate 住(非 _execute 裸调)。"""
     br = _broker(level=ApprovalLevel.OBSERVE, search_hosts={"duckduckgo.com"})
     res = await br.request("web_search", {"query": "x"})
-    assert "拒绝" in res
+    assert "拒绝" in res or "denied" in res.lower()
     assert br.last_receipt is None  # deny → 不执行不签回执
 
 

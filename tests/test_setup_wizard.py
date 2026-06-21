@@ -4,13 +4,14 @@ import os
 import stat
 import pytest
 from argos.setup_wizard import PRESETS, write_profile
+from argos.i18n import t
 
 
 def test_presets_have_protocol_and_base_url():
     """预设必须有 protocol 和 base_url 字段;「自定义」的 protocol/base_url 允许为空(向导会询问)。"""
     for name, p in PRESETS.items():
-        if name == "自定义":
-            # 自定义预设的 protocol/base_url 为空,由向导交互询问(spec §6.1 「(问)」)
+        if name == "Custom":
+            # Custom preset: protocol/base_url are blank, wizard asks (spec §6.1 「(问)」)
             assert p["protocol"] == ""
             assert p["base_url"] == ""
         else:
@@ -79,7 +80,7 @@ async def test_probe_connection_fenced_python_ok():
     res = await probe_connection(protocol="openai", base_url="http://x/v1", model="m",
                                  api_key="k", client_factory=_mock_client(
                                      lambda r: httpx.Response(200, content=sse)))
-    assert res.connected is True and res.codeact_ok is True and res.rating == "行"
+    assert res.connected is True and res.codeact_ok is True and res.rating == t("setup.probe_rating_ok")
 
 
 @pytest.mark.asyncio
@@ -89,7 +90,7 @@ async def test_probe_connection_no_fence_warns():
     res = await probe_connection(protocol="openai", base_url="http://x/v1", model="m",
                                  api_key="k", client_factory=_mock_client(
                                      lambda r: httpx.Response(200, content=sse)))
-    assert res.connected is True and res.codeact_ok is False and res.rating == "勉强"
+    assert res.connected is True and res.codeact_ok is False and res.rating == t("setup.probe_rating_marginal")
     assert "CodeAct" in res.message or "围栏" in res.message
 
 
@@ -98,7 +99,7 @@ async def test_probe_connection_http_error_honest():
     res = await probe_connection(protocol="openai", base_url="http://x/v1", model="m",
                                  api_key="bad", client_factory=_mock_client(
                                      lambda r: httpx.Response(401, text="invalid api key")))
-    assert res.connected is False and res.rating == "不行"
+    assert res.connected is False and res.rating == t("setup.probe_rating_fail")
     assert "401" in res.message
 
 
@@ -144,12 +145,12 @@ async def test_run_wizard_happy_path(tmp_path, monkeypatch):
 async def test_run_wizard_custom_preset(tmp_path, monkeypatch):
     """「自定义」预设触发 protocol/base_url 额外询问(spec §6.1 「(问)」)。"""
     import argos.setup_wizard as W
-    # 自定义是 PRESETS 第 7 项(最后一项)
-    custom_idx = str(list(W.PRESETS.keys()).index("自定义") + 1)
+    # "Custom" is the last entry in PRESETS
+    custom_idx = str(list(W.PRESETS.keys()).index("Custom") + 1)
     inputs = iter([
-        custom_idx,                             # 1. 选「自定义」
-        "openai",                               # 2a. protocol(询问,因预设为空)
-        "http://localhost:8000/v1",             # 2b. base_url(询问,因预设为空)
+        custom_idx,                             # 1. select "Custom"
+        "openai",                               # 2a. protocol (asked, preset is blank)
+        "http://localhost:8000/v1",             # 2b. base_url (asked, preset is blank)
         "my-local-model",                       # 3. model id
         "paste",                                # 4. key 方式
         "localkey",                             # 5. key 值
@@ -232,7 +233,8 @@ async def test_deep_probe_passed_rates_xing(tmp_path, monkeypatch):
                                "```python\nwrite_file('st.py','def f():\\n    return 1\\n')\n```\n"
                                "propose_verify('python3 -c \"import st; assert st.f()==1\"')",
                                "完成。"]))
-    assert res.rating in ("行", "勉强", "不行")   # 真跑出三态之一(平台相关), 不抛异常
+    # 真跑出三态之一(平台相关), 不抛异常
+    assert res.rating in (t("setup.probe_rating_ok"), t("setup.probe_rating_marginal"), t("setup.probe_rating_fail"))
 
 
 # ── Phase 3 加固回归(fail-closed / 诚实) ──────────────────────────────────────

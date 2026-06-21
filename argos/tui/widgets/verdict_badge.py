@@ -18,6 +18,7 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from argos.core.types import Verdict, VerdictStatus
+from argos.i18n import t
 
 
 class VerdictBadge(Static):
@@ -75,7 +76,7 @@ class VerdictBadge(Static):
         # ── no_test 态(CONTRACT A):无机检,中性灰,绝不染橙 ─────────────────
         # 用 getattr 防御:CORE 未发布前 no_test 字段不存在时降级走 unverifiable 路径。
         if getattr(verdict, "no_test", False):
-            self.render_text = f"○ 未机检 · 无 verify · {verdict.detail}"
+            self.render_text = t("verdict.no_test_line", detail=verdict.detail)
             # watch_status 的副作用(设 verdict-unverifiable 类)须在 _clear_all_classes 之前
             # 发生,故先赋 status reactive、再整体清类、再挂 verdict-no-test。
             # 赋值触发 watch_status → 设 verdict-unverifiable;下一行即清除它。
@@ -93,8 +94,8 @@ class VerdictBadge(Static):
         if verdict.status == "passed" and verdict.self_verified:
             # ── self-verified 弱通过(第四态,契约10) ──────────────────
             # ◍ 格纹瞳,去饱和绿 $pass-weak,强制第二行 ⤷ 注解
-            line1 = f"◍ 自验证通过(较弱) · {cmd} → {verdict.detail}"
-            line2 = f"  ⤷ 非用户级 verify,未晋级技能"
+            line1 = t("verdict.self_verified_line1", cmd=cmd, detail=verdict.detail)
+            line2 = t("verdict.self_verified_line2")
             self.render_text = f"{line1}\n{line2}"
             self._clear_all_classes()
             self.set_class(True, "verdict-self")
@@ -105,9 +106,9 @@ class VerdictBadge(Static):
         if verdict.status == "passed":
             # ── passed 强通过 ──────────────────────────────────────
             # ◉ 注视实瞳,满绿 $pass bold,展示 verify_cmd + N 次尝试 + detail
-            attempts_str = f"{verdict.attempts} 次尝试"
-            self.render_text = (
-                f"◉ verify passed · {cmd} · {attempts_str} → {verdict.detail}"
+            attempts_str = t("verdict.passed_attempts", attempts=verdict.attempts)
+            self.render_text = t(
+                "verdict.passed_line", cmd=cmd, attempts_str=attempts_str, detail=verdict.detail
             )
             self._clear_all_classes()
             self.set_class(True, "verdict-passed")
@@ -117,8 +118,8 @@ class VerdictBadge(Static):
         if verdict.status == "failed":
             # ── failed ────────────────────────────────────────────
             # ◉ 注视实瞳,红 $fail bold,FAILED 大写,追加 ⤷ 重试注解
-            line1 = f"◉ verify FAILED · {cmd} → {verdict.detail}"
-            line2 = f"  ⤷ 重试 {verdict.attempts} 次后仍 failed"
+            line1 = t("verdict.failed_line1", cmd=cmd, detail=verdict.detail)
+            line2 = t("verdict.failed_line2", attempts=verdict.attempts)
             self.render_text = f"{line1}\n{line2}"
             self._clear_all_classes()
             self.set_class(True, "verdict-failed")
@@ -129,11 +130,11 @@ class VerdictBadge(Static):
         # ◔ 扫视半瞳,橙 $unverif,三重冗余:◔ + 橙 + "无法验证"文字
         if verdict.tampered:
             tampered_str = " ".join(verdict.tampered)
-            self.render_text = (
-                f"◔ 无法验证 · 受保护文件被改 {tampered_str} → {verdict.detail}"
+            self.render_text = t(
+                "verdict.unverifiable_tampered", tampered=tampered_str, detail=verdict.detail
             )
         else:
-            self.render_text = f"◔ 无法验证 · {cmd} · {verdict.detail}"
+            self.render_text = t("verdict.unverifiable", cmd=cmd, detail=verdict.detail)
         self._clear_all_classes()
         self.set_class(True, "verdict-unverifiable")
         self.update(self.render_text)

@@ -169,7 +169,7 @@ def test_render_empty_plan():
     """0 todos + 0 tool_calls 仍产 markdown('无具体任务分解'段)。"""
     md = PlanRenderer.render(goal="noop", todos=[], tool_calls=[])
     assert "# Plan: noop" in md
-    assert "无具体任务分解" in md
+    assert "无具体任务分解" in md or "no specific task breakdown" in md.lower()
     assert "审批" in md or "Approve" in md or "approve" in md.lower()
 
 
@@ -203,7 +203,7 @@ def test_render_with_risks():
     md = PlanRenderer.render(
         goal="x", todos=[], tool_calls=[], risks=["rm -rf 风险", "无 verify_cmd"],
     )
-    assert "风险" in md
+    assert "风险" in md or "risk" in md.lower()
     assert "rm -rf" in md
     assert "verify_cmd" in md
 

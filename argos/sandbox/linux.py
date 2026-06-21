@@ -128,7 +128,8 @@ def _linux_spawn(*, backend: str, workspace: Path, child_argv: list[str],
     elif backend == "unshare":
         argv = _unshare_argv(workspace, child_argv)
     else:
-        raise RuntimeError(f"未知 Linux 沙箱后端:{backend!r}")
+        from argos.i18n import t
+        raise RuntimeError(t("sandbox.linux.unknown_backend", backend=backend))
     child_env = dict(env or os.environ)
     return subprocess.Popen(
         argv, cwd=str(workspace), env=child_env,
@@ -152,10 +153,8 @@ class _BaseLinuxExecutor:
               allow_workflow: bool = True, read_only: bool = False,
               tool_allowlist: "list[str] | None" = None) -> None:
         if _AVAILABLE_BACKEND is None:
-            raise RuntimeError(
-                "无可用 Linux 沙箱后端(bwrap / unshare 都不在 PATH);"
-                "装 bwrap 或 unshare 后重试,或不假装隔离地放弃"
-            )
+            from argos.i18n import t
+            raise RuntimeError(t("sandbox.linux.no_backend_spawn"))
         if self.backend and self.backend != _AVAILABLE_BACKEND:
             # 想用 bwrap 但只有 unshare(或反之)—— 降级提示但不抛(让代码继续跑)
             import warnings
@@ -182,17 +181,19 @@ class _BaseLinuxExecutor:
                     "tool_allowlist": list(tool_allowlist) if tool_allowlist is not None else None})
         msg = self._recv()
         if not msg or msg.get("type") != "init_ok":
-            raise RuntimeError(f"sandbox init 失败:{msg!r};stderr={self._drain_stderr()}")
+            from argos.i18n import t
+            raise RuntimeError(t("sandbox.executor.init_failed", msg=msg, stderr=self._drain_stderr()))
 
     def exec_code(self, code: str) -> ExecResult:
+        from argos.i18n import t
         if self._proc is None:
-            raise RuntimeError("executor 未 spawn")
+            raise RuntimeError(t("sandbox.executor.not_spawned"))
         self._send({"op": "exec", "code": code})
         while True:
             msg = self._recv()
             if msg is None:
                 return ExecResult(stdout="", value_repr="",
-                                  exc=f"沙箱通道意外关闭;stderr={self._drain_stderr()}")
+                                  exc=t("sandbox.executor.channel_closed", stderr=self._drain_stderr()))
             mtype = msg.get("type")
             if mtype == "broker_call":
                 value = self._handle_broker_call(msg.get("action", ""), msg.get("args") or {})
@@ -218,7 +219,8 @@ class _BaseLinuxExecutor:
     # ── 内部(与 SeatbeltExecutor 同) ─────────────────────────────
     def _handle_broker_call(self, action: str, args: dict[str, Any]) -> Any:
         if self._broker_handler is None:
-            return "错误:该工具需要 broker 授权但当前没有 broker 上下文,默认拒绝。"
+            from argos.i18n import t
+            return t("sandbox.executor.no_broker_context")
         return self._broker_handler(action, args)
 
     def _send(self, obj: dict[str, Any]) -> None:
@@ -303,11 +305,7 @@ def select_backend():
             return BwrapExecutor
         if _AVAILABLE_BACKEND == "unshare":
             return UnshareExecutor
-        raise RuntimeError(
-            "无可用 Linux 沙箱后端(bwrap / unshare 都不在 PATH);"
-            "装 bwrap 或 unshare 后重试,或不假装隔离地放弃"
-        )
-    raise RuntimeError(
-        f"Argos 沙箱暂不支持 {sys.platform!r};"
-        f"macOS 用 Seatbelt,Linux 用 bwrap/unshare"
-    )
+        from argos.i18n import t
+        raise RuntimeError(t("sandbox.linux.no_backend_select"))
+    from argos.i18n import t
+    raise RuntimeError(t("sandbox.executor.win32_unsupported"))

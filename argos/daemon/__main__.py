@@ -23,6 +23,8 @@ import sys
 import time
 from pathlib import Path
 
+from argos.i18n import t
+
 log = logging.getLogger(__name__)
 
 
@@ -76,11 +78,10 @@ async def _serve(args: argparse.Namespace) -> int:
         log.info("daemon: AgentLoop factory 装配完成(model=%s)", components.config.model_tier)
     except RuntimeError as e:
         # 诚实降级:无 key → daemon 起得来,但 create_run 会明确拒绝(_NO_KEY 哨兵)
-        print(f"[daemon] 警告:无法装配 AgentLoop({e});daemon 以无 key 模式启动,create_run 将拒绝。",
-              file=sys.stderr)
+        print(t("daemon.serve.warn_no_key", e=e), file=sys.stderr)
         log.warning("daemon: loop_factory 装配失败: %s", e)
     except Exception as e:  # noqa: BLE001
-        print(f"[daemon] 警告:装配异常({e});daemon 以无 key 模式启动。", file=sys.stderr)
+        print(t("daemon.serve.warn_assembly_error", e=e), file=sys.stderr)
         log.warning("daemon: loop_factory 装配异常: %s", e)
 
     manager = RunManager(runs_dir=runs_dir, index_path=index_path)
@@ -193,7 +194,7 @@ def _cmd_stop(
 
     # 快速路径:pid 文件不存在或进程已死、socket 也不在 → 诚实说
     if pid is None and not socket_path.exists():
-        print("daemon 未运行")
+        print(t("daemon.stop.not_running"))
         return 0
 
     if pid is not None and not is_alive(pid):
@@ -203,37 +204,36 @@ def _cmd_stop(
         except OSError:
             pass
         if not socket_path.exists():
-            print("daemon 未运行 (残留 pid 文件已清理)")
+            print(t("daemon.stop.stale_pid_cleaned"))
             return 0
 
     if pid is None:
         # socket 在但 pid 文件没有 —— 无法发信号;提示用户
-        print(f"daemon socket 存在于 {socket_path} 但无 pid 文件;无法优雅停止。",
-              file=sys.stderr)
+        print(t("daemon.stop.socket_no_pid", socket_path=socket_path), file=sys.stderr)
         return 1
 
     # 发 SIGTERM
     try:
         os.kill(pid, signal.SIGTERM)
-        print(f"[daemon] SIGTERM 已发送 → pid={pid}")
+        print(t("daemon.stop.sigterm_sent", pid=pid))
     except ProcessLookupError:
-        print("daemon 未运行 (进程已不存在)")
+        print(t("daemon.stop.process_gone"))
         # 清理残留文件
         pid_path.unlink(missing_ok=True)
         return 0
     except PermissionError as e:
-        print(f"[daemon] 无权发送 SIGTERM: {e}", file=sys.stderr)
+        print(t("daemon.stop.no_permission", e=e), file=sys.stderr)
         return 1
 
     # 等待 socket 消失(轮询,最多 timeout 秒)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if not _socket_alive(socket_path):
-            print("[daemon] 已停止")
+            print(t("daemon.stop.stopped"))
             return 0
         time.sleep(0.2)
 
-    print(f"[daemon] 警告:daemon 在 {timeout:.0f}s 内未完全退出(socket 仍在 {socket_path})",
+    print(t("daemon.stop.timeout_warning", timeout=f"{timeout:.0f}", socket_path=socket_path),
           file=sys.stderr)
     return 1
 
@@ -250,19 +250,20 @@ def _cmd_status(
     socket_ok = _socket_alive(socket_path)
 
     if not alive and not socket_ok:
-        print("daemon 未运行")
+        print(t("daemon.status.not_running"))
         if pid is not None:
             # 残留 pid 文件
-            print(f"  (残留 pid 文件: {pid_path}, pid={pid})")
+            print(t("daemon.status.stale_pid_note", pid_path=pid_path, pid=pid))
         return 1
 
     # 进程存在
     status_lines: list[str] = []
-    status_lines.append("daemon 运行中")
+    status_lines.append(t("daemon.status.running"))
     if pid is not None:
-        status_lines.append(f"  pid       : {pid}")
-    status_lines.append(f"  pid 文件  : {pid_path}")
-    status_lines.append(f"  socket    : {socket_path} ({'可连接' if socket_ok else '不可连接'})")
+        status_lines.append(t("daemon.status.pid_line", pid=pid))
+    status_lines.append(t("daemon.status.pid_file_line", pid_path=pid_path))
+    connectivity = t("daemon.status.socket_connectable") if socket_ok else t("daemon.status.socket_not_connectable")
+    status_lines.append(t("daemon.status.socket_line", socket_path=socket_path, connectivity=connectivity))
 
     # 尝试读取 uptime(pid 文件修改时间作为启动时间近似)
     if pid_path.exists():
@@ -271,7 +272,7 @@ def _cmd_status(
             uptime_s = time.time() - start_ts
             h, rem = divmod(int(uptime_s), 3600)
             m, s = divmod(rem, 60)
-            status_lines.append(f"  uptime    : {h:02d}:{m:02d}:{s:02d}")
+            status_lines.append(t("daemon.status.uptime_line", uptime=f"{h:02d}:{m:02d}:{s:02d}"))
         except OSError:
             pass
 
@@ -280,7 +281,7 @@ def _cmd_status(
         try:
             version_info = _query_version_sync(socket_path)
             if version_info:
-                status_lines.append(f"  version   : {version_info}")
+                status_lines.append(t("daemon.status.version_line", version_info=version_info))
         except Exception:  # noqa: BLE001
             pass
 
@@ -326,9 +327,9 @@ def _cmd_restart(args: argparse.Namespace) -> int:
         return rc
 
     # start (detached subprocess)
-    print("[daemon] 正在重新启动…")
+    print(t("daemon.restart.restarting"))
     _spawn_detached(args)
-    print("[daemon] 已重新启动(后台运行)")
+    print(t("daemon.restart.restarted"))
     return 0
 
 

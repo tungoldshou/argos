@@ -306,19 +306,22 @@ class TestStatusBarHints:
     """#21: StatusBar hint string includes Ctrl+B, Ctrl+O, Ctrl+V."""
 
     def test_hints_include_ctrl_b(self) -> None:
-        from argos.tui.widgets.status_bar import _HINTS
+        from argos.tui.widgets.status_bar import _hints
+        _HINTS = _hints()  # i18n:hints 改为运行时函数(随 ARGOS_LANG 切语言),不再是模块常量
         assert "^B" in _HINTS or "Ctrl+B" in _HINTS or "ctrl+b" in _HINTS.lower(), (
             f"StatusBar hint must mention Ctrl+B (后台), got: {_HINTS!r}"
         )
 
     def test_hints_include_ctrl_o(self) -> None:
-        from argos.tui.widgets.status_bar import _HINTS
+        from argos.tui.widgets.status_bar import _hints
+        _HINTS = _hints()  # i18n:hints 改为运行时函数(随 ARGOS_LANG 切语言),不再是模块常量
         assert "^O" in _HINTS or "Ctrl+O" in _HINTS or "ctrl+o" in _HINTS.lower(), (
             f"StatusBar hint must mention Ctrl+O (右栏), got: {_HINTS!r}"
         )
 
     def test_hints_include_ctrl_v(self) -> None:
-        from argos.tui.widgets.status_bar import _HINTS
+        from argos.tui.widgets.status_bar import _hints
+        _HINTS = _hints()  # i18n:hints 改为运行时函数(随 ARGOS_LANG 切语言),不再是模块常量
         assert "^V" in _HINTS or "Ctrl+V" in _HINTS or "ctrl+v" in _HINTS.lower(), (
             f"StatusBar hint must mention Ctrl+V (贴图), got: {_HINTS!r}"
         )

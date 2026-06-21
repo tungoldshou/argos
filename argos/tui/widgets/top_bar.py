@@ -18,6 +18,8 @@ from __future__ import annotations
 from rich.text import Text
 from textual.widgets import Static
 
+from argos.i18n import t
+
 # 与 theme.ARGOS_NIGHT 同源的固定色(Rich style 无法引用 Textual CSS 变量)
 # v3 新色 token 映射(theme.py 里的真实值)
 _EYE_SOFT = "#A8854A"   # $eye-soft:idle 暗金之眼
@@ -109,16 +111,16 @@ class TopBar(Static):
         """
         out: list[str] = []
         if self._plan_mode:
-            out.append("plan")
+            out.append(t("widget.badge_plan"))
         if self._yolo:
-            out.append("YOLO")
+            out.append(t("widget.badge_yolo"))
         if self._demo:
-            out.append("DEMO 脚本演示")
+            out.append(t("widget.badge_demo"))
         elif not self._has_key:
-            out.append("未配 key")
+            out.append(t("widget.badge_no_key"))
         else:
             # has_key=True + demo=False → 真实运行,显示 LIVE
-            out.append("LIVE")
+            out.append(t("widget.badge_live"))
         # Trust 徽标排最后(README §188)
         if self._trust_level is not None:
             prefix = "⏻ " if self._trust_level == 4 else ""
@@ -165,11 +167,11 @@ class TopBar(Static):
         固定徽标用字典查表;Trust 徽标(含 'L' 前缀或 '⏻' 前缀)按 level 动态着色。
         """
         _FIXED: dict[str, str] = {
-            "plan":          _PLAN,
-            "YOLO":          _FAIL,
-            "DEMO 脚本演示": _UNVERIF,
-            "未配 key":      _UNVERIF,
-            "LIVE":          _PASS,
+            t("widget.badge_plan"): _PLAN,
+            t("widget.badge_yolo"): _FAIL,
+            t("widget.badge_demo"): _UNVERIF,
+            t("widget.badge_no_key"): _UNVERIF,
+            t("widget.badge_live"): _PASS,
         }
         if badge in _FIXED:
             return _FIXED[badge]

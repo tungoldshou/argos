@@ -21,6 +21,8 @@ from __future__ import annotations
 from textual.reactive import reactive
 from textual.widgets import Static
 
+from argos.i18n import t
+
 try:
     # 单一来源 argos.__version__(查分发名 "argos-agent" + VERSION 文件兜底)。
     # 不能用 version("argos") —— 分发名非 "argos",必 PackageNotFoundError 回退占位符。
@@ -91,13 +93,13 @@ def _compose_text(*, model_label: str, live: bool, plan_mode: bool,
 
     if not live:
         # DEMO:橙色徽标
-        badge_markup = f"[{_COL_UNVERIF}]DEMO 脚本演示[/{_COL_UNVERIF}]"
+        badge_markup = f"[{_COL_UNVERIF}]{t('widget.splash_badge_demo')}[/{_COL_UNVERIF}]"
     elif not has_key:
         # 未配 key:用 ink-dim,绝不出现 LIVE
-        badge_markup = f"[{_COL_INK_DIM}]未配 key · /setup[/{_COL_INK_DIM}]"
+        badge_markup = f"[{_COL_INK_DIM}]{t('widget.splash_badge_no_key')}[/{_COL_INK_DIM}]"
     else:
         # LIVE:绿色徽标
-        badge_markup = f"[{_COL_PASS}]LIVE[/{_COL_PASS}]"
+        badge_markup = f"[{_COL_PASS}]{t('widget.splash_badge_live')}[/{_COL_PASS}]"
 
     prefix = _plan_prefix_str(plan_mode)
     # 眼字形用 $eye-glow 高亮金;副标题行用 $ink-dim;提示行用 $ink-faint
@@ -109,9 +111,9 @@ def _compose_text(*, model_label: str, live: bool, plan_mode: bool,
         _LOGO
         + "\n                   ARGOS\n"
         + f"\n                    [{_COL_EYE_GLOW}]{eye}[/{_COL_EYE_GLOW}]\n"
-        + f"\n[{_COL_INK_DIM}]百眼智能体 · v{_VERSION} · {model_label} · [/{_COL_INK_DIM}]"
+        + f"\n[{_COL_INK_DIM}]{t('widget.splash_subtitle', version=_VERSION, model_label=model_label)}[/{_COL_INK_DIM}]"
         + badge_markup
-        + f"\n[{_COL_INK_FAINT}]输入目标开始 · / 命令 · Esc 打断 · ^C 退出[/{_COL_INK_FAINT}]"
+        + f"\n[{_COL_INK_FAINT}]{t('widget.splash_hint')}[/{_COL_INK_FAINT}]"
     )
 
 
@@ -186,12 +188,12 @@ class StartupSplash(Static):
             # 'LSP' → 'LSP 已禁用'(同 hooks/LSP 行为);否则 'hooks 已禁用'(默认)。
             reason = str(self._bad_config)
             if "permissions" in reason:
-                prefix = "permissions"
+                prefix = t("widget.splash_bad_config_permissions")
             elif "LSP" in reason:
-                prefix = "LSP"
+                prefix = t("widget.splash_bad_config_lsp")
             else:
-                prefix = "hooks"
-            text += f"\n       ⚠︎ {prefix} 已禁用({reason})"
+                prefix = t("widget.splash_bad_config_hooks")
+            text += f"\n       ⚠︎ {prefix}" + t("widget.splash_bad_config_suffix", reason=reason)
         self._text = text
         self.update(self._text)
         # 切色 CSS 类:plan mode 走 $primary 冷靛蓝(对齐 glow.phase_color("plan")),act 走 $accent

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from argos import web
+from argos.i18n import t
 
 _EXTRACT_COMPRESS_THRESHOLD = 6000
 
@@ -14,10 +15,10 @@ def web_search(query: str, limit: int = 5) -> str:
     """联网搜索,返回若干结果(标题+链接+摘要)。"""
     res = web.search(query, limit)
     if not res.get("success"):
-        return f"搜索失败:{res.get('error', '未知错误')}"
+        return t("tools.web.search_failed", error=res.get("error") or t("tools.web.unknown_error"))
     results = res.get("results") or []
     if not results:
-        return "没有搜到结果。"
+        return t("tools.web.search_no_results")
     lines = []
     for i, r in enumerate(results, 1):
         lines.append(f"{i}. {r.get('title', '')}\n   {r.get('url', '')}\n   {r.get('snippet', '')}")
@@ -28,11 +29,11 @@ def web_extract(url: str) -> str:
     """取一个网页的正文(已去导航/广告噪声)。长正文截断(压缩留 Phase 4 接 model)。"""
     res = web.extract(url)
     if not res.get("success"):
-        return f"取页失败:{res.get('error', '未知错误')}"
+        return t("tools.web.extract_failed", error=res.get("error") or t("tools.web.unknown_error"))
     text = res.get("text") or ""
     if len(text) <= _EXTRACT_COMPRESS_THRESHOLD:
-        return text or "(页面无可提取正文)"
-    return text[:8000] + f"\n…(正文共 {len(text)} 字符,已截断)"
+        return text or t("tools.web.extract_empty")
+    return text[:8000] + t("tools.web.extract_truncated", total=len(text))
 
 
 def host_for(action: str, args: dict) -> str:

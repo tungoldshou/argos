@@ -53,6 +53,7 @@ from argos.protocol.events import (
 )
 from argos.protocol.events import EventBus
 from argos import hooks as _hooks
+from argos.i18n import is_error_result, t as _i18n_t
 from argos.hooks.payload import (
     build_post_payload, build_pre_payload, build_session_start_payload,
     build_stop_payload, extract_tool_names,
@@ -593,7 +594,8 @@ class AgentLoop:
         from argos.core.plan_mode import ExitPlanMode
         result = ExitPlanMode(self, action, feedback)
         # ExitPlanMode 失败(校验不过)→ 不清注册表,返 False 告知调用方。
-        if result.startswith("错误:"):
+        # 用 is_error_result(locale 无关):工具/plan 错误串切英文后以 "Error:" 起,绝不漏判。
+        if is_error_result(result):
             return False
         # 清注册表条目(ExitPlanMode 已 set _plan_decision_event,loop 会唤醒)。
         self._plan_call_registry.pop(call_id, None)
@@ -604,7 +606,7 @@ class AgentLoop:
         """把当前 todos 摘成一行行的进度文本(回灌 messages 的锚,防长任务丢目标)。"""
         glyph = {"completed": "[x]", "in_progress": "[~]", "pending": "[ ]"}
         done = sum(1 for t in todos if t.get("status") == "completed")
-        lines = [f"[Argos 任务清单 {done}/{len(todos)}]"]
+        lines = [_i18n_t("loop.todos.header", done=done, total=len(todos))]
         for t in todos:
             mark = glyph.get(t.get("status", "pending"), "[ ]")
             lines.append(f"{mark} {t.get('content', '')}")
@@ -715,7 +717,7 @@ class AgentLoop:
             )
         except Exception as exc:  # noqa: BLE001 — fail-closed
             result_type = type(exc).__name__
-            result_err = f"DOM 探针线程异常：{result_type}: {exc}"
+            result_err = _i18n_t("loop.dom_probe.thread_error", result_type=result_type, exc=exc)
             # 构造一个哨兵 result（不引入循环 import）
             class _R:  # noqa: N801 — 局部哨兵
                 found = False
@@ -728,10 +730,7 @@ class AgentLoop:
 
         if result.error:
             # 浏览器不可用/异常 → unverifiable（诚实）
-            detail = (
-                f"[L3 DOM 探针] {rationale}\n"
-                f"探针错误（unverifiable）：{result.error}"
-            )
+            detail = _i18n_t("loop.dom_probe.error_detail", rationale=rationale, error=result.error)
             verdict = Verdict(
                 status="unverifiable",
                 detail=detail,
@@ -740,19 +739,12 @@ class AgentLoop:
             )
         elif result.found:
             # 元素存在（且 expected_text 命中，若有）→ passed（带探针证据）
-            excerpt = result.text_excerpt[:200] if result.text_excerpt else "（无文本摘录）"
-            detail = (
-                f"[L3 DOM 探针] {rationale}\n"
-                f"元素 {selector!r} 存在。摘录：{excerpt}"
-            )
+            excerpt = result.text_excerpt[:200] if result.text_excerpt else _i18n_t("loop.dom_probe.no_excerpt")
+            detail = _i18n_t("loop.dom_probe.found_detail", rationale=rationale, selector=selector, excerpt=excerpt)
             verdict = Verdict.passed(detail=detail, verify_cmd=label, attempts=attempt)
         else:
             # 元素不存在/文本不匹配 → failed（真实证据，回灌 bounce）
-            detail = (
-                f"[L3 DOM 探针] {rationale}\n"
-                f"元素 {selector!r} 在页面中未找到（或 expected_text 不匹配）。"
-                "请检查网页改动是否已生效，或检查选择器是否正确。"
-            )
+            detail = _i18n_t("loop.dom_probe.not_found_detail", rationale=rationale, selector=selector)
             verdict = Verdict.failed(detail=detail, verify_cmd=label, attempts=attempt)
 
         # 投 VerifyVerdict 事件（走既有账本/TUI 路径）
@@ -779,25 +771,24 @@ class AgentLoop:
             class _R:  # noqa: N801 — 局部哨兵
                 found = False
                 text_excerpt = ""
-                error = f"GUI 探针线程异常:{type(exc).__name__}: {exc}"
+                error = _i18n_t("loop.gui_probe.thread_error", exc_type=type(exc).__name__, exc=exc)
             result = _R()  # type: ignore[assignment]
 
         if result.error:
             verdict = Verdict(
                 status="unverifiable",
-                detail=f"[GUI 探针] 屏上文本断言无法机检(unverifiable):{result.error}",
+                detail=_i18n_t("loop.gui_probe.unverifiable_detail", error=result.error),
                 verify_cmd=label, attempts=attempt,
             )
         elif result.found:
-            excerpt = result.text_excerpt[:200] if result.text_excerpt else "(无摘录)"
+            excerpt = result.text_excerpt[:200] if result.text_excerpt else _i18n_t("loop.gui_probe.no_excerpt")
             verdict = Verdict.passed(
-                detail=f"[GUI 探针] 屏上确认含 {expected_text!r}。OCR 摘录:{excerpt}",
+                detail=_i18n_t("loop.gui_probe.found_detail", expected_text=expected_text, excerpt=excerpt),
                 verify_cmd=label, attempts=attempt,
             )
         else:
             verdict = Verdict.failed(
-                detail=(f"[GUI 探针] 屏上未找到 {expected_text!r}(OCR 未命中)。"
-                        "请检查 GUI 操作是否已生效。"),
+                detail=_i18n_t("loop.gui_probe.not_found_detail", expected_text=expected_text),
                 verify_cmd=label, attempts=attempt,
             )
         await self._harness.bus.emit(_VV(verdict=verdict))
@@ -824,10 +815,9 @@ class AgentLoop:
                 )
                 ok = await resolve_vision_capability(tier, self._model, VisionCapabilityCache())
                 if not ok:
-                    model_name = getattr(tier, "model", "当前模型")
+                    model_name = getattr(tier, "model", "current model")
                     raise ValueError(
-                        f"当前模型 {model_name!r} 看不了图。请换一个支持视觉的模型,"
-                        "或在 config 给该 profile 设 multimodal override。"
+                        _i18n_t("loop.vision.unsupported", model_name=model_name)
                     )
         self._reset_run_state()
         # P0 护城河:inline 路径自建 runtime 上下文(daemon 在 worker.py 外部自设;inline 此前漏设 →
@@ -904,19 +894,11 @@ class AgentLoop:
                 "429" in _raw_msg or "too many requests" in _raw_msg.lower()
                 or "rate_limit" in _raw_msg.lower()
             ):
-                _friendly = (
-                    "模型限流(429):当前 key QPS 不足。"
-                    "建议:等几秒后重试,或在 config 里配多个逗号分隔的 key 轮换,或降低 best-of-N 并发。"
-                    f"(原始:{_raw_msg[:120]})"
-                )
+                _friendly = _i18n_t("loop.error.rate_limit", raw_msg=_raw_msg[:120])
             elif isinstance(e, _httpx.TransportError) or isinstance(
                 e, (_httpx.ConnectError, _httpx.ConnectTimeout, _httpx.ReadTimeout)
             ):
-                _friendly = (
-                    f"连不上模型端点(网络或 DNS 问题):"
-                    "请检查网络连接,或确认 config 里的 base_url 是否正确。"
-                    f"原始:{_raw_msg[:200]}"
-                )
+                _friendly = _i18n_t("loop.error.network", raw_msg=_raw_msg[:200])
             msg = _friendly if _friendly is not None else _raw_msg
             err = Error(message=msg, chain=chain)
             self._store.append_event(session_id, err)
@@ -959,8 +941,8 @@ class AgentLoop:
             fb_msg["attachments"] = [load_from_path(path)]
             if size and tuple(size) != (0, 0):
                 fb_msg["content"] = (
-                    f"{fb_msg['content']}\n"
-                    f"[截图 {size[0]}x{size[1]} 像素;点击坐标请用这张图的像素坐标]"
+                    f"{fb_msg['content']}"
+                    + _i18n_t("loop.screenshot.pixel_note", w=size[0], h=size[1])
                 )
         except Exception as exc:  # noqa: BLE001 — 读图失败诚实降级纯文本(不阻断 run)
             __import__("logging").getLogger(__name__).debug("screenshot attach skipped: %s", exc)
@@ -1404,24 +1386,18 @@ class AgentLoop:
                 if getattr(self, "_verify_rejected_fstring", False):
                     # #11:f-string verify(含 {} 占位)—— 诚实告知用普通字面量,而非静默丢失。
                     messages.append({"role": "user", "content":
-                        f"[Argos 验证门] `{self._verify_rejected}` 像是 f-string(含 {{}} 占位)。host 侧"
-                        "独立跑验证、拿不到你沙箱里的变量,无法求值 f-string。请改用普通字符串字面量、"
-                        "填入完整命令(如 propose_verify('pytest -q tests/test_x.py'))。"})
+                        _i18n_t("loop.verify_gate.fstring_rejected", cmd=self._verify_rejected)})
                     self._verify_rejected_fstring = False
                 elif (os.environ.get("ARGOS_BRIDGE_VERIFY_LOCK", "1") != "0"
                         and os.environ.get("ARGSOS_BRIDGE_VERIFY_LOCK", "1") != "0") \
                         and self._cfg.verify_cmd is not None and self._cfg.verify_cmd.strip():
                     # W5:bridge 已配 verify,agent 不必再 propose(开锁时)
                     messages.append({"role": "user", "content":
-                        f"[Argos 验证门] 你提出 verify 命令 `{self._verify_rejected}`,但本次任务已由桥接"
-                        f"统一配置了验证(会自动跑、不需要你再 propose)。请继续完成你手上的代码改动,不要"
-                        f"再次声明 verify —— 收尾时桥接会独立跑验证并按退出码给三态裁决。"})
+                        _i18n_t("loop.verify_gate.bridge_locked", cmd=self._verify_rejected)})
                 else:
                     # H1:伪命令
                     messages.append({"role": "user", "content":
-                        f"[Argos 验证门] `{self._verify_rejected}` 不是有效的验证命令(它永远通过、什么都不验证)。"
-                        "propose_verify 需要真正能判定对错的测试/编译/lint 命令(如 pytest、cargo test、"
-                        "ruff、mypy、tsc)。若此项目确实无可机检验证,就别声明、直接说明情况。"})
+                        _i18n_t("loop.verify_gate.trivial_rejected", cmd=self._verify_rejected)})
                 self._verify_rejected = None
 
             # 真 TODO 拆解:抓本段里 agent 的 update_plan([...]) 子任务清单。变化才 yield PlanUpdate
@@ -1477,10 +1453,9 @@ class AgentLoop:
                                     error=h.error)
                 # PreToolUse 阻塞:任一 fail 且非 timeout → 拒,反喂(spec D4 / §2.5)
                 if not pre_result.success and not pre_result.timed_out:
-                    reason = pre_result.stop_reason or "(无理由)"
+                    reason = pre_result.stop_reason or _i18n_t("loop.hook.no_reason")
                     messages.append({"role": "user", "content":
-                        f"[Argos Hook] PreToolUse 工具调用被 hook 拒绝:"
-                        f"\n{reason}\n请调整方案后再试,或与用户沟通。"})
+                        _i18n_t("loop.hook.pretooluse_rejected", reason=reason)})
                     step += 1
                     continue   # 不调 exec_code,走下一轮
                 yield CodeAction(code=code, step=step)
@@ -1614,10 +1589,7 @@ class AgentLoop:
                 if _wf_spec is not None and not _wf_on:
                     # 诚实纠偏:工作流默认关闭时 host 不 dispatch,但沙箱 _propose_workflow_pure 回执仍说
                     # "待审批后执行"(沙箱子进程不知道 host 的开关)—— 不纠偏会让模型空等一个不会跑的工作流。
-                    feedback = (
-                        "[note] 工作流未启用(ARGOS_WORKFLOWS 未设),你的 propose_workflow 不会被执行;"
-                        "请直接单线程完成任务,不要等待它运行。\n" + feedback
-                    )
+                    feedback = _i18n_t("loop.workflow.not_enabled") + "\n" + feedback
                 if self._todos:
                     # 锚机制:每个 act step 把当前 todos 摘要回灌(随执行结果一起),
                     # 防长任务在多步后丢失目标/漏更状态。
@@ -1640,8 +1612,7 @@ class AgentLoop:
                     and _looks_like_lazy_claim(text)):
                 noaction_nudged = True
                 messages.append({"role": "user", "content":
-                    "你还没有产出任何 ```python 代码动作就停了。如果要做事,请输出代码块真正执行;"
-                    "如果确认无需任何动作即可回答,请直接给出最终答复(我会据此收尾)。"})
+                    _i18n_t("loop.nudge.no_code_action")})
                 step += 1
                 continue
 
@@ -1651,9 +1622,7 @@ class AgentLoop:
             if made_changes and self._verify_cmd is None and not verify_nudged:
                 verify_nudged = True
                 messages.append({"role": "user", "content":
-                    "你改动了代码但没有声明验证命令。请用 `propose_verify('<测试/编译/lint 命令>')` "
-                    "声明如何机检本次改动(如 pytest、cargo test、ruff、mypy、tsc),我会独立运行它以退出码为准。"
-                    "若此项目确实无可机检验证,直接说明即可(我会如实标'未机检验证'收尾)。"})
+                    _i18n_t("loop.nudge.verify_missing")})
                 step += 1
                 continue
 
@@ -1746,7 +1715,7 @@ class AgentLoop:
                     zone, reason = _autonomy
                     if zone.value == "red" and self._broker is not None:
                         try:
-                            desc = f"verify 不可信,需人确认:{reason}"
+                            desc = _i18n_t("loop.verify_gate.unverifiable_needs_confirmation", reason=reason)
                             decision = await self._broker.gate.request(
                                 "autonomy_unverifiable", {"verify_cmd": self._verify_cmd},
                                 description=desc, risk="high", timeout=120.0,
@@ -1757,19 +1726,25 @@ class AgentLoop:
                                 if self._fail_count > self._cfg.max_rounds:
                                     escalated = True
                                     break
-                                bounce = (
-                                    f"[Argos 验证门] 验证 `{self._verify_cmd}` 不可信,"
-                                    f"用户拒绝继续: {verdict.detail}。请修复后再试。"
+                                bounce = _i18n_t(
+                                    "loop.verify_gate.user_rejected_bounce",
+                                    verify_cmd=self._verify_cmd,
+                                    detail=verdict.detail,
                                 )
                                 messages.append({"role": "user", "content": bounce})
                                 step += 1
                                 continue
                             # 用户批准继续 → 收尾(降级为 unverifiable 完成,标 NO_TEST)
-                            report_note = (
-                                f"verify 不可信({verdict.status}),用户已确认继续"
-                            )
                             if self._compacted:
-                                report_note += ";上下文经过压缩(有损)"
+                                report_note = _i18n_t(
+                                    "loop.report_note.unverifiable_user_confirmed_compacted",
+                                    verdict_status=verdict.status,
+                                )
+                            else:
+                                report_note = _i18n_t(
+                                    "loop.report_note.unverifiable_user_confirmed",
+                                    verdict_status=verdict.status,
+                                )
                             break
                         except Exception:  # noqa: BLE001 — gate 异常不阻断 run
                             pass
@@ -1809,15 +1784,16 @@ class AgentLoop:
                         compacted=self._compacted,
                         reverified=self._reverified_since_compact)):
                 if self._compacted:
-                    report_note = "上下文经过压缩(有损),已重跑验证确认通过"
+                    report_note = _i18n_t("loop.report_note.compacted_reverified")
                 break                        # 通过 → 收尾(用户级)
             if self._harness.is_honest_completion(verdict, verify_cmd=self._verify_cmd):
                 # HONESTY CORRECTION:无测任务的诚实非阻塞完成 —— 收尾,report 标"未机检验证"。
                 # 若发生过(有损)压缩且无可机检命令 → 诚实加注:记忆有损且无法机检确认进度,
                 # 仍判 unverifiable(NO_TEST),绝不假装 passed(spec 2026-06-07)。
-                report_note = "未机检验证 (no test command)"
                 if self._compacted:
-                    report_note += "；上下文经过压缩(有损),无机检命令可重验确认进度"
+                    report_note = _i18n_t("loop.report_note.no_test_compacted")
+                else:
+                    report_note = _i18n_t("loop.report_note.no_test")
                 break
             # 到这里:failed,或配了 cmd 却 unverifiable(篡改/超时)→ 真问题 → bounce/escalate。
             self._fail_count += 1
@@ -1826,9 +1802,10 @@ class AgentLoop:
                 # 投出 Escalation —— 二者同一判据(attempt > max_rounds)同轮触发,诚实终止。
                 escalated = True
                 break
-            bounce = (
-                f"[Argos 验证门] 你声称完成,但验证 `{self._verify_cmd}` 未通过/不可信:"
-                f"\n{verdict.detail}\n请用工具定位并修复,改完再说完成。"
+            bounce = _i18n_t(
+                "loop.verify_gate.bounce",
+                verify_cmd=self._verify_cmd,
+                detail=verdict.detail,
             )
             messages.append({"role": "user", "content": bounce})
             step += 1
@@ -1903,11 +1880,11 @@ class AgentLoop:
         persisted = text.strip()
         if not persisted:
             if escalated:
-                persisted = "(本轮结束:未通过验证,已上报)"
+                persisted = _i18n_t("loop.persisted.escalated")
             elif report_note:
-                persisted = f"(本轮完成:{report_note})"
+                persisted = _i18n_t("loop.persisted.with_note", report_note=report_note)
             else:
-                persisted = "(本轮完成)"
+                persisted = _i18n_t("loop.persisted.done")
         self._store.append_message(session_id, role="assistant", content=persisted)
 
         # ── report ──
@@ -1923,22 +1900,22 @@ class AgentLoop:
         if conversational_done:
             done = ""   # 纯对话/纯读问答:只给答复本身,不加任何完成判决行(像 Claude Code 直接答)
         elif escalated:
-            done = "⚠️ 未能在限定轮内通过验证,已如实上报(见上方升级提示)。\n"
+            done = _i18n_t("loop.done.escalated")
         elif report_note:
-            done = f"✅ 完成。{report_note}\n"   # 无测任务:诚实标"未机检验证 (no test command)"
+            done = _i18n_t("loop.done.with_note", report_note=report_note)
         elif last_verdict is not None and getattr(last_verdict, "is_user_verified", False):
             # E4 防火墙:必须用 is_user_verified 判,绝不能仅看 status=="passed" —
             # self_verified=True 的 passed 是系统自造测试"弱通过",与用户级 verify 同字会骗用户。
-            done = "✅ 完成,验证通过(测试/检查全绿)。\n"
+            done = _i18n_t("loop.done.verified")
         elif (last_verdict is not None
               and getattr(last_verdict, "status", None) == "passed"
               and getattr(last_verdict, "self_verified", False)):
             # 自验证"较弱"通过(系统按 reviewer + canary 守卫自造测试),显式标 weaker,绝不冒充强验证
-            done = "🟡 完成,自验证通过(系统自造测试;非用户级 verify)。\n"
+            done = _i18n_t("loop.done.self_verified")
         elif last_verdict is not None and getattr(last_verdict, "status", None) != "passed":
-            done = "⚠️ 本轮结束:验证未通过/不可信(详见上)。\n"
+            done = _i18n_t("loop.done.verdict_bad")
         else:
-            done = "✅ 本轮结束。\n"
+            done = _i18n_t("loop.done.generic")
         # ── Stop hook fire(spec §2.5)───────────────────────
         stop_payload = build_stop_payload(
             session_id=session_id, cwd=str(self._workspace),
@@ -1969,12 +1946,12 @@ class AgentLoop:
         from argos.workflow.spec import WorkflowSpecError, parse_spec
         import uuid as _uuid
         if self._workflow_engine_factory is None:
-            messages.append({"role": "user", "content": "[工作流引擎未接入,无法编排;请单线程继续。]"})
+            messages.append({"role": "user", "content": _i18n_t("loop.workflow.no_engine")})
             return
         try:
             spec = parse_spec(raw_spec)
         except WorkflowSpecError as e:
-            messages.append({"role": "user", "content": f"[工作流被拒:规格非法 — {e}。请修正或单线程继续。]"})
+            messages.append({"role": "user", "content": _i18n_t("loop.workflow.spec_invalid", error=e)})
             return
         preview = render_preview(spec)
         call_id = _uuid.uuid4().hex[:12]
@@ -1986,18 +1963,18 @@ class AgentLoop:
                                           description=preview, risk="high",
                                           timeout=120.0, call_id=call_id)
             if not decision.approved:
-                messages.append({"role": "user", "content": "[工作流被拒,单线程继续。]"})
+                messages.append({"role": "user", "content": _i18n_t("loop.workflow.rejected")})
                 return
         engine = self._workflow_engine_factory()
         async for ev in engine.run(spec):
             yield ev
         result = engine.last_result
-        synth = result.synthesis if result else "(工作流无结果)"
+        synth = result.synthesis if result else _i18n_t("loop.workflow.no_result")
         notes = result.notes if result else ()
         yield WorkflowDone(name=spec.name, synthesis=synth, notes=notes)
-        summary = f"[工作流「{spec.name}」结果]\n{synth}"
+        summary = _i18n_t("loop.workflow.result_summary", name=spec.name, synthesis=synth)
         if notes:
-            summary += "\n注记:" + " / ".join(notes)
+            summary += _i18n_t("loop.workflow.result_notes", notes=" / ".join(notes))
         messages.append({"role": "user", "content": summary})
 
     # plan 决策超时(秒)。daemon 客户端断连/不应答时触发,fail-closed 默认取消。
@@ -2030,9 +2007,9 @@ class AgentLoop:
                 )
             except asyncio.TimeoutError:
                 yield Error(
-                    message=(
-                        f"plan 决策超时({self.PLAN_DECISION_TIMEOUT_S:.0f}s):客户端断连或无响应,"
-                        " run 已取消(fail-closed)。"
+                    message=_i18n_t(
+                        "loop.plan.timeout",
+                        timeout=self.PLAN_DECISION_TIMEOUT_S,
                     ),
                     chain=["asyncio.TimeoutError: plan_decision_event.wait() timed out"],
                 )
@@ -2045,7 +2022,7 @@ class AgentLoop:
                 # 边界防御:正常路径 ExitPlanMode 必写 _plan_decision;None 不应发生。
                 # fail-closed:不自动 approve,投诚实 Error 并取消。
                 yield Error(
-                    message="plan 决策异常:_plan_decision 为 None(内部错误),run 已取消(fail-closed)。",
+                    message=_i18n_t("loop.plan.decision_none"),
                     chain=["AssertionError: _plan_decision is None after event.wait()"],
                 )
                 self._plan_call_registry.clear()
@@ -2141,12 +2118,13 @@ class AgentLoop:
     @staticmethod
     def _feedback(result: Any) -> str:
         """把 ExecResult 转成给模型回灌的文本。"""
+        from argos.i18n import t as _t_fb
         if not result.ok:
-            return f"[执行异常]\n{result.exc}"
+            return _t_fb("loop.exec.exception", exc=result.exc)
         out = result.stdout
         if result.value_repr:
-            out += f"\n[返回值] {result.value_repr}"
-        return f"[执行结果]\n{out}" if out.strip() else "[执行完成,无输出]"
+            out += _t_fb("loop.exec.value_repr", value_repr=result.value_repr)
+        return _t_fb("loop.exec.result", out=out) if out.strip() else _t_fb("loop.exec.no_output")
 
 
 # 运行时懒 import(避免顶层与 broker/receipts 形成 import 环;仅无 broker 占位用)。

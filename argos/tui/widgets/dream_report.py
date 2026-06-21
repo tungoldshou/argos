@@ -29,6 +29,8 @@ from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import Static
 
+from argos.i18n import t
+
 # ── Rich Text 颜色常量(与 theme.py token 一一对应,Rich 不解析 $token) ───────
 # DEFAULT_CSS 一律用 $token 名;Rich Text style 用 hex(Rich 不解析 $token)
 _COL_PASS       = "#9ECE6A"  # $pass    : verdict passed — 唯一的绿
@@ -141,15 +143,15 @@ class DreamReportCard(Vertical):
 
         报告子卡(#dream-report-box)在 show_report 时动态 mount。
         """
-        yield Static("› /dream", markup=False, classes="dream-echo")
+        yield Static(t("widget.dream_echo"), markup=False, classes="dream-echo")
         yield Vertical(id="dream-stages")
         yield Static(
-            "可执行内容逐字来自源材料 · 模型只写叙述",
+            t("widget.dream_caption"),
             markup=False,
             classes="dream-caption",
         )
         yield Static(
-            "失败安全降级 · 全建议需用户确认 · argos/learning/dream",
+            t("widget.dream_footer"),
             markup=False,
             classes="dream-footer",
         )
@@ -195,20 +197,23 @@ class DreamReportCard(Vertical):
         detail 存在时追加 ' · {detail}'($ink-dim)。
         markup=False 语义:Text 对象本身不含 markup,由 Static 原样渲染。
         """
-        t = Text()
+        # 局部用 txt(不叫 t):避免遮蔽模块级 i18n 的 t() —— 否则 `t(label_key)` 会去调
+        # Text 对象抛 "Text object is not callable"(Wave 2 本地化引入的真 bug)。
+        txt = Text()
         if stage == "done":
-            t.append(glyph, style=_COL_PASS)
-            t.append(f" {stage}", style=_COL_PASS)
+            txt.append(glyph, style=_COL_PASS)
+            txt.append(f" {stage}", style=_COL_PASS)
         else:
-            t.append(glyph, style=_COL_EYE)
-            t.append(f" {stage}", style=_COL_INK)
+            txt.append(glyph, style=_COL_EYE)
+            txt.append(f" {stage}", style=_COL_INK)
             # 阶段特定标签(spec 精确格式)
-            label = _STAGE_LABEL.get(stage, "")
+            label_key = _STAGE_LABEL_KEYS.get(stage, "")
+            label = t(label_key) if label_key else ""
             if label:
-                t.append(f"    {label}", style=_COL_INK)
+                txt.append(f"    {label}", style=_COL_INK)
         if detail:
-            t.append(f" · {detail}", style=_COL_INK_DIM)
-        return t
+            txt.append(f" · {detail}", style=_COL_INK_DIM)
+        return txt
 
     def _build_row_b(self, report: Any) -> Text:
         """构建 Row B:整合单元计数行(三色铁律)。
@@ -225,14 +230,14 @@ class DreamReportCard(Vertical):
         rejected = d.get("rejected", 0)
         skipped  = d.get("skipped", 0)
 
-        t = Text()
-        t.append(f"整合单元 {units} · ", style=_COL_INK)
-        t.append(f"晋升 {promoted}", style=_COL_PASS)
-        t.append(" · ", style=_COL_INK)
-        t.append(f"驳回 {rejected}", style=_COL_FAIL)
-        t.append(" · ", style=_COL_INK)
-        t.append(f"跳过 {skipped}", style=_COL_UNVERIF)
-        return t
+        tx = Text()
+        tx.append(t("widget.dream_row_b", units=units), style=_COL_INK)
+        tx.append(t("widget.dream_promoted", promoted=promoted), style=_COL_PASS)
+        tx.append(" · ", style=_COL_INK)
+        tx.append(t("widget.dream_rejected", rejected=rejected), style=_COL_FAIL)
+        tx.append(" · ", style=_COL_INK)
+        tx.append(t("widget.dream_skipped", skipped=skipped), style=_COL_UNVERIF)
+        return tx
 
     # ── 内部 mount 帮助(call_after_refresh 回调) ─────────────────────────────
 
@@ -255,17 +260,17 @@ class DreamReportCard(Vertical):
             # 首次挂载:构建整个子卡
             box = Vertical(id="dream-report-box")
 
-            row_a = Static("─ 报告", markup=False, classes="dream-report-title")
+            row_a = Static(t("widget.dream_report_title"), markup=False, classes="dream-report-title")
             row_b_text = self._build_row_b(d)
             row_b = Static(row_b_text, markup=False, classes="dream-report-row")
-            row_c_text = f"记忆合并 {memory_merged} · 归档 {memory_archived}"
+            row_c_text = t("widget.dream_row_c", memory_merged=memory_merged, memory_archived=memory_archived)
             row_c = Static(row_c_text, markup=False, classes="dream-report-row")
 
             children = [row_a, row_b, row_c]
 
             # Row D:只在后端提供 promoted_name 且 promoted>=1 时渲染(v1 安全策略)
             if promoted >= 1 and promoted_name:
-                row_d_text = f"晋升:{promoted_name}(综合自已验证 run)"
+                row_d_text = t("widget.dream_row_d", promoted_name=promoted_name)
                 row_d = Static(row_d_text, markup=False, classes="dream-report-dim")
                 children.append(row_d)
 
@@ -285,14 +290,14 @@ class DreamReportCard(Vertical):
             try:
                 box = self.query_one("#dream-report-box", Vertical)
                 box.remove_children()
-                row_a = Static("─ 报告", markup=False, classes="dream-report-title")
+                row_a = Static(t("widget.dream_report_title"), markup=False, classes="dream-report-title")
                 row_b_text = self._build_row_b(d)
                 row_b = Static(row_b_text, markup=False, classes="dream-report-row")
-                row_c_text = f"记忆合并 {memory_merged} · 归档 {memory_archived}"
+                row_c_text = t("widget.dream_row_c", memory_merged=memory_merged, memory_archived=memory_archived)
                 row_c = Static(row_c_text, markup=False, classes="dream-report-row")
                 children = [row_a, row_b, row_c]
                 if promoted >= 1 and promoted_name:
-                    row_d_text = f"晋升:{promoted_name}(综合自已验证 run)"
+                    row_d_text = t("widget.dream_row_d", promoted_name=promoted_name)
                     row_d = Static(row_d_text, markup=False, classes="dream-report-dim")
                     children.append(row_d)
                 for child in children:
@@ -303,11 +308,12 @@ class DreamReportCard(Vertical):
 
 # ── 阶段标签(stage stream 里的人话补充,追加在阶段名后) ──────────────────────
 # spec §13 exact format strings — only used when detail is absent
-_STAGE_LABEL: dict[str, str] = {
-    "scan":       "候选区",
-    "cluster":    "",     # cluster 行从 detail 拿 '3 簇(Jaccard ≥ 0.35)'
-    "synthesize": "",
-    "promote":    "A/B 晋升门",
-    "memory":     "记忆整理",
-    "done":       "",
+# Keys are looked up via t() at render time so they respect ARGOS_LANG.
+_STAGE_LABEL_KEYS: dict[str, str] = {
+    "scan":       "widget.dream_stage_scan",
+    "cluster":    "widget.dream_stage_cluster",     # cluster 行从 detail 拿 '3 簇(Jaccard ≥ 0.35)'
+    "synthesize": "widget.dream_stage_synthesize",
+    "promote":    "widget.dream_stage_promote",
+    "memory":     "widget.dream_stage_memory",
+    "done":       "widget.dream_stage_done",
 }

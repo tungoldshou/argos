@@ -1,6 +1,13 @@
 """pytest 全局夹具。"""
 from __future__ import annotations
 
+import os
+
+# i18n:全套测试默认跑 zh。真实用户默认 en(匹配 README/品牌),但绝大多数现存 UI/CLI 断言
+# 写的是中文原串 —— 把测试环境钉在 zh,让重构后(经 t() 路由)的渲染串 == ZH catalog 逐字原串,
+# 旧断言零改动即绿。en 默认路径由 tests/test_i18n.py 等新测试显式覆盖(用 monkeypatch 切 env)。
+os.environ.setdefault("ARGOS_LANG", "zh")
+
 import shutil
 import sys
 
