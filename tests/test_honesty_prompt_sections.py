@@ -78,7 +78,7 @@ def test_self_check_section():
     from argos.core.honesty import HONESTY_SYSTEM
     assert "<self_check>" in HONESTY_SYSTEM
     assert "Did the verify command actually run" in HONESTY_SYSTEM
-    assert "exit code or my own assertion" in HONESTY_SYSTEM
+    assert "real run_command exit code" in HONESTY_SYSTEM   # 自检 rule2 锐化:只认退出码,非眼看输出
     assert "invent a tool count" in HONESTY_SYSTEM
     # 自检在提示词末尾(汇报前最后过一遍)
     assert HONESTY_SYSTEM.endswith(_SELF_CHECK)
@@ -86,7 +86,8 @@ def test_self_check_section():
 
 def test_prompt_within_budget():
     from argos.core.honesty import HONESTY_SYSTEM
-    # 防膨胀:全英文化后字符数升但 TOKEN 反降 —— 实测 o200k:旧中文 3008 字符=1631 token,
-    # 新英文 ~6423 字符≈1470 token(CJK≈0.54 tok/char,英文≈0.20)。预算的真实度量是 token,
-    # 英文更省;CEILING 按新英文字符 +10% 余量设(防未来无节制增长),token 已低于旧版。
-    assert len(HONESTY_SYSTEM) <= 7100   # round(6423 * 1.10) 余量
+    # 防膨胀:度量真实成本看 TOKEN 不看字符。实测 o200k:旧中文 3008 字符=1631 token;
+    # 全英文化 + Fable 质感升级 + 五维 review 修复后 7232 字符=1651 token —— 与旧中文【token 持平】
+    # (+1.2%),但质量远超(XML 结构 / 两处 worked 示例 / 结构性诚实重构 / loophole+f-string+越界
+    # 反馈修复)。CEILING 按新字符 +7% 余量设,防未来无节制增长。
+    assert len(HONESTY_SYSTEM) <= 7740   # round(7232 * 1.07) 余量
