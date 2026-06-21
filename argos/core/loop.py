@@ -266,11 +266,12 @@ def _env_context(workspace: Path) -> str:
     import platform
     from datetime import date
     return (
-        "\n\n【运行环境】\n"
-        f"- 工作目录(相对路径都相对它解析):{workspace}\n"
-        f"- 操作系统:{platform.system()} {platform.machine()}\n"
-        f"- 今天日期:{date.today().isoformat()}\n"
-        "以上为已知事实,无需用代码现场探测(如 os.getcwd / pathlib.Path.cwd / pwd)。"
+        "\n\n<environment>\n"
+        f"- Working directory (relative paths resolve against it): {workspace}\n"
+        f"- OS: {platform.system()} {platform.machine()}\n"
+        f"- Today: {date.today().isoformat()}\n"
+        "These are known facts — don't probe them at runtime (os.getcwd / pathlib.Path.cwd / pwd).\n"
+        "</environment>"
     )
 
 
@@ -941,13 +942,14 @@ class AgentLoop:
         顺序锁死——若改了位置,先看 spec §12.1。
         """
         return (
-            "\n\n## 工具签名速查(本会话新签名)\n"
-            "- read_file(path, offset: int = 0, limit: int | None = None)\n"
-            "  · offset=起始行号(0-based),limit=读多少行(None=读到 EOF)\n"
-            "- edit_file(path, old, new, all_occurrences: bool = False)\n"
-            "  · all_occurrences=False(默认)=唯一匹配;True=替换全部(上限 1000 处)\n"
-            "· 沙箱命令 /undo 还原本轮 run 起点的文件改动(不发)\n"
-            "· 沙箱命令 /retry 重发本会话最后一条 user 消息(忙时先 Esc)\n"
+            "\n\n<tool_signatures>\n"
+            "- read_file(path, offset: int = 0, limit: int | None = None) "
+            "— offset = start line (0-based), limit = how many lines (None = to EOF)\n"
+            "- edit_file(path, old, new, all_occurrences: bool = False) "
+            "— all_occurrences=False (default) = unique match; True = replace all (max 1000)\n"
+            "- slash /undo reverts this run's file changes; /retry resends your last "
+            "message (press Esc first if busy).\n"
+            "</tool_signatures>"
         )
 
     async def _maybe_proactive_compact(self, session_id: str, step: int) -> AsyncIterator["Event"]:
