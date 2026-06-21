@@ -176,19 +176,21 @@ async def test_version_unreachable_treated_as_stale(monkeypatch, tmp_path):
 # ── _kill_stale_daemon ────────────────────────────────────────────────────
 
 def test_kill_stale_daemon_removes_pid_and_sock(monkeypatch, tmp_path):
-    """杀 daemon.pid 记录的 PID + 删 pid/sock 文件。"""
+    """杀 daemon.pid 记录的 PID + 删 pid/sock 文件(进程响应 SIGTERM 优雅退出,无需 SIGKILL)。"""
     sock = tmp_path / "daemon.sock"
     sock.write_text("")  # 假 sock 文件(单元测试不起真 socket)
     pid_path = tmp_path / "daemon.pid"
     pid_path.write_text("424242\n")
 
-    monkeypatch.setattr(daemon_spawn, "_pid_alive", lambda pid: True)
+    # 第1次(决定 SIGTERM)=活;SIGTERM 后(等待/最终检查)=已退出 → 不升级 SIGKILL
+    states = iter([True, False, False, False])
+    monkeypatch.setattr(daemon_spawn, "_pid_alive", lambda pid: next(states, False))
     killed: list[int] = []
     monkeypatch.setattr(daemon_spawn.os, "kill", lambda pid, sig: killed.append(pid))
 
     daemon_spawn._kill_stale_daemon(sock)
 
-    assert killed == [424242], "应向 pid 文件里的 PID 发信号"
+    assert killed == [424242], "应向 pid 文件里的 PID 发一次信号(SIGTERM)"
     assert not pid_path.exists(), "pid 文件应被删"
     assert not sock.exists(), "sock 文件应被删"
 

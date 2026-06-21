@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import signal
+import time
 from pathlib import Path
 
 from argos import __version__ as _ARGOS_VERSION
@@ -24,6 +25,8 @@ log = logging.getLogger(__name__)
 _PROBE_TIMEOUT = 1.0    # 单次 health 探测超时（秒）
 _SPAWN_TIMEOUT = 3.0    # 拉起后等待就绪的最大等待（秒）
 _WAIT_POLL    = 0.2     # 等待就绪的轮询间隔（秒）
+_KILL_GRACE_S = 0.6     # SIGTERM 后等优雅退出的宽限（秒）；超时仍活则升级 SIGKILL
+_KILL_POLL_S  = 0.05    # 等待退出的轮询间隔（秒）
 
 
 async def _probe(socket_path: Path) -> bool:
@@ -112,9 +115,12 @@ def _pid_alive(pid: int) -> bool:
 
 
 def _kill_stale_daemon(socket_path: Path) -> None:
-    """杀掉 daemon.pid 记录的陈旧 daemon(best-effort)+ 清 pid/sock,为 spawn 新的让路。
+    """杀掉 daemon.pid 记录的陈旧/假死 daemon + 清 pid/sock,为 spawn 新的让路。
 
-    安全:仅当 PID 仍存活才发 SIGTERM(防 PID 复用误杀);无论杀否都清 pid/sock 文件。
+    安全:仅当 PID 仍存活才发信号(防 PID 复用误杀)。先 SIGTERM 给优雅退出机会;假死 daemon
+    (事件循环 wedged)会忽略 SIGTERM —— 在 _KILL_GRACE_S 内仍未退出则升级 SIGKILL,杜绝孤儿
+    泄漏(否则旧进程继续占着旧 socket inode,lsof 会见两个 daemon 绑同一路径)。无论杀否都清
+    pid/sock 文件。
     """
     from argos.daemon.pidfile import read_pid, remove
     pid_path = socket_path.parent / "daemon.pid"
@@ -124,11 +130,41 @@ def _kill_stale_daemon(socket_path: Path) -> None:
             os.kill(pid, signal.SIGTERM)
         except OSError:  # 已退 / 无权限——忽略,继续清文件
             pass
+        else:
+            # 等待优雅退出;超时仍活(假死忽略 SIGTERM)→ 升级 SIGKILL
+            waited = 0.0
+            while waited < _KILL_GRACE_S and _pid_alive(pid):
+                time.sleep(_KILL_POLL_S)
+                waited += _KILL_POLL_S
+            if _pid_alive(pid):
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
     remove(pid_path)
     try:
         socket_path.unlink()
     except FileNotFoundError:
         pass
+
+
+def _daemon_log_path(socket_path: Path) -> Path:
+    """TUI 截获 argosd 启动期 stdout/stderr(print + 未捕获 traceback)的日志;每次 spawn 截断。
+
+    与 daemon 自身的运行日志(daemon.log,daemon 进程内 RotatingFileHandler 有界轮转)分离:
+    两者若同名,fd 重定向会与轮转 rename 相互冲突,且运行日志会把 boot 日志灌满。
+    """
+    return socket_path.parent / "daemon-boot.log"
+
+
+def _tail(path: Path, n: int = 20) -> str:
+    """读日志文件最后 n 行(best-effort);读不到返空串。"""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+        return "".join(lines[-n:]).rstrip()
+    except OSError:
+        return ""
 
 
 async def probe_or_spawn(socket_path: Path) -> bool:
@@ -151,17 +187,35 @@ async def probe_or_spawn(socket_path: Path) -> bool:
             socket_path, ver, _ARGOS_VERSION, PROTOCOL_VERSION,
         )
         _kill_stale_daemon(socket_path)
+    elif socket_path.exists():
+        # socket 文件在但 /health 不响应 = 假死 daemon 占着 socket(事件循环 wedged,
+        # 内核 backlog 仍接受 connect 但永不回应)。不清理的话,新 argosd 的
+        # check_socket_available 会因 connect 成功误判"已占用" → rc=1 退出 → 永久 inline
+        # 死锁(2026-06-22 真机)。spawn 前先杀掉它 + 清 pid/sock,为新 daemon 让路。
+        log.warning(
+            "daemon probe: socket %s exists but unresponsive (hung daemon?)"
+            " — killing it before respawn",
+            socket_path,
+        )
+        _kill_stale_daemon(socket_path)
 
-    # 2. 尝试拉起 argosd
+    # 2. 尝试拉起 argosd。子进程输出重定向到 daemon.log(每次截断):spawn 失败时能回显原因,
+    #    不再用 DEVNULL 静默吞掉致命启动错误(如 'daemon socket already in use')。
     log.info("daemon probe: socket not ready, attempting to spawn argosd")
+    log_path = _daemon_log_path(socket_path)
+    try:
+        log_fh = open(log_path, "wb")
+    except OSError:
+        log_fh = None  # 打不开日志就退化 DEVNULL,绝不挡启动
+    out = log_fh if log_fh is not None else asyncio.subprocess.DEVNULL
     try:
         proc = await asyncio.create_subprocess_exec(
             "argosd",
             # daemon argparse 只认 --socket-path(__main__.py);过去传 --socket → argosd rc=2
             # 退出 → 永远落 inline。修正 flag 名,让 argosd 在 PATH 时能真正拉起。
             "--socket-path", str(socket_path),
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
+            stdout=out,
+            stderr=out,
         )
     except FileNotFoundError:
         # argosd 不在 PATH（纯内嵌 / 测试环境）—— silent fallback
@@ -170,6 +224,13 @@ async def probe_or_spawn(socket_path: Path) -> bool:
     except Exception as e:  # noqa: BLE001
         log.warning("daemon spawn: failed to start argosd: %s", e)
         return False
+    finally:
+        # 子进程已 dup 了 fd,父进程关掉自己的副本(防句柄泄漏)
+        if log_fh is not None:
+            try:
+                log_fh.close()
+            except OSError:
+                pass
 
     # 3. 轮询等待就绪（最多 SPAWN_TIMEOUT 秒）
     elapsed = 0.0
@@ -179,15 +240,25 @@ async def probe_or_spawn(socket_path: Path) -> bool:
         if await _probe(socket_path):
             log.info("daemon spawn: argosd ready after %.1fs", elapsed)
             return True
-        # 子进程已提前退出（失败）
+        # 子进程已提前退出（失败）—— 回显 daemon.log 尾部,暴露根因
         if proc.returncode is not None:
-            log.warning("daemon spawn: argosd exited early (rc=%s)", proc.returncode)
+            tail = _tail(log_path)
+            log.warning(
+                "daemon spawn: argosd exited early (rc=%s)%s",
+                proc.returncode,
+                f"; daemon.log tail:\n{tail}" if tail else "",
+            )
             return False
 
-    # 超时：杀掉子进程，诚实 fallback
+    # 超时：杀掉子进程，诚实 fallback（同样回显日志尾部）
     try:
         proc.kill()
     except Exception:  # noqa: BLE001
         pass
-    log.warning("daemon spawn: argosd did not become ready within %.1fs", _SPAWN_TIMEOUT)
+    tail = _tail(log_path)
+    log.warning(
+        "daemon spawn: argosd did not become ready within %.1fs%s",
+        _SPAWN_TIMEOUT,
+        f"; daemon.log tail:\n{tail}" if tail else "",
+    )
     return False
