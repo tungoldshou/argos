@@ -17,6 +17,7 @@ HONESTY CORRECTION(spec HONESTY_SYSTEM 规则 1):Verifier 在没配 verify_cmd �
 from __future__ import annotations
 
 from argos.core.types import Phase, Verdict
+from argos.i18n import t as _i18n_t
 from argos.core.verify_gate import Verifier
 from argos.tools.receipts import Receipt, ReceiptSigner
 from argos.protocol.events import PhaseChange, VerifyVerdict, Escalation
@@ -26,7 +27,8 @@ from argos.protocol.events import EventBus
 PHASE_ORDER: list[str] = ["plan", "act", "verify", "report"]
 
 # 无测任务诚实完成的报告标签(spec HONESTY:never claim passed without verification)。
-NO_TEST_LABEL = "未机检验证 (no test command)"
+# 字面值保留作内部常量以便现有测试比对;TUI 渲染走 i18n(loop.report_note.no_test)。
+NO_TEST_LABEL = _i18n_t("loop.report_note.no_test")
 
 
 class Harness:
@@ -112,10 +114,11 @@ class Harness:
             self._last_failure = verdict.detail
             if attempt > self.max_rounds:
                 await self.bus.emit(Escalation(
-                    reason=(
-                        f"已尝试 {attempt} 次仍无法通过验证 "
-                        f"`{verify_cmd}`(bounce 上限 {self.max_rounds} 轮)"
-                        f" —— 我没搞定,需要你介入指路,不会假装完成。"
+                    reason=_i18n_t(
+                        "verdict_detail.escalation_reason",
+                        attempt=attempt,
+                        verify_cmd=verify_cmd,
+                        max_rounds=self.max_rounds,
                     ),
                     attempts=attempt,
                     last_failure=verdict.detail,

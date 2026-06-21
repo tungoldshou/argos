@@ -18,6 +18,8 @@ import asyncio
 import sys
 from pathlib import Path
 
+from argos.i18n import t
+
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="argos", description="Argos — the hundred-eyed agent")
@@ -28,43 +30,30 @@ def _build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"argos {argos.__version__}",
     )
-    p.add_argument("--demo", action="store_true", help="FakeLoop 成功演示")
-    p.add_argument("--demo-fail", action="store_true", help="FailingFakeLoop escalation 演示")
-    p.add_argument("--selftest", action="store_true", help="不连真模型自检(脚本模型跑四阶段)")
-    p.add_argument("--project", metavar="PATH", help="在用户项目目录干活")
-    p.add_argument("--model", metavar="NAME", help="本次启动用指定 config profile(默认当前 active)")
+    p.add_argument("--demo", action="store_true", help=t("cli.demo.help"))
+    p.add_argument("--demo-fail", action="store_true", help=t("cli.demo_fail.help"))
+    p.add_argument("--selftest", action="store_true", help=t("cli.selftest.help"))
+    p.add_argument("--project", metavar="PATH", help=t("cli.project.help"))
+    p.add_argument("--model", metavar="NAME", help=t("cli.model.help"))
     # #11 per-task routing:effort 等级(契约 §11;spec §8)。effort 只控步数预算;审批档由
     # /trust 拨盘(Cautious/Trusted/Autonomous)独立控制(2026-06-20 重设后两者解耦)。
     from argos.routing.effort import EffortLevel
     p.add_argument("--effort", choices=[e.value for e in EffortLevel],
                    default=EffortLevel.MEDIUM.value,
-                   help="任务努力档(步数预算:low=8 / medium=40 / high=80;审批档由 /trust 控制)")
+                   help=t("cli.effort.help"))
     sub = p.add_subparsers(dest="command")
     # headless 非交互执行(可脚本化 / CI):argos exec "<任务>"
     from argos.cli import headless as _headless_cli
     _headless_cli.add_subparser(sub)
     sub.add_parser(
         "setup",
-        help="接入模型的交互向导(选 provider→填 key→连通测试→保存)",
-        epilog=(
-            "向导写入 ~/.argos/config.json(profile 表 + active 指针)和 ~/.argos/.env(key, 0600)。\n\n"
-            "config.json 最小示例:\n"
-            '  { "active": "default",\n'
-            '    "models": { "default": {\n'
-            '      "protocol": "anthropic",   # 或 "openai"\n'
-            '      "base_url": "https://api.anthropic.com",\n'
-            '      "model": "claude-sonnet-4-5",\n'
-            '      "api_key_env": "ANTHROPIC_API_KEY",\n'
-            '      "max_tokens": 8096, "context_window": 200000,\n'
-            '      "price_in": 0.000003, "price_out": 0.000015 } } }\n\n'
-            "完整字段说明见 docs/setup-wizard.md 。\n"
-            "非 TTY 场景(Docker/CI)请手动写上述文件或挂载 secret。"
-        ),
+        help=t("cli.setup.help"),
+        epilog=t("cli.setup.epilog"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sp_update = sub.add_parser(
         "self-update",
-        help="检查并提示新版本(不自动下载;跳过 7 天缓存)",
+        help=t("cli.self_update.help"),
     )
     sp_update.set_defaults(func=_cmd_self_update)
     # #7:argos eval 子命令
@@ -164,7 +153,7 @@ def _run_selftest() -> int:
             sandbox = SeatbeltExecutor(broker_handler=broker_handler)
             model = _SelftestModel([
                 "```python\nwrite_file('st.py', 'def f():\\n    return 1\\n')\n```",
-                "完成。",
+                t("cli.selftest.done"),
             ])
             store = ArgosStore(db_path=str(Path(td) / "argos.db"))
             loop = AgentLoop(
@@ -177,7 +166,7 @@ def _run_selftest() -> int:
 
             async def _go() -> list[str]:
                 vs: list[str] = []
-                async for ev in loop.run("实现 st.f 返回 1", "selftest"):
+                async for ev in loop.run(t("cli.selftest.task"), "selftest"):
                     if isinstance(ev, VerifyVerdict):
                         vs.append(ev.verdict.status)
                 return vs
@@ -187,7 +176,7 @@ def _run_selftest() -> int:
             print(f"[selftest] verdicts={verdicts} → {'OK' if ok else 'FAIL'}")
             return 0 if ok else 1
         except Exception as e:  # noqa: BLE001 — 自检失败诚实返 1,不假装通过
-            print(f"[selftest] 装配自检失败:{type(e).__name__}: {e} → FAIL", file=sys.stderr)
+            print(t("cli.selftest.assembly_failed", exc_type=type(e).__name__, exc=e), file=sys.stderr)
             return 1
         finally:
             if store is not None:
@@ -210,18 +199,18 @@ def _cmd_self_update(args) -> int:
             force=True,  # 主动命令跳过缓存
         )
     except Exception as e:  # noqa: BLE001
-        print(f"argos self-update: 检查失败:{e}", file=sys.stderr)
+        print(t("cli.self_update.check_failed", err=e), file=sys.stderr)
         return 1
     if newer:
         print(f"🆕 Argos {newer} available (you have {__version__}).")
         # 检测 Homebrew Cask 安装痕迹(spec §2.6 友好提示)
         brew_cask = Path("/opt/homebrew/Caskroom/argos")
         if brew_cask.exists():
-            print("   您通过 Homebrew 装的,请用:brew upgrade --cask argos")
+            print(t("cli.self_update.brew_hint"))
         else:
-            print("   重装最新版:curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash")
+            print(t("cli.self_update.install_hint"))
         return 0
-    print(f"✓ argos {__version__} 已是最新 (up to date)。")
+    print(t("cli.self_update.up_to_date", version=__version__))
     return 0
 
 
@@ -242,8 +231,7 @@ def _spawn_update_check() -> None:
         )
         if newer:
             print(
-                f"🆕 Argos {newer} available (you have {__version__}). "
-                f"Run `argos self-update` to upgrade.",
+                t("cli.update_available_banner", newer=newer, current=__version__),
                 file=sys.stderr,
             )
     except Exception:  # noqa: BLE001 — 任何失败都不阻断启动
@@ -313,7 +301,7 @@ def main() -> None:
         # ConfigError(config.py) subclasses Exception, not RuntimeError → 分开列举。
         # 无 key / 无效 profile → 诚实落 demo 态,不假装能跑。
         from argos.tui.fakeloop import FakeLoop
-        print(f"[argos] {e}\n[argos] 运行 `argos setup` 接入模型,或配置环境变量后重启。", file=sys.stderr)
+        print(t("cli.no_key_fallback", err=e), file=sys.stderr)
         ArgosApp(loop_factory=lambda: FakeLoop(), demo=True).run()
 
 

@@ -30,6 +30,8 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from argos.i18n import is_error_result
+
 if TYPE_CHECKING:
     from argos.browser import BrowserController
 
@@ -113,7 +115,7 @@ class DomProber:
         # 1. 导航（若提供 URL）
         if url:
             nav_result = browser.navigate(url)
-            if nav_result.startswith("错误:"):
+            if is_error_result(nav_result):  # locale 无关:英文工具错误以 "Error:" 起
                 return DomProbeResult(
                     found=False, text_excerpt="",
                     error=f"导航失败：{nav_result}",
@@ -121,7 +123,7 @@ class DomProber:
 
         # 2. 抓 snapshot（BrowserController.snapshot → inner_text("body")）
         snapshot = browser.snapshot(max_chars=8000)
-        if snapshot.startswith("错误:"):
+        if is_error_result(snapshot):  # locale 无关:英文工具错误以 "Error:" 起
             return DomProbeResult(
                 found=False, text_excerpt="",
                 error=f"页面快照失败：{snapshot}",

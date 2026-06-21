@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from argos.approval import ApprovalGate
+from argos.i18n import t
 from argos.tools import files as _files
 from argos.tools import shell as _shell
 from argos.tools import web as _web
@@ -155,14 +156,10 @@ class CapabilityBroker:
         host = _web.host_for(action, args)
         if action == "web_extract":
             if _web.extract_url_blocked(args.get("url", "")):
-                return f"SSRF 防护拒绝私网/保留/内网地址(web_extract 仅允许公网 URL):{host!r}"
+                return t("sandbox.egress.ssrf_deny", host=host)
             return None
         if not self._egress.allowed(host):
-            return (
-                f"egress 拒绝 —— {host!r} 不在允许出网名单。"
-                "用 /trust autonomous 放开本会话出网,或在 ~/.argos/config.json 的 egress 段"
-                "加入该 host 后重启。"
-            )
+            return t("sandbox.egress.host_not_allowed", host=host)
         return None
 
     def _preflight(self, action: str, args: dict[str, Any]
@@ -181,7 +178,7 @@ class CapabilityBroker:
         _reg = getattr(self, "_registry", None)
         registry_risk = _reg.risk_table() if _reg is not None else {}
         if action not in registry_risk and action not in _RISK:
-            return (f"错误:未知/不支持的特权动作 {action!r},拒绝。", 1), registry_risk
+            return (t("sandbox.broker.unknown_action", action=action), 1), registry_risk
         # ①a run_command 危险命令 hard rule(2026-06-20 review #1):两条路都拦。
         # 此前 check_hard_shell 只在 request() 的异步审批路径(evaluator)里跑;execute_sync(workflow
         # 子 agent / 无 host_loop 回退)直落 _execute → rm -rf/curl|sh/git -c <hook> 等在 sync 桥旁路。
@@ -191,14 +188,14 @@ class CapabilityBroker:
             from argos.permissions.hard_rules import check_hard_shell
             _rule = check_hard_shell(str(args.get("command", "")))
             if _rule is not None:
-                return (f"错误:命令命中危险硬规则({_rule}),拒绝执行。", 1), registry_risk
+                return (t("sandbox.broker.hard_shell_denied", rule=_rule), 1), registry_risk
         if action in _FILE_WRITE_ACTIONS:
             val = self._gate_only_write(action, args)
             return (val, (0 if val == _files.WRITE_APPROVED_SENTINEL else 1)), registry_risk
         if action in self._derive_network_actions():
             deny = self._egress_deny_reason(action, args)
             if deny is not None:
-                return (f"错误:{deny}", 1), registry_risk
+                return (deny, 1), registry_risk
         return None, registry_risk
 
     async def request(self, action: str, args: dict[str, Any]) -> Any:
@@ -215,10 +212,8 @@ class CapabilityBroker:
         # ② 审批拨盘(L4/YOLO 不再把任何动作从 AUTO 强制升 CONFIRM —— 全自治,HARD RULES 仍拦)。
         decision = await self._request_decision(action, args, registry_risk=_registry_risk)
         if not decision.approved:
-            return (
-                f"用户拒绝执行该操作({decision.reason or '未提供原因'})。"
-                f"请尝试其他做法或向用户解释为什么需要它。"
-            )
+            return t("sandbox.broker.user_denied",
+                     reason=decision.reason or t("sandbox.broker.user_denied_no_reason"))
         # ③ host 执行真副作用
         # 出网阀(2026-06-20):run_command 走到这步 = 已批准。命令若需联网(pip install / git push /
         # curl …),用 allow_network=True 的 Seatbelt profile 跑(临时开网);否则牢笼网络默认 OFF。
@@ -268,10 +263,7 @@ class CapabilityBroker:
             from argos.permissions.hard_rules import check_computer_hard_rules
             _rule = check_computer_hard_rules(action, args)
             if _rule:
-                return (
-                    f"错误:计算机控制命中非开发者域硬规则({_rule}),需人在场确认;"
-                    "同步桥(子 agent AUTO)无法交互审批 → fail-closed 拒绝。", 1
-                )
+                return (t("sandbox.broker.computer_hard_rule_denied", rule=_rule), 1)
         # ③ host 执行真副作用(② 交互审批跳过 —— 同步桥无法 await)
         value, exit_code = self._execute(action, args, run_ctx=None)
         # ④ 签 Receipt(HMAC,host 侧):沙箱工具调用现在真有签名回执 + 可审计
@@ -303,7 +295,7 @@ class CapabilityBroker:
             fut = asyncio.run_coroutine_threadsafe(self.request(action, args), loop)
             return fut.result(timeout=self._bridge_timeout)
         except Exception as exc:  # noqa: BLE001 — 桥异常 fail-closed 拒
-            return f"错误:审批桥异常({type(exc).__name__}),默认拒绝。"
+            return t("sandbox.broker.bridge_exception", exc_type=type(exc).__name__)
 
     def _derive_network_actions(self) -> set[str]:
         """P2 egress manifest 驱动:从 registry 派生需要 egress 检查的动作集合。
@@ -387,12 +379,10 @@ class CapabilityBroker:
         meta = self._gate.evaluate_sync(action, args)
         if meta is not None:
             if meta.decision == "deny":
-                return meta.reason or f"{action} 被硬规则拒绝。"
+                return meta.reason or t("sandbox.broker.write_hard_denied", action=action)
             if meta.secret_pattern or (meta.trigger or "").startswith("secret:"):
-                return (
-                    f"⚠ 可能含密钥({meta.secret_pattern or '?'})—— 已拒绝写入。"
-                    "请去掉密钥后重试,或请用户显式放行该写入。"
-                )
+                return t("sandbox.broker.write_secret_detected",
+                         pattern=meta.secret_pattern or "?")
         self.last_receipt = self._signer.sign(
             action=action, args=args, result=_files.WRITE_APPROVED_SENTINEL, exit_code=0,
         )
@@ -424,8 +414,7 @@ class CapabilityBroker:
                 if cap.dispatch is not None:
                     if not _gated:
                         raise PermissionError(
-                            f"dispatch 能力 {action!r} 只允许经 broker.request() 管线执行"
-                            "(egress/审批/回执不可旁路)"
+                            t("sandbox.broker.dispatch_bypass", action=action)
                         )
                     result = cap.dispatch(args, run_ctx)
                     return result, None
@@ -489,7 +478,7 @@ class CapabilityBroker:
                     app=str(args["app"]) if "app" in args else None,
                 )
             except (ValueError, TypeError) as exc:
-                return f"computer 动作参数校验失败: {exc}", None
+                return t("sandbox.broker.computer_args_invalid", exc=exc), None
             # auto_detect_scale=True:真实 dispatch 路径惰性探测 Retina backing scale,
             # 让点击/滚动坐标(物理像素)正确换算为 AppleScript 逻辑点(2x 屏不再偏移)。
             result = ComputerExecutor(auto_detect_scale=True).dispatch(ca)
@@ -588,29 +577,30 @@ class CapabilityBroker:
         if action in _FILE_WRITE_ACTIONS:
             return _files.WRITE_APPROVED_SENTINEL, 0
         # 未知 action 已被 request 顶部挡掉;此处兜底诚实返回。
-        return f"错误:动作 {action!r} 暂未实现 host 执行。", None
+        return t("sandbox.broker.execute_unknown_action", action=action), None
 
     @staticmethod
     def _describe(action: str, args: dict[str, Any]) -> str:
         if action == "run_command":
             cmd = args.get("command", "")
             if _shell.command_needs_network(cmd):
-                return f"执行命令(需联网,将临时开出网阀){cmd}"
-            return f"执行命令 {cmd}"
+                return t("sandbox.broker.describe_run_command_net", cmd=cmd)
+            return t("sandbox.broker.describe_run_command", cmd=cmd)
         if action == "web_search":
-            return f"联网搜索 {args.get('query', '')}"
+            return t("sandbox.broker.describe_web_search", query=args.get("query", ""))
         if action == "web_extract":
-            return f"取网页 {args.get('url', '')}"
+            return t("sandbox.broker.describe_web_extract", url=args.get("url", ""))
         if action == "browser_navigate":
-            return f"浏览器打开 {args.get('url', '')}"
+            return t("sandbox.broker.describe_browser_navigate", url=args.get("url", ""))
         if action == "browser_snapshot":
-            return "读取当前浏览器页面内容"
+            return t("sandbox.broker.describe_browser_snapshot")
         if action == "browser_screenshot":
-            return f"浏览器截图到 {args.get('path', 'screenshot.png')}"
+            return t("sandbox.broker.describe_browser_screenshot", path=args.get("path", "screenshot.png"))
         if action == "browser_click":
-            return f"浏览器点击 {args.get('selector', '')}"
+            return t("sandbox.broker.describe_browser_click", selector=args.get("selector", ""))
         if action == "browser_type":
-            return f"浏览器在 {args.get('selector', '')} 填入文本"
+            return t("sandbox.broker.describe_browser_type", selector=args.get("selector", ""))
         if action == "mcp_call":
-            return f"调用 MCP 工具 {args.get('server', '')}/{args.get('tool', '')}"
+            return t("sandbox.broker.describe_mcp_call",
+                     server=args.get("server", ""), tool=args.get("tool", ""))
         return f"{action} {args}"

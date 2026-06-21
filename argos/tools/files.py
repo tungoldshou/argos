@@ -11,6 +11,8 @@ import os
 import re
 from pathlib import Path
 
+from argos.i18n import t
+
 WORKSPACE = Path(os.environ.get("ARGOS_WORKSPACE", Path.home() / ".argos" / "workspace")).resolve()
 
 # host→child 放行哨兵:broker 对一次文件写做完 gate-only 治理(hard-path/密钥)并签回执后,
@@ -63,39 +65,39 @@ def read_file(path: str, offset: int = 0, limit: int | None = None) -> str:
     越界 / 不存在 / offset 负数 / limit<=0 → 错误串(不抛异常)。"""
     p = _safe_path(path)
     if p is None:
-        return f"错误:路径 {path!r} 越出 workspace,拒绝访问。"
+        return t("tools.files.read.outside_workspace", path=path)
     if not p.exists():
-        return f"错误:文件 {path!r} 不存在。"
+        return t("tools.files.read.not_found", path=path)
     if offset < 0:
-        return f"错误:offset 须 ≥ 0(收到 {offset})。"
+        return t("tools.files.read.offset_negative", offset=offset)
     if limit is not None and limit <= 0:
-        return f"错误:limit 须为正整数或 None(收到 {limit})。"
+        return t("tools.files.read.limit_invalid", limit=limit)
     try:
         text = p.read_text(encoding="utf-8")
     except Exception as e:  # noqa: BLE001
-        return f"错误:读取失败 {e}"
+        return t("tools.files.read.failed", exc=e)
     lines = text.splitlines(keepends=True)
     total = len(lines)
     if offset >= total:
-        return f"错误:offset 越界(文件共 {total} 行,offset={offset})。"
+        return t("tools.files.read.offset_oob", total=total, offset=offset)
     end = offset + limit if limit is not None else total
     chunk = "".join(lines[offset:end])
     start_line = offset + 1
     end_line = min(end, total)
-    return f"{path}: 第 {start_line}–{end_line} 行 / 共 {total} 行\n{chunk}"
+    return t("tools.files.read.header", path=path, start=start_line, end=end_line, total=total, chunk=chunk)
 
 
 def write_file(path: str, content: str) -> str:
     """把内容写入 workspace 内某个文件(覆盖)。path 是相对 workspace 的路径。"""
     p = _safe_path(path)
     if p is None:
-        return f"错误:路径 {path!r} 越出 workspace,拒绝写入。"
+        return t("tools.files.write.outside_workspace", path=path)
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
     except Exception as e:  # noqa: BLE001
-        return f"错误:写入失败 {e}"
-    return f"已写入 {path}({len(content)} 字符)。"
+        return t("tools.files.write.failed", exc=e)
+    return t("tools.files.write.ok", path=path, nbytes=len(content))
 
 
 def _normalize_ws(s: str) -> str:
@@ -112,25 +114,25 @@ def edit_file(path: str, old: str, new: str, all_occurrences: bool = False) -> s
     上限 _OCCURRENCES_CAP=1000(防爆)。"""
     p = _safe_path(path)
     if p is None:
-        return f"错误:路径 {path!r} 越出 workspace,拒绝编辑。"
+        return t("tools.files.edit.outside_workspace", path=path)
     if not p.exists():
-        return f"错误:文件 {path!r} 不存在。"
+        return t("tools.files.edit.not_found", path=path)
     text = p.read_text(encoding="utf-8")
     count = text.count(old)
     if count >= 2 and not all_occurrences:
-        return f"错误:old 串多次匹配({count} 次,需唯一),请给更多上下文。"
+        return t("tools.files.edit.ambiguous", count=count)
     if count >= 2 and all_occurrences:
         if count > _OCCURRENCES_CAP:
-            return f"错误:匹配过多({count}>{_OCCURRENCES_CAP}),请给更多上下文。"
+            return t("tools.files.edit.too_many", count=count, cap=_OCCURRENCES_CAP)
         new_text = text.replace(old, new)
         p.write_text(new_text, encoding="utf-8")
-        return f"已编辑 {path}({count} 处)。"
+        return t("tools.files.edit.ok_n", path=path, count=count)
     if count == 1:
         if all_occurrences:
             p.write_text(text.replace(old, new), encoding="utf-8")
-            return f"已编辑 {path}(1 处)。"
+            return t("tools.files.edit.ok_1_all", path=path)
         p.write_text(text.replace(old, new), encoding="utf-8")
-        return f"已编辑 {path}。"
+        return t("tools.files.edit.ok_unique", path=path)
     # count == 0:走模糊匹配兜底(同旧)
     target = _normalize_ws(old)
     lines = text.splitlines(keepends=True)
@@ -146,12 +148,12 @@ def edit_file(path: str, old: str, new: str, all_occurrences: bool = False) -> s
             if len(norm) > len(target):
                 break
     if len(matches) == 0:
-        return "错误:未找到要替换的内容。"
+        return t("tools.files.edit.not_found_fuzzy")
     if len(matches) > 1:
         if not all_occurrences:
-            return f"错误:old 串模糊匹配了 {len(matches)} 次(需唯一),请给更多上下文。"
+            return t("tools.files.edit.ambiguous_fuzzy", count=len(matches))
         if len(matches) > _OCCURRENCES_CAP:
-            return f"错误:匹配过多({len(matches)}>{_OCCURRENCES_CAP}),请给更多上下文。"
+            return t("tools.files.edit.too_many_fuzzy", count=len(matches), cap=_OCCURRENCES_CAP)
         new_lines: list[str] = []
         covered = 0
         for i, j in matches:
@@ -161,13 +163,13 @@ def edit_file(path: str, old: str, new: str, all_occurrences: bool = False) -> s
             covered = j + 1
         new_lines.extend(lines[covered:])
         p.write_text("".join(new_lines), encoding="utf-8")
-        return f"已编辑 {path}({len(matches)} 处,模糊匹配)。"
+        return t("tools.files.edit.ok_n_fuzzy", path=path, count=len(matches))
     # 模糊唯一
     i, j = matches[0]
     new_segment = new if new.endswith("\n") or j + 1 >= len(lines) else new + "\n"
     new_lines = lines[:i] + [new_segment] + lines[j + 1:]
     p.write_text("".join(new_lines), encoding="utf-8")
-    return f"已编辑 {path}(1 处,模糊匹配)。"
+    return t("tools.files.edit.ok_1_fuzzy", path=path)
 
 
 # 搜索改纯 Python(os.walk + re),不再 shell 出 rg —— rg 在 Seatbelt 沙箱里会挂死,且
@@ -200,7 +202,7 @@ def search_files(pattern: str, target: str = "content", file_glob: str = "", lim
         try:
             rx = re.compile(pattern)
         except re.error as e:
-            return f"错误:正则非法 {e}"
+            return t("tools.files.search.regex_error", exc=e)
 
     for root, dirs, names in os.walk(ws):
         # 原地剪枝:跳过重目录 + 隐藏目录(与 rg 默认一致),性能 + 降噪。
@@ -243,13 +245,16 @@ def search_files(pattern: str, target: str = "content", file_glob: str = "", lim
             break
 
     if not results:
-        return "搜索超时(部分目录未扫完,无匹配)。" if timed_out else "没有匹配。"
+        return (
+            t("tools.files.search.no_match_timeout") if timed_out
+            else t("tools.files.search.no_match")
+        )
     out = "\n".join(results)
     tail = []
     if truncated:
-        tail.append(f"已截断前 {limit}")
+        tail.append(t("tools.files.search.truncated_suffix", limit=limit))
     if timed_out:
-        tail.append(f"超时 {int(_SEARCH_DEADLINE_S)}s,结果可能不完整")
+        tail.append(t("tools.files.search.timeout_suffix", deadline=int(_SEARCH_DEADLINE_S)))
     if tail:
         out += "\n…(" + ";".join(tail) + ")"
     return out
