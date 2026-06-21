@@ -270,18 +270,26 @@ def evaluate(
         # (web_search/web_extract/read_file/search_files)+ run_command(沙箱命令:Seatbelt 关在
         # 牢笼里、网络 OFF、写caged、凭据读拒;危险命令 rm -rf 等已在前面 hard_rule 步 deny)。
         # 只在【牢笼墙】问:出网越界(egress)、越界写、hard-rule/金融。这就是"牢笼内自动跑、只在墙问"
-        # (Codex/Claude Code 的丝滑来源,2026-06-20 重设)。仅 low_risk_auto 且非 L0 且 lvl==confirm 时
-        # 生效;裸 CONFIRM(测试)不置标志 → 行为不变。中/高危且非沙箱命令(浏览器写/mcp 等)仍 ask。
+        # (Codex/Claude Code 的丝滑来源,2026-06-20 重设)。中/高危且非沙箱命令(浏览器写/mcp 等)仍 ask。
         # 出网阀(2026-06-20):需联网的 run_command(pip install / git push / curl…)不走"牢笼内
         # 自动放行"——开网是越牢笼墙的升级,Cautious 下须弹卡问用户(approve 后 broker 临时开网)。
         # 持久化的 always 规则在前面 soft_allow 段已先放行,不受此排除影响。
+        #
+        # P0 反转修复(2026-06-21):accept_edits(Trusted 档 / plan-mode「接受编辑」)此前两头落空——
+        # 既不置 low_risk_auto、lvl 又非 "confirm" → 牢笼内动作全部 ask,Trusted 反比 Cautious 更烦人。
+        # 现 accept_edits 独立于 low_risk_auto 拿到与 Cautious 同样的牢笼放行,并额外自动批 write_file/
+        # edit_file(名副其实"接受编辑";它们是 broker gate-only 写,host 仍跑 hard-path/密钥治理)→
+        # Trusted 严格 ≥ Cautious。裸 CONFIRM(测试,low_risk_auto=False)不受影响 → 行为不变。
+        _is_accept_edits = (lvl == "accept_edits")
         _cautious_cage_ok = (
             risk == "low"
             or (action == "run_command" and not _run_command_needs_net(args))
+            or (_is_accept_edits and action in ("write_file", "edit_file"))
         )
-        if low_risk_auto and not ask_readonly and lvl == "confirm" and _cautious_cage_ok:
-            base = DecisionMeta(decision="approve", trigger="trust:cautious 牢笼内放行",
-                                reason="Cautious:牢笼内动作自动放行(只在牢笼墙/危险操作问)")
+        _cage_auto = _is_accept_edits or (low_risk_auto and lvl == "confirm")
+        if _cage_auto and not ask_readonly and _cautious_cage_ok:
+            _why = "Trusted:接受编辑+牢笼内放行" if _is_accept_edits else "Cautious:牢笼内动作自动放行(只在牢笼墙/危险操作问)"
+            base = DecisionMeta(decision="approve", trigger="trust:cage 牢笼内放行", reason=_why)
         else:
             base = DecisionMeta(decision="ask", trigger=f"level:{lvl}", reason=f"default {lvl}")
     elif lvl == "observe":
