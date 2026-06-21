@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from argos.eval.corpus import EvalTask
+from argos.i18n import t
 from argos.eval.results import append as append_result
 from argos.eval.runner import (
     EvalResult,
@@ -653,11 +654,11 @@ def cmd_tb(args: argparse.Namespace) -> int:
     runner._budget_s = args.budget_s
     subset = _resolve_subset_arg(getattr(args, "subset", "") or "smoke")
     if not subset:
-        print("[eval tb] 未指定 --subset;请传 'smoke' 跑内置 fixture,或逗号分隔 TB 任务目录。", file=sys.stderr)
+        print(t("eval.tb.no_subset"), file=sys.stderr)
         return 2
     for d in subset:
         if not d.exists():
-            print(f"[eval tb] 路径不存在:{d}", file=sys.stderr)
+            print(t("eval.tb.path_not_found", path=d), file=sys.stderr)
             return 2
     workdir = base / "tb_corpus"
     report = run_subset(subset, runner=runner, model_tier=args.model, workdir=workdir)
@@ -691,28 +692,28 @@ def _print_tb_report(report: TBBatchReport) -> None:
 
 def add_tb_subparser(sub: Any) -> None:
     """注册 `argos eval tb` 子命令。"""
-    p_tb = sub.add_parser("tb", help="跑 Terminal-Bench 子集(适配器,需 --subset)")
+    p_tb = sub.add_parser("tb", help=t("eval.tb.cmd_help"))
     p_tb.add_argument(
         "--subset", default="smoke",
-        help="逗号分隔 TB 任务目录;或 'smoke' 跑内置 fixture(默认 smoke)",
+        help=t("eval.tb.subset_help"),
     )
     p_tb.add_argument("--model", default="default", help="model profile name")
     p_tb.add_argument("--budget", type=float, default=1.0, help="cost cap USD")
     p_tb.add_argument("--budget-s", type=int, default=600, help="time cap seconds")
-    p_tb.add_argument("--keep-worktree", action="store_true", help="调试:不删 worktree")
+    p_tb.add_argument("--keep-worktree", action="store_true", help=t("eval.tb.keep_worktree_help"))
     p_tb.add_argument(
-        "--format", choices=("text", "json"), default="text", help="报告格式",
+        "--format", choices=("text", "json"), default="text", help=t("eval.tb.format_help"),
     )
     # 同步输出三档:auto(默认)/on/off。auto 让 sync_batch 现场 probe 终端支持度。
     sync_grp = p_tb.add_mutually_exclusive_group()
     sync_grp.add_argument(
         "--sync-output", dest="sync_output", action="store_const",
         const=True, default=None,
-        help="报告块用 DECSET 2026 包住(适合真 TTY;非 TTY 自动 no-op)",
+        help=t("eval.tb.sync_output_help"),
     )
     sync_grp.add_argument(
         "--no-sync-output", dest="sync_output", action="store_const",
         const=False,
-        help="显式关同步输出(A/B 对比用)",
+        help=t("eval.tb.no_sync_output_help"),
     )
     p_tb.set_defaults(func=cmd_tb)

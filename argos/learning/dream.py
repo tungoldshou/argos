@@ -17,6 +17,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from argos.i18n import t
 from argos.learning.candidates import StoredCandidate
 
 if TYPE_CHECKING:
@@ -186,8 +187,7 @@ def _merged_name(unit: DreamUnit) -> str:
 def narrative_prompt(unit: DreamUnit) -> str:
     """构造叙述层提示词(纯函数;模型调用在 DreamPipeline 层,async 友好)。"""
     return (
-        "以下是多次已验证成功的任务经验,请用 2-4 句中文总结"
-        "「何时适用」与「注意事项」。只写文字,不要代码:\n"
+        t("learn.dream.narrative_prompt")
         + "\n".join(f"- {s.goal}" for s in unit.sources)
     )
 
@@ -212,7 +212,7 @@ def synthesize(
     # 叙述层:剥代码(铁律:模型输出永远不许携带可执行内容) or 模板兜底
     text = _strip_code_blocks(narrative or "")
     if not text:
-        text = "本技能综合自 %d 次已验证通过的 run(目标见下),适用于同类任务。" % len(unit.sources)
+        text = t("learn.dream.synthesize_fallback", n=len(unit.sources))
 
     lines = [
         "---",
@@ -262,7 +262,7 @@ class HintedRunner:
         import dataclasses
         truncated = (self.hint or "")[:self.max_hint_len]  # hint=None 防 TypeError
         hinted = dataclasses.replace(
-            task, goal=f"可参考以下已验证经验:\n{truncated}\n\n---\n\n{task.goal}")
+            task, goal=f"{t('learn.dream.hinted_runner_prefix')}{truncated}\n\n---\n\n{task.goal}")
         return self.inner.run(hinted, model_tier=model_tier)
 
 

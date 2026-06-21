@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from argos.conductor.orders import OrderAction
+from argos.i18n import t
 
 if TYPE_CHECKING:
     from argos.conductor.orders import StandingOrder
@@ -50,14 +51,9 @@ class ProactiveSuggestion:
     def __post_init__(self) -> None:
         """契约断言：requires_confirmation 永远为 True（建议永远要确认）。"""
         if not self.requires_confirmation:
-            raise ValueError(
-                "ProactiveSuggestion.requires_confirmation 必须为 True "
-                "（建议永远要用户确认，绝不自动执行）"
-            )
+            raise ValueError(t("cond.proposal.requires_confirmation_true"))
         if self.action not in ("run", "dream"):
-            raise ValueError(
-                f"ProactiveSuggestion.action 必须是 'run' 或 'dream'，收到 {self.action!r}"
-            )
+            raise ValueError(t("cond.proposal.action_invalid", action=self.action))
 
 
 def propose(
@@ -87,10 +83,10 @@ def propose(
 
     # 构造人话原因
     if order.kind == "schedule":
-        reason = f"定时触发（{order.schedule}）：{order.utterance}"
+        reason = t("cond.proposal.reason_schedule", schedule=order.schedule, utterance=order.utterance)
     else:
         triggered_path = context.get("path", order.trigger_glob or "")
-        reason = f"文件变化触发（{triggered_path}）：{order.utterance}"
+        reason = t("cond.proposal.reason_file", path=triggered_path, utterance=order.utterance)
 
     return ProactiveSuggestion(
         id=_new_suggestion_id(),

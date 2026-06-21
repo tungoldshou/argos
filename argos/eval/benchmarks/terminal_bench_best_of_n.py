@@ -36,6 +36,7 @@ from argos.eval.benchmarks.terminal_bench import (
     load_tb_task,
     to_eval_task,
 )
+from argos.i18n import t
 from argos.workflow.engine import WorkflowEngine
 from argos.workflow.result import AgentResult, StageResult
 from argos.workflow.spec import (
@@ -72,7 +73,7 @@ def build_spec_for_task(
       agent 的产出。host 路径下忽略。
     """
     if n < 1:
-        raise ValueError(f"n 必须 ≥ 1,得 {n}")
+        raise ValueError(t("eval.bon.n_must_be_positive", n=n))
     cls = classify(tb_task)
     if cls.kind == "supported_in_docker":
         # workdir 优先用 mirror_dir(agent 产出会被镜像到这里);无 mirror_dir 退化到
@@ -190,7 +191,7 @@ def run_pass_at_1(
     docker_available:None → 自动探;True/False → 显式给定(测试用)。
     """
     if n < 1:
-        raise ValueError(f"n 必须 ≥ 1,得 {n}")
+        raise ValueError(t("eval.bon.n_must_be_positive", n=n))
     base_dir = Path(base_dir)
     base_dir.mkdir(parents=True, exist_ok=True)
 

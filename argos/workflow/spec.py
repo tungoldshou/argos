@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from argos.core.types import TRIVIAL_VERIFY_BINS
+from argos.i18n import t
 
 # 合法 op 集合
 _OPS = {"fan_out", "pipeline", "panel", "loop_until", "synthesize", "best_of_n"}
@@ -69,12 +70,7 @@ ROLE_PRESETS: dict[str, _RolePreset] = {
     "explorer": _RolePreset(
         name="explorer",
         tool_allowlist=_ROLE_READ_TOOLS,
-        system_prompt=(
-            "你处于 explorer(只读侦察)角色。\n"
-            "- 只能读文件、检索、查网络、看浏览器;不准写文件、不准改代码、不准跑会改状态的命令。\n"
-            "- 任务是收集情报与定位代码,不产出最终代码改动。\n"
-            "- 若需写,告诉调用方让你走 coder 角色(子 agent 沙箱不给你写工具)。"
-        ),
+        system_prompt=t("wf.role.explorer.system_prompt"),
         max_steps=12,
         read_only=True,
         requires_verify=False,
@@ -85,12 +81,7 @@ ROLE_PRESETS: dict[str, _RolePreset] = {
         # 故不放进 allowlist、提示也不叫它用 —— 否则模型跟着提示调 propose_workflow 会 NameError
         # (2026-06-18 排查 #9)。planner 的产出就是一段纯方案,不是工作流草稿。
         tool_allowlist=_ROLE_READ_TOOLS,
-        system_prompt=(
-            "你处于 planner(规划)角色。\n"
-            "- 只产方案不执行;沙箱工具在 plan mode 会被 dispatcher 拦(plan mode 守卫见 plan_mode.py)。\n"
-            "- 你的产出 = 一段可被父 agent 审阅的方案(纯文字步骤/取舍,不要调用工作流工具)。\n"
-            "- 不要假装执行了什么 —— 沙箱是独立子进程,parent 拿不到你的本地状态。"
-        ),
+        system_prompt=t("wf.role.planner.system_prompt"),
         max_steps=8,
         read_only=True,
         requires_verify=False,
@@ -107,13 +98,7 @@ ROLE_PRESETS: dict[str, _RolePreset] = {
             "lsp_definition", "lsp_references", "lsp_hover",
             "lsp_document_symbols", "lsp_workspace_symbols", "lsp_diagnostics",
         }),
-        system_prompt=(
-            "你处于 coder(编码)角色。\n"
-            "- 拥有全部写工具(write_file/edit_file/run_command + 浏览器写 + mcp_call)。\n"
-            "- 完成前必须 propose_verify('<测试/编译/lint 命令>') 声明真验证;host 会独立跑。\n"
-            "- 没声明 verify → 走 'NO_TEST'(未机检验证)诚实路径,绝不会判 passed —— 不会撒谎。\n"
-            "- 防篡改:verify 在隔离 verify_dir 跑,你碰不到执行,改了评判你的测试也救不了假绿。"
-        ),
+        system_prompt=t("wf.role.coder.system_prompt"),
         max_steps=20,
         read_only=False,
         requires_verify=True,
@@ -121,13 +106,7 @@ ROLE_PRESETS: dict[str, _RolePreset] = {
     "reviewer": _RolePreset(
         name="reviewer",
         tool_allowlist=_ROLE_READ_TOOLS | frozenset({"run_command", "lsp_diagnostics"}),
-        system_prompt=(
-            "你处于 reviewer(审查)角色。\n"
-            "- 工具集 = explorer + run_command + lsp_diagnostics(看 + 跑检查)。\n"
-            "- 不准写文件/编辑代码;产出 = 一段审查意见(具体文件:行号 + 问题)。\n"
-            "- 走 verify 门:自动接 detect_tampering(测试被改 → unverifiable,不假装通过)。\n"
-            "- 跑测试/lint 时用 propose_verify 声明,host 独立跑退出码为准。"
-        ),
+        system_prompt=t("wf.role.reviewer.system_prompt"),
         max_steps=10,
         read_only=True,
         requires_verify=True,
@@ -190,17 +169,17 @@ class WorkflowSpec:
 def _parse_agent(raw: dict) -> AgentTask:
     """解析并校验单个 agent 任务描述。"""
     if not isinstance(raw, dict) or "prompt" not in raw:
-        raise WorkflowSpecError("agent 缺 prompt")
+        raise WorkflowSpecError(t("wf.spec.agent_missing_prompt"))
     scope = raw.get("tool_scope", "read")
     if scope not in _SCOPES:
-        raise WorkflowSpecError(f"非法 tool_scope:{scope!r}(只允许 {_SCOPES})")
+        raise WorkflowSpecError(t("wf.spec.invalid_tool_scope", scope=scope, scopes=_SCOPES))
     iso = raw.get("isolation", "none")
     if iso not in _ISOLATION:
-        raise WorkflowSpecError(f"非法 isolation:{iso!r}")
+        raise WorkflowSpecError(t("wf.spec.invalid_isolation", iso=iso))
     role = raw.get("role")
     if role is not None:
         if role not in _ROLES:
-            raise WorkflowSpecError(f"非法 role:{role!r}(只允许 {_ROLES})")
+            raise WorkflowSpecError(t("wf.spec.invalid_role", role=role, roles=_ROLES))
         # role 是高阶抽象:role 存在时,tool_scope 必须与之派生的 read_only 一致;若用户
         # 同时显式填了与 role 矛盾的 tool_scope(role=explorer + tool_scope=full)—— 拒收,
         # 不让 spec 留下歧义(谁说了算)。role 不填则 tool_scope 默认 "read" 旧路径不变。
@@ -209,9 +188,13 @@ def _parse_agent(raw: dict) -> AgentTask:
             scope_implies_readonly = (scope == "read")
             if preset.read_only != scope_implies_readonly:
                 raise WorkflowSpecError(
-                    f"role={role!r} 与 tool_scope={scope!r} 矛盾"
-                    f"(role 派生 read_only={preset.read_only},"
-                    f"tool_scope=read 派生 read_only={scope_implies_readonly})"
+                    t(
+                        "wf.spec.role_scope_conflict",
+                        role=role,
+                        scope=scope,
+                        role_read_only=preset.read_only,
+                        scope_read_only=scope_implies_readonly,
+                    )
                 )
     # P0 防假绿(纵深 fail-fast):stage 的 verify 由模型在 propose_workflow 里自著。trivial 命令
     # (echo/cat/ls/pwd...)什么都不验证,模型填它 = 自助开绿灯。canonical Verifier 最终也会判
@@ -224,7 +207,7 @@ def _parse_agent(raw: dict) -> AgentTask:
             _vbin = ""
         if _vbin in TRIVIAL_VERIFY_BINS:
             raise WorkflowSpecError(
-                f"stage verify 不能是 trivial 命令(永远通过、什么都不验证):{verify!r}"
+                t("wf.spec.trivial_verify", verify=verify)
             )
     return AgentTask(
         prompt=str(raw["prompt"]),
@@ -241,28 +224,28 @@ def _parse_agent(raw: dict) -> AgentTask:
 def parse_spec(raw: dict) -> WorkflowSpec:
     """将原始 dict 解析为 WorkflowSpec,任何非法输入立即抛 WorkflowSpecError。"""
     if not isinstance(raw, dict):
-        raise WorkflowSpecError("spec 必须是 dict")
+        raise WorkflowSpecError(t("wf.spec.not_a_dict"))
     name = str(raw.get("name") or "").strip()
     if not name:
-        raise WorkflowSpecError("spec 缺 name")
+        raise WorkflowSpecError(t("wf.spec.missing_name"))
     stages_raw = raw.get("stages")
     if not isinstance(stages_raw, list) or not stages_raw:
-        raise WorkflowSpecError("spec 缺非空 stages")
+        raise WorkflowSpecError(t("wf.spec.missing_stages"))
     if len(stages_raw) > _MAX_STAGES:
-        raise WorkflowSpecError(f"stages 过多(>{_MAX_STAGES})")
+        raise WorkflowSpecError(t("wf.spec.too_many_stages", max_stages=_MAX_STAGES))
     seen_ids: set[str] = set()
     stages: list[Stage] = []
     for sr in stages_raw:
         if not isinstance(sr, dict):
-            raise WorkflowSpecError("stage 必须是 dict")
+            raise WorkflowSpecError(t("wf.spec.stage_not_a_dict"))
         sid = str(sr.get("id") or "").strip()
         if not sid:
-            raise WorkflowSpecError("stage 缺 id")
+            raise WorkflowSpecError(t("wf.spec.stage_missing_id"))
         if sid in seen_ids:
-            raise WorkflowSpecError(f"重复的 stage id:{sid!r}")
+            raise WorkflowSpecError(t("wf.spec.duplicate_stage_id", sid=sid))
         op = sr.get("op")
         if op not in _OPS:
-            raise WorkflowSpecError(f"非法 op:{op!r}(只允许 {_OPS})")
+            raise WorkflowSpecError(t("wf.spec.invalid_op", op=op, ops=_OPS))
         over_raw = sr.get("over")
         over: tuple | dict | None
         if over_raw is None:
@@ -273,11 +256,11 @@ def parse_spec(raw: dict) -> WorkflowSpec:
             ref = over_raw["from"]
             if ref not in seen_ids:
                 raise WorkflowSpecError(
-                    f"over.from 引用了不存在或非更早的 stage:{ref!r}"
+                    t("wf.spec.invalid_over_ref", ref=ref)
                 )
             over = {"from": ref}
         else:
-            raise WorkflowSpecError(f"非法 over:{over_raw!r}")
+            raise WorkflowSpecError(t("wf.spec.invalid_over", over=over_raw))
         agent_raw = sr.get("agent")
         if isinstance(agent_raw, list):
             agent: AgentTask | tuple[AgentTask, ...] = tuple(
@@ -289,7 +272,7 @@ def parse_spec(raw: dict) -> WorkflowSpec:
         threshold = max(1, int(sr.get("threshold", 1)))
         if op == "panel" and threshold > voters:
             raise WorkflowSpecError(
-                f"panel threshold({threshold})不可大于 voters({voters})"
+                t("wf.spec.panel_threshold_exceeds_voters", threshold=threshold, voters=voters)
             )
         cap = min(int(sr.get("cap", 4)), _MAX_CAP)
         # best_of_n:取 n(默认 3,夹在 1.._BEST_OF_N_MAX 之间)
@@ -298,7 +281,7 @@ def parse_spec(raw: dict) -> WorkflowSpec:
                 n = int(sr.get("n", _BEST_OF_N_DEFAULT))
             except (TypeError, ValueError):
                 raise WorkflowSpecError(
-                    f"stage「{sid}」best_of_n 的 n 非法:{sr.get('n')!r}"
+                    t("wf.spec.best_of_n_invalid", sid=sid, n=sr.get("n"))
                 )
             n = max(1, min(n, _BEST_OF_N_MAX))
             n_val: int | None = n

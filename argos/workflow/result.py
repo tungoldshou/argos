@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from argos.i18n import t
 from argos.workflow.spec import AgentTask, Stage, WorkflowSpec
 
 
@@ -63,19 +64,27 @@ def _model_of(agent: AgentTask | tuple[AgentTask, ...]) -> str:
 
 def render_preview(spec: WorkflowSpec) -> str:
     """审批模态用:逐 stage 列将起几个 agent、用什么模型、是否写/隔离。"""
-    lines = [f"工作流「{spec.name}」—— {spec.description}", "将执行:"]
+    lines = [
+        t("wf.result.preview_header", name=spec.name, description=spec.description),
+        t("wf.result.preview_will_run"),
+    ]
     total = 0
     for s in spec.stages:
         n = _agent_count(s)
         total += n
         a = s.agent[0] if isinstance(s.agent, tuple) else s.agent
-        scope = "写+跑" if a.tool_scope == "full" else "只读"
-        iso = " · worktree 隔离" if a.isolation == "worktree" else ""
+        scope = t("wf.result.preview_scope_write") if a.tool_scope == "full" else t("wf.result.preview_scope_read")
+        iso = t("wf.result.preview_worktree_iso") if a.isolation == "worktree" else ""
         lines.append(
-            f" · [{s.op}] {s.id}:起 {n} 个 agent(模型 {_model_of(s.agent)} · {scope}{iso})"
+            t(
+                "wf.result.preview_stage_line",
+                op=s.op,
+                stage_id=s.id,
+                n=n,
+                model=_model_of(s.agent),
+                scope=scope,
+                iso=iso,
+            )
         )
-    lines.append(
-        f"合计约 {total} 个子 agent。"
-        "批准后在 OS 沙箱边界内自动执行(网络 OFF、写限工作区)。"
-    )
+    lines.append(t("wf.result.preview_footer", total=total))
     return "\n".join(lines)

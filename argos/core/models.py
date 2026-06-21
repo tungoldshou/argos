@@ -17,6 +17,7 @@ from argos.core.protocols import (  # re-export 保旧导入路径
     get_protocol, _coalesce_consecutive_roles,
 )
 from argos.core.types import ModelTierName
+from argos.i18n import t
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,7 +48,7 @@ class CredentialPool:
 
     def __init__(self, keys: list[str]) -> None:
         if not keys:
-            raise ValueError("CredentialPool 需要至少 1 个 key")
+            raise ValueError(t("core2.models.pool_empty"))
         # key -> {last_used, exhausted_until}
         self._state: dict[str, dict[str, float | None]] = {
             k: {"last_used": 0.0, "exhausted_until": None} for k in keys
@@ -83,7 +84,7 @@ class CredentialPool:
         """terminal 401(key 无效)→ 永久剔除。"""
         self._state.pop(key, None)
         if not self._state:
-            raise RuntimeError("所有 credential 均已 terminal 剔除,无可用 key")
+            raise RuntimeError(t("core2.models.all_terminal"))
 
     @staticmethod
     def is_terminal_401(status: int, body: str) -> bool:

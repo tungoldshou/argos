@@ -17,6 +17,7 @@ import logging
 from pathlib import Path
 
 from argos.ledger.entry import LedgerEntry, UndoState
+from argos.i18n import t
 
 log = logging.getLogger("argos.ledger")
 
@@ -104,7 +105,7 @@ class LedgerStore:
                     "run_id": run_id,
                     "seq": 0,
                     "action": "undo_done",
-                    "summary_human": "撤销完成:已还原 run 起点的文件改动。",
+                    "summary_human": t("core2.ledger.undo_done"),
                     "risk": "low",
                     "reversible": "no",
                     "undo_token": None,

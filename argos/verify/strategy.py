@@ -24,6 +24,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from argos.i18n import t
+
 # ── 类型定义 ────────────────────────────────────────────────────
 
 Level = Literal["L1", "L2", "L3", "L5"]
@@ -59,9 +61,9 @@ class VerifyStrategy:
 
     def __post_init__(self) -> None:
         if not (0.0 <= self.confidence <= 1.0):
-            raise ValueError(f"confidence 必须在 [0,1] 区间，实际值：{self.confidence!r}")
+            raise ValueError(t("verify.strategy.confidence_range", value=self.confidence))
         if self.level == "L5" and self.kind != "evidence_trail":
-            raise ValueError("L5 级策略 kind 必须是 evidence_trail")
+            raise ValueError(t("verify.strategy.l5_kind_required"))
 
 
 # ── WorkspaceFacts ───────────────────────────────────────────────
@@ -351,11 +353,8 @@ _URL_PATTERN = re.compile(r'https?://[^\s\'"<>]+', re.I)
 
 def _l5_fallback(reason: str = "") -> VerifyStrategy:
     """生成 L5 evidence_trail 诚实退路策略。"""
-    human = (
-        "这件事我没法自动验证对错，需要你看一眼确认。"
-        f"{(' ' + reason) if reason else ''}"
-        "结果已记录在 Ledger 中，可随时复盘。"
-    )
+    reason_part = (" " + reason) if reason else ""
+    human = t("verify.strategy.l5_human", reason=reason_part)
     return VerifyStrategy(
         level="L5",
         kind="evidence_trail",
@@ -370,9 +369,9 @@ def _l5_fallback(reason: str = "") -> VerifyStrategy:
 
 def _l1_pytest(hints: dict[str, str]) -> VerifyStrategy:
     cmd = hints.get("pytest_cmd", "pytest")
-    rationale = f"运行 pytest（{cmd}）；退出码 0 = 所有测试通过 = 任务做对了。"
+    rationale = t("verify.strategy.l1_pytest_rationale", cmd=cmd)
     if "pytest_cmd" in hints:
-        rationale += f" 来自 capability hint: {hints['pytest_cmd']!r}。"
+        rationale += t("verify.strategy.l1_pytest_hint", hint=hints["pytest_cmd"])
     return VerifyStrategy(
         level="L1", kind="exit_code",
         cmd=cmd, target=None,
@@ -384,7 +383,7 @@ def _l1_cargo_test() -> VerifyStrategy:
     return VerifyStrategy(
         level="L1", kind="exit_code",
         cmd="cargo test", target=None,
-        rationale_human="运行 cargo test；退出码 0 = Rust 测试全过 = 实现正确。",
+        rationale_human=t("verify.strategy.l1_cargo_rationale"),
         confidence=0.95,
     )
 
@@ -393,7 +392,7 @@ def _l1_npm_test() -> VerifyStrategy:
     return VerifyStrategy(
         level="L1", kind="exit_code",
         cmd="npm test", target=None,
-        rationale_human="运行 npm test；退出码 0 = JS/TS 测试全过。",
+        rationale_human=t("verify.strategy.l1_npm_rationale"),
         confidence=0.90,
     )
 
@@ -402,7 +401,7 @@ def _l1_make_test() -> VerifyStrategy:
     return VerifyStrategy(
         level="L1", kind="exit_code",
         cmd="make test", target=None,
-        rationale_human="运行 make test；Makefile 定义的测试目标通过 = 任务完成。",
+        rationale_human=t("verify.strategy.l1_make_rationale"),
         confidence=0.85,
     )
 
@@ -411,15 +410,15 @@ def _l1_go_test() -> VerifyStrategy:
     return VerifyStrategy(
         level="L1", kind="exit_code",
         cmd="go test ./...", target=None,
-        rationale_human="运行 go test ./...；退出码 0 = Go 测试全过。",
+        rationale_human=t("verify.strategy.l1_go_rationale"),
         confidence=0.90,
     )
 
 
 def _l2_artifact_exists(file_path: str, hints: dict[str, str]) -> VerifyStrategy:
-    rationale = f"检查文件 {file_path!r} 存在 = agent 确实生成了声明的产物。"
+    rationale = t("verify.strategy.l2_artifact_exists_rationale", file_path=file_path)
     if hints:
-        rationale += f" 来自 capability hints: {list(hints)!r}。"
+        rationale += t("verify.strategy.l2_artifact_exists_hint", hints=list(hints))
     return VerifyStrategy(
         level="L2", kind="artifact_exists",
         cmd=f"test -f {file_path}", target=file_path,
@@ -433,7 +432,7 @@ def _l2_artifact_exists_dir(dir_path: str) -> VerifyStrategy:
     Args:
         dir_path: 目录路径（从 goal 动词锚定提取）
     """
-    rationale = f"检查目录 {dir_path!r} 存在 = agent 确实创建/整理了声明的输出目录。"
+    rationale = t("verify.strategy.l2_artifact_exists_dir_rationale", dir_path=dir_path)
     return VerifyStrategy(
         level="L2", kind="artifact_exists",
         cmd=f"test -d {dir_path}", target=dir_path,
@@ -446,9 +445,7 @@ def _l2_content_assert_json(file_path: str) -> VerifyStrategy:
         level="L2", kind="artifact_schema",
         cmd=f"python -c \"import json, sys; json.load(open('{file_path}'))\"",
         target=file_path,
-        rationale_human=(
-            f"验证 {file_path!r} 是合法 JSON —— 结构化输出正确序列化。"
-        ),
+        rationale_human=t("verify.strategy.l2_json_rationale", file_path=file_path),
         confidence=0.70,
     )
 
@@ -458,9 +455,7 @@ def _l2_content_assert_csv(file_path: str) -> VerifyStrategy:
         level="L2", kind="content_assert",
         cmd=f"python -c \"import csv, sys; list(csv.reader(open('{file_path}')))\"",
         target=file_path,
-        rationale_human=(
-            f"验证 {file_path!r} 是合法 CSV —— 结构化输出可解析。"
-        ),
+        rationale_human=t("verify.strategy.l2_csv_rationale", file_path=file_path),
         confidence=0.70,
     )
 
@@ -478,19 +473,19 @@ def _l3_dom_assert(hints: dict[str, str], goal_url: str | None = None) -> Verify
     if not url:
         # 无法确定目标 URL → 不生成（调用方已做 guard，此处保险再判一次）
         # 此分支不应被触达；若触达则返回一个标记策略（level L5 退路由 generate 追加）
-        raise ValueError("_l3_dom_assert: 无 url，不应调用")
+        raise ValueError(t("verify.strategy.l3_dom_no_url"))
     expected_text = hints.get("dom_expected_text") or ""
     if expected_text:
-        rationale = (
-            f"在 {url!r} 确认页面文本包含 {expected_text!r} —— "
-            "声明式内容断言，可机检判定（强证据路径）。"
+        rationale = t(
+            "verify.strategy.l3_dom_strong_rationale",
+            url=url,
+            expected_text=expected_text,
         )
     else:
-        rationale = (
-            f"在 {url!r} 检查 DOM 选择器 {selector!r} 相关内容 —— "
-            "仅有文本弱提示，无结构性 DOM 校验通道；"
-            "结果最高为 unverifiable（非 passed）。"
-            "如需机检断言，请在 propose_dom_verify() 中提供 expected_text。"
+        rationale = t(
+            "verify.strategy.l3_dom_weak_rationale",
+            url=url,
+            selector=selector,
         )
     return VerifyStrategy(
         level="L3", kind="dom_assert",
@@ -535,10 +530,7 @@ def generate(
     # 全局不变量不变:任何任务都绝不生成"传输层响应码=verified"型策略。
     if _SEND_PATTERN.search(goal) and not _CODE_PATTERN.search(goal):
         return (
-            _l5_fallback(
-                "发送/通知/购买类任务：传输层返回成功不等于任务内容正确"
-                "（收错人/发错内容仍可能 200）。"
-            ),
+            _l5_fallback(t("verify.strategy.send_l5_reason")),
         )
 
     # ── capability hint 优先注入 ──────────────────────────────────
@@ -612,7 +604,7 @@ def generate(
                     level="L2", kind="content_assert",
                     cmd=None,  # 具体文件名未知；接线层需填充
                     target="*.json",
-                    rationale_human="目标含 JSON 输出信号，验证输出文件是合法 JSON。",
+                    rationale_human=t("verify.strategy.json_output_rationale"),
                     confidence=0.55,
                 )
             )
@@ -622,7 +614,7 @@ def generate(
                     level="L2", kind="content_assert",
                     cmd=None,
                     target="*.csv",
-                    rationale_human="目标含 CSV 输出信号，验证输出文件可解析。",
+                    rationale_human=t("verify.strategy.csv_output_rationale"),
                     confidence=0.55,
                 )
             )

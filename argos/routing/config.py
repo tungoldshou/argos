@@ -17,6 +17,7 @@ from pathlib import Path
 
 from argos import config_base
 from argos.config import ConfigError
+from argos.i18n import t
 from argos.routing.categorizer import TaskCategory
 
 
@@ -49,8 +50,8 @@ def load_routing(config_dir: Path) -> RoutingConfig:
         raw = config_base.read_json_file(cfile, ErrorCls=ConfigError, on_os_error="silent")
     except ConfigError as e:
         # 重抛带原消息前缀(测试/用户文案不变)
-        if "不是合法 JSON" in str(e):
-            raise ConfigError(f"config.json 解析失败:{str(e).split(':', 1)[-1].strip()}") from None
+        if isinstance(e.__cause__, json.JSONDecodeError):  # locale 无关:按异常 cause 判,不匹配本地化文案
+            raise ConfigError(t("route.config_parse_fail", detail=str(e).split(':', 1)[-1].strip())) from None
         raise
     if raw is None:
         return RoutingConfig()
@@ -63,17 +64,15 @@ def load_routing(config_dir: Path) -> RoutingConfig:
     tier_force_confirm = list(routing.get("tier_force_confirm") or [])
     for k, v in {**by_category, **by_tool}.items():
         if not isinstance(v, str):
-            raise ConfigError(
-                f"routing.{k} 的 tier 值必须是 str,得 {type(v).__name__}")
+            raise ConfigError(t("route.tier_must_be_str", key=k, type_name=type(v).__name__))
     for v in tier_force_confirm:
         if not isinstance(v, str):
-            raise ConfigError("routing.tier_force_confirm 项必须是 str")
+            raise ConfigError(t("route.tier_force_confirm_must_be_str"))
     # 校验 category 键必须在 8 枚举内(spec D11 严格 schema)
     valid_cats = {c.value for c in TaskCategory}
     for k in by_category:
         if k not in valid_cats:
-            raise ConfigError(
-                f"routing.by_category 的键 {k!r} 不在合法类别 {sorted(valid_cats)} 内")
+            raise ConfigError(t("route.category_key_invalid", key=k, valid=sorted(valid_cats)))
     return RoutingConfig(
         default=default, by_category=by_category, by_tool=by_tool,
         tier_force_confirm=tier_force_confirm,
@@ -87,15 +86,14 @@ def _validate_tier(tier: str, config_dir: Path) -> None:
     try:
         raw = config_base.read_json_file(cfile, ErrorCls=ConfigError, on_os_error="silent")
     except ConfigError as e:
-        if "不是合法 JSON" in str(e):
-            raise ConfigError(f"config.json 解析失败:{str(e).split(':', 1)[-1].strip()}") from None
+        if isinstance(e.__cause__, json.JSONDecodeError):  # locale 无关:按异常 cause 判,不匹配本地化文案
+            raise ConfigError(t("route.config_parse_fail", detail=str(e).split(':', 1)[-1].strip())) from None
         raise
     if raw is None:
         return
     models = raw.get("models") or {}
     if tier not in models:
-        raise ConfigError(
-            f"routing tier '{tier}' 不在 config.models {list(models)} 内(防拼写退化)")
+        raise ConfigError(t("route.tier_not_in_models", tier=tier, models=list(models)))
 
 
 def set_category(config_dir: Path, category: TaskCategory, tier: str) -> RoutingConfig:
@@ -104,13 +102,13 @@ def set_category(config_dir: Path, category: TaskCategory, tier: str) -> Routing
     config_dir = Path(config_dir).expanduser()
     cfile = config_dir / "config.json"
     if not cfile.exists():
-        raise ConfigError(f"无 {cfile},无法 set_category")
+        raise ConfigError(t("route.no_config_set_category", path=cfile))
     # set_category 必须读到完整 raw(要保留其他段),不走 read_json_file 助手(助手只返顶层 dict,
     # set_category 需要 raw 全段保留 + 原子写),但 parse error 处理复用助手模式。
     try:
         raw = json.loads(cfile.read_text())
     except json.JSONDecodeError as e:
-        raise ConfigError(f"config.json 解析失败:{e}") from e
+        raise ConfigError(t("route.config_parse_fail", detail=str(e))) from e
     routing = dict(raw.get("routing") or {})
     by_category = dict(routing.get("by_category") or {})
     by_category[category.value] = tier

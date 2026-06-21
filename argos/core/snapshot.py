@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import logging
 import shutil
+
+from argos.i18n import t
 import tarfile
 import tempfile
 from dataclasses import dataclass, field
@@ -115,7 +117,7 @@ class RunSnapshot:
         """
         result = RestoreResult()
         if not self.tar_path.exists():
-            result.errors.append(("", f"快照文件不存在:{self.tar_path}"))
+            result.errors.append(("", t("core2.snapshot.tar_not_found_restore", path=self.tar_path)))
             return result
         try:
             with tarfile.open(self.tar_path, "r") as tf:
@@ -128,7 +130,7 @@ class RunSnapshot:
                         try:
                             target.parent.mkdir(parents=True, exist_ok=True)
                         except OSError as e:
-                            result.errors.append((m.name, f"创建父目录失败:{e}"))
+                            result.errors.append((m.name, t("core2.snapshot.mkdir_failed", error=e)))
                             continue
                     try:
                         # 走 extractfile(返回 ExFileObject)→ 写到目标;处理大文件
@@ -142,7 +144,7 @@ class RunSnapshot:
                     except OSError as e:
                         result.errors.append((m.name, str(e)))
         except tarfile.TarError as e:
-            result.errors.append(("", f"tar 读取失败:{e}"))
+            result.errors.append(("", t("core2.snapshot.tar_read_failed", error=e)))
         return result
 
     def restore_file(self, workspace: Path, rel_path: str) -> RestoreResult:
@@ -171,11 +173,11 @@ class RunSnapshot:
             # resolve() 后 target 必须以 workspace 为前缀(含等于自身)
             target.relative_to(workspace_resolved)
         except (ValueError, OSError) as e:
-            result.errors.append((rel_path, f"路径牢笼拒绝(../ 逃逸或非法路径):{e}"))
+            result.errors.append((rel_path, t("core2.snapshot.path_cage_rejected", error=e)))
             return result
 
         if not self.tar_path.exists():
-            result.errors.append((rel_path, f"快照文件不存在:{self.tar_path}"))
+            result.errors.append((rel_path, t("core2.snapshot.tar_not_found_file", path=self.tar_path)))
             return result
 
         # 规范化 rel_path 以匹配 tar 内 arcname(tar 用 str(rel),POSIX 分隔符)
@@ -197,7 +199,7 @@ class RunSnapshot:
                         try:
                             target.unlink()
                         except OSError as e:
-                            result.errors.append((rel_path, f"新建文件删除失败:{e}"))
+                            result.errors.append((rel_path, t("core2.snapshot.new_file_delete_failed", error=e)))
                     return result
 
                 # 快照中有 → 覆盖写回
@@ -205,12 +207,12 @@ class RunSnapshot:
                     try:
                         target.parent.mkdir(parents=True, exist_ok=True)
                     except OSError as e:
-                        result.errors.append((rel_path, f"创建父目录失败:{e}"))
+                        result.errors.append((rel_path, t("core2.snapshot.mkdir_failed_file", error=e)))
                         return result
                 try:
                     src = tf.extractfile(matched)
                     if src is None:
-                        result.errors.append((rel_path, "tar extractfile 返回 None"))
+                        result.errors.append((rel_path, t("core2.snapshot.extractfile_none")))
                         return result
                     with target.open("wb") as dst:
                         shutil.copyfileobj(src, dst)
@@ -218,5 +220,5 @@ class RunSnapshot:
                 except OSError as e:
                     result.errors.append((rel_path, str(e)))
         except tarfile.TarError as e:
-            result.errors.append((rel_path, f"tar 读取失败:{e}"))
+            result.errors.append((rel_path, t("core2.snapshot.tar_read_failed_file", error=e)))
         return result
