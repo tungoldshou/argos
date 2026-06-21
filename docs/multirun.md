@@ -78,7 +78,7 @@ observer TUI 的 `/runs` 命令会显 `🔒 READ-ONLY 观察者`;focus / pause /
 
 owner 退出(TUI 关 / 网络断)→ **最旧 observer 自动 promote** 为新 owner,继续可用。
 
-> **前向兼容说明**:daemon 的 ACP session/owner-observer 协议是客户端无关的。正在开发中的桌面壳(Tauri 2,`desktop/`)将使用同一机制作为第二个客户端接入——届时 owner/observer/promote 语义不变。
+> **前向兼容说明**:daemon 的 ACP session/owner-observer 协议是客户端无关的；任何协议客户端接入时 owner/observer/promote 语义不变。
 
 ## 3. Worktree 隔离
 

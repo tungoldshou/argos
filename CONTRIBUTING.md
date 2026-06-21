@@ -5,8 +5,7 @@ First off, thank you for considering contributing to Argos! 🎉
 Argos — the hundred-eyed agent (百眼智能体) — runs as a background daemon kernel
 (argosd, Unix socket at ~/.argos/daemon.sock); clients attach as protocol clients.
 The terminal TUI is the current primary client (with an honest single inline-process
-fallback when the daemon is unavailable); a Tauri 2 desktop shell (desktop/) is an
-in-progress second client — v6 P6b walking skeleton, not yet shipped.
+fallback when the daemon is unavailable).
 Our ambition: make cheap models reliable through a verify hard-gate, honesty
 protocol, and OS-sandboxed executor.
 
@@ -115,10 +114,6 @@ argos/                # Main package
 ├── eval/                  # Self-eval harness (corpus / runner / compare)
 ├── verify/                # Opt-in self-test sub-system (reviewer-role candidate tests)
 └── skills_curator/        # Skill discovery / install pipeline
-
-desktop/                    # Desktop shell (in-progress second client)
-├── shell/                 # Rust/Tauri 2 walking skeleton (v6 P6b, NOT yet shipped)
-└── sdk/                   # ACP TypeScript client SDK, zero runtime dependencies
 
 docs/                       # Specs + plans
 ├── superpowers/specs/      # Feature design specs (one per PR)

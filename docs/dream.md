@@ -112,7 +112,7 @@ argos dream --report      # 显示最新报告
 
 ## 端点（daemon HTTP/SSE）
 
-这些是标准 ACP 端点，TUI、桌面壳（desktop/）或任何协议客户端均可消费。
+这些是标准 ACP 端点，TUI 或任何协议客户端均可消费。
 
 ```
 POST /dream/run           # 触发一轮整合（请求体为空或 {dry_run: bool}）

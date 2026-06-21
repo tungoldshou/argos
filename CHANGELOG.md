@@ -17,7 +17,6 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - **P4 intent 确认回路 + verify 策略自动生成 + Trust Dial**:intent 引擎(`argos/intent/`)NL→Goal 意图预解析,高风险词必确认,超时 120s fail-closed;verify 策略自动生成(`verify/strategy.py`,L1-L5 验证梯子;发送/购买/通知类直接 L5 红线);Trust Dial(`permissions/trust_dial.py`)L0-L4 五档,`/trust` 命令,升档须 InlineChoice 确认,HARD RULES 任何档位不放行;`/yolo=L4` 别名
   - **P5 conductor 自治核心**(`argos/conductor/`):StandingOrder 人话规矩 + `cronlite.py` 零依赖 cron-lite(@别名/HH:MM/every N/五段);`triggers.py` mtime 轮询+glob+去抖(边界牢笼,`'..'` 与 symlink 逃逸 fail-closed);`proposals.py` `requires_confirmation` 恒 `True`(构造期断言,契约级);tick 幂等防重发;P5b conductor supervisor 宿主进 daemon,结构性"绝不自动执行":supervisor 物理上无法调用 `create_run`(负向断言测试钉死);confirm 红线双写死 `isolation=worktree` + `trust_level=L1`
   - **P6a computer use**(`argos/perception/`):ComputerAction 7 种动作 + `ComputerExecutor` 零依赖 macOS 后端(screencapture/osascript/open -a);Accessibility 权限被拒返人话指引;非开发者域 HARD RULES(金融文本正则/支付类 app → hard CONFIRM,L4 不放行);conductor 自治 run 一律 RED 拒绝;`ARGOS_COMPUTER_USE=1` 旗标默认关
-  - **P6b 桌面端通道**(`desktop/`):TS ACP SDK(`desktop/sdk/`,零运行时依赖,30 事件 kind 对齐 `protocol/events.py`);`parse.ts` 前向兼容;`client.ts` Unix socket 镜像 daemon 15 端点;黄金向量 33 个 Python 真序列化向量(node:test 39 测试);Tauri 2 行走骨架(`desktop/shell/`),Rust UDS 桥 8 个 IPC 命令,verdict 三态着色(unverifiable=黄,绝不绿)
 
 - **Dream 夜间整合 — 验证门控跨 run 自进化 + 记忆整理**:让一次验证通过的经验不被丢弃、多次相似经验自动综合成泛化 skill。**核心架构**:
   - **候选落盘通电**(`argos/learning/candidates.py`):无 runner 时 distiller 产物落盘到 `~/.argos/learning/candidates/<name>-<run_id>/`(之前直接丢弃);`meta.json` 标记 `consumed` 状态与源(含 self_verified 来源记录);E4 双保险拒绝 self_verified 候选;一切 IO 失败诚实降级,不挂主任务
@@ -36,12 +35,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **欠账冲刺 B — sidecar 自动拉起 + SDK 单源化 + 向量双向防漂移**:
   - **B1 sidecar 状态机**(`ConnState` probing→spawning→connected/failed,绝不假 connected);`ARGOS_DAEMON_CMD` 可配;拉起失败带 stderr 摘要;窗口关闭不杀常驻内核;acp_heartbeat 10s 前端心跳 + 失效自动重建 session
   - **B2 SDK 单源化**:`sync_to_shell.mjs` + 漂移测试(内存复现变换与已提交副本逐字节比对,手改即红;已验证可误性);check/build 去写副作用
-  - **B3 向量双向防漂移**:`tests/desktop_channel/` Python 侧 deserialize→serialize→比对入库向量;TS 钉 parse 侧,Python 钉 serialize 侧;31/31 kind 全覆盖
+  - **B3 向量双向防漂移**:Python 侧 deserialize→serialize→比对入库向量;31/31 kind 全覆盖
 
-- **desktop .app bundle + 三轨并行加固**:
-  - **桌面壳 .app bundle**:PIL 生成 1024×1024 图标 → `npx tauri icon` 全套;`tauri.conf.json bundle.active=true`;`packaging/build_desktop.sh`(npm ci → tsc → tauri build + codesign 校验);`packaging/desktop.md`(签名状态如实:ad-hoc 未公证;版本单源纪律);实测 release 构建通过,`Argos_0.1.0_aarch64.dmg` 产出
-  - **运行时冒烟测试**(`tests/desktop_smoke/`):起真窗口 + 隔离 daemon,session 注册 = JS 存活铁证(≤20s),心跳前移 = bug4 回归钉;构建失败报红不 skip;teardown 不留孤儿
-  - **验证策略中文泛化**:动词锚定提取(整理到/保存到/创建/生成… 中英双语)→ L2 `artifact_exists`(`test -d/-e`);防过度提取三红线(否定语境/模板占位/路径合法性);61 新测试
+- **验证策略中文泛化**:动词锚定提取(整理到/保存到/创建/生成… 中英双语)→ L2 `artifact_exists`(`test -d/-e`);防过度提取三红线(否定语境/模板占位/路径合法性);61 新测试
+
+- **chore**: removed the in-progress Tauri desktop shell + ACP TypeScript SDK (`desktop/`) and their tests/packaging — focusing on the TUI/CLI client. The daemon ACP protocol stays (the TUI uses it).
 
 - **性能:pytest-xdist 并行化 + SSE keepalive 压缩**:
   - `pytest-xdist` 上车,全量测试 355s→100-150s(2.4-3.5x),零削弱零生产改动;推荐命令 `uv run pytest -n auto --dist loadgroup`;9 个真子进程/真等待测试补标 `@slow`;binary-dist xdist_group 串行互斥(防 dist/ 重建并发竞态)

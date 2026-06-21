@@ -72,7 +72,7 @@ uv run python scripts/tb_pass_at_1_benchmark.py --tb-source /tmp/tb-inspect --n 
 | `uv run argos setup` 非交互挂 | stdin 不是 TTY(管道/CI) | 在真终端跑;或手工写 `~/.argos/config.json` + `~/.argos/.env` |
 | TB bench 候选一直 hung | 上游模型限流 | 切模型(`uv run argos setup` 选个);或加 bridge per-candidate timeout(待 ship) |
 | 任务 verify 一直 unverifiable | 项目无 pytest/无可机检命令 | 让 agent 显式 declare `propose_verify`;或加测试 |
-| 打包 .app 跑不了真模型 | Python 改了没重打 PyInstaller | `packaging/build_arm64.sh` 重打 → `tauri build` |
+| 打包 .app 跑不了真模型 | Python 改了没重打 PyInstaller | `packaging/build_arm64.sh` 重打 |
 
 ## 5. 进一步
 

@@ -6,9 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Argos — **the hundred-eyed agent** (named for Argus Panoptes, the all-seeing guardian) — runs cheap
 models reliably by wrapping them in a verify hard-gate, an honesty protocol, and an OS-level
-sandbox. Its runtime is a background daemon kernel (auto-spawned) with pluggable clients: the Textual
-TUI is the current primary client, falling back to a single inline process when the daemon is
-unavailable, and a Tauri desktop shell is an in-progress second client. Model-agnostic
+sandbox. Its runtime is a background daemon kernel (auto-spawned) with the Textual TUI as its client,
+falling back to a single inline process when the daemon is unavailable. Model-agnostic
 (Anthropic-Messages and OpenAI-compatible endpoints both first-class).
 See `README.md` for the product story and `docs/argos-product-definition.md` for the spec.
 
@@ -17,9 +16,7 @@ See `README.md` for the product story and `docs/argos-product-definition.md` for
 - **`argos/`** — the entire active codebase (Python 3.12+). All work happens here.
 - **`tests/`** — pytest suite (3459 tests). Mirrors `argos/` subpackage layout, plus
   integration subdirs: `tests/e2e/`, `tests/eval/`, `tests/workflow/`, `tests/skills_curator/`,
-  `tests/input/`, `tests/daemon/`, `tests/tui/`, `tests/desktop_channel/`, `tests/desktop_smoke/`, …
-- **`desktop/`** — Tauri 2 desktop shell (v6 P6b): `desktop/shell/` (Rust/Tauri walking skeleton)
-  and `desktop/sdk/` (ACP TypeScript client SDK, zero runtime dependencies).
+  `tests/input/`, `tests/daemon/`, `tests/tui/`, …
 - **`scripts/`** — standalone demo/benchmark scripts (`best_of_n_demo.py`, `tb_pass_at_1_benchmark.py`, …).
 - **`examples/`** — user-facing quickstart guide (`quickstart.md`).
 - **`packaging/`** — multi-channel install (install.sh, Homebrew, WinGet, .deb, PyInstaller spec).

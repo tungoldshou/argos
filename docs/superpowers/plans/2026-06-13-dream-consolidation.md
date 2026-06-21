@@ -16,7 +16,7 @@
 
 - 工作目录：worktree `/Users/zc/Projects/argos-dream`（分支 `feat/dream-consolidation`）。
 - 命令前缀 `rtk`（如 `rtk git add`）；测试跑 `uv run pytest <目标文件> -q`。
-- **基线已知红**（环境性，与本功能无关，不要去修）：`tests/desktop_smoke/test_shell_runtime_smoke.py` 2 个 + `tests/eval/test_terminal_bench_docker.py` 1 个。
+- **基线已知红**（环境性，与本功能无关，不要去修）：`tests/eval/test_terminal_bench_docker.py` 1 个。
 - 每任务只跑**定向**测试；全量（`uv run pytest -n auto --dist loadgroup`）只在最终门跑。子集覆盖率低于 80% 是正常的，覆盖率只看全量。
 - 代码风格：PEP 8、签名带类型注解、**中文 docstring/注释**（house norm）、frozen dataclass、绝不让学习路径异常拖挂主流程（log + 降级）。
 - 与 spec 的一个**有意命名偏离**：spec 写的新字段名 `kind`，但 `StandingOrder.kind` 已被占用（schedule|file_trigger），故统一改名 **`action`**（"run" | "dream"），语义不变。
