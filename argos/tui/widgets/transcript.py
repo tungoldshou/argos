@@ -110,6 +110,10 @@ class Transcript(VerticalScroll):
         self.can_focus = False               # 不抢输入框焦点(滚动用鼠标/PageUp)
         self._current: AssistantMessage | None = None
         self._lines: list[str] = []          # 已落定文本(供 rendered_text)
+        # 是否已锚定贴底。空态(只挂矮于视口的 StartupSplash)绝不锚定,否则 Textual 的
+        # anchor() 会把矮内容底对齐(scroll_offset 变负)→ 启动 logo 掉到屏幕下方
+        # (2026-06-22 回归,PR #8 在 on_mount 无条件 anchor 引入)。改为首次有真实内容才锚。
+        self._anchored_once: bool = False
 
     @property
     def rendered_text(self) -> str:
@@ -118,14 +122,22 @@ class Transcript(VerticalScroll):
             parts.append(strip_code_fences(self._current._raw))
         return "\n".join(p for p in parts if p)
 
-    def on_mount(self) -> None:
-        """锚定到底部:Textual 的 anchor() 会在新内容到达时自动保持贴底,直到用户主动上滚
-        (release_anchor),滚回底部又自动重新锚定(_check_anchor)。这取代手搓的 _stick_to_bottom
-        —— 后者读挂载后仍 stale 的 max_scroll_y + 单次 deferred scroll_end,在事件成批到达
-        (daemon SSE:token 流 + step 行 + 巨型结果块连发,中间无布局周期)时会卡在中间态几何、
-        滚不到最新(2026-06-22 真机复现:off 死锁在起点)。anchor 在【每次布局】维持贴底,
-        对成批到达健壮;用户上翻看历史仍正确不抢位。"""
-        self.anchor()
+    def _ensure_anchored(self) -> None:
+        """首次有真实内容时锚定贴底(取代旧的 on_mount 无条件 anchor)。
+
+        Textual 的 anchor() 会在新内容到达时自动保持贴底,直到用户主动上滚(release_anchor),
+        滚回底部又自动重新锚定(_check_anchor)。它取代手搓的 _stick_to_bottom —— 后者读挂载后
+        仍 stale 的 max_scroll_y + 单次 deferred scroll_end,在事件成批到达(daemon SSE:token 流
+        + step 行 + 巨型结果块连发,中间无布局周期)时会卡在中间态几何、滚不到最新
+        (2026-06-22 真机复现:off 死锁在起点)。anchor 在【每次布局】维持贴底,对成批到达健壮。
+
+        但绝不能在 on_mount 就锚:空态 Transcript 唯一子件是 StartupSplash(矮于视口),anchor()
+        会把它底对齐 → 启动 logo 掉到屏幕下方(2026-06-22 回归)。故延后到首条真实内容到达。
+        只锚一次:此后"贴底跟随 / 用户上翻保位"交给 Textual 的 anchor/release_anchor/_check_anchor
+        自理;反复 anchor() 会把上翻看历史的用户硬拽回底(破坏 scrolled-up 保位契约)。"""
+        if self.is_attached and not self._anchored_once:
+            self._anchored_once = True
+            self.anchor()
 
     async def user_line(self, text: str) -> None:
         self.finalize_response()
@@ -136,7 +148,11 @@ class Transcript(VerticalScroll):
         self._lines.append(f"› {text}")
         if self.is_attached:
             await self.mount(UserMessage(text))
-            self.anchor()   # 新一轮:重新锚定贴底,即便用户刚才上翻了历史也跳回看自己的输入
+            # 新一轮:重新锚定贴底,即便用户刚才上翻了历史也跳回看自己的输入。
+            # 这里用显式 anchor()(非 _ensure_anchored):每轮都要重置 release_anchor 态,
+            # 否则上轮上翻后提交新目标看不到自己的输入。同步置位 once 标志,免首 token 再锚一次。
+            self._anchored_once = True
+            self.anchor()
 
     async def append_token(self, text: str) -> None:
         if self._current is None:
@@ -156,7 +172,8 @@ class Transcript(VerticalScroll):
         target = self._current   # 局部引用:即便重建后再被并发清空,也喂进有效气泡而非 None
         if target is not None:
             target.feed(text)
-        # 跟随贴底由 on_mount 的 anchor() 在每次布局自动维持(不再手动 scroll)。
+        # 首条真实内容到达即锚定;此后跟随贴底由 Textual 的 anchor 每次布局自动维持(不手动 scroll)。
+        self._ensure_anchored()
 
     def finalize_response(self) -> None:
         """当前流式段落定:记入 _lines,清 current 指针 → 下个 token 起新气泡。"""
@@ -171,20 +188,28 @@ class Transcript(VerticalScroll):
         # 跳过视觉 mount —— 这样 rendered_text 仍可断言,生产路径(widgets 必挂)不受影响。
         if self.is_attached:
             await self.mount(SystemLine(text, kind=kind))
+            self._ensure_anchored()
 
     async def mount_block(self, widget) -> None:
         self.finalize_response()
         if not self.is_attached:
             return
         await self.mount(widget)
+        self._ensure_anchored()
 
     async def show_thinking(self, label: str | None = None) -> None:
         self.finalize_response()
         if not self.is_attached:
             return
         await self.mount(ThinkingIndicator(label if label is not None else t("core2.transcript.thinking")))
+        self._ensure_anchored()
 
     async def clear(self) -> None:        # /clear 用:移除所有消息
         await self.remove_children()
         self._current = None
+        # 复位锚定:/clear 后会重挂 StartupSplash(矮于视口),须回到"未锚"态使其留顶部,
+        # 否则残留的 anchor 会把新 splash 再次底对齐(同 2026-06-22 回归)。
+        # 既清自有"已锚一次"标志,也调 anchor(False) 解除 Textual 框架层的 _anchored,缺一不可。
+        self._anchored_once = False
+        self.anchor(False)
         self._lines.clear()
