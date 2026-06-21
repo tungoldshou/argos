@@ -13,10 +13,10 @@ EN: dict[str, str] = {
     # __main__.py argparse flags
     "cli.demo.help": "FakeLoop success demo",
     "cli.demo_fail.help": "FailingFakeLoop escalation demo",
-    "cli.selftest.help": "Offline self-check (script model, four-phase run)",
-    "cli.project.help": "Work inside the specified user project directory",
-    "cli.model.help": "Use the specified config profile for this run (default: current active)",
-    "cli.effort.help": "Task effort tier (step budget: low=8 / medium=40 / high=80; approval mode controlled by /trust)",
+    "cli.selftest.help": "Offline self-check (scripted model, four-phase run)",
+    "cli.project.help": "Work inside the given project directory",
+    "cli.model.help": "Use the named config profile for this run (default: the active one)",
+    "cli.effort.help": "Effort tier (step budget: low=8 / medium=40 / high=80; approval mode is set by /trust)",
     # setup sub-command
     "cli.setup.help": "Interactive wizard to connect a model (choose provider → enter key → probe → save)",
     "cli.setup.epilog": (
@@ -35,26 +35,26 @@ EN: dict[str, str] = {
         "For non-TTY environments (Docker/CI) write the files above manually or mount a secret."
     ),
     # self-update sub-command
-    "cli.self_update.help": "Check for a newer version and print upgrade instructions (skips 7-day cache)",
+    "cli.self_update.help": "Check for a newer version and print upgrade instructions (skips the 7-day cache)",
     # headless exec sub-command
-    "cli.exec.help": "Run a task non-interactively and exit (headless; scriptable / CI; equivalent to claude -p / codex exec)",
-    "cli.exec.prompt.help": "Task description; omit or pass '-' to read from stdin",
-    "cli.exec.json.help": "Output JSON envelope (result / verdict / session_id / cost_usd / is_error) instead of plain text",
-    "cli.exec.auto.help": "Permissive: approve all side-effects (including network / out-of-cage); use only in trusted CI environments",
-    "cli.exec.verify.help": "Declare a verification command (exit-code is authoritative; equivalent to agent's propose_verify)",
-    "cli.exec.project.help": "Work inside the specified project directory (default: current directory)",
-    "cli.exec.model.help": "Use the specified config profile for this run (default: current active)",
-    "cli.exec.quiet.help": "Suppress progress output to stderr; only emit the final result (suitable for strict CI stdout capture)",
+    "cli.exec.help": "Run a task non-interactively and exit (headless; scriptable / CI; like claude -p / codex exec)",
+    "cli.exec.prompt.help": "Task description; omit it or pass '-' to read from stdin",
+    "cli.exec.json.help": "Emit a JSON envelope (result / verdict / session_id / cost_usd / is_error) instead of plain text",
+    "cli.exec.auto.help": "Permissive: approve every side effect (including network and writes outside the workspace); use only in trusted CI",
+    "cli.exec.verify.help": "Declare a verify command (its exit code is authoritative; the same as the agent's propose_verify)",
+    "cli.exec.project.help": "Work inside the given project directory (default: the current directory)",
+    "cli.exec.model.help": "Use the named config profile for this run (default: the active one)",
+    "cli.exec.quiet.help": "Don't write progress to stderr; emit only the final result (for strict CI stdout capture)",
     # context sub-command
-    "cli.context.help": "Context visualizer (#12: show buckets / JSON export)",
-    "cli.context.show.help": "Show the current LLM context breakdown (system/memory/tools/messages)",
-    "cli.context.json.help": "JSON output (machine-readable; for eval / custom integrations)",
-    "cli.context.session.help": "Specify session_id (default: current active)",
+    "cli.context.help": "Context visualizer (#12: show buckets / export JSON)",
+    "cli.context.show.help": "Show the current LLM context breakdown (system / memory / tools / messages)",
+    "cli.context.json.help": "JSON output (machine-readable; for eval and custom integrations)",
+    "cli.context.session.help": "Use the given session_id (default: the active one)",
     # ── runtime printed messages ──────────────────────────────────────────────
     # __main__.py _cmd_self_update
     "cli.self_update.check_failed": "argos self-update: check failed: {err}",
     "cli.self_update.brew_hint": "   Installed via Homebrew — upgrade with: brew upgrade --cask argos",
-    "cli.self_update.install_hint": "   Reinstall latest: curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash",
+    "cli.self_update.install_hint": "   Reinstall the latest: curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash",
     "cli.self_update.up_to_date": "✓ argos {version} is up to date.",
     # __main__.py _spawn_update_check (stderr banner)
     "cli.update_available_banner": (
@@ -64,11 +64,11 @@ EN: dict[str, str] = {
     # __main__.py main() — no-key fallback
     "cli.no_key_fallback": "[argos] {err}\n[argos] Run `argos setup` to connect a model, or set the environment variable and restart.",
     # headless.py — missing prompt
-    "cli.exec.missing_prompt": "argos exec: missing task description (pass a positional argument or provide via stdin).",
+    "cli.exec.missing_prompt": "argos exec: no task description (pass it as an argument or pipe it in on stdin).",
     # headless.py — trivial verify rejection
     "cli.exec.trivial_verify": (
         "argos exec: --verify '{cmd}' is a trivial command"
-        " (always passes, verifies nothing) — rejected, no fake green."
+        " (it always passes and verifies nothing) — rejected, no fake green."
         " Use a real test command (e.g. pytest / cargo test / tsc --noEmit)."
     ),
     # headless.py — build_components failure
@@ -85,7 +85,7 @@ EN: dict[str, str] = {
     "cli.exec.verdict_passed_self": "✓ passed (self-verified / weak)",
     "cli.exec.verdict_failed": "✗ failed",
     "cli.exec.verdict_unverifiable": "? unverifiable",
-    "cli.exec.verdict_no_test": "· no declared verification (honest no-test)",
+    "cli.exec.verdict_no_test": "· no verify command declared (honest no-test)",
     # context CLI
     "cli.context.analysis_failed": "context: analysis failed: {err}",
     # ── setup_wizard.py interactive prompts / messages ────────────────────────
@@ -97,61 +97,61 @@ EN: dict[str, str] = {
     "setup.prompt_protocol": "Protocol (anthropic/openai):",
     "setup.prompt_base_url": "base_url:",
     "setup.prompt_model": "Model id [{default}]:",
-    "setup.prompt_key_method": "API key method: paste / use existing environment variable (env):",
+    "setup.prompt_key_method": "API key method — paste a key, or use an existing environment variable (env):",
     "setup.prompt_env_var_name": "Environment variable name:",
     "setup.prompt_paste_key": "Paste API key:",
     "setup.prompt_max_tokens": "max_tokens [4096]:",
     "setup.prompt_context_window": "context_window [200000]:",
-    "setup.prompt_price_in": "Price in (USD/1M, leave blank to skip):",
-    "setup.prompt_price_out": "Price out (USD/1M, leave blank to skip):",
+    "setup.prompt_price_in": "Price in (USD per 1M tokens, leave blank to skip):",
+    "setup.prompt_price_out": "Price out (USD per 1M tokens, leave blank to skip):",
     "setup.prompt_embedding_model": "Embedding model (blank = keyword recall, no extra model call; e.g. text-embedding-3-small):",
-    "setup.no_embeddings_note": "(This provider uses the Anthropic protocol — no /embeddings endpoint; memory uses keyword recall)",
+    "setup.no_embeddings_note": "(This provider uses the Anthropic protocol — no /embeddings endpoint; memory falls back to keyword recall.)",
     "setup.probing": "Running connection probe…",
     "setup.probe_rating": "[{rating}] {message}",
-    "setup.reconnect_prompt": "Connection failed, reconfigure this model? (Y/n):",
-    "setup.deep_probe_prompt": "Run a deep probe? (real write+verify, ~10-30s) [y/N]:",
-    "setup.deep_probing": "Running deep probe (real write+verify)…",
+    "setup.reconnect_prompt": "Connection failed — reconfigure this model? (Y/n):",
+    "setup.deep_probe_prompt": "Run a deep probe? (real write + verify, ~10-30s) [y/N]:",
+    "setup.deep_probing": "Running deep probe (real write + verify)…",
     "setup.deep_probe_result": "Deep probe result [{rating}] {message}",
     "setup.prompt_profile_name": "Name for this model [{default}]:",
-    "setup.set_active_prompt": "Set as current default model? (y/N):",
-    "setup.warn_set_active_disconnected": "⚠️ This model failed the connection probe, but you chose to set it as current — confirm it is reachable before use.",
+    "setup.set_active_prompt": "Make this the active model? (y/N):",
+    "setup.warn_set_active_disconnected": "⚠️ This model failed the connection probe, but you chose to make it active — confirm it is reachable before you use it.",
     "setup.save_failed": "Save failed (invalid configuration): {err} — please reconfigure this model.",
-    "setup.saved_active": "Saved '{name}' and set as current model.",
-    "setup.saved_inactive": "Saved '{name}' (current default model unchanged).",
-    "setup.key_stored_warning": "Note: API key is stored in plain text in ~/.argos/.env (permissions 0600), not encrypted.",
+    "setup.saved_active": "Saved '{name}' and made it the active model.",
+    "setup.saved_inactive": "Saved '{name}' (active model unchanged).",
+    "setup.key_stored_warning": "Note: the API key is stored in plain text in ~/.argos/.env (permissions 0600), not encrypted.",
     "setup.add_another_prompt": "Add another model? (y/N):",
-    "setup.done": "Setup complete. Run `argos` to use the current model.",
+    "setup.done": "Setup complete. Run `argos` to use the active model.",
     "setup.no_tty": (
-        "\n⚠ stdin is closed (`argos setup` requires an interactive terminal).\n"
-        "  • Run in a real terminal: `argos setup` (or `uv run argos setup`)\n"
-        "  • For non-interactive environments (scripts/CI) write two files manually:\n"
+        "\n⚠ stdin is closed (`argos setup` needs an interactive terminal).\n"
+        "  • Run it in a real terminal: `argos setup` (or `uv run argos setup`)\n"
+        "  • For non-interactive environments (scripts / CI), write two files by hand:\n"
         "      ~/.argos/config.json   ← provider / model / base_url declaration\n"
         "      ~/.argos/.env          ← API key (permissions 0600)\n"
         "    File schema: `argos setup --help` or docs/setup-wizard.md"
     ),
     # setup_wizard.py _ask_int / _ask_float_or_none fail-soft messages
-    "setup.not_integer": "'{val}' is not an integer, using default {default}.",
-    "setup.not_number": "'{val}' is not a number, skipping that price.",
+    "setup.not_integer": "'{val}' is not an integer; using the default {default}.",
+    "setup.not_number": "'{val}' is not a number; skipping that price.",
     # setup_wizard.py probe ratings (ProbeResult.rating field)
     "setup.probe_rating_ok": "ok",
     "setup.probe_rating_marginal": "marginal",
     "setup.probe_rating_fail": "fail",
     # setup_wizard.py probe messages
     "setup.probe_timeout": (
-        "Connection timed out ({timeout}s with no response): endpoint reachable but not responding, "
-        "check that base_url is correct and the model is loaded."
+        "Connection timed out (no response in {timeout}s): the endpoint is reachable but not responding. "
+        "Check that base_url is correct and the model is loaded."
     ),
     "setup.probe_connect_error": "Cannot connect / endpoint error: {detail}",
-    "setup.probe_ok_message": "Connected successfully, CodeAct format compliant.",
+    "setup.probe_ok_message": "Connected; CodeAct format looks good.",
     "setup.probe_marginal_message": (
-        "Connected successfully, but this model does not emit ```python CodeAct fences by default "
-        "(Argos has seen this with MiniMax-M3 and corrects it via the system-prompt contract) "
-        "— usable but may need stronger prompting; you can still save."
+        "Connected, but this model does not emit ```python CodeAct fences by default "
+        "(Argos has seen this with MiniMax-M3 and corrects it through the system-prompt contract) "
+        "— usable, but it may need stronger prompting; you can still save it."
     ),
     # deep_probe results
-    "setup.deep_probe_pass_one": "End-to-end succeeded (verify {vs}).",
-    "setup.deep_probe_pass_marginal": "End-to-end succeeded (verify {vs}).",
-    "setup.deep_probe_fail": "Verification did not pass (verdicts={vs}).",
+    "setup.deep_probe_pass_one": "End-to-end run succeeded (verify {vs}).",
+    "setup.deep_probe_pass_marginal": "End-to-end run succeeded (verify {vs}).",
+    "setup.deep_probe_fail": "Verify did not pass (verdicts={vs}).",
     "setup.deep_probe_error": "Deep probe could not run: {err}",
     # setup_wizard.py _probe_prompt / deep_probe task
     "setup.probe_prompt": "Output only a single ```python code block containing: print('ok'). No other text.",
@@ -160,6 +160,62 @@ EN: dict[str, str] = {
     "cli.selftest.done": "Done.",
     "cli.selftest.task": "Implement st.f returning 1",
     "cli.selftest.assembly_failed": "[selftest] Assembly self-check failed: {exc_type}: {exc} → FAIL",
+
+    # ── argos/cli/eval.py ────────────────────────────────────────────────────
+    "cli.eval.help": "Agent self-eval + A/B comparison (#7)",
+    "cli.eval.list.help": "List recent eval runs",
+    "cli.eval.run.help": "Run a single task",
+    "cli.eval.run.task_id.help": "Task id (see `argos eval corpus`)",
+    "cli.eval.run.model.help": "Model profile name (default = active)",
+    "cli.eval.run.keep_worktree.help": "Debug: keep worktree after run",
+    "cli.eval.compare.help": "A/B compare two model tiers",
+    "cli.eval.corpus.help": "List corpus task catalog",
+    "cli.eval.no_runs": "No eval runs yet. Try `argos eval corpus` to see the task list.",
+    "cli.eval.task_not_found": "未找到 task: {err}",
+
+    # ── argos/cli/skills.py ──────────────────────────────────────────────────
+    "cli.skills.help": "Skill ecosystem management (#10: refresh / list / install / remove / test)",
+    "cli.skills.refresh.help": "Fetch remote index.json and refresh local cache",
+    "cli.skills.refresh.url.help": "Custom index URL (for testing)",
+    "cli.skills.list.help": "List installed + index remote available",
+    "cli.skills.install.help": "Install a skill (default enabled=false)",
+    "cli.skills.install.name.help": "Skill name (see `argos skills list`)",
+    "cli.skills.remove.help": "Remove a skill (moved to .trash; recoverable for 30 days)",
+    "cli.skills.test.help": "Run the skill's own smoke test (or generic probe if none)",
+    "cli.skills.no_skills_hint": "\n(no skills installed; run `argos skills refresh` to pull index)",
+    "cli.skills.network_confirm": "[skills] {name!r} declares network traffic — install? [y/N] ",
+
+    # ── argos/cli/dream.py ───────────────────────────────────────────────────
+    "cli.dream.help": "Nightly consolidation: cross-run distillation + memory tidy (--report to view last report)",
+    "cli.dream.report.help": "Show the latest Dream report without running a new cycle",
+    "cli.dream.report_fmt": (
+        "Dream report  "
+        "units_total={units_total}  "
+        "promoted={promoted}  "
+        "rejected={rejected}  "
+        "skipped={skipped}  "
+        "memory_merged={memory_merged}  "
+        "memory_archived={memory_archived}"
+    ),
+    "cli.dream.no_report": "No Dream report yet (candidate pool empty or Dream has never run).",
+    "cli.dream.report_bad_type": "Dream report format unexpected (expected dict, got {type_name}).",
+    "cli.dream.no_key_notice": "No API key: running memory tidy and candidate inventory only (A/B promotion skipped).",
+    "cli.dream.no_key_setup_hint": "For full Dream promotion, run `argos setup` to configure a model.",
+    "cli.dream.memory_tidy": "Memory tidy: merged={merged} archived={archived}",
+    "cli.dream.memory_tidy_failed": "Memory tidy failed (degraded/skipped): {err}",
+    "cli.dream.candidates_count": "Candidate pool unconsumed: {n} item(s) (configure a key to trigger promotion)",
+    "cli.dream.no_runner_warning": "Warning: could not initialize eval runner, skipping A/B promotion.",
+    "cli.dream.starting": "Dream starting (cross-run cluster synthesis + A/B promotion + memory tidy)…",
+    "cli.dream.pipeline_failed": "Dream pipeline failed: {err}",
+    "cli.dream.already_running": "Another Dream is already running (possibly the daemon nightly consolidation) — skipping.",
+    "cli.dream.report_written": "Report written to: {path}",
+
+    # ── argos/cli/pkg.py ─────────────────────────────────────────────────────
+    "cli.pkg.usage_info": "  info      — print project metadata + packaging/VERSION + git tag",
+    "cli.pkg.usage_check": "  check     — verify self + argos entry-point import succeeds",
+    "cli.pkg.usage_manifest": "  manifest  — dry-run winget manifest generation (real in v0.2.0)",
+    "cli.pkg.check_import_failed": "argospkg check: import failed: {exc_type}: {err}",
+    "cli.pkg.manifest_placeholder": "argospkg manifest: v0.1.0 placeholder only; v0.2.0 will wire wingetcreate for auto-generation",
 }
 
 ZH: dict[str, str] = {
@@ -311,4 +367,60 @@ ZH: dict[str, str] = {
     "cli.selftest.done": "完成。",
     "cli.selftest.task": "实现 st.f 返回 1",
     "cli.selftest.assembly_failed": "[selftest] 装配自检失败:{exc_type}: {exc} → FAIL",
+
+    # ── argos/cli/eval.py ────────────────────────────────────────────────────
+    "cli.eval.help": "Agent 自我评估 + A/B 对比 (#7)",
+    "cli.eval.list.help": "列最近 eval run",
+    "cli.eval.run.help": "跑单个 task",
+    "cli.eval.run.task_id.help": "task id (见 `argos eval corpus`)",
+    "cli.eval.run.model.help": "model profile name(默认 = active)",
+    "cli.eval.run.keep_worktree.help": "调试:不删 worktree",
+    "cli.eval.compare.help": "A/B 对比两个 model tier",
+    "cli.eval.corpus.help": "列 corpus 任务清单",
+    "cli.eval.no_runs": "尚未跑过 eval。试试 argos eval corpus 看任务清单。",
+    "cli.eval.task_not_found": "未找到 task: {err}",
+
+    # ── argos/cli/skills.py ──────────────────────────────────────────────────
+    "cli.skills.help": "Skill 生态管理 (#10: refresh / list / install / remove / test)",
+    "cli.skills.refresh.help": "拉远端 index.json 刷新本地 cache",
+    "cli.skills.refresh.url.help": "自定义 index URL(测试用)",
+    "cli.skills.list.help": "列已装 + index 远端可用",
+    "cli.skills.install.help": "装一个 skill(默认 enabled=false)",
+    "cli.skills.install.name.help": "skill name(见 `argos skills list`)",
+    "cli.skills.remove.help": "卸一个 skill(进 .trash 30d 可恢复)",
+    "cli.skills.test.help": "跑 skill 自带 smoke test(无则跑通用探针)",
+    "cli.skills.no_skills_hint": "\n(no skills installed; 跑 `argos skills refresh` 拉 index)",
+    "cli.skills.network_confirm": "[skills] {name!r} 声明会发网络流量,装? [y/N] ",
+
+    # ── argos/cli/dream.py ───────────────────────────────────────────────────
+    "cli.dream.help": "夜间整合:跨 run 综合蒸馏 + 记忆整理(--report 看上次报告)",
+    "cli.dream.report.help": "只读最新 Dream 报告(不跑新一轮)",
+    "cli.dream.report_fmt": (
+        "Dream 报告  "
+        "units_total={units_total}  "
+        "promoted={promoted}  "
+        "rejected={rejected}  "
+        "skipped={skipped}  "
+        "memory_merged={memory_merged}  "
+        "memory_archived={memory_archived}"
+    ),
+    "cli.dream.no_report": "暂无 Dream 报告(候选区空或从未跑过 Dream)。",
+    "cli.dream.report_bad_type": "Dream 报告格式异常(期望 dict,收到 {type_name})。",
+    "cli.dream.no_key_notice": "无 API key:仅做记忆整理与候选区盘点(A/B 晋升跳过)。",
+    "cli.dream.no_key_setup_hint": "若要完整 Dream 晋升,请先运行 `argos setup` 配置模型。",
+    "cli.dream.memory_tidy": "记忆整理:merged={merged} archived={archived}",
+    "cli.dream.memory_tidy_failed": "记忆整理失败(降级跳过): {err}",
+    "cli.dream.candidates_count": "候选区未消费材料: {n} 条(配置 key 后可触发晋升)",
+    "cli.dream.no_runner_warning": "警告: 无法初始化 eval runner,跳过 A/B 晋升。",
+    "cli.dream.starting": "Dream 启动(跨 run 聚类综合 + A/B 晋升 + 记忆整理)…",
+    "cli.dream.pipeline_failed": "Dream 管道执行失败: {err}",
+    "cli.dream.already_running": "另一个 Dream 正在运行(可能是 daemon 夜间整合),本次跳过。",
+    "cli.dream.report_written": "报告已写入: {path}",
+
+    # ── argos/cli/pkg.py ─────────────────────────────────────────────────────
+    "cli.pkg.usage_info": "  info      — 打印项目元数据 + packaging/VERSION + git tag",
+    "cli.pkg.usage_check": "  check     — 校验 self + argos 入口 import 成功",
+    "cli.pkg.usage_manifest": "  manifest  — 预演生成 winget manifest(v0.2.0 真出)",
+    "cli.pkg.check_import_failed": "argospkg check: import 失败:{exc_type}: {err}",
+    "cli.pkg.manifest_placeholder": "argospkg manifest: v0.1.0 仅占位;v0.2.0 接 wingetcreate 自动生成",
 }

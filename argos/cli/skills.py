@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from argos.skills_curator.index import BUILTIN_NAMES
+from argos.i18n import t
 
 
 def cmd_refresh(args: argparse.Namespace) -> int:
@@ -69,7 +70,7 @@ def cmd_list(args: argparse.Namespace) -> int:
         print(f"\n(last index refresh: {age:.1f}d ago; "
               f"{len(installed)} installed)")
     elif not installed:
-        print("\n(no skills installed; 跑 `argos skills refresh` 拉 index)")
+        print(t("cli.skills.no_skills_hint"))
     return 0
 
 
@@ -83,7 +84,7 @@ def cmd_install(args: argparse.Namespace) -> int:
     if cache:
         entry = cache.find(name)
         if entry and "network" in entry.capabilities:
-            ans = input(f"[skills] {name!r} 声明会发网络流量,装? [y/N] ").strip().lower()
+            ans = input(t("cli.skills.network_confirm", name=name)).strip().lower()
             if ans != "y":
                 print("[skills] cancelled")
                 return 1
@@ -138,25 +139,25 @@ def cmd_test(args: argparse.Namespace) -> int:
 def add_subparser(sub: Any) -> None:
     p = sub.add_parser(
         "skills",
-        help="Skill 生态管理 (#10: refresh / list / install / remove / test)",
+        help=t("cli.skills.help"),
     )
     sp = p.add_subparsers(dest="skills_command")
 
-    p_refresh = sp.add_parser("refresh", help="拉远端 index.json 刷新本地 cache")
-    p_refresh.add_argument("--url", default=None, help="自定义 index URL(测试用)")
+    p_refresh = sp.add_parser("refresh", help=t("cli.skills.refresh.help"))
+    p_refresh.add_argument("--url", default=None, help=t("cli.skills.refresh.url.help"))
     p_refresh.set_defaults(func=cmd_refresh)
 
-    p_list = sp.add_parser("list", help="列已装 + index 远端可用")
+    p_list = sp.add_parser("list", help=t("cli.skills.list.help"))
     p_list.set_defaults(func=cmd_list)
 
-    p_install = sp.add_parser("install", help="装一个 skill(默认 enabled=false)")
-    p_install.add_argument("name", help="skill name(见 `argos skills list`)")
+    p_install = sp.add_parser("install", help=t("cli.skills.install.help"))
+    p_install.add_argument("name", help=t("cli.skills.install.name.help"))
     p_install.set_defaults(func=cmd_install)
 
-    p_remove = sp.add_parser("remove", help="卸一个 skill(进 .trash 30d 可恢复)")
+    p_remove = sp.add_parser("remove", help=t("cli.skills.remove.help"))
     p_remove.add_argument("name", help="skill name")
     p_remove.set_defaults(func=cmd_remove)
 
-    p_test = sp.add_parser("test", help="跑 skill 自带 smoke test(无则跑通用探针)")
+    p_test = sp.add_parser("test", help=t("cli.skills.test.help"))
     p_test.add_argument("name", help="skill name")
     p_test.set_defaults(func=cmd_test)
