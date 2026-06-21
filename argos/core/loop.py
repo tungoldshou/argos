@@ -1131,11 +1131,12 @@ class AgentLoop:
         if _os_cu.environ.get("ARGOS_WORKFLOWS"):
             from argos.core.honesty import WORKFLOW_PROMPT
             safe = safe + "\n\n" + WORKFLOW_PROMPT
-        # LSP 工具段:仅当用户配了 LSP server(~/.argos/lsp.json servers 非空)才注入 —— 否则这 6 个
-        # 工具对模型隐形(此前 callable-yet-invisible)。多数任务无 LSP,默认不占便宜模型的预算。
+        # LSP 工具段:仅当用户显式创建了 ~/.argos/lsp.json 且 servers 非空才注入 ——
+        # load() 在文件不存在时返回内置默认(含 python server),所以必须先检查文件是否存在,
+        # 否则对所有默认用户都会注入 LSP 段(与注释声称的"仅用户配置时"相悖)。
         try:
-            from argos.lsp.config import load as _load_lsp
-            if _load_lsp().servers:
+            from argos.lsp.config import LSP_CONFIG_PATH as _LSP_CONFIG_PATH, load as _load_lsp
+            if _LSP_CONFIG_PATH.exists() and _load_lsp().servers:
                 from argos.core.honesty import LSP_TOOLS
                 safe = safe + "\n\n" + LSP_TOOLS
         except Exception:  # noqa: BLE001 — LSP 配置读取失败诚实降级为不注入(不阻断 run)
