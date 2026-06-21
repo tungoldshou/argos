@@ -1170,6 +1170,10 @@ class ArgosApp(App):
             if _broker is not None:
                 _registry = getattr(_broker, "_registry", None)
         names = _tools.get_tool_names(_registry)
+        # 诚实:工作流默认关闭(ARGOS_WORKFLOWS 未设时 host 不 dispatch propose_workflow)——
+        # 注明这点,别让 /tools 把一个默认 inert 的工具显示成立即可用。
+        import os as _os_wf
+        _wf_label = "编排(工作流)" if _os_wf.environ.get("ARGOS_WORKFLOWS") else "编排(工作流,需 ARGOS_WORKFLOWS=1 才执行)"
         groups = [
             ("文件", ["read_file", "write_file", "edit_file", "search_files"]),
             ("命令/验证/计划", ["run_command", "propose_verify", "update_plan"]),
@@ -1180,7 +1184,7 @@ class ArgosApp(App):
             # 模型可见名=下划线(ALL_TOOL_NAMES 路径);registry.names() 仍点号 —— 两者都归此组。
             ("OS 级控制(P6a)", [n for n in names
                                 if n.startswith("computer_")]),
-            ("编排(工作流)", ["propose_workflow"]),
+            (_wf_label, ["propose_workflow"]),
         ]
         lines = [f"共 {len(names)} 个工具:"]
         for label, members in groups:

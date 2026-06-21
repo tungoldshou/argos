@@ -96,7 +96,8 @@ _TOOLS = (
     "- 浏览器（需要真实交互/JS 渲染/登录态的页面时用）："
     "browser_navigate(url)、browser_snapshot()、browser_click(selector)、"
     "browser_type(selector, text)、browser_screenshot(path)。"
-    "纯静态正文优先用 web_extract（更快）。\n"
+    "纯静态正文优先用 web_extract（更快）。做了浏览器改动要机检时,用 "
+    "propose_dom_verify(url, selector, expected_text) 声明 DOM 验证(host 独立判三态)。\n"
     "- 外部工具（MCP）：mcp_call(server, tool, arguments)（仅当上文列出了可用 MCP 工具时才用）。\n"
     "需要实时或你不掌握的外部信息时，先用 web_search 去查，不要凭空说'我没法联网/获取'。\n"
 )
@@ -151,6 +152,17 @@ COMPUTER_USE_PROMPT = (
     "④ 绝不替用户下单/转账/支付/发送资金 —— 交回用户自己做。\n"
     "⑤ 要机检确认 GUI 改动:用 propose_gui_verify(expected_text='屏上应出现的文本') 声明;"
     "host 会独立截图+OCR 判三态(passed/failed/unverifiable),OCR 看不清=unverifiable,别假装成功。\n"
+)
+
+# LSP 工具段:仅当用户配了 ~/.argos/lsp.json(servers 非空)时由 loop._build_system_pair 注入
+# (默认不占预算 —— 多数任务用不上 LSP;配了才说明用户要用)。此前这 6 个工具已绑进命名空间却
+# 在提示里完全隐形(callable-yet-invisible),便宜模型只能靠撞运气调到 → 现按需可见。
+LSP_TOOLS = (
+    "【代码智能(LSP;已配置语言服务器,比 grep 更准 —— 基于真实 AST/类型)】\n"
+    "- lsp_definition(file, line, col):跳转定义;lsp_references(file, line, col):查所有引用。\n"
+    "- lsp_hover(file, line, col):看类型/签名/文档;lsp_diagnostics(file):取该文件的错误/警告。\n"
+    "- lsp_document_symbols(file):列文件内符号;lsp_workspace_symbols(query):全工程按名找符号。\n"
+    "改动跨文件的符号前,先 lsp_references 看清影响面,别只靠文本搜索。\n"
 )
 
 # untrusted 围栏标记(Phase 4 升为常量，供 Scrubber 识别)。

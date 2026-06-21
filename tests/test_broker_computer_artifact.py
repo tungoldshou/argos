@@ -27,7 +27,8 @@ def _patch_executor(monkeypatch, result):
     class _FakeExec:
         def dispatch(self, ca):
             return result
-    monkeypatch.setattr(_ex, "ComputerExecutor", lambda: _FakeExec())
+    # broker 现以 ComputerExecutor(auto_detect_scale=True) 构造(Retina 缩放惰性探测)→ fake 接受 **kw。
+    monkeypatch.setattr(_ex, "ComputerExecutor", lambda **kw: _FakeExec())
 
 
 def test_screenshot_stashes_artifact(monkeypatch):

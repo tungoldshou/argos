@@ -1131,6 +1131,15 @@ class AgentLoop:
         if _os_cu.environ.get("ARGOS_WORKFLOWS"):
             from argos.core.honesty import WORKFLOW_PROMPT
             safe = safe + "\n\n" + WORKFLOW_PROMPT
+        # LSP 工具段:仅当用户配了 LSP server(~/.argos/lsp.json servers 非空)才注入 —— 否则这 6 个
+        # 工具对模型隐形(此前 callable-yet-invisible)。多数任务无 LSP,默认不占便宜模型的预算。
+        try:
+            from argos.lsp.config import load as _load_lsp
+            if _load_lsp().servers:
+                from argos.core.honesty import LSP_TOOLS
+                safe = safe + "\n\n" + LSP_TOOLS
+        except Exception:  # noqa: BLE001 — LSP 配置读取失败诚实降级为不注入(不阻断 run)
+            pass
 
         if not self._cfg.recall:
             return (safe, "")
@@ -1538,14 +1547,21 @@ class AgentLoop:
                 # Phase 5.3(review #9):工作流默认 off,仅 ARGOS_WORKFLOWS=1 时才 dispatch —— 否则即便
                 # 模型(训练先验/被污染的导入技能)凭空吐 propose_workflow,host 也不跑工作流机器(对称于
                 # 提示词不再宣传它);未开时当普通无副作用文本走常规 feedback。
-                raw_spec = (extract_workflow_spec(text)
-                            if __import__("os").environ.get("ARGOS_WORKFLOWS") else None)
-                if raw_spec is not None:
-                    async for ev in self._run_workflow(raw_spec, messages):
+                _wf_on = bool(__import__("os").environ.get("ARGOS_WORKFLOWS"))
+                _wf_spec = (extract_workflow_spec(text) if "propose_workflow" in text else None)
+                if _wf_spec is not None and _wf_on:
+                    async for ev in self._run_workflow(_wf_spec, messages):
                         yield ev
                     step += 1
                     continue   # 工作流结果已作为 feedback 回灌,跳过常规 exec feedback
                 feedback = self._feedback(result)
+                if _wf_spec is not None and not _wf_on:
+                    # 诚实纠偏:工作流默认关闭时 host 不 dispatch,但沙箱 _propose_workflow_pure 回执仍说
+                    # "待审批后执行"(沙箱子进程不知道 host 的开关)—— 不纠偏会让模型空等一个不会跑的工作流。
+                    feedback = (
+                        "[note] 工作流未启用(ARGOS_WORKFLOWS 未设),你的 propose_workflow 不会被执行;"
+                        "请直接单线程完成任务,不要等待它运行。\n" + feedback
+                    )
                 if self._todos:
                     # 锚机制:每个 act step 把当前 todos 摘要回灌(随执行结果一起),
                     # 防长任务在多步后丢失目标/漏更状态。
