@@ -2,16 +2,17 @@
 
 ## 0. 装好并配 key
 
-```bash
-# macOS arm64(一行装)
-curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash
+目前唯一可用路径是从源码运行(v0.1.0 tag 已打但 GitHub release 尚无二进制产物,
+一行安装脚本 / PyPI / Homebrew cask 均待 stage #13 发布后才可用)。
 
-# 任何平台(从 PyPI)
-uv tool install argos-agent
-# 或 pip install argos-agent
+```bash
+# 从源码运行(当前唯一可用路径,需 Python 3.12+ 和 uv)
+git clone https://github.com/tungoldshou/argos
+cd argos
+uv sync
 
 # 配模型 + key(交互向导)
-argos setup
+uv run argos setup
 # 选 provider → 填 key → 连通测试 → 保存
 ```
 
