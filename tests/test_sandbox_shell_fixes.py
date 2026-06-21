@@ -4,9 +4,13 @@ Fix 1 (P0): run_command on non-darwin must NOT run uncaged.
   - When a Linux bwrap/unshare backend is available → route through it.
   - When NO backend available → honest-refuse (ok=False, no subprocess).
 
-Fix 2 (P1): run_command network valve is all-or-nothing.
-  - Approving 'curl a.com' must NOT silently add evil.com to the egress set.
-  - Only the parsed target host should be recorded on the egress policy.
+Network valve (P1, honesty fix 2026-06-21): the run_command network valve is an
+all-or-nothing approval gate, NOT a per-host filter (the OS sandbox can't host-filter
+a subprocess). Tests pin that honest behavior — no faked per-host containment.
+
+Linux cage argv (P1, 2026-06-21): bwrap must mount `--ro-bind / /` BEFORE the writable
+`--bind $WS $WS` (so the workspace stays writable), and must thread allow_network so the
+valve actually works on Linux.
 """
 from __future__ import annotations
 
@@ -166,15 +170,23 @@ class TestNonDarwinHonestRefuse:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Fix 2 — egress scoping: approved 'curl a.com' must not let evil.com through
+# Network valve for run_command — HONEST semantics (2026-06-21)
+#
+# The valve is an ALL-OR-NOTHING approval gate, NOT a per-host filter. The OS
+# sandbox (Seatbelt `(allow network*)` / bwrap net ns) can only turn networking
+# on or off for a child — it cannot host-filter a subprocess's outbound
+# connections. So approving a network run_command grants the child FULL network
+# (write-cage + credential-read-deny still apply; it can reach any host). These
+# tests pin that honest behavior — they do NOT claim a per-host containment that
+# the OS layer cannot provide.
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestEgressScopingForRunCommand:
-    """After approving a network run_command, only the parsed host enters egress."""
+class TestNetworkValveForRunCommand:
+    """run_command network valve = on/off approval gate (honest, not per-host)."""
 
     @pytest.mark.asyncio
-    async def test_approved_curl_a_com_does_not_add_evil_com(self, monkeypatch):
-        """Approving 'curl a.com' must NOT add evil.com to the egress allowlist."""
+    async def test_network_command_runs_with_network_on_after_approval(self, monkeypatch):
+        """Approved network command → run_command receives allow_network=True (valve opens)."""
         from argos.approval import ApprovalGate, ApprovalLevel
         from argos.sandbox.broker import CapabilityBroker
         from argos.sandbox.egress import EgressPolicy
@@ -192,27 +204,23 @@ class TestEgressScopingForRunCommand:
         gate = ApprovalGate(level=ApprovalLevel.AUTO)
         br = CapabilityBroker(gate=gate, egress=egress, signer=ReceiptSigner(key=b"k"))
 
-        # Approve 'curl a.com'
         await br.request("run_command", {"command": "curl https://a.com/data"})
-
-        # evil.com must NOT be in the egress allowlist
-        assert not egress.allowed("evil.com"), (
-            "evil.com should NOT be in the egress set after approving curl a.com"
-        )
-        # a.com SHOULD be recorded (scoped grant)
-        assert egress.allowed("a.com"), (
-            "a.com SHOULD be recorded in egress after approving curl a.com"
+        assert captured.get("allow_network") is True, (
+            "approved network command must open the valve (allow_network=True)"
         )
 
     @pytest.mark.asyncio
-    async def test_approved_pip_install_records_pypi_not_all_hosts(self, monkeypatch):
-        """Approving 'pip install requests' records pypi.org, not a blanket wildcard."""
+    async def test_local_command_runs_with_network_off(self, monkeypatch):
+        """Local command (pytest) → run_command receives allow_network=False (valve stays shut)."""
         from argos.approval import ApprovalGate, ApprovalLevel
         from argos.sandbox.broker import CapabilityBroker
         from argos.sandbox.egress import EgressPolicy
         from argos.tools.receipts import ReceiptSigner
 
+        captured: dict = {}
+
         def fake_run(command, *, workspace=None, allow_network=False):
+            captured["allow_network"] = allow_network
             return ("ok", 0)
 
         monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
@@ -221,66 +229,99 @@ class TestEgressScopingForRunCommand:
         gate = ApprovalGate(level=ApprovalLevel.AUTO)
         br = CapabilityBroker(gate=gate, egress=egress, signer=ReceiptSigner(key=b"k"))
 
-        await br.request("run_command", {"command": "pip install requests"})
-
-        # After pip install, evil.com must still NOT be allowed
-        assert not egress.allowed("evil.com"), (
-            "evil.com must not be reachable after approving pip install"
-        )
-
-    @pytest.mark.asyncio
-    async def test_non_network_command_does_not_alter_egress(self, monkeypatch):
-        """A local command (pytest) must not touch the egress allowlist at all."""
-        from argos.approval import ApprovalGate, ApprovalLevel
-        from argos.sandbox.broker import CapabilityBroker
-        from argos.sandbox.egress import EgressPolicy
-        from argos.tools.receipts import ReceiptSigner
-
-        def fake_run(command, *, workspace=None, allow_network=False):
-            return ("ok", 0)
-
-        monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
-
-        egress = EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set())
-        gate = ApprovalGate(level=ApprovalLevel.AUTO)
-        br = CapabilityBroker(gate=gate, egress=egress, signer=ReceiptSigner(key=b"k"))
-
-        # snapshot user egress set before
-        before = set(egress._user)
         await br.request("run_command", {"command": "pytest -q"})
-        after = set(egress._user)
-
-        assert before == after, (
-            f"Local command must not alter egress. Before: {before}, after: {after}"
+        assert captured.get("allow_network") is False, (
+            "local command must not open the network valve"
         )
 
-    def test_parse_egress_host_from_curl(self):
-        """Utility: host can be parsed from curl/wget commands."""
-        from argos.tools.shell import parse_network_host
+    @pytest.mark.asyncio
+    async def test_run_command_never_touches_egress_allowlist(self, monkeypatch):
+        """HONESTY pin: run_command must NOT mutate the egress allowlist — the valve is
+        all-or-nothing at the OS layer, so faking per-host entries would be security theater.
+        Approving 'curl a.com' records NO host (the prior parse_network_host→allow() was removed)."""
+        from argos.approval import ApprovalGate, ApprovalLevel
+        from argos.sandbox.broker import CapabilityBroker
+        from argos.sandbox.egress import EgressPolicy
+        from argos.tools.receipts import ReceiptSigner
 
-        assert parse_network_host("curl https://a.com/data") == "a.com"
-        assert parse_network_host("curl http://b.org/path?q=1") == "b.org"
-        assert parse_network_host("wget https://files.example.com/x.zip") == "files.example.com"
+        def fake_run(command, *, workspace=None, allow_network=False):
+            return ("ok", 0)
 
-    def test_parse_egress_host_from_pip_returns_none(self):
-        """pip install has no explicit URL — parse_network_host returns None."""
-        from argos.tools.shell import parse_network_host
+        monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
 
-        # pip doesn't have a parseable target URL in the command string
-        result = parse_network_host("pip install requests")
-        # None is acceptable — no host to record
-        assert result is None
+        egress = EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set())
+        gate = ApprovalGate(level=ApprovalLevel.AUTO)
+        br = CapabilityBroker(gate=gate, egress=egress, signer=ReceiptSigner(key=b"k"))
 
-    def test_parse_egress_host_from_git_push_returns_none(self):
-        """git push doesn't have a URL in argv — returns None."""
-        from argos.tools.shell import parse_network_host
+        before = set(egress._user)
+        await br.request("run_command", {"command": "curl https://a.com/data"})
+        after = set(egress._user)
+        assert before == after, (
+            "run_command must not add hosts to the egress allowlist (no per-host theater); "
+            f"before={before} after={after}"
+        )
+        # And it certainly must not create a false sense that a.com is 'allowed' while evil.com isn't.
+        assert egress.allowed("a.com") == egress.allowed("evil.com"), (
+            "run_command egress is all-or-nothing; a.com and evil.com must be treated identically"
+        )
 
-        result = parse_network_host("git push origin main")
-        assert result is None
 
-    def test_parse_egress_host_from_unknown_returns_none(self):
-        """Commands with no parseable URL return None."""
-        from argos.tools.shell import parse_network_host
+# ══════════════════════════════════════════════════════════════════════════════
+# Linux cage argv — bwrap mount order + allow_network threading (pure-structure,
+# runs on macOS dev host: asserts argv shape, no real bwrap needed)
+# ══════════════════════════════════════════════════════════════════════════════
 
-        assert parse_network_host("pytest -q") is None
-        assert parse_network_host("npm install") is None
+class TestLinuxCageArgv:
+    """_bwrap_argv / _unshare_argv build a correct cage (mount order + network valve)."""
+
+    def test_bwrap_ro_root_mounts_before_writable_workspace(self, tmp_path):
+        """bwrap applies fs ops in argv order — '--ro-bind / /' MUST precede '--bind $WS $WS'
+        or the read-only root re-shadows the workspace read-only → writes EROFS."""
+        from argos.sandbox.linux import _bwrap_argv
+
+        argv = _bwrap_argv(tmp_path, ["echo", "hi"])
+        ro_idx = argv.index("--ro-bind")
+        bind_idx = argv.index("--bind")
+        assert ro_idx < bind_idx, (
+            f"--ro-bind / / (idx {ro_idx}) must come BEFORE --bind $WS (idx {bind_idx}) "
+            f"so the writable workspace bind wins; argv={argv}"
+        )
+        # the writable bind must target the workspace
+        assert argv[bind_idx + 1] == str(tmp_path.resolve())
+
+    def test_bwrap_network_off_by_default(self, tmp_path):
+        from argos.sandbox.linux import _bwrap_argv
+        assert "--unshare-net" in _bwrap_argv(tmp_path, ["echo"])
+
+    def test_bwrap_network_on_when_allowed(self, tmp_path):
+        """allow_network=True (valve approved) → drop --unshare-net so the child can reach the net."""
+        from argos.sandbox.linux import _bwrap_argv
+        assert "--unshare-net" not in _bwrap_argv(tmp_path, ["echo"], allow_network=True)
+
+    def test_unshare_network_off_by_default(self, tmp_path):
+        from argos.sandbox.linux import _unshare_argv
+        assert "--net" in _unshare_argv(tmp_path, ["echo"])
+
+    def test_unshare_network_on_when_allowed(self, tmp_path):
+        from argos.sandbox.linux import _unshare_argv
+        assert "--net" not in _unshare_argv(tmp_path, ["echo"], allow_network=True)
+
+    def test_shell_threads_allow_network_into_linux_cage(self, monkeypatch, tmp_path):
+        """run_command(allow_network=True) on Linux+bwrap → argv has NO --unshare-net (valve works)."""
+        import subprocess
+        from argos.tools import shell
+
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr("argos.tools.shell._linux_available_backend", lambda: "bwrap")
+        captured: list = []
+
+        def fake_run(argv, **kwargs):
+            captured.extend(argv)
+            m = MagicMock(); m.returncode = 0; m.stdout = ""; m.stderr = ""
+            return m
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        shell.run_command("curl https://a.com", workspace=tmp_path, allow_network=True)
+        assert "bwrap" in captured and "--unshare-net" not in captured, (
+            f"approved network run_command must open the Linux valve; argv={captured}"
+        )
