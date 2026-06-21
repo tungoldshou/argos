@@ -60,10 +60,11 @@ def _bwrap_argv(workspace: Path, child_argv: list[str], *,
         "bwrap",
         "--unshare-pid",       # PID 命名空间
         "--unshare-ipc",       # IPC 命名空间
-        "--unshare-uts",       # UTS 命名空间
         "--unshare-user",      # 用户命名空间(预存在 bug 修复 2026-06-21:--unshare-user-uid
-                               # 不是合法 bwrap 选项,真 Linux 上 init 必失败 "Unknown option";
-                               # 正确是 --unshare-user,unprivileged 下 bwrap 自动建 uid/gid map)
+                               # 不是合法 bwrap 选项,真 Linux 上 init 必失败 "Unknown option")
+        "--uid", "0",          # 映射为 namespace 内 root → 获 CAP_NET_ADMIN,--unshare-net 才能
+        "--gid", "0",          # 配 loopback(否则 bwrap "loopback: RTM_NEWADDR Operation not permitted")
+        "--unshare-uts",       # UTS 命名空间
         "--die-with-parent",   # 父进程退出则子进程死
     ]
     if not allow_network:
