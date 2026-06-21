@@ -19,7 +19,6 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import urlparse
 
 from ..sandbox import seatbelt
 from .files import _ws
@@ -54,41 +53,6 @@ def _linux_available_backend() -> str | None:
         return "bwrap"
     if shutil.which("unshare"):
         return "unshare"
-    return None
-
-
-def parse_network_host(command: str) -> str | None:
-    """从联网命令的 argv 中抽取目标 host(供 broker 做 egress 精确加白)。
-
-    仅处理能在 argv 中明确拿到目标 URL 的命令(curl/wget/ssh/scp):
-      · curl https://a.com/path  →  "a.com"
-      · wget https://b.org/x    →  "b.org"
-    其余命令(pip/npm/git push 等)的目标是解析期不可知的 —— 返回 None(不做过度假设)。
-    None 表示"host 不可解析",broker 不加白(比盲猜更诚实)。
-    """
-    try:
-        parts = shlex.split(command)
-    except ValueError:
-        return None
-    if not parts:
-        return None
-    bin_name = Path(parts[0]).name
-    # curl / wget:扫 argv 找第一个 http(s):// 参数(跳过 -* flag)。
-    if bin_name in ("curl", "wget"):
-        for tok in parts[1:]:
-            if tok.startswith("http://") or tok.startswith("https://"):
-                parsed = urlparse(tok)
-                host = parsed.hostname
-                return host.lower() if host else None
-    # ssh / scp:第一个非 flag arg 常是 [user@]host[:path]
-    if bin_name in ("ssh", "scp"):
-        for tok in parts[1:]:
-            if not tok.startswith("-"):
-                # user@host or host
-                host = tok.split("@")[-1].split(":")[0].split("/")[0].lower()
-                if host:
-                    return host
-    # 其余命令(pip / npm / git push …):host 在运行时才知道 → 不猜,返 None。
     return None
 
 
@@ -145,10 +109,12 @@ def run_command(command: str, *, workspace: Path | None = None,
                 1,
             )
         from ..sandbox.linux import _bwrap_argv, _unshare_argv
+        # allow_network 必须穿透到 Linux cage —— 否则出网阀在 Linux 完全失效:bwrap/unshare 恒
+        # 断网,approved 的 pip/curl/git push 静默失败(2026-06-21 修)。darwin 走 seatbelt 已 honor。
         if backend == "bwrap":
-            argv = _bwrap_argv(workspace=ws, child_argv=parts)
+            argv = _bwrap_argv(workspace=ws, child_argv=parts, allow_network=allow_network)
         else:
-            argv = _unshare_argv(workspace=ws, child_argv=parts)
+            argv = _unshare_argv(workspace=ws, child_argv=parts, allow_network=allow_network)
     else:
         return (
             f"错误:no sandbox backend available on platform {sys.platform!r}"

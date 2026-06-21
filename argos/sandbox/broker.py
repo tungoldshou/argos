@@ -220,18 +220,15 @@ class CapabilityBroker:
         # curl …),用 allow_network=True 的 Seatbelt profile 跑(临时开网);否则牢笼网络默认 OFF。
         # Cautious 下联网命令不被"牢笼内自动放行"短路(evaluator 已排除)→ 这里的批准是用户真点的;
         # Autonomous 下 evaluator 直接 approve → 自动开网(Codex YOLO);写牢笼+凭据读拒始终在。
+        # 出网阀是一个【全开/全关的审批 gate】,不是 per-host 过滤器 —— 要诚实说清(2026-06-21 修):
+        # OS 沙箱(Seatbelt `(allow network*)` / bwrap net ns)只能"开网或不开网",host 无法按目标
+        # host 过滤一个子进程的出站连接。所以批准一条联网 run_command = 该子进程获得【完整】网络访问
+        # (写牢笼 workspace+temp、凭据目录读拒仍在,限制外泄面;但能连任意 host)。此前这里调
+        # parse_network_host()→egress.allow() 制造"只放行 a.com"的假象 —— 那个 allowlist 在 run_command
+        # 路径上【从不被查】(run_command 无 egress_hosts,不进 _egress_deny_reason),纯属安全剧场,已删。
+        # egress allowlist 仍对真正按 host 走的能力(web_search/web_extract/MCP)生效,见 _egress_deny_reason。
         _allow_net = (action == "run_command"
                       and _shell.command_needs_network(args.get("command", "")))
-        # egress 精确加白(P1 Fix 2 — 2026-06-21):
-        # 出网阀批准后,把从命令中能解析到的目标 host 加进 egress allowlist(精确加白)。
-        # 这让"批准 curl a.com"只使 a.com 进白名单,evil.com 仍被拒。
-        # 对 host 不可解析的命令(pip/npm/git push),不做盲猜 —— host 未知留 TODO。
-        # TODO(future): for pip/npm/git, enumerate known registry hosts and add them here
-        #   instead of blanket-opening the OS network without egress audit trail.
-        if _allow_net:
-            _parsed_host = _shell.parse_network_host(args.get("command", ""))
-            if _parsed_host:
-                self._egress.allow(_parsed_host)
         value, exit_code = self._execute(action, args, run_ctx=None, _gated=True,
                                          allow_network=_allow_net)
         # ④ 签 Receipt(HMAC,host 侧)
