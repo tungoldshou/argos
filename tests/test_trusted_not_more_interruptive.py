@@ -53,3 +53,52 @@ def test_cautious_writes_unchanged():
     """不放宽默认档:write_file 在 Cautious 下仍 ask(本修复只动 accept_edits 语义)。"""
     assert _d("write_file", {"path": "a", "content": "x"},
               gate_level=ApprovalLevel.CONFIRM, low_risk_auto=True, risk="medium") == "ask"
+
+
+# ── 安全回归:accept_edits 牢笼放行必须在 secret/hard-path 检查之后 ──────────────
+# P2 锁:即便在 ACCEPT_EDITS(Trusted)档位下,secret 命中 → ask,系统路径 → deny。
+# 证明新的 accept_edits 放行分支是在 hard-rule / secret 检查之后短路,不会绕过护栏。
+
+def test_accept_edits_still_asks_on_secret_write():
+    """ACCEPT_EDITS 下,写含 AWS key 的内容 → decision=='ask'(secret 命中 D8 锁不旁路)。"""
+    from argos.permissions.evaluator import evaluate
+    from argos.permissions import get_config
+
+    # AWS access key pattern: AKIA + 16 uppercase alphanumeric chars
+    aws_key = "AKIAIOSFODNN7EXAMPLE"   # AKIA + 16 chars — 命中 SECRET_PATTERNS[0]
+    meta = evaluate(
+        "write_file",
+        {"path": "config.py", "content": f'AWS_ACCESS_KEY_ID = "{aws_key}"'},
+        gate_level=ApprovalLevel.ACCEPT_EDITS,
+        config=get_config(),
+        low_risk_auto=False,
+        risk="medium",
+    )
+    assert meta.decision == "ask", (
+        f"ACCEPT_EDITS 下含 secret 的写操作应 ask,得 {meta.decision!r}(trigger={meta.trigger!r})"
+    )
+    assert meta.trigger.startswith("secret:"), (
+        f"trigger 应以 'secret:' 开头,得 {meta.trigger!r}"
+    )
+
+
+def test_accept_edits_still_denies_system_path_write():
+    """ACCEPT_EDITS 下,写系统路径 → decision=='deny'(hard-path 规则不旁路)。"""
+    from argos.permissions.evaluator import evaluate
+    from argos.permissions import get_config
+
+    for path in ("/etc/cron.d/x", "~/.ssh/authorized_keys"):
+        meta = evaluate(
+            "write_file",
+            {"path": path, "content": "x"},
+            gate_level=ApprovalLevel.ACCEPT_EDITS,
+            config=get_config(),
+            low_risk_auto=False,
+            risk="medium",
+        )
+        assert meta.decision == "deny", (
+            f"ACCEPT_EDITS 下系统路径 {path!r} 写应 deny,得 {meta.decision!r}(trigger={meta.trigger!r})"
+        )
+        assert "hard_rule:system_path:" in meta.trigger, (
+            f"trigger 应含 'hard_rule:system_path:',得 {meta.trigger!r}"
+        )

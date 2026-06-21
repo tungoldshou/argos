@@ -19,13 +19,13 @@ uv run argos setup
 ## 1. 第一次启动 TUI
 
 ```bash
-argos
+uv run argos
 ```
 
 看到 `✳ LIVE` 状态 + 底部输入框 → 直接输入目标开始。
 
 > ⚠️ 没配 key 时 TUI 会落 demo 态(`⚠ DEMO`),诚实标"无 API key",
-> 不会假装能跑。配好 `argos setup` 后自动转 LIVE。
+> 不会假装能跑。配好 `uv run argos setup` 后自动转 LIVE。
 
 ## 2. 看 best_of_n 故事(1 task, < 2min)
 
@@ -68,9 +68,9 @@ uv run python scripts/tb_pass_at_1_benchmark.py --tb-source /tmp/tb-inspect --n 
 
 | 现象 | 可能原因 | 修法 |
 |---|---|---|
-| TUI 起来就是 `⚠ DEMO` | 没配 key | `argos setup` 配;或 export 对应 env var |
-| `argos setup` 非交互挂 | stdin 不是 TTY(管道/CI) | 在真终端跑;或手工写 `~/.argos/config.json` + `~/.argos/.env` |
-| TB bench 候选一直 hung | 上游模型限流 | 切模型(`argos setup` 选个);或加 bridge per-candidate timeout(待 ship) |
+| TUI 起来就是 `⚠ DEMO` | 没配 key | `uv run argos setup` 配;或 export 对应 env var |
+| `uv run argos setup` 非交互挂 | stdin 不是 TTY(管道/CI) | 在真终端跑;或手工写 `~/.argos/config.json` + `~/.argos/.env` |
+| TB bench 候选一直 hung | 上游模型限流 | 切模型(`uv run argos setup` 选个);或加 bridge per-candidate timeout(待 ship) |
 | 任务 verify 一直 unverifiable | 项目无 pytest/无可机检命令 | 让 agent 显式 declare `propose_verify`;或加测试 |
 | 打包 .app 跑不了真模型 | Python 改了没重打 PyInstaller | `packaging/build_arm64.sh` 重打 → `tauri build` |
 
