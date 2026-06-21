@@ -17,7 +17,17 @@ log = logging.getLogger(__name__)
 
 
 class DaemonError(Exception):
-    """daemon 端返非 2xx / 5xx 错误(含 code / message)。"""
+    """daemon 端返非 2xx / 5xx 错误。
+
+    .status / .code 结构化暴露,供上层程序化判别(如 missing_session 会话自愈),
+    无需脆弱地解析 message 字符串。非 _check 路径(empty response / 超时等)构造时
+    无 code,字段取安全默认(code=""、status=None)。
+    """
+
+    def __init__(self, message: str, *, status: int | None = None, code: str = "") -> None:
+        super().__init__(message)
+        self.status = status
+        self.code = code
 
 
 class DaemonClient:
@@ -130,7 +140,7 @@ class DaemonClient:
         if status not in expected:
             code = body.get("code", "")
             msg = body.get("error", "")
-            raise DaemonError(f"HTTP {status} (code={code}): {msg}")
+            raise DaemonError(f"HTTP {status} (code={code}): {msg}", status=status, code=code)
         return body
 
     # ── Public API ────────────────────────────────────────────────

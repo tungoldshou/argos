@@ -55,7 +55,7 @@ _DEFAULT_BASE = _first("ARGOS_LLM_BASE", "VITE_LLM_BASE", "VITE_MINIMAX_URL",
                        default="https://api.minimaxi.com/anthropic")
 _DEFAULT_MAX_TOKENS = int(get("ARGOS_LLM_MAX_TOKENS", "4096") or "4096")
 _DEFAULT_CONTEXT_WINDOW = int(get("ARGOS_LLM_CONTEXT_WINDOW", "192000") or "192000")
-# 模型单价(USD / 1M tokens)——可选。设了才能在 UI 显真实成本;不设则诚实显 $(N/A),
+# 模型单价(USD / 1M tokens)——可选。设了才能在 UI 显真实成本;不设则诚实显 $N/A,
 # 绝不为自带模型编造占位价(诚实协议)。两价都设才生效(不接受半价)。
 _DEFAULT_PRICE_IN = get("ARGOS_LLM_PRICE_IN")
 _DEFAULT_PRICE_OUT = get("ARGOS_LLM_PRICE_OUT")
@@ -95,14 +95,14 @@ DEFAULT_TIER = ModelTier(name="default", model=_DEFAULT_MODEL or "MiniMax-M2",
 # ── 用户自带模型的单价注入(可选) ────────────────────────────────────────────
 # 用户在 .env.local / 环境变量里设 ARGOS_LLM_PRICE_IN / ARGOS_LLM_PRICE_OUT 后,
 # 把真实单价注册进 observability.PRICING,让成本栏对自带模型(如 MiniMax-M3)显真实成本。
-# 不设则该模型不在表里 → loop 诚实回退 $(N/A),不编价。
+# 不设则该模型不在表里 → loop 诚实回退 $N/A,不编价。
 if _DEFAULT_PRICE_IN and _DEFAULT_PRICE_OUT:
     try:
         from argos.core.observability import PRICING as _PRICING
         _PRICING[_DEFAULT_MODEL or "MiniMax-M2"] = {
             "in": float(_DEFAULT_PRICE_IN), "out": float(_DEFAULT_PRICE_OUT),
         }
-    except Exception:  # noqa: BLE001 — 注册失败不应阻断启动;成本只是退回 $(N/A)
+    except Exception:  # noqa: BLE001 — 注册失败不应阻断启动;成本只是退回 $N/A
         pass
 
 
