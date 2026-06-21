@@ -205,13 +205,16 @@ def _extract_body_text(snapshot: str) -> str:
 
         <body text...>
     """
+    # 页头标记从 browser.snapshot_header 同一 i18n 键派生(en="[Page]" / zh="[页面]";
+    # [URL] locale 无关)——绝不硬编码中文,否则 ARGOS_LANG=en 时首行 "[Page]" 不被跳过、污染 body。
+    from argos.i18n import t as _t
+    _hdr = _t("browser.snapshot_header").split("\n", 1)[0]
+    _page_marker = _hdr.split("{", 1)[0].strip() or "[Page]"
     lines = snapshot.split('\n')
-    # 跳过前两行（[页面] / [URL] 头）
+    # 跳过前两行(<page-marker> / [URL] 头)
     body_lines = []
-    skip = 0
     for line in lines:
-        if line.startswith('[页面]') or line.startswith('[URL]'):
-            skip += 1
+        if line.startswith(_page_marker) or line.startswith('[URL]'):
             continue
         body_lines.append(line)
     return '\n'.join(body_lines).strip()
