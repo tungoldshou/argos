@@ -72,6 +72,44 @@ def _cost():
     return CostUpdate(tokens_in=10, tokens_out=5, cost_usd=0.001, elapsed_s=1.0)
 
 
+def test_self_verified_pass_labeled_distinctly(monkeypatch, capsys):
+    """自验证(较弱)passed 不冒充用户级强 passed:JSON verdict='passed_self' + self_verified=True,
+    退出码仍 0(它真通过了),但脚本能据 self_verified 区分。"""
+    events = [TokenDelta(text="done"),
+              VerifyVerdict(verdict=Verdict.passed_self("[exit_code=0]", "pytest", 1))]
+    _wire(monkeypatch, events)
+    code = headless.run_exec(_args(prompt="x", as_json=True))
+    assert code == 0
+    obj = json.loads(capsys.readouterr().out)
+    assert obj["verdict"] == "passed_self"
+    assert obj["self_verified"] is True
+    assert obj["is_error"] is False
+
+
+def test_user_verified_pass_is_plain_passed(monkeypatch, capsys):
+    """用户级 passed → verdict='passed', self_verified=False(回归:不误标)。"""
+    events = [VerifyVerdict(verdict=Verdict.passed("[exit_code=0]", "pytest", 1))]
+    _wire(monkeypatch, events)
+    headless.run_exec(_args(prompt="x", as_json=True))
+    obj = json.loads(capsys.readouterr().out)
+    assert obj["verdict"] == "passed" and obj["self_verified"] is False
+
+
+def test_effort_threaded_from_args(monkeypatch):
+    """全局 --effort high 透传到 build_components(此前硬编 MEDIUM 被忽略)。"""
+    from argos.routing.effort import EffortLevel
+    captured = {}
+
+    def _bc(**kw):
+        captured.update(kw)
+        return _FakeComponents(_FakeLoop([TokenDelta(text="x")]), _FakeGate())
+    monkeypatch.setattr("argos.app_factory.build_components", _bc)
+    monkeypatch.setattr("argos.app_factory.build_loop_factory",
+                        lambda c: (lambda: _FakeLoop([TokenDelta(text="x")])))
+    headless.run_exec(_args(prompt="x", effort="high"))
+    assert captured.get("effort") == EffortLevel.HIGH
+
+
 def test_missing_prompt_returns_2(monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO(""))
     assert headless.run_exec(_args(prompt=None)) == 2
