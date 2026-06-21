@@ -80,10 +80,54 @@ async def test_cost_unknown_shows_na_not_zero():
         ap.on_cost(tokens_in=100, tokens_out=50, cost_usd=None, elapsed_s=1.0, cache_read=0)
         await pilot.pause()
         t = ap.snapshot_text()
-        assert "N/A" in t, "单价未知应显 $(N/A)"
-        assert "$(N/A)" in t
-        # 排除首屏"$0.000"(初始 0 值);不显成本时只有$(N/A);但本次只 verify N/A 存在
+        assert "N/A" in t, "单价未知应显 N/A"
+        assert "$(N/A)" not in t, "不应再用 shell 样 $(N/A)(形似命令替换,易被误读为 bug)"
+        # 排除首屏"$0.000"(初始 0 值);不显成本时只有 N/A
         # 注:新增 Run 区段占 idx 4 不影响 cost idx(6)
+
+
+@pytest.mark.asyncio
+async def test_cost_line_token_flow_has_unit():
+    """成本行 token 段带 'tok' 单位 + 方向箭头(修裸数字无单位)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.on_cost(tokens_in=37900, tokens_out=174, cost_usd=None, elapsed_s=1.0, cache_read=0)
+        await pilot.pause()
+        cost = str(ap._sections()[ap._COST_IDX].content)
+        assert "↑37.9k" in cost and "↓174" in cost and "tok" in cost, f"实际:{cost!r}"
+
+
+@pytest.mark.asyncio
+async def test_context_section_no_redundant_model_or_window():
+    """上下文区去冗余(2026-06-22):window 只以人类可读 '1000k' 出现一次(无原始 1,000,000 重复);
+    pct 只在进度条出现一次(不再 badge 内重复);model 不再在此重复(已在 Model 段)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.on_context(used=13204, window=1000000)  # 1%
+        await pilot.pause()
+        ctx = str(ap._sections()[ap._CTX_IDX].content)
+        assert "1000k" in ctx, f"应有人类可读窗口 1000k,实际:{ctx!r}"
+        assert "1,000,000" not in ctx, f"不应再出现原始窗口(去重),实际:{ctx!r}"
+        assert ctx.count("1%") == 1, f"pct 应只出现一次(进度条上),实际:{ctx!r}"
+        assert "MiniMax-M3" not in ctx, f"model 不应在上下文区重复(在 Model 段),实际:{ctx!r}"
+
+
+@pytest.mark.asyncio
+async def test_cache_idle_line_has_elapsed_label():
+    """无缓存命中时,耗时带标签 + 分隔(不再是裸 31.9s 紧贴 'cache —' 字段)。"""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.on_cost(tokens_in=100, tokens_out=50, cost_usd=None, elapsed_s=31.9, cache_read=0)
+        await pilot.pause()
+        cost = str(ap._sections()[ap._COST_IDX].content)
+        assert "31.9" in cost, f"应含耗时,实际:{cost!r}"
+        assert "用时" in cost, f"耗时应带标签(zh 用时),实际:{cost!r}"
 
 
 @pytest.mark.asyncio

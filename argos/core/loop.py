@@ -1438,9 +1438,9 @@ class AgentLoop:
                 context_used = (int(usage.get("input_tokens") or 0)
                                 + int(usage.get("cache_read") or 0)
                                 + int(usage.get("cache_creation") or 0))
-            # 成本:用已就绪的定价表算【会话累计】成本(此前硬编码 None → 永远 $(N/A) 是 bug)。
-            # 模型不在 PRICING(用户自带模型且未配单价)→ 回退 None,UI 诚实显 $(N/A),
-            # 而非 cost_of 对未知模型返回的 0.0(那会让 $(N/A) 变成失真的恒 $0.000)。
+            # 成本:用已就绪的定价表算【会话累计】成本(此前硬编码 None → 永远 $N/A 是 bug)。
+            # 模型不在 PRICING(用户自带模型且未配单价)→ 回退 None,UI 诚实显 $N/A,
+            # 而非 cost_of 对未知模型返回的 0.0(那会让 $N/A 变成失真的恒 $0.000)。
             from argos.core.observability import PRICING, cost_of
             _tier = getattr(self._model, "tier", None)
             model_name = getattr(_tier, "model", "") if _tier is not None else ""

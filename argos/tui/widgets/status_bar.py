@@ -26,6 +26,7 @@ from textual.widgets import Static
 
 from argos.core.types import Phase
 from argos.i18n import t as _t
+from argos.tui.widgets._fmt import fmt_cost, fmt_token_flow
 
 # §3 字形词典：阶段眼映射
 _PHASE_GLYPH: dict[str, str] = {
@@ -46,13 +47,6 @@ _STYLE_INK_FAINT = "#525A73"  # $ink-faint：键提示
 
 def _hints() -> str:
     return _t("tui.statusbar.hints")
-
-
-def _k(n: int) -> str:
-    """token 千分缩写：12400 → 12.4k；<1000 原样。"""
-    if n >= 1000:
-        return f"{n / 1000:.1f}k"
-    return str(n)
 
 
 class StatusBar(Static):
@@ -145,13 +139,13 @@ class StatusBar(Static):
     def render_text(self) -> str:
         """左侧数据段纯文本（/status 回显与测试断言的单一真源）。"""
         eye, _ = self._resolve_render_state()
-        cost = "$(N/A)" if self.cost_usd is None else f"${self.cost_usd:.3f}"
+        cost = fmt_cost(self.cost_usd)
 
-        # §4.9 a："动作N"文字格式（⚙ 处决）
+        # §4.9 a："动作N"文字格式（⚙ 处决）;token 带 ↑↓ 方向 + tok 单位(共享 _fmt)
         parts = [
             f"{eye} {self.phase}",
             _t("tui.statusbar.action", n=self.actions),
-            f"↑{_k(self.tokens_in)} ↓{_k(self.tokens_out)}",
+            fmt_token_flow(self.tokens_in, self.tokens_out),
             cost,
             f"{self.elapsed_s:.1f}s",
         ]

@@ -144,6 +144,11 @@ class AnthropicProtocol:
         if t == "message_start":
             u = (obj.get("message") or {}).get("usage") or {}
             last_usage["input_tokens"] = int(u.get("input_tokens") or 0)
+            # 保真:output_tokens 也从 message_start 抓(规范该帧含此字段)。标准流里这是初值,
+            # 最终累积值随后由 message_delta 覆盖;但第三方 Anthropic 兼容端点若 message_delta
+            # 形态不标准/缺字段,至少这里抓到的不为 0 —— 最大化诚实提取,避免输出 token 静默低估。
+            if u.get("output_tokens") is not None:
+                last_usage["output_tokens"] = int(u.get("output_tokens") or 0)
             if u.get("cache_read_input_tokens") is not None:
                 last_usage["cache_read"] = int(u.get("cache_read_input_tokens") or 0)
             if u.get("cache_creation_input_tokens") is not None:
