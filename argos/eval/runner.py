@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from argos.eval.corpus import EvalTask
+from argos.i18n import t
 
 log = logging.getLogger(__name__)
 
@@ -237,7 +238,7 @@ class EvalRunner:
         if self._loop_factory is None:
             return self._mk_error(
                 task, run_id, model_tier, started, wt_path,
-                "loop_factory_required: v1 全用 fake 桩(真模式 v1.1)", fallback,
+                t("eval.runner.loop_factory_required"), fallback,
             )
         try:
             loop = self._loop_factory(model_tier)

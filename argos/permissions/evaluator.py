@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal, TYPE_CHECKING
 
 from argos.approval import ApprovalLevel
+from argos.i18n import t
 from argos.permissions.config import PermissionsConfig
 from argos.permissions.hard_rules import (
     HARD_PATH_DENYLIST,
@@ -104,7 +105,7 @@ def _check_hard_path_write(args: dict[str, Any], *, workspace: str | Path | None
                 return DecisionMeta(
                     decision="deny",
                     trigger=f"hard_rule:system_path:{prefix}",
-                    reason=f"系统路径 {prefix}* 不可写",
+                    reason=t("perm2.eval.system_path_deny", prefix=prefix),
                 )
     return None
 
@@ -141,7 +142,7 @@ def evaluate(
                 decision="deny",
                 trigger=f"hard_rule:{rule}",
                 rule_name=rule,
-                reason=f"硬规则 {rule} 命中,自动拒",
+                reason=t("perm2.eval.hard_shell_deny", rule=rule),
             )
 
     # 1b. Hard rules:系统路径 / workspace 边界(写操作)
@@ -162,10 +163,7 @@ def evaluate(
                 decision="ask",
                 trigger=f"hard_rule:{computer_rule}",
                 rule_name=computer_rule,
-                reason=(
-                    f"计算机控制动作命中非开发者域硬规则 {computer_rule!r} —— "
-                    "此类操作必须人在场确认,Trust Dial 任何档位下均不可降级。"
-                ),
+                reason=t("perm2.eval.computer_hard_ask", rule=computer_rule),
             )
 
     # 1c. Hard rules:.env 教学样例(永远 allow)→ 无动作,继续
@@ -188,7 +186,7 @@ def evaluate(
             decision="deny",
             trigger=f"soft_deny:{deny_entry.matcher}",
             rule_name=deny_entry.matcher,
-            reason=f"软规则 deny 命中: {deny_entry.matcher}",
+            reason=t("perm2.eval.soft_deny_reason", matcher=deny_entry.matcher),
         )
 
     # 3. Soft allow(secret 命中时不短路,D8 锁)
@@ -199,7 +197,7 @@ def evaluate(
                 decision="approve",
                 trigger=f"soft_allow:{allow_entry.matcher}",
                 rule_name=allow_entry.matcher,
-                reason=f"软规则 allow 命中: {allow_entry.matcher}",
+                reason=t("perm2.eval.soft_allow_reason", matcher=allow_entry.matcher),
             )
             return _apply_trust_semantics(soft_allow_meta, action=action,
                                           ask_readonly=ask_readonly,
@@ -221,7 +219,7 @@ def evaluate(
             decision="ask",
             trigger=f"soft_ask:{ask_entry.matcher}",
             rule_name=ask_entry.matcher,
-            reason=f"软规则 ask 命中: {ask_entry.matcher}",
+            reason=t("perm2.eval.soft_ask_reason", matcher=ask_entry.matcher),
         )
 
     # 5. Per-tool level override
@@ -288,8 +286,8 @@ def evaluate(
         )
         _cage_auto = _is_accept_edits or (low_risk_auto and lvl == "confirm")
         if _cage_auto and not ask_readonly and _cautious_cage_ok:
-            _why = "Trusted:接受编辑+牢笼内放行" if _is_accept_edits else "Cautious:牢笼内动作自动放行(只在牢笼墙/危险操作问)"
-            base = DecisionMeta(decision="approve", trigger="trust:cage 牢笼内放行", reason=_why)
+            _why = t("perm2.eval.trusted_accept_edits_cage") if _is_accept_edits else t("perm2.eval.cautious_cage")
+            base = DecisionMeta(decision="approve", trigger=t("perm2.eval.cage_trigger"), reason=_why)
         else:
             base = DecisionMeta(decision="ask", trigger=f"level:{lvl}", reason=f"default {lvl}")
     elif lvl == "observe":
@@ -334,8 +332,8 @@ def _apply_trust_semantics(
         if meta.decision == "approve":
             return DecisionMeta(
                 decision="ask",
-                trigger="trust:L0 每步确认",
-                reason="L0 档位:只读操作也需确认",
+                trigger=t("perm2.eval.l0_trigger"),
+                reason=t("perm2.eval.l0_reason"),
             )
         return meta
 
@@ -357,15 +355,15 @@ def _apply_trust_semantics(
         if rev is True:
             return DecisionMeta(
                 decision="approve",
-                trigger="trust:L2 可逆放行",
-                reason=f"L2 档位:动作 {action!r} 声明为可逆,自动放行",
+                trigger=t("perm2.eval.l2_approve_trigger"),
+                reason=t("perm2.eval.l2_approve_reason", action=action),
             )
         # False/None → 保守:已有 ask 维持;如果是 approve(level:auto)则升格为 ask
         if meta.decision == "approve":
             return DecisionMeta(
                 decision="ask",
-                trigger=f"{meta.trigger}:trust:L2 不可逆/未知保守问",
-                reason=f"L2 档位:动作 {action!r} 不可逆或 reversible 未知,保守确认",
+                trigger=t("perm2.eval.l2_ask_trigger", trigger=meta.trigger),
+                reason=t("perm2.eval.l2_ask_reason", action=action),
             )
         return meta
 

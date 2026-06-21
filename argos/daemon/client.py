@@ -11,6 +11,8 @@ import logging
 from pathlib import Path
 from typing import Any, AsyncIterator
 
+from argos.i18n import t
+
 log = logging.getLogger(__name__)
 
 
@@ -114,7 +116,8 @@ class DaemonClient:
             return await asyncio.wait_for(_roundtrip(), timeout=self._timeout)
         except asyncio.TimeoutError:
             raise DaemonError(
-                f"daemon 无响应(超过 {self._timeout:.0f}s):{method} {path} —— 可能繁忙或卡死"
+                t("daemon.srv.client_timeout",
+                  timeout=self._timeout, method=method, path=path)
             )
 
     def _parse_json(self, status: int, body: bytes) -> dict:

@@ -33,6 +33,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from argos.i18n import t as _t
+
 if TYPE_CHECKING:
     from argos.perception.actions import ComputerAction
 
@@ -53,20 +55,7 @@ _ACCESS_DENIED_MARKERS = (
 # 能力开关环境变量
 _ENV_FLAG = "ARGOS_COMPUTER_USE"
 
-# 诚实消息:未启用 OS 级 computer use
-_DISABLED_MSG = (
-    "OS 级 computer use 未启用。"
-    "如需使用截图/点击等系统控制能力,请设置环境变量 ARGOS_COMPUTER_USE=1 后重启 argos。"
-    "注意:此能力操控全局屏幕/鼠标资源,Seatbelt 沙箱无法隔离;"
-    "启用前请确认已在系统设置中授予终端辅助功能权限。"
-)
-
-# 诚实消息:Accessibility 权限未授予
-_ACCESS_DENIED_MSG = (
-    "系统拒绝了辅助功能访问请求。"
-    "请前往「系统设置 → 隐私与安全性 → 辅助功能」,将终端(Terminal / iTerm / Warp 等)"
-    "加入允许列表后重试。截图功能不受此限制。"
-)
+# 诚实消息:lazily resolved via i18n at call site
 
 
 # ── 结果 dataclass ────────────────────────────────────────────────────────────
@@ -229,7 +218,7 @@ class ComputerExecutor:
         各 kind 委托对应私有方法处理。
         """
         if os.environ.get(_ENV_FLAG, "") != "1":
-            return ComputerActionResult(ok=False, detail=_DISABLED_MSG)
+            return ComputerActionResult(ok=False, detail=_t("perception.executor.disabled"))
 
         kind = action.kind
         if kind == "screenshot":
@@ -253,7 +242,7 @@ class ComputerExecutor:
         else:
             return ComputerActionResult(
                 ok=False,
-                detail=f"未知动作 kind={kind!r},拒绝执行。",
+                detail=_t("perception.executor.unknown_kind", kind=kind),
             )
 
     # ── 私有实现 ──────────────────────────────────────────────────────────────
@@ -280,9 +269,9 @@ class ComputerExecutor:
             )
             return result.returncode, result.stdout, result.stderr
         except subprocess.TimeoutExpired:
-            return -1, "", f"超时:命令 {cmd[0]!r} 在 {t}s 内未完成"
+            return -1, "", _t("perception.executor.timeout", cmd=cmd[0], t=t)
         except FileNotFoundError:
-            return -1, "", f"命令不存在: {cmd[0]!r}(请检查 macOS 环境)"
+            return -1, "", _t("perception.executor.cmd_not_found", cmd=cmd[0])
 
     def _screenshot(self) -> ComputerActionResult:
         """全屏截图 → 临时 PNG 文件;返回路径 + 尺寸。"""
@@ -304,7 +293,8 @@ class ComputerExecutor:
                 pass
             return ComputerActionResult(
                 ok=False,
-                detail=f"截图失败(exit {rc}): {err.strip() or '未知错误'}",
+                detail=_t("perception.executor.screenshot_failed",
+                          rc=rc, err=err.strip() or _t("perception.executor.unknown_error")),
             )
 
         # 尝试读取尺寸(Pillow 可选)
@@ -318,7 +308,7 @@ class ComputerExecutor:
 
         return ComputerActionResult(
             ok=True,
-            detail=f"截图已保存至 {path}",
+            detail=_t("perception.executor.screenshot_saved", path=path),
             artifact_path=path,
             size=size,
         )
@@ -343,14 +333,17 @@ class ComputerExecutor:
         rc, out, err = self._run(["osascript", "-e", script])
         if rc != 0:
             if _is_access_denied(err, out):
-                return ComputerActionResult(ok=False, detail=_ACCESS_DENIED_MSG)
+                return ComputerActionResult(ok=False, detail=_t("perception.executor.access_denied"))
+            _err_str = err.strip() or out.strip() or _t("perception.executor.unknown_error")
+            _key = "perception.executor.double_click_failed" if double else "perception.executor.click_failed"
             return ComputerActionResult(
                 ok=False,
-                detail=f"{'双击' if double else '点击'}失败(exit {rc}): {err.strip() or out.strip() or '未知错误'}",
+                detail=_t(_key, rc=rc, err=_err_str),
             )
+        _ok_key = "perception.executor.double_click_ok" if double else "perception.executor.click_ok"
         return ComputerActionResult(
             ok=True,
-            detail=f"{'双击' if double else '点击'} ({lx}, {ly}) 成功",
+            detail=_t(_ok_key, lx=lx, ly=ly),
         )
 
     def _type_text(self, text: str) -> ComputerActionResult:
@@ -365,13 +358,14 @@ class ComputerExecutor:
         rc, out, err = self._run(["osascript", "-e", script])
         if rc != 0:
             if _is_access_denied(err, out):
-                return ComputerActionResult(ok=False, detail=_ACCESS_DENIED_MSG)
+                return ComputerActionResult(ok=False, detail=_t("perception.executor.access_denied"))
             return ComputerActionResult(
                 ok=False,
-                detail=f"键入文本失败(exit {rc}): {err.strip() or out.strip() or '未知错误'}",
+                detail=_t("perception.executor.type_text_failed",
+                           rc=rc, err=err.strip() or out.strip() or _t("perception.executor.unknown_error")),
             )
         preview = text[:40] + ("…" if len(text) > 40 else "")
-        return ComputerActionResult(ok=True, detail=f"键入文本成功: {preview!r}")
+        return ComputerActionResult(ok=True, detail=_t("perception.executor.type_text_ok", preview=preview))
 
     def _key(self, key_combo: str) -> ComputerActionResult:
         """发送快捷键序列,如 'command+c'、'return'(System Events keystroke using)。
@@ -409,12 +403,13 @@ class ComputerExecutor:
         rc, out, err = self._run(["osascript", "-e", script])
         if rc != 0:
             if _is_access_denied(err, out):
-                return ComputerActionResult(ok=False, detail=_ACCESS_DENIED_MSG)
+                return ComputerActionResult(ok=False, detail=_t("perception.executor.access_denied"))
             return ComputerActionResult(
                 ok=False,
-                detail=f"快捷键失败(exit {rc}): {err.strip() or out.strip() or '未知错误'}",
+                detail=_t("perception.executor.key_failed",
+                           rc=rc, err=err.strip() or out.strip() or _t("perception.executor.unknown_error")),
             )
-        return ComputerActionResult(ok=True, detail=f"快捷键 {key_combo!r} 成功")
+        return ComputerActionResult(ok=True, detail=_t("perception.executor.key_ok", combo=key_combo))
 
     def _scroll(self, x: int | None, y: int | None, dy: int) -> ComputerActionResult:
         """在 (x, y) 处滚动 dy 行(System Events scroll)。
@@ -432,12 +427,13 @@ class ComputerExecutor:
         rc, out, err = self._run(["osascript", "-e", script])
         if rc != 0:
             if _is_access_denied(err, out):
-                return ComputerActionResult(ok=False, detail=_ACCESS_DENIED_MSG)
+                return ComputerActionResult(ok=False, detail=_t("perception.executor.access_denied"))
             return ComputerActionResult(
                 ok=False,
-                detail=f"滚动失败(exit {rc}): {err.strip() or out.strip() or '未知错误'}",
+                detail=_t("perception.executor.scroll_failed",
+                           rc=rc, err=err.strip() or out.strip() or _t("perception.executor.unknown_error")),
             )
-        return ComputerActionResult(ok=True, detail=f"滚动 ({lx}, {ly}) dy={dy} 成功")
+        return ComputerActionResult(ok=True, detail=_t("perception.executor.scroll_ok", lx=lx, ly=ly, dy=dy))
 
     def _open_app(self, app: str) -> ComputerActionResult:
         """用 `open -a` 打开应用。"""
@@ -445,6 +441,8 @@ class ComputerExecutor:
         if rc != 0:
             return ComputerActionResult(
                 ok=False,
-                detail=f"打开应用 {app!r} 失败(exit {rc}): {err.strip() or '应用不存在或无权限'}",
+                detail=_t("perception.executor.open_app_failed",
+                           app=app, rc=rc,
+                           err=err.strip() or _t("perception.executor.open_app_no_permission")),
             )
-        return ComputerActionResult(ok=True, detail=f"已启动应用 {app!r}")
+        return ComputerActionResult(ok=True, detail=_t("perception.executor.open_app_ok", app=app))

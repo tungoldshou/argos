@@ -19,6 +19,7 @@ from pathlib import Path
 
 import yaml
 
+from argos.i18n import t
 from argos.skills_curator import index as _index_mod
 from argos.skills_curator.capabilities import parse_frontmatter, validate_skill_meta
 from argos.skills_curator.index import (
@@ -154,9 +155,7 @@ def install(name: str, *, base_dir: Path | None = None,
 
     # 网络 capability 二次确认(spec §6.1 防线 3)
     if "network" in entry.capabilities and not _network_user_confirmed(name):
-        raise InstallError(
-            f"network_capability_requires_confirmation: {name!r} 声明会发网络流量"
-        )
+        raise InstallError(t("skill.install_network_confirm_required", name=name))
 
     # 落盘
     root = base_dir or _index_mod._skills_root()

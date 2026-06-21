@@ -21,6 +21,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from argos.i18n import t
+
 _DEFAULT_WS = Path(os.environ.get("ARGOS_WORKSPACE", Path.home() / ".argos" / "workspace"))
 _DEFAULT_VERIFY = Path(os.environ.get("ARGOS_VERIFY_DIR", Path.home() / ".argos" / "verify"))
 
@@ -126,9 +128,9 @@ def detect_tampering() -> list[str]:
     for rel, digest in ctx.guarded.items():
         f = ctx.workspace / rel
         if not f.exists():
-            changed.append(rel + "(被删除)")
+            changed.append(rel + t("core2.runtime.deleted"))
         elif _sha256(f) != digest:
-            changed.append(rel + "(被修改)")
+            changed.append(rel + t("core2.runtime.modified"))
     for drel, snap in ctx.guarded_dirs.items():
         d = ctx.workspace / drel
         now = (
@@ -138,11 +140,11 @@ def detect_tampering() -> list[str]:
         for frel, digest in snap.items():
             f = ctx.workspace / frel
             if not f.exists():
-                changed.append(frel + "(被删除)")
+                changed.append(frel + t("core2.runtime.deleted"))
             elif _sha256(f) != digest:
-                changed.append(frel + "(被修改)")
+                changed.append(frel + t("core2.runtime.modified"))
         for frel in sorted(now - set(snap)):
-            changed.append(frel + "(新增)")
+            changed.append(frel + t("core2.runtime.added"))
     return changed
 
 

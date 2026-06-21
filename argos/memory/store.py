@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from argos.core.types import VerdictStatus, Phase
+from argos.i18n import t
 
 if TYPE_CHECKING:
     from argos.protocol.events import Event
@@ -277,7 +278,7 @@ class ArgosStore:
         if len(rows) <= keep_recent:
             return
         old = rows[:-keep_recent]
-        summary = "(早期对话摘要)" + " / ".join((r["content"] or "")[:60] for r in old)
+        summary = t("mem.summary_prefix") + " / ".join((r["content"] or "")[:60] for r in old)
         old_ids = [r["message_id"] for r in old]
         ph = ",".join("?" * len(old_ids))
         sid = uuid.uuid4().hex[:12]
@@ -384,6 +385,46 @@ class ArgosStore:
             for r in rows
         ]
 
+    async def arecall(self, goal: str, *, k: int = 3, sim_min: float = 0.4
+                      ) -> list[tuple["MemoryRecord", str]]:
+        """#4 异步 recall:嵌入器 aembed 存在时用 AsyncClient 非阻塞召回;否则退 to_thread。
+
+        主路径:OpenAIEmbedder.aembed → 协程不阻塞事件循环。
+        降级路径:aembed 失败/不可用 → asyncio.to_thread(self.recall, goal) → 同步 FTS5 走线程池。
+        ARGOS_NO_MEMORY=1 或无 embedder → 同 recall 直接走 FTS5 降级。
+        """
+        import asyncio
+        if not goal.strip():
+            return []
+        recs = self._load_memories(limit=200)
+        if not recs:
+            return []
+        # 主路径:embedder 有 aembed(OpenAIEmbedder) → 全程异步
+        if self._embedder is not None and hasattr(self._embedder, "aembed"):
+            try:
+                goal_emb = (await self._embedder.aembed([goal]))[0]  # type: ignore[attr-defined]
+                texts = [self._index_text(r) for r in recs]
+                rec_embs = await self._embedder.aembed(texts)  # type: ignore[attr-defined]
+                scored: list[tuple[float, "MemoryRecord"]] = [
+                    (self._cosine(goal_emb, e), r) for e, r in zip(rec_embs, recs)
+                ]
+                scored.sort(key=lambda x: x[0], reverse=True)
+                out: list[tuple["MemoryRecord", str]] = []
+                for sim, r in scored[:k]:
+                    if sim < sim_min:
+                        continue
+                    parts = [t("mem.recall_hit_sim", sim=sim)]
+                    if r.verdict:
+                        parts.append(f"verdict={r.verdict}")
+                    if r.model:
+                        parts.append(t("mem.recall_hit_model", model=r.model))
+                    out.append((r, t("mem.recall_hit_prefix") + " + ".join(parts)))
+                return out
+            except Exception:
+                pass  # 任何 aembed 失败 → 降级 to_thread(recall)
+        # 降级:同步 recall 在线程池里跑(FTS5 字面或同步 embed),不阻塞主循环
+        return await asyncio.to_thread(self.recall, goal, k=k, sim_min=sim_min)
+
     def recall(self, goal: str, *, k: int = 3, sim_min: float = 0.4
                ) -> list[tuple["MemoryRecord", str]]:
         """诚实召回(spec §5.6):(记录, 为什么召回)。embedding 不可用 → 降级 LIKE,reason 标注。"""
@@ -406,12 +447,12 @@ class ArgosStore:
                 for sim, r in scored[:k]:
                     if sim < sim_min:
                         continue
-                    parts = [f"goal 相似 {sim:.2f}"]
+                    parts = [t("mem.recall_hit_sim", sim=sim)]
                     if r.verdict:
                         parts.append(f"verdict={r.verdict}")
                     if r.model:
-                        parts.append(f"模型 {r.model}")
-                    out.append((r, "命中：" + " + ".join(parts)))
+                        parts.append(t("mem.recall_hit_model", model=r.model))
+                    out.append((r, t("mem.recall_hit_prefix") + " + ".join(parts)))
                 return out
             except Exception:
                 pass  # embedding 调用失败 → 落到下面 LIKE 降级
@@ -426,7 +467,7 @@ class ArgosStore:
             (
                 MemoryRecord(id=r["id"], goal=r["goal"], verdict=r["verdict"],
                              model=r["model"], fact=r["fact"], ts=r["ts"]),
-                "命中：embedding 不可用,降级字面匹配（goal 含查询串）",
+                t("mem.recall_hit_fallback"),
             )
             for r in rows
         ]

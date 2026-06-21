@@ -22,6 +22,8 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
+from argos.i18n import t as _t
+
 # ── 常量 ─────────────────────────────────────────────────────────────────────
 
 ActionKind = Literal[
@@ -66,39 +68,38 @@ class ComputerAction:
         # ── 坐标非负校验 ────────────────────────────────────────────────────
         for name, val in (("x", self.x), ("y", self.y)):
             if val is not None and val < 0:
-                raise ValueError(f"ComputerAction.{name} 必须 >= 0,得到 {val!r}")
+                raise ValueError(_t("perception.actions.coord_negative", name=name, val=val))
 
         # ── text 长度上限 ────────────────────────────────────────────────────
         if self.text is not None and len(self.text) > TEXT_MAX_LEN:
             raise ValueError(
-                f"ComputerAction.text 超过上限 {TEXT_MAX_LEN} 字符"
-                f"(实际 {len(self.text)} 字符)"
+                _t("perception.actions.text_too_long",
+                   max_len=TEXT_MAX_LEN, actual=len(self.text))
             )
 
         # ── app 名白名单字符集(非空才检查;空串留给 open_app 必填校验报更清晰错误)──
         if self.app is not None and self.app != "" and not _APP_NAME_RE.match(self.app):
             raise ValueError(
-                f"ComputerAction.app 名 {self.app!r} 含非法字符"
-                f"(仅允许 A-Za-z0-9 空格 _ . -)"
+                _t("perception.actions.app_name_invalid", app=self.app)
             )
 
         # ── 各 kind 必填字段 ─────────────────────────────────────────────────
         if self.kind in ("click", "double_click"):
             if self.x is None or self.y is None:
                 raise ValueError(
-                    f"kind={self.kind!r} 需要 x 和 y 坐标"
+                    _t("perception.actions.click_needs_xy", kind=self.kind)
                 )
         elif self.kind in ("type_text", "key"):
             if not self.text:
                 raise ValueError(
-                    f"kind={self.kind!r} 需要非空 text"
+                    _t("perception.actions.text_needs_nonempty", kind=self.kind)
                 )
         elif self.kind == "scroll":
             if self.x is None or self.y is None:
-                raise ValueError("kind='scroll' 需要 x 和 y 坐标")
+                raise ValueError(_t("perception.actions.scroll_needs_xy"))
             if not self.text:
-                raise ValueError("kind='scroll' 需要 text=str(dy) 表示滚动行数")
+                raise ValueError(_t("perception.actions.scroll_needs_text"))
         elif self.kind == "open_app":
             if not self.app:
-                raise ValueError("kind='open_app' 需要非空 app 名称")
+                raise ValueError(_t("perception.actions.open_app_needs_name"))
         # screenshot 无需额外字段

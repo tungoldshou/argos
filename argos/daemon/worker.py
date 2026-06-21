@@ -36,6 +36,7 @@ from typing import AsyncIterator, Any
 
 from argos.daemon.manager import RunManager
 import argos.runtime as _runtime
+from argos.i18n import t as _t
 
 log = logging.getLogger(__name__)
 
@@ -171,9 +172,11 @@ class DaemonApprovalGate:
                 # 清理内层 _pending 残留
                 self._gate.deny(call_id)
                 # 超时 fail-closed:投诚实 error 事件(持久化 + SSE)
-                msg = (
-                    f"审批超时(action={action!r},run={self._run_id!r},"
-                    f"call_id={call_id!r}),已按 fail-closed 拒绝。"
+                msg = _t(
+                    "daemon.srv.approval_timeout",
+                    action=action,
+                    run_id=self._run_id,
+                    call_id=call_id,
                 )
                 log.warning("DaemonApprovalGate timeout fail-closed: %s", msg)
                 if self._manager is not None:
@@ -567,9 +570,10 @@ class RunWorker:
             undo_state = "available" if reversible == "yes" else "impossible"
             # summary_human:确定性模板
             if added or removed:
-                summary = f"修改了 {basename}(+{added}/-{removed})"
+                summary = _t("daemon.srv.ledger_modified_diff",
+                             basename=basename, added=added, removed=removed)
             else:
-                summary = f"修改了 {basename}"
+                summary = _t("daemon.srv.ledger_modified", basename=basename)
 
             self._ledger_seq += 1
             entry = LedgerEntry(

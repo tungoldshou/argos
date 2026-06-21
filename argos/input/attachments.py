@@ -16,6 +16,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Optional
 
+from argos.i18n import t
+
 # 支持的 media_type 白名单(对齐 Anthropic Claude Code §4)
 SUPPORTED_MEDIA_TYPES: frozenset[str] = frozenset({
     "image/png",
@@ -80,13 +82,12 @@ def validate_attachment(att: ImageAttachment) -> None:
     """
     if att.media_type not in SUPPORTED_MEDIA_TYPES:
         raise ValueError(
-            f"unsupported / 不支持的图片格式: {att.media_type!r}。"
-            f"支持的格式: {sorted(SUPPORTED_MEDIA_TYPES)}"
+            t("core2.attachments.unsupported_format",
+              media_type=att.media_type, supported=sorted(SUPPORTED_MEDIA_TYPES))
         )
     if len(att.data) > MAX_SIZE_BYTES:
         raise ValueError(
-            f"图片超过 5MB 上限 (actual={len(att.data) / 1024 / 1024:.1f}MB)。"
-            "请压缩或裁剪后重试。"
+            t("core2.attachments.too_large", size=len(att.data) / 1024 / 1024)
         )
 
 

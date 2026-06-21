@@ -15,16 +15,30 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from argos.context.tokens import token_estimate
+from argos.i18n import t
 
-# 折叠后的短桩(标注原因,人类/模型都能看出这里被修剪过)。
-_STUB_TOOL = "[已修剪:过期工具输出]"
-_STUB_PLAN = "[已修剪:被取代的旧计划]"
-_STUB_DEAD = "[已修剪:走死路的探索]"
+# 内容标记 —— 与 loop 发出的执行反馈 / todos 头**同一组 i18n 键**派生(同进程同 locale,
+# 永远与 loop 实际发出的文案对齐)。loop 的这些反馈已本地化(en 下是英文),所以这里绝不能
+# 硬编码中文,否则 ARGOS_LANG=en 时 prune 分桶全部失配 —— 改从 t() 取稳定标签前缀。
+# loop.exec.* / loop.todos.header 的键见 argos/locales/core.py。
 
-# 稳定内容标记(与 loop._feedback / _todos_summary / bounce 文案对齐)。
-_TOOL_MARKERS = ("[执行结果]", "[执行完成", "[返回值]")
-_DEAD_MARKERS = ("[执行异常]",)             # 工具执行报错 = 死路探索的痕迹
-_PLAN_MARKER = "[Argos 任务清单"            # _todos_summary 锚
+
+def _prefix(key: str) -> str:
+    """取本地化模板里第一个占位符 / 换行之前的稳定标签前缀(value_repr 模板以 \\n 起,先剥前导)。"""
+    s = t(key).lstrip()
+    for cut in ("{", "\n"):
+        i = s.find(cut)
+        if i >= 0:
+            s = s[:i]
+    return s.rstrip()
+
+
+def _markers() -> tuple[tuple[str, ...], tuple[str, ...], str]:
+    """(tool_markers, dead_markers, plan_marker) —— 当前 locale 下与 loop 反馈对齐的检测前缀。"""
+    tool = (_prefix("loop.exec.result"), _prefix("loop.exec.no_output"), _prefix("loop.exec.value_repr"))
+    dead = (_prefix("loop.exec.exception"),)
+    plan = _prefix("loop.todos.header")
+    return tool, dead, plan
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,21 +58,29 @@ class PruneResult:
 
 
 def _bucket(content: str) -> str:
-    """把单条消息内容分到桶:tool_output / dead_end / plan / keep。"""
+    """把单条消息内容分到桶:tool_output / dead_end / plan / keep。
+
+    标记从当前 locale 的 loop 反馈键派生(_markers),所以 zh / en 下都与 loop 实际文案对齐。
+    """
     c = (content or "").lstrip()
-    if c.startswith(_PLAN_MARKER):
+    tool_markers, dead_markers, plan_marker = _markers()
+    if plan_marker and c.startswith(plan_marker):
         return "plan"
-    for m in _DEAD_MARKERS:
-        if c.startswith(m):
+    for m in dead_markers:
+        if m and c.startswith(m):
             return "dead_end"
-    for m in _TOOL_MARKERS:
-        if c.startswith(m):
+    for m in tool_markers:
+        if m and c.startswith(m):
             return "tool_output"
     return "keep"
 
 
 def _stub_for(bucket: str) -> str:
-    return {"tool_output": _STUB_TOOL, "plan": _STUB_PLAN, "dead_end": _STUB_DEAD}[bucket]
+    return {
+        "tool_output": t("ctx.stub_tool"),
+        "plan": t("ctx.stub_plan"),
+        "dead_end": t("ctx.stub_dead"),
+    }[bucket]
 
 
 def prune_messages(

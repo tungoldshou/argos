@@ -5,6 +5,10 @@
 降级(诚实:embedding 不可用就老实说,不假装搜过)。
 
 store 持有 Embedder | None,绝不直接 import 具体后端——换后端零改动。
+
+#4 async 召回:OpenAIEmbedder 提供 aembed(texts) 异步方法(httpx.AsyncClient),
+供 store.arecall(goal) 在事件循环上非阻塞地召回 —— 避免 httpx.Client(timeout=30)
+在主 async 事件循环上阻塞 30s。降级:aembed 失败 → store.arecall 退 FTS5(与同步路径一致)。
 """
 from __future__ import annotations
 
@@ -15,6 +19,9 @@ from argos.llm_embed import embed_text as _llm_embed_text, EmbedError, EMBED_DIM
 
 # 模块级间接层,便于测试 monkeypatch
 _endpoint_embed_text = _llm_embed_text
+
+# #4:recall 超时降级窗口。慢嵌入器超过此值 → FTS5 降级,而非冻结主循环 30s。
+_RECALL_ASYNC_TIMEOUT_S: float = 5.0
 
 
 @runtime_checkable
@@ -54,11 +61,38 @@ class OpenAIEmbedder:
         return self._base if self._base.endswith("/embeddings") else self._base + "/embeddings"
 
     def embed(self, texts: list[str]) -> list[list[float]]:
+        # #4:同步路径超时由 _RECALL_ASYNC_TIMEOUT_S 控制(比旧的 30s 短,
+        # 让慢嵌入器更快降级 FTS5 而非冻结线程)。
         import httpx
-        with httpx.Client(transport=self._transport, timeout=30.0) as client:
+        with httpx.Client(transport=self._transport, timeout=_RECALL_ASYNC_TIMEOUT_S) as client:
             resp = client.post(
                 self._endpoint(),
                 headers={"Authorization": f"Bearer {self._key}", "content-type": "application/json"},
+                json={"model": self._model, "input": texts},
+            )
+            resp.raise_for_status()
+            data = resp.json().get("data") or []
+        vecs = [(row.get("embedding") or []) for row in data]
+        if vecs and vecs[0]:
+            self.dim = len(vecs[0])
+        return vecs
+
+    async def aembed(self, texts: list[str]) -> list[list[float]]:
+        """#4 异步 embed:httpx.AsyncClient + _RECALL_ASYNC_TIMEOUT_S 超时,不阻塞事件循环。
+
+        超时由 httpx.AsyncClient(timeout=...) 控制(httpx 内部用 asyncio.CancelledError 实现),
+        无需外层再包 asyncio.wait_for —— 避免双重超时竞争。
+        失败(网络/超时/非 2xx) → 抛异常,调用方(store.arecall)捕获后降级 FTS5,
+        绝不让嵌入失败掀翻整个 run。
+        """
+        import httpx
+        async with httpx.AsyncClient(
+            transport=self._transport, timeout=_RECALL_ASYNC_TIMEOUT_S,
+        ) as client:
+            resp = await client.post(
+                self._endpoint(),
+                headers={"Authorization": f"Bearer {self._key}",
+                         "content-type": "application/json"},
                 json={"model": self._model, "input": texts},
             )
             resp.raise_for_status()

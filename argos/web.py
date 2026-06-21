@@ -10,6 +10,8 @@ from __future__ import annotations
 import os
 import threading
 
+from argos.i18n import t
+
 # 延迟/可 monkeypatch 的间接层:测试替换这些符号即可,不碰真网。
 try:
     from ddgs import DDGS as _DDGS
@@ -34,7 +36,7 @@ def _ddgs_search(query: str, limit: int) -> dict:
     """免 key 多引擎元搜索(backend=auto:DuckDuckGo/Bing/Brave/Google/… 聚合)。
     归一化为 {title,url,snippet};库内软超时 + 外层 daemon 线程硬超时双护栏(防卡死)。"""
     if _DDGS is None:
-        return {"success": False, "error": "ddgs 包不可用,无法免费搜索;可配置 TAVILY_API_KEY 升级。"}
+        return {"success": False, "error": t("web.ddgs_unavailable")}
 
     def _blocking() -> list[dict]:
         results: list[dict] = []
@@ -60,17 +62,15 @@ def _ddgs_search(query: str, limit: int) -> dict:
         except Exception as e:  # noqa: BLE001 — 错误作为数据回传主线程(ReAct:让 agent 看到失败)
             box["error"] = e
 
-    t = threading.Thread(target=_target, daemon=True)
-    t.start()
-    t.join(_DDGS_TIMEOUT_S)
-    if t.is_alive():
+    _thr = threading.Thread(target=_target, daemon=True)
+    _thr.start()
+    _thr.join(_DDGS_TIMEOUT_S)
+    if _thr.is_alive():
         return {"success": False,
-                "error": f"联网搜索超时(>{int(_DDGS_TIMEOUT_S)}s,已并发试 DuckDuckGo/Bing/Brave/"
-                         "Google 等免费引擎均无响应);稍后重试,或配置 TAVILY_API_KEY 升级。"}
+                "error": t("web.search_timeout", timeout=int(_DDGS_TIMEOUT_S))}
     if "error" in box:
         return {"success": False,
-                "error": f"联网搜索暂不可用(免费引擎均未返回:{box['error']});"
-                         "稍后重试,或配置 TAVILY_API_KEY 升级。"}
+                "error": t("web.search_all_failed", error=box["error"])}
     return {"success": True, "results": box.get("results", [])}
 
 
@@ -93,7 +93,7 @@ def _tavily_search(query: str, limit: int) -> dict:
         } for it in (data.get("results") or [])]
         return {"success": True, "results": results}
     except Exception as e:  # noqa: BLE001
-        return {"success": False, "error": f"Tavily 搜索失败:{e}"}
+        return {"success": False, "error": t("web.tavily_failed", exc=e)}
 
 
 # 各 provider 的出口 host(broker 的 EgressPolicy 据此 fail-closed 校验 web_search 出网)。
@@ -144,7 +144,7 @@ def _http_get(url: str) -> str:
         for _ in range(6):   # 初始 + 最多 5 跳 redirect
             host = urlparse(cur).hostname or ""
             if _is_blocked_host(host):
-                raise ValueError(f"SSRF 防护:拒绝访问私网/保留地址 {host!r}")
+                raise ValueError(t("web.ssrf_blocked", host=host))
             r = client.get(cur)
             if r.is_redirect:
                 loc = str(r.headers.get("location") or "")
@@ -154,7 +154,7 @@ def _http_get(url: str) -> str:
                 continue
             r.raise_for_status()
             return r.text
-        raise ValueError("取页失败:redirect 跳数超限(>5)")
+        raise ValueError(t("web.redirect_limit"))
 
 
 def _trafilatura_extract(html: str) -> str | None:
@@ -176,7 +176,7 @@ def extract(url: str) -> dict:
     try:
         html = _http_get(url)
     except Exception as e:  # noqa: BLE001
-        return {"success": False, "error": f"取页失败:{e}"}
+        return {"success": False, "error": t("web.fetch_failed", exc=e)}
     try:
         text = _trafilatura_extract(html)
     except Exception:

@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import Mapping
 
 from argos.eval.benchmarks.terminal_bench import TBTask
+from argos.i18n import t
 
 log = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ class TBContainerExecutor:
         self._network = network
         self._timeout = timeout
         if shutil.which("docker") is None:
-            raise RuntimeError("docker 不在 PATH —— TBContainerExecutor 无法起容器")
+            raise RuntimeError(t("eval.docker.no_docker"))
 
     def image_ready(self, tb_task: TBTask) -> tuple[bool, str]:
         """检查镜像是否已在本机:有 → 返 (True, name);无 → 返 (False, base_ref)。
@@ -199,12 +200,12 @@ class TBContainerExecutor:
         except subprocess.TimeoutExpired:
             return ContainerVerifyResult(
                 exit_code=-1,
-                detail=f"[超时] run-tests.sh 超过 {self._timeout}s 未完成",
+                detail=t("eval.docker.timeout", timeout=self._timeout),
                 timed_out=True, setup_failed=True,
             )
         except Exception as e:  # noqa: BLE001
             return ContainerVerifyResult(
-                exit_code=-1, detail=f"docker run 失败:{type(e).__name__}: {e}",
+                exit_code=-1, detail=t("eval.docker.run_failed", exc_type=type(e).__name__, exc=e),
                 setup_failed=True,
             )
         # detail 风格同 verify_gate:[exit_code=N]\nstdout\nstderr

@@ -23,6 +23,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Iterable, Literal
 
+from argos.i18n import t
+
 # ── 公共类型(spec §4.2)───────────────────────────────────────────────────────
 Scope = Literal["user", "project", "skill", "session"]
 Type = Literal["preference", "convention", "failure", "decision", "fact"]
@@ -595,7 +597,7 @@ def view_all(*, project_id: str | None = None,
                 f"  - {e.type}: {e.key} = {e.value} (conf={e.confidence:.2f}, used {e.use_count}x)"
             )
     else:
-        lines.append("  (空)")
+        lines.append(t("mem.empty"))
     if project_id:
         proj = load(scope="project", project_id=project_id, limit=limit_per_tier)
         lines.append("")
@@ -606,7 +608,7 @@ def view_all(*, project_id: str | None = None,
                     f"  - {e.type}: {e.key} = {e.value} (conf={e.confidence:.2f}, used {e.use_count}x)"
                 )
         else:
-            lines.append("  (空)")
+            lines.append(t("mem.empty"))
     if session_id:
         sess = load(scope="session", session_id=session_id, limit=limit_per_tier)
         lines.append("")
@@ -617,7 +619,7 @@ def view_all(*, project_id: str | None = None,
                     f"  - {e.type}: {e.key} = {e.value} (conf={e.confidence:.2f}, used {e.use_count}x)"
                 )
         else:
-            lines.append("  (空)")
+            lines.append(t("mem.empty"))
     skill = load(scope="skill", limit=limit_per_tier)
     lines.append("")
     lines.append(f"[Skill memories] ({len(skill)})")
@@ -627,7 +629,7 @@ def view_all(*, project_id: str | None = None,
                 f"  - {e.type}: {e.key} = {e.value} (conf={e.confidence:.2f}, used {e.use_count}x)"
             )
     else:
-        lines.append("  (空)")
+        lines.append(t("mem.empty"))
     return "\n".join(lines)
 
 

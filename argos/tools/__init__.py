@@ -14,6 +14,7 @@ from typing import Any
 
 from . import files
 from .shell import ALLOWED_CMDS
+from argos.i18n import t
 
 # ── workspace / verify-dir 模块级常量(test_tools.py 会 monkeypatch.setattr 这里) ──────
 WORKSPACE: Path = Path(os.environ.get("ARGOS_WORKSPACE",
@@ -274,7 +275,7 @@ def _propose_workflow_pure(spec: dict) -> str:
     """
     name = (spec or {}).get("name", "?") if isinstance(spec, dict) else "?"
     n = len((spec or {}).get("stages", [])) if isinstance(spec, dict) else 0
-    return f"[已登记工作流「{name}」:{n} 个 stage,待审批后执行]"
+    return t("tools.propose_workflow.registered", name=name, n=n)
 
 
 def _propose_verify_pure(command: str) -> str:
@@ -284,7 +285,7 @@ def _propose_verify_pure(command: str) -> str:
     propose_verify('<cmd>') 登记命令,收尾时由 harness 在隔离 verify_dir 独立运行它(退出码为准),
     agent 碰不到执行 —— 防 agent 篡改评判它的测试作弊。
     """
-    return f"已登记验证命令:{command}(收尾时由 harness 独立运行,以退出码为准)"
+    return t("tools.propose_verify.registered", command=command)
 
 
 def _propose_dom_verify_pure(
@@ -309,7 +310,7 @@ def _propose_dom_verify_pure(
         parts.append(f"selector={selector!r}")
     if expected_text:
         parts.append(f"expected_text={expected_text!r}")
-    return f"[已登记 DOM 验证: {', '.join(parts)}（host 侧 DomProber 收尾时断言，以三态为准）]"
+    return t("tools.propose_dom_verify.registered", parts=", ".join(parts))
 
 
 def _propose_gui_verify_pure(expected_text: str) -> str:
@@ -323,7 +324,7 @@ def _propose_gui_verify_pure(expected_text: str) -> str:
     Args:
         expected_text: 操作完成后屏幕上应出现的文本(必填;声明式内容断言)。
     """
-    return f"[已登记 GUI 验证: expected_text={expected_text!r}（host 侧 GuiProber 收尾时截图+OCR 断言，以三态为准）]"
+    return t("tools.propose_gui_verify.registered", expected_text=expected_text)
 
 
 def _update_plan_pure(todos: list[dict]) -> str:
@@ -334,7 +335,7 @@ def _update_plan_pure(todos: list[dict]) -> str:
     todos:[{content, status: pending|in_progress|completed, activeForm}]。
     """
     n = len(todos) if isinstance(todos, list) else 0
-    return f"已更新任务清单({n} 项,活动栏将渲染进度)。"
+    return t("tools.update_plan.registered", n=n)
 
 
 # ── 沙箱工具 dispatcher(plan-mode 守卫,spec §2.4) ───────────────────────
@@ -343,18 +344,19 @@ def _update_plan_pure(todos: list[dict]) -> str:
 # build_namespace 仍通过 _make_gated(broker) 给沙箱注入闭包版本(带 broker 引用),
 # 这里暴露模块级版本主要是给 dispatcher 拦截 + 单测直接访问用。
 
-_PLAN_MODE_BLOCKED_MSG = "错误:plan mode 不允许调沙箱工具(请先 ExitPlanMode 退出)。"
+def _plan_mode_blocked_msg() -> str:
+    return t("tools.plan_mode.blocked")
 
 
 def run_command_gated(command: str) -> str:
     """dispatcher for run_command。plan mode 拦截(spec §2.4);否则走 broker-gated。"""
     from argos.core.plan_mode import is_plan_mode
     if is_plan_mode():
-        return _PLAN_MODE_BLOCKED_MSG
+        return _plan_mode_blocked_msg()
     # 模块级直调:broker 须由 build_namespace / build_child_namespace 先注入。
     # 沙箱真正执行走 build_namespace 注入的闭包版本(带 broker),不走这里。
     if _MODULE_BROKER is None:
-        return "错误:broker 未初始化(模块级 dispatcher 仅供 plan_mode 单测直调)。"
+        return t("tools.broker.uninitialized")
     return _MODULE_BROKER.request(action="run_command", args={"command": command})
 
 
@@ -362,7 +364,7 @@ def write_file_gated(path: str, content: str) -> str:
     """dispatcher for write_file。plan mode 拦截;否则走 files.write_file。"""
     from argos.core.plan_mode import is_plan_mode
     if is_plan_mode():
-        return _PLAN_MODE_BLOCKED_MSG
+        return _plan_mode_blocked_msg()
     return files.write_file(path, content)
 
 
@@ -370,7 +372,7 @@ def edit_file_gated(path: str, old: str, new: str, all_occurrences: bool = False
     """dispatcher for edit_file。plan mode 拦截;否则走 files.edit_file。"""
     from argos.core.plan_mode import is_plan_mode
     if is_plan_mode():
-        return _PLAN_MODE_BLOCKED_MSG
+        return _plan_mode_blocked_msg()
     return files.edit_file(path, old, new, all_occurrences)
 
 

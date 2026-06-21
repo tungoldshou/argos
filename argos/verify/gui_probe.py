@@ -21,6 +21,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from argos.i18n import t
+
 if TYPE_CHECKING:
     from argos.perception.executor import ComputerExecutor
 
@@ -58,26 +60,33 @@ class GuiProber:
         """
         if not expected_text:
             return GuiProbeResult(
-                error="未提供 expected_text —— GUI 状态无机检判据,无法判定(unverifiable)。",
+                error=t("verify.gui_probe.no_expected_text"),
             )
         if self._executor is None:
-            return GuiProbeResult(error="GuiProber 未接入 ComputerExecutor(executor=None)。")
+            return GuiProbeResult(error=t("verify.gui_probe.no_executor"))
         try:
             from argos.perception.actions import ComputerAction
             shot = self._executor.dispatch(ComputerAction(kind="screenshot"))
             if not getattr(shot, "ok", False) or not getattr(shot, "artifact_path", None):
-                return GuiProbeResult(error=f"截图失败,无法机检 GUI 状态:{getattr(shot, 'detail', '?')}")
+                return GuiProbeResult(error=t(
+                    "verify.gui_probe.screenshot_failed",
+                    detail=getattr(shot, "detail", "?"),
+                ))
             text = _ocr(shot.artifact_path)
             if text is None:
                 return GuiProbeResult(
-                    error="OCR 不可用(未装 pytesseract / tesseract)—— GUI 状态无法机检判定 → unverifiable。",
+                    error=t("verify.gui_probe.ocr_unavailable"),
                 )
             if expected_text.lower() in text.lower():
                 return GuiProbeResult(found=True, text_excerpt=_excerpt_around(text, expected_text))
             # 明确不出现 → failed(真实证据,非错误)
             return GuiProbeResult(found=False, text_excerpt="", error="")
         except Exception as exc:  # noqa: BLE001 — 任何异常 → unverifiable,诚实
-            return GuiProbeResult(error=f"GUI 探针异常:{type(exc).__name__}: {exc}")
+            return GuiProbeResult(error=t(
+                "verify.gui_probe.exception",
+                exc_type=type(exc).__name__,
+                exc=exc,
+            ))
 
 
 def _ocr(path: str) -> str | None:

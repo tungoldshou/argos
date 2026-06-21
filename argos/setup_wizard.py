@@ -9,6 +9,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from argos.i18n import t
+
 
 class _NotATTY(Exception):
     """stdin/stdout 不是真终端(测试/管道)→ 方向键选择不可用,调用方回退编号输入。"""
@@ -30,7 +32,7 @@ def _arrow_select(options: list[str], *, title: str, writer) -> int:
     out = sys.stdout
     n = len(options)
     idx = 0
-    out.write(title + "\r\n(↑↓ 选,回车确认)\r\n")
+    out.write(title + "\r\n" + t("setup.arrow_hint"))
 
     def draw() -> None:
         for i, opt in enumerate(options):
@@ -77,11 +79,11 @@ PRESETS: dict[str, dict] = {
                 "model": "MiniMax-M3"},
     "DeepSeek": {"protocol": "openai", "base_url": "https://api.deepseek.com/v1",
                  "model": "deepseek-chat"},
-    "Ollama (本地)": {"protocol": "openai", "base_url": "http://localhost:11434/v1",
-                     "model": "qwen2.5-coder"},
+    "Ollama (local)": {"protocol": "openai", "base_url": "http://localhost:11434/v1",
+                      "model": "qwen2.5-coder"},
     "OpenRouter": {"protocol": "openai", "base_url": "https://openrouter.ai/api/v1",
                    "model": "anthropic/claude-sonnet-4-6"},
-    "自定义": {"protocol": "", "base_url": "", "model": ""},
+    "Custom": {"protocol": "", "base_url": "", "model": ""},
 }
 
 
@@ -111,7 +113,7 @@ def _ask_int(reader, writer, prompt: str, default: int) -> int:
     try:
         return int(raw)
     except ValueError:
-        writer(f"'{raw}' 不是整数,改用默认 {default}。")
+        writer(t("setup.not_integer", val=raw, default=default))
         return default
 
 
@@ -123,7 +125,7 @@ def _ask_float_or_none(reader, writer, prompt: str) -> float | None:
     try:
         return float(raw)
     except ValueError:
-        writer(f"'{raw}' 不是数字,跳过该价格。")
+        writer(t("setup.not_number", val=raw))
         return None
 
 
@@ -185,7 +187,8 @@ class ProbeResult:
     message: str      # 给用户的诚实一句话
 
 
-_PROBE_PROMPT = "请只用一个 ```python 代码块输出:print('ok')。不要任何其它文字。"
+def _probe_prompt() -> str:
+    return t("setup.probe_prompt")
 # 连通测试硬超时:ModelClient 自身 timeout=300s 且 stream() 还重试 3 次 → 填错 base_url
 # (端口开着但不回流:misrouted proxy / Ollama 模型没加载)会让向导卡"正在连通测试…"近 900s。
 # 20s 够冷启动首 token,又把 typo/卡死端点的等待收敛到可接受范围(2026-06-18 排查 #7)。
@@ -210,21 +213,21 @@ async def probe_connection(*, protocol: str, base_url: str, model: str, api_key:
     system = compose_system(HONESTY_SYSTEM, untrusted=format_untrusted(skill_bodies=[], memory_lines=[]))
     async def _collect() -> str:
         return "".join([c async for c in client.stream(
-            [{"role": "user", "content": _PROBE_PROMPT}], system=system)])
+            [{"role": "user", "content": _probe_prompt()}], system=system)])
     try:
         out = await asyncio.wait_for(_collect(), timeout=_PROBE_TIMEOUT_S)
     except asyncio.TimeoutError:
-        return ProbeResult(False, False, "不行",
-                           f"连接超时({int(_PROBE_TIMEOUT_S)}s 无回流):端点可达但未响应,"
-                           "检查 base_url 是否正确、模型是否已加载。")
+        return ProbeResult(False, False, t("setup.probe_rating_fail"),
+                           t("setup.probe_timeout", timeout=int(_PROBE_TIMEOUT_S)))
     except Exception as e:  # noqa: BLE001 — 连通失败如实报(含状态码/真因)
         detail = str(e)
-        return ProbeResult(False, False, "不行", f"连不上 / 端点报错:{detail[:200]}")
+        return ProbeResult(False, False, t("setup.probe_rating_fail"),
+                           t("setup.probe_connect_error", detail=detail[:200]))
     if extract_code_block(out) is not None:
-        return ProbeResult(True, True, "行", "连通正常,CodeAct 格式合规。")
-    return ProbeResult(True, False, "勉强",
-                       "连通正常,但此模型默认不吐 ```python 围栏(Argos 实测 MiniMax-M3 也曾如此,"
-                       "靠系统提示契约掰正)——能用但可能需要更强提示;仍可保存。")
+        return ProbeResult(True, True, t("setup.probe_rating_ok"),
+                           t("setup.probe_ok_message"))
+    return ProbeResult(True, False, t("setup.probe_rating_marginal"),
+                       t("setup.probe_marginal_message"))
 
 
 # ── 交互向导编排(spec §6.1) ────────────────────────────────────────────────────
@@ -235,8 +238,8 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
 
     reader 调用顺序(每轮一个模型):
       1. 选编号
-      (仅「自定义」预设)2a. 协议 (anthropic/openai)
-      (仅「自定义」预设)2b. base_url
+      (仅「Custom」预设)2a. 协议 (anthropic/openai)
+      (仅「Custom」预设)2b. base_url
       2/3. 模型 id(留空=默认)
       3/4. API key 方式(paste/env)
       4/5. 若 paste:粘贴 key;若 env:环境变量名
@@ -256,68 +259,66 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
         while True:
             # provider 选择:真终端用 ↑↓ 方向键,非 TTY(测试/管道)回退编号输入(保持可测)。
             try:
-                pidx = _arrow_select(names, title="选择 provider:", writer=writer)
+                pidx = _arrow_select(names, title=t("setup.choose_provider_title"), writer=writer)
             except _NotATTY:
-                writer("可选 provider 预设:")
+                writer(t("setup.available_presets"))
                 for i, n in enumerate(names, 1):
-                    writer(f"  {i}. {n}")
-                choice = (reader("选编号:") or "").strip()
+                    writer(t("setup.preset_item", i=i, name=n))
+                choice = (reader(t("setup.choose_provider_title")) or "").strip()
                 try:
                     pidx = int(choice) - 1
                     if not (0 <= pidx < len(names)):
                         raise ValueError
                 except ValueError:
-                    writer("无效编号,重来。")
+                    writer(t("setup.invalid_choice"))
                     continue
             preset = PRESETS[names[pidx]]
-            # 「自定义」预设 protocol/base_url 为空 → 向用户询问(spec §6.1 表格「(问)」)
-            protocol = preset["protocol"] or (reader("协议 (anthropic/openai):") or "openai").strip()
-            base_url = preset["base_url"] or (reader("base_url:") or "").strip()
+            # 「Custom」预设 protocol/base_url 为空 → 向用户询问(spec §6.1 表格「(问)」)
+            protocol = preset["protocol"] or (reader(t("setup.prompt_protocol")) or "openai").strip()
+            base_url = preset["base_url"] or (reader(t("setup.prompt_base_url")) or "").strip()
             default_model = preset["model"]
-            model = (reader(f"模型 id [{default_model}]:") or default_model).strip()
+            model = (reader(t("setup.prompt_model", default=default_model)) or default_model).strip()
             # key 方式:paste 或 env
-            way = (reader("API key 方式:粘贴(paste) / 用已有环境变量(env):") or "paste").strip()
+            way = (reader(t("setup.prompt_key_method")) or "paste").strip()
             if way == "env":
                 api_key = None
-                api_key_env = (reader("环境变量名:") or "").strip()
+                api_key_env = (reader(t("setup.prompt_env_var_name")) or "").strip()
                 derive_env = False
             else:
-                api_key = (reader("粘贴 API key:") or "").strip()
+                api_key = (reader(t("setup.prompt_paste_key")) or "").strip()
                 api_key_env = ""        # paste 路径:env 名延后由【唯一 profile 名】派生
                 derive_env = True       # (避免同 model 不同 key 的两 profile 撞同名 env 互相覆盖)
-            max_tokens = _ask_int(reader, writer, "max_tokens [4096]:", 4096)
-            ctx = _ask_int(reader, writer, "context_window [200000]:", 200000)
-            price_in = _ask_float_or_none(reader, writer, "价格 in (USD/1M, 留空跳过):")
-            price_out = (_ask_float_or_none(reader, writer, "价格 out (USD/1M, 留空跳过):")
+            max_tokens = _ask_int(reader, writer, t("setup.prompt_max_tokens"), 4096)
+            ctx = _ask_int(reader, writer, t("setup.prompt_context_window"), 200000)
+            price_in = _ask_float_or_none(reader, writer, t("setup.prompt_price_in"))
+            price_out = (_ask_float_or_none(reader, writer, t("setup.prompt_price_out"))
                          if price_in is not None else None)
             # 记忆向量语义召回:复用本 provider 的 /embeddings(需一个 embedding 模型名)。
             # 仅 OpenAI 协议有 /embeddings;Anthropic 端没有 → 不问,记忆走 FTS5 关键词。
             embedding_model = ""
             if protocol == "openai":
-                embedding_model = (reader(
-                    "embedding 模型(留空=记忆走关键词,不额外调模型;如 text-embedding-3-small):"
-                ) or "").strip()
+                embedding_model = (reader(t("setup.prompt_embedding_model")) or "").strip()
             else:
-                writer("(此 provider 是 Anthropic 端,无 embeddings;记忆走关键词召回)")
+                writer(t("setup.no_embeddings_note"))
             # 连通+格式探针(必做)
-            writer("正在连通测试…")
+            writer(t("setup.probing"))
             res = await probe_connection(protocol=protocol, base_url=base_url, model=model,
                                          api_key=api_key)
-            writer(f"[{res.rating}] {res.message}")
+            writer(t("setup.probe_rating", rating=res.rating, message=res.message))
             if not res.connected:
-                again = (reader("连不上,重配这个模型?(Y/n):") or "y").strip().lower()
+                again = (reader(t("setup.reconnect_prompt")) or "y").strip().lower()
                 if again != "n":
                     continue
             # 可选深度探针(默认跳过)
-            if (reader("要顺手深测一下吗?(真跑 write+verify, ~10-30s) [y/N]:") or "n").strip().lower() == "y":
-                writer("正在深度探针(真跑 write+verify)…")
+            if (reader(t("setup.deep_probe_prompt")) or "n").strip().lower() == "y":
+                writer(t("setup.deep_probing"))
                 dres = await deep_probe(protocol=protocol, base_url=base_url, model=model, api_key=api_key)
-                writer(f"深测结果 [{dres.rating}] {dres.message}")
+                writer(t("setup.deep_probe_result", rating=dres.rating, message=dres.message))
             # profile 命名:向用户提问,默认用 model id;重名追加序号(spec §6.1 step 5)
             cfg_existing = _read_config(cdir)
             existing_models = cfg_existing.get("models", {})
             default_name = model.lower().replace(" ", "-") if model else "custom"
-            raw_name = (reader(f"给这个模型起个名 [{default_name}]:") or default_name).strip() or default_name
+            raw_name = (reader(t("setup.prompt_profile_name", default=default_name)) or default_name).strip() or default_name
             name = raw_name
             idx = 2
             while name in existing_models:
@@ -328,12 +329,12 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
                 api_key_env = f"{name.upper().replace('-', '_').replace('/', '_')}_KEY"
             # 是否设为当前默认:首个模型自动设;已有模型时默认【不】改 active(重跑 setup 加模型不静默劫持)。
             if existing_models:
-                make_active = (reader("设为当前默认模型?(y/N):") or "n").strip().lower() == "y"
+                make_active = (reader(t("setup.set_active_prompt")) or "n").strip().lower() == "y"
             else:
                 make_active = True
             if not res.connected and make_active:
                 # 诚实:把明知连不通的模型设为当前 active 时不静默(spec §10 验收②的诚实兜底)。
-                writer("⚠️ 此模型连通测试未通过,仍按你的选择设为当前模型——下次使用前请确认它可用。")
+                writer(t("setup.warn_set_active_disconnected"))
             try:
                 write_profile(config_dir=cdir, name=name, protocol=protocol, base_url=base_url,
                               model=model, api_key=api_key, api_key_env=api_key_env,
@@ -342,25 +343,21 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
                               embedding_model=embedding_model, set_active=make_active)
             except C.ConfigError as e:
                 # fail-closed:配置不合法绝不假成功,也不顶掉原 active;让用户重配这个模型。
-                writer(f"保存失败(配置不合法):{e} —— 请重新配置这个模型。")
+                writer(t("setup.save_failed", err=e))
                 continue
-            writer(f"已保存 '{name}'{'并设为当前模型' if make_active else '(未改当前默认模型)'}。")
+            if make_active:
+                writer(t("setup.saved_active", name=name))
+            else:
+                writer(t("setup.saved_inactive", name=name))
             if api_key:
-                writer("注意:API key 以明文存于 ~/.argos/.env(权限 0600),不加密。")
-            if (reader("再配一个模型?(y/N):") or "n").strip().lower() != "y":
+                writer(t("setup.key_stored_warning"))
+            if (reader(t("setup.add_another_prompt")) or "n").strip().lower() != "y":
                 break
-            writer("setup 完成。运行 `argos` 即用当前模型。")
+            writer(t("setup.done"))
     except EOFError:
         # 非 TTY(管道 / CI)兜底:input() 抛 EOFError 时给一条清楚出路(不裸 traceback)。
         # 关键:真用户来用会卡在这,必须显式告诉他"setup 需真终端"+"可以手工写 config"。
-        writer(
-            "\n⚠ 检测到 stdin 关闭(`argos setup` 需交互终端)。\n"
-            "  • 在真终端直接跑:`argos setup`(或 `uv run argos setup`)\n"
-            "  • 非交互场景(脚本/CI)手工写两份文件:\n"
-            "      ~/.argos/config.json   ← provider / model / base_url 声明\n"
-            "      ~/.argos/.env          ← API key(权限 0600)\n"
-            "    文件 schema 见 `argos setup --help` 或 docs/setup-wizard.md"
-        )
+        writer(t("setup.no_tty"))
 
 
 # ── 深度探针(spec §6.3) ──────────────────────────────────────────────────────────
@@ -408,15 +405,22 @@ async def deep_probe(*, protocol: str, base_url: str, model: str, api_key: str |
                              config=LoopConfig(approval_level=ApprovalLevel.AUTO, compaction=False),
                              workspace=proj, verify_dir=proj)
             vs = []
-            async for ev in loop.run("写 st.f 返回 1 并验证", "probe"):
+            async for ev in loop.run(t("setup.deep_probe_task"), "probe"):
                 if isinstance(ev, VerifyVerdict):
                     vs.append(ev.verdict.status)
             if vs and vs[-1] == "passed":
-                rating = "行" if len(vs) == 1 else "勉强"
-                return ProbeResult(True, True, rating, f"端到端跑通(verify {vs})。")
-            return ProbeResult(True, False, "不行", f"未跑通验证(verdicts={vs})。")
+                if len(vs) == 1:
+                    rating = t("setup.probe_rating_ok")
+                    msg = t("setup.deep_probe_pass_one", vs=vs)
+                else:
+                    rating = t("setup.probe_rating_marginal")
+                    msg = t("setup.deep_probe_pass_marginal", vs=vs)
+                return ProbeResult(True, True, rating, msg)
+            return ProbeResult(True, False, t("setup.probe_rating_fail"),
+                               t("setup.deep_probe_fail", vs=vs))
         except Exception as e:  # noqa: BLE001 — 平台/装配失败诚实返不行,不抛
-            return ProbeResult(False, False, "不行", f"深度探针无法运行:{type(e).__name__}: {e}")
+            return ProbeResult(False, False, t("setup.probe_rating_fail"),
+                               t("setup.deep_probe_error", err=f"{type(e).__name__}: {e}"))
         finally:
             if store is not None:
                 store.close()

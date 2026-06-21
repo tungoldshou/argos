@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 from argos.core.verify_gate import Verifier
+from argos.i18n import t
 from argos.skills_runtime.analysis import (
     AnalysisSkillContext,
     AnalysisSkillResult,
@@ -61,10 +62,7 @@ async def run(args: dict, ctx: AnalysisSkillContext) -> AnalysisSkillResult:
         findings: tuple[Finding, ...] = ()
         # E4 防火墙:summary 显式标 self_verified,绝不冒充用户级 passed
         if getattr(v, "self_verified", False):
-            summary = (
-                f"/verify · <1ms · self_verified (较弱:系统自造测试;非用户级 verify)\n"
-                f"verify_cmd: {actual_cmd}"
-            )
+            summary = t("verify.skill.self_verified_summary", cmd=actual_cmd)
         else:
             summary = f"/verify · <1ms · passed\nverify_cmd: {actual_cmd}"
     elif v.status == "failed":

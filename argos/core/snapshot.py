@@ -11,15 +11,27 @@
 """
 from __future__ import annotations
 
+import logging
 import shutil
+
+from argos.i18n import t
 import tarfile
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
 
 SNAPSHOT_ROOT: Path = Path(tempfile.gettempdir()) / "argos-snapshots"
 """快照固定根目录:进程级常驻,跨 run 复用路径槽。"""
+
+# 单文件上限:超过此大小的文件跳过(不纳入快照),避免拷贝大型二进制/数据文件
+# (如 SQLite DB、视频、大 JSON)让 /undo 冻结几十秒。10MB 经验值:足以覆盖常见源码文件。
+_FILE_SIZE_CAP_BYTES: int = 10 * 1024 * 1024  # 10 MB
+
+# 快照总上限:所有已入 tar 文件的累计字节数超过此值时停止添加新文件,/undo 诚实降级
+# (已收入的文件仍可还原,余下文件仅告知用户)。200MB 足以覆盖中等项目。
+_TOTAL_SIZE_CAP_BYTES: int = 200 * 1024 * 1024  # 200 MB
 
 
 @dataclass(frozen=True)
@@ -53,17 +65,44 @@ class RunSnapshot:
 
         tar_path.parent.mkdir(parents=True, exist_ok=True)
         partial = tar_path.with_suffix(tar_path.suffix + ".partial")
+        total_bytes = 0
+        skipped_large: list[str] = []
+        cap_hit = False
         with tarfile.open(partial, "w") as tf:
             # os.walk + 原地剪枝:绝不【进入】prune 目录。旧实现用 rglob("*") 会先递归遍历
             # .venv/dist/build/target 里几十万文件(即使后续 continue 跳过 add 也照样 walk),
             # 大项目卡十几秒(2026-06-14 真机 11.4s)。原地裁 dirnames 让 os.walk 不下钻 → 快。
             for dirpath, dirnames, filenames in _os.walk(workspace):
+                if cap_hit:
+                    break
                 dirnames[:] = sorted(d for d in dirnames if d not in SNAPSHOT_PRUNE_DIRS)
                 for fn in sorted(filenames):
                     p = Path(dirpath) / fn
                     if not p.is_file():
                         continue
+                    # 单文件上限:超大文件跳过,/undo 诚实降级(不阻断 tar,其余文件正常收)
+                    try:
+                        fsize = p.stat().st_size
+                    except OSError:
+                        continue
+                    if fsize > _FILE_SIZE_CAP_BYTES:
+                        rel = str(p.relative_to(workspace))
+                        skipped_large.append(rel)
+                        logger.debug("snapshot: 跳过超大文件 %s (%d B > %d B 上限)",
+                                     rel, fsize, _FILE_SIZE_CAP_BYTES)
+                        continue
+                    # 总量上限:累计超限则停止,诚实记录(不假装完整快照)
+                    if total_bytes + fsize > _TOTAL_SIZE_CAP_BYTES:
+                        cap_hit = True
+                        logger.warning(
+                            "snapshot: 总量超限 %d MB,剩余文件未纳入快照 — /undo 仅能还原已收入部分",
+                            _TOTAL_SIZE_CAP_BYTES // 1024 // 1024,
+                        )
+                        break
                     tf.add(p, arcname=str(p.relative_to(workspace)))
+                    total_bytes += fsize
+        if skipped_large:
+            logger.info("snapshot: %d 个大文件已跳过(不影响 /undo 其余文件还原)", len(skipped_large))
         partial.rename(tar_path)
         return cls(tar_path=tar_path)
 
@@ -78,7 +117,7 @@ class RunSnapshot:
         """
         result = RestoreResult()
         if not self.tar_path.exists():
-            result.errors.append(("", f"快照文件不存在:{self.tar_path}"))
+            result.errors.append(("", t("core2.snapshot.tar_not_found_restore", path=self.tar_path)))
             return result
         try:
             with tarfile.open(self.tar_path, "r") as tf:
@@ -91,7 +130,7 @@ class RunSnapshot:
                         try:
                             target.parent.mkdir(parents=True, exist_ok=True)
                         except OSError as e:
-                            result.errors.append((m.name, f"创建父目录失败:{e}"))
+                            result.errors.append((m.name, t("core2.snapshot.mkdir_failed", error=e)))
                             continue
                     try:
                         # 走 extractfile(返回 ExFileObject)→ 写到目标;处理大文件
@@ -105,7 +144,7 @@ class RunSnapshot:
                     except OSError as e:
                         result.errors.append((m.name, str(e)))
         except tarfile.TarError as e:
-            result.errors.append(("", f"tar 读取失败:{e}"))
+            result.errors.append(("", t("core2.snapshot.tar_read_failed", error=e)))
         return result
 
     def restore_file(self, workspace: Path, rel_path: str) -> RestoreResult:
@@ -134,11 +173,11 @@ class RunSnapshot:
             # resolve() 后 target 必须以 workspace 为前缀(含等于自身)
             target.relative_to(workspace_resolved)
         except (ValueError, OSError) as e:
-            result.errors.append((rel_path, f"路径牢笼拒绝(../ 逃逸或非法路径):{e}"))
+            result.errors.append((rel_path, t("core2.snapshot.path_cage_rejected", error=e)))
             return result
 
         if not self.tar_path.exists():
-            result.errors.append((rel_path, f"快照文件不存在:{self.tar_path}"))
+            result.errors.append((rel_path, t("core2.snapshot.tar_not_found_file", path=self.tar_path)))
             return result
 
         # 规范化 rel_path 以匹配 tar 内 arcname(tar 用 str(rel),POSIX 分隔符)
@@ -160,7 +199,7 @@ class RunSnapshot:
                         try:
                             target.unlink()
                         except OSError as e:
-                            result.errors.append((rel_path, f"新建文件删除失败:{e}"))
+                            result.errors.append((rel_path, t("core2.snapshot.new_file_delete_failed", error=e)))
                     return result
 
                 # 快照中有 → 覆盖写回
@@ -168,12 +207,12 @@ class RunSnapshot:
                     try:
                         target.parent.mkdir(parents=True, exist_ok=True)
                     except OSError as e:
-                        result.errors.append((rel_path, f"创建父目录失败:{e}"))
+                        result.errors.append((rel_path, t("core2.snapshot.mkdir_failed_file", error=e)))
                         return result
                 try:
                     src = tf.extractfile(matched)
                     if src is None:
-                        result.errors.append((rel_path, "tar extractfile 返回 None"))
+                        result.errors.append((rel_path, t("core2.snapshot.extractfile_none")))
                         return result
                     with target.open("wb") as dst:
                         shutil.copyfileobj(src, dst)
@@ -181,5 +220,5 @@ class RunSnapshot:
                 except OSError as e:
                     result.errors.append((rel_path, str(e)))
         except tarfile.TarError as e:
-            result.errors.append((rel_path, f"tar 读取失败:{e}"))
+            result.errors.append((rel_path, t("core2.snapshot.tar_read_failed_file", error=e)))
         return result

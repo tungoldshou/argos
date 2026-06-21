@@ -11,11 +11,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# 三个沙箱外子系统的 config 文件名 → 人话警告(用户配了 = 有沙箱外执行面)。
-_SURFACES: tuple[tuple[str, str], ...] = (
-    ("hooks.json", "hooks(~/.argos/hooks.json):生命周期钩子在沙箱外运行你配置的命令"),
-    ("lsp.json", "lsp(~/.argos/lsp.json):language server 在沙箱外作为子进程运行"),
-    ("mcp.json", "mcp(~/.argos/mcp.json):MCP server 在沙箱外作为子进程运行"),
+from argos.i18n import t
+
+# 三个沙箱外子系统的 config 文件名 → i18n key(用户配了 = 有沙箱外执行面)。
+_SURFACE_KEYS: tuple[tuple[str, str], ...] = (
+    ("hooks.json", "core2.external.hooks"),
+    ("lsp.json", "core2.external.lsp"),
+    ("mcp.json", "core2.external.mcp"),
 )
 
 
@@ -30,7 +32,7 @@ def external_surface_warnings(argos_dir: Path | None = None) -> list[str]:
     """
     base = argos_dir if argos_dir is not None else (Path.home() / ".argos")
     out: list[str] = []
-    for filename, message in _SURFACES:
+    for filename, key in _SURFACE_KEYS:
         if (base / filename).exists():
-            out.append(message)
+            out.append(t(key))
     return out

@@ -37,6 +37,7 @@ from argos.mcp_native import McpManager
 from argos.permissions.audit import AuditLog
 from argos.permissions.config import PermissionsConfig, get_config as _permissions_get_config
 from argos.capability import CapabilityRegistry, register_builtins
+from argos.i18n import t
 from argos.sandbox.broker import CapabilityBroker
 from argos.sandbox.egress import EgressPolicy
 from argos.sandbox.executor import SeatbeltExecutor, select_backend
@@ -324,10 +325,7 @@ def build_components(
         tier = config.active_tier()
         key = config.active_key()
     if not key:
-        raise RuntimeError(
-            "未配置当前模型的 API key。请运行 `argos setup` 接入模型,或设置对应环境变量。"
-            "Argos 不会假装能跑。"
-        )
+        raise RuntimeError(t("core2.app_factory.no_api_key"))
     pool = CredentialPool([key])
     model = ModelClient(tier=tier, pool=pool)
 

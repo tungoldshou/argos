@@ -24,6 +24,7 @@ import traceback
 from pathlib import Path
 from typing import Any, Mapping
 
+from argos.i18n import t as _t
 from argos.skills_runtime.analysis import (
     AnalysisSkillContext,
     AnalysisSkillResult,
@@ -54,13 +55,13 @@ def _validate_args(skill_name: str, args: Mapping[str, object]) -> str | None:
     if extras:
         return f"invalid args for skill {skill_name!r}: unknown keys {sorted(extras)}"
     if "timeout" in args:
-        t = args["timeout"]
-        if not isinstance(t, int) or t < 1 or t > 600:
-            return f"invalid args: timeout {t!r} 必须在 1-600"
+        t_val = args["timeout"]
+        if not isinstance(t_val, int) or t_val < 1 or t_val > 600:
+            return _t("skill.arg_timeout_invalid", value=t_val)
     if "top" in args:
         n = args["top"]
         if not isinstance(n, int) or n < 1 or n > 100:
-            return f"invalid args: top {n!r} 必须在 1-100"
+            return _t("skill.arg_top_invalid", value=n)
     return None
 
 

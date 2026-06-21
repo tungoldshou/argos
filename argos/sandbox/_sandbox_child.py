@@ -23,6 +23,8 @@ import sys
 import traceback
 from typing import Any
 
+from argos.i18n import t
+
 
 def _emit(obj: dict[str, Any]) -> None:
     sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
@@ -45,7 +47,7 @@ class _BrokerStub:
         while True:
             msg = _read()
             if msg is None:
-                return "错误:broker 通道关闭,默认拒绝。"
+                return t("core2.sandbox_child.broker_closed")
             if msg.get("type") == "broker_reply":
                 return msg.get("value")
             # 其它消息(理论上不会有)忽略,继续等 reply。
