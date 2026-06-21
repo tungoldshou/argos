@@ -318,6 +318,8 @@ class AgentLoop:
         capability_hints: dict[str, str] | None = None,  # P4 策略生成:registry verify_hint 聚合;None=空 dict
         dom_prober: Any = None,  # A2 L3 DOM 探针:DomProber | None;None=未接入,行为同现状(L3 跳过)
         gui_prober: Any = None,  # 2d GUI 探针:GuiProber | None;None=未接入,GUI 验证 lane 跳过
+        manage_runtime_context: bool = False,  # inline 路径自建 runtime 上下文(daemon 在 worker 外部自设;此开关给 inline)
+        project_mode: bool = False,  # managed 时建立的上下文是否 project 模式(verify_dir==workspace,篡改可见)
     ) -> None:
         self._store = store
         self._bus = bus
@@ -348,6 +350,12 @@ class AgentLoop:
         # 2d GUI 探针 + 挂起 expected_text(propose_gui_verify 声明时存;verify 阶段消费)。
         self._gui_prober = gui_prober
         self._pending_gui_expected_text: str = ""
+        # P0 护城河:inline 路径(build_loop_factory)恒 verify_dir==workspace,却此前从不 set_context →
+        # runtime.current() 落默认沙盒(project_mode=False)→ guard_project_tests 返 0、verify 跑错目录。
+        # managed=True 时 run() 起始自建上下文,与 daemon worker.py 的 set_context 对称。daemon 路径
+        # (build_run_stack)不开此开关 → worker 仍自管,行为零变更。
+        self._manage_runtime_context = manage_runtime_context
+        self._project_mode = project_mode
         self._actions = 0
         self._fail_count = 0
         self._started = 0.0
@@ -818,6 +826,16 @@ class AgentLoop:
                         "或在 config 给该 profile 设 multimodal override。"
                     )
         self._reset_run_state()
+        # P0 护城河:inline 路径自建 runtime 上下文(daemon 在 worker.py 外部自设;inline 此前漏设 →
+        # project_mode=False → guard_project_tests 返 0、verify 跑默认 ~/.argos/verify 而非用户项目)。
+        # 必须早于下面的 guard_project_tests / spawn / verify(它们都读 runtime.current())。set-and-leave:
+        # inline 单 session 每次 run 起始都重设,无跨 run 残留风险;daemon 不开此开关,行为零变更。
+        if self._manage_runtime_context:
+            from argos import runtime as _rt
+            _rt.set_context(_rt.RunContext(
+                workspace=self._workspace, verify_dir=self._verify_dir,
+                project_mode=self._project_mode,
+            ))
         # 拍 workspace 快照(供 /undo 还原);失败不阻断 run,仅 _last_snapshot = None 走"/undo
         # 不可用"诚实降级路径。延迟 import 避免 core.snapshot ↔ runtime 之间未来的循环风险。
         self._last_snapshot = None
