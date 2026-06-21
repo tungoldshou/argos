@@ -162,6 +162,31 @@ async def test_scroll_follows_when_already_at_bottom():
 
 
 @pytest.mark.asyncio
+async def test_short_content_stays_at_top_not_bottom_anchored():
+    """回归(2026-06-22,PR #8 引入):内容矮于视口时不得被 anchor() 底对齐。
+
+    PR #8 在 Transcript.on_mount 无条件 self.anchor()。Textual 的 anchor 会让矮于视口的
+    内容底对齐(scroll_offset 变负、region.y 落到视口下沿)——空态 Transcript 里唯一子件是
+    StartupSplash(像素 logo,约 10 行,远矮于整屏),于是启动 logo 被压到屏幕下方。
+    修复:首次有真实内容才锚,空态/矮内容维持顶部(region.y==0)。"""
+    from textual.widgets import Static
+
+    app = _Harness()
+    async with app.run_test(size=(80, 40)) as pilot:
+        t = app.query_one("#t", Transcript)
+        # 模拟 StartupSplash:直接 mount 一个矮于视口的子件(非走 append_* 内容方法)
+        short = Static("\n".join(f"logo {i}" for i in range(8)))
+        await t.mount(short)
+        await pilot.pause()
+        await pilot.pause()
+        assert t.max_scroll_y == 0, "矮内容不可滚动"
+        assert short.region.y == 0, \
+            f"矮于视口的内容应顶对齐(logo 在顶部),实际 region.y={short.region.y}"
+        assert t.scroll_offset.y == 0, \
+            f"空态不该有滚动偏移(底对齐会让其变负),实际 y={t.scroll_offset.y}"
+
+
+@pytest.mark.asyncio
 async def test_scroll_follows_during_burst_of_events():
     """回归(2026-06-22 真机:daemon SSE 成批到达时不自动滚到最新)。
     事件成批连发(流式 token + 巨型结果块,中间无布局周期)时,停在底部的用户必须持续跟随到底
