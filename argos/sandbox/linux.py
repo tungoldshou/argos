@@ -43,51 +43,75 @@ _AVAILABLE_BACKEND: str | None = _probe_backend()
 
 
 # ── 公共:build linux argv(仿 seatbelt.confined_argv)─────────────────
-def _bwrap_argv(workspace: Path, child_argv: list[str]) -> list[str]:
-    """bwrap argv:网络 OFF / 挂载命名空间 / 写牢笼 workspace / tmpfs /tmp / ro-bind / /"""
+def _bwrap_argv(workspace: Path, child_argv: list[str], *,
+                allow_network: bool = False) -> list[str]:
+    """bwrap argv:网络默认 OFF / 挂载命名空间 / 写牢笼 workspace / tmpfs /tmp / ro-bind / /
+
+    挂载顺序关键(bwrap 按 argv 顺序应用 fs 操作):**先 `--ro-bind / /`(整根只读),
+    最后 `--bind $WS $WS`(workspace 可写)** —— 因为 $WS 在 / 之下,可写 bind 必须后应用才能
+    覆盖只读根的该子树。顺序写反会让 workspace 被只读根重新盖住 → run_command 写入 EROFS
+    (2026-06-21 修;对齐 Codex bubblewrap 沙箱的 canonical 顺序)。
+
+    allow_network=False(默认,安全不变量)→ `--unshare-net` 断网;True(出网阀经审批)→ 省略
+    该 flag,子进程共享 host 网络命名空间(approved 的 pip/curl/git push 才能联网)。
+    """
     ws = workspace.resolve()
-    return [
+    argv = [
         "bwrap",
-        "--unshare-net",       # 网络 OFF(spec 关键安全不变量,等价 Seatbelt deny network*)
         "--unshare-pid",       # PID 命名空间
         "--unshare-ipc",       # IPC 命名空间
+        "--unshare-user",      # 用户命名空间(预存在 bug 修复 2026-06-21:--unshare-user-uid
+                               # 不是合法 bwrap 选项,真 Linux 上 init 必失败 "Unknown option")
+        "--uid", "0",          # 映射为 namespace 内 root → 获 CAP_NET_ADMIN,--unshare-net 才能
+        "--gid", "0",          # 配 loopback(否则 bwrap "loopback: RTM_NEWADDR Operation not permitted")
         "--unshare-uts",       # UTS 命名空间
-        "--unshare-user-uid",  # 用户命名空间(bwrap 自动 map root)
         "--die-with-parent",   # 父进程退出则子进程死
-        # 写牢笼:workspace 绑定为可写,其他路径不可写
-        "--bind", str(ws), str(ws),
-        # 临时目录:tmpfs(可写,被 namespace 隔离)
-        "--tmpfs", "/tmp",
-        # 读放宽:/ 只读 bind(spec 允许模型 import 库 + 读项目源码)
+    ]
+    if not allow_network:
+        argv.append("--unshare-net")  # 网络 OFF(默认安全不变量,等价 Seatbelt deny network*)
+    argv += [
+        # 读放宽:/ 只读 bind 先应用(spec 允许模型 import 库 + 读项目源码)
         "--ro-bind", "/", "/",
-        # 自身运行所需:dev(允许 /dev/null 等)
+        # 自身运行所需:dev(允许 /dev/null 等)+ proc
         "--dev", "/dev",
         "--proc", "/proc",
+        # 临时目录:tmpfs(可写,被 namespace 隔离)
+        "--tmpfs", "/tmp",
+        # 写牢笼:workspace 绑定为可写 —— 最后应用,覆盖只读根的该子树(顺序关键,见 docstring)
+        "--bind", str(ws), str(ws),
         # 跑子进程
         "--chdir", str(ws),
         "--",
         *child_argv,
     ]
+    return argv
 
 
-def _unshare_argv(workspace: Path, child_argv: list[str]) -> list[str]:
-    """unshare fallback:无 mount 命名空间(workspace 牢笼弱);网络 OFF。
+def _unshare_argv(workspace: Path, child_argv: list[str], *,
+                  allow_network: bool = False) -> list[str]:
+    """unshare fallback:无 mount 命名空间(workspace 牢笼弱);网络默认 OFF。
 
     退化路径:当 bwrap 不可用(老 Linux 发行版 / 容器内)时,至少保网络 OFF。
     workspace 防逃逸仅靠 --chdir(无 bind mount 隔离),所以严格说写牢笼弱于 bwrap。
+
+    allow_network=False(默认)→ `--net` 断网;True(出网阀经审批)→ 省略,共享 host 网络。
     """
     ws = workspace.resolve()
-    return [
+    argv = [
         "unshare",
         "--user",            # 用户命名空间(让 --map-root-user 生效)
         "--map-root-user",   # 当前用户映成 namespace 内 root(子进程能 fork 自身)
-        "--net",             # 网络 OFF(关键不变量)
+    ]
+    if not allow_network:
+        argv.append("--net")  # 网络 OFF(默认关键不变量)
+    argv += [
         "--pid",             # PID 命名空间
         "--mount",           # mount 命名空间(空,内层无新 mount,但隔离)
         "--fork",            # fork 一个新子进程(让 PID 命名空间生效)
         "--",
         *child_argv,
     ]
+    return argv
 
 
 def _linux_spawn(*, backend: str, workspace: Path, child_argv: list[str],

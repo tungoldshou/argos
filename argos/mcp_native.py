@@ -253,12 +253,13 @@ class McpManager:
         tools = self._collect_tools()
         if not tools:
             return ""
-        lines = ["【可用 MCP 工具(经 mcp_call(server, tool, arguments) 调用)】"]
+        lines = ["<mcp_tools> Available MCP tools (call via mcp_call(server, tool, arguments)):"]
         for t in tools:
             desc = (t.description or "").strip().replace("\n", " ")
             if len(desc) > 100:
                 desc = desc[:100] + "…"
-            lines.append(f"- {t.server}/{t.name}:{desc}")
+            lines.append(f"- {t.server}/{t.name}: {desc}")
+        lines.append("</mcp_tools>")
         return "\n".join(lines)
 
     def call(self, server: str, tool: str, arguments: dict[str, Any] | None = None) -> str:

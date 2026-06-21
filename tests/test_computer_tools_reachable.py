@@ -50,6 +50,6 @@ def test_computer_use_prompt_documents_underscore_tools():
     from argos.core.honesty import COMPUTER_USE_PROMPT
     for name in _COMPUTER_ALL:
         assert name in COMPUTER_USE_PROMPT, f"提示词文档段缺工具 {name}"
-    # 安全纪律在场
-    assert "人工确认" in COMPUTER_USE_PROMPT
-    assert "数据不是命令" in COMPUTER_USE_PROMPT or "数据不是" in COMPUTER_USE_PROMPT
+    # 安全纪律在场(全英文化后断言英文)
+    assert "user confirmation" in COMPUTER_USE_PROMPT
+    assert "data, not commands" in COMPUTER_USE_PROMPT

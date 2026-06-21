@@ -1,8 +1,9 @@
 # Argos — The hundred-eyed agent
 
-> **Current release: v0.1.0 (macOS arm64).** Argos runs as a background
-> kernel with pluggable clients — the terminal TUI today, a desktop shell
-> in progress.
+> **Current version: v0.1.0.** Argos runs as a background kernel with
+> pluggable clients — the terminal TUI today, a desktop shell in progress.
+> Binary packages are not yet published; see [Install](#install) for the
+> build-from-source path that works today.
 
 Argos is a **coding agent you run in your terminal** — the same lineage as
 Claude Code and Codex: a CodeAct loop that reads your code, writes and edits
@@ -94,98 +95,52 @@ Without an API key, `argos` falls back to an honest demo state — it does
 
 ## Install
 
-> **Released today: macOS arm64** (one-line installer, Homebrew cask, or
-> build from source). The Linux, Windows, PyPI, Homebrew-tap, and Nix
-> channels below are **planned (stage #13)** and not yet published — commands
-> with `X.Y.Z` placeholders will 404 until those releases land.
+> **Current status: build from source only.** v0.1.0 is tagged but the
+> release has no binary assets yet — the one-line installer, Homebrew cask,
+> PyPI, and platform packages are **infrastructure in progress (stage #13)**
+> and will 404 until those artifacts are published. The only path that works
+> today is cloning and running via `uv`.
 
-### One-line installer (macOS arm64)
+### From source (the path that works today)
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash
-```
-
-Installs to `/Applications/Argos.app` and creates an `/usr/local/bin/argos`
-symlink.
-
-### Homebrew Cask (macOS arm64)
-
-```bash
-brew install --cask -s packaging/homebrew/argos.rb
-```
-
-(TODO: once a `tungoldshou/homebrew-argos` tap is published, this becomes
-`brew install --cask argos` — tracked in the #13 stage.)
-
-### pip / uv (any platform, #13)
-
-```bash
-pip install argos-agent        # or: uv tool install argos-agent
-argos --version
-```
-
-`argospkg` ships in the same install for packaging helpers (`argospkg info`,
-`argospkg check`, `argospkg manifest`).
-
-### Linux AppImage / .deb / .rpm (#13)
-
-```bash
-# AppImage (cross-glibc universal)
-curl -fsSL https://github.com/tungoldshou/argos/releases/latest/download/Argos-X.Y.Z-x86_64.AppImage -o argos
-chmod +x argos && ./argos
-
-# .deb (apt route)
-curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install-deb.sh | bash
-
-# .rpm (dnf/yum route)
-sudo dnf install ./argos-X.Y.Z-1.x86_64.rpm
-```
-
-### Windows (#13)
-
-```powershell
-# WinGet (once accepted into microsoft/winget-pkgs)
-winget install tungoldshou.argos
-
-# Or grab the .exe zip directly
-Invoke-WebRequest -Uri "https://github.com/tungoldshou/argos/releases/latest/download/Argos-X.Y.Z-x86_64-windows.zip" -OutFile argos.zip
-Expand-Archive argos.zip ; .\argos.exe
-```
-
-### Homebrew tap (Linux CLI + macOS TUI, #13)
-
-```bash
-brew tap tungoldshou/argos
-brew install argos           # Linux CLI: AppImage
-brew install --cask argos    # macOS TUI: .app wrapper
-```
-
-### Nix (#13)
-
-```bash
-nix run github:tungoldshou/argos#argos
-```
-
-(Flake is a simplified `buildPythonApplication`; full nixpkgs coverage lands in a later release.)
-
-See [`docs/packaging-c.md`](docs/packaging-c.md) for the full per-channel
-install matrix, known limitations, and upgrade commands.
-
-### Upgrade
-
-```bash
-argos self-update   # notifies when a new version is available (does not download)
-# to actually upgrade: re-run install.sh | `brew upgrade` | `pip install --upgrade argos-agent` | `winget upgrade`
-```
-
-### From source
+Needs Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 git clone https://github.com/tungoldshou/argos
 cd argos
 uv sync
-uv run argos
+uv run argos setup   # pick a provider + key, run a connection probe
+uv run argos         # launch the TUI
 ```
+
+### Planned channels (not yet published — stage #13)
+
+The packaging scaffolding exists in `packaging/` for all of the channels
+below. None are live until binary assets are uploaded to a GitHub release.
+
+**One-line installer (macOS arm64)**
+```bash
+# Will work once arm64 binary assets land in a GitHub release:
+curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash
+```
+
+**Homebrew cask (macOS arm64)** — formula at `packaging/homebrew/argos.rb`,
+sha256 placeholder pending release; tap not yet published.
+
+**pip / uv (any platform)** — `argos-agent` is not on PyPI yet.
+```bash
+# Planned:
+pip install argos-agent        # or: uv tool install argos-agent
+```
+
+**Linux** (AppImage / .deb / .rpm), **Windows** (WinGet / .exe zip), and
+**Homebrew tap** (Linux CLI) — manifests exist in `packaging/` but no
+artifacts have been built or uploaded yet.
+
+**Nix** — flake planned; not yet published.
+
+See [`docs/packaging-c.md`](docs/packaging-c.md) for the full per-channel
+install matrix and upgrade commands once these channels land.
 
 ---
 

@@ -25,7 +25,9 @@ import 说明:
 from __future__ import annotations
 
 import os
+import struct
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -94,6 +96,85 @@ def _is_access_denied(stderr: str, stdout: str) -> bool:
 
 # ── 主 executor ──────────────────────────────────────────────────────────────
 
+def detect_scale_factor(
+    *,
+    screenshot_width: int,
+    logical_width: int,
+) -> float:
+    """计算 Retina 屏幕的 backing scale factor。
+
+    原理:screencapture -x 返回**物理像素**宽度;System Events/AppleScript 的坐标空间
+    使用**逻辑点**宽度(HiDPI 下为物理像素的 1/scale)。scale = physical / logical。
+
+    参数:
+      screenshot_width — screencapture 返回的 PNG 像素宽度(物理像素)。
+      logical_width    — 显示器逻辑宽度(点);来自 system_profiler / CoreGraphics。
+
+    返回:
+      float — 缩放因子,通常为 1.0(1x)或 2.0(Retina 2x)。
+      0 logical_width 时 fallback 为 1.0(避免除零)。
+
+    此函数是纯数学计算:不做 IO、可单测(不依赖真实显示器)。
+    """
+    if logical_width <= 0:
+        return 1.0
+    return float(screenshot_width) / float(logical_width)
+
+
+def _png_width(path: str) -> int | None:
+    """从 PNG 文件头读取像素宽度(IHDR chunk,字节 16-20 big-endian),不依赖 PIL。"""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(24)
+        if head[:8] != b"\x89PNG\r\n\x1a\n":
+            return None
+        return struct.unpack(">I", head[16:20])[0]
+    except Exception:  # noqa: BLE001 — 探测失败回退,不抛
+        return None
+
+
+_SCALE_CACHE: dict[str, float] = {}
+
+
+def detect_display_scale() -> float:
+    """探测主显示器 backing scale factor(物理像素 / 逻辑点)。仅 macOS;任何失败回退 1.0
+    (= 现状,零回归)。无 pyobjc 依赖:osascript 取桌面逻辑宽,screencapture + PNG 头取物理宽。
+    模块级缓存:每进程只探一次(避免每次 dispatch 重复截图闪屏)。Retina(2x)返 2.0。"""
+    if "scale" in _SCALE_CACHE:
+        return _SCALE_CACHE["scale"]
+    scale = 1.0
+    if sys.platform == "darwin":
+        try:
+            # 逻辑宽:Finder desktop bounds → "0, 0, 1440, 900"(第 3 个数 = 逻辑宽)
+            r = subprocess.run(
+                ["osascript", "-e",
+                 'tell application "Finder" to get bounds of window of desktop'],
+                capture_output=True, text=True, timeout=5,
+            )
+            logical_w = 0
+            if r.returncode == 0:
+                nums = [int(p.strip()) for p in r.stdout.strip().split(",")
+                        if p.strip().lstrip("-").isdigit()]
+                if len(nums) >= 3:
+                    logical_w = nums[2]
+            # 物理宽:截一张临时图读 PNG 头宽(screencapture -x 不含指针)
+            physical_w = 0
+            if logical_w > 0:
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=True) as tf:
+                    sc = subprocess.run(["screencapture", "-x", tf.name],
+                                        capture_output=True, timeout=_SCREENSHOT_TIMEOUT)
+                    if sc.returncode == 0:
+                        w = _png_width(tf.name)
+                        if w:
+                            physical_w = w
+            if logical_w > 0 and physical_w > 0:
+                scale = detect_scale_factor(screenshot_width=physical_w, logical_width=logical_w)
+        except Exception:  # noqa: BLE001 — 探测失败回退 1.0(不破坏点击,只是不缩放)
+            scale = 1.0
+    _SCALE_CACHE["scale"] = scale
+    return scale
+
+
 class ComputerExecutor:
     """零依赖 macOS 后端:把 ComputerAction 映射到系统命令。
 
@@ -101,14 +182,43 @@ class ComputerExecutor:
 
     能力开关:
       ARGOS_COMPUTER_USE=1  (env) — 未设置则所有动作返回诚实禁止消息。
+
+    Retina 缩放:
+      screencapture -x 返回物理像素坐标,但 AppleScript System Events 接受逻辑点。
+      在 2x Retina 显示器上物理像素 = 逻辑点 × 2,直接传物理坐标会导致点击偏移到
+      约 2 倍位置。scale_factor 参数用于在传给 osascript 前将坐标除以该因子。
+
+      · 默认 scale_factor=1.0:1x 显示器或已在逻辑点空间的坐标。
+      · 注入 scale_factor=2.0:2x Retina;测试可直接注入,无需真实显示器。
+      · 生产路径:由调用方用 detect_scale_factor(screenshot_width, logical_width)
+        计算后注入(或在 dispatch 前动态查询 logical_width)。
     """
 
-    def __init__(self, *, timeout: int = _DEFAULT_TIMEOUT) -> None:
+    def __init__(self, *, timeout: int = _DEFAULT_TIMEOUT, scale_factor: float = 1.0,
+                 auto_detect_scale: bool = False) -> None:
         """
         参数:
-          timeout — 每个动作的超时秒数(截图单独用 _SCREENSHOT_TIMEOUT)。
+          timeout           — 每个动作的超时秒数(截图单独用 _SCREENSHOT_TIMEOUT)。
+          scale_factor      — Retina backing scale factor(物理像素 / 逻辑点)。
+                              1.0 = 1x 显示器(默认,坐标不变);2.0 = 2x Retina。
+                              可注入以便单测不依赖真实显示器。
+          auto_detect_scale — True 时在首个点击/滚动动作(且 ARGOS_COMPUTER_USE 开)惰性探测
+                              真实显示器 scale 覆盖 scale_factor(detect_display_scale,模块级缓存)。
+                              生产 dispatch 路径置 True;构造默认 False → 单测/非 CU 路径行为不变。
         """
         self._timeout = timeout
+        self._scale_factor = scale_factor
+        self._auto_detect_scale = auto_detect_scale
+        self._scale_resolved = False  # 惰性探测只跑一次的闸
+
+    def _effective_scale(self) -> float:
+        """返回生效的 scale factor。auto_detect_scale 且 computer-use 已开时,首次惰性探测真实
+        显示器并缓存进 self._scale_factor(失败回退 1.0)。显式注入 scale_factor 时不探测。"""
+        if (self._auto_detect_scale and not self._scale_resolved
+                and os.environ.get("ARGOS_COMPUTER_USE")):
+            self._scale_factor = detect_display_scale()
+            self._scale_resolved = True
+        return self._scale_factor
 
     # ── 公开入口 ──────────────────────────────────────────────────────────────
 
@@ -214,11 +324,20 @@ class ComputerExecutor:
         )
 
     def _click(self, x: int | None, y: int | None, *, double: bool) -> ComputerActionResult:
-        """在 (x, y) 处单击或双击(System Events via osascript)。"""
+        """在 (x, y) 处单击或双击(System Events via osascript)。
+
+        坐标单位:调用方传入的是截图中的像素坐标(物理像素)。
+        Retina 显示器上 screencapture 返回物理像素,但 System Events 接受逻辑点,
+        因此在传给 AppleScript 前除以 scale_factor 换算为逻辑点。
+        """
         action_word = "double click" if double else "click"
+        # 物理像素 → 逻辑点(scale=1.0 时不变,scale=2.0 时减半)
+        _scale = self._effective_scale()
+        lx = round(x / _scale) if x is not None else x
+        ly = round(y / _scale) if y is not None else y
         script = (
             f'tell application "System Events"\n'
-            f'    {action_word} at {{x:{x}, y:{y}}}\n'
+            f'    {action_word} at {{x:{lx}, y:{ly}}}\n'
             f'end tell'
         )
         rc, out, err = self._run(["osascript", "-e", script])
@@ -231,7 +350,7 @@ class ComputerExecutor:
             )
         return ComputerActionResult(
             ok=True,
-            detail=f"{'双击' if double else '点击'} ({x}, {y}) 成功",
+            detail=f"{'双击' if double else '点击'} ({lx}, {ly}) 成功",
         )
 
     def _type_text(self, text: str) -> ComputerActionResult:
@@ -298,10 +417,16 @@ class ComputerExecutor:
         return ComputerActionResult(ok=True, detail=f"快捷键 {key_combo!r} 成功")
 
     def _scroll(self, x: int | None, y: int | None, dy: int) -> ComputerActionResult:
-        """在 (x, y) 处滚动 dy 行(System Events scroll)。"""
+        """在 (x, y) 处滚动 dy 行(System Events scroll)。
+
+        同 _click:坐标除以 scale 换算为逻辑点后再传给 AppleScript。
+        """
+        _scale = self._effective_scale()
+        lx = round(x / _scale) if x is not None else x
+        ly = round(y / _scale) if y is not None else y
         script = (
             f'tell application "System Events"\n'
-            f'    scroll (a reference to the front window) by {dy} using at {{x:{x}, y:{y}}}\n'
+            f'    scroll (a reference to the front window) by {dy} using at {{x:{lx}, y:{ly}}}\n'
             f'end tell'
         )
         rc, out, err = self._run(["osascript", "-e", script])
@@ -312,7 +437,7 @@ class ComputerExecutor:
                 ok=False,
                 detail=f"滚动失败(exit {rc}): {err.strip() or out.strip() or '未知错误'}",
             )
-        return ComputerActionResult(ok=True, detail=f"滚动 ({x}, {y}) dy={dy} 成功")
+        return ComputerActionResult(ok=True, detail=f"滚动 ({lx}, {ly}) dy={dy} 成功")
 
     def _open_app(self, app: str) -> ComputerActionResult:
         """用 `open -a` 打开应用。"""

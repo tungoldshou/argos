@@ -1,6 +1,7 @@
 """`python -m argos.daemon` 入口(spec §2.10 + D13)。
 
-`argos daemon` 子命令也走这个入口。
+同一入口也由 `argosd` console script 暴露,以及 TUI 启动时探测 socket 不在则自动 spawn。
+(没有 `argos daemon` 子命令 —— daemon 不挂在 `argos` CLI 下;用 `argosd` 或 `python -m argos.daemon`。)
 """
 from __future__ import annotations
 
