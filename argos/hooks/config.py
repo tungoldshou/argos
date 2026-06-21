@@ -14,6 +14,7 @@ from typing import Mapping
 
 from argos import config_base
 from argos.hooks.schema import KNOWN_EVENTS, VALID_HANDLER_TYPES
+from argos.i18n import t
 
 
 class HooksConfigError(Exception):
@@ -30,12 +31,12 @@ class HookHandler:
     def __post_init__(self) -> None:
         if self.type not in VALID_HANDLER_TYPES:
             raise ValueError(
-                f"HookHandler.type 必须是 {sorted(VALID_HANDLER_TYPES)} 之一,收到 {self.type!r}"
+                t("hooks.config.handler_type_invalid", valid=sorted(VALID_HANDLER_TYPES), type_val=self.type)
             )
         if not self.command or not self.command.strip():
-            raise ValueError("HookHandler.command 不能为空")
+            raise ValueError(t("hooks.config.handler_command_empty"))
         if self.timeout <= 0:
-            raise ValueError(f"HookHandler.timeout 必须 > 0 ms,收到 {self.timeout}")
+            raise ValueError(t("hooks.config.handler_timeout_nonpositive", timeout=self.timeout))
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,35 +66,35 @@ HOOKS_CONFIG_PATH: Path = Path.home() / ".argos" / "hooks.json"
 def _validate_event_name(event_name: str) -> None:
     if event_name not in KNOWN_EVENTS:
         raise HooksConfigError(
-            f"未知事件名 (event) {event_name!r};允许: {sorted(KNOWN_EVENTS)}"
+            t("hooks.config.unknown_event", event_name=event_name, allowed=sorted(KNOWN_EVENTS))
         )
 
 
 def _parse_handler(raw: dict) -> HookHandler:
     if not isinstance(raw, dict):
-        raise HooksConfigError(f"hook handler 必须是 dict,收到 {type(raw).__name__}")
+        raise HooksConfigError(t("hooks.config.handler_not_dict", type_name=type(raw).__name__))
     if "type" not in raw:
-        raise HooksConfigError("hook handler 缺 'type' 字段")
+        raise HooksConfigError(t("hooks.config.handler_missing_type"))
     if "command" not in raw:
-        raise HooksConfigError("hook handler 缺 'command' 字段")
+        raise HooksConfigError(t("hooks.config.handler_missing_command"))
     timeout = raw.get("timeout", 60000)
     try:
         return HookHandler(type=raw["type"], command=raw["command"], timeout=timeout)
     except ValueError as e:
-        raise HooksConfigError(f"hook handler 非法: {e}") from e
+        raise HooksConfigError(t("hooks.config.handler_invalid", exc=e)) from e
 
 
 def _parse_entry(raw: dict) -> HookMatcherEntry:
     if not isinstance(raw, dict):
-        raise HooksConfigError(f"matcher entry 必须是 dict,收到 {type(raw).__name__}")
+        raise HooksConfigError(t("hooks.config.entry_not_dict", type_name=type(raw).__name__))
     if "hooks" not in raw:
-        raise HooksConfigError("matcher entry 缺 'hooks' 字段")
+        raise HooksConfigError(t("hooks.config.entry_missing_hooks"))
     raw_hooks = raw["hooks"]
     if not isinstance(raw_hooks, list) or not raw_hooks:
-        raise HooksConfigError("matcher entry 'hooks' 必须是非空 array")
+        raise HooksConfigError(t("hooks.config.entry_hooks_not_array"))
     matcher = raw.get("matcher")
     if matcher is not None and not isinstance(matcher, str):
-        raise HooksConfigError(f"matcher 必须是 string 或省略,收到 {type(matcher).__name__}")
+        raise HooksConfigError(t("hooks.config.entry_matcher_not_string", type_name=type(matcher).__name__))
     # 加载期 matcher 编译校验(spec D14:长度 / ReDoS / re.error)
     # matcher 为 None / 空串 / '*' 的语义化处理归 _MATCHER_USED_EVENTS 路径,
     # 校验只对"真要编译"的字符串生效——空串虽能 compile 但语义无意义,这里拒。
@@ -125,18 +126,18 @@ def load(path: Path | None = None) -> HooksConfig:
         # 文件不存在 → 走 empty()(spec §3)
         return HooksConfig.empty()
     if "version" not in data:
-        raise HooksConfigError("hooks.json 缺 'version' 字段")
+        raise HooksConfigError(t("hooks.config.missing_version"))
     if data["version"] != 1:
         raise HooksConfigError(
-            f"hooks.json version={data['version']} 不匹配(host 仅支持 v1)"
+            t("hooks.config.version_mismatch", version=data["version"])
         )
     raw_hooks = data.get("hooks", {})
     if not isinstance(raw_hooks, dict):
-        raise HooksConfigError("'hooks' 必须是 object(事件名 → matcher entries)")
+        raise HooksConfigError(t("hooks.config.hooks_not_object"))
     entries: dict[str, tuple[HookMatcherEntry, ...]] = {}
     for event_name, raw_entries in raw_hooks.items():
         _validate_event_name(event_name)
         if not isinstance(raw_entries, list):
-            raise HooksConfigError(f"事件 {event_name!r} 的 entries 必须是 array")
+            raise HooksConfigError(t("hooks.config.event_entries_not_array", event_name=event_name))
         entries[event_name] = tuple(_parse_entry(e) for e in raw_entries)
     return HooksConfig(version=1, entries=entries)

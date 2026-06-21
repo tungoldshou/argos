@@ -16,6 +16,8 @@ import logging
 from pathlib import Path
 from typing import AsyncIterator
 
+from argos.i18n import t
+
 log = logging.getLogger(__name__)
 
 # 最大重连次数（超过后投 Error 事件并停止）
@@ -106,9 +108,11 @@ class DaemonEventSource:
                         self._run_id, e,
                     )
                     yield ErrorEvent(
-                        message=(
-                            f"daemon 连接断开（run={self._run_id!r}），"
-                            f"重连 {self._max_retries} 次仍失败：{e}"
+                        message=t(
+                            "daemon.srv.reconnect_failed",
+                            run_id=self._run_id,
+                            max_retries=self._max_retries,
+                            error=e,
                         ),
                         chain=[f"{type(e).__name__}: {e}"],
                     )

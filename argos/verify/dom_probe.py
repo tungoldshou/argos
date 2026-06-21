@@ -30,7 +30,7 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from argos.i18n import is_error_result
+from argos.i18n import is_error_result, t
 
 if TYPE_CHECKING:
     from argos.browser import BrowserController
@@ -89,14 +89,14 @@ class DomProber:
         if self._browser is None:
             return DomProbeResult(
                 found=False, text_excerpt="",
-                error="DomProber 未接入浏览器控制器（browser=None）。",
+                error=t("verify.dom_probe.no_browser"),
             )
         try:
             return self._do_probe(url, selector, expected_text=expected_text)
         except Exception as exc:  # noqa: BLE001 — 任何异常 → unverifiable，诚实
             return DomProbeResult(
                 found=False, text_excerpt="",
-                error=f"DOM 探针异常：{type(exc).__name__}: {exc}",
+                error=t("verify.dom_probe.exception", exc_type=type(exc).__name__, exc=exc),
             )
 
     # ── 内部实现 ─────────────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ class DomProber:
             if is_error_result(nav_result):  # locale 无关:英文工具错误以 "Error:" 起
                 return DomProbeResult(
                     found=False, text_excerpt="",
-                    error=f"导航失败：{nav_result}",
+                    error=t("verify.dom_probe.nav_failed", result=nav_result),
                 )
 
         # 2. 抓 snapshot（BrowserController.snapshot → inner_text("body")）
@@ -126,7 +126,7 @@ class DomProber:
         if is_error_result(snapshot):  # locale 无关:英文工具错误以 "Error:" 起
             return DomProbeResult(
                 found=False, text_excerpt="",
-                error=f"页面快照失败：{snapshot}",
+                error=t("verify.dom_probe.snapshot_failed", result=snapshot),
             )
 
         # 3. 证据强度分级（Major-1 修正）
@@ -161,10 +161,10 @@ class DomProber:
         else:
             # ── 弱证据路径：仅有选择器派生的文本提示，最高只能 unverifiable ──
             selector_text = _selector_to_text_hint(selector)
-            detail = (
-                f"仅有文本弱提示（选择器 {selector!r} → 提示 {selector_text!r}），"
-                "无结构性 DOM 校验通道，无法机检判定元素是否真实存在。"
-                "如需机检验证，请在 propose_dom_verify() 中提供显式 expected_text。"
+            detail = t(
+                "verify.dom_probe.weak_evidence",
+                selector=selector,
+                hint=selector_text,
             )
             return DomProbeResult(found=False, text_excerpt="", error=detail)
 

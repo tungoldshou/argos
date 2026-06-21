@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Mapping
 
 from argos import config_base
+from argos.i18n import t
 from argos.lsp.schema import SERVER_NAME_PATTERN
 
 
@@ -34,21 +35,17 @@ class LspServerConfig:
 
     def __post_init__(self) -> None:
         if not self.command:
-            raise ValueError("LspServerConfig.command 不能为空(否则 spawn 空 argv)")
+            raise ValueError(t("lsp.config.empty_command"))
         for ft in self.filetypes:
             if not ft.startswith("."):
-                raise ValueError(
-                    f"LspServerConfig.filetypes 项必须以 . 开头(如 '.py'),收到 {ft!r}"
-                )
+                raise ValueError(t("lsp.config.filetype_no_dot", ft=ft))
         if not self.filetypes:
-            raise ValueError("LspServerConfig.filetypes 不能为空(0 server 服务 = 死代码)")
+            raise ValueError(t("lsp.config.empty_filetypes"))
 
 
 def _validate_server_name(name: str) -> None:
     if not _SERVER_NAME_RE.match(name):
-        raise ValueError(
-            f"server name {name!r} 非法:仅允许 ASCII 字母数字 + _ + -(spec §2.2)"
-        )
+        raise ValueError(t("lsp.config.invalid_server_name", name=name))
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,34 +92,32 @@ LSP_CONFIG_PATH: Path = Path.home() / ".argos" / "lsp.json"
 
 def _parse_server_config(name: str, raw: dict) -> LspServerConfig:
     if not isinstance(raw, dict):
-        raise LspConfigError(f"server {name!r} 必须是 object,收到 {type(raw).__name__}")
+        raise LspConfigError(t("lsp.config.server_not_object", name=name, type_name=type(raw).__name__))
     if "command" not in raw:
-        raise LspConfigError(f"server {name!r} 缺 'command' 字段")
+        raise LspConfigError(t("lsp.config.missing_command_field", name=name))
     if "filetypes" not in raw:
-        raise LspConfigError(f"server {name!r} 缺 'filetypes' 字段")
+        raise LspConfigError(t("lsp.config.missing_filetypes_field", name=name))
     raw_cmd = raw["command"]
     if not isinstance(raw_cmd, list) or not raw_cmd:
-        raise LspConfigError(
-            f"server {name!r} 'command' 必须是非空 array(argv 数组,不是 shell 字符串),收到 {raw_cmd!r}"
-        )
+        raise LspConfigError(t("lsp.config.command_not_array", name=name, value=raw_cmd))
     if not all(isinstance(c, str) and c for c in raw_cmd):
-        raise LspConfigError(f"server {name!r} 'command' 项必须是非空 string")
+        raise LspConfigError(t("lsp.config.command_item_not_string", name=name))
     raw_ft = raw["filetypes"]
     if not isinstance(raw_ft, list) or not raw_ft:
-        raise LspConfigError(f"server {name!r} 'filetypes' 必须是非空 array")
+        raise LspConfigError(t("lsp.config.filetypes_not_array", name=name))
     if not all(isinstance(ft, str) for ft in raw_ft):
-        raise LspConfigError(f"server {name!r} 'filetypes' 项必须是 string")
+        raise LspConfigError(t("lsp.config.filetypes_item_not_string", name=name))
     init_options = raw.get("init_options", {}) or {}
     if not isinstance(init_options, dict):
-        raise LspConfigError(f"server {name!r} 'init_options' 必须是 object")
+        raise LspConfigError(t("lsp.config.init_options_not_object", name=name))
     env = raw.get("env", {}) or {}
     if not isinstance(env, dict):
-        raise LspConfigError(f"server {name!r} 'env' 必须是 object")
+        raise LspConfigError(t("lsp.config.env_not_object", name=name))
     if not all(isinstance(k, str) and isinstance(v, str) for k, v in env.items()):
-        raise LspConfigError(f"server {name!r} 'env' 项必须是 string→string 映射")
+        raise LspConfigError(t("lsp.config.env_not_string_map", name=name))
     disabled = raw.get("disabled", False)
     if not isinstance(disabled, bool):
-        raise LspConfigError(f"server {name!r} 'disabled' 必须是 bool")
+        raise LspConfigError(t("lsp.config.disabled_not_bool", name=name))
     try:
         return LspServerConfig(
             command=tuple(raw_cmd),
@@ -132,7 +127,7 @@ def _parse_server_config(name: str, raw: dict) -> LspServerConfig:
             env=env,
         )
     except ValueError as e:
-        raise LspConfigError(f"server {name!r} 非法: {e}") from e
+        raise LspConfigError(t("lsp.config.server_invalid", name=name, exc=e)) from e
 
 
 def load(path: Path | None = None) -> LspConfig:
@@ -159,14 +154,12 @@ def load(path: Path | None = None) -> LspConfig:
         # 不存在 / 不可读 → 走 built-in 默认(spec §2.2 / §3)
         return BUILTIN_DEFAULT_CONFIG
     if "version" not in data:
-        raise LspConfigError("lsp.json 缺 'version' 字段")
+        raise LspConfigError(t("lsp.config.missing_version"))
     if data["version"] != 1:
-        raise LspConfigError(
-            f"lsp.json version={data['version']} 不匹配(host 仅支持 v1)"
-        )
+        raise LspConfigError(t("lsp.config.version_mismatch", version=data["version"]))
     raw_servers = data.get("servers", {})
     if not isinstance(raw_servers, dict):
-        raise LspConfigError("'servers' 必须是 object(server name → config)")
+        raise LspConfigError(t("lsp.config.servers_not_object"))
     servers: dict[str, LspServerConfig] = {}
     for name, raw in raw_servers.items():
         try:

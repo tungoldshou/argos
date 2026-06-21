@@ -8,6 +8,7 @@
 builtin/ 子模块分离:本模块纯数据契约 + 编排;builtin/ 是具体 skill 实现。"""
 from __future__ import annotations
 
+from argos.i18n import t
 from argos.skills_runtime.analysis import (
     AnalysisSkill,
     AnalysisSkillContext,
@@ -47,9 +48,9 @@ def register_builtin_skills() -> None:
     from argos.skills_runtime.builtin.verify import run as _verify_run
 
     for name, run_fn, desc in [
-        ("verify", _verify_run, "显式跑 verify_cmd(D9/D13 — 不走 propose_verify)"),
-        ("security-review", security_review.run, "3-pass 安全审计(secrets + deps + permissions)"),
-        ("simplify", simplify.run, "3-pass 重复/复杂度/死代码扫描"),
+        ("verify", _verify_run, t("skill.builtin_verify_desc")),
+        ("security-review", security_review.run, t("skill.builtin_security_review_desc")),
+        ("simplify", simplify.run, t("skill.builtin_simplify_desc")),
     ]:
         if get(name) is not None:
             continue

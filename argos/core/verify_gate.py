@@ -17,6 +17,8 @@ Verdict canonical 归属:argos.core.types(契约 §6.1)。
 """
 from __future__ import annotations
 
+from argos.i18n import t
+
 import os
 import shlex
 import subprocess
@@ -107,7 +109,7 @@ class Verifier:
         tampered = runtime.detect_tampering()
         if tampered:
             return Verdict.unverifiable(
-                detail=f"验证依赖的受保护文件被改动:{', '.join(tampered)} —— 通过不可信。",
+                detail=t("core2.verify_gate.tampered", files=', '.join(tampered)),
                 tampered=tampered, attempts=attempts,
             )
 
@@ -121,7 +123,7 @@ class Verifier:
             # 关闭 / 没 generator / 旁路失败 → 诚实无测标记(no_test=True)。
             # status 仍 'unverifiable',升级/诚实路径不变;UI 据 no_test 渲染中性色。
             return Verdict.no_check(
-                detail="(无 verify_cmd，未做机检验证)", attempts=attempts,
+                detail=t("core2.verify_gate.no_cmd"), attempts=attempts,
             )
 
         # P0 防假绿(canonical 门):trivial 命令(echo/true/cat/ls/pwd...)什么都不验证。
@@ -134,10 +136,7 @@ class Verifier:
             _bin = ""
         if _bin in TRIVIAL_VERIFY_BINS:
             return Verdict.unverifiable(
-                detail=(
-                    f"验证命令 `{verify_cmd}` 是 trivial(永远通过、什么都不验证)—— "
-                    f"拒绝当作机检验证,落'未验证'诚实路径(绝不假绿)。"
-                ),
+                detail=t("core2.verify_gate.trivial", cmd=verify_cmd),
                 tampered=[], attempts=attempts,
             )
 
@@ -177,14 +176,11 @@ class Verifier:
             )
         if ok:
             return Verdict.passed_self(
-                detail=(
-                    f"[self_verified] 较弱:测试由系统按 reviewer 角色 + canary 守卫自动生成"
-                    f"(空 workspace 必非 0 验过);用户级 verify 不在场。{detail}"
-                ),
+                detail=t("core2.verify_gate.self_verified_weak", detail=detail),
                 verify_cmd=proposal.cmd, attempts=attempts,
             )
         return Verdict.failed(
-            detail=f"[self_verified failed] 自造测试在真 workspace 未通过:{detail}",
+            detail=t("core2.verify_gate.self_verified_failed", detail=detail),
             verify_cmd=proposal.cmd, attempts=attempts,
         )
 
@@ -193,10 +189,10 @@ class Verifier:
         try:
             parts = shlex.split(cmd)
         except ValueError as e:
-            return False, f"验证命令解析失败：{e}", False
+            return False, t("core2.verify_gate.parse_failed", error=e), False
 
         if not parts or Path(parts[0]).name not in ALLOWED_CMDS:
-            return False, f"验证命令不在白名单：{cmd}", False
+            return False, t("core2.verify_gate.not_allowlisted", cmd=cmd), False
 
         ctx = runtime.current()
         verify_dir, workspace = ctx.verify_dir, ctx.workspace
@@ -217,12 +213,9 @@ class Verifier:
                 timeout=self.inline_timeout, env=env,
             )
         except subprocess.TimeoutExpired:
-            return False, (
-                f"[超时] 验证命令 `{cmd}` 超过 {self.inline_timeout}s 未完成 —— "
-                f"降级为'无法验证'(不会假装通过)。"
-            ), True
+            return False, t("core2.verify_gate.timeout", cmd=cmd, timeout=self.inline_timeout), True
         except Exception as e:  # noqa: BLE001
-            return False, f"验证执行失败：{e}", False
+            return False, t("core2.verify_gate.exec_failed", error=e), False
 
         out = (r.stdout or "")[-1500:]
         err = (r.stderr or "")[-1500:]

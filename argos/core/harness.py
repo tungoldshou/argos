@@ -55,18 +55,17 @@ class Harness:
         # 首次进入必须从 plan 开始。
         if self._phase_idx == -1 and target != 0:
             raise ValueError(
-                f"首次 enter_phase 必须从 plan 开始,收到 {phase}。"
+                _i18n_t("core2.harness.must_start_plan", phase=phase)
             )
         # 不允许倒退。
         if self._phase_idx >= 0 and 0 <= target < self._phase_idx:
             raise ValueError(
-                f"阶段不可倒退:当前 {PHASE_ORDER[self._phase_idx]} → 试图回到 {phase}。"
+                _i18n_t("core2.harness.no_retreat", current=PHASE_ORDER[self._phase_idx], phase=phase)
             )
         # 不允许跳过中间阶段。
         if self._phase_idx >= 0 and target > self._phase_idx + 1:
             raise ValueError(
-                f"阶段不可跳:当前 {PHASE_ORDER[self._phase_idx]} → 试图直接到 {phase}"
-                f"(必须依次经过 {PHASE_ORDER})。"
+                _i18n_t("core2.harness.no_skip", current=PHASE_ORDER[self._phase_idx], phase=phase, order=PHASE_ORDER)
             )
         self._phase_idx = max(self._phase_idx, target)
         await self.bus.emit(PhaseChange(phase=phase, actions=actions))

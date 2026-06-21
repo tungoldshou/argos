@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Final, Mapping, Sequence
 
 from argos import config_base
+from argos.i18n import t
 from argos.permissions.schema import VALID_LEVELS
 
 _log = logging.getLogger("argos.permissions")
@@ -82,12 +83,12 @@ class PermissionsConfig:
     def __post_init__(self) -> None:
         if self.default_level is not None and self.default_level not in VALID_LEVELS:
             raise ValueError(
-                f"default_level {self.default_level!r} 非法,需 ∈ {sorted(VALID_LEVELS)}"
+                t("perm2.config.invalid_default_level", level=self.default_level, valid=sorted(VALID_LEVELS))
             )
         for tool, level in self.tools.items():
             if level not in VALID_LEVELS:
                 raise ValueError(
-                    f"tool level {level!r} for {tool!r} 非法,需 ∈ {sorted(VALID_LEVELS)}"
+                    t("perm2.config.invalid_tool_level", level=level, tool=tool, valid=sorted(VALID_LEVELS))
                 )
 
     @staticmethod
@@ -161,16 +162,16 @@ def load(path: Path | None = None) -> PermissionsConfig:
     version = raw.get("version")
     if version != 1:
         raise PermissionsConfigError(
-            f"permissions.json version 必须 = 1,收到 {version!r}(v2 留 v1.1)"
+            t("perm2.config.bad_version", version=version)
         )
     default_level = raw.get("default_level")
     if default_level is not None and default_level not in VALID_LEVELS:
         raise PermissionsConfigError(
-            f"default_level {default_level!r} 非法,需 ∈ {sorted(VALID_LEVELS)}"
+            t("perm2.config.invalid_default_level_load", level=default_level, valid=sorted(VALID_LEVELS))
         )
     tools = raw.get("tools") or {}
     if not isinstance(tools, dict):
-        raise PermissionsConfigError("tools 必须是 object")
+        raise PermissionsConfigError(t("perm2.config.tools_not_object"))
     tools_clean: dict[str, str] = {}
     for k, v in tools.items():
         if isinstance(k, str) and isinstance(v, str) and v in VALID_LEVELS:

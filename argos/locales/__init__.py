@@ -21,4 +21,15 @@ CATALOG_MODULES: list[str] = [
     "tools",    # tools/* + plan_mode 工具结果串(Wave 2c)
     "permissions",  # trust_dial 模式描述 + approval 审批提示(Wave 2d)
     "misc",     # config 错误 / 剪贴板图片 / web+browser 工具错误(Wave 2d)
+    # Wave 3:全仓彻底双语 —— 深层内部/模型可见/框架 plumbing 也全部走 t()。
+    "verify",       # verify/strategy / dom_probe / gui_probe / self_test
+    "perception",   # perception/executor / actions
+    "daemon2",      # daemon/server / worker / client / conductor_supervisor / tui/daemon_source
+    "workflow",     # workflow/spec / engine / result / subagent / worktree
+    "infra",        # mcp_native / lsp / hooks / capability
+    "permissions2", # permissions/evaluator / autonomy / config / hard_rules
+    "conductor",    # conductor/cronlite / proposals / orders
+    "data",         # memory / routing / context / skills_curator / skills_runtime / skills
+    "evalx",        # eval/benchmarks / eval/runner / learning
+    "core2",        # core/loop 残余 / verify_gate / snapshot / harness / models / contracts / runtime / input / 其它零散
 ]

@@ -25,6 +25,7 @@ from pathlib import Path
 from argos.conductor import ConductorEngine, OrderStore
 from argos.conductor.orders import StandingOrder
 from argos.conductor.proposals import ProactiveSuggestion
+from argos.i18n import t
 
 log = logging.getLogger("argos.daemon.conductor")
 
@@ -45,7 +46,7 @@ def ensure_builtin_dream_order(store: OrderStore) -> None:
         return
     order = StandingOrder(
         id=BUILTIN_DREAM_ORDER_ID,
-        utterance="夜间整合:跨 run 综合蒸馏 + 记忆整理(Dream)",
+        utterance=t("daemon.srv.dream_order_utterance"),
         kind="schedule",
         schedule="03:00",
         trigger_glob=None,

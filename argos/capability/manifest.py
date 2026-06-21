@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
 
 from argos.core.types import RiskLevel
+from argos.i18n import t
 
 # kind 合法值（§5 列举；lsp/plugin 是开发者能力，对普通用户 visibility=developer）
 KindName = Literal["tool", "mcp", "computer", "browser", "hook", "skill", "lsp", "plugin"]
@@ -53,10 +54,10 @@ class Capability:
     def __post_init__(self) -> None:
         """基础不变式：name 不可为空串。"""
         if not self.name or not self.name.strip():
-            raise ValueError("Capability.name 不能为空串")
+            raise ValueError(t("cap.manifest.empty_name"))
         if self.kind not in (
             "tool", "mcp", "computer", "browser", "hook", "skill", "lsp", "plugin"
         ):
-            raise ValueError(f"Capability.kind 非法值：{self.kind!r}")
+            raise ValueError(t("cap.manifest.invalid_kind", kind=self.kind))
         if self.visibility not in ("all", "developer"):
-            raise ValueError(f"Capability.visibility 非法值：{self.visibility!r}")
+            raise ValueError(t("cap.manifest.invalid_visibility", visibility=self.visibility))

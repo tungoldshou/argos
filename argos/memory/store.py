@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from argos.core.types import VerdictStatus, Phase
+from argos.i18n import t
 
 if TYPE_CHECKING:
     from argos.protocol.events import Event
@@ -277,7 +278,7 @@ class ArgosStore:
         if len(rows) <= keep_recent:
             return
         old = rows[:-keep_recent]
-        summary = "(早期对话摘要)" + " / ".join((r["content"] or "")[:60] for r in old)
+        summary = t("mem.summary_prefix") + " / ".join((r["content"] or "")[:60] for r in old)
         old_ids = [r["message_id"] for r in old]
         ph = ",".join("?" * len(old_ids))
         sid = uuid.uuid4().hex[:12]
@@ -412,12 +413,12 @@ class ArgosStore:
                 for sim, r in scored[:k]:
                     if sim < sim_min:
                         continue
-                    parts = [f"goal 相似 {sim:.2f}"]
+                    parts = [t("mem.recall_hit_sim", sim=sim)]
                     if r.verdict:
                         parts.append(f"verdict={r.verdict}")
                     if r.model:
-                        parts.append(f"模型 {r.model}")
-                    out.append((r, "命中：" + " + ".join(parts)))
+                        parts.append(t("mem.recall_hit_model", model=r.model))
+                    out.append((r, t("mem.recall_hit_prefix") + " + ".join(parts)))
                 return out
             except Exception:
                 pass  # 任何 aembed 失败 → 降级 to_thread(recall)
@@ -446,12 +447,12 @@ class ArgosStore:
                 for sim, r in scored[:k]:
                     if sim < sim_min:
                         continue
-                    parts = [f"goal 相似 {sim:.2f}"]
+                    parts = [t("mem.recall_hit_sim", sim=sim)]
                     if r.verdict:
                         parts.append(f"verdict={r.verdict}")
                     if r.model:
-                        parts.append(f"模型 {r.model}")
-                    out.append((r, "命中：" + " + ".join(parts)))
+                        parts.append(t("mem.recall_hit_model", model=r.model))
+                    out.append((r, t("mem.recall_hit_prefix") + " + ".join(parts)))
                 return out
             except Exception:
                 pass  # embedding 调用失败 → 落到下面 LIKE 降级
@@ -466,7 +467,7 @@ class ArgosStore:
             (
                 MemoryRecord(id=r["id"], goal=r["goal"], verdict=r["verdict"],
                              model=r["model"], fact=r["fact"], ts=r["ts"]),
-                "命中：embedding 不可用,降级字面匹配（goal 含查询串）",
+                t("mem.recall_hit_fallback"),
             )
             for r in rows
         ]

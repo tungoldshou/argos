@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from argos.i18n import t
+
 log = logging.getLogger("argos.conductor.orders")
 
 # 常驻指令类型
@@ -62,17 +64,11 @@ class StandingOrder:
     def __post_init__(self) -> None:
         """字段一致性断言（构造时立即检查，fail-loud）。"""
         if self.kind == "schedule" and not self.schedule:
-            raise ValueError(
-                f"StandingOrder kind=schedule 必须提供 schedule 字段 (id={self.id!r})"
-            )
+            raise ValueError(t("cond.order.schedule_required", id=self.id))
         if self.kind == "file_trigger" and not self.trigger_glob:
-            raise ValueError(
-                f"StandingOrder kind=file_trigger 必须提供 trigger_glob 字段 (id={self.id!r})"
-            )
+            raise ValueError(t("cond.order.trigger_glob_required", id=self.id))
         if self.action not in ("run", "dream"):
-            raise ValueError(
-                f"StandingOrder.action 必须是 'run' 或 'dream'，收到 {self.action!r} (id={self.id!r})"
-            )
+            raise ValueError(t("cond.order.action_invalid", action=self.action, id=self.id))
 
     # ------------------------------------------------------------------
     # 序列化 / 反序列化

@@ -10,6 +10,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from pathlib import Path
 
+from argos.i18n import t
 from argos.protocol.events import WorkflowProgress
 from argos.workflow.result import AgentResult, StageResult, WorkflowResult
 from argos.workflow.spec import AgentTask, Stage, WorkflowSpec
@@ -140,9 +141,15 @@ class WorkflowEngine:
         yes = sum(1 for r in results if r.ok and self._is_yes(r.output))
         passed = yes >= stage.threshold
         notes.append(
-            f"panel「{stage.id}」{yes}/{stage.voters} 票 "
-            f"{'≥' if passed else '<'} 阈值 {stage.threshold} → "
-            f"{'通过' if passed else '未通过'}"
+            t(
+                "wf.engine.panel_note",
+                stage_id=stage.id,
+                yes=yes,
+                voters=stage.voters,
+                op=t("wf.engine.panel_gte") if passed else t("wf.engine.panel_lt"),
+                threshold=stage.threshold,
+                verdict=t("wf.engine.panel_passed") if passed else t("wf.engine.panel_failed"),
+            )
         )
         self._note_failures(stage, results, notes)
         return StageResult(stage_id=stage.id, results=tuple(results))
@@ -183,8 +190,13 @@ class WorkflowEngine:
 
         if capped:
             notes.append(
-                f"loop_until「{stage.id}」触硬轮数上限 {_MAX_LOOP_ROUNDS} 轮停止"
-                f"(累计成功 {ok_total} 个,未达 target {stage.target})"
+                t(
+                    "wf.engine.loop_until_capped",
+                    stage_id=stage.id,
+                    max_rounds=_MAX_LOOP_ROUNDS,
+                    ok_total=ok_total,
+                    target=stage.target,
+                )
             )
         self._note_failures(stage, acc, notes)
         return StageResult(stage_id=stage.id, results=tuple(acc))
@@ -246,9 +258,10 @@ class WorkflowEngine:
                         ok=False,
                         output="",
                         verdict="unverifiable",
-                        error=(
-                            f"per_candidate_timeout: 候选 c{idx} 超过 "
-                            f"{per_candidate_timeout_s}s 未完成,被取消"
+                        error=t(
+                            "wf.engine.candidate_timeout",
+                            idx=idx,
+                            timeout=per_candidate_timeout_s,
                         ),
                         diff_file_count=0,
                     )
@@ -261,9 +274,14 @@ class WorkflowEngine:
         # notes:如实记录 best_of_n 跑了几个、几个 passed、winner 选了哪个
         passed_n = sum(1 for r in results if r.verdict == "passed")
         notes.append(
-            f"best_of_n「{stage.id}」N={n} 跑了 {n} 个候选,"
-            f"passed={passed_n} → winner={winner.agent_id}"
-            f"({'passed' if all_passed else stage_verdict})"
+            t(
+                "wf.engine.best_of_n_note",
+                stage_id=stage.id,
+                n=n,
+                passed_n=passed_n,
+                winner_id=winner.agent_id,
+                winner_verdict="passed" if all_passed else stage_verdict,
+            )
         )
         return StageResult(
             stage_id=stage.id,
@@ -340,7 +358,12 @@ class WorkflowEngine:
         failed = [r for r in results if not r.ok]
         if failed:
             notes.append(
-                f"stage「{stage.id}」{len(failed)}/{len(results)} 个 agent 失败(已带其余结果继续)"
+                t(
+                    "wf.engine.failures_note",
+                    stage_id=stage.id,
+                    failed=len(failed),
+                    total=len(results),
+                )
             )
 
     @staticmethod
@@ -361,12 +384,12 @@ class WorkflowEngine:
             if last.ok and last.output:
                 return str(last.output)
         if notes:
-            return "工作流完成。" + " / ".join(notes)
+            return t("wf.engine.synthesis_done") + " / ".join(notes)
         lines = []
         for sr in stage_results:
             ok = sum(1 for r in sr.results if r.ok)
-            lines.append(f"[{sr.stage_id}] {ok}/{len(sr.results)} 成功")
-        return "工作流完成。" + " · ".join(lines)
+            lines.append(f"[{sr.stage_id}] " + t("wf.engine.synthesis_stage_ok", ok=ok, total=len(sr.results)))
+        return t("wf.engine.synthesis_done") + " · ".join(lines)
 
     @classmethod
     def for_test(cls, *, workspace: Path, model_factory) -> "WorkflowEngine":

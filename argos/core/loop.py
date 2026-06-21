@@ -845,8 +845,7 @@ class AgentLoop:
         # M8:固定空命名空间的副本 —— 模型输出永不经此进入 __authorized_imports__。
         spawn_namespace = dict(_FIXED_SPAWN_NAMESPACE)
         assert "__authorized_imports__" not in spawn_namespace, (
-            "M8 安全不变量:loop spawn 的 namespace 绝不可携带 __authorized_imports__"
-            "(smolagents 把 '*' 当 allow-all,模型可控会绕过 AST 限制层)。"
+            _i18n_t("core2.loop.m8_assert")
         )
         # tool_allowlist 仅在【角色子 agent】非 None 时传(它们走真后端,签名已支持);父 agent 恒 None
         # → 不传该 kwarg,保持对既有测试 FakeSandbox.spawn(无此参数)的兼容。对真后端而言
@@ -1171,7 +1170,7 @@ class AgentLoop:
         try:
             from argos import skills as _skills
             skill_bodies = [
-                f"## 技能:{s.name}\n{s.description}\n\n{s.body.strip()}"
+                _i18n_t("core2.loop.skill_header", name=s.name, description=s.description, body=s.body.strip())
                 for s in _skills.recall(goal)
             ]
         except Exception:  # noqa: BLE001 — skill 召回失败诚实降级为无 skill

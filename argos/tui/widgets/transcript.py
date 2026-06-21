@@ -15,6 +15,7 @@ import re
 from textual.containers import VerticalScroll
 from textual.widgets import Markdown, Static
 
+from argos.i18n import t
 from argos.tui.widgets.thinking import ThinkingIndicator
 
 _FENCE_BLOCK = re.compile(r"```[^\n]*\n.*?```\n?", re.DOTALL)  # 连吃闭围栏后的换行,块间塌缩干净
@@ -178,11 +179,11 @@ class Transcript(VerticalScroll):
         await self.mount(widget)
         self._stick_to_bottom()
 
-    async def show_thinking(self, label: str = "思考中…") -> None:
+    async def show_thinking(self, label: str | None = None) -> None:
         self.finalize_response()
         if not self.is_attached:
             return
-        await self.mount(ThinkingIndicator(label))
+        await self.mount(ThinkingIndicator(label if label is not None else t("core2.transcript.thinking")))
         self._stick_to_bottom()
 
     async def clear(self) -> None:        # /clear 用:移除所有消息

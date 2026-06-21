@@ -13,6 +13,7 @@ from dataclasses import replace
 
 from argos.config import ConfigError
 from argos.core.models import ModelClient
+from argos.i18n import t
 from argos.routing.categorizer import TaskCategory
 from argos.routing.config import RoutingConfig
 from argos.routing.resolver import RouteDecision, resolve
@@ -39,8 +40,7 @@ class ModelRouter:
             if client is None:
                 client = self._client_factory(decision.tier)
                 if client is None:
-                    raise ConfigError(
-                        f"profile '{decision.tier}' 工厂返 None,无法构造 ModelClient")
+                    raise ConfigError(t("route.factory_returned_none", tier=decision.tier))
                 self._clients[decision.tier] = client
             decision = replace(decision, step=step)
             self._history.append(decision)
