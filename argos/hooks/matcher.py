@@ -17,6 +17,7 @@ from argos.hooks.config import (
     HooksConfig,
     HooksConfigError,
 )
+from argos.i18n import t
 
 # PreToolUse / PostToolUse 用 matcher;其他事件忽略 matcher 字段
 _MATCHER_USED_EVENTS: frozenset[str] = frozenset({"PreToolUse", "PostToolUse"})
@@ -50,18 +51,17 @@ def validate_matcher(matcher: str) -> None:
     """
     if len(matcher) > MAX_MATCHER_LENGTH:
         raise HooksConfigError(
-            f"matcher 长度 {len(matcher)} > {MAX_MATCHER_LENGTH}(spec D14 上限)"
+            t("hooks.matcher.too_long", length=len(matcher), limit=MAX_MATCHER_LENGTH)
         )
     if _NESTED_QUANTIFIER_RE.search(matcher):
         raise HooksConfigError(
-            f"matcher {matcher!r} 含嵌套量词(ReDoS 危险模式,spec D14):"
-            f"形如 (.*)* / (.+)+ 等"
+            t("hooks.matcher.nested_quantifiers", matcher=matcher)
         )
     try:
         re.compile(matcher)
     except re.error as e:
         raise HooksConfigError(
-            f"matcher {matcher!r} 编译失败(re.error): {e}"
+            t("hooks.matcher.compile_error", matcher=matcher, exc=e)
         ) from e
 
 

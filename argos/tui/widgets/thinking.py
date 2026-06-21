@@ -17,6 +17,8 @@ import time
 
 from textual.widgets import Static
 
+from argos.i18n import t
+
 _FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"  # 10 帧 braille(全 EAW=N,v2 已验证)
 
 
@@ -27,9 +29,9 @@ class ThinkingIndicator(Static):
     ThinkingIndicator { color: $eye; padding: 0 2; }
     """
 
-    def __init__(self, label: str = "思考中…", **kwargs) -> None:
+    def __init__(self, label: str | None = None, **kwargs) -> None:
         super().__init__("", **kwargs)
-        self._label = label
+        self._label = label if label is not None else t("core2.thinking.label")
         self._frame = 0
         self._timer = None
         self._t0 = time.monotonic()

@@ -25,6 +25,7 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from argos.core.types import Phase
+from argos.i18n import t as _t
 
 # §3 字形词典：阶段眼映射
 _PHASE_GLYPH: dict[str, str] = {
@@ -43,7 +44,8 @@ _STYLE_BLOCKED  = "#FF9E64"   # $unverif：用户阻塞
 _STYLE_INK_DIM  = "#7E869C"   # $ink-dim：数据段
 _STYLE_INK_FAINT = "#525A73"  # $ink-faint：键提示
 
-_HINTS = "Esc 打断 · \\↵ 换行 · ^C 退出"
+def _hints() -> str:
+    return _t("tui.statusbar.hints")
 
 
 def _k(n: int) -> str:
@@ -148,7 +150,7 @@ class StatusBar(Static):
         # §4.9 a："动作N"文字格式（⚙ 处决）
         parts = [
             f"{eye} {self.phase}",
-            f"动作{self.actions}",
+            _t("tui.statusbar.action", n=self.actions),
             f"↑{_k(self.tokens_in)} ↓{_k(self.tokens_out)}",
             cost,
             f"{self.elapsed_s:.1f}s",
@@ -158,10 +160,10 @@ class StatusBar(Static):
 
         # blocked 模式插入提示段
         if self._blocked:
-            parts.insert(1, "审批挂起")
+            parts.insert(1, _t("tui.statusbar.blocked_label"))
 
         if self.plan_mode:
-            parts.append("[plan mode]")
+            parts.append(_t("tui.statusbar.plan_mode"))
         # v6 P3b §2 诚实标注：argosd=走协议;inline=单进程 fallback;""=不显示
         if self._kernel_mode:
             parts.append(self._kernel_mode)
@@ -241,7 +243,7 @@ class StatusBar(Static):
             left.stylize(eye_style, 0, len(eye))
 
         width = self.size.width or 0
-        hints = Text(_HINTS, style=_STYLE_INK_FAINT)
+        hints = Text(_hints(), style=_STYLE_INK_FAINT)
         pad = width - left.cell_len - hints.cell_len - 2
         if pad >= 1:
             return Text.assemble(left, " " * pad, hints)

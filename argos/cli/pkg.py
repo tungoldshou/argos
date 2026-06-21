@@ -16,6 +16,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from argos.i18n import t
+
 __all__ = ["main", "dispatch", "cmd_info", "cmd_check", "cmd_manifest"]
 
 
@@ -28,9 +30,9 @@ def dispatch(argv: list[str]) -> int:
     """分发到子命令。无参/--help 返 0(usage);未知子命令返 2。"""
     if not argv or argv[0] in ("-h", "--help"):
         print("usage: argospkg <subcommand> [args]")
-        print("  info      — 打印项目元数据 + packaging/VERSION + git tag")
-        print("  check     — 校验 self + argos 入口 import 成功")
-        print("  manifest  — 预演生成 winget manifest(v0.2.0 真出)")
+        print(t("cli.pkg.usage_info"))
+        print(t("cli.pkg.usage_check"))
+        print(t("cli.pkg.usage_manifest"))
         return 0 if argv else 1
     sub, *rest = argv
     handler = {
@@ -95,7 +97,7 @@ def cmd_check(_rest: list[str]) -> int:
         from argos.__main__ import main as _argos_main  # noqa: F401,PLC0415
         from argos.cli import pkg as _self_pkg  # noqa: F401,PLC0415
     except Exception as e:  # noqa: BLE001
-        print(f"argospkg check: import 失败:{type(e).__name__}: {e}", file=sys.stderr)
+        print(t("cli.pkg.check_import_failed", exc_type=type(e).__name__, err=e), file=sys.stderr)
         return 1
     print("argospkg check: import OK")
     return 0
@@ -106,7 +108,7 @@ def cmd_manifest(_rest: list[str]) -> int:
 
     列出 packaging/winget/ 下的 3 件文件路径,供手动 PR 审阅。
     """
-    print("argospkg manifest: v0.1.0 仅占位;v0.2.0 接 wingetcreate 自动生成")
+    print(t("cli.pkg.manifest_placeholder"))
     manifest_dir = Path("packaging/winget")
     if manifest_dir.exists():
         for p in sorted(manifest_dir.glob("tungoldshou.argos.*.yaml")):

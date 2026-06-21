@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Mapping
 
 from argos.approval import ApprovalLevel
+from argos.i18n import t
 
 if TYPE_CHECKING:
     from argos.core.types import Verdict
@@ -110,47 +111,47 @@ def classify(
     """
     # 1. 不可撤销必升级(语义边界,不是规则层)
     if not reversible:
-        return (Zone.RED, "动作不可撤销(reversible=False),需用户确认")
+        return (Zone.RED, t("perm2.zone.irreversible"))
 
     # 2. evaluator 决策
     decision, trigger = _evaluator_decision(action, args or {}, config)
 
     # 硬规则 / 系统路径 / secret 触发 → RED,即便 preauth 也不降级(铁律:不削弱 hard_rules)
     if decision == "deny":
-        return (Zone.RED, f"硬规则触发:{trigger} — 不可降级")
+        return (Zone.RED, t("perm2.zone.hard_deny", trigger=trigger))
     if decision == "ask" and (
         trigger.startswith("hard_rule:")
         or trigger.startswith("secret:")
     ):
-        return (Zone.RED, f"硬规则触发:{trigger} — 不可降级")
+        return (Zone.RED, t("perm2.zone.hard_deny", trigger=trigger))
 
     # 3. verdict=unverifiable 应该被调用方在收尾阶段用 on_unverifiable_completion 拦截,
     #    不会到这一步(收尾时已经处理)。如果传到了 classify(unverifiable + reversible=True),
     #    仍按 RED 处理(不假装通过)。
     if verdict is not None and getattr(verdict, "status", None) == "unverifiable":
-        return (Zone.RED, f"verdict=unverifiable:{trigger} — 不假装通过")
+        return (Zone.RED, t("perm2.zone.unverifiable", trigger=trigger))
 
     # 3b. verdict=failed → RED(走 bounce/escalate)
     if verdict is not None and getattr(verdict, "status", None) == "failed":
-        return (Zone.RED, f"verdict=failed:{trigger} — 走升级路径")
+        return (Zone.RED, t("perm2.zone.failed", trigger=trigger))
 
     # 4. soft_ask + preauth 命中 → GREEN
     if decision == "ask" and policy.preauth.get(trigger) is True:
-        return (Zone.GREEN, f"预授权降级:{trigger} → 自动")
+        return (Zone.GREEN, t("perm2.zone.preauth_green", trigger=trigger))
 
     # 5. soft_ask / per-tool ask / default ask(无 preauth)→ RED
     if decision == "ask":
-        return (Zone.RED, f"需用户审批:{trigger}")
+        return (Zone.RED, t("perm2.zone.ask_red", trigger=trigger))
 
     # 6. slow_action / goal_vague → YELLOW
     eff_slow = slow_action if slow_action is not None else _is_slow_action(action, policy.slow_actions)
     if eff_slow:
-        return (Zone.YELLOW, f"慢/贵动作:{action} — 任务开头走 plan mode 收澄清")
+        return (Zone.YELLOW, t("perm2.zone.slow_yellow", action=action))
     if goal_vague:
-        return (Zone.YELLOW, "目标模糊 — 任务开头走 plan mode 收澄清")
+        return (Zone.YELLOW, t("perm2.zone.vague_yellow"))
 
     # 7. 默认 GREEN
-    return (Zone.GREEN, f"evaluator approve ({trigger}) + 可验证可撤销")
+    return (Zone.GREEN, t("perm2.zone.green", trigger=trigger))
 
 
 def on_unverifiable_completion(
@@ -177,5 +178,5 @@ def on_unverifiable_completion(
     detail = getattr(verdict, "detail", "") or ""
     return (
         Zone.RED,
-        f"verdict=unverifiable 且已声明 verify_cmd={verify_cmd!r} — {detail[:120]} — 升级问人",
+        t("perm2.zone.unverifiable_completion", cmd=verify_cmd, detail=detail[:120]),
     )

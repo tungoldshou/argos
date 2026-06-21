@@ -15,6 +15,7 @@ from typing import Any
 
 from argos.learning.candidates import DEFAULT_ROOT as _DEFAULT_CANDIDATES_DIR
 from argos.skills import USER_DIR as _DEFAULT_SKILLS_DIR
+from argos.i18n import t
 
 log = logging.getLogger(__name__)
 
@@ -71,14 +72,14 @@ def _latest_report() -> dict | None:
 
 def _fmt_report(r: dict) -> str:
     """把报告 dict 格式化成一行摘要。"""
-    return (
-        f"Dream 报告  "
-        f"units_total={r.get('units_total', 0)}  "
-        f"promoted={r.get('promoted', 0)}  "
-        f"rejected={r.get('rejected', 0)}  "
-        f"skipped={r.get('skipped', 0)}  "
-        f"memory_merged={r.get('memory_merged', 0)}  "
-        f"memory_archived={r.get('memory_archived', 0)}"
+    return t(
+        "cli.dream.report_fmt",
+        units_total=r.get("units_total", 0),
+        promoted=r.get("promoted", 0),
+        rejected=r.get("rejected", 0),
+        skipped=r.get("skipped", 0),
+        memory_merged=r.get("memory_merged", 0),
+        memory_archived=r.get("memory_archived", 0),
     )
 
 
@@ -88,10 +89,10 @@ def run_dream(args: Any) -> int:
     if getattr(args, "report", False):
         report = _latest_report()
         if report is None:
-            print("暂无 Dream 报告(候选区空或从未跑过 Dream)。")
+            print(t("cli.dream.no_report"))
             return 0
         if not isinstance(report, dict):
-            print(f"Dream 报告格式异常(期望 dict,收到 {type(report).__name__})。")
+            print(t("cli.dream.report_bad_type", type_name=type(report).__name__))
             return 0
         print(_fmt_report(report))
         return 0
@@ -109,21 +110,21 @@ def run_dream(args: Any) -> int:
 
     if not has_key:
         # 无 key:仅做记忆整理 + 候选区盘点,诚实告知晋升需要模型
-        print("无 API key:仅做记忆整理与候选区盘点(A/B 晋升跳过)。")
-        print("若要完整 Dream 晋升,请先运行 `argos setup` 配置模型。")
+        print(t("cli.dream.no_key_notice"))
+        print(t("cli.dream.no_key_setup_hint"))
         mem_dir = _memory_dir()
         try:
             from argos.memory.consolidate import consolidate
             rep = consolidate(mem_dir)
-            print(f"记忆整理:merged={rep.merged} archived={rep.archived}")
+            print(t("cli.dream.memory_tidy", merged=rep.merged, archived=rep.archived))
         except Exception as e:  # noqa: BLE001
             log.warning("dream CLI: 记忆整理失败: %s", e)
-            print(f"记忆整理失败(降级跳过): {e}")
+            print(t("cli.dream.memory_tidy_failed", err=e))
         # 候选区盘点
         try:
             from argos.learning.candidates import list_unconsumed, DEFAULT_ROOT
             cands = list_unconsumed(DEFAULT_ROOT)
-            print(f"候选区未消费材料: {len(cands)} 条(配置 key 后可触发晋升)")
+            print(t("cli.dream.candidates_count", n=len(cands)))
         except Exception as e:  # noqa: BLE001
             log.warning("dream CLI: 候选区盘点失败: %s", e)
         return 0
@@ -190,7 +191,7 @@ def run_dream(args: Any) -> int:
             _runner_factory = None
 
     if _runner_factory is None:
-        print("警告: 无法初始化 eval runner,跳过 A/B 晋升。")
+        print(t("cli.dream.no_runner_warning"))
         return 0
 
     from argos.learning.dream import DreamPipeline
@@ -205,15 +206,15 @@ def run_dream(args: Any) -> int:
         broadcast_fn=None,
     )
 
-    print("Dream 启动(跨 run 聚类综合 + A/B 晋升 + 记忆整理)…")
+    print(t("cli.dream.starting"))
     try:
         report = asyncio.run(pipeline.run())
     except Exception as e:  # noqa: BLE001
-        print(f"Dream 管道执行失败: {e}", file=__import__("sys").stderr)
+        print(t("cli.dream.pipeline_failed", err=e), file=__import__("sys").stderr)
         return 1
 
     if report is None:
-        print("另一个 Dream 正在运行(可能是 daemon 夜间整合),本次跳过。")
+        print(t("cli.dream.already_running"))
         return 0
 
     print(_fmt_report({
@@ -225,7 +226,7 @@ def run_dream(args: Any) -> int:
         "memory_archived": report.memory_archived,
     }))
     if report.report_path:
-        print(f"报告已写入: {report.report_path}")
+        print(t("cli.dream.report_written", path=report.report_path))
     return 0
 
 
@@ -233,11 +234,11 @@ def add_subparser(sub: Any) -> None:
     """注册 dream 子命令到 argparse subparsers。"""
     p = sub.add_parser(
         "dream",
-        help="夜间整合:跨 run 综合蒸馏 + 记忆整理(--report 看上次报告)",
+        help=t("cli.dream.help"),
     )
     p.add_argument(
         "--report",
         action="store_true",
-        help="只读最新 Dream 报告(不跑新一轮)",
+        help=t("cli.dream.report.help"),
     )
     p.set_defaults(func=run_dream)

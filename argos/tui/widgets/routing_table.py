@@ -28,6 +28,7 @@ from typing import Sequence
 from rich.text import Text
 from textual.widgets import Static
 
+from argos.i18n import t as _t
 from argos.routing.categorizer import TaskCategory
 from argos.routing.config import RoutingConfig
 from argos.routing.resolver import RouteDecision
@@ -127,7 +128,7 @@ class RoutingTable(Static):
         t.append("\n")
 
         # Row 2: caption
-        t.append("按任务路由 · 8 类别 · cheap / default / strong", style=_COL_INK)
+        t.append(_t("widget.routing_caption"), style=_COL_INK)
         t.append("\n")
 
         # Row 3..N: 8 category→tier 行
@@ -135,16 +136,16 @@ class RoutingTable(Static):
             self._append_category_row(t, cat)
 
         # set hint 行
-        t.append("/routing set <类别> <档位> 修改", style=_COL_INK_FAINT)
+        t.append(_t("widget.routing_set_hint"), style=_COL_INK_FAINT)
         t.append("\n")
 
         # 历史块
         self._append_history_block(t)
 
         # 页脚（单行，左标签 + 右模块标签）
-        t.append("启发式分类 · 0 token · 异常兜底 simple_read", style=_COL_INK_FAINT)
+        t.append(_t("widget.routing_footer_left"), style=_COL_INK_FAINT)
         t.append("  ", style=_COL_INK_FAINT)
-        t.append("argos/routing", style=_COL_INK_FAINT)
+        t.append(_t("widget.routing_footer_module"), style=_COL_INK_FAINT)
 
         return t
 
@@ -171,18 +172,18 @@ class RoutingTable(Static):
 
         # force-confirm 尾缀（诚实规则 #2）
         if self._routing.is_force_confirm(tier):
-            t.append("  ❂ force confirm", style=_COL_UNVERIF)
+            t.append(_t("widget.routing_force_confirm"), style=_COL_UNVERIF)
 
         t.append("\n")
 
     def _append_history_block(self, t: Text) -> None:
         """追加历史决策块（最多 10 条）；无历史则诚实空态。"""
         if not self._history:
-            t.append("(无;本 run 尚未调模型)", style=_COL_INK_FAINT)
+            t.append(_t("widget.routing_no_history"), style=_COL_INK_FAINT)
             t.append("\n")
             return
 
-        t.append("[最近 10 步决策]", style=_COL_INK_DIM)
+        t.append(_t("widget.routing_history_header"), style=_COL_INK_DIM)
         t.append("\n")
 
         # spec: f"  step {d.step:3}  cat={d.category.value:13} tool={d.tool or '-':14} → {d.tier:8} ({d.source})"

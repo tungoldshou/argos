@@ -19,6 +19,7 @@ from dataclasses import dataclass, field, asdict
 from typing import TYPE_CHECKING, Any, AsyncIterator, Literal
 
 from argos.core.types import Phase, RiskLevel, DecisionKind
+from argos.i18n import t
 
 if TYPE_CHECKING:  # Phase 3 落地;Phase 2 只序列化其 dict 形态
     from argos.core.types import Verdict, Receipt  # noqa: F401
@@ -272,7 +273,7 @@ class ProactiveSuggestionEvent:
         """协议校验：action 只接受 'run' 或 'dream'（坏数据 fail-loud）。"""
         if self.action not in ("run", "dream"):
             raise ValueError(
-                f"ProactiveSuggestionEvent.action 必须是 'run' 或 'dream'，收到 {self.action!r}"
+                t("core2.events.proactive_action_invalid", action=self.action)
             )
 
 

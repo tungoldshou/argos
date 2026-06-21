@@ -5,9 +5,10 @@
 
 渲染结构（逐行严格按 spec §14 / .dc.html §14 原文）:
   1. Header:「行为账本 · run {run_id} · {N} 条」
-  2. 列头行:「seq  动作 · 人话  风险  可逆  撤销」
+  2. 列头行:「seq  动作 · 人话  风险  可逆  撤销  签名」
   3. 发丝分隔线:「─」重复至宽度
-  4. 数据行（每条 LedgerEntry 一行,5 列）
+  4. 数据行（每条 LedgerEntry 一行,6 列）
+     - 第 6 列:receipt_sig 前 8 字符截断(可见,使"已签名"声明可伪证)
      - action=='undo_done' 的 sentinel 行过滤不渲染
   5. （footer 由调用方 handler 另外 append_line，不在 widget 内）
 
@@ -33,6 +34,7 @@ from __future__ import annotations
 from rich.text import Text
 from textual.widgets import Static
 
+from argos.i18n import t as t_
 from argos.ledger.entry import LedgerEntry
 
 # ── Rich Text 颜色常量（对应 ARGOS_NIGHT token，用于 Rich Text 渲染）──────────
@@ -42,7 +44,7 @@ _COL_EYE        = "#D9A85C"   # $eye:       金系主强调 / header 标题
 _COL_INK_BRIGHT = "#ECEEF5"   # $ink-bright: bold 强调
 _COL_INK        = "#C8CCDA"   # $ink:        正文散文层（summary_human）
 _COL_INK_DIM    = "#7E869C"   # $ink-dim:    次要/非关键（seq / risk-low / undo-done）
-_COL_INK_FAINT  = "#525A73"   # $ink-faint:  列头 / 占位 / undo-impossible
+_COL_INK_FAINT  = "#6B7494"   # $ink-faint:  列头 / 占位 / undo-impossible(finding #27 升对比度)
 _COL_PASS       = "#9ECE6A"   # $pass:       verdict passed（undo_state=available）
 _COL_PASS_WEAK  = "#73A857"   # $pass-weak:  弱通过 E4 防火墙（reversible=yes）
 _COL_FAIL       = "#F7768E"   # $fail:       failed（risk=high / reversible=no）
@@ -58,7 +60,11 @@ _W_SEQ   = 4    # seq 列（右填充）
 _W_RISK  = 7    # 风险列（left-pad 后固定宽）
 _W_REV   = 8    # 可逆列
 _W_UNDO  = 11   # 撤销列
+_W_SIG   = 8    # 签名列（receipt_sig 前 8 字符,供可视审计;finding #6）
 _COL_GAP = "  " # 列间两空格
+
+# 签名列截断宽度:显示前 8 字符(全 16 字符太宽,8 足以目视核验一致性)
+_SIG_DISPLAY_LEN = 8
 
 # risk 显示映射（backend 存完整单词，display 映射 medium→med，spec §14 注释）
 _RISK_DISPLAY = {
@@ -158,22 +164,24 @@ class LedgerTable(Static):
 
         # ── 1. Header line ──────────────────────────────────────────────
         # 「行为账本 · run {run_id} · {N} 条」in $ink
-        t.append(f"行为账本 · run {self._run_id} · {n} 条", style=_COL_INK)
+        t.append(t_("ledger.header", run_id=self._run_id, n=n), style=_COL_INK)
         t.append("\n")
 
         # ── 2. Column header row in $ink-faint ─────────────────────────
-        # EXACT header cell texts per spec:
-        # seq  动作 · 人话  风险  可逆  撤销
-        seq_h   = "seq "    # 4 chars
-        action_h = "动作 · 人话"
-        risk_h   = "  风险 "     # right-padded
-        rev_h    = "  可逆  "
-        undo_h   = "  撤销"
+        # EXACT header cell texts per spec(含第 6 列签名,finding #6):
+        # seq  动作 · 人话  风险  可逆  撤销  签名
+        seq_h    = t_("ledger.col_seq")
+        action_h = t_("ledger.col_action")
+        risk_h   = t_("ledger.col_risk")
+        rev_h    = t_("ledger.col_rev")
+        undo_h   = t_("ledger.col_undo")
+        sig_h    = t_("ledger.col_sig")
         t.append(seq_h, style=_COL_INK_FAINT)
         t.append(action_h, style=_COL_INK_FAINT)
         t.append(risk_h, style=_COL_INK_FAINT)
         t.append(rev_h, style=_COL_INK_FAINT)
         t.append(undo_h, style=_COL_INK_FAINT)
+        t.append(sig_h, style=_COL_INK_FAINT)
         t.append("\n")
 
         # ── 3. Hairline separator ───────────────────────────────────────
@@ -190,9 +198,10 @@ class LedgerTable(Static):
     def _append_data_row(self, t: Text, entry: LedgerEntry) -> None:
         """追加一条数据行到 Rich Text t。
 
-        列顺序（spec §14 .dc.html grid-template-columns: 28px 1fr 56px 60px 80px）:
-          [seq]  [summary_human]  [风险]  [可逆]  [撤销]
+        列顺序（spec §14 .dc.html grid-template-columns: 28px 1fr 56px 60px 80px + sig）:
+          [seq]  [summary_human]  [风险]  [可逆]  [撤销]  [签名]
         列间双空格分隔。
+        第 6 列（签名）显示 receipt_sig 前 _SIG_DISPLAY_LEN 字符(finding #6:使"已签名"声明可伪证)。
         """
         # ── col 1: seq ──
         seq_str = str(entry.seq)
@@ -221,5 +230,11 @@ class LedgerTable(Static):
         undo_val = entry.undo_state
         disp_u, color_u = _UNDO_COLOR.get(undo_val, ("—", _COL_INK_FAINT))
         t.append(f"{disp_u:<{_W_UNDO}}", style=color_u)
+        t.append(_COL_GAP)
+
+        # ── col 6: 签名（finding #6:使"已签名"声明可伪证）──
+        # 截取前 _SIG_DISPLAY_LEN 字符;receipt_sig 已是 16 字符截断,再截 8 显示足够目视核验。
+        sig_disp = (entry.receipt_sig or "")[:_SIG_DISPLAY_LEN]
+        t.append(f"{sig_disp:<{_W_SIG}}", style=_COL_INK_FAINT)
 
         t.append("\n")

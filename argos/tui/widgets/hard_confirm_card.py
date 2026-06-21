@@ -29,6 +29,7 @@ from rich.text import Text
 from textual.app import ComposeResult
 from textual.widgets import Static
 
+from argos.i18n import t
 from argos.tui.widgets.inline_choice import InlineChoice
 
 # ── Rich Text 颜色常量(对应 ARGOS_NIGHT token,用于 Rich Text 渲染)──────────
@@ -90,13 +91,14 @@ class HardConfirmCard(InlineChoice):
     不接受 risk/escape_value 参数(二者硬编码,调用方不可覆盖)。
     """
 
-    # 硬编码静态文字常量(精确匹配 spec,不可参数化)
-    _GOVERNANCE_TEXT: str = (
-        "Seatbelt 无法约束全局屏幕/鼠标资源 — 审批门、账本、审计是唯一治理层"
-    )
-    _FOOTER_TEXT: str = (
-        "每个 computer.* 动作恒 risk=high + reversible=False · 不受 Trust Dial 降级"
-    )
+    # 硬编码静态文字常量(精确匹配 spec,不可参数化) — i18n via property
+    @property
+    def _GOVERNANCE_TEXT(self) -> str:  # type: ignore[override]
+        return t("hardconfirm.governance")
+
+    @property
+    def _FOOTER_TEXT(self) -> str:  # type: ignore[override]
+        return t("hardconfirm.footer")
 
     DEFAULT_CSS = """
     HardConfirmCard #hc-gov { color: $ink-faint; }
@@ -123,11 +125,11 @@ class HardConfirmCard(InlineChoice):
         body = _body_line(action, x=x, y=y, description=description, text=text, app=app)
         # action_label 用于 _finish 摘要行("◕ 审批 {action_label} → {value}")
         super().__init__(
-            title="⛔ 计算机控制 · 硬确认 [high · 不可逆]",
+            title=t("hardconfirm.title"),
             body=body,
             options=[
-                ("once", "仅此一次"),
-                ("deny", "拒绝"),
+                ("once", t("hardconfirm.option_once")),
+                ("deny", t("hardconfirm.option_deny")),
             ],
             on_decide=on_decide,
             escape_value="deny",
@@ -205,7 +207,7 @@ class HardConfirmCard(InlineChoice):
         try:
             self._on_decide(value, feedback)
         finally:
-            summary_text = f"◕ 审批 {self._action_label} → {value}"
+            summary_text = t("hardconfirm.finish_summary", action_label=self._action_label, value=value)
             parent = self.parent
             try:
                 if parent is not None:

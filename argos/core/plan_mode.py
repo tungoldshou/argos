@@ -12,6 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from argos.i18n import t
+
 
 class PlanModeError(Exception):
     """plan mode 期间调用沙箱工具抛。"""
@@ -55,7 +57,7 @@ class PlanExitDecision:
     def __post_init__(self):
         if self.action not in _VALID_ACTIONS:
             raise ValueError(
-                f"PlanExitDecision.action 必须是 {_VALID_ACTIONS} 之一,收到 {self.action!r}"
+                t("plan.decision.invalid_action", valid=_VALID_ACTIONS, action=self.action)
             )
 
 
@@ -69,15 +71,15 @@ def EnterPlanMode(loop) -> str:
         用户可见消息(成功/错误)
     """
     if getattr(loop, "_busy", False):
-        return "错误:当前 run 正在跑,请先 Esc 打断,再 /plan。"
+        return t("plan.enter.busy")
     if getattr(loop, "mode", "act") == "plan":
-        return "已在 plan mode。"
+        return t("plan.enter.already")
     loop.mode = "plan"
     set_plan_mode(True)  # 写 per-run RunContext.plan_mode(供沙箱工具 dispatcher 守卫)
     # emit PhaseChange 事件(给前端,标题/边缘光变色)
     if hasattr(loop, "_emit_phase"):
         loop._emit_phase("plan")
-    return "已切到 plan mode。"
+    return t("plan.enter.ok")
 
 
 
@@ -100,13 +102,13 @@ def ExitPlanMode(loop, action: str, feedback: str | None = None) -> str:
     "校验-切 mode-存 decision-唤醒 await"一次完成,caller 不需记忆设 event。
     """
     if getattr(loop, "mode", "act") != "plan":
-        return "错误:当前不在 plan mode。"
+        return t("plan.exit.not_in_plan")
     if action == "refine" and not (feedback and feedback.strip()):
-        return "错误:refine 需要 feedback。"
+        return t("plan.exit.refine_no_feedback")
     try:
         decision = PlanExitDecision(action=action, feedback=feedback)
     except ValueError as e:
-        return f"错误:{e}"
+        return t("plan.exit.invalid_action", exc=e)
     loop.mode = "act"
     set_plan_mode(False)  # 清 per-run RunContext.plan_mode
     loop._plan_decision = decision
@@ -114,7 +116,7 @@ def ExitPlanMode(loop, action: str, feedback: str | None = None) -> str:
     ev = getattr(loop, "_plan_decision_event", None)
     if ev is not None:
         ev.set()
-    return f"已退出 plan mode,action={action}。"
+    return t("plan.exit.ok", action=action)
 
 
 class PlanRenderer:
@@ -132,41 +134,41 @@ class PlanRenderer:
         lines = [f"# Plan: {title}", ""]
 
         # 任务分解
-        lines.append("## 任务分解")
+        lines.append(t("plan.render.tasks"))
         if todos:
-            for t in todos:
-                step = t.get("step", "?")
-                desc = t.get("description", "")
-                tool = t.get("tool", "")
+            for todo in todos:
+                step = todo.get("step", "?")
+                desc = todo.get("description", "")
+                tool = todo.get("tool", "")
                 tool_part = f"(tool: {tool})" if tool else ""
                 lines.append(f"- [ ] **step {step}**: {desc} {tool_part}")
         else:
-            lines.append("- (无具体任务分解)")
+            lines.append(t("plan.render.no_tasks"))
         lines.append("")
 
         # 涉及文件(从 tool_calls 抽)
-        files = set()
+        files_set = set()
         for tc in tool_calls:
             if tc.get("tool") in ("write_file", "edit_file", "read_file"):
                 p = tc.get("args", {}).get("path")
                 if p:
-                    files.add(p)
-        if files:
-            lines.append("## 涉及文件")
-            for f in sorted(files):
+                    files_set.add(p)
+        if files_set:
+            lines.append(t("plan.render.files"))
+            for f in sorted(files_set):
                 lines.append(f"- `{f}`")
             lines.append("")
 
         # 风险
         if risks:
-            lines.append("## 风险")
+            lines.append(t("plan.render.risks"))
             for r in risks:
                 lines.append(f"- {r}")
             lines.append("")
 
         # 工具调用序列
         if tool_calls:
-            lines.append("## 工具调用序列")
+            lines.append(t("plan.render.tool_calls"))
             for tc in tool_calls:
                 tool = tc.get("tool", "?")
                 args = tc.get("args", {})
@@ -176,11 +178,11 @@ class PlanRenderer:
 
         # 审批
         lines.extend([
-            "## 审批",
-            "请选择下一步:",
-            "- ✅ **Approve and start** — 全权限,继续 act",
-            "- ✏️ **Approve and accept edits** — 写/编辑工具自动批,其他按现有审批",
-            "- 🔄 **Keep planning** — 继续 plan 阶段",
-            "- 📝 **Refine with feedback** — 提供补充上下文后重新 plan",
+            t("plan.render.approval"),
+            t("plan.render.approval_prompt"),
+            t("plan.render.approve_start"),
+            t("plan.render.approve_edits"),
+            t("plan.render.keep_planning"),
+            t("plan.render.refine"),
         ])
         return "\n".join(lines)

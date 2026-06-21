@@ -15,6 +15,7 @@ import re
 from textual.containers import VerticalScroll
 from textual.widgets import Markdown, Static
 
+from argos.i18n import t
 from argos.tui.widgets.thinking import ThinkingIndicator
 
 _FENCE_BLOCK = re.compile(r"```[^\n]*\n.*?```\n?", re.DOTALL)  # 连吃闭围栏后的换行,块间塌缩干净
@@ -60,14 +61,39 @@ class AssistantMessage(Markdown):
     AssistantMessage .markdown--em { color: $ink-bright; }
     AssistantMessage .markdown-strong { color: $ink-bright; }
     """
+
+    # 节流间隔(finding #31):每 40ms 刷新一次,避免每 token 都全量 re-render(O(n²))。
+    _FLUSH_INTERVAL_MS: int = 40
+
     def __init__(self) -> None:
         super().__init__("")
         self.add_class("assistant-msg")
-        self._raw = ""
+        self._raw = ""           # 已积累全文
+        self._pending = False    # 有未刷新增量待 flush
 
     def feed(self, text: str) -> None:
+        """积累流式 token(finding #31:不再逐 token 调 Markdown.update)。
+
+        首个 token 同步触发一次 update(让用户立刻看到内容),之后靠 set_interval
+        定时刷新。定时器在 on_mount 里注册,使用 _pending 标志避免空刷。
+        """
+        first_token = not self._raw   # 首 token 前 _raw 为空
         self._raw += text
+        self._pending = True
+        if first_token:
+            # 首 token 立即渲染,让用户不感知延迟
+            self._flush()
+
+    def _flush(self) -> None:
+        """将当前 _raw 渲染到 Markdown 组件(幂等,可重入)。"""
+        if not self._pending:
+            return
+        self._pending = False
         self.update(strip_code_fences(self._raw))
+
+    def on_mount(self) -> None:
+        """挂载后启动周期 flush 定时器(finding #31)。"""
+        self.set_interval(self._FLUSH_INTERVAL_MS / 1000.0, self._flush)
 
 
 class Transcript(VerticalScroll):
@@ -153,11 +179,11 @@ class Transcript(VerticalScroll):
         await self.mount(widget)
         self._stick_to_bottom()
 
-    async def show_thinking(self, label: str = "思考中…") -> None:
+    async def show_thinking(self, label: str | None = None) -> None:
         self.finalize_response()
         if not self.is_attached:
             return
-        await self.mount(ThinkingIndicator(label))
+        await self.mount(ThinkingIndicator(label if label is not None else t("core2.transcript.thinking")))
         self._stick_to_bottom()
 
     async def clear(self) -> None:        # /clear 用:移除所有消息

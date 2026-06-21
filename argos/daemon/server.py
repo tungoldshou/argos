@@ -30,6 +30,7 @@ from urllib.parse import parse_qs, urlsplit
 from argos.app_factory import build_run_stack
 from argos.daemon.conductor_supervisor import CONDUCTOR_RUN_ID
 from argos.daemon.manager import RunManager
+from argos.i18n import t
 from argos.daemon.protocol import (
     CODE_BAD_REQUEST, CODE_BUSY, CODE_INTERNAL, CODE_INVALID_TRANSITION,
     CODE_MISSING_SESSION, CODE_NOT_FOUND, CODE_SESSION_READONLY, HEADER_SESSION,
@@ -397,8 +398,7 @@ class DaemonHTTPServer:
         if self._loop_factory is _NO_KEY:
             return await self._send_error(
                 writer, 503, "no_worker_key",
-                "daemon 未配置 API key,无法执行 run。"
-                "请运行 `argos setup` 配置模型 key 后重启 daemon。",
+                t("daemon.srv.no_key_run"),
             )
 
         # #5b 并发满 → 503(spec §5.2)
@@ -912,7 +912,7 @@ class DaemonHTTPServer:
         if ledger_store is None:
             return await self._send_error(
                 writer, 409, "nothing_to_undo",
-                "此 run 无行为账本(ledger 未启用或 run 无副作用动作)",
+                t("daemon.srv.undo_no_ledger"),
             )
 
         # 解析 body(entry_seq 可选)
@@ -927,7 +927,7 @@ class DaemonHTTPServer:
             except (ValueError, TypeError):
                 return await self._send_error(
                     writer, 400, CODE_BAD_REQUEST,
-                    "entry_seq 必须为整数",
+                    t("daemon.srv.undo_entry_seq_must_be_int"),
                 )
 
         # ── A3 分支:文件粒度还原 ─────────────────────────────────────────
@@ -940,7 +940,7 @@ class DaemonHTTPServer:
         if ledger_store.is_undo_done(run_id):
             return await self._send_error(
                 writer, 409, "already_undone",
-                "此 run 已执行过 undo,不可重复撤销",
+                t("daemon.srv.undo_already_done"),
             )
 
         # 有无 reversible=yes 条目
@@ -949,7 +949,7 @@ class DaemonHTTPServer:
         if not available:
             return await self._send_error(
                 writer, 409, "nothing_to_undo",
-                "此 run 无可撤销的操作(所有操作均不可逆或已无效)",
+                t("daemon.srv.undo_nothing_available"),
             )
 
         # 找 undo_token(run 级快照路径:不含 "file:" 前缀的条目)
@@ -973,7 +973,7 @@ class DaemonHTTPServer:
         if not undo_token:
             return await self._send_error(
                 writer, 409, "no_snapshot",
-                "无可用快照(run 起点快照不存在或路径丢失),无法执行文件系统还原",
+                t("daemon.srv.undo_no_snapshot"),
             )
 
         from pathlib import Path as _Path
@@ -981,7 +981,7 @@ class DaemonHTTPServer:
         if not snap_path.exists():
             return await self._send_error(
                 writer, 409, "no_snapshot",
-                f"快照文件不存在:{snap_path}",
+                t("daemon.srv.undo_snap_missing", snap_path=snap_path),
             )
 
         # 找 workspace(从 run meta 拿)
@@ -990,14 +990,14 @@ class DaemonHTTPServer:
         if not workspace_str:
             return await self._send_error(
                 writer, 409, "no_workspace",
-                "run 无 workspace 路径,无法执行文件系统还原",
+                t("daemon.srv.undo_no_workspace_run"),
             )
 
         workspace = _Path(workspace_str).expanduser().resolve()
         if not workspace.exists():
             return await self._send_error(
                 writer, 409, "no_workspace",
-                f"workspace 不存在:{workspace}",
+                t("daemon.srv.undo_workspace_missing", workspace=workspace),
             )
 
         # 执行快照还原
@@ -1015,7 +1015,7 @@ class DaemonHTTPServer:
                 "restored": len(result.restored),
                 "errors": len(result.errors),
                 "error_detail": error_detail,
-                "note": "部分还原:快照已应用,但部分文件还原失败(见 error_detail)。账本已标记。",
+                "note": t("daemon.srv.undo_partial_note"),
             })
 
         # 全量成功
@@ -1035,7 +1035,7 @@ class DaemonHTTPServer:
             "run_id": run_id,
             "state": "done",
             "restored": len(result.restored),
-            "note": "已还原 run 起点的文件改动(注:撤销还原整个 run 的文件改动,粒度为 run 级)。",
+            "note": t("daemon.srv.undo_done_note"),
         })
 
     async def _handle_undo_entry(self, writer, run_id: str, ledger_store, entry_seq: int):
@@ -1060,28 +1060,29 @@ class DaemonHTTPServer:
         if ledger_entry is None:
             return await self._send_error(
                 writer, 409, "entry_not_found",
-                f"账本中不存在 seq={entry_seq} 的条目",
+                t("daemon.srv.undo_entry_not_found", entry_seq=entry_seq),
             )
 
         # undo_token 必须是 file: 前缀(文件粒度条目)
         if not ledger_entry.undo_token or not ledger_entry.undo_token.startswith("file:"):
             return await self._send_error(
                 writer, 409, "not_file_entry",
-                f"seq={entry_seq} 的条目不是文件类条目(undo_token 无 file: 前缀)",
+                t("daemon.srv.undo_entry_not_file", entry_seq=entry_seq),
             )
 
         # reversible 检查
         if ledger_entry.reversible != "yes":
             return await self._send_error(
                 writer, 409, "not_reversible",
-                f"seq={entry_seq} 的条目不可逆(reversible={ledger_entry.reversible!r}),无法撤销",
+                t("daemon.srv.undo_entry_not_reversible",
+                  entry_seq=entry_seq, reversible=ledger_entry.reversible),
             )
 
         # 已撤销检查
         if ledger_entry.undo_state == "done":
             return await self._send_error(
                 writer, 409, "already_undone",
-                f"seq={entry_seq} 的条目已经撤销(undo_state=done),不可重复撤销",
+                t("daemon.srv.undo_entry_already_done", entry_seq=entry_seq),
             )
 
         # 从 undo_token 提取文件路径("file:{abs_path}")
@@ -1104,14 +1105,14 @@ class DaemonHTTPServer:
         if not snap_token:
             return await self._send_error(
                 writer, 409, "no_snapshot",
-                "无法找到 run 起点快照路径,无法执行文件粒度还原",
+                t("daemon.srv.undo_entry_no_snapshot"),
             )
 
         snap_path = _Path(snap_token)
         if not snap_path.exists():
             return await self._send_error(
                 writer, 409, "no_snapshot",
-                f"快照文件不存在:{snap_path}",
+                t("daemon.srv.undo_entry_snap_missing", snap_path=snap_path),
             )
 
         # 找 workspace
@@ -1120,13 +1121,13 @@ class DaemonHTTPServer:
         if not workspace_str:
             return await self._send_error(
                 writer, 409, "no_workspace",
-                "run 无 workspace 路径,无法执行文件粒度还原",
+                t("daemon.srv.undo_entry_no_workspace"),
             )
         workspace = _Path(workspace_str).expanduser().resolve()
         if not workspace.exists():
             return await self._send_error(
                 writer, 409, "no_workspace",
-                f"workspace 不存在:{workspace}",
+                t("daemon.srv.undo_entry_workspace_missing", workspace=workspace),
             )
 
         # 计算相对路径(文件路径相对于 workspace)
@@ -1145,7 +1146,7 @@ class DaemonHTTPServer:
             error_detail = "; ".join(f"{p}: {e}" for p, e in result.errors[:3])
             return await self._send_error(
                 writer, 500, "restore_failed",
-                f"文件还原失败:{error_detail}",
+                t("daemon.srv.undo_entry_restore_failed", error_detail=error_detail),
             )
 
         # 标记该条目 undo_state → done
@@ -1154,9 +1155,9 @@ class DaemonHTTPServer:
         # 判断结果类型:missing = run 中新建(撤销=删除),restored = 已还原
         was_new_file = bool(result.missing)
         if was_new_file:
-            note = f"此文件是任务中新建的,撤销即删除(已删除:{file_path_str})"
+            note = t("daemon.srv.undo_entry_new_file_note", file_path=file_path_str)
         else:
-            note = f"已还原文件:{file_path_str}"
+            note = t("daemon.srv.undo_entry_restored_note", file_path=file_path_str)
 
         # 广播 undo_entry_done 事件(审计可见性)
         undo_ev = {
@@ -1300,7 +1301,7 @@ class DaemonHTTPServer:
             return await self._send_error(writer, 400, CODE_BAD_REQUEST, "missing suggestion id")
         if self._conductor is None:
             return await self._send_error(writer, 503, "conductor_unavailable",
-                                          "conductor 未启动，无法确认建议")
+                                          t("daemon.srv.conductor_unavailable_confirm"))
 
         s = self._conductor.get_suggestion(suggestion_id)
         if s is None:
@@ -1315,23 +1316,24 @@ class DaemonHTTPServer:
         if self._loop_factory is _NO_KEY:
             return await self._send_error(
                 writer, 503, "no_worker_key",
-                "daemon 未配置 API key，无法执行 run。请运行 `argos setup` 配置模型 key 后重启 daemon。",
+                t("daemon.srv.no_key_run_confirm"),
             )
 
         # 并发槽位检查
         if not self._registry.has_capacity():
             return await self._send_error(
                 writer, 503, CODE_BUSY,
-                f"max_concurrent_runs_reached (max={self._registry.max_concurrent}, "
-                f"active={self._registry.active_count})；建议已登记，请稍后重试确认",
+                t("daemon.srv.busy_suggestion_capacity",
+                  max_concurrent=self._registry.max_concurrent,
+                  active_count=self._registry.active_count),
             )
         try:
             await asyncio.wait_for(self._registry.acquire_slot(), timeout=0.01)
         except asyncio.TimeoutError:
             return await self._send_error(
                 writer, 503, CODE_BUSY,
-                f"max_concurrent_runs_reached (max={self._registry.max_concurrent})；"
-                f"建议已登记，请稍后重试确认",
+                t("daemon.srv.busy_suggestion_timeout",
+                  max_concurrent=self._registry.max_concurrent),
             )
 
         # 铁律：isolation=worktree，trust_level=L1_DANGEROUS_ONLY
@@ -1440,7 +1442,7 @@ class DaemonHTTPServer:
             return await self._send_error(writer, 400, CODE_BAD_REQUEST, "missing suggestion id")
         if self._conductor is None:
             return await self._send_error(writer, 503, "conductor_unavailable",
-                                          "conductor 未启动")
+                                          t("daemon.srv.conductor_unavailable_dismiss"))
         dismissed = self._conductor.dismiss_suggestion(suggestion_id)
         if not dismissed:
             return await self._send_error(writer, 404, CODE_NOT_FOUND,
@@ -1508,7 +1510,7 @@ class DaemonHTTPServer:
             return await asyncio.wait_for(
                 client.complete(
                     [{"role": "user", "content": prompt}],
-                    system="你是技能文档撰写者。只输出文字,不输出代码。",
+                    system=t("daemon.srv.dream_narrate_system"),
                 ),
                 timeout=60.0,
             )
@@ -1546,7 +1548,7 @@ class DaemonHTTPServer:
         if pipeline is None:
             await self._send_error(
                 writer, 503, "no_worker_key",
-                "daemon 未配置 API key，无法执行 Dream。请运行 `argos setup` 配置模型 key 后重启 daemon。",
+                t("daemon.srv.no_key_dream"),
             )
             return False
         # 三重守卫：
@@ -1556,7 +1558,7 @@ class DaemonHTTPServer:
         #     否则 pipeline.run() 因跨进程锁返 None 是异步发生,daemon 已回 202 却没真跑。
         if pipeline.is_running or self._dream_starting or pipeline.cross_process_busy():
             await self._send_error(
-                writer, 409, "dream_busy", "已有一次夜间整合在跑，请稍后再试。",
+                writer, 409, "dream_busy", t("daemon.srv.dream_busy"),
             )
             return False
         # 从检查通过到 create_task 之间无 await —— 单线程事件循环不可被抢占，原子。

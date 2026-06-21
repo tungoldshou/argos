@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from argos.core.types import RiskLevel
+from argos.i18n import t
 
 if TYPE_CHECKING:
     from argos.capability.manifest import Capability, KindName, VisibilityName
@@ -53,14 +54,9 @@ class CapabilityRegistry:
             ValueError: risk 未声明或名称重复。
         """
         if cap.risk is None:
-            raise ValueError(
-                f"能力 {cap.name!r} 注册失败：risk 未声明（fail-closed）。"
-                f"必须显式指定 risk='low'|'medium'|'high'。"
-            )
+            raise ValueError(t("cap.registry.register_no_risk", name=cap.name))
         if cap.name in self._caps:
-            raise ValueError(
-                f"能力 {cap.name!r} 注册失败：名称已存在（全局唯一约束）。"
-            )
+            raise ValueError(t("cap.registry.register_duplicate", name=cap.name))
         self._caps[cap.name] = cap
 
     # ------------------------------------------------------------------
@@ -82,7 +78,7 @@ class CapabilityRegistry:
         try:
             return self._caps[name]
         except KeyError:
-            raise KeyError(f"能力 {name!r} 未注册。") from None
+            raise KeyError(t("cap.registry.not_found", name=name)) from None
 
     def names(self) -> tuple[str, ...]:
         """返回所有已注册能力名（按注册顺序，Python 3.7+ dict 有序）。"""

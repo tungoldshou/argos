@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from argos.approval import ApprovalGate, ApprovalLevel
+from argos.i18n import t
 from argos.core.loop import AgentLoop, LoopConfig
 from argos.sandbox.broker import CapabilityBroker
 from argos.sandbox.executor import select_backend
@@ -118,7 +119,7 @@ class SubAgentFactory:
             max_steps = role_preset.max_steps
             # system_prompt 走 user 段前缀注入:把角色上下文拼到 user goal 最前(loop._drive
             # 看到的 user message 已含角色引导,等效 system 块对齐)。不动 loop.py 签名。
-            prompt = f"[角色:{role_preset.name}]\n{role_preset.system_prompt}\n\n---\n\n{prompt}"
+            prompt = t("wf.subagent.role_prefix", role_name=role_preset.name) + f"\n{role_preset.system_prompt}\n\n---\n\n{prompt}"
         else:
             derived_read_only = (task.tool_scope == "read")
             derived_allowlist = None
@@ -200,7 +201,7 @@ class SubAgentFactory:
 
             output = "".join(report_parts).strip()
             if note:
-                output = f"{output}\n[隔离注记] {note}"
+                output = output + t("wf.subagent.isolation_note", note=note)
 
             # diff 处理(任务:并行子 agent 摘要模式)——
             # 拆 worktree 前的 with 块内抓 diff 文本(失败返 None,不挂子 agent)。
@@ -213,17 +214,15 @@ class SubAgentFactory:
                 if diff_text:
                     if self.inline_diff:
                         # 旧行为:整段 diff inline 进 output(给 v1 caller / 审批预览用)
-                        output += (
-                            f"\n[worktree 改动 diff —— 未自动合并,请审阅后应用]\n{diff_text}"
-                        )
+                        output += t("wf.subagent.diff_inline_header") + diff_text
                     else:
                         # 默认:完整 diff 落盘 + output 只装摘要 + 引用
                         diff_ref = self._persist_diff_journal(agent_id, diff_text)
                         diff_summary, diff_file_count = self._summarize_diff(diff_text)
                         if diff_summary:
-                            output += f"\n[diff 摘要] {diff_summary}"
+                            output += t("wf.subagent.diff_summary_prefix", summary=diff_summary)
                         if diff_ref:
-                            output += f"\n[完整 diff] {diff_ref}"
+                            output += t("wf.subagent.diff_ref_prefix", ref=diff_ref)
 
             # output_mirror(任务:让 agent 产出能到 docker verify 看的目录)——
             # 拆 worktree 前把整个 worktree 拷到 self.output_mirror。

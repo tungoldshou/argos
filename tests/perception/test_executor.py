@@ -21,12 +21,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from argos.i18n import t as _t
 from argos.perception.actions import ComputerAction
 from argos.perception.executor import (
     ComputerExecutor,
     ComputerActionResult,
-    _DISABLED_MSG,
-    _ACCESS_DENIED_MSG,
 )
 
 
@@ -57,7 +56,7 @@ def test_disabled_when_no_flag(monkeypatch: pytest.MonkeyPatch):
     executor = ComputerExecutor()
     result = executor.dispatch(ComputerAction(kind="screenshot"))
     assert result.ok is False
-    assert "未启用" in result.detail or _DISABLED_MSG in result.detail
+    assert "未启用" in result.detail or _t("perception.executor.disabled") in result.detail
     assert len(called) == 0, "旗标未设置时不应调用 subprocess.run"
 
 
@@ -171,7 +170,7 @@ def test_click_access_denied_returns_helpful_message(monkeypatch: pytest.MonkeyP
     result = executor._click(100, 200, double=False)
     assert result.ok is False
     assert "辅助功能" in result.detail or "系统设置" in result.detail
-    assert result.detail == _ACCESS_DENIED_MSG
+    assert result.detail == _t("perception.executor.access_denied")
 
 
 def test_type_text_access_denied(monkeypatch: pytest.MonkeyPatch):

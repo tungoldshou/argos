@@ -26,6 +26,8 @@ from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import Input, Static
 
+from argos.i18n import t
+
 # ⚠︎ = U+26A0 UNICODE WARNING SIGN + U+FE0E VARIATION SELECTOR-15(强制文本字形)
 _WARNING_SIGN = "⚠︎"
 
@@ -42,7 +44,7 @@ def format_approval_title(*, risk: str, trigger: str) -> str:
       tool_level:T=L    → ◓ 审批请求 [risk] — [level: L]
       level:L           → ◓ 审批请求 [risk] — [level: L]
     空 trigger / 未知前缀 → 不附加标签(向后兼容)。"""
-    base = f"◓ 审批请求 [{risk}]"
+    base = t("widget.approval_title_base", risk=risk)
     if not trigger:
         return base
     if trigger.startswith("hard_rule:"):
@@ -60,7 +62,8 @@ def format_approval_title(*, risk: str, trigger: str) -> str:
     elif trigger.startswith("secret:"):
         # secret 命中:副标用 ⚠︎(VS15) + 密钥名称
         key_name = trigger.split(":", 1)[1]
-        return f"{base} · {_WARNING_SIGN} 命中密钥模式 {key_name}"
+        secret_label = t("widget.approval_secret_hit", _WARNING_SIGN=_WARNING_SIGN, key_name=key_name)
+        return f"{base} · {secret_label}"
     elif trigger.startswith("tool_level:"):
         inner = trigger.split("=", 1)[1] if "=" in trigger else trigger
         tag = f"[level: {inner}]"
@@ -107,21 +110,21 @@ class InlineChoice(Vertical):
         on_decide: Callable[[str, str], None],
         escape_value: str | None = None,
         needs_input: frozenset[str] | set[str] = frozenset(),
-        input_placeholder: str = "补充反馈,Enter 提交,Esc 返回",
+        input_placeholder: str | None = None,
         risk: str = "medium",
         action_label: str = "",
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         if not options:
-            raise ValueError("InlineChoice 至少需要一个选项")
+            raise ValueError(t("widget.choice_empty"))
         self._title = title
         self._body = body
         self._options = list(options)
         self._on_decide = on_decide
         self._escape_value = escape_value
         self._needs_input = frozenset(needs_input)
-        self._input_placeholder = input_placeholder
+        self._input_placeholder = input_placeholder if input_placeholder is not None else t("widget.choice_input_placeholder")
         # action_label 用于决策摘要行;未传则取首选项 value 兜底
         self._action_label = action_label or (options[0][0] if options else "")
         self._cursor = 0
@@ -146,22 +149,22 @@ class InlineChoice(Vertical):
 
     def _options_text(self) -> Text:
         """渲染选项列表:当前项前缀 ▸(U+25B8),非选中项两空格缩进。"""
-        t = Text()
+        txt = Text()
         for i, (_, label) in enumerate(self._options):
             cur = i == self._cursor
             # ▸(U+25B8 BLACK RIGHT-POINTING SMALL TRIANGLE)——spec §3 词典字形
-            t.append("▸ " if cur else "  ", style=f"bold {self._COL_EYE}")
-            t.append(
+            txt.append("▸ " if cur else "  ", style=f"bold {self._COL_EYE}")
+            txt.append(
                 f"{i + 1}  {label}",
                 style=f"bold {self._COL_INK_BRIGHT}" if cur else self._COL_INK_DIM,
             )
             if i < len(self._options) - 1:
-                t.append("\n")
-        return t
+                txt.append("\n")
+        return txt
 
     def _hint_text(self) -> str:
-        esc = " · Esc 拒绝" if self._escape_value else ""
-        return f"↑↓ 选择 · ↵ 确认 · 数字直选{esc}"
+        esc = t("widget.choice_hint_esc") if self._escape_value else ""
+        return t("widget.choice_hint_base") + esc
 
     def _refresh_options(self) -> None:
         self.query_one("#ic-options", Static).update(self._options_text())
@@ -243,7 +246,7 @@ class InlineChoice(Vertical):
             self._on_decide(value, feedback)
         finally:
             # 决策后自毁为一行摘要——◕ 阅毕眼(v3 spec §4.7)
-            summary_text = f"◕ 审批 {self._action_label} → {value}"
+            summary_text = t("widget.choice_summary", action=self._action_label, value=value)
             parent = self.parent
             try:
                 if parent is not None:

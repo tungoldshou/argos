@@ -23,6 +23,8 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 
+from argos.i18n import t
+
 # 页面正文截断上限(snapshot 回灌给模型的预算,防把整页塞爆上下文)。
 _SNAPSHOT_MAX_CHARS = 4000
 _NAV_TIMEOUT_MS = 20000
@@ -107,7 +109,7 @@ class BrowserController:
         try:
             from playwright.sync_api import sync_playwright
         except Exception as e:  # noqa: BLE001
-            self._res_q.put(f"错误:浏览器不可用(playwright 未安装:{e})。")
+            self._res_q.put(t("browser.playwright_not_installed", exc=e))
             return
         try:
             with sync_playwright() as p:
@@ -120,10 +122,7 @@ class BrowserController:
                         args=["--disable-blink-features=AutomationControlled"],
                     )
                 except Exception as e:  # noqa: BLE001
-                    self._res_q.put(
-                        f"错误:浏览器启动失败(可能未安装 chromium,或当前环境无显示器无法开有头窗口:{e})。"
-                        "请运行 `playwright install chromium`;无显示器环境可设 ARGOS_BROWSER_HEADLESS=1。"
-                    )
+                    self._res_q.put(t("browser.launch_failed", exc=e))
                     return
                 page = browser.new_page()
                 self._res_q.put("__READY__")
@@ -134,7 +133,7 @@ class BrowserController:
                     self._res_q.put(self._dispatch(cmd, page))
                 browser.close()
         except Exception as e:  # noqa: BLE001 — 线程级兜底,绝不让浏览器线程静默死掉
-            self._res_q.put(f"错误:浏览器线程异常:{type(e).__name__}: {e}")
+            self._res_q.put(t("browser.thread_crashed", exc_type=type(e).__name__, exc=e))
 
     @staticmethod
     def _dispatch(cmd: _Cmd, page: Any) -> str:
@@ -142,7 +141,7 @@ class BrowserController:
         try:
             if op == "navigate":
                 page.goto(a["url"], timeout=_NAV_TIMEOUT_MS, wait_until="domcontentloaded")
-                return f"已打开 {a['url']}(标题:{page.title()!r})。用 browser_snapshot() 看页面内容。"
+                return t("browser.navigate_ok", url=a["url"], title=page.title())
             if op == "snapshot":
                 title = page.title()
                 url = page.url
@@ -152,20 +151,21 @@ class BrowserController:
                     body = ""
                 mc = int(a.get("max_chars", _SNAPSHOT_MAX_CHARS))
                 if len(body) > mc:
-                    body = body[:mc] + f"\n…(正文共 {len(body)} 字符,已截断前 {mc})"
-                return f"[页面] {title}\n[URL] {url}\n\n{body}"
+                    total_chars = len(body)
+                    body = body[:mc] + t("browser.snapshot_truncated", total=total_chars, mc=mc)
+                return t("browser.snapshot_header", title=title, url=url, body=body)
             if op == "click":
                 page.click(a["selector"], timeout=_ACTION_TIMEOUT_MS)
-                return f"已点击 {a['selector']!r}。"
+                return t("browser.click_ok", selector=a["selector"])
             if op == "type_text":
                 page.fill(a["selector"], a["text"], timeout=_ACTION_TIMEOUT_MS)
-                return f"已在 {a['selector']!r} 填入文本({len(a['text'])} 字符)。"
+                return t("browser.type_ok", selector=a["selector"], chars=len(a["text"]))
             if op == "screenshot":
                 page.screenshot(path=a["path"])
-                return f"已截图保存到 {a['path']}。"
-            return f"错误:未知浏览器动作 {op!r}。"
+                return t("browser.screenshot_ok", path=a["path"])
+            return t("browser.unknown_action", op=op)
         except Exception as e:  # noqa: BLE001 — 单动作失败返回可读错误,模型据此换路
-            return f"错误:浏览器动作 {op} 失败:{type(e).__name__}: {e}"
+            return t("browser.action_failed", op=op, exc_type=type(e).__name__, exc=e)
 
 
 # ── 进程内单例(broker._execute 通过 get_controller() 取用)──────────────────────

@@ -7,39 +7,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from argos.i18n import t
+
 # 命令 → 一句话说明(单一来源:/help 文案、slash 菜单、Tab 补全都从这里取,杜绝漂移)。
 # 顺序 = slash 菜单展示顺序(按常用度排:能力发现在前,会话控制居中,待接线在后)。
-COMMAND_HELP: dict[str, str] = {
-    "help": "显示所有命令",
-    "tools": "列出可调用的工具",
-    "skills": "管理 skill 生态:list/install/remove/refresh/test (跑 argos skills ...)",
-    "mcp": "列出 MCP 外部工具",
-    "model": "查看 / 切换模型",
-    "status": "当前运行状态",
-    "cost": "本轮成本 + 缓存",
-    "resume": "续上一次会话",
-    "clear": "开新会话(清空)",
-    "yolo": "放手执行(免审批；旧命令，同 /trust l4)",
-    "trust": "查看 / 切换信任档位(/trust [l0|l1|l2|l3|l4|status])—替代 /yolo",
-    "undo": "撤销本轮文件改动(还原到 run 起点)",
-    "ledger": "查看当前 run 的行为账本(人话条目 + 撤销状态)",
-    "retry": "重发上一条 user 消息",
-    "plan": "进入 plan mode(审批后继续 act)—对齐 CC /plan",
-    "hooks": "列出 / 重载 hooks 配置(/hooks, /hooks reload)",
-    "lsp": "列出 / 重载 LSP 配置(/lsp, /lsp reload)",
-    "permissions": "查看 / 重载权限配置(/permissions, /permissions reload)",
-    "runs": "列出 / 后台 run(/runs, /runs {id} resume/cancel)—daemon 模式",
-    "orders": "列出自治常驻指令(/orders)—conductor 自治面",
-    "confirm": "确认 conductor 主动建议(/confirm <suggestion_id>)—自治面通电",
-    "dismiss": "忽略 conductor 主动建议(/dismiss <suggestion_id>)",
-    "dream": "夜间整合:跑一轮 Dream(聚类综合+记忆整理);/dream status 看上次报告",
-    "verify": "显式跑 verify_cmd(/verify [path])—用户复核 verify 门",
-    "security-review": "安全审计(secrets + 依赖漏洞 + 危险 API)(/security-review [path])",
-    "simplify": "代码重复 / 复杂度 / 死代码扫描(/simplify [path])",
-    "eval": "Agent 自我评估 + A/B(/eval, /eval run <id>, /eval compare <a> <b>)",
-    "routing": "查看 / 切换路由配置(/routing, /routing set <cat> <tier>)",
-    "context": "查看当前 LLM 上下文分桶(/context, /context --json)",
-}
+# i18n: 描述通过 t("cmd.<name>") 在运行时取当前语言版本。
+_COMMAND_KEYS: list[str] = [
+    "help", "setup", "tools", "skills", "mcp", "model", "status", "cost",
+    "resume", "clear", "yolo", "trust", "undo", "ledger", "journal", "retry",
+    "plan", "hooks", "lsp", "permissions", "runs", "orders", "confirm", "dismiss",
+    "dream", "verify", "security-review", "simplify", "eval", "routing", "context",
+]
+
+
+def _build_command_help() -> dict[str, str]:
+    """当前语言的命令描述字典(运行时惰性构建,语言切换时重新调用)。"""
+    return {name: t(f"cmd.{name}") for name in _COMMAND_KEYS}
+
+
+# COMMAND_HELP 保留为动态属性以兼容 `from argos.tui.commands import COMMAND_HELP`
+# 用 module-level property 替代不易做到;改用函数调用点直接调 _build_command_help()。
+# 为保向后兼容(现有测试 + app.py 直接 import COMMAND_HELP),保留一份快照作默认值——
+# 测试在 ARGOS_LANG=zh 下跑,所以快照结果已是中文;app.py /help 分发路径已改为惰性重建。
+COMMAND_HELP: dict[str, str] = _build_command_help()
 
 COMMAND_NAMES: list[str] = list(COMMAND_HELP)
 
@@ -49,8 +39,16 @@ _HIDDEN_KNOWN: frozenset[str] = frozenset({"remember", "forget", "memory"})
 
 
 def match_commands(text: str) -> list[tuple[str, str]]:
-    """slash 菜单 / Tab 补全用:text 以 / 开头且尚未输入参数时,返回前缀匹配的 (name, desc) 列表
-    (按 COMMAND_HELP 顺序)。非 slash / 已带参数(出现空格)/ 无匹配 → 空列表。"""
+    """slash 菜单 / Tab 补全用:text 以 / 开头且尚未输入参数时,返回匹配的 (name, desc) 列表
+    (按 COMMAND_HELP 顺序)。
+
+    匹配策略(双层,优先级递降):
+      1. 前缀匹配:name.startswith(pref)
+      2. 子串回退:当前缀匹配无结果时,任意位置包含 pref 的命令(解决'security-review'
+         输入'review'找不到的问题)
+
+    非 slash / 已带参数(出现空格)/ 无匹配 → 空列表。
+    """
     s = text.lstrip()
     if not s.startswith("/"):
         return []
@@ -58,7 +56,11 @@ def match_commands(text: str) -> list[tuple[str, str]]:
     if " " in body:  # 已在输入参数,不再提示命令
         return []
     pref = body.lower()
-    return [(n, d) for n, d in COMMAND_HELP.items() if n.startswith(pref)]
+    prefix_matches = [(n, d) for n, d in COMMAND_HELP.items() if n.startswith(pref)]
+    if prefix_matches or not pref:
+        return prefix_matches
+    # 子串回退:前缀无命中时尝试任意位置包含
+    return [(n, d) for n, d in COMMAND_HELP.items() if pref in n]
 
 
 @dataclass(frozen=True, slots=True)

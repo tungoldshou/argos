@@ -104,7 +104,8 @@ async def test_preflight_parity_request_vs_execute_sync():
     # 2) egress 越界(非 allowlist host 的 web_extract → SSRF/allowlist 拒):两条路一致拒
     r2 = await via_request(_broker(), "web_extract", {"url": "http://169.254.169.254/latest/"})
     s2 = via_sync(_broker(), "web_extract", {"url": "http://169.254.169.254/latest/"})
-    assert "错误" in r2 and r2 == s2, (r2, s2)
+    # 本地化后 SSRF 拒绝串去掉了冗余"错误:"前缀(直接给本地化原因);治理不变量是两条路【一致拒】。
+    assert "拒绝" in r2 and r2 == s2, (r2, s2)
 
 
 def test_execute_sync_blocks_dangerous_run_command(monkeypatch):

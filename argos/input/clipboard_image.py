@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 
+from argos.i18n import t
 from argos.input.attachments import (
     ImageAttachment, sniff_media_type, validate_attachment,
 )
@@ -25,26 +26,22 @@ def _read_bytes() -> bytes:
     """按平台调外部工具,把剪贴板图片以 PNG 字节读出。失败抛 ClipboardError。"""
     if sys.platform == "darwin":
         if shutil.which("pngpaste") is None:
-            raise ClipboardError(
-                "读取剪贴板图片需要 pngpaste:请运行 `brew install pngpaste`。"
-            )
+            raise ClipboardError(t("input.clipboard.need_pngpaste"))
         proc = subprocess.run(["pngpaste", "-"], capture_output=True, timeout=10)
         if proc.returncode != 0 or not proc.stdout:
-            raise ClipboardError("剪贴板里没有图片(或读取失败)。")
+            raise ClipboardError(t("input.clipboard.no_image_macos"))
         return proc.stdout
     if sys.platform.startswith("linux"):
         if shutil.which("xclip") is None:
-            raise ClipboardError(
-                "读取剪贴板图片需要 xclip:请用包管理器安装(如 `apt install xclip`)。"
-            )
+            raise ClipboardError(t("input.clipboard.need_xclip"))
         proc = subprocess.run(
             ["xclip", "-selection", "clipboard", "-t", "image/png", "-o"],
             capture_output=True, timeout=10,
         )
         if proc.returncode != 0 or not proc.stdout:
-            raise ClipboardError("剪贴板里没有图片(或读取失败)。")
+            raise ClipboardError(t("input.clipboard.no_image_linux"))
         return proc.stdout
-    raise ClipboardError(f"当前平台 {sys.platform} 暂不支持读取剪贴板图片。")
+    raise ClipboardError(t("input.clipboard.unsupported_platform", platform=sys.platform))
 
 
 def read_clipboard_image() -> ImageAttachment:
@@ -54,7 +51,7 @@ def read_clipboard_image() -> ImageAttachment:
     try:
         media = sniff_media_type(data)
     except ValueError as e:
-        raise ClipboardError("剪贴板内容不是受支持的图片格式。") from e
+        raise ClipboardError(t("input.clipboard.bad_format")) from e
     att = ImageAttachment(data=data, media_type=media, source_label="clipboard")
     try:
         validate_attachment(att)  # 复用 Plan 1 的体积/类型校验(超 5MB → ValueError)

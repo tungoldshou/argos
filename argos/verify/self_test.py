@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from argos import runtime
+from argos.i18n import t
 from argos.tools import ALLOWED_CMDS
 
 
@@ -118,7 +119,7 @@ def _canary_check(cmd: str, workspace: Path, *, timeout: float = 30.0) -> tuple[
     (在 ws 父目录里建一个新 tmp dir 暂存,跑完 cmd 再删),最后还原。
     """
     if not workspace.is_dir():
-        return False, f"workspace 不存在:{workspace}"
+        return False, t("verify.self_test.workspace_missing", workspace=workspace)
     backup = workspace.parent / f".{workspace.name}.canary_backup"
     if backup.exists():
         # 防之前残留(canary 跑一半崩了):防御性清
@@ -137,10 +138,7 @@ def _canary_check(cmd: str, workspace: Path, *, timeout: float = 30.0) -> tuple[
         if backup.exists():
             backup.rename(workspace)
     if rc == 0:
-        return False, (
-            f"canary 失败:在空 workspace 上跑 {cmd!r} 也 exit 0 —— 测试不依赖 "
-            f"agent 产出,无法区分'做对 vs 没做' → 丢弃,回退 unverifiable"
-        )
+        return False, t("verify.self_test.canary_failed", cmd=cmd)
     return True, ""
 
 

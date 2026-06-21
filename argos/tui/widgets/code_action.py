@@ -14,6 +14,8 @@ from textual.containers import Vertical
 from textual.reactive import reactive
 from textual.widgets import Static
 
+from argos.i18n import t
+
 # theme.py 同源颜色常量,仅供 Rich Text.assemble() 用(Rich style 无法引用 CSS 变量)
 _EYE = "#D9A85C"     # = $eye:金系主强调
 _INK_DIM = "#7E869C" # = $ink-dim:次要文字/元信息/step 号
@@ -54,18 +56,18 @@ class CodeActionBlock(Vertical):
         yield Static(Syntax(shown, "python", theme="monokai",
                             line_numbers=False, word_wrap=True), id="code")
         if folded:
-            yield Static(f"… +{folded} 行", id="code-fold", markup=False)
+            yield Static(t("widget.code_fold", n=folded), id="code-fold", markup=False)
         # markup=False:结果区显工具/命令真实输出(value_repr/stdout 常含 `[...]`,如
         # 浏览器返回 `已点击 "input[value='x']"`)—— 绝不能当 Rich markup 解析,否则崩 TUI。
-        yield Static("└ 运行中…", id="result", markup=False)
+        yield Static(t("widget.code_running"), id="result", markup=False)
 
     def set_result(self, *, stdout: str, value_repr: str, exc: str, ok: bool) -> None:
         """填入执行结果。ok=True → ◕ 阅毕眼;ok=False → ◉ 红瞳。"""
         self.ok = ok
         body = exc if (not ok and exc) else (stdout or "")
         if value_repr:
-            body += f"\n[返回值] {value_repr}"
-        text = body.strip() or ("执行完成" if ok else "执行异常")
+            body += t("widget.code_return_value", repr=value_repr)
+        text = body.strip() or (t("widget.code_done") if ok else t("widget.code_error"))
         lines = text.splitlines()
         # 裸 traceback(沙箱内代码报错)→ 把最后一行【真正的 异常类型: 消息】当头条,内部帧折在其后。
         # 否则旧逻辑折"前 8 行"恰好全是 smolagents/concurrent.futures 内部帧,真错因被埋到看不见
@@ -74,10 +76,10 @@ class CodeActionBlock(Vertical):
             nonempty = [ln for ln in lines if ln.strip()]
             headline = nonempty[-1] if nonempty else text
             hidden = max(0, len(lines) - 1)
-            text = headline if hidden == 0 else f"{headline}\n… ({hidden} 行内部堆栈已折叠)"
+            text = headline if hidden == 0 else f"{headline}\n{t('widget.code_stack_folded', n=hidden)}"
         # 折叠长输出(头尾各留,中间省略)
         elif len(lines) > 12:
-            text = "\n".join(lines[:8]) + f"\n… +{len(lines) - 8} 行"
+            text = "\n".join(lines[:8]) + "\n" + t("widget.code_fold", n=len(lines) - 8)
         # ◕ 阅毕眼(ok=True,$pass);◉ 红瞳(ok=False,$fail)
         glyph = "◕" if ok else "◉"
         self.query_one("#result", Static).update(f"└ {glyph} {text}")

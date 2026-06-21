@@ -76,8 +76,9 @@ from argos.input.stt import LocalWhisper, make_transcriber, SttError
 from argos.input.stt_config import load_stt_config
 from argos.input.clipboard_image import read_clipboard_image, ClipboardError
 from argos.tui.widgets.workflow_panel import WorkflowPanel
+from argos.i18n import t
 
-_BASE_SUBTITLE = "百眼智能体"
+_BASE_SUBTITLE = t("tui.app.subtitle")
 
 
 def _app_version() -> str:
@@ -125,16 +126,19 @@ class ArgosApp(App):
     # 这里仍显式声明作双保险。与 on_mount 的手动 focus 一致。
     AUTO_FOCUS = "#prompt"
 
-    # Esc 打断当前任务(对齐 Claude Code):取消正在跑的 run。模型推理/等待这类 await 点能即时
-    # 中断;若卡在同步 exec_code(命令/浏览器动作占住事件循环)则需等该动作返回后才落地(诚实:
-    # 不假装能瞬间杀掉同步子进程)。idle 时按 Esc 无副作用。
+    # Esc / Ctrl+C 打断当前任务(对齐 Claude Code / all major agent CLIs):
+    #   · ctrl+c → interrupt(打断当前 run;idle 时第一次无副作用,第二次 1.5s 内退出)
+    #   · ctrl+d → quit(确定性退出,无论是否有 run)
+    #   · escape → interrupt(同 ctrl+c;收起菜单 / 打断二合一)
+    # 这与 Claude Code / shell 约定一致:Ctrl+C 是"打断/中断",Ctrl+D 是"退出/EOF"。
     # `Ctrl+B` 后台化(daemon 模式):把当前 run 推到 daemon → state=suspended(可跨 session 续)。
     BINDINGS = [
-        ("ctrl+c", "quit", "退出"),
-        ("escape", "interrupt", "打断"),
-        ("ctrl+b", "background", "后台"),
-        ("ctrl+o", "cycle_panel", "右栏视图"),   # TUI v2:智能切手动 pin/循环
-        ("ctrl+v", "paste_image", "贴图"),        # 读剪贴板图片 → [图片 #N] chip
+        ("ctrl+c", "ctrl_c", t("tui.bind.interrupt_quit")),   # 打断 run;双击退出(同 Claude Code)
+        ("ctrl+d", "quit", t("tui.bind.quit")),               # 确定性退出(同 shell EOF)
+        ("escape", "interrupt", t("tui.bind.interrupt")),
+        ("ctrl+b", "background", t("tui.bind.background")),
+        ("ctrl+o", "cycle_panel", t("tui.bind.right_panel")), # TUI v2:智能切手动 pin/循环
+        ("ctrl+v", "paste_image", t("tui.bind.paste_image")), # 读剪贴板图片 → [图片 #N] chip
         # #5b T7:tab 切换(放在 Ctrl+1..5 子绑定,tab_strip widget 自己处理)
     ]
 
@@ -206,6 +210,10 @@ class ArgosApp(App):
         self._daemon_session_id: str | None = None
         self._daemon_run_id: str | None = None   # 当前 run 在 daemon 里的 run_id
         self._last_esc_time: float = 0.0          # 双 Esc 检测(1.5s 内第二次 = cancel)
+        self._last_ctrl_c_time: float = 0.0       # 双 Ctrl+C 检测(1.5s 内第二次 = quit)
+        # 输入历史环形缓冲(#20):存最近 N 条 goal/slash 提交,↑/↓ 回填输入框
+        self._input_history: list[str] = []
+        self._input_history_max: int = 50
         # TUI v2 行内审批队列:同屏最多一个活动 InlineChoice,其余 FIFO 排队
         #(并发 ApprovalRequest 不互踩;前一个决策落定后再 mount 下一个)。
         self._choice_active = False
@@ -238,7 +246,7 @@ class ArgosApp(App):
         if self._plan_mode:
             parts.append("· [plan mode]")
         if self._demo:
-            parts.append("· DEMO 脚本演示(真 loop 待 Phase 6 接入)")
+            parts.append("· " + t("tui.app.demo_banner"))
         if self._yolo:
             parts.append("· ⏻ YOLO(Auto)")
         return "  ".join(parts)
@@ -285,7 +293,7 @@ class ArgosApp(App):
         except ClipboardError as e:
             self.run_worker(
                 self.query_one("#transcript", Transcript).append_line(
-                    f"⚠︎ 贴图失败:{e}", kind="error",
+                    t("tui.paste.failed", err=e), kind="error",
                 ),
                 exclusive=False,
             )
@@ -316,7 +324,7 @@ class ArgosApp(App):
         yield StatusBar(id="status-bar")
         # slash 菜单(默认隐藏)叠在输入框上方:打 / 时列出命令;PromptArea 是多行输入(Enter 提交)。
         yield SlashMenu(id="slash-menu")
-        yield PromptArea(placeholder="› 输入目标,或 / 开始命令", id="prompt")
+        yield PromptArea(placeholder=t("tui.prompt.placeholder"), id="prompt")
 
     def on_mount(self) -> None:
         """启动即把焦点放到输入框。否则 Textual 默认聚焦第一个可聚焦 widget。Transcript 已
@@ -409,7 +417,7 @@ class ArgosApp(App):
             self._kernel_mode = "inline"
             self._with_daemon = False
             try:
-                self.query_one("#status-bar", StatusBar).set_kernel_mode("inline(单进程)")
+                self.query_one("#status-bar", StatusBar).set_kernel_mode(t("tui.kernel.inline"))
             except Exception:  # noqa: BLE001
                 pass
             return
@@ -418,11 +426,23 @@ class ArgosApp(App):
 
         ready = await probe_or_spawn(socket_path)
         if not ready:
-            # inline fallback 模式
+            # inline fallback 模式(daemon 尝试拉起但失败/超时)
             self._kernel_mode = "inline"
             self._with_daemon = False
             try:
-                self.query_one("#status-bar", StatusBar).set_kernel_mode("inline(单进程)")
+                self.query_one("#status-bar", StatusBar).set_kernel_mode(t("tui.kernel.inline"))
+            except Exception:  # noqa: BLE001
+                pass
+            # #30:尝试拉起 daemon 失败后,在 transcript 落一条系统说明(诚实标注)。
+            # ARGOS_NO_DAEMON=1 明确关闭时不显示(那是用户主动选择 inline,不是 fallback)。
+            try:
+                self.run_worker(
+                    self.query_one("#transcript", Transcript).append_line(
+                        t("tui.daemon.unavailable"),
+                        kind="system",
+                    ),
+                    exclusive=False,
+                )
             except Exception:  # noqa: BLE001
                 pass
             return
@@ -438,7 +458,18 @@ class ArgosApp(App):
             self._kernel_mode = "inline"
             self._with_daemon = False
             try:
-                self.query_one("#status-bar", StatusBar).set_kernel_mode("inline(单进程)")
+                self.query_one("#status-bar", StatusBar).set_kernel_mode(t("tui.kernel.inline"))
+            except Exception:  # noqa: BLE001
+                pass
+            # #30:session 创建失败也属于 daemon 不可用,同样落说明行
+            try:
+                self.run_worker(
+                    self.query_one("#transcript", Transcript).append_line(
+                        t("tui.daemon.unavailable"),
+                        kind="system",
+                    ),
+                    exclusive=False,
+                )
             except Exception:  # noqa: BLE001
                 pass
             return
@@ -544,29 +575,29 @@ class ArgosApp(App):
             try:
                 self._get_recorder().start()
             except RecorderError as e:
-                await log.append_line(f"⚠︎ 录音失败:{e}", kind="error")
+                await log.append_line(t("tui.voice.record_failed", err=e), kind="error")
                 return
             self._voice_recording = True
-            await log.append_line("🎙 录音中…(再按空格停止)", kind="system")
+            await log.append_line(t("tui.voice.recording"), kind="system")
             return
         # 停止 → 转写
         self._voice_recording = False
         try:
             audio = self._get_recorder().stop()
         except RecorderError as e:
-            await log.append_line(f"⚠︎ 录音失败:{e}", kind="error")
+            await log.append_line(t("tui.voice.record_failed", err=e), kind="error")
             return
         transcriber = self._get_transcriber()
         # 首次使用本地语音:权重可能要从 HuggingFace 懒下载(约数百 MB),静默"转写中…"会像卡死。
         # 首次本地转写给更诚实的标签(可能下载),日常转写照旧"转写中…"(2026-06-18 排查 #4)。
         first_local = (not self._stt_warmed) and isinstance(transcriber, LocalWhisper)
         await log.show_thinking(
-            "首次使用·加载语音模型(若未缓存需下载约数百 MB,请稍候)…" if first_local else "转写中…"
+            t("tui.voice.transcribe_first") if first_local else t("tui.voice.transcribing")
         )
         try:
             text = await asyncio.to_thread(transcriber.transcribe, audio)
         except SttError as e:
-            await log.append_line(f"⚠︎ 转写失败:{e}", kind="error")
+            await log.append_line(t("tui.voice.transcribe_failed", err=e), kind="error")
             return
         self._stt_warmed = True
         if text:
@@ -593,7 +624,7 @@ class ArgosApp(App):
             try:
                 log_widget = self.query_one(Transcript)
                 await log_widget.append_line(
-                    f"⚠︎ focus 失败({run_id[:8]}…):{e}", kind="error",
+                    t("tui.tab.focus_failed", id=run_id[:8], err=e), kind="error",
                 )
             except Exception:  # noqa: BLE001
                 pass
@@ -621,7 +652,7 @@ class ArgosApp(App):
         try:
             log_widget = self.query_one(Transcript)
             await log_widget.append_line(
-                f"━━━ 切到 run {run_id[:8]}… ━━━", kind="system",
+                t("tui.tab.switched", id=run_id[:8]), kind="system",
             )
         except Exception:  # noqa: BLE001
             pass
@@ -656,10 +687,26 @@ class ArgosApp(App):
         menu = self.query_one("#slash-menu", SlashMenu)
         menu.show_matches(match_commands(event.text_area.text))
 
+    def _push_input_history(self, text: str) -> None:
+        """将提交的文本压入输入历史环形缓冲(去重最近一条;容量 _input_history_max)。"""
+        t = text.strip()
+        if not t:
+            return
+        # 避免连续重复
+        if self._input_history and self._input_history[-1] == t:
+            return
+        self._input_history.append(t)
+        if len(self._input_history) > self._input_history_max:
+            self._input_history.pop(0)
+
     def handle_input(self, text: str, attachments: list | None = None) -> None:
         """slash 走分发;否则当 goal(可带图片 attachments)。同步入口(测试可直接调)。
 
-        Transcript 落行是 async,故 slash 分发与"任务进行中"提示都包成 worker(测试 pause 后可见)。"""
+        Transcript 落行是 async,故 slash 分发与"任务进行中"提示都包成 worker(测试 pause 后可见)。
+        非空提交(goal 或 slash)都压入输入历史环形缓冲,供 ↑/↓ 历史导航回填。"""
+        # 提交时压历史(slash 和 goal 都记;/retry /clear 等单次偶用的命令也记,方便重试)
+        if text.strip():
+            self._push_input_history(text)
         cmd = parse_slash(text)
         if cmd is None:
             if text.strip():
@@ -667,7 +714,7 @@ class ArgosApp(App):
                     # 单会话编码 agent:一轮未完不并发起新轮(否则 step 块串台/漏渲染)。
                     self.run_worker(
                         self.query_one("#transcript", Transcript).append_line(
-                            "› 当前任务进行中,请等它结束再起新任务。"
+                            t("tui.run.busy")
                         ),
                         exclusive=False,
                     )
@@ -680,7 +727,7 @@ class ArgosApp(App):
     async def _dispatch_slash(self, cmd: SlashCommand) -> None:
         log = self.query_one("#transcript", Transcript)
         if not cmd.known:
-            await log.append_line(f"未知命令 /{cmd.name}")
+            await log.append_line(t("tui.cmd.unknown", name=cmd.name))
             return
         if cmd.name == "yolo":
             # /yolo 是 /trust autonomous 的别名（保留命令，直接生效；提示新用法）。
@@ -691,10 +738,7 @@ class ArgosApp(App):
             self._yolo = True
             self.sub_title = self._compose_subtitle()
             self._refresh_topbar()
-            await log.append_line(
-                "已切换到 Autonomous（全自治/YOLO）——顶栏显示 ⏻ YOLO 标记。"
-                " 提示：新用法为 /trust autonomous（或无参数 /trust 循环切换）。",
-            )
+            await log.append_line(t("tui.yolo.activated"))
         elif cmd.name == "trust":
             await self._trust_cmd(log, (cmd.arg or "").strip().lower())
         elif cmd.name == "model":
@@ -708,35 +752,36 @@ class ArgosApp(App):
                     _fallback = _cfg.DEFAULT_TIER
                     profs, cur = [_fallback.name], _fallback.name
                 await log.append_line(
-                    "可用模型:" + ", ".join(f"{p}{' *' if p == cur else ''}" for p in profs),
+                    t("tui.model.available", list=", ".join(f"{p}{' *' if p == cur else ''}" for p in profs)),
                     kind="system")
             else:
                 try:
                     _cfg.set_active(arg)
                     # 诚实:模型在启动时 build_components 注入一次,会话内不热切换;只重启真生效
                     #(不写"新任务生效"——那是假话,会话内新任务仍用旧模型)。
-                    await log.append_line(f"已切到 '{arg}'(重启 argos 后生效)。", kind="done")
+                    await log.append_line(t("tui.model.switched", name=arg), kind="done")
                 except Exception as e:  # noqa: BLE001
-                    await log.append_line(f"切换失败:{e}", kind="error")
+                    await log.append_line(t("tui.model.switch_failed", err=e), kind="error")
         elif cmd.name == "status":
             bar = self.query_one("#status-bar", StatusBar)
             await log.append_line(bar.render_text)
         elif cmd.name == "cost":
             # CostMeter 已退役为活动栏内的"成本 + 缓存"区;/cost 直接回显该区当前正文。
             ap = self.query_one("#activity", ActivityPanel)
-            await log.append_line("成本 + 缓存\n" + ap.snapshot_text())
+            await log.append_line(t("tui.cost.header") + "\n" + ap.snapshot_text())
         elif cmd.name == "clear":
             await log.clear()
             self._step_blocks.clear()
             self._session_id = uuid.uuid4().hex  # 换新 session = 开新会话、断多轮上下文。
-            await log.append_line("已开新会话(clear)。")
+            await log.append_line(t("tui.clear.done"))
         elif cmd.name == "resume":
             await self._resume_recent(log)
         elif cmd.name == "help":
-            from argos.tui.commands import COMMAND_HELP
-            lines = ["命令(打 / 也会就地列出,Tab 补全):"]
-            lines += [f" · /{name:<8} {desc}" for name, desc in COMMAND_HELP.items()]
-            lines.append("快捷键:Esc 打断当前任务 · 行尾 \\ + 回车 换行 · ^C 退出")
+            from argos.tui.commands import _build_command_help
+            _ch = _build_command_help()
+            lines = [t("tui.help.header")]
+            lines += [f" · /{name:<16} {desc}" for name, desc in _ch.items()]
+            lines.append(t("tui.help.shortcuts"))
             await log.append_line("\n".join(lines), kind="system")
         elif cmd.name == "tools":
             await self._show_tools(log)
@@ -749,6 +794,10 @@ class ArgosApp(App):
             await self._undo(log)
         elif cmd.name == "ledger":
             await self._ledger_cmd(log)
+        elif cmd.name == "journal":
+            await self._journal_cmd(log, cmd.arg)
+        elif cmd.name == "setup":
+            await self._setup_cmd(log)
         elif cmd.name == "retry":
             await self._retry(log)
         elif cmd.name == "plan":
@@ -791,10 +840,7 @@ class ArgosApp(App):
     async def _undo(self, log) -> None:
         """/undo:用本轮 run 起点的快照还原 workspace;不发 goal。"""
         if self._snapshot is None or not self._snapshot.tar_path.exists():
-            await log.append_line(
-                "无可撤销的运行(本会话尚未启动 run,或快照已清理)。",
-                kind="system",
-            )
+            await log.append_line(t("tui.undo.no_snapshot"), kind="system")
             return
         result = self._snapshot.restore(self._workspace)
         # #9 T5:auto-capture undo 事件
@@ -807,15 +853,14 @@ class ArgosApp(App):
             pass
         if result.errors:
             head = "\n".join(f"  ✗ {p}: {e}" for p, e in result.errors[:5])
-            more = "\n  …(更多省略)" if len(result.errors) > 5 else ""
+            more = t("tui.undo.more") if len(result.errors) > 5 else ""
             await log.append_line(
-                f"部分还原(成功 {len(result.restored)} / 失败 {len(result.errors)}):\n{head}{more}",
+                t("tui.undo.partial", ok=len(result.restored), fail=len(result.errors), head=head, more=more),
                 kind="error",
             )
         else:
             await log.append_line(
-                f"已还原 {len(result.restored)} 个文件到 run 起点。\n"
-                f"如要继续,可 /retry 重发上一条 goal,或输入新 goal。",
+                t("tui.undo.success", n=len(result.restored)),
                 kind="done",
             )
 
@@ -838,7 +883,7 @@ class ArgosApp(App):
         # status → 只显示状态,不切换
         if arg in ("status", "s"):
             await log.append_line(
-                f"当前信任模式：{current_trust.mode_name}（{current_trust.label_human}）\n{current_trust.description}",
+                t("tui.trust.status", mode_name=current_trust.mode_name, label_human=current_trust.label_human, description=current_trust.description),
                 kind="system",
             )
             await log.mount_block(TrustDial(current=current_trust))
@@ -865,8 +910,7 @@ class ArgosApp(App):
             target_trust = _arg_map.get(arg)
             if target_trust is None:
                 await log.append_line(
-                    f"未知模式 '{arg}'。用法：/trust [cautious|trusted|autonomous|paranoid|status]"
-                    "（无参数则循环切换）",
+                    t("tui.trust.unknown_mode", arg=arg),
                     kind="system",
                 )
                 return
@@ -874,7 +918,7 @@ class ArgosApp(App):
         # 同档位：无需操作
         if target_trust is current_trust:
             await log.append_line(
-                f"当前已是 {target_trust.mode_name}（{target_trust.label_human}），无需切换。",
+                t("tui.trust.already", mode_name=target_trust.mode_name, label_human=target_trust.label_human),
                 kind="system",
             )
             return
@@ -886,7 +930,7 @@ class ArgosApp(App):
             self.sub_title = self._compose_subtitle()
             self._refresh_topbar()
             await log.append_line(
-                f"已切换到 {target_trust.mode_name}（{target_trust.label_human}）。",
+                t("tui.trust.downgraded", mode_name=target_trust.mode_name, label_human=target_trust.label_human),
                 kind="done",
             )
             return
@@ -902,25 +946,25 @@ class ArgosApp(App):
                 self._yolo = (target_trust is TrustLevel.L4_AUTONOMOUS)
                 self.sub_title = self._compose_subtitle()
                 self._refresh_topbar()
+                _yolo_note = t("tui.trust.yolo_note") if target_trust is TrustLevel.L4_AUTONOMOUS else ""
                 self.run_worker(
                     log.append_line(
-                        f"已升级到 {target_name}（{target_label}）。"
-                        + (" TUI 顶栏显示 ⏻ 红色警示灯。" if target_trust is TrustLevel.L4_AUTONOMOUS else ""),
+                        t("tui.trust.upgraded", mode_name=target_name, label_human=target_label, yolo_note=_yolo_note),
                         kind="done",
                     ),
                     exclusive=False,
                 )
             else:
                 self.run_worker(
-                    log.append_line("已取消升档操作，保持当前档位。", kind="system"),
+                    log.append_line(t("tui.trust.cancelled"), kind="system"),
                     exclusive=False,
                 )
             self._choice_done()
 
         await self._enqueue_choice(lambda: InlineChoice(
-            title=f"升档确认 — 切换到 {target_label}",
+            title=t("tui.trust.confirm_title", label_human=target_label),
             body=warning_text,
-            options=[("confirm", "确认升档"), ("cancel", "取消，保持当前档位")],
+            options=[("confirm", t("tui.trust.confirm_yes")), ("cancel", t("tui.trust.confirm_no"))],
             on_decide=_on_trust_confirm,
             escape_value="cancel",  # fail-closed：Esc = 取消
             risk="high" if target_trust is TrustLevel.L4_AUTONOMOUS else "medium",
@@ -939,32 +983,23 @@ class ArgosApp(App):
         run_id = getattr(self, "_daemon_run_id", None) or getattr(self, "_run_id", None)
 
         if ledger_store is None or run_id is None:
-            await log.append_line(
-                "当前会话无行为账本(账本仅在 daemon 模式下可用,或本轮 run 尚未产生副作用动作)。",
-                kind="system",
-            )
+            await log.append_line(t("tui.ledger.no_ledger"), kind="system")
             return
 
         try:
             entries = ledger_store.replay(run_id)
         except Exception as e:  # noqa: BLE001
-            await log.append_line(f"账本读取失败:{e}", kind="error")
+            await log.append_line(t("tui.ledger.read_failed", err=e), kind="error")
             return
 
         if not entries:
-            await log.append_line(
-                f"run {run_id} 尚无账本记录(本轮 run 未产生副作用动作)。",
-                kind="system",
-            )
+            await log.append_line(t("tui.ledger.empty", run_id=run_id), kind="system")
             return
 
         # 过滤掉 undo_done 哨兵条目(action=undo_done 是内部标记,不对用户显示)
         visible = [e for e in entries if e.action != "undo_done"]
         if not visible:
-            await log.append_line(
-                f"run {run_id} 账本:所有动作均已撤销。",
-                kind="system",
-            )
+            await log.append_line(t("tui.ledger.all_undone", run_id=run_id), kind="system")
             return
 
         # 检查是否有文件粒度可撤条目(undo_token 含 "file:" 前缀)
@@ -977,36 +1012,77 @@ class ArgosApp(App):
 
         widget = LedgerTable(entries=visible, run_id=run_id)
         await log.mount_block(widget)
-        await log.append_line("每条回执签名 · summary 模板生成不调模型", kind="system")
+        journal_path = Path.home() / ".argos" / "ledger" / f"{run_id}.jsonl"
+        await log.append_line(
+            t("tui.ledger.footer", path=journal_path, run_id=run_id),
+            kind="system",
+        )
+
+    async def _setup_cmd(self, log) -> None:
+        """/setup:显示配置向导入口。TUI 内无法直接运行 argos setup(它是交互式 CLI);
+        诚实告知路径,让用户退出后运行。"""
+        await log.append_line(t("tui.setup.hint"), kind="system")
+
+    async def _journal_cmd(self, log, arg: str) -> None:
+        """/journal [run_id]:显示账本 JSONL 的绝对路径。
+
+        有 run_id → 显示指定 run 的路径;无参数 → 显示当前 run 的路径(若有)。
+        任意情况下都只打路径,不尝试读文件内容(避免在 TUI 里输出大量 JSONL)。
+        """
+        ledger_dir = Path.home() / ".argos" / "ledger"
+        run_id = arg.strip() or getattr(self, "_daemon_run_id", None) or getattr(self, "_run_id", None)
+        if run_id:
+            journal_path = ledger_dir / f"{run_id}.jsonl"
+            await log.append_line(t("tui.journal.with_id", path=journal_path), kind="system")
+        else:
+            await log.append_line(t("tui.journal.no_id", dir=ledger_dir), kind="system")
 
     async def _retry(self, log) -> None:
         """/retry:重发本 session 最后一条 user 消息。busy / 空 / 无 store 诚实报。
 
+        改进:若 _input_history 有记录,先把上一条 goal 回填到输入框(#20 历史导航),
+        再执行 start_run。
         实现简化:demo 模式(FakeLoop,无 store)下诚实报"当前 store 不支持"——
         真模式需要 build_components 把 store 注入到 App(self._store 字段),
         那是更大装配改动,留作下一 PR。
         """
         if self._run_active:  # busy 守卫(实际字段是 _run_active,非 _busy)
-            await log.append_line("先 Esc 打断当前任务,再 /retry。", kind="system")
+            await log.append_line(t("tui.retry.busy"), kind="system")
             return
-        # store 临时获取:走 loop_factory 拿一个临时 loop 借 .store 属性
-        # (实际应通过 build_components 注入;这是 demo 模式下的临时方案)
+        # 优先从输入历史取上一条(最近提交的 goal/slash;不需要 store):
+        # 找最后一条非 slash(非 / 开头)的历史条目作为 retry goal。
+        last_goal: str | None = None
+        for entry in reversed(getattr(self, "_input_history", []) or []):
+            if not entry.startswith("/"):
+                last_goal = entry
+                break
+        if last_goal:
+            # 回填输入框(#20)
+            try:
+                prompt_widget = self.query_one("#prompt", PromptArea)
+                prompt_widget._refill(last_goal)
+                prompt_widget.reset_history_nav()
+            except Exception:  # noqa: BLE001
+                pass
+            await self.start_run(last_goal)
+            return
+        # 无历史:降级到 store 路径(原有逻辑)
         loop = self._loop_factory() if self._loop_factory is not None else None
         store = getattr(loop, "store", None) if loop is not None else None
         if store is None or not hasattr(store, "get_messages"):
-            await log.append_line("当前 store 不支持 /retry(demo 模式或未通过 build_components 注入)。", kind="error")
+            await log.append_line(t("tui.retry.no_store"), kind="error")
             return
         try:
             msgs = store.get_messages(self._session_id)
         except Exception as e:  # noqa: BLE001
-            await log.append_line(f"读取历史失败:{e}", kind="error")
+            await log.append_line(t("tui.retry.read_failed", err=e), kind="error")
             return
         last_user = next(
             (m for m in reversed(msgs) if m.get("role") == "user" and (m.get("text") or "").strip()),
             None,
         )
         if last_user is None:
-            await log.append_line("当前会话没有可重试的消息。", kind="system")
+            await log.append_line(t("tui.retry.no_messages"), kind="system")
             return
         await self.start_run(last_user["text"])
 
@@ -1023,7 +1099,7 @@ class ArgosApp(App):
         try:
             loop = self._loop_factory()
         except Exception as e:  # noqa: BLE001 — loop 工厂抛(配错/无依赖)也落行告知,不崩 TUI
-            await log.append_line(f"/plan 不可用(loop factory 失败):{e}", kind="error")
+            await log.append_line(t("tui.plan.factory_failed", err=e), kind="error")
             return
         msg = EnterPlanMode(loop)
         # EnterPlanMode 内部已 set_plan_mode(True) + 设 loop.mode="plan";同步本端 flag + 指示器。
@@ -1037,26 +1113,20 @@ class ArgosApp(App):
         if arg == "reload":
             try:
                 cfg = reload_config()
-                await log.append_line(
-                    f"已重载 hooks 配置(共 {len(cfg.entries)} 个事件)。",
-                    kind="system",
-                )
+                await log.append_line(t("tui.hooks.reloaded", n=len(cfg.entries)), kind="system")
             except HooksConfigError as e:
-                await log.append_line(f"/hooks reload 失败(保留旧配置):{e}", kind="error")
+                await log.append_line(t("tui.hooks.reload_failed", err=e), kind="error")
             return
         # /hooks 无参 → 列当前配置
         cfg = get_config()
         if not cfg.entries:
-            await log.append_line(
-                "当前无 hooks 配置(空 ~/.argos/hooks.json 或未配置)。",
-                kind="system",
-            )
+            await log.append_line(t("tui.hooks.empty"), kind="system")
             return
-        lines = [f"当前 hooks 配置({len(cfg.entries)} 个事件):"]
+        lines = [t("tui.hooks.header", n=len(cfg.entries))]
         for ev_name, entries in cfg.entries.items():
             lines.append(f" · {ev_name}:")
             for e in entries:
-                matcher_str = f"matcher={e.matcher!r}" if e.matcher else "(全匹配)"
+                matcher_str = f"matcher={e.matcher!r}" if e.matcher else t("tui.hooks.all_match")
                 lines.append(f"   - {matcher_str}")
                 for h in e.hooks:
                     cmd_short = h.command[:60] + ("..." if len(h.command) > 60 else "")
@@ -1071,17 +1141,17 @@ class ArgosApp(App):
             try:
                 cfg = reload_config()
                 await log.append_line(
-                    f"已重载 LSP 配置(共 {len(cfg.servers)} 个 server)。",
+                    t("tui.lsp.reloaded", n=len(cfg.servers)),
                     kind="system",
                 )
             except LspConfigError as e:
-                await log.append_line(f"/lsp reload 失败(保留旧配置):{e}", kind="error")
+                await log.append_line(t("tui.lsp.reload_failed", err=e), kind="error")
             return
         # /lsp 无参 → 列当前 servers
         cfg = get_config()
         if not cfg.servers:
             await log.append_line(
-                "当前无 LSP 配置(空 ~/.argos/lsp.json 或不可读 → 走 built-in 默认)。",
+                t("tui.lsp.empty"),
                 kind="system",
             )
             return
@@ -1089,9 +1159,9 @@ class ArgosApp(App):
             mgr = _lsp.get_manager()
             servers = mgr.list_servers()
         except Exception as e:  # noqa: BLE001
-            await log.append_line(f"LSP manager 初始化失败:{e}", kind="error")
+            await log.append_line(t("tui.lsp.init_failed", err=e), kind="error")
             return
-        lines = [f"当前 LSP 配置({len(servers)} 个 server):"]
+        lines = [t("tui.lsp.header", n=len(servers))]
         for s in servers:
             ft = ",".join(s["filetypes"])
             disabled_tag = " (disabled)" if cfg.servers.get(s["name"], None) and cfg.servers[s["name"]].disabled else ""
@@ -1100,7 +1170,7 @@ class ArgosApp(App):
                 f"ft={ft:<20} cmd={s['command']}{disabled_tag}"
             )
             if s.get("diag_count", 0) > 0:
-                lines.append(f"     diagnostics: {s['diag_count']} 条")
+                lines.append(t("tui.lsp.diag", n=s["diag_count"]))
         await log.append_line("\n".join(lines), kind="system")
 
     async def _permissions_cmd(self, log, arg: str) -> None:
@@ -1114,39 +1184,41 @@ class ArgosApp(App):
         if arg == "reload":
             try:
                 cfg = reload_config()
+                _dfl = cfg.default_level or t("tui.permissions.default_gate")
                 await log.append_line(
-                    f"已重载 permissions 配置(allow {len(cfg.allow)} / deny {len(cfg.deny)} / "
-                    f"ask {len(cfg.ask)} / per-tool {len(cfg.tools)} / "
-                    f"default_level={cfg.default_level or '(沿用 gate.level)'})。",
+                    t("tui.permissions.reloaded",
+                      allow=len(cfg.allow), deny=len(cfg.deny),
+                      ask=len(cfg.ask), tools=len(cfg.tools), level=_dfl),
                     kind="system",
                 )
             except PermissionsConfigError as e:
                 await log.append_line(
-                    f"/permissions reload 失败(保留旧配置):{e}", kind="error",
+                    t("tui.permissions.reload_failed", err=e), kind="error",
                 )
             return
         # /permissions 无参 → 列当前配置摘要
         try:
             cfg = get_config()
         except Exception as e:  # noqa: BLE001
-            await log.append_line(f"读取 permissions 配置失败:{e}", kind="error")
+            await log.append_line(t("tui.permissions.read_failed", err=e), kind="error")
             return
+        _dfl = cfg.default_level or t("tui.permissions.default_gate")
         lines = [
-            "当前 permissions 配置:",
-            f" · default_level: {cfg.default_level or '(沿用 gate.level)'}",
-            f" · per-tool 覆盖: {len(cfg.tools)} 个" + (
-                "  " + ", ".join(f"{t}={lv}" for t, lv in cfg.tools.items()) if cfg.tools else ""
+            t("tui.permissions.header"),
+            t("tui.permissions.default_level", level=_dfl),
+            t("tui.permissions.per_tool", n=len(cfg.tools)) + (
+                "  " + ", ".join(f"{_t}={lv}" for _t, lv in cfg.tools.items()) if cfg.tools else ""
             ),
-            f" · allow rules: {len(cfg.allow)} 条",
+            t("tui.permissions.allow_rules", n=len(cfg.allow)),
         ]
         for e in list(cfg.allow)[:5]:
             lines.append(f"   · {e.tool}  matcher={e.matcher!r}")
         if len(cfg.allow) > 5:
-            lines.append(f"   …(共 {len(cfg.allow)} 条,省略 {len(cfg.allow) - 5})")
-        lines.append(f" · deny rules: {len(cfg.deny)} 条")
+            lines.append(t("tui.permissions.omitted", total=len(cfg.allow), omitted=len(cfg.allow) - 5))
+        lines.append(t("tui.permissions.deny_rules", n=len(cfg.deny)))
         for e in list(cfg.deny)[:5]:
             lines.append(f"   · {e.tool}  matcher={e.matcher!r}")
-        lines.append(f" · ask rules: {len(cfg.ask)} 条")
+        lines.append(t("tui.permissions.ask_rules", n=len(cfg.ask)))
         for e in list(cfg.ask)[:5]:
             lines.append(f"   · {e.tool}  matcher={e.matcher!r}")
         await log.append_line("\n".join(lines), kind="system")
@@ -1173,20 +1245,20 @@ class ArgosApp(App):
         # 诚实:工作流默认关闭(ARGOS_WORKFLOWS 未设时 host 不 dispatch propose_workflow)——
         # 注明这点,别让 /tools 把一个默认 inert 的工具显示成立即可用。
         import os as _os_wf
-        _wf_label = "编排(工作流)" if _os_wf.environ.get("ARGOS_WORKFLOWS") else "编排(工作流,需 ARGOS_WORKFLOWS=1 才执行)"
+        _wf_label = t("tui.tools.wf_on") if _os_wf.environ.get("ARGOS_WORKFLOWS") else t("tui.tools.wf_off")
         groups = [
-            ("文件", ["read_file", "write_file", "edit_file", "search_files"]),
-            ("命令/验证/计划", ["run_command", "propose_verify", "update_plan"]),
-            ("联网", ["web_search", "web_extract"]),
-            ("计算机控制(浏览器)", [n for n in names if n.startswith("browser_")]),
-            ("外部工具", ["mcp_call"]),
-            ("LSP 语言服务器", [n for n in names if n.startswith("lsp_")]),
+            (t("tui.tools.group.file"), ["read_file", "write_file", "edit_file", "search_files"]),
+            (t("tui.tools.group.cmd"), ["run_command", "propose_verify", "update_plan"]),
+            (t("tui.tools.group.web"), ["web_search", "web_extract"]),
+            (t("tui.tools.group.browser"), [n for n in names if n.startswith("browser_")]),
+            (t("tui.tools.group.external"), ["mcp_call"]),
+            (t("tui.tools.group.lsp"), [n for n in names if n.startswith("lsp_")]),
             # 模型可见名=下划线(ALL_TOOL_NAMES 路径);registry.names() 仍点号 —— 两者都归此组。
-            ("OS 级控制(P6a)", [n for n in names
+            (t("tui.tools.group.os"), [n for n in names
                                 if n.startswith("computer_")]),
             (_wf_label, ["propose_workflow"]),
         ]
-        lines = [f"共 {len(names)} 个工具:"]
+        lines = [t("tui.tools.header", n=len(names))]
         for label, members in groups:
             present = [m for m in members if m in names]
             if present:
@@ -1201,7 +1273,7 @@ class ArgosApp(App):
         """
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             await log.append_line(
-                "未启用 daemon(--with-daemon flag);/runs 不可用。",
+                t("tui.runs.no_daemon"),
                 kind="system",
             )
             return
@@ -1214,10 +1286,10 @@ class ArgosApp(App):
             try:
                 runs = await self._daemon_client.list_runs(self._daemon_session_id)
             except Exception as e:  # noqa: BLE001
-                await log.append_line(f"列 run 失败:{e}", kind="error")
+                await log.append_line(t("tui.runs.list_failed", err=e), kind="error")
                 return
             if not runs:
-                await log.append_line("无 run。", kind="system")
+                await log.append_line(t("tui.runs.empty"), kind="system")
                 return
             import time as _time
             from argos.tui.widgets.tab_strip import _format_cost
@@ -1226,7 +1298,7 @@ class ArgosApp(App):
                 "suspended": "◌", "completed": "◕",
                 "failed": "◉", "cancelled": "◌",
             }
-            lines = ["Run 列表(#5b 扩展:cost / worktree):"]
+            lines = [t("tui.runs.list_header")]
             for r in runs:
                 icon = _ICON.get(r.get("state", "pending"), "◌")
                 age = int(_time.time() - r.get("created_at", 0))
@@ -1239,7 +1311,7 @@ class ArgosApp(App):
                     f"{r['goal'][:32]}  {cost}  [{wt_short}]{focus_tag}  ({age}s ago)"
                 )
             lines.append("")
-            lines.append("/runs {id} focus|resume|cancel — 控制")
+            lines.append(t("tui.runs.list_footer", id="{id}"))
             await log.append_line("\n".join(lines), kind="system")
             return
         # /runs {id} [focus|resume|cancel]
@@ -1254,49 +1326,51 @@ class ArgosApp(App):
                 if status == 200:
                     self._daemon_run_id = run_id
                     await log.append_line(
-                        f"已 focus {run_id}(active 切到该 run)。",
+                        t("tui.runs.focus_ok", run_id=run_id),
                         kind="system",
                     )
                     self._refresh_tab_strip()
                 else:
                     await log.append_line(
-                        f"focus 失败:HTTP {status}", kind="error",
+                        t("tui.runs.focus_failed", status=status), kind="error",
                     )
             except Exception as e:  # noqa: BLE001
                 err = str(e)
                 if "session_readonly" in err or "403" in err:
                     await log.append_line(
-                        "READ-ONLY 观察者不能 focus(只有 owner TUI 能切 active)。",
+                        t("tui.runs.focus_readonly"),
                         kind="error",
                     )
                 else:
-                    await log.append_line(f"focus 失败:{e}", kind="error")
+                    await log.append_line(t("tui.runs.focus_err", err=e), kind="error")
             return
         if action == "resume":
             try:
                 await self._daemon_client.resume(self._daemon_session_id, run_id)
-                await log.append_line(f"已请求 resume {run_id}。", kind="system")
+                await log.append_line(t("tui.runs.resume_ok", run_id=run_id), kind="system")
             except Exception as e:  # noqa: BLE001
-                await log.append_line(f"resume 失败:{e}", kind="error")
+                await log.append_line(t("tui.runs.resume_failed", err=e), kind="error")
         elif action == "cancel":
             try:
                 await self._daemon_client.cancel(self._daemon_session_id, run_id)
-                await log.append_line(f"已请求 cancel {run_id}。", kind="system")
+                await log.append_line(t("tui.runs.cancel_ok", run_id=run_id), kind="system")
             except Exception as e:  # noqa: BLE001
-                await log.append_line(f"cancel 失败:{e}", kind="error")
+                await log.append_line(t("tui.runs.cancel_failed", err=e), kind="error")
         else:
             try:
                 info = await self._daemon_client.get_run(self._daemon_session_id, run_id)
                 from argos.tui.widgets.tab_strip import _format_cost
                 cost = _format_cost(info.get("cost_usd"))
                 wt = info.get("worktree_path") or "(none)"
+                journal_path = Path.home() / ".argos" / "ledger" / f"{run_id}.jsonl"
                 await log.append_line(
                     f"{run_id}: state={info.get('state')}  events={info.get('events_count')}  "
-                    f"cost={cost}  worktree={wt}",
+                    f"cost={cost}  worktree={wt}\n"
+                    f"  journal: {journal_path}",
                     kind="system",
                 )
             except Exception as e:  # noqa: BLE001
-                await log.append_line(f"查 run 失败:{e}", kind="error")
+                await log.append_line(t("tui.runs.info_failed", err=e), kind="error")
 
     # ── P5b §9 自治面：/orders /confirm /dismiss ──────────────────────
 
@@ -1314,7 +1388,7 @@ class ArgosApp(App):
                 import json as _json
                 orders = _json.loads(raw)
             except Exception as e:  # noqa: BLE001
-                await log.append_line(f"/orders 请求失败（daemon）:{e}", kind="error")
+                await log.append_line(t("tui.orders.request_failed", err=e), kind="error")
                 return
         else:
             # 无 daemon：本地 OrderStore 直读
@@ -1322,7 +1396,7 @@ class ArgosApp(App):
                 from argos.conductor.orders import OrderStore
                 orders = [o.to_dict() for o in OrderStore().list()]
             except Exception as e:  # noqa: BLE001
-                await log.append_line(f"读取本地 orders 失败:{e}", kind="error")
+                await log.append_line(t("tui.orders.local_failed", err=e), kind="error")
                 return
 
         from argos.tui.widgets.transcript import Transcript
@@ -1336,11 +1410,11 @@ class ArgosApp(App):
         """
         suggestion_id = suggestion_id.strip()
         if not suggestion_id:
-            await log.append_line("用法:/confirm <suggestion_id>", kind="error")
+            await log.append_line(t("tui.confirm.no_id"), kind="error")
             return
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             await log.append_line(
-                "confirm 需要 daemon 模式（--with-daemon）。",
+                t("tui.confirm.no_daemon"),
                 kind="error",
             )
             return
@@ -1352,31 +1426,28 @@ class ArgosApp(App):
             import json as _json
             body = _json.loads(raw) if raw else {}
         except Exception as e:  # noqa: BLE001
-            await log.append_line(f"/confirm 请求失败:{e}", kind="error")
+            await log.append_line(t("tui.confirm.request_failed", err=e), kind="error")
             return
         if status == 201:
             run_id = body.get("run_id", "?")
             wt = body.get("worktree_path") or "(none)"
             await log.append_line(
-                f"建议已确认并创建 run：{run_id}\n"
-                f"  隔离：worktree={wt}\n"
-                f"  信任档：L1_DANGEROUS_ONLY（写死，不可升级）\n"
-                f"  用 /runs 查看运行状态。",
+                t("tui.confirm.ok", run_id=run_id, wt=wt),
                 kind="done",
             )
         elif status == 404:
             await log.append_line(
-                f"建议 {suggestion_id!r} 未找到或已处理（dismissed/confirmed）。",
+                t("tui.confirm.not_found", id=suggestion_id),
                 kind="error",
             )
         elif status == 503:
             await log.append_line(
-                f"无法确认：{body.get('error', '服务暂不可用')}",
+                t("tui.confirm.unavailable", err=body.get("error", t("tui.confirm.service_unavailable"))),
                 kind="error",
             )
         else:
             await log.append_line(
-                f"/confirm 失败（HTTP {status}）：{body.get('error', raw)}",
+                t("tui.confirm.failed", status=status, err=body.get("error", raw)),
                 kind="error",
             )
 
@@ -1384,11 +1455,11 @@ class ArgosApp(App):
         """/dismiss <suggestion_id>:忽略 conductor 建议（通过 daemon 端点）。"""
         suggestion_id = suggestion_id.strip()
         if not suggestion_id:
-            await log.append_line("用法:/dismiss <suggestion_id>", kind="error")
+            await log.append_line(t("tui.dismiss.no_id"), kind="error")
             return
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             await log.append_line(
-                "dismiss 需要 daemon 模式（--with-daemon）。",
+                t("tui.dismiss.no_daemon"),
                 kind="error",
             )
             return
@@ -1400,18 +1471,18 @@ class ArgosApp(App):
             import json as _json
             body = _json.loads(raw) if raw else {}
         except Exception as e:  # noqa: BLE001
-            await log.append_line(f"/dismiss 请求失败:{e}", kind="error")
+            await log.append_line(t("tui.dismiss.request_failed", err=e), kind="error")
             return
         if status == 200:
-            await log.append_line(f"建议 {suggestion_id!r} 已忽略。", kind="system")
+            await log.append_line(t("tui.dismiss.ok", id=suggestion_id), kind="system")
         elif status == 404:
             await log.append_line(
-                f"建议 {suggestion_id!r} 未找到或已处理。",
+                t("tui.dismiss.not_found", id=suggestion_id),
                 kind="error",
             )
         else:
             await log.append_line(
-                f"/dismiss 失败（HTTP {status}）：{body.get('error', raw)}",
+                t("tui.dismiss.failed", status=status, err=body.get("error", raw)),
                 kind="error",
             )
 
@@ -1465,30 +1536,36 @@ class ArgosApp(App):
         if kind == "screenshot":
             if ev.ok:
                 path_hint = f" → {ev.artifact_path}" if ev.artifact_path else ""
-                line = f"[computer] {ok_mark} 截图已保存{path_hint}"
+                line = t("tui.computer.screenshot_ok", mark=ok_mark, path=path_hint)
             else:
-                line = f"[computer] {ok_mark} 截图失败:{ev.detail}"
+                line = t("tui.computer.screenshot_fail", mark=ok_mark, detail=ev.detail)
         elif kind in ("click", "double_click"):
-            label = "双击" if kind == "double_click" else "点击"
-            coord = f"({ev.x}, {ev.y})" if ev.x is not None and ev.y is not None else "(未知坐标)"
-            line = f"[computer] {ok_mark} {label}了 {coord}" + (f":{ev.detail}" if not ev.ok else "")
+            _label = t("tui.computer.dblclick_label") if kind == "double_click" else t("tui.computer.click_label")
+            _coord = f"({ev.x}, {ev.y})" if ev.x is not None and ev.y is not None else t("tui.computer.unknown_coord")
+            if ev.ok:
+                line = t("tui.computer.click_ok", mark=ok_mark, label=_label, coord=_coord)
+            else:
+                line = t("tui.computer.click_fail", mark=ok_mark, label=_label, coord=_coord, detail=ev.detail)
         elif kind == "type_text":
             preview = ev.text_preview[:40] + ("…" if len(ev.text_preview) > 40 else "") if ev.text_preview else ""
             if ev.ok:
-                line = f"[computer] {ok_mark} 输入了 {preview!r}" if preview else f"[computer] {ok_mark} 键入文本"
+                line = t("tui.computer.type_ok", mark=ok_mark, preview=preview) if preview else t("tui.computer.type_ok_nopreview", mark=ok_mark)
             else:
-                line = f"[computer] {ok_mark} 键入失败:{ev.detail}"
+                line = t("tui.computer.type_fail", mark=ok_mark, detail=ev.detail)
         elif kind == "key":
             preview = ev.text_preview or ""
-            line = f"[computer] {ok_mark} 按键 {preview!r}" + (f":{ev.detail}" if not ev.ok else "")
+            _detail = f":{ev.detail}" if not ev.ok else ""
+            line = t("tui.computer.key_line", mark=ok_mark, preview=preview, detail=_detail)
         elif kind == "scroll":
-            coord = f"({ev.x}, {ev.y})" if ev.x is not None and ev.y is not None else ""
-            line = f"[computer] {ok_mark} 滚动{coord}" + (f":{ev.detail}" if not ev.ok else "")
+            _coord = f"({ev.x}, {ev.y})" if ev.x is not None and ev.y is not None else ""
+            _detail = f":{ev.detail}" if not ev.ok else ""
+            line = t("tui.computer.scroll_line", mark=ok_mark, coord=_coord, detail=_detail)
         elif kind == "open_app":
             app_hint = ev.text_preview or ev.detail
-            line = f"[computer] {ok_mark} 启动应用 {app_hint}" + ("" if ev.ok else f":{ev.detail}")
+            _detail = "" if ev.ok else f":{ev.detail}"
+            line = t("tui.computer.open_app_line", mark=ok_mark, hint=app_hint, detail=_detail)
         else:
-            line = f"[computer] {ok_mark} {kind}:{ev.detail}"
+            line = t("tui.computer.generic_line", mark=ok_mark, kind=kind, detail=ev.detail)
 
         kind_str = "system" if ev.ok else "error"
         try:
@@ -1515,7 +1592,7 @@ class ArgosApp(App):
         try:
             result = await run_skill(skill_name, {"path": path}, ctx)
         except Exception as e:  # noqa: BLE001
-            await log.append_line(f"/{skill_name} 失败:{e}", kind="error")
+            await log.append_line(t("tui.skill.run_failed", name=skill_name, err=e), kind="error")
             return
         await log.append_line(result.summary, kind="info")
         if result.findings:
@@ -1532,33 +1609,32 @@ class ArgosApp(App):
     async def _remember_cmd(self, log, text: str) -> None:
         """/remember <text>:追加一条用户记忆(scope 自动判 user/project)。"""
         if not text.strip():
-            await log.append_line("用法:/remember <要记住的内容>", kind="error")
+            await log.append_line(t("tui.remember.usage"), kind="error")
             return
         from argos.memory import auto as _mem
         pid = _mem.project_id_for()
         e = _mem.remember(text, project_id=pid)
         if e is None:
-            await log.append_line("(已是最新 — 24h 内重复 / 空内容 / 解析失败,跳过)",
-                                 kind="info")
+            await log.append_line(t("tui.remember.duplicate"), kind="info")
             return
         await log.append_line(
-            f"已记住 ({e.scope}): {e.value} (id={e.id}, conf={e.confidence:.2f})",
+            t("tui.remember.ok", scope=e.scope, value=e.value, id=e.id, conf=e.confidence),
             kind="done",
         )
 
     async def _forget_cmd(self, log, query: str) -> None:
         """/forget <id|key|text>:软删(confidence=0,后台 prune 真删)。"""
         if not query.strip():
-            await log.append_line("用法:/forget <id 或 key 或 文本>", kind="error")
+            await log.append_line(t("tui.forget.usage"), kind="error")
             return
         from argos.memory import auto as _mem
         pid = _mem.project_id_for()
         sid = self._session_id
         out = _mem.forget(query, project_id=pid, session_id=sid)
         if not out:
-            await log.append_line(f"未找到匹配 '{query}' 的记忆。", kind="info")
+            await log.append_line(t("tui.forget.not_found", query=query), kind="info")
             return
-        await log.append_line(f"已软删 {len(out)} 条:", kind="done")
+        await log.append_line(t("tui.forget.ok", n=len(out)), kind="done")
         for e in out:
             await log.append_line(f"  - {e.id} ({e.scope}) {e.key} = {e.value[:60]}",
                                  kind="info")
@@ -1584,11 +1660,11 @@ class ArgosApp(App):
             runs = list_runs(limit=20)
             if not runs:
                 await log.append_line(
-                    "尚未跑过 eval。试试 /eval run <task_id> 或 argos eval corpus",
+                    t("tui.eval.no_runs"),
                     kind="system")
                 return
             lines = [
-                "最近 eval runs(最多 20):",
+                t("tui.eval.list_header"),
                 (f"  {'Date':<11} {'Task':<32} {'Tier':<10} {'Status':<14} "
                  f"{'Cost':<8} {'Time':<5}"),
             ]
@@ -1618,7 +1694,7 @@ class ArgosApp(App):
             await self._eval_compare_cmd(log, parts[1], parts[2])
             return
         await log.append_line(
-            "用法:/eval [run <task_id> | compare <a> <b>]", kind="error")
+            t("tui.eval.usage"), kind="error")
 
     async def _eval_run_cmd(self, log, task_id: str) -> None:
         """/eval run <task_id>:跑单个 task(走 EvalRunner)。"""
@@ -1629,7 +1705,7 @@ class ArgosApp(App):
         try:
             task = load_task(task_id)
         except FileNotFoundError as e:
-            await log.append_line(f"未找到 task: {e}", kind="error")
+            await log.append_line(t("tui.eval.task_not_found", err=e), kind="error")
             return
         # 用 config active model(本期不热切换)
         model_tier = "default"
@@ -1672,15 +1748,15 @@ class ArgosApp(App):
         tb, mb = _parse(b)
         if not (ta and tb):
             await log.append_line(
-                "用法:/eval compare <task_id>[:<model>] <task_id>[:<model>]", kind="error")
+                t("tui.eval.compare_usage"), kind="error")
             return
         if ta != tb:
-            await log.append_line(f"task_id 不一致:{ta} vs {tb}", kind="error")
+            await log.append_line(t("tui.eval.task_mismatch", a=ta, b=tb), kind="error")
             return
         try:
             task = load_task(ta)
         except FileNotFoundError as e:
-            await log.append_line(f"未找到 task: {e}", kind="error")
+            await log.append_line(t("tui.eval.task_not_found", err=e), kind="error")
             return
         # model 缺省 = active
         active = "default"
@@ -1701,7 +1777,7 @@ class ArgosApp(App):
         md = p.read_text("utf-8")
         if md.count("\n") > 200:
             await log.append_line(
-                md[:8000] + "\n\n... (truncated; 完整报告看:cat " + str(p) + ")",
+                md[:8000] + t("tui.eval.truncated", path=str(p)),
                 kind="system")
         else:
             await log.append_line(md, kind="system")
@@ -1717,7 +1793,7 @@ class ArgosApp(App):
         router = self._current_router()
         if router is None:
             await log.append_line(
-                "/routing 不可用(无 router 注入;demo/fake 模式)。",
+                t("tui.routing.no_router"),
                 kind="system")
             return
         widget = RoutingTable(routing=router.routing, history=router.history())
@@ -1737,7 +1813,7 @@ class ArgosApp(App):
         try:
             b = analyze(loop, store=store, workspace=workspace)  # type: ignore[arg-type]
         except Exception as e:  # noqa: BLE001 — 任何分析失败都降级
-            await log.append_line(f"/context 失败:{e}", kind="error")
+            await log.append_line(t("tui.context.failed", err=e), kind="error")
             return
         if "--json" in arg:
             await log.append_line(format_json(b), kind="info")
@@ -1750,14 +1826,14 @@ class ArgosApp(App):
     @staticmethod
     def _fmt_dream_report(r: dict) -> str:
         """把 Dream 报告 dict 格式化成一行摘要(复用于 /dream status 和 SSE dream_report)。"""
-        return (
-            f"Dream 完成  "
-            f"units={r.get('units_total', 0)}  "
-            f"promoted={r.get('promoted', 0)}  "
-            f"rejected={r.get('rejected', 0)}  "
-            f"skipped={r.get('skipped', 0)}  "
-            f"memory_merged={r.get('memory_merged', 0)}  "
-            f"memory_archived={r.get('memory_archived', 0)}"
+        return t(
+            "tui.dream.fmt",
+            units=r.get("units_total", 0),
+            promoted=r.get("promoted", 0),
+            rejected=r.get("rejected", 0),
+            skipped=r.get("skipped", 0),
+            merged=r.get("memory_merged", 0),
+            archived=r.get("memory_archived", 0),
         )
 
     async def _dream_cmd(self, log, arg: str) -> None:
@@ -1773,8 +1849,7 @@ class ArgosApp(App):
         # ── inline 模式:诚实拒绝 ─────────────────────────────────────
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             await log.append_line(
-                "Dream 需要 daemon 模式(当前 inline)。\n"
-                "提示:重启 Argos 让其自动连接 daemon,或检查 ~/.argos/daemon.sock。",
+                t("tui.dream.no_daemon"),
                 kind="system",
             )
             return
@@ -1787,21 +1862,21 @@ class ArgosApp(App):
                 )
                 body = _json.loads(raw) if raw else {}
             except Exception as e:  # noqa: BLE001
-                await log.append_line(f"/dream report 请求失败:{e}", kind="error")
+                await log.append_line(t("tui.dream.report_failed", err=e), kind="error")
                 return
             if status == 200:
                 report = body.get("report")
                 if report is None:
-                    await log.append_line("暂无 Dream 报告(还没跑过夜间整合)。", kind="system")
+                    await log.append_line(t("tui.dream.no_report"), kind="system")
                 elif not isinstance(report, dict):
                     await log.append_line(
-                        f"Dream 报告格式异常(期望 dict,收到 {type(report).__name__})",
+                        t("tui.dream.report_bad_type", type=type(report).__name__),
                         kind="error",
                     )
                 else:
                     await log.append_line(self._fmt_dream_report(report), kind="done")
             else:
-                await log.append_line(f"/dream report 失败(HTTP {status})", kind="error")
+                await log.append_line(t("tui.dream.http_failed", status=status), kind="error")
             return
 
         # ── 无参数 → POST /dream/run ────────────────────────────────
@@ -1811,22 +1886,22 @@ class ArgosApp(App):
             )
             body = _json.loads(raw) if raw else {}
         except Exception as e:  # noqa: BLE001
-            await log.append_line(f"/dream/run 请求失败:{e}", kind="error")
+            await log.append_line(t("tui.dream.run_failed", err=e), kind="error")
             return
 
         if status == 202:
             # 诚实铁律:202 = 已启动(test_daemon_wiring 锁此契约);先发口头确认再挂整合卡。
-            await log.append_line("Dream 已启动 · 整合进度见下方。", kind="done")
+            await log.append_line(t("tui.dream.started"), kind="done")
             self._dream_card = DreamReportCard()
             await log.mount_block(self._dream_card)
         elif status == 409:
-            await log.append_line("已有 Dream 在跑,请稍后再试。", kind="system")
+            await log.append_line(t("tui.dream.already_running"), kind="system")
         elif status == 503:
-            msg = body.get("error") or body.get("state") or "无 worker key"
-            await log.append_line(f"Dream 启动失败:{msg}", kind="error")
+            msg = body.get("error") or body.get("state") or t("tui.dream.no_worker_key")
+            await log.append_line(t("tui.dream.start_failed", msg=msg), kind="error")
         else:
             await log.append_line(
-                f"/dream/run 返回未知状态 HTTP {status}:{body}", kind="error"
+                t("tui.dream.unknown_status", status=status, body=body), kind="error"
             )
 
     async def _routing_set(self, log, arg: str) -> None:
@@ -1840,8 +1915,7 @@ class ArgosApp(App):
         parts = arg.strip().split()
         if len(parts) != 2:
             await log.append_line(
-                "用法:/routing set <category> <tier>  "
-                f"(8 个合法 category: {[c.value for c in TaskCategory]})",
+                t("tui.routing.set_usage", cats=str([c.value for c in TaskCategory])),
                 kind="error")
             return
         cat_name, tier = parts
@@ -1849,8 +1923,7 @@ class ArgosApp(App):
             category = TaskCategory(cat_name)
         except ValueError:
             await log.append_line(
-                f"category '{cat_name}' 不存在;8 个合法值:"
-                f"{[c.value for c in TaskCategory]}",
+                t("tui.routing.bad_category", cat=cat_name, cats=str([c.value for c in TaskCategory])),
                 kind="error")
             return
         try:
@@ -1858,11 +1931,10 @@ class ArgosApp(App):
                               or Path.home() / ".argos")
             set_category(config_dir, category, tier)
         except ConfigError as e:
-            await log.append_line(f"/routing set 失败:{e}", kind="error")
+            await log.append_line(t("tui.routing.set_failed", err=e), kind="error")
             return
         await log.append_line(
-            f"已写入 {config_dir}/config.json:"
-            f"routing.by_category.{category.value} = {tier}",
+            t("tui.routing.set_ok", dir=config_dir, cat=category.value, tier=tier),
             kind="done")
 
     def _current_router(self):
@@ -1884,11 +1956,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         if sub_parts and sub_parts[0] in ("install", "remove", "refresh", "test"):
             sub = sub_parts[0]
             sub_arg = sub_parts[1] if len(sub_parts) > 1 else ""
-            hint = (
-                f"[skills] TUI 不直装副作用。请到 host 跑:\n"
-                f"        $ argos skills {sub} {sub_arg}"
-            )
-            await log.append_line(hint, kind="system")
+            await log.append_line(t("tui.skills.side_effect_hint", sub=sub, arg=sub_arg), kind="system")
             return
 
         try:
@@ -1898,7 +1966,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 SessionActivity, build_activity_from_session, recommend,
             )
         except Exception as e:  # noqa: BLE001
-            await log.append_line(f"curator 未加载:{e}", kind="error")
+            await log.append_line(t("tui.skills.curator_failed", err=e), kind="error")
             return
 
         installed = list_installed()
@@ -1907,7 +1975,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         lines: list[str] = []
         lines.append(f"Installed skills ({len(installed)}):")
         if not installed:
-            lines.append("  (no skills installed;跑 `argos skills refresh` 拉 index)")
+            lines.append(t("tui.skills.empty"))
         for s in installed:
             flag = "OK" if s.enabled else "OFF"
             flag2 = "" if s.enabled else "  (unreviewed)"
@@ -1945,20 +2013,19 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             mgr = mcp_native.get_manager()
             tools = mgr.list_tools()   # 阻塞确保连接(用户主动查时可接受短暂等待)
         except Exception as e:  # noqa: BLE001
-            await log.append_line(f"MCP 查询失败:{e}", kind="error")
+            await log.append_line(t("tui.mcp.query_failed", err=e), kind="error")
             return
         if not tools:
             await log.append_line(
-                "未配置 MCP,或配置的 server 未连上 / 无工具。\n"
-                "在 ~/.argos/mcp.json 配置 stdio server 即可扩展工具(默认零预配)。",
+                t("tui.mcp.empty"),
                 kind="system")
             return
         by_server: dict[str, list] = {}
-        for t in tools:
-            by_server.setdefault(t.server, []).append(t)
-        lines = [f"已连接 MCP 工具 {len(tools)} 个,经 mcp_call(server, tool, arguments) 调用:"]
+        for _tool in tools:
+            by_server.setdefault(_tool.server, []).append(_tool)
+        lines = [t("tui.mcp.header", n=len(tools))]
         for server, ts in by_server.items():
-            lines.append(f" · {server}:{', '.join(t.name for t in ts)}")
+            lines.append(f" · {server}:{', '.join(_tool.name for _tool in ts)}")
         await log.append_line("\n".join(lines), kind="system")
 
     async def _resume_recent(self, log) -> None:
@@ -1969,18 +2036,18 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         loop = self._loop_factory()
         store = getattr(loop, "store", None)
         if store is None or not hasattr(store, "list_sessions"):
-            await log.append_line("/resume 不可用(当前无持久化会话)。", kind="error")
+            await log.append_line(t("tui.resume.no_store"), kind="error")
             return
         sessions = [s for s in store.list_sessions(limit=10) if s.session_id != self._session_id]
         if not sessions:
-            await log.append_line("没有可恢复的历史会话。", kind="system")
+            await log.append_line(t("tui.resume.no_sessions"), kind="system")
             return
         prev = sessions[0]   # 最近一次(list_sessions 按 started_at DESC)
         self._session_id = prev.session_id
         msgs = store.get_messages(prev.session_id) if hasattr(store, "get_messages") else []
         title = (prev.title or prev.session_id[:8]).strip() or prev.session_id[:8]
         await log.append_line(
-            f"已恢复会话「{title}」,带回 {len(msgs)} 条历史 —— 继续输入即接上文。", kind="done")
+            t("tui.resume.ok", title=title, n=len(msgs)), kind="done")
 
     # ── 一轮 run:EventBus + loop + Worker 消费 ────────────────────────────
     async def start_run(self, goal: str, attachments: list | None = None) -> None:
@@ -2054,10 +2121,10 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         await self._announce_memory_recall(log, loop, goal)
         if self._demo:
             await log.append_line(
-                "⚠︎ 演示模式:以下为脚本化假数据,非真实执行/验证(真 AgentLoop 待 Phase 6 接入)。"
+                t("tui.run.demo_banner")
             )
         else:
-            await log.show_thinking("已收到目标,思考中…")
+            await log.show_thinking(t("tui.run.thinking"))
 
         async def _produce() -> None:
             try:
@@ -2091,7 +2158,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             except Exception:  # noqa: BLE001
                 pass
             if self._interrupted:
-                await log.append_line("⎋ 已打断当前任务。", kind="system")
+                await log.append_line(t("tui.run.interrupted"), kind="system")
                 self._interrupted = False
 
     async def _start_run_daemon(self, goal: str, log, attachments: list | None = None) -> None:
@@ -2118,7 +2185,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 attachments=attachments or [],
             )
         except Exception as e:  # noqa: BLE001
-            await log.append_line(f"◉ daemon create_run 失败:{e}", kind="error")
+            await log.append_line(t("tui.run.create_failed", err=e), kind="error")
             self._run_active = False
             self._glow_stop()
             return
@@ -2128,7 +2195,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         # 刷新 TabStrip
         self._refresh_tab_strip()
 
-        await log.show_thinking("已收到目标,思考中…")
+        await log.show_thinking(t("tui.run.thinking"))
 
         # DaemonEventSource:SSE → typed Event 流
         socket_path = self._daemon_client.socket_path
@@ -2170,7 +2237,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             except Exception:  # noqa: BLE001
                 pass
             if self._interrupted:
-                await log.append_line("⎋ 已打断当前任务。", kind="system")
+                await log.append_line(t("tui.run.interrupted"), kind="system")
                 self._interrupted = False
 
     async def _announce_memory_recall(self, log, loop: object, goal: str) -> None:
@@ -2191,7 +2258,12 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             await log.append_token(ev.text)
         elif isinstance(ev, PhaseChange):
             for sp in log.query(ThinkingIndicator):
-                sp.set_label({"plan": "规划中…", "act": "执行中…", "verify": "验证中…", "report": "汇总中…"}.get(ev.phase, "思考中…"))
+                sp.set_label({
+                    "plan": t("tui.event.phase.plan"),
+                    "act": t("tui.event.phase.act"),
+                    "verify": t("tui.event.phase.verify"),
+                    "report": t("tui.event.phase.report"),
+                }.get(ev.phase, t("tui.event.phase.default")))
             log.finalize_response()
             bar.set_phase(ev.phase, ev.actions)
             ap.on_phase(ev.phase, ev.actions)
@@ -2221,16 +2293,26 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 await log.mount_block(badge)
             badge.show(ev.verdict)
             ap.on_verdict(ev.verdict)   # 右栏 Verdict 区段(verify/idle 视图)同步
-            # E4 防火墙:self_verified=True 的 passed 用 warning 橙而非 success 绿
-            self._set_border(glow.verdict_color_self_aware(
-                ev.verdict.status,
-                self_verified=bool(getattr(ev.verdict, "self_verified", False)),
-            ))
-            if ev.verdict.status in ("failed", "unverifiable"):
-                # 锁定告警色(边框 + StatusBar -alert),后续 report 阶段色/眼不得覆盖(陷阱2)
-                # unverifiable 锁橙(真相不确定)而非红——三态语义纯度
-                self._set_terminal_glow(
-                    True, kind="warn" if ev.verdict.status == "unverifiable" else "fail")
+            # CONTRACT A:no_test==True = 仅因无 verify_cmd 而未机检,不是真实错误/篡改。
+            # no_test 态用中性 idle 边框 + 不锁 StatusBar 告警色(绝不染橙/红)。
+            # 只有"genuine unverifiable"(tamper/timeout/declared-but-failed) 才锁橙。
+            _is_no_test = bool(getattr(ev.verdict, "no_test", False))
+            if _is_no_test:
+                # 中性收尾:边框回 idle,不锁 glow(诚实:没跑验证≠失败)
+                from argos.tui import glow as _glow_mod
+                self._set_border(_glow_mod.IDLE_BORDER)
+                self._set_terminal_glow(False)
+            else:
+                # E4 防火墙:self_verified=True 的 passed 用 warning 橙而非 success 绿
+                self._set_border(glow.verdict_color_self_aware(
+                    ev.verdict.status,
+                    self_verified=bool(getattr(ev.verdict, "self_verified", False)),
+                ))
+                if ev.verdict.status in ("failed", "unverifiable"):
+                    # 锁定告警色(边框 + StatusBar -alert),后续 report 阶段色/眼不得覆盖(陷阱2)
+                    # unverifiable 锁橙(真相不确定)而非红——三态语义纯度
+                    self._set_terminal_glow(
+                        True, kind="warn" if ev.verdict.status == "unverifiable" else "fail")
         elif isinstance(ev, CostUpdate):
             bar.set_cost(
                 tokens_in=ev.tokens_in, tokens_out=ev.tokens_out,
@@ -2258,14 +2340,14 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 pass
             pct = round(ev.reduction_pct * 100) if ev.reduction_pct <= 1 else round(ev.reduction_pct)
             await log.append_line(
-                f"◌ 已压缩 -{pct}% · {ev.before}→{ev.after} 条", kind="system")
+                t("tui.event.compacted", pct=pct, before=ev.before, after=ev.after), kind="system")
         elif isinstance(ev, PrunedEvent):
             # context rot 相关性修剪(spec §8.1 机会点①):右栏 + transcript faint 系统行。
             try:
                 ap.on_pruned(ev.before, ev.after, ev.removed)
             except Exception:  # noqa: BLE001
                 pass
-            await log.append_line(f"◌ 已修剪 {ev.removed} 条", kind="system")
+            await log.append_line(t("tui.event.pruned", n=ev.removed), kind="system")
         elif isinstance(ev, WorkflowProposed):
             await self._handle_workflow_proposed(ev)
         elif isinstance(ev, WorkflowProgress):
@@ -2277,10 +2359,11 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 self._workflow_panel.finish(ev.synthesis, ev.notes)
             # 汇总落对话流(synthesis 可能含 `[...]`,append_line 走 SystemLine 已 markup=False,安全)。
             await log.append_line(
-                f"◕ 工作流「{ev.name}」完成:{ev.synthesis}", kind="done")
+                t("tui.event.workflow_done", name=ev.name, synthesis=ev.synthesis), kind="done")
         elif isinstance(ev, ToolReceipt):
             # 回执进活动栏面板的"回执"区 + 工具计数,不再进 transcript(Task 10)。
-            ap.on_receipt(ev.receipt.action)
+            # #6:把 HMAC 签名前 8 字符一并传入,让"已签名"成为可见、可证伪的事实而非空标签。
+            ap.on_receipt(ev.receipt.action, ev.receipt.sig[:8])
         elif isinstance(ev, ApprovalRequest):
             await self._handle_approval(ev)
         elif isinstance(ev, PlanRendered):
@@ -2298,13 +2381,13 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             # 替换原来 _announce_memory_recall 对 loop._store 的直接访问(store 穿透修)。
             n = len(ev.hits)
             if n > 0:
-                await log.append_line(f"◌ 记忆召回 {n} 条", kind="system")
+                await log.append_line(t("tui.event.memory_recall", n=n), kind="system")
                 try:
                     ap.on_memory_recall(n)
                 except Exception:  # noqa: BLE001 — 未 mount / 窄屏:静默
                     pass
         elif isinstance(ev, ApprovalResponse):
-            await log.append_line(f"审批结果:{ev.call_id} → {ev.decision}")
+            await log.append_line(t("tui.event.approval_result", action=ev.call_id, value=ev.decision))
         elif isinstance(ev, ProactiveSuggestionEvent):
             # P5b §9 自治面:conductor 建议到达 → transcript 只读展示 + 操作提示
             await self._on_proactive_suggestion(ev)
@@ -2355,14 +2438,48 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 except Exception:  # noqa: BLE001 — 未 mount / 静默
                     pass
         elif isinstance(ev, Escalation):
-            await log.append_line(f"⚠︎ 卡住({ev.attempts} 轮):{ev.reason} — 最后失败:{ev.last_failure}", kind="escalation")
+            await log.append_line(t("tui.event.escalation", attempts=ev.attempts, reason=ev.reason, failure=ev.last_failure), kind="escalation")
             self._set_border(glow.ERROR)
             self._set_terminal_glow(True, kind="warn")   # escalation 锁橙(诚实喊人≠失败)(陷阱2)
         elif isinstance(ev, Error):
             chain = (" ← " + " ← ".join(ev.chain)) if ev.chain else ""
-            await log.append_line(f"◉ 错误:{ev.message}{chain}", kind="error")
+            await log.append_line(t("tui.event.error", message=ev.message, chain=chain), kind="error")
             self._set_border(glow.ERROR)
             self._set_terminal_glow(True)   # 告警锁色 + StatusBar -alert(陷阱2)
+
+    def action_ctrl_c(self) -> None:
+        """Ctrl+C:打断当前 run(同 Esc);idle 时 1.5s 内连按两次才退出。
+
+        行为设计(对齐 Claude Code / Cursor / Aider 惯例):
+          · 有 run 在跑 → 打断 run(同 action_interrupt);不退出
+          · idle(无 run)且 1.5s 内第二次 → 退出(友好的双击退出,防误触)
+          · idle 且首次 → transcript 提示"再按一次 Ctrl+C 退出",记录时间戳
+        用户也可随时 Ctrl+D 确定性退出。
+        """
+        import time
+        now = time.time()
+        # 有 run 在跑 → 转发到打断逻辑(不退出)
+        if self._run_active:
+            self.action_interrupt()
+            self._last_ctrl_c_time = 0.0  # 打断后重置退出计时
+            return
+        # idle:双击检测
+        if (now - self._last_ctrl_c_time) < 1.5:
+            self._last_ctrl_c_time = 0.0
+            self.exit()
+            return
+        # 首次:提示
+        self._last_ctrl_c_time = now
+        try:
+            self.run_worker(
+                self.query_one("#transcript", Transcript).append_line(
+                    t("tui.ctrlc.hint"),
+                    kind="system",
+                ),
+                exclusive=False,
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     def action_interrupt(self) -> None:
         """Esc:打断当前 run(daemon 模式 = step-boundary pause,legacy = 整 run kill)。
@@ -2450,7 +2567,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             log_widget = self.query_one("#transcript", Transcript)
             self.run_worker(
                 log_widget.append_line(
-                    f"› Run {self._daemon_run_id} 后台化(suspended)。可 /resume {self._daemon_run_id} 续。",
+                    t("tui.background.suspended", run_id=self._daemon_run_id),
                     kind="system",
                 ),
                 exclusive=False,
@@ -2509,15 +2626,19 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         def _decide(value: str, _feedback: str) -> None:
             self.gate.respond(call_id, value)  # type: ignore[arg-type]
             self.run_worker(
-                log.append_line(f"工作流审批:{ev.name} → {value}"),
+                log.append_line(t("tui.event.workflow_approval", name=ev.name, value=value)),
                 exclusive=False,
             )
             self._choice_done()
 
         await self._enqueue_choice(lambda: InlineChoice(
-            title="工作流审批 — 将起多个子 agent 编排执行",
+            title=t("tui.workflow.approval_title"),
             body=ev.preview,
-            options=[("once", "本次批准"), ("always", "总是批准"), ("deny", "拒绝")],
+            options=[
+                ("once", t("tui.workflow.once")),
+                ("always", t("tui.workflow.always")),
+                ("deny", t("tui.workflow.deny")),
+            ],
             on_decide=_decide,
             escape_value="deny",   # fail-closed:不明确批准即不放行
             risk="medium",
@@ -2563,7 +2684,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 self.gate.respond(req.call_id, "always")
             return
 
-        body_lines = [req.description, f"动作: {req.action} · 参数: {req.args}"]
+        body_lines = [req.description, t("tui.approval.action_line", action=req.action, args=req.args)]
         if getattr(req, "secret_pattern", None):
             body_lines.append("⚠︎ Possible secret pattern matched: did you mean to commit this?")
 
@@ -2586,7 +2707,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 self.gate.respond(req.call_id, value)  # type: ignore[arg-type]
             self.run_worker(
                 self.query_one("#transcript", Transcript).append_line(
-                    f"审批结果:{req.action} → {value}"
+                    t("tui.event.approval_result", action=req.action, value=value)
                 ),
                 exclusive=False,
             )
@@ -2610,8 +2731,10 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             ),
             body="\n".join(body_lines),
             options=[
-                ("once", "本次允许"), ("session", "本会话允许"),
-                ("always", "总是允许"), ("deny", "拒绝"),
+                ("once", t("tui.approval.once")),
+                ("session", t("tui.approval.session")),
+                ("always", t("tui.approval.always")),
+                ("deny", t("tui.approval.deny")),
             ],
             on_decide=_decide,
             escape_value="deny",
@@ -2685,25 +2808,25 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 ExitPlanMode(loop, value, feedback if value == "refine" else None)
             self.run_worker(
                 self.query_one("#transcript", Transcript).append_line(
-                    f"Plan 决策:{value}", kind="system"
+                    t("tui.event.plan_decision", value=value), kind="system"
                 ),
                 exclusive=False,
             )
             self._choice_done()
 
         await self._enqueue_choice(lambda: InlineChoice(
-            title="◓ 计划已就绪 — 如何继续?",
+            title=t("tui.plan.modal_title"),
             body=ev.plan_md,
             options=[
-                ("approve_start", "批准,开始执行"),
-                ("approve_accept_edits", "批准 + 自动接受编辑"),
-                ("keep_planning", "继续规划"),
-                ("refine", "补充反馈后再规划"),
+                ("approve_start", t("tui.plan.approve_start")),
+                ("approve_accept_edits", t("tui.plan.approve_accept")),
+                ("keep_planning", t("tui.plan.keep_planning")),
+                ("refine", t("tui.plan.refine")),
             ],
             on_decide=_decide,
             escape_value=None,
             needs_input={"refine"},
-            input_placeholder="补充对 plan 的反馈,Enter 提交,Esc 返回",
+            input_placeholder=t("tui.plan.refine_placeholder"),
             risk="plan",
         ))
 

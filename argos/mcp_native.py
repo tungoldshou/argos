@@ -25,6 +25,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from argos.i18n import t
+
 CONFIG_PATH = Path.home() / ".argos" / "mcp.json"
 _INIT_TIMEOUT_S = 15.0
 _CALL_TIMEOUT_S = 60.0
@@ -59,7 +61,7 @@ class _StdioServer:
     def connect(self) -> bool:
         cmd = self._cfg.get("command")
         if not cmd:
-            self.error = "缺少 command"
+            self.error = t("mcp.server.missing_command")
             return False
         argv = [cmd, *(self._cfg.get("args") or [])]
         env = {**os.environ, **(self._cfg.get("env") or {})}
@@ -69,7 +71,7 @@ class _StdioServer:
                 stderr=subprocess.DEVNULL, text=True, bufsize=1, env=env,
             )
         except Exception as e:  # noqa: BLE001
-            self.error = f"启动失败:{type(e).__name__}: {e}"
+            self.error = t("mcp.server.start_failed", exc_type=type(e).__name__, exc=e)
             return False
         # 启动后台读线程(daemon):阻塞 readline 留在线程里,主路径只 queue.get(timeout)。
         self._reader = threading.Thread(target=self._reader_loop, daemon=True)
@@ -81,7 +83,7 @@ class _StdioServer:
                 "clientInfo": {"name": "argos", "version": "0.1.0"},
             }, timeout=_INIT_TIMEOUT_S)
             if "error" in init:
-                self.error = f"initialize 失败:{init['error']}"
+                self.error = t("mcp.server.initialize_failed", error=init["error"])
                 return False
             self._notify("notifications/initialized", {})
             listed = self._rpc("tools/list", {}, timeout=_INIT_TIMEOUT_S)
@@ -94,19 +96,19 @@ class _StdioServer:
             ]
             return True
         except Exception as e:  # noqa: BLE001
-            self.error = f"握手异常:{type(e).__name__}: {e}"
+            self.error = t("mcp.server.handshake_error", exc_type=type(e).__name__, exc=e)
             return False
 
     def call(self, tool: str, arguments: dict[str, Any]) -> str:
         if self._proc is None or self._proc.poll() is not None:
-            return f"错误:MCP server {self.name!r} 未连接或已退出。"
+            return t("mcp.server.not_connected", name=self.name)
         try:
             resp = self._rpc("tools/call", {"name": tool, "arguments": arguments},
                              timeout=_CALL_TIMEOUT_S)
         except Exception as e:  # noqa: BLE001
-            return f"错误:MCP 调用 {self.name}/{tool} 异常:{type(e).__name__}: {e}"
+            return t("mcp.server.call_error", name=self.name, tool=tool, exc_type=type(e).__name__, exc=e)
         if "error" in resp:
-            return f"错误:MCP {self.name}/{tool} 返回错误:{resp['error']}"
+            return t("mcp.server.call_rpc_error", name=self.name, tool=tool, error=resp["error"])
         result = resp.get("result") or {}
         return _flatten_content(result)
 
@@ -149,13 +151,13 @@ class _StdioServer:
             while True:
                 remaining = deadline - time.time()
                 if remaining <= 0:
-                    raise TimeoutError(f"{method} 超时({timeout}s):server 无响应")
+                    raise TimeoutError(t("mcp.server.rpc_timeout", method=method, timeout=timeout))
                 try:
                     line = self._rx.get(timeout=remaining)
                 except queue.Empty:
-                    raise TimeoutError(f"{method} 超时({timeout}s):server 无响应")
+                    raise TimeoutError(t("mcp.server.rpc_timeout", method=method, timeout=timeout))
                 if line is None:
-                    raise RuntimeError("server stdout 关闭(进程可能已退出)")
+                    raise RuntimeError(t("mcp.server.stdout_closed"))
                 line = line.strip()
                 if not line:
                     continue
@@ -188,11 +190,11 @@ def _flatten_content(result: dict[str, Any]) -> str:
         if c.get("type") == "text":
             parts.append(str(c.get("text", "")))
         else:
-            parts.append(f"[{c.get('type', 'unknown')} 内容]")
+            parts.append(t("mcp.content.non_text", content_type=c.get("type", "unknown")))
     out = "\n".join(p for p in parts if p)
     if result.get("isError"):
-        return f"[MCP 工具报错] {out}"
-    return out or "(MCP 工具返回空)"
+        return t("mcp.content.tool_error", out=out)
+    return out or t("mcp.content.empty_result")
 
 
 class McpManager:
@@ -267,10 +269,10 @@ class McpManager:
         srv = self._servers.get(server)
         if srv is None:
             if not self._servers:
-                return "错误:未配置任何 MCP server(~/.argos/mcp.json 不存在或为空)。"
-            return f"错误:未知 MCP server {server!r}(可用:{', '.join(self._servers)})。"
+                return t("mcp.manager.no_servers")
+            return t("mcp.manager.unknown_server", server=server, available=", ".join(self._servers))
         if srv.error and not srv.tools:
-            return f"错误:MCP server {server!r} 不可用({srv.error})。"
+            return t("mcp.manager.server_unavailable", server=server, error=srv.error)
         return srv.call(tool, arguments or {})
 
     def close(self) -> None:

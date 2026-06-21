@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 
 from argos.context.analyzer import ContextBreakdown, ContextBucket
-from argos.context.render import format_json, format_table
+from argos.context.render import format_json, format_table, format_table_plain, strip_markup
 
 
 def _b(system=100, memory=50, tools=80, messages=200, total=430, window=1000):
@@ -69,6 +69,43 @@ def test_format_json_keys_in_spec_order():
     out = format_json(_b())
     keys = list(json.loads(out).keys())
     assert keys == ["system", "memory", "tools", "messages", "total", "window", "pct", "health", "method"]
+
+
+def test_strip_markup_removes_tags():
+    """#15: strip_markup 剥去 [green]/[/green] 等 Rich/Textual markup 标签。"""
+    assert strip_markup("[green]hello[/green]") == "hello"
+    assert strip_markup("[bold red]text[/bold red]") == "text"
+    assert strip_markup("no tags here") == "no tags here"
+    # 保留其他内容
+    assert strip_markup("[est]  100 tok  [est]") == "  100 tok  "
+
+
+def test_format_table_plain_no_markup_tags():
+    """#15: format_table_plain 输出不含 Rich/Textual markup 标签(CLI 安全打印)。"""
+    out = format_table_plain(_b())
+    assert "[green]" not in out
+    assert "[/green]" not in out
+    assert "[yellow]" not in out
+    assert "[red]" not in out
+    assert "[est]" not in out
+    assert "[api]" not in out
+
+
+def test_format_table_plain_still_contains_content():
+    """format_table_plain 剥 markup 后仍含核心内容(不丢数据)。"""
+    out = format_table_plain(_b())
+    assert "system" in out
+    assert "memory" in out
+    assert "tools" in out
+    assert "messages" in out
+    assert "total" in out
+    assert "100" in out  # system token count
+
+
+def test_format_table_markup_preserved_for_tui():
+    """format_table(不是 plain)仍保留 markup,供 TUI 渲染颜色。"""
+    out = format_table(_b())
+    assert "[green]" in out or "[yellow]" in out or "[red]" in out
 
 
 def test_format_json_serializable():

@@ -14,6 +14,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable, Literal, TypeVar, overload
 
+from argos.i18n import t
+
 T = TypeVar("T")
 OnOSError = Literal["silent", "raise"]
 
@@ -41,13 +43,13 @@ def read_json_file(
     except OSError as e:
         if on_os_error == "silent":
             return None
-        raise ErrorCls(f"读 {p} 失败: {e}") from e
+        raise ErrorCls(t("core2.config_base.read_failed", path=p, error=e)) from e
     try:
         data = _json.loads(text)
     except _json.JSONDecodeError as e:
-        raise ErrorCls(f"{p} 不是合法 JSON: {e}") from e
+        raise ErrorCls(t("core2.config_base.invalid_json", path=p, error=e)) from e
     if not isinstance(data, dict):
-        raise ErrorCls("顶层必须是 object")
+        raise ErrorCls(t("core2.config_base.not_object"))
     return data
 
 

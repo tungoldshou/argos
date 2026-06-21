@@ -84,7 +84,7 @@ def test_argos_night_variables_ink_scale():
     assert v["ink-bright"] == "#ECEEF5"
     assert v["ink"] == "#C8CCDA"
     assert v["ink-dim"] == "#7E869C"
-    assert v["ink-faint"] == "#525A73"
+    assert v["ink-faint"] == "#6B7494"  # finding #27:从 #525A73(对比度 ~2.7)升至 ~3.5:1,提示/占位可读
     assert v["ink-ghost"] == "#3A4055"
 
 

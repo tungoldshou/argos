@@ -21,6 +21,7 @@ from typing import Any, Iterable, Protocol
 
 # 复用 memory/auto.py 既有脱敏函数(9 条正则覆盖 sk-ant- / ghp_ / AKIA / PRIVATE KEY /
 # password= 等);同代码库私有导入可接受 —— 脱敏逻辑保持单一来源
+from argos.i18n import t
 from argos.memory.auto import _redact_secrets
 
 
@@ -95,7 +96,7 @@ def _build_markdown(
         "",
         "## What worked",
         "",
-        "本技能来自一次通过 verify 的实际 run(可重放)。",
+        t("learn.distiller.what_worked_intro"),
         "",
     ]
     body = "\n".join(fm_lines)
@@ -105,7 +106,7 @@ def _build_markdown(
     if verify_cmd:
         body += "## Verify (re-runnable)\n\n"
         body += f"```bash\n{verify_cmd}\n```\n\n"
-        body += "退出码 0 = 通过(本技能晋升要求 A/B 实测通过率严格 > 基线)。\n"
+        body += t("learn.distiller.verify_footer")
     return body
 
 

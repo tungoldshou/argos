@@ -9,6 +9,7 @@ import time
 from collections.abc import AsyncIterator
 
 from argos.core.types import Verdict
+from argos.i18n import t
 from argos.tui.events import (
     Event,
     TokenDelta,
@@ -33,7 +34,7 @@ class FakeLoop:
         t0 = time.monotonic()
         return [
             PhaseChange(phase="plan", actions=0),
-            TokenDelta(text=f"计划:{goal}\n"),
+            TokenDelta(text=t("core2.fakeloop.plan_prefix", goal=goal)),
             PhaseChange(phase="act", actions=1),
             CodeAction(code="files = search_files('TODO')", step=0),
             CodeResult(step=0, stdout="2 matches", value_repr="['a.py', 'b.py']", exc="", ok=True),
@@ -45,7 +46,7 @@ class FakeLoop:
             PhaseChange(phase="verify", actions=2),
             VerifyVerdict(verdict=Verdict.passed(detail="12 passed (0.8s)", verify_cmd="pytest", attempts=1)),
             PhaseChange(phase="report", actions=2),
-            TokenDelta(text="完成,已验证全绿。\n"),
+            TokenDelta(text=t("core2.fakeloop.done")),
         ]
 
     async def run(self, goal: str, session_id: str,
@@ -66,6 +67,6 @@ class FailingFakeLoop(FakeLoop):
             CodeAction(code="boom()", step=0),
             CodeResult(step=0, stdout="", value_repr="", exc="NameError: boom", ok=False),
             VerifyVerdict(verdict=Verdict.failed(detail="1 failed", verify_cmd="pytest", attempts=3)),
-            Escalation(reason="连续 3 轮 verify 未过,无法自行收敛", attempts=3, last_failure="1 failed"),
-            Error(message="放弃,诚实上报", chain=["NameError: boom", "verify failed x3"]),
+            Escalation(reason=t("core2.fakeloop.escalation_reason"), attempts=3, last_failure="1 failed"),
+            Error(message=t("core2.fakeloop.error_message"), chain=["NameError: boom", "verify failed x3"]),
         ]

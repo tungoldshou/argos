@@ -112,3 +112,45 @@ def test_restore_idempotent(tmp_path: Path):
     (ws / "a.py").write_text("mod2")
     snap.restore(ws)  # 第二次还原,仍应到 original
     assert (ws / "a.py").read_text() == "original"
+
+
+# ── #24 size cap tests ──────────────────────────────────────────────────────
+
+def test_take_skips_files_over_file_size_cap(tmp_path: Path, monkeypatch):
+    """单文件上限:超大文件跳过,其余文件正常收入快照。"""
+    from argos.core import snapshot as _snap_mod
+    monkeypatch.setattr(_snap_mod, "_FILE_SIZE_CAP_BYTES", 10)  # 10 bytes cap
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "small.py").write_text("x" * 5)   # 5B < 10B → 收入
+    (ws / "large.py").write_text("y" * 20)  # 20B > 10B → 跳过
+
+    snap = RunSnapshot.take(ws, tmp_path / "snap_cap.tar")
+    with tarfile.open(snap.tar_path) as tf:
+        names = tf.getnames()
+    assert "small.py" in names
+    assert "large.py" not in names
+
+
+def test_take_stops_at_total_size_cap(tmp_path: Path, monkeypatch):
+    """总量上限:累计超限后停止添加,已收入文件仍可还原(不假装完整快照)。"""
+    from argos.core import snapshot as _snap_mod
+    monkeypatch.setattr(_snap_mod, "_FILE_SIZE_CAP_BYTES", 1000)
+    monkeypatch.setattr(_snap_mod, "_TOTAL_SIZE_CAP_BYTES", 25)  # 25 bytes total
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    # 三个文件各 10B:a.py 收入(10<25),b.py 收入(20<25),c.py 超总量限制停止
+    (ws / "a.py").write_text("a" * 10)
+    (ws / "b.py").write_text("b" * 10)
+    (ws / "c.py").write_text("c" * 10)
+
+    snap = RunSnapshot.take(ws, tmp_path / "snap_total_cap.tar")
+    with tarfile.open(snap.tar_path) as tf:
+        names = tf.getnames()
+    # a 和 b 应收入;c 可能收或不收取决于顺序,但总量不得超 25B
+    total_in_tar = sum(
+        m.size for m in tarfile.open(snap.tar_path).getmembers() if m.isfile()
+    )
+    assert total_in_tar <= 25

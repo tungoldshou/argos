@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from argos import git_worktree as gw
+from argos.i18n import t
 
 
 @contextlib.contextmanager
@@ -21,7 +22,7 @@ def worktree_for(base: Path, agent_id: str, isolation: str) -> Iterator[tuple[Pa
         yield base, None
         return
     if not gw.is_git_repo(base):
-        yield base, "工作区非 git 仓库,无法 worktree 硬隔离 → 退共享工作区(并行写同名文件有撞车风险)"
+        yield base, t("wf.worktree.not_git_repo")
         return
     safe = agent_id.replace("#", "_").replace("/", "_").replace(" ", "_")
     wt = base / ".argos_worktrees" / safe
@@ -31,7 +32,7 @@ def worktree_for(base: Path, agent_id: str, isolation: str) -> Iterator[tuple[Pa
     try:
         gw.add_worktree(repo=base, path=wt, branch=None)  # 游离头,不建命名分支
     except gw.WorktreeError as e:
-        yield base, f"git worktree 创建失败({str(e)[:80]})→ 退共享工作区"
+        yield base, t("wf.worktree.create_failed", error=str(e)[:80])
         return
     try:
         yield wt, None

@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from argos.capability.manifest import Capability
+from argos.i18n import t
 
 if TYPE_CHECKING:
     from argos.capability.registry import CapabilityRegistry
@@ -72,7 +73,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="low",
             reversible=True,
             visibility="all",
-            verify_hint="检查返回内容是否符合预期",
+            verify_hint=t("cap.hint.read_file"),
         ),
         Capability(
             name="write_file",
@@ -80,7 +81,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="medium",
             reversible=False,
             visibility="all",
-            verify_hint="检查文件存在且内容正确",
+            verify_hint=t("cap.hint.write_file"),
         ),
         Capability(
             name="edit_file",
@@ -88,7 +89,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="medium",
             reversible=False,
             visibility="all",
-            verify_hint="检查目标片段已被替换",
+            verify_hint=t("cap.hint.edit_file"),
         ),
         Capability(
             name="search_files",
@@ -104,7 +105,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="low",
             reversible=True,
             visibility="all",
-            verify_hint="检查 TODO 列表已更新至活动栏",
+            verify_hint=t("cap.hint.update_plan"),
         ),
         Capability(
             name="propose_verify",
@@ -112,7 +113,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="low",
             reversible=True,
             visibility="all",
-            verify_hint="检查 verify_cmd 已登记（harness 收尾独立运行）",
+            verify_hint=t("cap.hint.propose_verify"),
         ),
         Capability(
             name="propose_dom_verify",
@@ -120,7 +121,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="low",
             reversible=True,
             visibility="all",
-            verify_hint="检查 L3 DOM 验证策略已登记（host 侧 DomProber 收尾时执行三态断言）",
+            verify_hint=t("cap.hint.propose_dom_verify"),
         ),
         Capability(
             name="propose_gui_verify",
@@ -128,7 +129,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="low",
             reversible=True,
             visibility="all",
-            verify_hint="检查 GUI 验证已登记（host 侧 GuiProber 收尾时截图+OCR 三态断言）",
+            verify_hint=t("cap.hint.propose_gui_verify"),
         ),
         Capability(
             name="propose_workflow",
@@ -136,7 +137,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="low",
             reversible=True,
             visibility="all",
-            verify_hint="检查工作流已登记待审批",
+            verify_hint=t("cap.hint.propose_workflow"),
         ),
         # ── shell ──────────────────────────────────────────────────────────
         Capability(
@@ -145,7 +146,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="high",
             reversible=False,
             visibility="all",
-            verify_hint="检查 exit_code=0 + 预期输出",
+            verify_hint=t("cap.hint.run_command"),
         ),
         # ── 网络 ────────────────────────────────────────────────────────────
         Capability(
@@ -202,7 +203,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="high",
             reversible=False,
             visibility="all",
-            verify_hint="GUI 动作无机检通道,验证走 L5 留痕;screenshot 永不单独产出 passed",
+            verify_hint=t("cap.hint.computer_no_channel_screenshot"),
         ),
         Capability(
             name="computer_click",
@@ -210,7 +211,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="high",
             reversible=False,
             visibility="all",
-            verify_hint="GUI 动作无机检通道,验证走 L5 留痕",
+            verify_hint=t("cap.hint.computer_no_channel"),
         ),
         Capability(
             name="computer_double_click",
@@ -218,7 +219,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="high",
             reversible=False,
             visibility="all",
-            verify_hint="GUI 动作无机检通道,验证走 L5 留痕",
+            verify_hint=t("cap.hint.computer_no_channel"),
         ),
         Capability(
             name="computer_type_text",
@@ -226,7 +227,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="high",
             reversible=False,
             visibility="all",
-            verify_hint="GUI 动作无机检通道,验证走 L5 留痕;金融/验证码模式命中强制 CONFIRM",
+            verify_hint=t("cap.hint.computer_type_text"),
         ),
         Capability(
             name="computer_key",
@@ -234,7 +235,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="high",
             reversible=False,
             visibility="all",
-            verify_hint="GUI 动作无机检通道,验证走 L5 留痕",
+            verify_hint=t("cap.hint.computer_no_channel"),
         ),
         Capability(
             name="computer_scroll",
@@ -242,7 +243,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="high",
             reversible=False,
             visibility="all",
-            verify_hint="GUI 动作无机检通道,验证走 L5 留痕",
+            verify_hint=t("cap.hint.computer_no_channel"),
         ),
         Capability(
             name="computer_open_app",
@@ -250,7 +251,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="high",
             reversible=False,
             visibility="all",
-            verify_hint="GUI 动作无机检通道,验证走 L5 留痕;支付/银行类 app 强制 CONFIRM",
+            verify_hint=t("cap.hint.computer_open_app"),
         ),
     ]
 
@@ -262,7 +263,7 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             risk="low",
             reversible=True,
             visibility="developer",
-            verify_hint="只读查询,无副作用",
+            verify_hint=t("cap.hint.lsp_readonly"),
         ))
 
     return tuple(caps)

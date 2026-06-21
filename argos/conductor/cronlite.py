@@ -26,6 +26,8 @@ import time as _time_module
 from datetime import datetime, timezone
 from typing import Callable
 
+from argos.i18n import t
+
 # -----------------------------------------------------------------------
 # 常量 / 别名
 # -----------------------------------------------------------------------
@@ -61,7 +63,7 @@ def _parse_field(token: str, lo: int, hi: int, label: str) -> set[int]:
     """
     m = _FIELD_RE.match(token)
     if not m:
-        raise ValueError(f"cron 字段 {label!r} 非法值 {token!r}（支持 * / */N / 整数）")
+        raise ValueError(t("cond.cronlite.field_invalid", label=label, token=token))
 
     step_str, num_str = m.group(1), m.group(2)
 
@@ -70,7 +72,7 @@ def _parse_field(token: str, lo: int, hi: int, label: str) -> set[int]:
         n = int(num_str)
         if not (lo <= n <= hi):
             raise ValueError(
-                f"cron 字段 {label!r} 值 {n} 超出范围 [{lo}, {hi}]"
+                t("cond.cronlite.field_out_of_range", label=label, n=n, lo=lo, hi=hi)
             )
         return {n}
     else:
@@ -78,7 +80,7 @@ def _parse_field(token: str, lo: int, hi: int, label: str) -> set[int]:
         step = int(step_str) if step_str is not None else 1
         if step < 1:
             raise ValueError(
-                f"cron 字段 {label!r} 步进 {step} 必须 ≥ 1"
+                t("cond.cronlite.field_step_lt1", label=label, step=step)
             )
         return set(range(lo, hi + 1, step))
 
@@ -88,14 +90,14 @@ def _parse_five_field(spec: str) -> tuple[set[int], set[int], set[int], set[int]
     parts = spec.split()
     if len(parts) != 5:
         raise ValueError(
-            f"五段 cron 必须有 5 个字段，收到 {len(parts)} 个: {spec!r}"
+            t("cond.cronlite.five_field_count", count=len(parts), spec=spec)
         )
     minute_tok, hour_tok, mday_tok, month_tok, wday_tok = parts
-    minutes = _parse_field(minute_tok, 0, 59, "分")
-    hours   = _parse_field(hour_tok,   0, 23, "时")
-    mdays   = _parse_field(mday_tok,   1, 31, "日")
-    months  = _parse_field(month_tok,  1, 12, "月")
-    wdays   = _parse_field(wday_tok,   0,  6, "周")
+    minutes = _parse_field(minute_tok, 0, 59, t("cond.field_minute"))
+    hours   = _parse_field(hour_tok,   0, 23, t("cond.field_hour"))
+    mdays   = _parse_field(mday_tok,   1, 31, t("cond.field_mday"))
+    months  = _parse_field(month_tok,  1, 12, t("cond.field_month"))
+    wdays   = _parse_field(wday_tok,   0,  6, t("cond.field_wday"))
     return minutes, hours, mdays, months, wdays
 
 
@@ -133,7 +135,7 @@ def _next_cron_v2(
             return float(next_sec)
         next_sec += 60
 
-    raise ValueError("cron 表达式在 1 年内无触发点，请检查字段组合")
+    raise ValueError(t("cond.cronlite.no_trigger_in_year"))
 
 
 # -----------------------------------------------------------------------
@@ -172,7 +174,7 @@ def next_due(
     if m_hhmm:
         hh, mm = int(m_hhmm.group(1)), int(m_hhmm.group(2))
         if not (0 <= hh <= 23 and 0 <= mm <= 59):
-            raise ValueError(f"HH:MM 时间 {spec!r} 超出范围（HH 0-23，MM 0-59）")
+            raise ValueError(t("cond.cronlite.hhmm_out_of_range", spec=spec))
         # 转为等价 cron：mm hh * * *
         minutes = {mm}
         hours   = {hh}
@@ -187,7 +189,7 @@ def next_due(
         n = int(m_every.group(1))
         unit = m_every.group(2).lower()
         if n < 1:
-            raise ValueError(f"every 间隔 N 必须 ≥ 1，收到 {n!r}")
+            raise ValueError(t("cond.cronlite.every_n_lt1", n=n))
         multiplier = {"s": 1, "m": 60, "h": 3600}[unit]
         interval = n * multiplier
         # 下一次 = now + interval（对齐到 interval 边界，向上取）

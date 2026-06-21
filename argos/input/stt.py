@@ -6,6 +6,8 @@ from __future__ import annotations
 import platform
 from typing import Protocol, runtime_checkable
 
+from argos.i18n import t
+
 
 class SttError(Exception):
     """转写失败:模型缺失 / 后端异常 / 云端报错。"""
@@ -43,9 +45,7 @@ class LocalWhisper:
         try:
             from faster_whisper import WhisperModel
         except Exception as e:  # noqa: BLE001
-            raise SttError(
-                "本地 STT 不可用:未安装 faster-whisper(语音应随基础安装自带)。"
-            ) from e
+            raise SttError(t("core2.stt.local_unavailable")) from e
         model = WhisperModel(self._model_name, device="cpu", compute_type="int8")
 
         def _fw(audio, sr):
@@ -61,7 +61,7 @@ class LocalWhisper:
         except SttError:
             raise
         except Exception as e:  # noqa: BLE001
-            raise SttError(f"本地转写失败:{e}") from e
+            raise SttError(t("core2.stt.local_failed", error=e)) from e
 
 
 def _pcm16_wav_bytes(audio, samplerate: int) -> bytes:
@@ -95,9 +95,7 @@ class CloudWhisper:
             try:
                 from openai import OpenAI
             except Exception as e:  # noqa: BLE001
-                raise SttError(
-                    "云端 STT 需要 openai SDK:pip install 'argos-agent[cloud-stt]'。"
-                ) from e
+                raise SttError(t("core2.stt.cloud_sdk_missing")) from e
             self._client = OpenAI(api_key=self._api_key, base_url=self._base_url)
         return self._client
 
@@ -112,7 +110,7 @@ class CloudWhisper:
                 model=self._model, file=("audio.wav", io.BytesIO(wav)), timeout=60,
             )
         except Exception as e:  # noqa: BLE001
-            raise SttError(f"云端转写失败:{e}") from e
+            raise SttError(t("core2.stt.cloud_failed", error=e)) from e
         return (getattr(resp, "text", None) or "").strip()
 
 

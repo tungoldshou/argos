@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
+from argos.i18n import t
 from . import seatbelt
 from .backend import ExecResult
 
@@ -56,18 +57,18 @@ class SeatbeltExecutor:
                     "tool_allowlist": list(tool_allowlist) if tool_allowlist is not None else None})
         msg = self._recv()
         if not msg or msg.get("type") != "init_ok":
-            raise RuntimeError(f"sandbox init 失败:{msg!r};stderr={self._drain_stderr()}")
+            raise RuntimeError(t("sandbox.executor.init_failed", msg=msg, stderr=self._drain_stderr()))
 
     def exec_code(self, code: str) -> ExecResult:
         if self._proc is None:
-            raise RuntimeError("executor 未 spawn")
+            raise RuntimeError(t("sandbox.executor.not_spawned"))
         self._send({"op": "exec", "code": code})
         # 处理可能的 broker_call 往返,直到拿到 exec_result。
         while True:
             msg = self._recv()
             if msg is None:
                 return ExecResult(stdout="", value_repr="",
-                                  exc=f"沙箱通道意外关闭;stderr={self._drain_stderr()}")
+                                  exc=t("sandbox.executor.channel_closed", stderr=self._drain_stderr()))
             mtype = msg.get("type")
             if mtype == "broker_call":
                 value = self._handle_broker_call(msg.get("action", ""), msg.get("args") or {})
@@ -96,7 +97,7 @@ class SeatbeltExecutor:
     # ── 内部 ─────────────────────────────────────────────────────────────
     def _handle_broker_call(self, action: str, args: dict[str, Any]) -> Any:
         if self._broker_handler is None:
-            return "错误:该工具需要 broker 授权但当前没有 broker 上下文,默认拒绝。"
+            return t("sandbox.executor.no_broker_context")
         return self._broker_handler(action, args)
 
     def _send(self, obj: dict[str, Any]) -> None:
@@ -148,9 +149,11 @@ def select_backend():
     """按平台 + 工具可用性选后端类。懒转 linux.select_backend()。
 
     macOS → SeatbeltExecutor;Linux + bwrap → BwrapExecutor;Linux + 仅 unshare → UnshareExecutor;
-    其他/都无 → RuntimeError。
+    win32 → 明确拒绝(诚实错误,不走 Linux 路径后无声失败);其他/都无 → RuntimeError。
     """
     if sys.platform == "darwin":
         return SeatbeltExecutor
+    if sys.platform == "win32":
+        raise RuntimeError(t("sandbox.executor.win32_unsupported"))
     from .linux import select_backend as _linux_select
     return _linux_select()

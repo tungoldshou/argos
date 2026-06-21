@@ -21,6 +21,7 @@ from textual import events
 from textual.message import Message
 from textual.widgets import Static, TextArea
 
+from argos.i18n import t as _t
 from argos.input.attachments import ImageAttachment, extract_image_paths, load_from_path
 
 _PASTE_THRESHOLD = 10000  # >10000 字符的粘贴折成占位 chip(对齐 Claude Code)
@@ -63,6 +64,10 @@ class PromptArea(TextArea):
         self._image_store: dict[str, ImageAttachment] = {}
         self._paste_seq: int = 0
         self._image_seq: int = 0
+        # 历史导航状态(#20):_history_idx=-1 = "当前草稿",>0 = 回溯到历史第 N 条。
+        # _draft 临时保存浏览历史时的未提交草稿,方便 ↓ 回到最新状态。
+        self._history_idx: int = -1
+        self._draft: str = ""
 
     def _make_paste_token(self, text: str) -> str | None:
         """超长粘贴 → 生成占位 token 并存全文;否则 None(调用方原样内联)。"""
@@ -70,14 +75,14 @@ class PromptArea(TextArea):
             return None
         self._paste_seq += 1
         lines = text.count("\n")
-        token = f"[粘贴文本 #{self._paste_seq} +{lines} 行]"
+        token = _t("tui.prompt.paste_token", n=self._paste_seq, lines=lines)
         self._paste_store[token] = text
         return token
 
     def register_image(self, att: ImageAttachment) -> str:
         """登记一张图片附件,返回占位 token([图片 #N])。供 app 的 Ctrl+V 动作调用。"""
         self._image_seq += 1
-        token = f"[图片 #{self._image_seq}]"
+        token = _t("tui.prompt.image_token", n=self._image_seq)
         self._image_store[token] = att
         return token
 
@@ -99,6 +104,55 @@ class PromptArea(TextArea):
             except (ValueError, OSError):
                 pass  # 非图/读不了:诚实跳过(不附),文本保留路径原样
         return out_text.strip(), attachments
+
+    def _get_app_history(self) -> list[str]:
+        """从宿主 App 取输入历史列表(最新在末尾);测试单挂时返空列表。"""
+        try:
+            return list(self.app._input_history)  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001 — 测试单挂/无 app
+            return []
+
+    def _navigate_history(self, direction: str, history: list[str]) -> None:
+        """↑ 向前(更旧)浏览历史;↓ 向后(更新 / 回草稿)。
+
+        状态机:
+          _history_idx == -1  → 当前"最新草稿"状态(未浏览历史)
+          _history_idx == 0   → 最旧那条历史
+          _history_idx == N-1 → 最新那条历史(N = len(history))
+        """
+        n = len(history)
+        if n == 0:
+            return
+        if direction == "up":
+            if self._history_idx == -1:
+                # 首次向上:保存当前草稿,跳到最新历史条目
+                self._draft = self.text
+                self._history_idx = n - 1
+            elif self._history_idx > 0:
+                self._history_idx -= 1
+            # 已在最旧处不再移动
+            self._refill(history[self._history_idx])
+        else:  # down
+            if self._history_idx == -1:
+                return  # 已在草稿态,无处再向下
+            if self._history_idx < n - 1:
+                self._history_idx += 1
+                self._refill(history[self._history_idx])
+            else:
+                # 到达最新条目之后 → 回草稿
+                self._history_idx = -1
+                self._refill(self._draft)
+                self._draft = ""
+
+    def _refill(self, text: str) -> None:
+        """用 text 替换编辑器内容并把光标移到末尾。"""
+        self.load_text(text)
+        self.move_cursor(self.document.end)
+
+    def reset_history_nav(self) -> None:
+        """提交或 clear 后重置历史导航状态。由 App 在提交后调用。"""
+        self._history_idx = -1
+        self._draft = ""
 
     def _menu(self) -> "SlashMenu | None":
         try:
@@ -123,11 +177,19 @@ class PromptArea(TextArea):
             return
         menu = self._menu()
         menu_active = menu is not None and menu.display and menu.has_matches
-        if menu_active and event.key in ("up", "down"):
-            event.stop()
-            event.prevent_default()
-            menu.move(-1 if event.key == "up" else 1)
-            return
+        if event.key in ("up", "down"):
+            if menu_active:
+                event.stop()
+                event.prevent_default()
+                menu.move(-1 if event.key == "up" else 1)
+                return
+            # slash 菜单未开:↑/↓ 走输入历史导航(#20)
+            history = self._get_app_history()
+            if history:
+                event.stop()
+                event.prevent_default()
+                self._navigate_history(event.key, history)
+                return
         if event.key == "enter":
             event.stop()
             event.prevent_default()
@@ -142,6 +204,7 @@ class PromptArea(TextArea):
                 sel = menu.selected()
                 if sel is not None:
                     self.post_message(self.Submitted(f"/{sel}"))
+                    self.reset_history_nav()
                     self.clear()
                     return
             stripped = text.strip()
@@ -151,6 +214,7 @@ class PromptArea(TextArea):
                     self.post_message(self.Submitted(expanded, attachments))
                     self._paste_store.clear()
                     self._image_store.clear()
+                    self.reset_history_nav()
                     self.clear()
             return
         if event.key == "tab":
@@ -234,7 +298,7 @@ class SlashMenu(Static):
                 t.append(f"/{name:<16}", style=_INK_DIM)
                 t.append(f" {desc}", style=_INK_DIM)
             t.append("\n")
-        t.append("  ↑↓ 选择 · ↹ 补全 · ↵ 执行", style=_INK_FAINT)
+        t.append(_t("tui.slash_menu.nav_hint"), style=_INK_FAINT)
         self.update(t)
 
     def hide(self) -> None:

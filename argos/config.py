@@ -8,6 +8,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from argos.i18n import t
+
 
 def _load_env_local() -> dict[str, str]:
     env: dict[str, str] = {}
@@ -137,12 +139,14 @@ def _validate_profile(name: str, m: dict) -> None:
     避免把 active 切到一个畸形 profile 后失败被推迟到下次启动才暴露。"""
     for f in _REQUIRED:
         if not m.get(f):
-            raise ConfigError(f"profile '{name}' 缺必填字段 '{f}'")
+            raise ConfigError(t("config.profile.missing_field", name=name, field=f))
     # protocol 必须在已知集合内:拼错(如 'anthropc')会让 get_protocol 静默退化成 Anthropic
     # 框架去打 OpenAI 端点 → 运行时困惑的假退化;在加载/切换期 fail-closed 明确报错。
     if m["protocol"] not in _VALID_PROTOCOLS:
-        raise ConfigError(
-            f"profile '{name}' 的 protocol='{m['protocol']}' 非法,只能是 {_VALID_PROTOCOLS}")
+        raise ConfigError(t(
+            "config.profile.invalid_protocol",
+            name=name, protocol=m["protocol"], valid=_VALID_PROTOCOLS,
+        ))
     # 数字字段:非数字 int() 会漏 ValueError;0/负数会让请求 400 或 on_context 占用%除零。
     # 一律包成 ConfigError 守住 fail-closed 契约,且要求为正整数。
     try:
@@ -150,10 +154,10 @@ def _validate_profile(name: str, m: dict) -> None:
         cw = int(m.get("context_window", 200_000))
     except (ValueError, TypeError) as e:
         raise ConfigError(
-            f"profile '{name}' 的 max_tokens/context_window 必须是整数:{e}") from e
+            t("config.profile.non_integer_tokens", name=name, exc=e)) from e
     if mt <= 0 or cw <= 0:
         raise ConfigError(
-            f"profile '{name}' 的 max_tokens/context_window 必须是正整数(得 {mt}/{cw})")
+            t("config.profile.non_positive_tokens", name=name, mt=mt, cw=cw))
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,15 +175,15 @@ def load_config() -> ArgosConfig:
     cdir = _config_dir()
     cfile = cdir / "config.json"
     if not cfile.exists():
-        raise ConfigError(f"无 {cfile}")   # Task 5 的回退在 active_tier 层处理
+        raise ConfigError(t("config.load.no_config_file", path=cfile))   # Task 5 的回退在 active_tier 层处理
     try:
         raw = _json.loads(cfile.read_text())
     except _json.JSONDecodeError as e:
-        raise ConfigError(f"config.json 解析失败:{e}") from e
+        raise ConfigError(t("config.load.json_parse_error", exc=e)) from e
     models = raw.get("models") or {}
     active = raw.get("active")
     if not models or active not in models:
-        raise ConfigError(f"active='{active}' 不在 models 中(或 models 为空)")
+        raise ConfigError(t("config.load.active_not_in_models", active=active))
     secrets = load_env_file(cdir / ".env")
     tiers, key_envs, embed_models = {}, {}, {}
     for name, m in models.items():
@@ -251,11 +255,11 @@ def tier_for(name: str):
     if _has_config_file():
         cfg = load_config()
         if name not in cfg.tiers:
-            raise ConfigError(f"profile '{name}' 不存在(可用:{list(cfg.tiers)})")
+            raise ConfigError(t("config.tier_for.not_found", name=name, available=list(cfg.tiers)))
         return cfg.tiers[name]
     if name == DEFAULT_TIER.name:
         return DEFAULT_TIER
-    raise ConfigError(f"无 config.json,仅有默认 profile '{DEFAULT_TIER.name}'(请先 argos setup)")
+    raise ConfigError(t("config.tier_for.no_config", default=DEFAULT_TIER.name))
 
 
 def key_for(name: str) -> str | None:
@@ -279,11 +283,11 @@ def set_active(name: str) -> None:
     切换后下次启动/新任务生效(模型在 build_components 时注入)。"""
     cfile = _config_dir() / "config.json"
     if not cfile.exists():
-        raise ConfigError("无 config.json,无法切换(请先 argos setup)")
+        raise ConfigError(t("config.set_active.no_config"))
     raw = _json.loads(cfile.read_text())
     models = raw.get("models") or {}
     if name not in models:
-        raise ConfigError(f"profile '{name}' 不存在")
+        raise ConfigError(t("config.set_active.not_found", name=name))
     # fail-closed:切之前校验目标 profile 合法,避免切到畸形 profile 后失败被推迟到下次启动才暴露。
     _validate_profile(name, models[name])
     raw["active"] = name

@@ -21,6 +21,8 @@ from __future__ import annotations
 from textual.reactive import reactive
 from textual.widgets import Static
 
+from argos.i18n import t
+
 try:
     # 单一来源 argos.__version__(查分发名 "argos-agent" + VERSION 文件兜底)。
     # 不能用 version("argos") —— 分发名非 "argos",必 PackageNotFoundError 回退占位符。
@@ -32,7 +34,7 @@ except Exception:  # noqa: BLE001
 # 对应关系与 theme.py 完全一致,勿改
 _COL_EYE_GLOW = "#F0C078"   # $eye-glow:呼吸光峰值/眼高亮(logo 焦点金)
 _COL_INK_DIM  = "#7E869C"   # $ink-dim:次要/元信息/副标题
-_COL_INK_FAINT = "#525A73"  # $ink-faint:键提示/占位符/提示行
+_COL_INK_FAINT = "#6B7494"  # $ink-faint:键提示/占位符/提示行(finding #27 升对比度)
 _COL_PASS     = "#9ECE6A"   # $pass:verdict passed / LIVE 徽标
 _COL_UNVERIF  = "#FF9E64"   # $unverif:DEMO 脚本演示 / 真相不确定
 
@@ -91,24 +93,27 @@ def _compose_text(*, model_label: str, live: bool, plan_mode: bool,
 
     if not live:
         # DEMO:橙色徽标
-        badge_markup = f"[{_COL_UNVERIF}]DEMO 脚本演示[/{_COL_UNVERIF}]"
+        badge_markup = f"[{_COL_UNVERIF}]{t('widget.splash_badge_demo')}[/{_COL_UNVERIF}]"
     elif not has_key:
         # 未配 key:用 ink-dim,绝不出现 LIVE
-        badge_markup = f"[{_COL_INK_DIM}]未配 key · /setup[/{_COL_INK_DIM}]"
+        badge_markup = f"[{_COL_INK_DIM}]{t('widget.splash_badge_no_key')}[/{_COL_INK_DIM}]"
     else:
         # LIVE:绿色徽标
-        badge_markup = f"[{_COL_PASS}]LIVE[/{_COL_PASS}]"
+        badge_markup = f"[{_COL_PASS}]{t('widget.splash_badge_live')}[/{_COL_PASS}]"
 
     prefix = _plan_prefix_str(plan_mode)
     # 眼字形用 $eye-glow 高亮金;副标题行用 $ink-dim;提示行用 $ink-faint
     # ARGOS wordmark 保留裸文本(无 markup),保证 renderable_text 含 "ARGOS"(测试断言)
+    # finding #34:副标题/提示行去掉手工前置空格,改靠 CSS text-align: center 居中。
+    # 手工空格在窄终端(<51 cols)会让行在空格处换行,导致副标题错位。
+    # logo 块字(_LOGO / "ARGOS" / 眼字形)保留内嵌空格(它们是字形的一部分,非居中手段)。
     return prefix + (
         _LOGO
         + "\n                   ARGOS\n"
         + f"\n                    [{_COL_EYE_GLOW}]{eye}[/{_COL_EYE_GLOW}]\n"
-        + f"\n[{_COL_INK_DIM}]       百眼智能体 · v{_VERSION} · {model_label} · [/{_COL_INK_DIM}]"
+        + f"\n[{_COL_INK_DIM}]{t('widget.splash_subtitle', version=_VERSION, model_label=model_label)}[/{_COL_INK_DIM}]"
         + badge_markup
-        + f"\n[{_COL_INK_FAINT}]       输入目标开始 · / 命令 · Esc 打断 · ^C 退出[/{_COL_INK_FAINT}]"
+        + f"\n[{_COL_INK_FAINT}]{t('widget.splash_hint')}[/{_COL_INK_FAINT}]"
     )
 
 
@@ -121,8 +126,9 @@ class StartupSplash(Static):
     # DEFAULT_CSS 只控制布局和背景; 各段落颜色通过 Rich markup 着色(_compose_text 内联),
     # 不再用 color: $ink-bright 压一个全局前景色覆盖掉各段差异(design-audit MEDIUM fix)。
     # -plan-mode 仅保留 CSS 类标记,供外部查询用;实际着色由 _compose_text 的 markup 负责。
+    # text-align: center(finding #34):逐行居中,避免手工空格在窄终端(<51 cols)换行错位。
     DEFAULT_CSS = """
-    StartupSplash { content-align: center middle; height: auto; padding: 1 0; background: $stream; }
+    StartupSplash { content-align: center middle; text-align: center; height: auto; padding: 1 0; background: $stream; }
     """
     # plan_mode:实时反映当前 plan mode 状态。set_plan_mode() 是 host 侧切换入口,
     # watch_ 触发重渲(前缀 + 切色)。text 字段保留便于 renderable_text / 测试断言。
@@ -182,12 +188,12 @@ class StartupSplash(Static):
             # 'LSP' → 'LSP 已禁用'(同 hooks/LSP 行为);否则 'hooks 已禁用'(默认)。
             reason = str(self._bad_config)
             if "permissions" in reason:
-                prefix = "permissions"
+                prefix = t("widget.splash_bad_config_permissions")
             elif "LSP" in reason:
-                prefix = "LSP"
+                prefix = t("widget.splash_bad_config_lsp")
             else:
-                prefix = "hooks"
-            text += f"\n       ⚠︎ {prefix} 已禁用({reason})"
+                prefix = t("widget.splash_bad_config_hooks")
+            text += f"\n       ⚠︎ {prefix}" + t("widget.splash_bad_config_suffix", reason=reason)
         self._text = text
         self.update(self._text)
         # 切色 CSS 类:plan mode 走 $primary 冷靛蓝(对齐 glow.phase_color("plan")),act 走 $accent
