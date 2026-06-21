@@ -463,7 +463,7 @@ class AgentLoop:
         W5 默认开启(任务:TB 适配器):bridge 已配 verify(LoopConfig.verify_cmd)时,
         agent 的 propose_verify 一律拒登记 —— 否则弱模型会用 `cat /app/...` 或自造
         `python -c "import os; p=..."` 覆盖桥接的 docker verify,导致 verify 永远跑空。
-        关掉(老 sandbox 流程用)设 ARGSOS_BRIDGE_VERIFY_LOCK=0。
+        关掉(老 sandbox 流程用)设 ARGOS_BRIDGE_VERIFY_LOCK=0。
         """
         cmd = (cmd or "").strip()
         if not cmd:
@@ -474,7 +474,10 @@ class AgentLoop:
             self._verify_rejected = cmd
             self._verify_rejected_fstring = True
             return False
-        if os.environ.get("ARGSOS_BRIDGE_VERIFY_LOCK", "1") != "0" \
+        # #29:ARGSOS_BRIDGE_VERIFY_LOCK 是拼写错误;正确名是 ARGOS_BRIDGE_VERIFY_LOCK。
+        # 向后兼容:接受旧名(ARGSOS_)或新名(ARGOS_),取其中任一为"0"则解锁。
+        if (os.environ.get("ARGOS_BRIDGE_VERIFY_LOCK", "1") != "0"
+                and os.environ.get("ARGSOS_BRIDGE_VERIFY_LOCK", "1") != "0") \
                 and self._cfg.verify_cmd is not None and self._cfg.verify_cmd.strip():
             self._verify_rejected = cmd
             return False
@@ -839,11 +842,14 @@ class AgentLoop:
             ))
         # 拍 workspace 快照(供 /undo 还原);失败不阻断 run,仅 _last_snapshot = None 走"/undo
         # 不可用"诚实降级路径。延迟 import 避免 core.snapshot ↔ runtime 之间未来的循环风险。
+        # #24:RunSnapshot.take 同步 tar 整个 workspace;大项目可阻塞事件循环几秒 → to_thread 解放主循环。
         self._last_snapshot = None
         try:
             from argos.core.snapshot import RunSnapshot, SNAPSHOT_ROOT
             tar_path = SNAPSHOT_ROOT / f"{session_id}-{int(time.time() * 1000)}.tar"
-            self._last_snapshot = RunSnapshot.take(self._workspace, tar_path)
+            self._last_snapshot = await asyncio.to_thread(
+                RunSnapshot.take, self._workspace, tar_path,
+            )
         except Exception:  # noqa: BLE001 — 诚实:拍快照失败 = /undo 不可用,run 照常进行
             pass
         # M8:固定空命名空间的副本 —— 模型输出永不经此进入 __authorized_imports__。
@@ -888,7 +894,31 @@ class AgentLoop:
             while cur is not None and len(chain) < 4:
                 chain.append(f"{type(cur).__name__}: {cur}")
                 cur = cur.__cause__ or cur.__context__
-            err = Error(message=str(e), chain=chain)
+            # #2:429 限流 → 友好可操作提示(而非裸 httpx 字符串)。
+            # #10:网络/DNS 故障 → 友好提示含原始错误。
+            import httpx as _httpx
+            _raw_msg = str(e)
+            _friendly: str | None = None
+            _status = getattr(getattr(e, "response", None), "status_code", None)
+            if _status == 429 or (
+                "429" in _raw_msg or "too many requests" in _raw_msg.lower()
+                or "rate_limit" in _raw_msg.lower()
+            ):
+                _friendly = (
+                    "模型限流(429):当前 key QPS 不足。"
+                    "建议:等几秒后重试,或在 config 里配多个逗号分隔的 key 轮换,或降低 best-of-N 并发。"
+                    f"(原始:{_raw_msg[:120]})"
+                )
+            elif isinstance(e, _httpx.TransportError) or isinstance(
+                e, (_httpx.ConnectError, _httpx.ConnectTimeout, _httpx.ReadTimeout)
+            ):
+                _friendly = (
+                    f"连不上模型端点(网络或 DNS 问题):"
+                    "请检查网络连接,或确认 config 里的 base_url 是否正确。"
+                    f"原始:{_raw_msg[:200]}"
+                )
+            msg = _friendly if _friendly is not None else _raw_msg
+            err = Error(message=msg, chain=chain)
             self._store.append_event(session_id, err)
             yield err
         finally:
@@ -1071,7 +1101,9 @@ class AgentLoop:
             return stable
         return compose_system(stable, untrusted=dynamic)
 
-    def _build_system_pair(self, goal: str) -> tuple[str, str]:
+    def _build_system_pair(
+        self, goal: str, *, _prefetched_memory_lines: list[str] | None = None,
+    ) -> tuple[str, str]:
         """返 (stable, dynamic) 对(任务:Anthropic cache_control 拆段打稳定前缀)。
 
         stable = HONESTY + env + memory_context + tool_signatures + contract + mcp_summary
@@ -1082,6 +1114,11 @@ class AgentLoop:
         把 stable 走 ModelClient.stream(system=...)、dynamic 走 system_dynamic=...,
         Anthropic 据此给 stable text block 打 cache_control.ephemeral,parallel 子 agent
         共享同一稳定前缀 → 第二步起 cache_read 命中,价钱降约 10x(spec §4 / 任务设计点)。
+
+        _prefetched_memory_lines: #4 async 路径 — 调用方(如 _drive)已在异步上下文里
+        通过 arecall/to_thread 预拉取好 recall 行,直接传入避免此方法同步阻塞事件循环。
+        None = 同步路径(tests/_build_system 等)按旧逻辑调 store.recall(阻塞,但在测试/
+        plan_mode 场景里无事件循环阻塞问题)。
         """
         # ── 安全段:运行环境块(cwd/OS/日期前置,免得模型现场探目录)+ 结构化工程任务契约 ──
         # spec §2.3.3:_tool_signatures_block 跟 _env_context 同位置(HONESTY 之后、untrusted 之前)
@@ -1159,7 +1196,10 @@ class AgentLoop:
             skill_bodies = []
 
         memory_lines: list[str] = []
-        if hasattr(self._store, "recall"):
+        if _prefetched_memory_lines is not None:
+            # #4 async 路径:调用方已在事件循环里非阻塞拉取,直接用 —— 无 httpx 阻塞。
+            memory_lines = _prefetched_memory_lines
+        elif hasattr(self._store, "recall"):
             try:
                 hits = self._store.recall(goal)  # type: ignore[attr-defined]
                 memory_lines = [
@@ -1222,7 +1262,26 @@ class AgentLoop:
         # 任务:并行子 agent 共用稳定前缀 → 拆 (stable, dynamic) 对,Anthropic 据此给
         # stable text block 打 cache_control.ephemeral;plan 模式仍走单字符串 system
         # (plan 不重复 stream,缓存收益小;_run_plan_phase_loop 拿 system 串用)。
-        system_stable, system_dynamic = self._build_system_pair(goal)
+        # #4:在 async 上下文里先 arecall(非阻塞),再传 _prefetched_memory_lines 给
+        # _build_system_pair,避免同步 httpx.Client(timeout=30) 阻塞事件循环。
+        _prefetched_mem: list[str] = []
+        if self._cfg.recall and hasattr(self._store, "recall"):
+            try:
+                if hasattr(self._store, "arecall"):
+                    _mem_raw = await self._store.arecall(goal)  # type: ignore[attr-defined]
+                else:
+                    _mem_raw = await asyncio.to_thread(
+                        self._store.recall, goal,  # type: ignore[attr-defined]
+                    )
+                _prefetched_mem = [
+                    f"- {rec.goal} → {rec.verdict or '?'}（{reason}）"
+                    for rec, reason in _mem_raw
+                ]
+            except Exception:  # noqa: BLE001 — recall 失败降级为空(不阻断 run)
+                _prefetched_mem = []
+        system_stable, system_dynamic = self._build_system_pair(
+            goal, _prefetched_memory_lines=_prefetched_mem,
+        )
         system = system_stable if not system_dynamic else compose_system(
             system_stable, untrusted=system_dynamic,
         )
@@ -1230,16 +1289,9 @@ class AgentLoop:
         # v6 §4 ACP MemoryRecallEvent:run 起始把 store.recall 命中结果通过事件广播,
         # 消费侧(TUI/daemon client)据此渲染"记忆召回 N 条",不再 getattr(loop,'_store') 穿透。
         # 诚实:无 store / 无 recall 能力 / 0 命中 → 投空列表事件(hits=[]),消费侧不喧宾。
-        # 召回失败 → 同上,绝不让 recall 错误阻断 run。
-        _recall_hits: list[str] = []
-        if self._cfg.recall and hasattr(self._store, "recall"):
-            try:
-                _recall_hits = [
-                    f"{rec.goal} → {rec.verdict or '?'}（{reason}）"
-                    for rec, reason in self._store.recall(goal)  # type: ignore[attr-defined]
-                ]
-            except Exception:  # noqa: BLE001 — 召回失败诚实降级为空列表
-                _recall_hits = []
+        # #4:复用上方 _prefetched_mem(已非阻塞拉取),不再重复 recall。
+        # _prefetched_mem 格式 "- goal → verdict（reason）",MemoryRecallEvent.hits 用同格式。
+        _recall_hits: list[str] = [line.lstrip("- ") for line in _prefetched_mem]
         yield MemoryRecallEvent(hits=_recall_hits)
 
         # Plan mode spec §2.5:plan 模式 → plan 子循环(可多轮 keep_planning/refine)。
@@ -1347,7 +1399,7 @@ class AgentLoop:
             for gm in _PROPOSE_GUI_VERIFY.finditer(text):
                 self._on_propose_gui_verify(gm.group(1))
 
-            # 拒登记回灌:H1 伪命令(永远是) + W5 桥接 verify 锁(默认开,关需 ARGSOS_BRIDGE_VERIFY_LOCK=0)。
+            # 拒登记回灌:H1 伪命令(永远是) + W5 桥接 verify 锁(默认开,关需 ARGOS_BRIDGE_VERIFY_LOCK=0)。
             if self._verify_rejected is not None:
                 if getattr(self, "_verify_rejected_fstring", False):
                     # #11:f-string verify(含 {} 占位)—— 诚实告知用普通字面量,而非静默丢失。
@@ -1356,7 +1408,8 @@ class AgentLoop:
                         "独立跑验证、拿不到你沙箱里的变量,无法求值 f-string。请改用普通字符串字面量、"
                         "填入完整命令(如 propose_verify('pytest -q tests/test_x.py'))。"})
                     self._verify_rejected_fstring = False
-                elif os.environ.get("ARGSOS_BRIDGE_VERIFY_LOCK", "1") != "0" \
+                elif (os.environ.get("ARGOS_BRIDGE_VERIFY_LOCK", "1") != "0"
+                        and os.environ.get("ARGSOS_BRIDGE_VERIFY_LOCK", "1") != "0") \
                         and self._cfg.verify_cmd is not None and self._cfg.verify_cmd.strip():
                     # W5:bridge 已配 verify,agent 不必再 propose(开锁时)
                     messages.append({"role": "user", "content":

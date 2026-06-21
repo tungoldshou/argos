@@ -148,9 +148,14 @@ def select_backend():
     """按平台 + 工具可用性选后端类。懒转 linux.select_backend()。
 
     macOS → SeatbeltExecutor;Linux + bwrap → BwrapExecutor;Linux + 仅 unshare → UnshareExecutor;
-    其他/都无 → RuntimeError。
+    win32 → 明确拒绝(诚实错误,不走 Linux 路径后无声失败);其他/都无 → RuntimeError。
     """
     if sys.platform == "darwin":
         return SeatbeltExecutor
+    if sys.platform == "win32":
+        raise RuntimeError(
+            "Argos 的内核级沙箱目前仅支持 macOS (Seatbelt) 与 Linux (bubblewrap/unshare);"
+            " Windows is not yet supported."
+        )
     from .linux import select_backend as _linux_select
     return _linux_select()

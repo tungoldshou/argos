@@ -1,10 +1,13 @@
 """#12 Context 可视化:文本表格 + JSON(契约 §12;spec §7)。
 
 format_table / format_json 都是纯函数,无副作用。
-颜色走 Textual markup([green]/[yellow]/[red]),非 ANSI;TUI/CLI 共用。"""
+颜色走 Textual markup([green]/[yellow]/[red]),非 ANSI;TUI 渲染直接用。
+CLI(`argos context show`)走 format_table_plain:先剥 markup tag 再输出,
+避免裸 `[green]…[/green]` 字面漏到终端。"""
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict
 from typing import Any
 
@@ -12,6 +15,14 @@ from argos.context.analyzer import ContextBreakdown, ContextBucket
 
 
 _HEALTH_COLOR = {"green": "green", "yellow": "yellow", "red": "red"}
+
+# 匹配 Rich/Textual markup 标签:如 [green] / [/green] / [bold] / [/bold] 等
+_MARKUP_RE = re.compile(r"\[/?[a-zA-Z][a-zA-Z0-9 _#]*\]")
+
+
+def strip_markup(text: str) -> str:
+    """剥去 Rich/Textual markup 标签,返回纯文本(用于 CLI 直接 print)。"""
+    return _MARKUP_RE.sub("", text)
 
 
 def _method_tag(method: str) -> str:
@@ -56,6 +67,12 @@ def _bucket_dict(b: ContextBucket) -> dict[str, Any]:
     d = asdict(b)
     d["details"] = list(b.details)
     return d
+
+
+def format_table_plain(b: ContextBreakdown) -> str:
+    """纯文本版表格:同 format_table 结构,但已剥去 Rich/Textual markup 标签。
+    供 CLI(`argos context show`)直接 print;TUI 继续用 format_table(含 markup)。"""
+    return strip_markup(format_table(b))
 
 
 def format_json(b: ContextBreakdown) -> str:

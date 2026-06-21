@@ -119,6 +119,23 @@ class ModelClient:
         # loop 据此发 CostUpdate 让状态栏 token/计时走起来 —— 真数据,不伪造。
         self.last_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0,
                                            "cache_read": 0, "cache_creation": 0}
+        # #25:per-instance 共享 AsyncClient(连接池复用 TCP+TLS,避免每步重建)。
+        # 惰性初始化(首次 stream 时建),在 aclose 里显式关闭。
+        self._http_client: httpx.AsyncClient | None = None
+
+    def _get_http_client(self) -> httpx.AsyncClient:
+        """#25:惰性获取共享 AsyncClient。首次调用时构造并缓存;之后复用同一实例。"""
+        if self._http_client is None or self._http_client.is_closed:
+            self._http_client = httpx.AsyncClient(
+                transport=self._transport, timeout=300.0,
+            )
+        return self._http_client
+
+    async def aclose(self) -> None:
+        """显式关闭共享 HTTP 客户端(run 结束或对象析构时调用)。安全:未建则无操作。"""
+        if self._http_client is not None and not self._http_client.is_closed:
+            await self._http_client.aclose()
+        self._http_client = None
 
     def _payload(self, messages: list[dict], system: str,
                  system_dynamic: str | None = None) -> dict[str, Any]:
@@ -206,9 +223,10 @@ class ModelClient:
         错误响应先把 body aread 满(让 e.response.text 在重试决策时可读)。"""
         headers = self._proto.headers(cred.key)
         url = self._proto.endpoint(self.tier.base_url)
-        async with httpx.AsyncClient(transport=self._transport, timeout=300.0) as client:
-            async with client.stream("POST", url, headers=headers,
-                                     json=self._payload(messages, system, system_dynamic)) as resp:
+        # #25:复用 per-instance 共享 AsyncClient(连接池,避免每步新 TCP+TLS 握手)。
+        client = self._get_http_client()
+        async with client.stream("POST", url, headers=headers,
+                                 json=self._payload(messages, system, system_dynamic)) as resp:
                 if resp.status_code >= 400:
                     # 错误响应 body 较小,先 aread 满,raise_for_status 抛后 e.response.text 可读
                     await resp.aread()

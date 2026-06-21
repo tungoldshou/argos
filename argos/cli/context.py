@@ -31,7 +31,7 @@ def cmd_show(args: argparse.Namespace) -> int:
     """`argos context show [--json] [--session=<id>]` — 走 ContextAnalyzer 出文本/JSON。
     无 active run 也能跑(空分析返全空桶,不崩;spec §13 错误处理)。"""
     from argos.context.analyzer import analyze
-    from argos.context.render import format_json, format_table
+    from argos.context.render import format_json, format_table_plain
     store, loop, workspace = _active_components()
     try:
         b = analyze(loop, store=store, workspace=workspace)  # type: ignore[arg-type]
@@ -41,7 +41,8 @@ def cmd_show(args: argparse.Namespace) -> int:
     if args.json:
         print(format_json(b))
     else:
-        print(format_table(b))
+        # format_table_plain 已剥 Rich/Textual markup → 不会向终端泄漏裸 [green]…[/green] 标签
+        print(format_table_plain(b))
     return 0
 
 

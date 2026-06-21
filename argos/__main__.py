@@ -43,7 +43,25 @@ def _build_parser() -> argparse.ArgumentParser:
     # headless 非交互执行(可脚本化 / CI):argos exec "<任务>"
     from argos.cli import headless as _headless_cli
     _headless_cli.add_subparser(sub)
-    sub.add_parser("setup", help="接入模型的交互向导(选 provider→填 key→连通测试→保存)")
+    sub.add_parser(
+        "setup",
+        help="接入模型的交互向导(选 provider→填 key→连通测试→保存)",
+        epilog=(
+            "向导写入 ~/.argos/config.json(profile 表 + active 指针)和 ~/.argos/.env(key, 0600)。\n\n"
+            "config.json 最小示例:\n"
+            '  { "active": "default",\n'
+            '    "models": { "default": {\n'
+            '      "protocol": "anthropic",   # 或 "openai"\n'
+            '      "base_url": "https://api.anthropic.com",\n'
+            '      "model": "claude-sonnet-4-5",\n'
+            '      "api_key_env": "ANTHROPIC_API_KEY",\n'
+            '      "max_tokens": 8096, "context_window": 200000,\n'
+            '      "price_in": 0.000003, "price_out": 0.000015 } } }\n\n'
+            "完整字段说明见 docs/setup-wizard.md 。\n"
+            "非 TTY 场景(Docker/CI)请手动写上述文件或挂载 secret。"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     sp_update = sub.add_parser(
         "self-update",
         help="检查并提示新版本(不自动下载;跳过 7 天缓存)",
@@ -277,6 +295,7 @@ def main() -> None:
     try:
         from argos.app_factory import build_components, build_loop_factory
         from argos.approval import ApprovalLevel
+        from argos.config import ConfigError as _TuiConfigError
         from argos.routing.effort import EffortLevel
         effective_ws = resolve_workspace(args.project)
         components = build_components(
@@ -290,7 +309,9 @@ def main() -> None:
             loop_factory=factory, gate=components.gate, demo=False,
             workspace=effective_ws or components.workspace,
         ).run()
-    except RuntimeError as e:
+    except (RuntimeError, _TuiConfigError) as e:
+        # ConfigError(config.py) subclasses Exception, not RuntimeError → 分开列举。
+        # 无 key / 无效 profile → 诚实落 demo 态,不假装能跑。
         from argos.tui.fakeloop import FakeLoop
         print(f"[argos] {e}\n[argos] 运行 `argos setup` 接入模型,或配置环境变量后重启。", file=sys.stderr)
         ArgosApp(loop_factory=lambda: FakeLoop(), demo=True).run()

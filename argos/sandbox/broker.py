@@ -158,7 +158,11 @@ class CapabilityBroker:
                 return f"SSRF 防护拒绝私网/保留/内网地址(web_extract 仅允许公网 URL):{host!r}"
             return None
         if not self._egress.allowed(host):
-            return f"egress 拒绝 —— {host!r} 不在允许出网名单。可让用户批准该域名后重试。"
+            return (
+                f"egress 拒绝 —— {host!r} 不在允许出网名单。"
+                "用 /trust autonomous 放开本会话出网,或在 ~/.argos/config.json 的 egress 段"
+                "加入该 host 后重启。"
+            )
         return None
 
     def _preflight(self, action: str, args: dict[str, Any]
