@@ -17,6 +17,8 @@ from __future__ import annotations
 from rich.text import Text
 from textual.widgets import Static
 
+from argos.i18n import t
+
 # ── 颜色常量(单源,对应 argos/tui/theme.py token)────────────────────────────
 # $ink-bright (#ECEEF5) — bold 标题
 _COL_INK_BRIGHT = "#ECEEF5"
@@ -31,15 +33,19 @@ _COL_INK_DIM = "#7E869C"
 # $ink-faint (#525A73)  — 诚实注记行(最低层级)
 _COL_INK_FAINT = "#525A73"
 
-# phase → 简明中文 + 标记。error/done 标记分明(诚实:告警与完成不可混淆)。
-_PHASE_TEXT = {
-    "plan": "规划",
-    "act": "执行",
-    "verify": "验证",
-    "report": "汇总",
-    "done": "完成",
-    "error": "失败",
+# phase → 简明标签。error/done 标记分明(诚实:告警与完成不可混淆)。
+# _PHASE_KEY:  i18n key map (single source of truth for render and tests).
+# _PHASE_TEXT: derived at import time via t() — imported by tests for contract assertions.
+#              Values reflect the active ARGOS_LANG (ZH in test suite, EN by default).
+_PHASE_KEY = {
+    "plan":   "widget.phase_plan",
+    "act":    "widget.phase_act",
+    "verify": "widget.phase_verify",
+    "report": "widget.phase_report",
+    "done":   "widget.phase_done",
+    "error":  "widget.phase_error",
 }
+_PHASE_TEXT = {phase: t(key) for phase, key in _PHASE_KEY.items()}
 _PHASE_GLYPH = {
     "plan": "◔",
     "act": "◉",
@@ -116,15 +122,16 @@ class WorkflowPanel(Static):
         result = Text(no_wrap=False, end="")
 
         # [LOW fix] 标题行:bold + $ink-bright (#ECEEF5)
-        head = "工作流:" + self._name
         if self._done:
-            head += "(完成)"
+            head = t("widget.workflow_title_done", name=self._name)
+        else:
+            head = t("widget.workflow_title", name=self._name)
         result.append(head, style=f"bold {_COL_INK_BRIGHT}")
 
         for agent_id in self._order:
             phase, note = self._agents[agent_id]
             glyph = _PHASE_GLYPH.get(phase, "·")
-            phase_text = _PHASE_TEXT.get(phase, phase)
+            phase_text = t(_PHASE_KEY.get(phase, "widget.phase_plan")) if phase in _PHASE_KEY else phase
             glyph_color = _PHASE_GLYPH_COLOR.get(phase, _COL_EYE)
 
             result.append("\n  ")
@@ -136,7 +143,7 @@ class WorkflowPanel(Static):
 
         if self._done:
             # [LOW fix] 综合结论行:$ink-dim (#7E869C)
-            result.append("\n  ─ 综合结论:", style=_COL_INK_DIM)
+            result.append(t("widget.workflow_synthesis_label"), style=_COL_INK_DIM)
             result.append(self._synthesis, style=_COL_INK_DIM)
             # [LOW fix] 诚实注记行:$ink-faint (#525A73)
             for n in self._notes:

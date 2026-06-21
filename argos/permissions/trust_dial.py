@@ -21,6 +21,8 @@ from __future__ import annotations
 import enum
 from typing import Any
 
+from argos.i18n import t
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TrustLevel 枚举
@@ -40,12 +42,12 @@ class TrustLevel(enum.IntEnum):
     @property
     def label_human(self) -> str:
         """人话标签（TUI 显示用）。"""
-        return _HUMAN_LABELS[self]
+        return t(_HUMAN_LABELS[self])
 
     @property
     def description(self) -> str:
         """档位完整说明（TUI 设置页/帮助文本用）。"""
-        return _DESCRIPTIONS[self]
+        return t(_DESCRIPTIONS[self])
 
     @property
     def mode_name(self) -> str:
@@ -90,36 +92,19 @@ def next_in_cycle(level: TrustLevel) -> TrustLevel:
 
 # 人话标签表（独立字典，枚举定义后填充）
 _HUMAN_LABELS: dict[TrustLevel, str] = {
-    TrustLevel.L0_EVERY_STEP:      "每一步都问我",
-    TrustLevel.L1_DANGEROUS_ONLY:  "只有危险操作才问",
-    TrustLevel.L2_IRREVERSIBLE_ONLY: "只有不可逆操作才问",
-    TrustLevel.L3_SESSION_TRUSTED: "同类操作批准后本会话放行",
-    TrustLevel.L4_AUTONOMOUS:      "全自治（HARD RULES 仍拦）",
+    TrustLevel.L0_EVERY_STEP:        "perm.label.l0",
+    TrustLevel.L1_DANGEROUS_ONLY:    "perm.label.l1",
+    TrustLevel.L2_IRREVERSIBLE_ONLY: "perm.label.l2",
+    TrustLevel.L3_SESSION_TRUSTED:   "perm.label.l3",
+    TrustLevel.L4_AUTONOMOUS:        "perm.label.l4",
 }
 
 _DESCRIPTIONS: dict[TrustLevel, str] = {
-    TrustLevel.L0_EVERY_STEP: (
-        "最保守模式。每一个工具调用都会暂停等你确认，包括只读操作。"
-        "适合初次使用或对任务完全不确定时。"
-    ),
-    TrustLevel.L1_DANGEROUS_ONLY: (
-        "只对高风险操作（删除文件、执行 shell 命令、网络请求等）暂停等确认；"
-        "低风险操作（读取文件、列目录）自动放行。"
-    ),
-    TrustLevel.L2_IRREVERSIBLE_ONLY: (
-        "只对不可逆操作暂停等确认（依赖 P2 能力 manifest 的 reversible 字段）；"
-        "可撤销操作自动放行。"
-        "注意：reversible 信息来自能力声明，声明不准确时保护力下降。"
-    ),
-    TrustLevel.L3_SESSION_TRUSTED: (
-        "同一类操作在本次会话内批准一次后自动放行（等同于 ACCEPT_EDITS 扩展到所有类别）；"
-        "新类操作首次仍需确认。会话结束后缓存清零。"
-    ),
-    TrustLevel.L4_AUTONOMOUS: (
-        "全自治模式：所有工具调用自动放行，等同于旧 /yolo。"
-        "HARD RULES（系统路径、危险 shell 命令、secret 检测）仍然强制拦截，永不绕过。"
-        "TUI 头部显示红色警示灯。"
-    ),
+    TrustLevel.L0_EVERY_STEP:        "perm.desc.l0",
+    TrustLevel.L1_DANGEROUS_ONLY:    "perm.desc.l1",
+    TrustLevel.L2_IRREVERSIBLE_ONLY: "perm.desc.l2",
+    TrustLevel.L3_SESSION_TRUSTED:   "perm.desc.l3",
+    TrustLevel.L4_AUTONOMOUS:        "perm.desc.l4",
 }
 
 
@@ -156,7 +141,7 @@ def to_approval_semantics(level: TrustLevel) -> dict[str, Any]:
         return {
             **_base,
             "approval_level": _AL_CONFIRM,
-            "description": "全量确认：每步都问（含只读操作）",
+            "description": t("perm.sem.desc.l0"),
             "reversible_check": False,
             # L0 额外语义：连只读操作也要问，实现时 gate 应忽略 risk level 短路
             "ask_readonly": True,
@@ -166,7 +151,7 @@ def to_approval_semantics(level: TrustLevel) -> dict[str, Any]:
         return {
             **_base,
             "approval_level": _AL_CONFIRM,
-            "description": "危险才问：高风险操作暂停，低风险自动放行",
+            "description": t("perm.sem.desc.l1"),
             "reversible_check": False,
             "ask_readonly": False,
             # low_risk_auto：兑现"低风险自动放行"——evaluator 默认决策处对 registry risk=low 的动作
@@ -179,7 +164,7 @@ def to_approval_semantics(level: TrustLevel) -> dict[str, Any]:
         return {
             **_base,
             "approval_level": _AL_CONFIRM,
-            "description": "不可逆才问：依赖 capability manifest reversible 字段；可逆操作自动放行",
+            "description": t("perm.sem.desc.l2"),
             # reversible_check=True → gate._evaluate 传入 reversible_lookup。
             # gate.set_reversible_lookup() 由 app_factory 从 CapabilityRegistry 构造注入；
             # 未注入时 evaluator 保守退化：所有动作均 ask（fail-closed，不假装放行）。
@@ -191,7 +176,7 @@ def to_approval_semantics(level: TrustLevel) -> dict[str, Any]:
         return {
             **_base,
             "approval_level": _AL_ACCEPT_EDITS,
-            "description": "同类批过后本会话放行（等同于 ACCEPT_EDITS 扩展到所有操作类别）",
+            "description": t("perm.sem.desc.l3"),
             "reversible_check": False,
             "ask_readonly": False,
         }
@@ -200,7 +185,7 @@ def to_approval_semantics(level: TrustLevel) -> dict[str, Any]:
         return {
             **_base,
             "approval_level": _AL_AUTO,
-            "description": "全自治：所有工具自动放行，HARD RULES 仍强制拦截",
+            "description": t("perm.sem.desc.l4"),
             "reversible_check": False,
             "ask_readonly": False,
             # 警示标志：TUI 应在头部显示红色 ⏻ 灯
@@ -208,7 +193,8 @@ def to_approval_semantics(level: TrustLevel) -> dict[str, Any]:
         }
 
     # 防御性兜底（穷举 IntEnum 理论上不会到这里）
-    return {**_base, "approval_level": _AL_CONFIRM, "description": f"未知档位 {level}，降级 confirm",
+    return {**_base, "approval_level": _AL_CONFIRM,
+            "description": t("perm.sem.desc.unknown", level=level),
             "reversible_check": False, "ask_readonly": False}
 
 
@@ -236,11 +222,11 @@ def hard_rules_immune() -> bool:
 
 # 各档位涉及的"放宽了什么"的人话描述（供警示文案组装用）
 _LEVEL_RELAXED_DESCRIPTION: dict[TrustLevel, str] = {
-    TrustLevel.L0_EVERY_STEP:      "所有操作（含只读）的逐步确认",
-    TrustLevel.L1_DANGEROUS_ONLY:  "危险操作的确认",
-    TrustLevel.L2_IRREVERSIBLE_ONLY: "不可逆操作的确认",
-    TrustLevel.L3_SESSION_TRUSTED: "同类操作的会话级批准缓存",
-    TrustLevel.L4_AUTONOMOUS:      "全自治（所有工具自动放行）",
+    TrustLevel.L0_EVERY_STEP:        "perm.relaxed.l0",
+    TrustLevel.L1_DANGEROUS_ONLY:    "perm.relaxed.l1",
+    TrustLevel.L2_IRREVERSIBLE_ONLY: "perm.relaxed.l2",
+    TrustLevel.L3_SESSION_TRUSTED:   "perm.relaxed.l3",
+    TrustLevel.L4_AUTONOMOUS:        "perm.relaxed.l4",
 }
 
 
@@ -260,22 +246,11 @@ def escalation_warning(from_level: TrustLevel, to_level: TrustLevel) -> str:
         return ""  # 降档：收紧权限，无需警示
 
     # 升档：构造警示文案
-    from_desc = _LEVEL_RELAXED_DESCRIPTION[from_level]
+    from_desc = t(_LEVEL_RELAXED_DESCRIPTION[from_level])
     to_label = to_level.label_human
 
     # 特殊情况：升到 L4（全自治）需要最强警示
     if to_level is TrustLevel.L4_AUTONOMOUS:
-        return (
-            f"⚠ 你正在切换到「{to_label}」模式。"
-            f"这意味着放宽了「{from_desc}」的保护，"
-            f"所有工具调用将自动执行，不再逐步确认。"
-            f"HARD RULES（危险命令、系统路径、secret 检测）仍然强制拦截，无法绕过。"
-            f"如有任何疑虑，建议保持当前档位。"
-        )
+        return t("perm.escalation.to_l4", to_label=to_label, from_desc=from_desc)
 
-    return (
-        f"⚠ 你正在放宽「{from_desc}」的确认要求，切换到「{to_label}」。"
-        f"这意味着更多操作将自动执行，减少中断。"
-        f"HARD RULES 仍然强制拦截危险操作，但确认频率降低意味着错误操作被发现前可能已执行。"
-        f"确认后该设置在本会话内生效。"
-    )
+    return t("perm.escalation.generic", from_desc=from_desc, to_label=to_label)

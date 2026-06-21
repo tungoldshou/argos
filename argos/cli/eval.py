@@ -22,6 +22,7 @@ from argos.eval.compare import run_pair, write_report, write_report_json
 from argos.eval.results import list_runs, summary
 from argos.eval.runner import EvalRunner, PASS_PASSED
 from argos.daemon.worktree import WorktreeManager
+from argos.i18n import t
 
 
 def _format_run(r) -> str:
@@ -43,7 +44,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     """`argos eval list` — 列最近 run。"""
     runs = list_runs(limit=args.limit)
     if not runs:
-        print("尚未跑过 eval。试试 argos eval corpus 看任务清单。")
+        print(t("cli.eval.no_runs"))
         return 0
     header = (f"{'Run ID':<14} {'Date':<11} {'Task':<32} {'Tier':<10} "
               f"{'Status':<14} {'Cost':<10} {'Time':<5}")
@@ -67,7 +68,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     try:
         task = load_task(args.task_id)
     except FileNotFoundError as e:
-        print(f"未找到 task: {e}", file=__import__("sys").stderr)
+        print(t("cli.eval.task_not_found", err=e), file=__import__("sys").stderr)
         return 2
     base = Path.home() / ".argos" / "eval"
     model = args.model or _active_profile()
@@ -92,7 +93,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
     try:
         task = load_task(args.task_id)
     except FileNotFoundError as e:
-        print(f"未找到 task: {e}", file=__import__("sys").stderr)
+        print(t("cli.eval.task_not_found", err=e), file=__import__("sys").stderr)
         return 2
     base = Path.home() / ".argos" / "eval"
     print(f"[eval] A/B: {args.model_a} vs {args.model_b} on {task.id} ...")
@@ -142,22 +143,22 @@ def _active_profile() -> str:
 
 def add_subparser(sub: Any) -> None:
     """注册 eval 子命令到 argparse subparsers。"""
-    p = sub.add_parser("eval", help="Agent 自我评估 + A/B 对比 (#7)")
+    p = sub.add_parser("eval", help=t("cli.eval.help"))
     sp = p.add_subparsers(dest="eval_command")
 
-    p_list = sp.add_parser("list", help="列最近 eval run")
+    p_list = sp.add_parser("list", help=t("cli.eval.list.help"))
     p_list.add_argument("--limit", type=int, default=20)
     p_list.set_defaults(func=cmd_list)
 
-    p_run = sp.add_parser("run", help="跑单个 task")
-    p_run.add_argument("task_id", help="task id (见 `argos eval corpus`)")
-    p_run.add_argument("--model", default=None, help="model profile name(默认 = active)")
+    p_run = sp.add_parser("run", help=t("cli.eval.run.help"))
+    p_run.add_argument("task_id", help=t("cli.eval.run.task_id.help"))
+    p_run.add_argument("--model", default=None, help=t("cli.eval.run.model.help"))
     p_run.add_argument("--budget", type=float, default=1.0, help="cost cap USD")
     p_run.add_argument("--budget-s", type=int, default=600, help="time cap seconds")
-    p_run.add_argument("--keep-worktree", action="store_true", help="调试:不删 worktree")
+    p_run.add_argument("--keep-worktree", action="store_true", help=t("cli.eval.run.keep_worktree.help"))
     p_run.set_defaults(func=cmd_run)
 
-    p_cmp = sp.add_parser("compare", help="A/B 对比两个 model tier")
+    p_cmp = sp.add_parser("compare", help=t("cli.eval.compare.help"))
     p_cmp.add_argument("task_id", help="task id")
     p_cmp.add_argument("model_a")
     p_cmp.add_argument("model_b")
@@ -166,7 +167,7 @@ def add_subparser(sub: Any) -> None:
     p_cmp.add_argument("--keep-worktree", action="store_true")
     p_cmp.set_defaults(func=cmd_compare)
 
-    p_corpus = sp.add_parser("corpus", help="列 corpus 任务清单")
+    p_corpus = sp.add_parser("corpus", help=t("cli.eval.corpus.help"))
     p_corpus.set_defaults(func=cmd_corpus)
 
     # 子模块子命令(Terminal-Bench 适配器等);走 add_subparser 模式

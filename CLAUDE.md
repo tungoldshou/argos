@@ -170,5 +170,11 @@ share mutable state. The `ApprovalGate` from `build_components` is shared with t
   forces inline (used in tests to prevent attaching to a live daemon).
 - Honesty is the product invariant: when something can't be verified, say `unverifiable` — never
   fabricate success, tool counts, or status. The `/tools` count comes from `ALL_TOOL_NAMES`.
+- **User-facing strings go through i18n** (`from argos.i18n import t`; default `ARGOS_LANG=en`,
+  `zh` available). Catalogs live in `argos/locales/*.py` (`EN`/`ZH` dicts, registered in
+  `CATALOG_MODULES`); each `ZH` value is the verbatim original so `ARGOS_LANG=zh` keeps legacy
+  tests green (`tests/conftest.py` pins `zh`). Don't hardcode user-visible Chinese — internal
+  logs / exceptions / model-facing prompt fragments stay as-is. See `docs/i18n.md`;
+  `scripts/_i18n_leak_scan.py` finds leaks.
 - Changing Python that ships in the binary requires re-running PyInstaller before the packaging
   smoke test (`smoke_packaged.py`) reflects it (see `packaging/` and `docs/packaging-c.md`).

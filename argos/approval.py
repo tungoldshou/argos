@@ -26,6 +26,8 @@ import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Literal
 
+from argos.i18n import t
+
 if TYPE_CHECKING:
     from argos.permissions.evaluator import DecisionMeta  # noqa: F401
 
@@ -297,20 +299,20 @@ class ApprovalGate:
                 trigger="level:auto", by="level", risk=risk,
             )
             self._notify("approved", action, "level:auto")
-            return Decision(kind="once", reason="AUTO 档放手")
+            return Decision(kind="once", reason=t("approval.reason.auto"))
         if self.level is ApprovalLevel.OBSERVE and (eval_meta is None or eval_meta.decision != "ask"):
             self._audit(
                 action=action, args=args, decision="denied",
                 trigger="level:observe", by="level", risk=risk,
             )
             self._notify("denied", action, "level:observe")
-            return Decision(kind="deny", reason="OBSERVE 档:只看不执行副作用")
+            return Decision(kind="deny", reason=t("approval.reason.observe"))
         # 3) session 缓存命中:同 payload 整 session 已批 → 不再弹窗
         payload = {"action": action, "args": args}
         key = _hash_payload(payload)
         if self._session_approvals.get(key) is not None:
             self._notify("approved", action, "session:cached")
-            return Decision(kind="session", reason="session 已批准")
+            return Decision(kind="session", reason=t("approval.reason.session_cached"))
         # 4) ask:挂起等 respond
         # call_id 可由调用方预生成(如工作流提议先投 WorkflowProposed 携带 call_id,TUI 据它放行);
         # 未传则自生成,向后兼容。
@@ -343,7 +345,7 @@ class ApprovalGate:
             return await asyncio.wait_for(fut, timeout=timeout)
         except asyncio.TimeoutError:
             self._pending.pop(call_id, None)
-            return Decision(kind="deny", reason="审批超时,默认拒绝")
+            return Decision(kind="deny", reason=t("approval.reason.timeout"))
 
     # ── Smart approval 内部 helper(spec 2026-06-06 §2.6) ──────────────
     def _evaluate(self, action: str, args: dict[str, Any],
@@ -453,7 +455,7 @@ class ApprovalGate:
         """session 终止时调用,把所有挂着的请求以 deny 收尾(避免挂死)。"""
         n = 0
         for p in list(self._pending.values()):
-            self._settle(p, Decision(kind="deny", reason="session 终止"))
+            self._settle(p, Decision(kind="deny", reason=t("approval.reason.session_cancelled")))
             n += 1
         self._pending.clear()
         return n
@@ -528,7 +530,7 @@ def requires_approval(description: str, risk: RiskLevel = "medium") -> Callable:
             gate = _current_gate()
             if gate is None:
                 # 无 gate 上下文(测试 / headless)→ fail-closed 拒绝,绝不放行
-                return "错误:该工具需要用户审批但当前没有审批上下文,默认拒绝。"
+                return t("approval.err.no_gate")
             tool_name = getattr(fn, "__name__", str(fn))
             serialized_args = _serialize(args, kwargs)
             decision = await gate.request(
@@ -537,9 +539,9 @@ def requires_approval(description: str, risk: RiskLevel = "medium") -> Callable:
                 risk=risk,
             )
             if not decision.approved:
-                return (
-                    f"用户拒绝执行该操作({decision.reason or '未提供原因'})。"
-                    f"请尝试其他做法或向用户解释为什么需要它。"
+                return t(
+                    "approval.err.denied",
+                    reason=decision.reason or t("approval.err.denied_no_reason"),
                 )
             return await _call_original(fn, args, kwargs)
 
@@ -547,16 +549,16 @@ def requires_approval(description: str, risk: RiskLevel = "medium") -> Callable:
         def sync_wrapper(*args: Any, **kwargs: Any) -> str:
             gate = _current_gate()
             if gate is None:
-                return "错误:该工具需要用户审批但当前没有审批上下文,默认拒绝。"
+                return t("approval.err.no_gate")
             if asyncio.iscoroutinefunction(fn):
-                return "错误:同步工具包装器收到了异步调用路径,这是内部错误。"
+                return t("approval.err.async_path")
             try:
                 asyncio.get_running_loop()
                 in_loop = True
             except RuntimeError:
                 in_loop = False
             if in_loop:
-                return "错误:同步工具不能在事件循环中等待审批,请改用异步版本。"
+                return t("approval.err.in_loop")
             return asyncio.run(async_wrapper(*args, **kwargs))
 
         # functools.wraps 已复制 __name__/__doc__/__wrapped__ —— __wrapped__ 让
@@ -604,12 +606,12 @@ async def guarded_call(
     · 批准 → await run()(run 是个返回 awaitable 的零参可调用)。"""
     gate = _current_gate()
     if gate is None:
-        return "错误:该工具需要用户审批但当前没有审批上下文,默认拒绝。"
+        return t("approval.err.no_gate")
     decision = await gate.request(action, args, description=description, risk=risk, timeout=timeout)
     if not decision.approved:
-        return (
-            f"用户拒绝执行该操作({decision.reason or '未提供原因'})。"
-            f"请尝试其他做法或向用户解释为什么需要它。"
+        return t(
+            "approval.err.denied",
+            reason=decision.reason or t("approval.err.denied_no_reason"),
         )
     return await run()
 

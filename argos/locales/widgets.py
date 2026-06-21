@@ -11,22 +11,22 @@ from __future__ import annotations
 
 EN: dict[str, str] = {
     # verdict_badge — no_test state (CONTRACT A)
-    "verdict.no_test_line": "○ unchecked · no verify · {detail}",
+    "verdict.no_test_line": "○ no machine check · no verify command · {detail}",
 
     # verdict_badge — self-verified (weak pass, contract 10)
     "verdict.self_verified_line1": "◍ self-verified (weak) · {cmd} → {detail}",
-    "verdict.self_verified_line2": "  ⤷ not user-level verify, not promoted to skill",
+    "verdict.self_verified_line2": "  ⤷ not a user-level verify · not promoted to a skill",
 
     # verdict_badge — passed (strong)
     "verdict.passed_attempts": "{attempts} attempt(s)",
     "verdict.passed_line": "◉ verify passed · {cmd} · {attempts_str} → {detail}",
 
     # verdict_badge — failed
-    "verdict.failed_line1": "◉ verify FAILED · {cmd} → {detail}",
-    "verdict.failed_line2": "  ⤷ still failed after {attempts} attempt(s)",
+    "verdict.failed_line1": "◉ verify failed · {cmd} → {detail}",
+    "verdict.failed_line2": "  ⤷ still failing after {attempts} attempt(s)",
 
     # verdict_badge — unverifiable (tampered)
-    "verdict.unverifiable_tampered": "◔ unverifiable · protected file(s) modified {tampered} → {detail}",
+    "verdict.unverifiable_tampered": "◔ unverifiable · protected file(s) changed {tampered} → {detail}",
     # verdict_badge — unverifiable (plain)
     "verdict.unverifiable": "◔ unverifiable · {cmd} · {detail}",
 
@@ -37,27 +37,27 @@ EN: dict[str, str] = {
     "trust.title_level_suffix": "（{short}）",
 
     # five dial rows: (label, hint)
-    "trust.l0_label": "confirm every step",
-    "trust.l0_hint": "confirm all (including reads)",
-    "trust.l1_label": "only dangerous actions",
-    "trust.l1_hint": "pause on high-risk · pass low-risk",
-    "trust.l2_label": "only irreversible actions",
-    "trust.l2_hint": "respects capability reversible field",
-    "trust.l3_label": "same-class approved for session",
-    "trust.l3_hint": "= ACCEPT_EDITS extended",
+    "trust.l0_label": "ask me at every step",
+    "trust.l0_hint": "confirm everything (including reads)",
+    "trust.l1_label": "ask only for risky actions",
+    "trust.l1_hint": "pause on high-risk · allow low-risk",
+    "trust.l2_label": "ask only for irreversible actions",
+    "trust.l2_hint": "follows each capability's reversible flag",
+    "trust.l3_label": "approve once, allow same kind this session",
+    "trust.l3_hint": "= ACCEPT_EDITS, extended",
     "trust.l4_label": "fully autonomous",
     "trust.l4_hint_red": "⏻ red-light",
-    "trust.l4_hint_rest": " · HARD RULES still enforced",
+    "trust.l4_hint_rest": " · hard rules still enforced",
 
     # hard-rules footer line
-    "trust.hard_rules_prefix": "HARD RULES never downgraded:",
+    "trust.hard_rules_prefix": "hard rules, never downgraded:",
     "trust.hard_rules_shell": "dangerous shell",
     "trust.hard_rules_sep": " · ",
     "trust.hard_rules_path": "system paths",
     "trust.hard_rules_secret": "secret detection",
 
     # provenance footer
-    "trust.footer_provenance": "level-up always shows warning · never silently auto-upgrades",
+    "trust.footer_provenance": "raising the level always shows a warning · never auto-upgrades silently",
     "trust.footer_module": "permissions/trust_dial",
 
     # ── ledger_table ──────────────────────────────────────────────────────────
@@ -67,7 +67,7 @@ EN: dict[str, str] = {
 
     # column headers (exact cell text)
     "ledger.col_seq": "seq ",
-    "ledger.col_action": "action · summary",
+    "ledger.col_action": "action · plain summary",
     "ledger.col_risk": "  risk  ",
     "ledger.col_rev": "  rev   ",
     "ledger.col_undo": "  undo      ",
@@ -79,19 +79,19 @@ EN: dict[str, str] = {
     "hardconfirm.title": "⛔ computer control · hard confirm [high · irreversible]",
 
     # option labels
-    "hardconfirm.option_once": "this time only",
+    "hardconfirm.option_once": "allow once",
     "hardconfirm.option_deny": "deny",
 
     # governance annotation
     "hardconfirm.governance": (
-        "Seatbelt cannot constrain global screen/mouse resources — "
-        "approval gate, ledger, and audit trail are the only governance layer"
+        "the sandbox cannot fence off the global screen and mouse — "
+        "the approval gate, ledger, and audit trail are the only governance layer here"
     ),
 
     # footer invariant
     "hardconfirm.footer": (
-        "every computer.* action is always risk=high + reversible=False · "
-        "not subject to Trust Dial downgrade"
+        "every computer.* action is always risk=high and reversible=False · "
+        "the trust dial cannot downgrade it"
     ),
 
     # finish summary line prefix  "◕ approved {action_label} → {value}"
@@ -115,14 +115,14 @@ EN: dict[str, str] = {
     "widget.section_context": "Context",
 
     # activity_panel body strings
-    "widget.progress_pending": "(pending)",
+    "widget.progress_pending": "(not started)",
     "widget.tools_zero": "0 calls this run",
     "widget.tools_this_run": "calls this run:\n{tools}",
     "widget.empty": "◌ (none)",
     "widget.progress_todo": "Progress {done}/{total}",
     "widget.skills_none": "none available",
-    "widget.skills_available": "{n} available (recalled by task)",
-    "widget.mcp_unconfigured": "unconfigured",
+    "widget.skills_available": "{n} available (recalled per task)",
+    "widget.mcp_unconfigured": "not configured",
     "widget.mcp_configured": "{n} configured",
     "widget.cache_hit_line": "cache hit {cache_read} tok  {elapsed_s:.1f}s",
     "widget.compacted_line": "↯ compacted -{reduction_pct:.0f}% · {before}→{after} entries",
@@ -136,7 +136,7 @@ EN: dict[str, str] = {
     # ── splash ────────────────────────────────────────────────────────────────
 
     "widget.splash_subtitle": "hundred-eyed agent · v{version} · {model_label} · ",
-    "widget.splash_hint": "enter a goal to begin · / commands · Esc to interrupt · ^C to quit",
+    "widget.splash_hint": "type a goal to begin · / for commands · Esc to interrupt · ^C to quit",
     "widget.splash_badge_demo": "DEMO scripted",
     "widget.splash_badge_no_key": "no key · /setup",
     "widget.splash_badge_live": "LIVE",
@@ -156,8 +156,8 @@ EN: dict[str, str] = {
     # ── dream_report ──────────────────────────────────────────────────────────
 
     "widget.dream_echo": "› /dream",
-    "widget.dream_caption": "executable content sourced verbatim from runs · model writes narrative only",
-    "widget.dream_footer": "fail-safe degradation · all suggestions require user confirmation · argos/learning/dream",
+    "widget.dream_caption": "executable content taken verbatim from runs · the model writes only the narrative",
+    "widget.dream_footer": "fail-safe by design · every suggestion needs your confirmation · argos/learning/dream",
     "widget.dream_report_title": "─ report",
     "widget.dream_row_b": "consolidation units {units} · ",
     "widget.dream_promoted": "promoted {promoted}",
@@ -182,22 +182,94 @@ EN: dict[str, str] = {
 
     # conductor suggestion choice
     "widget.conductor_title": "◔ proactive suggestion · awaiting confirmation",
-    "widget.conductor_body_suggest": "suggest → {goal}",
-    "widget.conductor_body_confirm_invariant": "requires_confirmation = true · never auto-executes",
+    "widget.conductor_body_suggest": "suggests → {goal}",
+    "widget.conductor_body_confirm_invariant": "requires_confirmation = true · never runs on its own",
     "widget.conductor_option_confirm": "confirm  /confirm {sid8}",
     "widget.conductor_option_dismiss": "dismiss  /dismiss {sid8}",
-    "widget.conductor_hint": "↑↓ select · ↵ confirm · digit shortcut · Esc dismiss",
+    "widget.conductor_hint": "↑↓ select · ↵ confirm · digit to pick · Esc to dismiss",
     "widget.conductor_action_label": "proactive suggestion",
 
     # ── routing_table ─────────────────────────────────────────────────────────
 
     "widget.routing_caption": "per-task routing · 8 categories · cheap / default / strong",
     "widget.routing_set_hint": "/routing set <category> <tier> to change",
-    "widget.routing_footer_left": "heuristic categorization · 0 tokens · fallback simple_read",
+    "widget.routing_footer_left": "heuristic categorization · 0 tokens · falls back to simple_read",
     "widget.routing_footer_module": "argos/routing",
     "widget.routing_history_header": "[last 10 decisions]",
-    "widget.routing_no_history": "(none; no model calls yet this run)",
+    "widget.routing_no_history": "(none yet; no model calls this run)",
     "widget.routing_force_confirm": "  ❂ force confirm",
+
+    # ── workflow_panel ────────────────────────────────────────────────────────
+
+    # phase labels (rendered as on-screen status text per sub-agent row)
+    "widget.phase_plan": "planning",
+    "widget.phase_act": "acting",
+    "widget.phase_verify": "verifying",
+    "widget.phase_report": "summarising",
+    "widget.phase_done": "done",
+    "widget.phase_error": "failed",
+
+    # workflow panel title and completion suffix
+    "widget.workflow_title": "workflow: {name}",
+    "widget.workflow_title_done": "workflow: {name} (done)",
+    "widget.workflow_synthesis_label": "\n  ─ synthesis:",
+
+    # ── inline_choice ─────────────────────────────────────────────────────────
+
+    # approval title base  ◓ approval request [{risk}]
+    "widget.approval_title_base": "◓ approval request [{risk}]",
+    # secret-hit sub-label  ⚠︎ secret pattern matched {key_name}
+    "widget.approval_secret_hit": "{_WARNING_SIGN} secret pattern matched {key_name}",
+    # error when options is empty
+    "widget.choice_empty": "InlineChoice requires at least one option",
+    # feedback input placeholder
+    "widget.choice_input_placeholder": "add feedback, Enter to submit, Esc to cancel",
+    # hint line fragments
+    "widget.choice_hint_base": "↑↓ select · ↵ confirm · digit to pick",
+    "widget.choice_hint_esc": " · Esc to deny",
+    # decision summary line  ◕ approved {action} → {value}
+    "widget.choice_summary": "◕ approved {action} → {value}",
+
+    # ── code_action ───────────────────────────────────────────────────────────
+
+    # code block fold indicator  … +N lines
+    "widget.code_fold": "… +{n} lines",
+    # initial running state
+    "widget.code_running": "└ running…",
+    # return value prefix in result
+    "widget.code_return_value": "\n[return value] {repr}",
+    # result text when no output
+    "widget.code_done": "done",
+    "widget.code_error": "error",
+    # traceback internal frame fold  … (N lines of internal stack folded)
+    "widget.code_stack_folded": "… ({n} lines of internal stack folded)",
+
+    # ── ledger/summary ────────────────────────────────────────────────────────
+
+    "ledger.summary_write_lines": "wrote {path} (+{lines} lines)",
+    "ledger.summary_write": "wrote {path}",
+    "ledger.summary_edit_diff": "edited {path} (+{added}/-{removed} lines)",
+    "ledger.summary_edit": "edited {path}",
+    "ledger.summary_read": "read {path}",
+    "ledger.summary_delete": "deleted {path}",
+    "ledger.summary_listdir": "listed directory {path}",
+    "ledger.summary_mkdir": "created directory {path}",
+    "ledger.summary_shell_cmd": "ran command: {cmd}",
+    "ledger.summary_shell": "ran a shell command",
+    "ledger.summary_get": "sent GET request: {url}",
+    "ledger.summary_search_q": "searched: {q}",
+    "ledger.summary_search": "sent a web search",
+    "ledger.summary_post": "sent POST request: {url}",
+    "ledger.summary_navigate": "browser navigated to: {url}",
+    "ledger.summary_click_target": "clicked: {target}",
+    "ledger.summary_click": "browser click",
+    "ledger.summary_fill": "filled {selector}: {value}",
+    "ledger.summary_fill_no_sel": "browser input",
+    "ledger.summary_screenshot": "captured browser screenshot",
+    "ledger.summary_unknown": "executed {action}",
+    "ledger.summary_url_unknown": "(url unknown)",
+    "ledger.summary_file_unknown": "file",
+    "ledger.summary_dir_unknown": ".",
 }
 
 ZH: dict[str, str] = {
@@ -387,4 +459,63 @@ ZH: dict[str, str] = {
     "widget.routing_history_header": "[最近 10 步决策]",
     "widget.routing_no_history": "(无;本 run 尚未调模型)",
     "widget.routing_force_confirm": "  ❂ force confirm",
+
+    # ── workflow_panel ────────────────────────────────────────────────────────
+
+    "widget.phase_plan": "规划",
+    "widget.phase_act": "执行",
+    "widget.phase_verify": "验证",
+    "widget.phase_report": "汇总",
+    "widget.phase_done": "完成",
+    "widget.phase_error": "失败",
+
+    "widget.workflow_title": "工作流:{name}",
+    "widget.workflow_title_done": "工作流:{name}(完成)",
+    "widget.workflow_synthesis_label": "\n  ─ 综合结论:",
+
+    # ── inline_choice ─────────────────────────────────────────────────────────
+
+    "widget.approval_title_base": "◓ 审批请求 [{risk}]",
+    "widget.approval_secret_hit": "{_WARNING_SIGN} 命中密钥模式 {key_name}",
+    "widget.choice_empty": "InlineChoice 至少需要一个选项",
+    "widget.choice_input_placeholder": "补充反馈,Enter 提交,Esc 返回",
+    "widget.choice_hint_base": "↑↓ 选择 · ↵ 确认 · 数字直选",
+    "widget.choice_hint_esc": " · Esc 拒绝",
+    "widget.choice_summary": "◕ 审批 {action} → {value}",
+
+    # ── code_action ───────────────────────────────────────────────────────────
+
+    "widget.code_fold": "… +{n} 行",
+    "widget.code_running": "└ 运行中…",
+    "widget.code_return_value": "\n[返回值] {repr}",
+    "widget.code_done": "执行完成",
+    "widget.code_error": "执行异常",
+    "widget.code_stack_folded": "… ({n} 行内部堆栈已折叠)",
+
+    # ── ledger/summary ────────────────────────────────────────────────────────
+
+    "ledger.summary_write_lines": "写入了 {path}(+{lines} 行)",
+    "ledger.summary_write": "写入了 {path}",
+    "ledger.summary_edit_diff": "编辑了 {path}(+{added}/-{removed} 行)",
+    "ledger.summary_edit": "编辑了 {path}",
+    "ledger.summary_read": "读取了 {path}",
+    "ledger.summary_delete": "删除了 {path}",
+    "ledger.summary_listdir": "列出了目录 {path}",
+    "ledger.summary_mkdir": "创建了目录 {path}",
+    "ledger.summary_shell_cmd": "跑了命令: {cmd}",
+    "ledger.summary_shell": "跑了 shell 命令",
+    "ledger.summary_get": "发出了 GET 请求: {url}",
+    "ledger.summary_search_q": "搜索了: {q}",
+    "ledger.summary_search": "发出了网络搜索",
+    "ledger.summary_post": "发出了 POST 请求: {url}",
+    "ledger.summary_navigate": "浏览器导航至: {url}",
+    "ledger.summary_click_target": "点击了: {target}",
+    "ledger.summary_click": "浏览器点击操作",
+    "ledger.summary_fill": "填写了 {selector}: {value}",
+    "ledger.summary_fill_no_sel": "浏览器输入操作",
+    "ledger.summary_screenshot": "截取了浏览器截图",
+    "ledger.summary_unknown": "执行了 {action}",
+    "ledger.summary_url_unknown": "(url 未知)",
+    "ledger.summary_file_unknown": "文件",
+    "ledger.summary_dir_unknown": ".",
 }

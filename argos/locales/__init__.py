@@ -19,4 +19,6 @@ CATALOG_MODULES: list[str] = [
     "sandbox",  # broker / executor / linux 沙箱消息
     "daemon",   # argosd stop/status/restart 输出
     "tools",    # tools/* + plan_mode 工具结果串(Wave 2c)
+    "permissions",  # trust_dial 模式描述 + approval 审批提示(Wave 2d)
+    "misc",     # config 错误 / 剪贴板图片 / web+browser 工具错误(Wave 2d)
 ]
