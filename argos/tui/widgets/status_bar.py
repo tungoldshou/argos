@@ -197,6 +197,14 @@ class StatusBar(Static):
         self.phase   = phase
         self.actions = actions
 
+    def mark_run_end(self) -> None:
+        """run 收尾:phase 复位 idle(与 ActivityPanel.on_run_end 对称)。
+        否则 phase 粘在最后的 'report' 不动,而右栏头已回 idle → 两处自相矛盾
+        (2026-06-22 真机:run 结束后底栏仍显 'report · action5')。告警色(_alert_kind)不在此清,
+        由下一轮 plan 解锁——失败裁决的红/橙不被收尾抹掉(陷阱2)。"""
+        self.phase   = "idle"
+        self.actions = 0
+
     def set_cost(
         self,
         *,

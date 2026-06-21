@@ -129,3 +129,24 @@ async def test_openai_stream_end_to_end_mock():
     # usage 来自完成帧【之后】的单独 usage-only 帧,必须被抓到(否则 OpenAI 成本恒 0)
     assert mc.last_usage["input_tokens"] == 10 and mc.last_usage["output_tokens"] == 2
     assert mc.last_usage["cache_read"] == 4
+
+
+def test_anthropic_context_total_is_input_plus_cache():
+    """D1:Anthropic 口径 input_tokens 不含缓存 → context_total = input + cache_read + cache_creation。"""
+    p = AnthropicProtocol()
+    u: dict = {}
+    p.capture_usage({"type": "message_start", "message": {"usage": {
+        "input_tokens": 600, "cache_read_input_tokens": 400, "cache_creation_input_tokens": 0,
+    }}}, u)
+    assert u["context_total"] == 1000
+
+
+def test_openai_context_total_does_not_double_count_cache():
+    """D1(2026-06-22:OpenAI 路径上下文 % 高估):prompt_tokens 已含 cached_tokens,
+    context_total 必须 == prompt_tokens,不能再加 cache_read,否则缓存部分被重复计。"""
+    p = OpenAIProtocol()
+    u: dict = {}
+    p.capture_usage({"usage": {"prompt_tokens": 1000, "completion_tokens": 45,
+                               "prompt_tokens_details": {"cached_tokens": 400}}}, u)
+    assert u["context_total"] == 1000, "不得 == 1400(重复计 cached)"
+    assert u["cache_read"] == 400      # cache_read 仍如实记录(供缓存命中显示)

@@ -159,3 +159,35 @@ async def test_scroll_follows_when_already_at_bottom():
         await t.append_token("继续流入")
         await pilot.pause()
         assert t.max_scroll_y - t.scroll_offset.y <= 2, "在底部时新内容应跟随到底"
+
+
+@pytest.mark.asyncio
+async def test_scroll_follows_during_burst_of_events():
+    """回归(2026-06-22 真机:daemon SSE 成批到达时不自动滚到最新)。
+    事件成批连发(流式 token + 巨型结果块,中间无布局周期)时,停在底部的用户必须持续跟随到底
+    —— 旧 _stick_to_bottom 读到中间态几何 + 单次 deferred scroll_end,会卡在半路(off 死锁在起点)。"""
+    from textual.widgets import Static
+
+    class _Tall(Static):
+        def __init__(self, n: int, tag: str) -> None:
+            super().__init__("\n".join(f"{tag}{i}" for i in range(n)))
+
+    app = _Harness()
+    async with app.run_test(size=(80, 12)) as pilot:
+        t = app.query_one("#t", Transcript)
+        for i in range(20):
+            await t.append_line(f"sys {i}")
+        await pilot.pause()
+        # 成批:流式 60 token,中间不给布局机会
+        for i in range(60):
+            await t.append_token(f"tok{i} filler text that wraps eventually maybe\n")
+        await pilot.pause()
+        assert t.max_scroll_y - t.scroll_offset.y <= 2, \
+            f"流式成批到达后应跟随到底,实际 off={t.scroll_offset.y} max={t.max_scroll_y}"
+        # 成批:step 行 + 巨型结果块交替连发
+        for s in range(6):
+            await t.append_line(f"python step {s}")
+            await t.mount_block(_Tall(20, f"r{s}_"))
+        await pilot.pause()
+        assert t.max_scroll_y - t.scroll_offset.y <= 2, \
+            f"密集 step+结果块后应跟随到底,实际 off={t.scroll_offset.y} max={t.max_scroll_y}"

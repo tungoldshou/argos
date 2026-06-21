@@ -118,12 +118,14 @@ class Transcript(VerticalScroll):
             parts.append(strip_code_fences(self._current._raw))
         return "\n".join(p for p in parts if p)
 
-    def _stick_to_bottom(self) -> None:
-        """仅当用户已停在(或几乎停在)底部时才跟随到底——否则保留用户的滚动位置。
-        修复"滚不动":此前每个流式 token / 每条系统行都无条件 scroll_end,用户向上翻历史
-        会被下一个事件即时拽回底部,体感=滚动条失效。判据:距底 ≤2 行算"在底部跟随"。"""
-        if self.max_scroll_y - self.scroll_offset.y <= 2:
-            self.scroll_end(animate=False)
+    def on_mount(self) -> None:
+        """锚定到底部:Textual 的 anchor() 会在新内容到达时自动保持贴底,直到用户主动上滚
+        (release_anchor),滚回底部又自动重新锚定(_check_anchor)。这取代手搓的 _stick_to_bottom
+        —— 后者读挂载后仍 stale 的 max_scroll_y + 单次 deferred scroll_end,在事件成批到达
+        (daemon SSE:token 流 + step 行 + 巨型结果块连发,中间无布局周期)时会卡在中间态几何、
+        滚不到最新(2026-06-22 真机复现:off 死锁在起点)。anchor 在【每次布局】维持贴底,
+        对成批到达健壮;用户上翻看历史仍正确不抢位。"""
+        self.anchor()
 
     async def user_line(self, text: str) -> None:
         self.finalize_response()
@@ -134,7 +136,7 @@ class Transcript(VerticalScroll):
         self._lines.append(f"› {text}")
         if self.is_attached:
             await self.mount(UserMessage(text))
-            self.scroll_end(animate=False)   # 用户刚提交新目标 → 无条件跳到底看自己的输入
+            self.anchor()   # 新一轮:重新锚定贴底,即便用户刚才上翻了历史也跳回看自己的输入
 
     async def append_token(self, text: str) -> None:
         if self._current is None:
@@ -154,8 +156,7 @@ class Transcript(VerticalScroll):
         target = self._current   # 局部引用:即便重建后再被并发清空,也喂进有效气泡而非 None
         if target is not None:
             target.feed(text)
-        if self.is_attached:
-            self._stick_to_bottom()
+        # 跟随贴底由 on_mount 的 anchor() 在每次布局自动维持(不再手动 scroll)。
 
     def finalize_response(self) -> None:
         """当前流式段落定:记入 _lines,清 current 指针 → 下个 token 起新气泡。"""
@@ -170,21 +171,18 @@ class Transcript(VerticalScroll):
         # 跳过视觉 mount —— 这样 rendered_text 仍可断言,生产路径(widgets 必挂)不受影响。
         if self.is_attached:
             await self.mount(SystemLine(text, kind=kind))
-            self._stick_to_bottom()
 
     async def mount_block(self, widget) -> None:
         self.finalize_response()
         if not self.is_attached:
             return
         await self.mount(widget)
-        self._stick_to_bottom()
 
     async def show_thinking(self, label: str | None = None) -> None:
         self.finalize_response()
         if not self.is_attached:
             return
         await self.mount(ThinkingIndicator(label if label is not None else t("core2.transcript.thinking")))
-        self._stick_to_bottom()
 
     async def clear(self) -> None:        # /clear 用:移除所有消息
         await self.remove_children()

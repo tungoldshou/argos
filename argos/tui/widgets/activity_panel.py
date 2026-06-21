@@ -118,11 +118,16 @@ class ActivityPanel(Vertical):
         self._approval_log: deque[tuple[str, str, str]] = deque(maxlen=10)
         # 缓存 sparkline 历史(最近 8 次 cache_read 值)
         self._cache_history: deque[int] = deque(maxlen=8)
+        # 是否【曾】见过真实缓存命中(>0)。非缓存 provider(如不报 cache 的 OpenAI-compat 端点)
+        # 永远 cache_read=0 → 不显误导性的 "cache hit 0",改中性行;一旦真见过缓存就切回完整行。
+        # provider 级状态,跨轮粘性(reset_run 不清)。
+        self._cache_seen: bool = False
         # 压缩/修剪 信息(上下文区追加行)
         self._compaction_line: str = ""
         # ── 智能切状态(TUI v2)─────────────────────────────────
         self._view: str = "idle"          # 当前视图
         self._pinned: bool = False        # True = 用户 Ctrl+O 手动钉住,phase 不再自动切
+        self._verdict_shown: bool = False  # 本轮是否投过 VerifyVerdict(收尾给"只读·无机检"诚实兜底)
 
     def compose(self) -> ComposeResult:
         yield Static(self._header_text(), id="view-header", markup=False)
@@ -189,8 +194,20 @@ class ActivityPanel(Vertical):
         if view:
             self.set_view(view)
 
+    def on_run_active(self, label: str) -> None:
+        """run 起手:Run 段显当前活跃 run(取代旧版整轮显 '(none)')。
+        label 过长截断(右栏窄)。on_memory_recall 命中时会用召回信息覆盖,二者都是 run 相关信息。"""
+        text = (label or "").strip().replace("\n", " ")
+        if len(text) > 40:
+            text = text[:39] + "…"
+        self._set(self._RUN_IDX, t_("widget.run_active", label=text))
+
     def on_run_end(self) -> None:
-        """run 收尾:auto 模式回 idle 视图(verdict/成本仍可见)。"""
+        """run 收尾:auto 模式回 idle 视图(verdict/成本仍可见)。
+        本轮没投过 VerifyVerdict(纯对话/只读/出错于 verify 前)→ Verdict 段给诚实兜底文案,
+        而非误导性的 '(none)'(诚实铁律:不机检就说没机检,绝不冒充通过)。"""
+        if not self._verdict_shown:
+            self._set(self._VERDICT_IDX, t_("widget.verdict_no_check"))
         if not self._pinned:
             self.set_view("idle")
 
@@ -342,6 +359,8 @@ class ActivityPanel(Vertical):
             tier_tag = f" [{short}]"
         # 缓存 sparkline(机会点④):记录本次 cache_read 进历史,渲染 ▁▂▃▄▅▆▇
         self._cache_history.append(cache_read)
+        if cache_read > 0:
+            self._cache_seen = True
         spark = self._build_sparkline(list(self._cache_history))
         # [FIX LOW] token 计数千分缩写(设计稿 ↑12.4k ↓3.1k)
         tok_in_str = self._fmt_tokens(tokens_in)
@@ -349,9 +368,13 @@ class ActivityPanel(Vertical):
         # [FIX MEDIUM] cache sparkline 整行染 $cyan(冷色=省钱语义)
         t = Text()
         t.append(f"↑{tok_in_str} ↓{tok_out_str}{tier_tag}  {cost}\n")
-        t.append(t_("widget.cache_hit_line", cache_read=cache_read, elapsed_s=elapsed_s))
-        if spark:
-            t.append(f"\ncache {spark} {cache_read}", style=_COL_CYAN)
+        if self._cache_seen:
+            t.append(t_("widget.cache_hit_line", cache_read=cache_read, elapsed_s=elapsed_s))
+            if spark:
+                t.append(f"\ncache {spark} {cache_read}", style=_COL_CYAN)
+        else:
+            # 从未见过缓存命中:不显 "cache hit 0"(易被误读为故障),只显中性行 + 耗时。
+            t.append(t_("widget.cache_idle_line", elapsed_s=elapsed_s))
         self._set(self._COST_IDX, t)
 
     def on_context(self, *, used: int, window: int) -> None:
@@ -400,6 +423,7 @@ class ActivityPanel(Vertical):
         if rest.strip():
             t.append(rest)
         self._set(self._VERDICT_IDX, t)
+        self._verdict_shown = True   # 本轮已机检 → on_run_end 不再覆盖兜底文案
 
     def on_hook_fired(self, ev: HookFired) -> None:
         """单条 hook 触发结果。3 态:ok(dim) / fail(red 标记) / timeout(red 标记)。"""
@@ -448,6 +472,7 @@ class ActivityPanel(Vertical):
         self._lsp_diag_cache[ev.uri] = ev.count
 
     def reset_run(self) -> None:
+        self._verdict_shown = False
         self._phases.clear(); self._tool_counts.clear(); self._receipts.clear()
         self._todos.clear()
         self._hook_log.clear()

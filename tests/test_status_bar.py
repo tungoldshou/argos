@@ -329,3 +329,14 @@ async def test_blocked_eye_glyph_color_is_gold_not_orange():
         assert "eye_style = _STYLE_EYE" in render_src, "eye_style 应恒为 _STYLE_EYE"
         assert "if self._blocked" not in render_src.split("eye_style = _STYLE_EYE")[0].split('\n')[-1], \
             "eye_style = _STYLE_EYE 之前不应有 if self._blocked 分支"
+
+
+def test_mark_run_end_resets_phase_to_idle():
+    """C2(2026-06-22 真机:run 结束后底栏 phase 粘在 'report' 与右栏 idle 矛盾)。"""
+    from argos.tui.widgets.status_bar import StatusBar
+    bar = StatusBar()
+    bar.set_phase("report", 5)
+    assert bar.phase == "report"
+    bar.mark_run_end()
+    assert bar.phase == "idle", "run 收尾 phase 应复位 idle"
+    assert bar.actions == 0

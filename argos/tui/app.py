@@ -2070,7 +2070,9 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             await sp.remove()
         self._step_blocks = {}  # 每轮独立,杜绝跨轮 step 串台。
         self._current_plan_call_id = None  # 每轮清 plan call_id(不跨轮泄漏)。
-        self.query_one("#activity", ActivityPanel).reset_run()  # 每轮起手清活动栏(进度/工具/回执)。
+        _ap = self.query_one("#activity", ActivityPanel)
+        _ap.reset_run()              # 每轮起手清活动栏(进度/工具/回执)。
+        _ap.on_run_active(goal)      # Run 段显当前活跃 run(取代整轮显 '(none)')。
         # UserPromptSubmit hook fire(spec §2.5:TUI 端触发,不在 loop 内)
         try:
             from argos import hooks as _hooks
@@ -2155,6 +2157,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             self._glow_stop()
             try:
                 self.query_one("#activity", ActivityPanel).on_run_end()
+                self.query_one("#status-bar", StatusBar).mark_run_end()  # phase 复位 idle(与右栏对称)
             except Exception:  # noqa: BLE001
                 pass
             if self._interrupted:
@@ -2234,6 +2237,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             self._glow_stop()
             try:
                 self.query_one("#activity", ActivityPanel).on_run_end()
+                self.query_one("#status-bar", StatusBar).mark_run_end()  # phase 复位 idle(与右栏对称)
             except Exception:  # noqa: BLE001
                 pass
             if self._interrupted:
