@@ -6,7 +6,10 @@
   --selftest             不连真模型自检:脚本模型跑一轮四阶段贯通,打印 verdict 退出
   --project PATH         在用户项目目录干活(runtime.use_project)
   --model NAME           本次启动用指定的 config profile(默认当前 active;模型不绑定、无档位)
-  --resume SESSION_ID    续跑历史会话(占位透传;真续跑走 TUI 内 /resume)
+
+子命令:
+  exec "<任务>"          非交互 headless 执行(可脚本化 / CI;对标 claude -p / codex exec)
+  setup / self-update / eval / skills / context / dream
 """
 from __future__ import annotations
 
@@ -30,14 +33,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--selftest", action="store_true", help="不连真模型自检(脚本模型跑四阶段)")
     p.add_argument("--project", metavar="PATH", help="在用户项目目录干活")
     p.add_argument("--model", metavar="NAME", help="本次启动用指定 config profile(默认当前 active)")
-    p.add_argument("--resume", metavar="SESSION_ID", help="续跑历史会话(占位:真续跑走 TUI /resume)")
-    # #11 per-task routing:effort 等级(契约 §11;spec §8):low/medium/high 映射到
-    # max_steps + approval_level;CLI 默认 medium。
+    # #11 per-task routing:effort 等级(契约 §11;spec §8)。effort 只控步数预算;审批档由
+    # /trust 拨盘(Cautious/Trusted/Autonomous)独立控制(2026-06-20 重设后两者解耦)。
     from argos.routing.effort import EffortLevel
     p.add_argument("--effort", choices=[e.value for e in EffortLevel],
                    default=EffortLevel.MEDIUM.value,
-                   help="任务努力档(low=8 步+AUTO;medium=40+CONFIRM;high=80+CONFIRM)")
+                   help="任务努力档(步数预算:low=8 / medium=40 / high=80;审批档由 /trust 控制)")
     sub = p.add_subparsers(dest="command")
+    # headless 非交互执行(可脚本化 / CI):argos exec "<任务>"
+    from argos.cli import headless as _headless_cli
+    _headless_cli.add_subparser(sub)
     sub.add_parser("setup", help="接入模型的交互向导(选 provider→填 key→连通测试→保存)")
     sp_update = sub.add_parser(
         "self-update",
@@ -238,13 +243,15 @@ def main() -> None:
         return
 
     args = _build_parser().parse_args()
-    # 启动时查更新(同步,失败静默,stderr 提示)。在 parse_args 之后 → future
-    # `argos self-update` 子命令自身的执行不会被这条通知逻辑干扰。
-    _spawn_update_check()
+    # 启动时查更新(同步,失败静默,stderr 提示)。headless `exec` 跳过 —— CI / 脚本化场景
+    # 既不该被 5s 网络检查拖慢,也不该往 stderr 喷升级提示污染输出。
+    if getattr(args, "command", None) != "exec":
+        _spawn_update_check()
 
-    # 子命令分发:`setup` 走交互向导,`self-update` 走 _cmd_self_update(force 检查)
+    # 子命令分发:func 子命令(exec / self-update / …)的返回值即进程退出码(sys.exit 真正传递,
+    # 此前 `return args.func(args)` 被 main() 吞掉 → 退出码恒 0,headless / self-update 无法被脚本判别)。
     if hasattr(args, "func") and callable(getattr(args, "func", None)):
-        return args.func(args)
+        sys.exit(args.func(args) or 0)
 
     if getattr(args, "command", None) == "setup":
         from argos import setup_wizard
