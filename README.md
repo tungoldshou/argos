@@ -1,7 +1,8 @@
 # Argos — The hundred-eyed agent
 
 > **Current version: v0.1.0.** Argos runs as a background kernel with
-> pluggable clients — the terminal TUI today, a desktop shell in progress.
+> pluggable clients — the terminal TUI today, with a single-process fallback
+> when the daemon is unavailable.
 > Binary packages are not yet published; see [Install](#install) for the
 > build-from-source path that works today.
 
@@ -38,9 +39,8 @@ receipt, and every event is persisted to a replayable JSONL journal. These run
 in the background — you don't have to manage them.
 
 Built in Python on Textual. A background daemon kernel runs the work and
-survives a closed terminal; the TUI attaches as a protocol client — and a
-Tauri desktop shell is an in-progress second client — with a single-process
-fallback when the daemon is unavailable.
+survives a closed terminal; the TUI attaches as a protocol client, with a
+single-process fallback when the daemon is unavailable.
 
 ---
 
@@ -353,29 +353,6 @@ CONFIRM approval regardless of the Trust Dial level. The Seatbelt
 sandbox cannot confine global screen/mouse resources; the approval gate,
 the ledger, and the audit trail are the governance layer instead.
 
-### Desktop shell (ACP channel)
-
-> **Status: in-progress (v6 P6b walking skeleton) — not in the stable
-> release.** The terminal TUI is the shipping client; the desktop shell is a
-> second client surface you can build from source to try.
-
-`desktop/` contains a Tauri 2 shell that connects to the running
-`argosd` daemon via the ACP protocol (Unix socket, HTTP/SSE). The
-TypeScript SDK (`desktop/sdk/`) is a zero-runtime-dependency client
-library (`DaemonClient`, typed SSE subscriptions).
-
-Build the desktop shell:
-
-```bash
-bash packaging/build_desktop.sh      # release build → .app + .dmg
-bash packaging/build_desktop.sh --debug   # faster debug build
-```
-
-Requires Node.js, Rust toolchain, and macOS 13+. The current build
-is ad-hoc signed (local use only; not notarised). See
-[`packaging/desktop.md`](packaging/desktop.md) for full build and
-signing documentation.
-
 ### Self-test firewall (learning)
 
 `argos/learning/` promotes only *verified* runs into skill memory:
@@ -556,11 +533,6 @@ The trust-outs that remain (and the user is told about each):
   CONFIRM, every action), the ledger, and the audit trail. Every
   computer-use action is `risk=high + reversible=False`. Only enable
   this if you are willing to watch what the agent does.
-- **Desktop shell (ACP channel)** — the Tauri desktop shell connects to
-  `argosd` via a Unix socket on the local machine only. The ACP
-  protocol does not expose the socket over the network. Trust boundary
-  is the local user account.
-
 ---
 
 ## License
