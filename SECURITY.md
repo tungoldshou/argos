@@ -61,12 +61,6 @@ Argos has several core moats (see [docs/argos-product-definition.md](docs/argos-
   is on the roadmap (v0.x milestone).
 - **No automatic updates** — `argos self-update` force-checks and prints the
   upgrade URL; it does not auto-install. The user runs the installer manually.
-- **Desktop shell in progress** — `desktop/` is the Tauri 2 second client (v6
-  P6b walking skeleton, not yet released). The Seatbelt sandbox guarantees
-  described above apply to the daemon kernel (`argosd`); both the terminal TUI
-  and the future desktop client attach to that same daemon as protocol clients,
-  so the sandbox boundary does not change when the desktop client ships.
-
 ## Past Advisories
 
 None yet.

@@ -4,7 +4,7 @@
 
 > 一句话：**让任何人对着一句话说出意图，便宜模型也交付「机检证据背书、绝不撒谎、可回放可撤销」的结果 —— 一个会说"我不会"的自治伙伴。**
 >
-> 形态：headless 内核（argosd）+ 协议（ACP）+ 多客户端（TUI v3 已完成 / 桌面端预留）。
+> 形态：headless 内核（argosd）+ 协议（ACP）+ 多客户端（TUI v3 已完成）。
 > 定稿：2026-06-11。设计来源：8 路子系统侦察审计 + 3 派架构提案 + 3 镜头评审团裁决
 > （全档案见 `docs/superpowers/plans/2026-06-11-v6-recon-audits.json` 与 `2026-06-11-v6-design-panel.json`）。
 > 本文取代 v5 产品定义的架构部分与「工厂」转型路线图（其契约引擎/证据包被吸收为本设计的验证梯子第二级）。
@@ -15,7 +15,7 @@
 
 - **Jarvis 级超级智能体**：人为介入极少、高度自治。
 - **目标用户是所有人**，不只是开发者 —— 自然语言进、人话出，易用是硬要求。
-- **多形态**：TUI（v3 黑曜石之眼，视觉层不动）→ 桌面端（类 codex/Claude desktop），能操作电脑一切。
+- **多形态**：TUI（v3 黑曜石之眼，视觉层不动），能操作电脑一切。
 - **扩展机制全支持**：skills / 插件 / MCP，市面上有的都要有。
 - **灵魂不变**：verify 硬门禁、三态判决、诚实协议、沙箱 broker —— 只能加强。
 
@@ -59,7 +59,7 @@
 
 ```
                  ┌────────────────────────────────────────────────┐
-  客户端(shell)   │  TUI(v3,不动视觉) │ 桌面端(Tauri+sidecar,预留) │ CLI │
+  客户端(shell)   │  TUI(v3,不动视觉) │ CLI                        │
                  └──────────────────┬─────────────────────────────┘
                                     │ ACP 协议(Unix socket + SSE;Event/Command/RPC;版本协商)
   ══════════════════════════════════╪═════════ 内核/客户端边界(进程隔离) ═════════
@@ -107,8 +107,7 @@
 - **Event 双层措辞**（设计预留，v1 未实现）：每个事件带 `plain`（人话）/`technical`（技术）两份渲染源；
   非开发者模式读 plain（"我检查过了，这步确实做成了 ✓"），开发者模式读 technical。TUI 视觉层零改动。
   （当前 `argos/protocol/events.py` 无 `plain`/`technical` 字段。）
-- 传输：本地 Unix socket（沿用 DaemonHTTPServer）+ SSE fan-out；桌面端 sidecar 同 socket；
-  未来远程必须加 token/HMAC 握手。
+- 传输：本地 Unix socket（沿用 DaemonHTTPServer）+ SSE fan-out；未来远程必须加 token/HMAC 握手。
 
 ## 5. 能力模型：CapabilityRegistry
 
@@ -157,7 +156,7 @@ Capability(
   高风险意图强制确认回路（§2.4）。
 - **报告人话化**：三态判决翻译 —— passed→"我检查过了，确实做成了"；failed→"没做成，这是原因"；
   unverifiable→"这件事我没法自动验证对错，老实告诉你，需要你看一眼"。
-- slash 命令能力升内核 API（桌面端复用），TUI 命令面板只是其一个入口。
+- slash 命令能力升内核 API，TUI 命令面板只是其一个入口。
 
 ## 8. 认知面
 
@@ -184,13 +183,7 @@ Capability(
 - **VLM 验证红线**：截图比对是比退出码弱得多的验证基础，"VLM 误读弹窗 = 假 passed"是新假绿灯入口；
   置信度低一律降 unverifiable。
 
-## 11. 桌面端（预留通道）
-
-Tauri 壳 + argosd sidecar，同一 Unix socket 协议，内核零改动；
-TUI 与桌面端订阅同一 run 的 SSE 实时同步。打包新增 client-only 规格。
-（实施排最后阶段，协议与事件双层措辞从 P0 起就为它铺路。）
-
-## 12. 工程事实清单（评审团逐条核实，实施必读）
+## 11. 工程事实清单（评审团逐条核实，实施必读）
 
 1. ~~`runtime.py:65` **早已是 contextvars.ContextVar** —— 不要重写 per-run；
    真正要修的是 `_DEFAULT_CTX` 共享可变单例隐患（runtime.py:64 docstring 已警告）。~~
@@ -208,7 +201,7 @@ TUI 与桌面端订阅同一 run 的 SSE 实时同步。打包新增 client-only
    **✅ 已修复（P2）**：`capability/builtins.py` 已将 LSP 动作以 `kind="lsp"` 注册入 CapabilityRegistry，broker dispatch 路径一致。
 7. 测试基线 ~3000 个（`grep -rh "def test_" tests/ | wc -l` 取实时计数）、覆盖率门 80%（全量跑）；PyInstaller re-exec 约束不变。
 
-## 13. 实施路线（P0-P6，每阶段独立可交付、基线不破）
+## 12. 实施路线（P0-P6，每阶段独立可交付、基线不破）
 
 > **✅ 全部阶段已完成（2026-06-12）。** 以下表格保留为历史参考记录。
 
@@ -220,15 +213,15 @@ TUI 与桌面端订阅同一 run 的 SSE 实时同步。打包新增 client-only
 | **P3 跨进程审批 + 账本 + TUI 客户端化** | ApprovalGate pending registry + ACP 路由；PlanDecisionRequest；Ledger v1（人话条目+undo 三态）；TUI 默认走 daemon 协议（inline loop 留 fallback） | TUI 隔协议批准一个真审批;Ledger 可回放;undo 真还原 |
 | **P4 人话层 + 信任拨盘 + 验证策略** | intent/ NL→Goal+确认回路；Event plain/technical；Trust Dial L0-L4；Verify Strategy Generator（梯子 L2/L3 + 诚实退路） | 非开发者跑通一个非代码任务全程人话;无策略任务诚实 unverifiable+留痕 |
 | **P5 自治面** | conductor/：Scheduler/Triggers/Standing Orders；自治 run 默认 worktree；优先级调度 | 定时任务夜跑隔离树,验证过才合并;HARD RULES 自治下不放行 |
-| **P6 Computer use + 桌面端通道** | perception/ 浏览器级 computer-use + OS 级探索；非开发者域 HARD RULES；桌面壳脚手架 | computer 动作四线管辖;VLM 低置信度降 unverifiable;桌面壳连上 argosd 收到事件流 |
+| **P6 Computer use** | perception/ 浏览器级 computer-use + OS 级探索；非开发者域 HARD RULES | computer 动作四线管辖;VLM 低置信度降 unverifiable |
 
 依赖链：P0 → P1 → P2 → P3 → (P4, P5 可并行) → P6。
 每阶段完成即提交；测试基线全绿是阶段放行条件。
 
-## 14. 已知风险（诚实标注）
+## 13. 已知风险（诚实标注）
 
 - **Verify Strategy Generator 是 v6 最不确定的赌注**：生不出可靠机检命令时大量任务退化
   unverifiable。退路已设计（L5 留痕 + 人话请过目），但体验上"Argos 老说不确定"的风险真实存在。
 - 跨进程审批引入分布式状态（客户端断连时 pending 悬挂）—— 需要超时 + 默认拒绝兜底。
-- daemon-first 牺牲"单进程跑起来"的简单性 —— inline fallback 保留到桌面端阶段再评估。
+- daemon-first 牺牲"单进程跑起来"的简单性 —— inline fallback 长期保留。
 - 自治放大一切漏洞的爆炸半径 —— worktree 默认隔离 + HARD RULES + 低默认档是三道闸。
