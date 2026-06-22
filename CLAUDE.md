@@ -178,3 +178,17 @@ share mutable state. The `ApprovalGate` from `build_components` is shared with t
   `scripts/_i18n_leak_scan.py` finds leaks.
 - Changing Python that ships in the binary requires re-running PyInstaller before the packaging
   smoke test (`smoke_packaged.py`) reflects it (see `packaging/` and `docs/packaging-c.md`).
+- **`main` is protected — PR-only, no direct pushes.** Branch protection requires the
+  `Full test suite (Linux + bwrap sandbox)` check to pass, requires the branch to be up to date
+  with `main` (`strict`), and applies to admins too (`enforce_admins`). So: branch → push →
+  `gh pr create` → wait for green CI → `gh pr merge`. A red or pending CI cannot be merged and
+  there is no admin override; if `main` moved, rebase/merge it into your PR before merging.
+  - The CI workflow (`.github/workflows/ci.yml`) runs the full suite under a real bwrap sandbox on
+    Linux. `ubuntu-latest` (24.04) ships `kernel.apparmor_restrict_unprivileged_userns=1`, which
+    lets bwrap create the user namespace but strips the `CAP_NET_ADMIN` needed to configure
+    loopback under `--unshare-net` (→ `RTM_NEWADDR: Operation not permitted`, failing every
+    sandbox test). CI disables that sysctl before the run; don't remove that step or sandbox tests
+    go red again. `ci.yml` is also reused as the release gate via `workflow_call`.
+  - Emergency escape hatch (use sparingly, restore immediately):
+    `gh api --method DELETE repos/<owner>/argos/branches/main/protection/enforce_admins`,
+    land the fix, then re-enable with the matching `POST`.
