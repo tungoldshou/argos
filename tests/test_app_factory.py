@@ -16,7 +16,10 @@ from argos.sandbox.broker import CapabilityBroker
 
 def test_build_components_assembles_full_stack(tmp_path, monkeypatch):
     monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
-    monkeypatch.setattr(af.config, "WORKER_KEYS", ["k-test"])  # 非空避免诚实拒绝
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))   # 空目录:走旧 env 回退路径
+    # active_key() 实读 DEFAULT_KEYS(WORKER_KEYS 只是 import 期别名,patch 它无效);
+    # 此前靠开发机 ~/.argos/.env 的真实 key 蒙混过关,CI 无 key 即暴露(本应 hermetic)。
+    monkeypatch.setattr(af.config, "DEFAULT_KEYS", ["k-test"])
     c = af.build_components(workspace=str(tmp_path / "ws"))
     assert isinstance(c.store, ArgosStore)
     assert isinstance(c.broker, CapabilityBroker)
