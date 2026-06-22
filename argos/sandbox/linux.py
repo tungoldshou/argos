@@ -77,6 +77,13 @@ def _bwrap_argv(workspace: Path, child_argv: list[str], *,
         "--proc", "/proc",
         # 临时目录:tmpfs(可写,被 namespace 隔离)
         "--tmpfs", "/tmp",
+    ]
+    # 凭据遮蔽:在只读根之上盖空,真密钥读不到(机制对齐 Seatbelt 的 deny file-read* ~/.ssh ...)。
+    # Seatbelt 靠 stat 抛 EPERM;bwrap 对 namespace 内 mapped-root 无法让 stat 抛错,改用 tmpfs(目录)
+    # / /dev/null(文件)遮蔽 —— 殊途同归:读侧凭据不可读。开"出网阀"(allow_network=True)时尤其
+    # 关键(能读 ~/.ssh + 联网 = 真外泄)。复用 seatbelt 的同一份凭据清单,单一真源不漂移。
+    argv += _credential_mask_args()
+    argv += [
         # 写牢笼:workspace 绑定为可写 —— 最后应用,覆盖只读根的该子树(顺序关键,见 docstring)
         "--bind", str(ws), str(ws),
         # 跑子进程
@@ -85,6 +92,28 @@ def _bwrap_argv(workspace: Path, child_argv: list[str], *,
         *child_argv,
     ]
     return argv
+
+
+def _credential_mask_args() -> list[str]:
+    """凭据遮蔽 bwrap argv 片段:目录 → 空 tmpfs;密钥文件 → /dev/null(读到空)。
+
+    清单复用 seatbelt._CRED_DENY_DIRS / _CRED_DENY_FILES(macOS deny 的同一份),保证两后端不漂移。
+    路径基于 Path.home():host 侧拼 argv 与沙箱子进程内的 Path.home() 同源(HOME 一致)。"""
+    from .seatbelt import _CRED_DENY_DIRS, _CRED_DENY_FILES
+    home = Path.home()
+    args: list[str] = []
+    # 只遮蔽【真实存在】的路径:① 不存在=无可泄露,跳过即安全(沙箱写牢笼禁止子进程新建它);
+    # ② 关键 —— 在 `--ro-bind / /` 只读根之上,mount-over 已存在的目录/文件不需 mkdir(纯命名空间
+    # 操作,只读也成立),而对不存在路径建挂载点会在只读根上 mkdir 失败(EROFS)拖垮整个 init。
+    for d in _CRED_DENY_DIRS:
+        p = home / d
+        if p.exists():
+            args += ["--tmpfs", str(p)]                    # 凭据目录:盖空 tmpfs,真内容看不到
+    for f in _CRED_DENY_FILES:
+        p = home / f
+        if p.exists():
+            args += ["--ro-bind", "/dev/null", str(p)]     # 密钥文件:盖 /dev/null,读到空
+    return args
 
 
 def _unshare_argv(workspace: Path, child_argv: list[str], *,
