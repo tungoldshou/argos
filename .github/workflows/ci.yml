@@ -33,6 +33,32 @@ jobs:
           version: "latest"
       - name: Install bubblewrap (enables real sandbox tests on Linux)
         run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Enable + probe unprivileged sandbox (bwrap user-ns / loopback)
+        # ubuntu-latest 自 24.04 起设 kernel.apparmor_restrict_unprivileged_userns=1:
+        # bwrap 能建 user-ns(故走到 loopback 这步),但配 loopback 所需的 CAP_NET_ADMIN
+        # 被 AppArmor 剥掉 → "--unshare-net" 时 "loopback: RTM_NEWADDR Operation not permitted",
+        # 连带所有真沙箱测试硬挂。关掉该限制即恢复 user-ns 内的能力。本步骤打印证据 + 探测
+        # bwrap/unshare 是否可用(不 fail job,让下方测试步骤跑出真实结果)。
+        run: |
+          set -x
+          bwrap --version || true
+          echo "apparmor_restrict_unprivileged_userns (before):"
+          cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo "(sysctl absent)"
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          echo "--- bwrap net-isolated probe (mirrors _bwrap_argv init) ---"
+          if bwrap --unshare-pid --unshare-ipc --unshare-user --uid 0 --gid 0 \
+                   --unshare-uts --die-with-parent --unshare-net \
+                   --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp -- /bin/true; then
+            echo "PROBE: bwrap-netns OK"
+          else
+            echo "PROBE: bwrap-netns FAILED"
+          fi
+          echo "--- unshare net-isolated probe (fallback viability) ---"
+          if unshare --user --map-root-user --net --pid --mount --fork -- /bin/true; then
+            echo "PROBE: unshare-netns OK"
+          else
+            echo "PROBE: unshare-netns FAILED"
+          fi
       - name: Run full test suite
         # 全量 `uv run pytest -q` —— pyproject 里 addopts 强制 --cov=argos
         # --cov-fail-under=80,所以这是覆盖门 + 沙箱真跑的统一验证。

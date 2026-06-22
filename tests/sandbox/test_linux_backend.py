@@ -77,7 +77,10 @@ def test_bwrap_blocks_network(tmp_path):
     if cls is not BwrapExecutor:
         pytest.skip(f"bwrap 不可用,跳过(用 {cls.__name__})")
     ex = cls()
-    ex.spawn(workspace=tmp_path, namespace={}, allow_workflow=True, read_only=False)
+    # subprocess 必须显式授权 —— smolagents AST 默认只放行 os/re/json/... 一小撮;
+    # 不授权则 `import subprocess` 在沙箱内被解释器拦掉(报错而非跑 curl),测的就不是网络隔离了。
+    ex.spawn(workspace=tmp_path, namespace={"__authorized_imports__": ["subprocess"]},
+             allow_workflow=True, read_only=False)
     try:
         res = ex.exec_code(
             "import subprocess\n"

@@ -62,11 +62,14 @@ def test_cautious_auto_passes_sandboxed_run_command():
     assert ev("run_command", {"command": "pytest -q"}, low=False) == "ask"
 
 
-def test_build_components_default_gate_is_cautious():
+def test_build_components_default_gate_is_cautious(tmp_path, monkeypatch):
     """Phase 1:产品默认档(build_components,不传 approval_level)= Cautious —— gate.level=CONFIRM
     且 low_risk_auto ON(此前默认是裸 CONFIRM、low_risk_auto=False,导致开箱'啥都问')。"""
-    import os
-    os.environ.setdefault("ARGOS_NO_DAEMON", "1")
+    import argos.app_factory as af
+    monkeypatch.setenv("ARGOS_NO_DAEMON", "1")
+    monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))   # 空目录:走旧 env 回退,无 key 时 CI 不挂
+    monkeypatch.setattr(af.config, "DEFAULT_KEYS", ["k-test"])      # 之前裸调 build_components(),靠开发机 key 才过
     from argos.app_factory import build_components
     c = build_components()
     assert c.gate.level is ApprovalLevel.CONFIRM
