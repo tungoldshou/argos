@@ -139,3 +139,38 @@ def test_bwrap_allows_write_inside_workspace(tmp_path):
         assert "OK" in res.stdout, f"workspace 内写失败:{res.stdout!r}"
     finally:
         ex.close()
+
+
+@linux_only
+def test_bwrap_masks_credential_dirs(tmp_path, monkeypatch):
+    """bwrap 凭据遮蔽(2026-06-22 硬化):tmpfs 盖住 ~/.ssh 等凭据目录 → 沙箱内真密钥读不到。
+
+    机制对齐(非字面对齐)Seatbelt 的 (deny file-read* ~/.ssh ...):Seatbelt 靠 stat 抛 EPERM,
+    bwrap 对 namespace 内 mapped-root 无法让 stat 抛错,改用 tmpfs 遮蔽 —— 殊途同归的安全不变量:
+    放进 ~/.ssh 的真密钥,沙箱代码读不出来。用临时 HOME + 真 sentinel 密钥做确定性铁证。"""
+    cls = select_backend()
+    if cls is not BwrapExecutor:
+        pytest.skip(f"非 bwrap 后端,跳过(用 {cls.__name__})")
+    fake_home = tmp_path / "home"
+    (fake_home / ".ssh").mkdir(parents=True)
+    secret = "SUPER_SECRET_PRIVATE_KEY_DO_NOT_LEAK"
+    (fake_home / ".ssh" / "id_rsa").write_text(secret)
+    monkeypatch.setenv("HOME", str(fake_home))   # host 侧 _bwrap_argv 与子进程 Path.home() 都取它
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    ex = cls()
+    ex.spawn(workspace=ws, namespace={"__authorized_imports__": ["pathlib"]},
+             allow_workflow=True, read_only=False)
+    try:
+        res = ex.exec_code(
+            "import pathlib\n"
+            "p = pathlib.Path.home() / '.ssh' / 'id_rsa'\n"
+            "try:\n"
+            "    print('CONTENT=' + p.read_text())\n"
+            "except Exception as e:\n"
+            "    print('READ_BLOCKED=' + type(e).__name__)"
+        )
+        blob = (res.stdout or "") + (res.value_repr or "") + (res.exc or "")
+        assert secret not in blob, f"凭据竟可读(遮蔽失效):{blob!r}"
+    finally:
+        ex.close()
