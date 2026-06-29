@@ -1322,6 +1322,7 @@ class AgentLoop:
         compactions = 0           # 上下文压缩次数上限,防压缩仍溢出时无限重试。
         last_fp: str | None = None   # stagnation guard: fingerprint of last (code, stdout)
         fp_run: int = 0              # consecutive run-length of the same fingerprint
+        escalation_reason: str = "max_rounds_exceeded"  # telemetry label; overwritten at each escalated=True site
         text = ""                 # 在 while 外初始化:max_steps=0 等边界下收尾仍能安全 text.strip()
         while step < self._cfg.max_steps:
             # context rot 第二层(spec 2026-06-07):持续相关性修剪,优先于整体压缩 ——
@@ -1488,6 +1489,7 @@ class AgentLoop:
                 ))
                 for ev in self._hbus.drain():
                     yield ev
+                escalation_reason = "budget_exceeded"
                 escalated = True
                 break
 
@@ -1607,6 +1609,7 @@ class AgentLoop:
                     ))
                     for ev in self._hbus.drain():
                         yield ev
+                    escalation_reason = "stagnation"
                     escalated = True
                     break
                 # ── PostToolUse hook fire(spec §2.5)───────────────
@@ -1948,7 +1951,7 @@ class AgentLoop:
                 _mem_auto.capture_event(
                     "escalation_decision",
                     project_id=_pid(self._workspace),
-                    reason="max_rounds_exceeded",
+                    reason=escalation_reason,
                     user_reply="escalated",
                 )
             elif (not report_note and step >= 5

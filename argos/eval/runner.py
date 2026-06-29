@@ -275,9 +275,10 @@ class EvalRunner:
             # ponytail: thread timer for sync wall-clock timeout; asyncio.wait_for
             # won't help here since _drive is sync. Upgrade to async when real
             # AgentLoop streaming is wired in.
-            timed_out = threading.Event()
             timer: threading.Timer | None = None
+            timed_out: threading.Event | None = None
             if self._budget_s is not None:
+                timed_out = threading.Event()
                 def _flag_timeout():
                     timed_out.set()
                 timer = threading.Timer(self._budget_s, _flag_timeout)
@@ -289,10 +290,14 @@ class EvalRunner:
                 if timer is not None:
                     timer.cancel()
 
-            if timed_out.is_set():
+            if self._budget_s is not None and timed_out.is_set():
                 return LoopOutcome(
                     verdict_status=PASS_FAILED,
                     verify_detail=f"timed_out: exceeded {self._budget_s}s wall-clock budget",
+                    steps=outcome.steps,
+                    tokens_in=outcome.tokens_in,
+                    tokens_out=outcome.tokens_out,
+                    cost_usd=outcome.cost_usd,
                 )
 
             if not isinstance(outcome, LoopOutcome):
