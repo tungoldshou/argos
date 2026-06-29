@@ -898,6 +898,11 @@ class ArgosApp(App):
             await self._context_cmd(log, cmd.arg)
         elif cmd.name == "dream":
             await self._dream_cmd(log, cmd.arg)
+        elif cmd.name in ("goal", "loop"):
+            await self._goal_cmd(log, cmd.name, cmd.arg)
+        else:
+            # known command with no handler yet — honest fallback (Task 2.3 wires /schedule /watch)
+            await log.append_line(t("tui.cmd.unwired", name=cmd.name))
 
     async def _undo(self, log) -> None:
         """/undo:用本轮 run 起点的快照还原 workspace;不发 goal。"""
@@ -1966,6 +1971,58 @@ class ArgosApp(App):
                 t("tui.dream.unknown_status", status=status, body=body), kind="error"
             )
 
+    def _parse_verify_arg(self, arg: str) -> tuple[str, str | None]:
+        """解析 goal/loop 参数,提取 verify_cmd。
+
+        支持两种语法:
+          · "task text | verify: <cmd>"
+          · "task text --verify <cmd>"
+        返回 (goal_text, verify_cmd_or_None)。
+        """
+        import re
+        # pipe syntax: "text | verify: cmd"
+        m = re.search(r"\|\s*verify:\s*(.+)$", arg, re.IGNORECASE)
+        if m:
+            goal_text = arg[:m.start()].strip()
+            return goal_text, m.group(1).strip()
+        # flag syntax: "text --verify cmd"
+        m = re.search(r"--verify\s+(.+)$", arg, re.IGNORECASE)
+        if m:
+            goal_text = arg[:m.start()].strip()
+            return goal_text, m.group(1).strip()
+        return arg.strip(), None
+
+    async def _goal_cmd(self, log, cmd_name: str, arg: str) -> None:
+        """/goal <text> [| verify: <cmd>]  — 提交带可选验证退出条件的目标。
+        /loop <text> [until: <cmd>]        — until: 是 verify: 的别名(Batch 2 surface)。
+
+        ponytail: 真正的跨 run 循环(直到条件持续成立)推迟到 Batch 3 事件驱动目标循环;
+        这里的单 run verify-gated 形式已是 Batch 2 要求的最小可交付面:verify gate 的
+        "bounce until pass"语义覆盖了"loop until condition holds"的单 run 等价物。
+        """
+        import re
+        # /loop 也支持 "until:" 别名
+        if cmd_name == "loop":
+            # normalize "until: <cmd>" → "| verify: <cmd>" 再走统一解析
+            arg = re.sub(r"\buntil:\s*", "| verify: ", arg, count=1, flags=re.IGNORECASE)
+
+        goal_text, verify_cmd = self._parse_verify_arg(arg)
+
+        if not goal_text:
+            await log.append_line(
+                t("tui.cmd.unknown", name=cmd_name),  # 无 goal 文本:诚实报用法错误
+            )
+            return
+
+        if self._run_active:
+            await log.append_line(t("tui.run.busy"))
+            return
+
+        if verify_cmd:
+            await log.append_line(t("tui.goal.submitted", verify_cmd=verify_cmd), kind="system")
+
+        await self.start_run(goal_text, verify_cmd=verify_cmd)
+
     async def _routing_set(self, log, arg: str) -> None:
         """#11 /routing set <category> <tier>:原子改写 config.json。"""
         import os
@@ -2112,7 +2169,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             t("tui.resume.ok", title=title, n=len(msgs)), kind="done")
 
     # ── 一轮 run:EventBus + loop + Worker 消费 ────────────────────────────
-    async def start_run(self, goal: str, attachments: list | None = None) -> None:
+    async def start_run(self, goal: str, attachments: list | None = None, *, verify_cmd: str | None = None) -> None:
         if self._run_active:
             return
         self._run_active = True
@@ -2167,17 +2224,21 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         if self._with_daemon and self._daemon_client is not None and self._daemon_session_id:
             await self._start_run_daemon(goal, log, attachments or [])
         else:
-            await self._start_run_inline(goal, log, attachments or [])
+            await self._start_run_inline(goal, log, attachments or [], verify_cmd=verify_cmd)
 
-    async def _start_run_inline(self, goal: str, log, attachments: list | None = None) -> None:
+    async def _start_run_inline(self, goal: str, log, attachments: list | None = None, *, verify_cmd: str | None = None) -> None:
         """inline 路径(单进程直跑):保持原有语义,支持 FakeLoop + AgentLoop。
 
         plan_decision 走 loop.respond_plan_decision(call_id, action, feedback)——
         彻底去掉 TUI 对 ExitPlanMode 等 loop 内部对象的直接引用(设计 §4 刀2收口)。
         _handle_plan_rendered 已统一经 loop.respond_plan_decision 回传决策。
+        verify_cmd:用户经 /goal / /loop 显式声明的退出条件;注入 loop.verify_cmd 覆盖 LoopConfig 默认。
         """
         bus = EventBus()
         loop = self._loop_factory()
+        # /goal | verify: <cmd> — 用户声明的退出条件覆盖 LoopConfig.verify_cmd
+        if verify_cmd is not None and hasattr(loop, "verify_cmd"):
+            loop.verify_cmd = verify_cmd
         # Plan mode:把本轮 loop 引用挂到 self;_handle_plan_rendered 经 respond_plan_decision 回传。
         self._current_loop = loop
 

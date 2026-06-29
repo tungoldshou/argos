@@ -89,6 +89,10 @@ EN: dict[str, str] = {
 
     # ── unknown command ───────────────────────────────────────────────────────
     "tui.cmd.unknown": "Unknown command /{name}",
+    "tui.cmd.unwired": "/{name} is not wired yet — coming in a future batch.",
+
+    # ── /goal and /loop commands ──────────────────────────────────────────────
+    "tui.goal.submitted": "Goal submitted with verify: {verify_cmd}",
 
     # ── /yolo command ────────────────────────────────────────────────────────
     "tui.yolo.activated": (
@@ -477,6 +481,10 @@ ZH: dict[str, str] = {
 
     # ── unknown command ───────────────────────────────────────────────────────
     "tui.cmd.unknown": "未知命令 /{name}",
+    "tui.cmd.unwired": "/{name} 命令尚未接线，将在后续批次中实现。",
+
+    # ── /goal and /loop commands ──────────────────────────────────────────────
+    "tui.goal.submitted": "目标已提交，验证命令：{verify_cmd}",
 
     # ── /yolo command ────────────────────────────────────────────────────────
     "tui.yolo.activated": (
