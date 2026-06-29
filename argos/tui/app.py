@@ -9,6 +9,7 @@ slash:输入以 / 开头走 commands.parse_slash 分发;否则当 goal 起一轮
 """
 from __future__ import annotations
 
+import re
 import uuid
 from collections import deque
 from collections.abc import Callable
@@ -163,7 +164,7 @@ class ArgosApp(App):
         # 模型不绑定、无档位:活动栏显示的真实模型名取自 config.active_tier()(当前 active profile)。
         # loop_factory() 返回一个有 async run(goal, session_id) -> AsyncIterator[Event] 的对象。
         # 默认 FakeLoop(Phase 6 真 AgentLoop 落地后由入口注入真实工厂)。
-        self._loop_factory = loop_factory or (lambda: FakeLoop())
+        self._loop_factory = loop_factory or (lambda **kw: FakeLoop())
         # demo=True:当前驱动 FakeLoop,产出脚本化假数据 —— 头部常驻 DEMO 标识 + 每轮起手 banner
         # 都如实标注(诚实灵魂:任何脚本化全绿不得在无标识下冒充真实执行)。注入真 loop 时传 demo=False。
         self._demo = demo
@@ -210,6 +211,7 @@ class ArgosApp(App):
         self._daemon_session_id: str | None = None
         self._daemon_run_id: str | None = None   # 当前 run 在 daemon 里的 run_id
         self._daemon_hb_timer = None             # 会话心跳保活计时器(set_interval 句柄)
+        self._conductor_source = None            # DaemonEventSource for _conductor SSE stream
         self._last_esc_time: float = 0.0          # 双 Esc 检测(1.5s 内第二次 = cancel)
         self._last_ctrl_c_time: float = 0.0       # 双 Ctrl+C 检测(1.5s 内第二次 = quit)
         # 输入历史环形缓冲(#20):存最近 N 条 goal/slash 提交,↑/↓ 回填输入框
@@ -486,6 +488,9 @@ class ArgosApp(App):
         # 会话保活:起周期心跳,远低于 daemon 30s TTL —— 否则空闲 >30s 会话被回收,
         # 下一次 run 撞 401 missing_session(真机 2026-06-22:天气查询后敲 'hello' 连续两条红)。
         self._start_daemon_heartbeat()
+        # conductor SSE 订阅:空闲 TUI 接收 ProactiveSuggestionEvent(P5b §9)。
+        # ponytail: one worker, torn down by source.stop() on disconnect / app exit.
+        self._start_conductor_subscription(socket_path, sid)
 
     # ── daemon 会话自愈(2026-06-22:修 401 missing_session 不自愈)──────────────
     _DAEMON_HB_INTERVAL_S: float = 10.0   # 心跳周期(<< daemon HEARTBEAT_TIMEOUT_S=30s)
@@ -519,7 +524,41 @@ class ArgosApp(App):
         except Exception:  # noqa: BLE001 — 网络抖动等:静默,不打扰用户
             pass
 
-    async def _daemon_create_run(self, goal: str, attachments: list | None) -> str:
+    # ── conductor SSE 订阅(P5b §9 自治面)────────────────────────────────────
+
+    def _start_conductor_subscription(self, socket_path: "Path", session_id: str) -> None:
+        """订阅 daemon 的 _conductor SSE 频道,将 ProactiveSuggestionEvent 喂入 _apply_event。
+
+        幂等:已有订阅时不重复启动。
+        inline / demo 模式不调用本方法,conductor 流不存在。
+        """
+        from argos.tui.daemon_source import DaemonEventSource
+
+        if self._conductor_source is not None:
+            return  # 幂等
+
+        source = DaemonEventSource(socket_path, "_conductor", session_id)
+        self._conductor_source = source
+
+        async def _stream_conductor() -> None:
+            try:
+                async for ev in source.stream():
+                    try:
+                        await self._apply_event(ev)
+                    except Exception:  # noqa: BLE001 — widget 未 mount 等:静默
+                        pass
+            except Exception:  # noqa: BLE001 — 断线 / 退出:静默
+                pass
+            finally:
+                # 先令 source 停止轮询(signal stop),再重置引用(worker cancel 亦覆盖此路径)
+                source.stop()
+                self._conductor_source = None
+
+        self.run_worker(_stream_conductor(), exclusive=False)
+
+    async def _daemon_create_run(
+        self, goal: str, attachments: list | None, *, verify_cmd: str | None = None
+    ) -> str:
         """create_run,会话过期(missing_session)时透明重握手并重试一次。
 
         单 TUI 场景安全:daemon 在 _require_session 顶部先 reap 掉过期 owner,
@@ -532,7 +571,7 @@ class ArgosApp(App):
             return await self._daemon_client.create_run(
                 self._daemon_session_id, goal=goal,
                 workspace=str(self._workspace), approval_level="confirm",
-                attachments=attachments or [],
+                attachments=attachments or [], verify_cmd=verify_cmd,
             )
         except DaemonError as e:
             if e.code != CODE_MISSING_SESSION:
@@ -542,7 +581,7 @@ class ArgosApp(App):
             return await self._daemon_client.create_run(
                 self._daemon_session_id, goal=goal,
                 workspace=str(self._workspace), approval_level="confirm",
-                attachments=attachments or [],
+                attachments=attachments or [], verify_cmd=verify_cmd,
             )
 
     # ── 工作态边缘光(spec §工作态边缘光) ─────────────────────────────────
@@ -898,6 +937,15 @@ class ArgosApp(App):
             await self._context_cmd(log, cmd.arg)
         elif cmd.name == "dream":
             await self._dream_cmd(log, cmd.arg)
+        elif cmd.name in ("goal", "loop"):
+            await self._goal_cmd(log, cmd.name, cmd.arg)
+        elif cmd.name == "schedule":
+            await self._schedule_cmd(log, cmd.arg)
+        elif cmd.name == "watch":
+            await self._watch_cmd(log, cmd.arg)
+        else:
+            # known command with no handler yet — honest fallback
+            await log.append_line(t("tui.cmd.unwired", name=cmd.name))
 
     async def _undo(self, log) -> None:
         """/undo:用本轮 run 起点的快照还原 workspace;不发 goal。"""
@@ -1966,6 +2014,116 @@ class ArgosApp(App):
                 t("tui.dream.unknown_status", status=status, body=body), kind="error"
             )
 
+    def _parse_verify_arg(self, arg: str) -> tuple[str, str | None]:
+        """解析 goal/loop 参数,提取 verify_cmd。
+
+        支持两种语法:
+          · "task text | verify: <cmd>"
+          · "task text --verify <cmd>"
+        返回 (goal_text, verify_cmd_or_None)。
+        """
+        # pipe syntax: "text | verify: cmd"
+        m = re.search(r"\|\s*verify:\s*(.+)$", arg, re.IGNORECASE)
+        if m:
+            goal_text = arg[:m.start()].strip()
+            return goal_text, m.group(1).strip()
+        # flag syntax: "text --verify cmd"
+        m = re.search(r"--verify\s+(.+)$", arg, re.IGNORECASE)
+        if m:
+            goal_text = arg[:m.start()].strip()
+            return goal_text, m.group(1).strip()
+        return arg.strip(), None
+
+    async def _goal_cmd(self, log, cmd_name: str, arg: str) -> None:
+        """/goal <text> [| verify: <cmd>]  — 提交带可选验证退出条件的目标。
+        /loop <text> [until: <cmd>]        — until: 是 verify: 的别名(Batch 2 surface)。
+
+        ponytail: 真正的跨 run 循环(直到条件持续成立)推迟到 Batch 3 事件驱动目标循环;
+        这里的单 run verify-gated 形式已是 Batch 2 要求的最小可交付面:verify gate 的
+        "bounce until pass"语义覆盖了"loop until condition holds"的单 run 等价物。
+        """
+        # /loop 也支持 "until:" 别名
+        if cmd_name == "loop":
+            # normalize "until: <cmd>" → "| verify: <cmd>" 再走统一解析
+            arg = re.sub(r"\buntil:\s*", "| verify: ", arg, count=1, flags=re.IGNORECASE)
+
+        goal_text, verify_cmd = self._parse_verify_arg(arg)
+
+        if not goal_text:
+            await log.append_line(
+                t("tui.goal.usage"),  # 无 goal 文本:诚实给用法提示(命令已知,是参数缺失)
+            )
+            return
+
+        if self._run_active:
+            await log.append_line(t("tui.run.busy"))
+            return
+
+        if verify_cmd:
+            await log.append_line(t("tui.goal.submitted", verify_cmd=verify_cmd), kind="system")
+
+        await self.start_run(goal_text, verify_cmd=verify_cmd)
+
+    async def _schedule_cmd(self, log, arg: str) -> None:
+        """/schedule <when>: <goal> — 通过 daemon 创建 kind=schedule StandingOrder。"""
+        if not self._with_daemon or not self._daemon_client:
+            await log.append_line(t("tui.schedule.needs_daemon"), kind="system")
+            return
+        # parse "every 1h: summarize logs" → schedule="every 1h", goal="summarize logs"
+        if ":" not in arg:
+            await log.append_line(t("tui.schedule.usage"), kind="system")
+            return
+        when, _, goal = arg.partition(":")
+        when = when.strip()
+        goal = goal.strip()
+        if not when or not goal:
+            await log.append_line(t("tui.schedule.usage"), kind="system")
+            return
+        body = {
+            "utterance": f"/schedule {arg}",
+            "kind": "schedule",
+            "schedule": when,
+            "goal_template": goal,
+        }
+        try:
+            status, data = await self._daemon_client.create_order(self._daemon_session_id, body)
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(t("tui.orders.request_failed", err=e), kind="error")
+            return
+        if status == 201:
+            await log.append_line(t("tui.schedule.created", id=data.get("id", "?")), kind="done")
+        else:
+            await log.append_line(t("tui.orders.http_failed", status=status), kind="error")
+
+    async def _watch_cmd(self, log, arg: str) -> None:
+        """/watch <glob> <goal> — 通过 daemon 创建 kind=file_trigger StandingOrder。"""
+        if not self._with_daemon or not self._daemon_client:
+            await log.append_line(t("tui.watch.needs_daemon"), kind="system")
+            return
+        parts = arg.strip().split(None, 1)
+        if len(parts) < 2:
+            await log.append_line(t("tui.watch.usage"), kind="system")
+            return
+        glob_pat, goal = parts[0], parts[1].strip()
+        if not goal:
+            await log.append_line(t("tui.watch.usage"), kind="system")
+            return
+        body = {
+            "utterance": f"/watch {arg}",
+            "kind": "file_trigger",
+            "trigger_glob": glob_pat,
+            "goal_template": goal,
+        }
+        try:
+            status, data = await self._daemon_client.create_order(self._daemon_session_id, body)
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(t("tui.orders.request_failed", err=e), kind="error")
+            return
+        if status == 201:
+            await log.append_line(t("tui.watch.created", id=data.get("id", "?")), kind="done")
+        else:
+            await log.append_line(t("tui.orders.http_failed", status=status), kind="error")
+
     async def _routing_set(self, log, arg: str) -> None:
         """#11 /routing set <category> <tier>:原子改写 config.json。"""
         import os
@@ -2112,7 +2270,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             t("tui.resume.ok", title=title, n=len(msgs)), kind="done")
 
     # ── 一轮 run:EventBus + loop + Worker 消费 ────────────────────────────
-    async def start_run(self, goal: str, attachments: list | None = None) -> None:
+    async def start_run(self, goal: str, attachments: list | None = None, *, verify_cmd: str | None = None) -> None:
         if self._run_active:
             return
         self._run_active = True
@@ -2165,19 +2323,23 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         # daemon 模式:POST /runs → DaemonEventSource 喂 EventBus → 现有渲染路径零改动。
         # inline 模式:直接 loop.run() → 现有路径(向后兼容,不动)。
         if self._with_daemon and self._daemon_client is not None and self._daemon_session_id:
-            await self._start_run_daemon(goal, log, attachments or [])
+            await self._start_run_daemon(goal, log, attachments or [], verify_cmd=verify_cmd)
         else:
-            await self._start_run_inline(goal, log, attachments or [])
+            await self._start_run_inline(goal, log, attachments or [], verify_cmd=verify_cmd)
 
-    async def _start_run_inline(self, goal: str, log, attachments: list | None = None) -> None:
+    async def _start_run_inline(self, goal: str, log, attachments: list | None = None, *, verify_cmd: str | None = None) -> None:
         """inline 路径(单进程直跑):保持原有语义,支持 FakeLoop + AgentLoop。
 
         plan_decision 走 loop.respond_plan_decision(call_id, action, feedback)——
         彻底去掉 TUI 对 ExitPlanMode 等 loop 内部对象的直接引用(设计 §4 刀2收口)。
         _handle_plan_rendered 已统一经 loop.respond_plan_decision 回传决策。
+        verify_cmd:用户经 /goal / /loop 显式声明的退出条件;注入 loop.verify_cmd 覆盖 LoopConfig 默认。
         """
         bus = EventBus()
-        loop = self._loop_factory()
+        # /goal | verify: <cmd> — pass verify_cmd into the factory so it lands in LoopConfig
+        # (same dataclasses.replace pattern as build_run_stack; hasattr-assignment was a silent no-op
+        # because AgentLoop stores it as _verify_cmd, not verify_cmd).
+        loop = self._loop_factory(verify_cmd=verify_cmd)
         # Plan mode:把本轮 loop 引用挂到 self;_handle_plan_rendered 经 respond_plan_decision 回传。
         self._current_loop = loop
 
@@ -2226,7 +2388,9 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 await log.append_line(t("tui.run.interrupted"), kind="system")
                 self._interrupted = False
 
-    async def _start_run_daemon(self, goal: str, log, attachments: list | None = None) -> None:
+    async def _start_run_daemon(
+        self, goal: str, log, attachments: list | None = None, *, verify_cmd: str | None = None
+    ) -> None:
         """daemon 路径(v6 P3b §3):POST /runs → DaemonEventSource 喂 EventBus。
 
         · Esc = POST cancel(已在 action_interrupt 处理)
@@ -2242,7 +2406,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
 
         # 创建 run(会话过期时 _daemon_create_run 透明重握手重试一次 —— 修 401 不自愈)
         try:
-            run_id = await self._daemon_create_run(goal, attachments)
+            run_id = await self._daemon_create_run(goal, attachments, verify_cmd=verify_cmd)
         except Exception as e:  # noqa: BLE001
             await log.append_line(t("tui.run.create_failed", err=e), kind="error")
             self._run_active = False
@@ -2325,7 +2489,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                     "report": t("tui.event.phase.report"),
                 }.get(ev.phase, t("tui.event.phase.default")))
             log.finalize_response()
-            bar.set_phase(ev.phase, ev.actions)
+            bar.set_phase(ev.phase, ev.actions, ev.max_steps)
             ap.on_phase(ev.phase, ev.actions)
             # spec §8.4:新 plan 周期 = 全新一轮,解锁告警色(StatusBar -alert + 边框)。
             # 仅 plan 清——report/act/verify 绝不清(陷阱2:失败裁决的告警不被后续阶段抹掉)。

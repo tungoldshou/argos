@@ -375,3 +375,35 @@ def test_mark_run_end_resets_phase_to_idle():
     bar.mark_run_end()
     assert bar.phase == "idle", "run 收尾 phase 应复位 idle"
     assert bar.actions == 0
+
+
+# ── Task 2.4: step budget N/M ─────────────────────────────────────────────────
+
+def test_status_bar_action_with_max_steps():
+    """set_phase with max_steps → render_text shows 'action N/M' format."""
+    from argos.tui.widgets.status_bar import StatusBar
+    bar = StatusBar()
+    bar.set_phase("act", 7, max_steps=40)
+    text = bar.render_text
+    assert "7/40" in text, f"期望 '7/40' 在 render_text 中，实际：{text!r}"
+
+
+def test_status_bar_action_without_max_steps():
+    """set_phase without max_steps → render_text shows 'action N' (no '/None')."""
+    from argos.tui.widgets.status_bar import StatusBar
+    bar = StatusBar()
+    bar.set_phase("act", 7)
+    text = bar.render_text
+    assert "7" in text, f"期望 '7' 在 render_text 中，实际：{text!r}"
+    assert "/None" not in text, f"不应出现 '/None'，实际：{text!r}"
+    assert "7/40" not in text  # 无 max_steps 不应显示分母
+
+
+def test_phase_change_max_steps_field_defaults_none():
+    """PhaseChange.max_steps defaults to None — existing call sites stay unbroken."""
+    from argos.protocol.events import PhaseChange
+    ev = PhaseChange(phase="act", actions=3)
+    assert ev.max_steps is None
+
+    ev_with = PhaseChange(phase="act", actions=3, max_steps=40)
+    assert ev_with.max_steps == 40

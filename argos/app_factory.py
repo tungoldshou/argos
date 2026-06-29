@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as _dataclass_replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -194,6 +194,7 @@ def build_run_stack(
     *,
     workspace: Path | None = None,
     session_id: str = "",
+    verify_cmd: str | None = None,
 ) -> RunStack:
     """per-run 隔离栈:每次 daemon 分配一个新 run 时调用。
 
@@ -259,6 +260,13 @@ def build_run_stack(
             return _lookup
         gate.set_reversible_lookup(_make_reversible_lookup(_reg))
 
+    # per-run LoopConfig:若 verify_cmd 传入,用它覆盖共享 config;否则复用 c.config(零分配)。
+    # ponytail: dataclass replace over full constructor — fewer fields to touch if LoopConfig grows
+    _run_config = (
+        _dataclass_replace(c.config, verify_cmd=verify_cmd) if verify_cmd is not None
+        else c.config
+    )
+
     def _loop_factory() -> "AgentLoop":
         # A2 L3 DOM 探针：BrowserController 已在 AppComponents 实例化；
         # 构造 DomProber 注入 loop（None=未接入，L3 候选跳过，行为同之前）。
@@ -282,7 +290,7 @@ def build_run_stack(
                 pass
         return AgentLoop(
             store=c.store, bus=EventBus(), sandbox=sandbox,
-            broker=broker, model=c.model, verifier=c.verifier, config=c.config,
+            broker=broker, model=c.model, verifier=c.verifier, config=_run_config,
             workspace=ws, verify_dir=ws,
             workflow_engine_factory=c.workflow_engine_factory,
             router=c.router,
@@ -458,12 +466,21 @@ def build_components(
     )
 
 
-def build_loop_factory(c: AppComponents) -> Callable[[], AgentLoop]:
-    """产 loop_factory:每轮 run 新建 EventBus,共享其余组件(契约 §3 AgentLoop.__init__)。"""
-    def factory() -> AgentLoop:
+def build_loop_factory(c: AppComponents) -> "Callable[[str | None], AgentLoop]":
+    """产 loop_factory:每轮 run 新建 EventBus,共享其余组件(契约 §3 AgentLoop.__init__)。
+
+    factory 接受可选 verify_cmd — 若传入,用 dataclasses.replace 覆盖 LoopConfig.verify_cmd,
+    与 build_run_stack 保持同一模式(不靠 hasattr 赋值幽灵属性)。
+    """
+    def factory(verify_cmd: str | None = None) -> AgentLoop:
+        # ponytail: same replace-over-shared-config pattern as build_run_stack ~L265
+        run_config = (
+            _dataclass_replace(c.config, verify_cmd=verify_cmd) if verify_cmd is not None
+            else c.config
+        )
         return AgentLoop(
             store=c.store, bus=EventBus(), sandbox=c.sandbox,
-            broker=c.broker, model=c.model, verifier=c.verifier, config=c.config,
+            broker=c.broker, model=c.model, verifier=c.verifier, config=run_config,
             workspace=c.workspace, verify_dir=c.workspace,
             workflow_engine_factory=c.workflow_engine_factory,
             router=c.router,          # #11 per-task routing 透传(spec §10)

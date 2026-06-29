@@ -7,7 +7,7 @@ from argos.tui.fakeloop import FakeLoop
 
 @pytest.mark.asyncio
 async def test_argos_night_theme_registered_and_applied():
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         assert app.theme == "argos-night", "应默认应用 argos-night 主题"
