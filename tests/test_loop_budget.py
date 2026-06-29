@@ -122,9 +122,9 @@ async def test_token_ceiling_triggers_budget_escalation():
     assert "max_tokens_in" in esc.reason, \
         f"reason should name max_tokens_in, got: {esc.reason!r}"
 
-    # Must stop well before max_steps=30
+    # Guard fires after step 1 (ceiling=15 < tokens_per_call=20), so at most 1 code result.
     code_results = [ev for ev in events if isinstance(ev, CodeResult)]
-    assert len(code_results) < 30, \
+    assert len(code_results) < 5, \
         f"loop should stop early on budget breach, ran {len(code_results)} steps"
 
 

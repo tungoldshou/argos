@@ -316,7 +316,9 @@ class LoopConfig:
     prune_aggressiveness: float = 0.5
     # Task 1.2: hard budget ceilings — None = no limit (pure-additive, behavior identical when unset).
     max_tokens_in: int | None = None    # cumulative input-token ceiling (works even for un-priced models)
-    max_cost_usd: float | None = None   # cumulative cost ceiling in USD
+    # 成本上限(USD)。仅当模型名存在于 PRICING 表时才会触发;不在表内时 cost 计算为 None,
+    # 此分支被静默跳过,用户不会收到任何突破提示。对自部署/未定价模型应优先使用 max_tokens_in。
+    max_cost_usd: float | None = None
 
 
 class AgentLoop:
@@ -1227,6 +1229,21 @@ class AgentLoop:
             self._store.ensure_session(  # type: ignore[attr-defined]
                 session_id, title=goal[:80], model=self._cfg.model_tier, system_snapshot="",
             )
+        # Task 1.2: 一次性警告:max_cost_usd 对未在 PRICING 表的模型静默无效;
+        # 仅在 run 起始发一次(不进 _hbus,直接 yield 给调用方,走事件流即可)。
+        if self._cfg.max_cost_usd is not None:
+            from argos.core.observability import PRICING
+            _tier = getattr(getattr(self, "_model", None), "tier", None)
+            _model_name = getattr(_tier, "model", None) or self._cfg.model_tier or ""
+            if _model_name not in PRICING:
+                from argos.protocol.events import Error as _Error
+                yield _Error(
+                    message=(
+                        f"warning: max_cost_usd is set but model {_model_name!r} is not in "
+                        "the PRICING table — cost ceiling is inactive. "
+                        "Use max_tokens_in as a model-agnostic guard instead."
+                    )
+                )
         # ── hooks: SessionStart(spec §2.5 触发点表)──────────────────
         from argos import config as _config
         try:
