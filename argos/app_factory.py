@@ -466,12 +466,21 @@ def build_components(
     )
 
 
-def build_loop_factory(c: AppComponents) -> Callable[[], AgentLoop]:
-    """产 loop_factory:每轮 run 新建 EventBus,共享其余组件(契约 §3 AgentLoop.__init__)。"""
-    def factory() -> AgentLoop:
+def build_loop_factory(c: AppComponents) -> "Callable[[str | None], AgentLoop]":
+    """产 loop_factory:每轮 run 新建 EventBus,共享其余组件(契约 §3 AgentLoop.__init__)。
+
+    factory 接受可选 verify_cmd — 若传入,用 dataclasses.replace 覆盖 LoopConfig.verify_cmd,
+    与 build_run_stack 保持同一模式(不靠 hasattr 赋值幽灵属性)。
+    """
+    def factory(verify_cmd: str | None = None) -> AgentLoop:
+        # ponytail: same replace-over-shared-config pattern as build_run_stack ~L265
+        run_config = (
+            _dataclass_replace(c.config, verify_cmd=verify_cmd) if verify_cmd is not None
+            else c.config
+        )
         return AgentLoop(
             store=c.store, bus=EventBus(), sandbox=c.sandbox,
-            broker=c.broker, model=c.model, verifier=c.verifier, config=c.config,
+            broker=c.broker, model=c.model, verifier=c.verifier, config=run_config,
             workspace=c.workspace, verify_dir=c.workspace,
             workflow_engine_factory=c.workflow_engine_factory,
             router=c.router,          # #11 per-task routing 透传(spec §10)
