@@ -263,6 +263,21 @@ async def test_unknown_route_returns_404(server):
 
 
 @pytest.mark.asyncio
+async def test_create_run_with_verify_cmd_accepted(server):
+    """POST /runs with verify_cmd in body → 201 (server accepts the field without error)."""
+    srv, mgr = server
+    sid = await _create_session(srv.socket_path)
+    status, _, raw = await _req(
+        srv.socket_path, "POST", "/runs",
+        session_id=sid,
+        body={"goal": "fix auth tests", "verify_cmd": "pytest -q tests/"},
+    )
+    assert status == 201, f"expected 201, got {status}: {raw.decode()}"
+    rid = json.loads(raw.decode("utf-8"))["run_id"]
+    assert len(rid) == 12
+
+
+@pytest.mark.asyncio
 async def test_approval_endpoint_no_worker_returns_404(server):
     """POST /runs/{id}/approval/{call_id}: run 存在但无 active worker → 404。
 

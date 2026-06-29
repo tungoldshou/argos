@@ -519,7 +519,9 @@ class ArgosApp(App):
         except Exception:  # noqa: BLE001 — 网络抖动等:静默,不打扰用户
             pass
 
-    async def _daemon_create_run(self, goal: str, attachments: list | None) -> str:
+    async def _daemon_create_run(
+        self, goal: str, attachments: list | None, *, verify_cmd: str | None = None
+    ) -> str:
         """create_run,会话过期(missing_session)时透明重握手并重试一次。
 
         单 TUI 场景安全:daemon 在 _require_session 顶部先 reap 掉过期 owner,
@@ -532,7 +534,7 @@ class ArgosApp(App):
             return await self._daemon_client.create_run(
                 self._daemon_session_id, goal=goal,
                 workspace=str(self._workspace), approval_level="confirm",
-                attachments=attachments or [],
+                attachments=attachments or [], verify_cmd=verify_cmd,
             )
         except DaemonError as e:
             if e.code != CODE_MISSING_SESSION:
@@ -542,7 +544,7 @@ class ArgosApp(App):
             return await self._daemon_client.create_run(
                 self._daemon_session_id, goal=goal,
                 workspace=str(self._workspace), approval_level="confirm",
-                attachments=attachments or [],
+                attachments=attachments or [], verify_cmd=verify_cmd,
             )
 
     # ── 工作态边缘光(spec §工作态边缘光) ─────────────────────────────────
@@ -2222,7 +2224,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         # daemon 模式:POST /runs → DaemonEventSource 喂 EventBus → 现有渲染路径零改动。
         # inline 模式:直接 loop.run() → 现有路径(向后兼容,不动)。
         if self._with_daemon and self._daemon_client is not None and self._daemon_session_id:
-            await self._start_run_daemon(goal, log, attachments or [])
+            await self._start_run_daemon(goal, log, attachments or [], verify_cmd=verify_cmd)
         else:
             await self._start_run_inline(goal, log, attachments or [], verify_cmd=verify_cmd)
 
@@ -2287,7 +2289,9 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 await log.append_line(t("tui.run.interrupted"), kind="system")
                 self._interrupted = False
 
-    async def _start_run_daemon(self, goal: str, log, attachments: list | None = None) -> None:
+    async def _start_run_daemon(
+        self, goal: str, log, attachments: list | None = None, *, verify_cmd: str | None = None
+    ) -> None:
         """daemon 路径(v6 P3b §3):POST /runs → DaemonEventSource 喂 EventBus。
 
         · Esc = POST cancel(已在 action_interrupt 处理)
@@ -2303,7 +2307,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
 
         # 创建 run(会话过期时 _daemon_create_run 透明重握手重试一次 —— 修 401 不自愈)
         try:
-            run_id = await self._daemon_create_run(goal, attachments)
+            run_id = await self._daemon_create_run(goal, attachments, verify_cmd=verify_cmd)
         except Exception as e:  # noqa: BLE001
             await log.append_line(t("tui.run.create_failed", err=e), kind="error")
             self._run_active = False

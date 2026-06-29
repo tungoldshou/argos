@@ -157,3 +157,115 @@ async def test_goal_busy_guard():
     assert submitted == []
     # tui.run.busy message (zh: "当前任务进行中"; en: "Task in progress")
     assert "进行中" in log.rendered_text or "in progress" in log.rendered_text.lower()
+
+
+# ── daemon path: verify_cmd flows through DaemonClient.create_run → POST body ─
+
+@pytest.mark.asyncio
+async def test_daemon_client_verify_cmd_in_payload():
+    """DaemonClient.create_run(verify_cmd='pytest') includes verify_cmd in the POST body."""
+    import json as _json
+    from unittest.mock import AsyncMock, patch
+    from argos.daemon.client import DaemonClient
+    from pathlib import Path
+
+    client = DaemonClient(Path("/nonexistent.sock"))
+    captured: list[dict] = []
+
+    async def _fake_request(method, path, *, session_id=None, body=None):
+        captured.append(body or {})
+        # simulate 201 {"run_id": "abc123456789"}
+        raw = _json.dumps({"run_id": "abc123456789"}).encode()
+        return 201, {}, raw
+
+    with patch.object(client, "_request", side_effect=_fake_request):
+        rid = await client.create_run(
+            "test-session", goal="fix auth", verify_cmd="pytest -q"
+        )
+
+    assert rid == "abc123456789"
+    assert len(captured) == 1
+    assert captured[0].get("verify_cmd") == "pytest -q"
+
+
+@pytest.mark.asyncio
+async def test_daemon_client_no_verify_cmd_omits_key():
+    """DaemonClient.create_run without verify_cmd does NOT include verify_cmd key."""
+    import json as _json
+    from unittest.mock import patch
+    from argos.daemon.client import DaemonClient
+    from pathlib import Path
+
+    client = DaemonClient(Path("/nonexistent.sock"))
+    captured: list[dict] = []
+
+    async def _fake_request(method, path, *, session_id=None, body=None):
+        captured.append(body or {})
+        raw = _json.dumps({"run_id": "abc123456789"}).encode()
+        return 201, {}, raw
+
+    with patch.object(client, "_request", side_effect=_fake_request):
+        await client.create_run("test-session", goal="fix auth")
+
+    assert "verify_cmd" not in captured[0]
+
+
+# ── daemon path: _daemon_create_run forwards verify_cmd ──────────────────────
+
+@pytest.mark.asyncio
+async def test_daemon_create_run_forwards_verify_cmd():
+    """_daemon_create_run passes verify_cmd kwarg to DaemonClient.create_run."""
+    from unittest.mock import AsyncMock
+
+    app = _make_app()
+    app._with_daemon = True
+    app._workspace = __import__("pathlib").Path("/tmp")
+
+    class _FakeClient:
+        async def create_run(self, session_id, *, goal, workspace, approval_level,
+                             attachments=None, verify_cmd=None):
+            self._last_verify_cmd = verify_cmd
+            return "run-abc"
+
+    fake_client = _FakeClient()
+    app._daemon_client = fake_client  # type: ignore[attr-defined]
+    app._daemon_session_id = "sid-123"  # type: ignore[attr-defined]
+
+    rid = await app._daemon_create_run("fix the tests", None, verify_cmd="pytest -x")
+    assert rid == "run-abc"
+    assert fake_client._last_verify_cmd == "pytest -x"
+
+
+# ── build_run_stack: verify_cmd overrides LoopConfig ─────────────────────────
+
+def test_build_run_stack_verify_cmd_overrides_loop_config(tmp_path):
+    """build_run_stack(verify_cmd='pytest') produces a loop_factory that returns
+    a loop whose config.verify_cmd equals 'pytest'."""
+    from unittest.mock import MagicMock, patch
+    from argos.app_factory import build_run_stack, AppComponents
+    from argos.core.loop import LoopConfig, AgentLoop
+    from argos.approval import ApprovalLevel
+
+    # Minimal AppComponents stub — build_run_stack only needs a few fields
+    c = MagicMock(spec=AppComponents)
+    c.config = LoopConfig(model_tier="default", verify_cmd=None)
+    c.workspace = tmp_path
+    c.registry = None
+    c.browser_controller = None
+    c.permissions_config = MagicMock()
+
+    created_configs: list[LoopConfig] = []
+
+    class _StubLoop:
+        def __init__(self, **kwargs):
+            created_configs.append(kwargs["config"])
+
+    with patch("argos.app_factory._make_gate_broker_sandbox") as mock_gbs, \
+         patch("argos.app_factory.AgentLoop", _StubLoop), \
+         patch("argos.app_factory.EventBus"):
+        mock_gbs.return_value = (MagicMock(), MagicMock(), MagicMock())
+        stack = build_run_stack(c, workspace=tmp_path, verify_cmd="pytest -q")
+        stack.loop_factory()
+
+    assert len(created_configs) == 1
+    assert created_configs[0].verify_cmd == "pytest -q"

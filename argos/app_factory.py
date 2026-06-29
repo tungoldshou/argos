@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as _dataclass_replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -194,6 +194,7 @@ def build_run_stack(
     *,
     workspace: Path | None = None,
     session_id: str = "",
+    verify_cmd: str | None = None,
 ) -> RunStack:
     """per-run 隔离栈:每次 daemon 分配一个新 run 时调用。
 
@@ -259,6 +260,13 @@ def build_run_stack(
             return _lookup
         gate.set_reversible_lookup(_make_reversible_lookup(_reg))
 
+    # per-run LoopConfig:若 verify_cmd 传入,用它覆盖共享 config;否则复用 c.config(零分配)。
+    # ponytail: dataclass replace over full constructor — fewer fields to touch if LoopConfig grows
+    _run_config = (
+        _dataclass_replace(c.config, verify_cmd=verify_cmd) if verify_cmd is not None
+        else c.config
+    )
+
     def _loop_factory() -> "AgentLoop":
         # A2 L3 DOM 探针：BrowserController 已在 AppComponents 实例化；
         # 构造 DomProber 注入 loop（None=未接入，L3 候选跳过，行为同之前）。
@@ -282,7 +290,7 @@ def build_run_stack(
                 pass
         return AgentLoop(
             store=c.store, bus=EventBus(), sandbox=sandbox,
-            broker=broker, model=c.model, verifier=c.verifier, config=c.config,
+            broker=broker, model=c.model, verifier=c.verifier, config=_run_config,
             workspace=ws, verify_dir=ws,
             workflow_engine_factory=c.workflow_engine_factory,
             router=c.router,
