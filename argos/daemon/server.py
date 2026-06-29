@@ -470,6 +470,10 @@ class DaemonHTTPServer:
             except Exception as _snap_err:  # noqa: BLE001
                 log.warning("server: run 起点快照失败(undo 将不可用): %s", _snap_err)
 
+        # per-run verify_cmd(可选):用户在 /goal | verify: <cmd> 中声明的验证命令。
+        # 透传到 build_run_stack → LoopConfig.verify_cmd,让验证门禁用正确退出码。
+        _verify_cmd: str | None = data.get("verify_cmd") or None
+
         # P4 Trust Dial:per-run trust_level 参数(可选,默认沿用现有 approval_level 语义)。
         # trust_level 取枚举名字符串(如 "L1_DANGEROUS_ONLY")或 None(不传 → 不覆盖 approval_level)。
         # 传入时通过 gate.set_trust_level(TrustLevel[name]) 写入;枚举名非法 → 诚实降级(警告+忽略)。
@@ -508,6 +512,7 @@ class DaemonHTTPServer:
                 self._components,
                 workspace=effective_ws_path,
                 session_id=f"run-{run_id}",
+                verify_cmd=_verify_cmd,
             )
             _apply_trust_to_gate(run_stack.gate)
             worker = RunWorker(

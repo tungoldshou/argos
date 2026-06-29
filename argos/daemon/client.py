@@ -177,10 +177,13 @@ class DaemonClient:
     async def create_run(
         self, session_id: str, *, goal: str, workspace: str = "",
         model: str = "", approval_level: str = "confirm", attachments=None,
+        verify_cmd: str | None = None,
     ) -> str:
         from argos.daemon.attachments_wire import encode_attachments
         body = {"goal": goal, "workspace": workspace, "model": model,
                 "approval_level": approval_level}
+        if verify_cmd:
+            body["verify_cmd"] = verify_cmd
         wire = encode_attachments(attachments)
         if wire:
             body["attachments"] = wire   # 图片 base64;无附件时不加键(请求体与现状一致)
