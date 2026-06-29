@@ -9,6 +9,7 @@ slash:输入以 / 开头走 commands.parse_slash 分发;否则当 goal 起一轮
 """
 from __future__ import annotations
 
+import re
 import uuid
 from collections import deque
 from collections.abc import Callable
@@ -1981,7 +1982,6 @@ class ArgosApp(App):
           · "task text --verify <cmd>"
         返回 (goal_text, verify_cmd_or_None)。
         """
-        import re
         # pipe syntax: "text | verify: cmd"
         m = re.search(r"\|\s*verify:\s*(.+)$", arg, re.IGNORECASE)
         if m:
@@ -2002,7 +2002,6 @@ class ArgosApp(App):
         这里的单 run verify-gated 形式已是 Batch 2 要求的最小可交付面:verify gate 的
         "bounce until pass"语义覆盖了"loop until condition holds"的单 run 等价物。
         """
-        import re
         # /loop 也支持 "until:" 别名
         if cmd_name == "loop":
             # normalize "until: <cmd>" → "| verify: <cmd>" 再走统一解析
@@ -2237,10 +2236,14 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         verify_cmd:用户经 /goal / /loop 显式声明的退出条件;注入 loop.verify_cmd 覆盖 LoopConfig 默认。
         """
         bus = EventBus()
-        loop = self._loop_factory()
-        # /goal | verify: <cmd> — 用户声明的退出条件覆盖 LoopConfig.verify_cmd
-        if verify_cmd is not None and hasattr(loop, "verify_cmd"):
-            loop.verify_cmd = verify_cmd
+        # /goal | verify: <cmd> — pass verify_cmd into the factory so it lands in LoopConfig
+        # (same dataclasses.replace pattern as build_run_stack; hasattr-assignment was a silent no-op
+        # because AgentLoop stores it as _verify_cmd, not verify_cmd).
+        try:
+            loop = self._loop_factory(verify_cmd=verify_cmd)
+        except TypeError:
+            # stubs / FakeLoop injected in tests may be nullary — fall back gracefully
+            loop = self._loop_factory()
         # Plan mode:把本轮 loop 引用挂到 self;_handle_plan_rendered 经 respond_plan_decision 回传。
         self._current_loop = loop
 

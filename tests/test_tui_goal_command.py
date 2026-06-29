@@ -17,7 +17,7 @@ def _make_app() -> ArgosApp:
     """Minimal ArgosApp without __init__ — only the fields _goal_cmd / _dispatch_slash touch."""
     app = ArgosApp.__new__(ArgosApp)
     app._run_active = False
-    app._loop_factory = lambda: _NoopLoop()
+    app._loop_factory = _noop_loop_factory
     app._with_daemon = False
     app._daemon_client = None
     app._daemon_session_id = None
@@ -27,13 +27,17 @@ def _make_app() -> ArgosApp:
 
 
 class _NoopLoop:
-    """Minimal stub — has verify_cmd attribute so the inline path can set it."""
-    verify_cmd: str | None = None
+    """Minimal stub — no verify_cmd class attribute (phantom attr masked the inline bug)."""
 
     async def run(self, goal, session_id=None, **kwargs):
-        # yield nothing — we only care about verify_cmd being set before run() is called
+        # yield nothing — we only care about dispatch, not run body
         return
         yield  # make it an async generator  # noqa: unreachable
+
+
+def _noop_loop_factory(verify_cmd: str | None = None) -> _NoopLoop:
+    """Factory that accepts verify_cmd kwarg (matching the real build_loop_factory signature)."""
+    return _NoopLoop()
 
 
 # ── _parse_verify_arg unit tests (no app context needed) ─────────────────────
@@ -125,7 +129,7 @@ async def test_known_unwired_command_shows_honest_fallback():
     """/schedule (known, no handler) → honest 'not wired yet' message, not silence."""
     from argos.tui.commands import parse_slash
 
-    app = ArgosApp(loop_factory=lambda: _NoopLoop())
+    app = ArgosApp(loop_factory=_noop_loop_factory)
     async with app.run_test() as pilot:
         await pilot.pause()
         cmd = parse_slash("/schedule 0 3 * * * dream")
@@ -269,3 +273,59 @@ def test_build_run_stack_verify_cmd_overrides_loop_config(tmp_path):
 
     assert len(created_configs) == 1
     assert created_configs[0].verify_cmd == "pytest -q"
+
+
+# ── inline path: verify_cmd reaches AgentLoop._cfg via build_loop_factory ─────
+
+def test_build_loop_factory_verify_cmd_reaches_loop_config(tmp_path):
+    """build_loop_factory returns a factory that accepts verify_cmd and passes it
+    into the AgentLoop config — the real inline path (was a silent no-op before fix).
+    This test FAILS against the pre-fix code (factory was nullary) and PASSES after."""
+    from unittest.mock import MagicMock, patch
+    from argos.app_factory import build_loop_factory, AppComponents
+    from argos.core.loop import LoopConfig
+
+    c = MagicMock(spec=AppComponents)
+    c.config = LoopConfig(model_tier="default", verify_cmd=None)
+    c.workspace = tmp_path
+
+    created_configs: list[LoopConfig] = []
+
+    class _StubLoop:
+        def __init__(self, **kwargs):
+            created_configs.append(kwargs["config"])
+
+    with patch("argos.app_factory.AgentLoop", _StubLoop), \
+         patch("argos.app_factory.EventBus"):
+        factory = build_loop_factory(c)
+        # call with verify_cmd — this is what _start_run_inline now does
+        factory(verify_cmd="pytest --tb=short")
+
+    assert len(created_configs) == 1, "loop was not constructed"
+    assert created_configs[0].verify_cmd == "pytest --tb=short", (
+        "verify_cmd did not reach LoopConfig — inline path still broken"
+    )
+
+
+def test_build_loop_factory_nullary_call_preserves_config_verify_cmd(tmp_path):
+    """build_loop_factory()(no verify_cmd) leaves LoopConfig.verify_cmd unchanged."""
+    from unittest.mock import MagicMock, patch
+    from argos.app_factory import build_loop_factory, AppComponents
+    from argos.core.loop import LoopConfig
+
+    c = MagicMock(spec=AppComponents)
+    c.config = LoopConfig(model_tier="default", verify_cmd="pre-existing")
+    c.workspace = tmp_path
+
+    created_configs: list[LoopConfig] = []
+
+    class _StubLoop:
+        def __init__(self, **kwargs):
+            created_configs.append(kwargs["config"])
+
+    with patch("argos.app_factory.AgentLoop", _StubLoop), \
+         patch("argos.app_factory.EventBus"):
+        factory = build_loop_factory(c)
+        factory()  # nullary — should not clobber
+
+    assert created_configs[0].verify_cmd == "pre-existing"
