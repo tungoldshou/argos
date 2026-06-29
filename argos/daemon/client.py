@@ -177,10 +177,13 @@ class DaemonClient:
     async def create_run(
         self, session_id: str, *, goal: str, workspace: str = "",
         model: str = "", approval_level: str = "confirm", attachments=None,
+        verify_cmd: str | None = None,
     ) -> str:
         from argos.daemon.attachments_wire import encode_attachments
         body = {"goal": goal, "workspace": workspace, "model": model,
                 "approval_level": approval_level}
+        if verify_cmd:
+            body["verify_cmd"] = verify_cmd
         wire = encode_attachments(attachments)
         if wire:
             body["attachments"] = wire   # 图片 base64;无附件时不加键(请求体与现状一致)
@@ -223,6 +226,11 @@ class DaemonClient:
             body={"decision": decision},
         )
         return self._check(status, self._parse_json(status, raw), (200,))
+
+    async def create_order(self, session_id: str, body: dict) -> tuple[int, dict]:
+        """POST /orders — 创建 StandingOrder。返回 (status, response_dict)。"""
+        status, _, raw = await self._request("POST", "/orders", session_id=session_id, body=body)
+        return status, self._parse_json(status, raw)
 
     # ── SSE 订阅(长连接)───────────────────────────────────────────
 
