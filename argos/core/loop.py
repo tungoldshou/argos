@@ -314,6 +314,9 @@ class LoopConfig:
     # context rot 持续相关性修剪激进度(0=不修剪;0<a<0.66 折叠过期工具输出;
     # a>=0.66 另折叠被取代旧计划/死路错误)。优先修剪而非整体压缩(spec 2026-06-07)。
     prune_aggressiveness: float = 0.5
+    # Task 1.2: hard budget ceilings — None = no limit (pure-additive, behavior identical when unset).
+    max_tokens_in: int | None = None    # cumulative input-token ceiling (works even for un-priced models)
+    max_cost_usd: float | None = None   # cumulative cost ceiling in USD
 
 
 class AgentLoop:
@@ -1459,6 +1462,32 @@ class AgentLoop:
                 # #11 per-task routing:实际跑这步的 profile 名(spec §15.2 可见性防线)。
                 tier_name=self._current_tier,
             )
+
+            # Task 1.2: hard budget circuit-breaker — checked after each step's accounting.
+            # None ceiling = no limit; both guards use the same running counters as CostUpdate.
+            _budget_msg: str | None = None
+            if self._cfg.max_tokens_in is not None and self._tok_in > self._cfg.max_tokens_in:
+                _budget_msg = (
+                    f"budget exceeded: cumulative input tokens {self._tok_in} "
+                    f"> max_tokens_in {self._cfg.max_tokens_in}"
+                )
+            elif (self._cfg.max_cost_usd is not None
+                  and cost is not None
+                  and cost > self._cfg.max_cost_usd):
+                _budget_msg = (
+                    f"budget exceeded: cumulative cost ${cost:.6f} "
+                    f"> max_cost_usd ${self._cfg.max_cost_usd:.6f}"
+                )
+            if _budget_msg is not None:
+                await self._hbus.emit(Escalation(
+                    reason=_budget_msg,
+                    attempts=step,
+                    last_failure=_budget_msg,
+                ))
+                for ev in self._hbus.drain():
+                    yield ev
+                escalated = True
+                break
 
             code = extract_code_block(text)
             if code is not None:
