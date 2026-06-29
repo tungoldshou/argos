@@ -32,6 +32,7 @@ report 诚实标 NO_TEST_LABEL。配了 verify_cmd 却 unverifiable(篡改/超�
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import re
 import shlex
@@ -47,7 +48,7 @@ from argos.core.honesty import (
 from argos.core.plan_mode import PlanExitDecision, PlanRenderer
 from argos.core.types import ModelTierName, TRIVIAL_VERIFY_BINS
 from argos.protocol.events import (
-    CodeAction, CodeResult, CostUpdate, Error, Event, PhaseChange,
+    CodeAction, CodeResult, CostUpdate, Escalation, Error, Event, PhaseChange,
     MemoryRecallEvent, PlanDecisionRequest, PlanRendered, PlanUpdate,
     TokenDelta, ToolReceipt,
 )
@@ -102,6 +103,9 @@ _GUI_KW_EXP = re.compile(r"""expected_text\s*=\s*['"]([^'"]+)['"]""")
 _PROBE_EXPECTED_MIN = 3
 _DOM_URL_ALLOWED = re.compile(r"^https?://", re.I)
 _DOM_PARAM_MAX = 500  # selector / expected_text 最大长度，防滥用
+
+# ponytail: 2 consecutive identical (code,stdout) pairs = stuck; break + escalate.
+STAGNATION_LIMIT = 2
 
 # 反琐碎集 TRIVIAL_VERIFY_BINS 已上移 argos.core.types(canonical;Verifier 的 canonical 门、
 # loop 的 propose_verify 门、workflow stage verify 校验共用同一份,杜绝多入口门不一致)。
@@ -1311,6 +1315,8 @@ class AgentLoop:
         conversational_done = False  # 人性化:纯对话/纯读问答轮 → 跳过验证门展示(report 不加完成判决行)。
         verify_nudged = False     # H2:改了代码却没声明验证 → 只催一轮(防误催纯读/无限催)。
         compactions = 0           # 上下文压缩次数上限,防压缩仍溢出时无限重试。
+        _last_fp: str | None = None   # stagnation guard: fingerprint of last (code, stdout)
+        _fp_run: int = 0              # consecutive run-length of the same fingerprint
         text = ""                 # 在 while 外初始化:max_steps=0 等边界下收尾仍能安全 text.strip()
         while step < self._cfg.max_steps:
             # context rot 第二层(spec 2026-06-07):持续相关性修剪,优先于整体压缩 ——
@@ -1539,6 +1545,36 @@ class AgentLoop:
                     step=step, stdout=result.stdout,
                     value_repr=result.value_repr, exc=result.exc, ok=result.ok,
                 )
+                # ── Stagnation guard (Task 1.1) ───────────────────
+                # Same (code, stdout) pair repeated >= STAGNATION_LIMIT consecutive
+                # times on a *failing* execution → model is stuck; break + escalate.
+                # Successful execution resets: idempotent-but-ok code isn't stagnant.
+                if not result.ok:
+                    _fp = hashlib.sha256(
+                        (code + "\x00" + (result.stdout or "")).encode()
+                    ).hexdigest()
+                    if _fp == _last_fp:
+                        _fp_run += 1
+                    else:
+                        _last_fp = _fp
+                        _fp_run = 1
+                else:
+                    _last_fp = None
+                    _fp_run = 0
+                if _fp_run >= STAGNATION_LIMIT:
+                    _stag_msg = (
+                        f"stagnant: identical (code, stdout) repeated "
+                        f"{_fp_run} times"
+                    )
+                    await self._hbus.emit(Escalation(
+                        reason=_stag_msg,
+                        attempts=_fp_run,
+                        last_failure=_stag_msg,
+                    ))
+                    for ev in self._hbus.drain():
+                        yield ev
+                    escalated = True
+                    break
                 # ── PostToolUse hook fire(spec §2.5)───────────────
                 post_payload = build_post_payload(
                     session_id=session_id, cwd=str(self._workspace),
