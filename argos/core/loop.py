@@ -943,7 +943,7 @@ class AgentLoop:
 
     async def _enter_phase(self, phase: str) -> AsyncIterator["Event"]:
         """W2:经 Harness.enter_phase 推进阶段门(强制不可跳),drain 出 PhaseChange 走主路径。"""
-        await self._harness.enter_phase(phase, actions=self._actions)  # type: ignore[arg-type]
+        await self._harness.enter_phase(phase, actions=self._actions, max_steps=self._cfg.max_steps)  # type: ignore[arg-type]
         for ev in self._hbus.drain():
             yield ev
 

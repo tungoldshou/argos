@@ -65,6 +65,7 @@ class StatusBar(Static):
     # ── reactives ────────────────────────────────────────────────────────────
     phase:      reactive[str]        = reactive("idle")
     actions:    reactive[int]        = reactive(0)
+    max_steps:  reactive[int | None] = reactive(None)
     tokens_in:  reactive[int]        = reactive(0)
     tokens_out: reactive[int]        = reactive(0)
     cost_usd:   reactive[float | None] = reactive(0.0)
@@ -142,9 +143,15 @@ class StatusBar(Static):
         cost = fmt_cost(self.cost_usd)
 
         # §4.9 a："动作N"文字格式（⚙ 处决）;token 带 ↑↓ 方向 + tok 单位(共享 _fmt)
+        # show action N/M when budget known, else action N (no "N/None")
+        _action_str = (
+            _t("tui.statusbar.action", n=self.actions) + f"/{self.max_steps}"
+            if self.max_steps is not None
+            else _t("tui.statusbar.action", n=self.actions)
+        )
         parts = [
             f"{eye} {self.phase}",
-            _t("tui.statusbar.action", n=self.actions),
+            _action_str,
             fmt_token_flow(self.tokens_in, self.tokens_out),
             cost,
             f"{self.elapsed_s:.1f}s",
@@ -186,18 +193,21 @@ class StatusBar(Static):
         )
         return f"⏵{active} / ⏸{paused} / ⏹{history}"
 
-    def set_phase(self, phase: Phase, actions: int) -> None:
-        """更新阶段与动作计数。"""
+    def set_phase(self, phase: Phase, actions: int, max_steps: int | None = None) -> None:
+        """更新阶段与动作计数。max_steps=None 时保留现有值（兼容旧调用）。"""
         self.phase   = phase
         self.actions = actions
+        if max_steps is not None:
+            self.max_steps = max_steps
 
     def mark_run_end(self) -> None:
         """run 收尾:phase 复位 idle(与 ActivityPanel.on_run_end 对称)。
         否则 phase 粘在最后的 'report' 不动,而右栏头已回 idle → 两处自相矛盾
         (2026-06-22 真机:run 结束后底栏仍显 'report · action5')。告警色(_alert_kind)不在此清,
         由下一轮 plan 解锁——失败裁决的红/橙不被收尾抹掉(陷阱2)。"""
-        self.phase   = "idle"
-        self.actions = 0
+        self.phase     = "idle"
+        self.actions   = 0
+        self.max_steps = None
 
     def set_cost(
         self,

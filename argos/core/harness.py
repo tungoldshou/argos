@@ -43,7 +43,7 @@ class Harness:
         self._phase_idx = -1     # 尚未进入任何阶段
         self._last_failure = ""
 
-    async def enter_phase(self, phase: Phase, *, actions: int) -> None:
+    async def enter_phase(self, phase: Phase, *, actions: int, max_steps: int | None = None) -> None:
         """阶段门:只允许按 PHASE_ORDER 顺序前进(允许停留同阶段,不允许跳过中间阶段或倒退)。
 
         规则(Phase 4 #2):
@@ -68,7 +68,7 @@ class Harness:
                 _i18n_t("core2.harness.no_skip", current=PHASE_ORDER[self._phase_idx], phase=phase, order=PHASE_ORDER)
             )
         self._phase_idx = max(self._phase_idx, target)
-        await self.bus.emit(PhaseChange(phase=phase, actions=actions))
+        await self.bus.emit(PhaseChange(phase=phase, actions=actions, max_steps=max_steps))
 
     @staticmethod
     def is_honest_completion(verdict: Verdict, *, verify_cmd: str | None) -> bool:

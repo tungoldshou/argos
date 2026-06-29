@@ -2457,7 +2457,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                     "report": t("tui.event.phase.report"),
                 }.get(ev.phase, t("tui.event.phase.default")))
             log.finalize_response()
-            bar.set_phase(ev.phase, ev.actions)
+            bar.set_phase(ev.phase, ev.actions, ev.max_steps)
             ap.on_phase(ev.phase, ev.actions)
             # spec §8.4:新 plan 周期 = 全新一轮,解锁告警色(StatusBar -alert + 边框)。
             # 仅 plan 清——report/act/verify 绝不清(陷阱2:失败裁决的告警不被后续阶段抹掉)。
