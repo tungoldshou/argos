@@ -41,6 +41,10 @@ EN: dict[str, str] = {
     "cmd.eval":             "Agent self-evaluation + A/B (/eval, /eval run <id>, /eval compare <a> <b>)",
     "cmd.routing":          "View / switch routing config (/routing, /routing set <cat> <tier>)",
     "cmd.context":          "View current LLM context buckets (/context, /context --json)",
+    "cmd.loop":             "Run a task repeatedly until a condition is met (/loop <task> [until: <condition>])",
+    "cmd.goal":             "Submit a goal with a verify exit condition (/goal <task> | verify: <cmd>)",
+    "cmd.schedule":         "Create a timed standing order (/schedule <cron> <task>)",
+    "cmd.watch":            "Watch for file changes and trigger a task (/watch <glob> <task>)",
 
     # ── prompt.py paste / image tokens ───────────────────────────────────────
     "tui.prompt.paste_token": "[pasted text #{n} +{lines} lines]",
@@ -425,6 +429,10 @@ ZH: dict[str, str] = {
     "cmd.eval":             "Agent 自我评估 + A/B(/eval, /eval run <id>, /eval compare <a> <b>)",
     "cmd.routing":          "查看 / 切换路由配置(/routing, /routing set <cat> <tier>)",
     "cmd.context":          "查看当前 LLM 上下文分桶(/context, /context --json)",
+    "cmd.loop":             "循环执行直到条件满足(/loop <任务> [until: <条件>])",
+    "cmd.goal":             "提交带验证退出条件的目标(/goal <任务> | verify: <命令>)",
+    "cmd.schedule":         "创建定时任务(standing order)(/schedule <cron> <任务>)",
+    "cmd.watch":            "监视文件变更触发任务(/watch <glob> <任务>)",
 
     # ── prompt.py paste / image tokens ───────────────────────────────────────
     "tui.prompt.paste_token": "[粘贴文本 #{n} +{lines} 行]",

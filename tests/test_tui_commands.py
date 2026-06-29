@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from argos.tui.commands import SlashCommand, parse_slash, COMMAND_NAMES
+from argos.tui.commands import SlashCommand, parse_slash, COMMAND_NAMES, COMMAND_HELP, match_commands
 
 
 def test_known_commands_listed():
@@ -25,6 +25,7 @@ def test_known_commands_listed():
         "dream",    # T10:夜间整合 Dream(聚类综合+记忆整理;/dream status 看报告)
         "setup",    # 2026-06-21 #3:无 key 引导(/setup → 提示退出后运行 argos setup)
         "journal",  # 2026-06-21 #7:显示账本 JSONL 路径(/journal [run_id])—让可篡改账本可发现
+        "loop", "goal", "schedule", "watch",  # Batch 2:循环/目标/定时/监视(parse 层,行为待接线)
     }
 
 
@@ -64,3 +65,58 @@ def test_parse_unknown_command_returns_error_marker():
 
 def test_known_flag_true_for_valid():
     assert parse_slash("/cost").known is True
+
+
+# ── Batch 2: /loop /goal /schedule /watch parse-layer registration ─────────
+
+def test_new_loop_commands_in_command_help():
+    """All 4 new commands appear in COMMAND_HELP with non-empty descriptions."""
+    for name in ("loop", "goal", "schedule", "watch"):
+        assert name in COMMAND_HELP, f"/{name} missing from COMMAND_HELP"
+        assert COMMAND_HELP[name], f"/{name} has empty description"
+
+
+def test_parse_goal_with_verify_pipe():
+    """parse_slash parses /goal with pipe-style verify arg as known."""
+    cmd = parse_slash("/goal fix bug | verify: pytest")
+    assert cmd is not None
+    assert cmd.name == "goal"
+    assert cmd.arg == "fix bug | verify: pytest"
+    assert cmd.known is True
+
+
+def test_parse_loop_known():
+    cmd = parse_slash("/loop run tests until: all pass")
+    assert cmd is not None and cmd.known is True
+    assert cmd.name == "loop"
+
+
+def test_parse_schedule_known():
+    cmd = parse_slash("/schedule 0 3 * * * dream")
+    assert cmd is not None and cmd.known is True
+
+
+def test_parse_watch_known():
+    cmd = parse_slash("/watch src/**/*.py run tests")
+    assert cmd is not None and cmd.known is True
+
+
+def test_match_commands_schedule_prefix():
+    """match_commands('/sch') includes 'schedule'."""
+    names = [n for n, _ in match_commands("/sch")]
+    assert "schedule" in names
+
+
+def test_match_commands_watch_prefix():
+    names = [n for n, _ in match_commands("/wat")]
+    assert "watch" in names
+
+
+def test_match_commands_loop_prefix():
+    names = [n for n, _ in match_commands("/lo")]
+    assert "loop" in names
+
+
+def test_match_commands_goal_prefix():
+    names = [n for n, _ in match_commands("/go")]
+    assert "goal" in names
