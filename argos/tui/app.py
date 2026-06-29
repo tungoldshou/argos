@@ -211,6 +211,7 @@ class ArgosApp(App):
         self._daemon_session_id: str | None = None
         self._daemon_run_id: str | None = None   # 当前 run 在 daemon 里的 run_id
         self._daemon_hb_timer = None             # 会话心跳保活计时器(set_interval 句柄)
+        self._conductor_source = None            # DaemonEventSource for _conductor SSE stream
         self._last_esc_time: float = 0.0          # 双 Esc 检测(1.5s 内第二次 = cancel)
         self._last_ctrl_c_time: float = 0.0       # 双 Ctrl+C 检测(1.5s 内第二次 = quit)
         # 输入历史环形缓冲(#20):存最近 N 条 goal/slash 提交,↑/↓ 回填输入框
@@ -487,6 +488,9 @@ class ArgosApp(App):
         # 会话保活:起周期心跳,远低于 daemon 30s TTL —— 否则空闲 >30s 会话被回收,
         # 下一次 run 撞 401 missing_session(真机 2026-06-22:天气查询后敲 'hello' 连续两条红)。
         self._start_daemon_heartbeat()
+        # conductor SSE 订阅:空闲 TUI 接收 ProactiveSuggestionEvent(P5b §9)。
+        # ponytail: one worker, torn down by source.stop() on disconnect / app exit.
+        self._start_conductor_subscription(socket_path, sid)
 
     # ── daemon 会话自愈(2026-06-22:修 401 missing_session 不自愈)──────────────
     _DAEMON_HB_INTERVAL_S: float = 10.0   # 心跳周期(<< daemon HEARTBEAT_TIMEOUT_S=30s)
@@ -519,6 +523,36 @@ class ArgosApp(App):
                     pass
         except Exception:  # noqa: BLE001 — 网络抖动等:静默,不打扰用户
             pass
+
+    # ── conductor SSE 订阅(P5b §9 自治面)────────────────────────────────────
+
+    def _start_conductor_subscription(self, socket_path: "Path", session_id: str) -> None:
+        """订阅 daemon 的 _conductor SSE 频道,将 ProactiveSuggestionEvent 喂入 _apply_event。
+
+        幂等:已有订阅时不重复启动。
+        inline / demo 模式不调用本方法,conductor 流不存在。
+        """
+        from argos.tui.daemon_source import DaemonEventSource
+
+        if self._conductor_source is not None:
+            return  # 幂等
+
+        source = DaemonEventSource(socket_path, "_conductor", session_id)
+        self._conductor_source = source
+
+        async def _stream_conductor() -> None:
+            try:
+                async for ev in source.stream():
+                    try:
+                        await self._apply_event(ev)
+                    except Exception:  # noqa: BLE001 — widget 未 mount 等:静默
+                        pass
+            except Exception:  # noqa: BLE001 — 断线 / 退出:静默
+                pass
+            finally:
+                self._conductor_source = None
+
+        self.run_worker(_stream_conductor(), exclusive=False)
 
     async def _daemon_create_run(
         self, goal: str, attachments: list | None, *, verify_cmd: str | None = None
