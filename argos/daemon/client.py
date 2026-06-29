@@ -227,6 +227,11 @@ class DaemonClient:
         )
         return self._check(status, self._parse_json(status, raw), (200,))
 
+    async def create_order(self, body: dict) -> tuple[int, dict]:
+        """POST /orders — 创建 StandingOrder。返回 (status, response_dict)。"""
+        status, _, raw = await self._request("POST", "/orders", body=body)
+        return status, self._parse_json(status, raw)
+
     # ── SSE 订阅(长连接)───────────────────────────────────────────
 
     async def subscribe_events(

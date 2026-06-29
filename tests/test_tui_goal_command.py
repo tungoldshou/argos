@@ -122,23 +122,22 @@ async def test_loop_until_alias_maps_to_verify_cmd():
     assert submitted[0]["verify_cmd"] == "pytest -q"
 
 
-# ── /schedule falls through to honest unwired message ────────────────────────
+# ── /schedule is now wired (Task 2.3): inline mode → honest daemon-required msg ──
 
 @pytest.mark.asyncio
 async def test_known_unwired_command_shows_honest_fallback():
-    """/schedule (known, no handler) → honest 'not wired yet' message, not silence."""
+    """/schedule (now wired, Task 2.3) in inline mode → honest daemon-required message."""
     from argos.tui.commands import parse_slash
 
     app = ArgosApp(loop_factory=_noop_loop_factory)
     async with app.run_test() as pilot:
         await pilot.pause()
-        cmd = parse_slash("/schedule 0 3 * * * dream")
+        cmd = parse_slash("/schedule every 1h: dream")
         assert cmd is not None and cmd.known is True
         await app._dispatch_slash(cmd)
         txt = app.query_one("#transcript", Transcript).rendered_text
-        assert "schedule" in txt
-        # must mention something about being unwired / coming soon
-        assert "wired" in txt.lower() or "batch" in txt.lower() or "实现" in txt
+        # Wired handler: inline mode produces daemon-required message
+        assert "daemon" in txt.lower() or "argosd" in txt.lower()
 
 
 # ── busy guard ────────────────────────────────────────────────────────────────

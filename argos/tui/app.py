@@ -903,8 +903,12 @@ class ArgosApp(App):
             await self._dream_cmd(log, cmd.arg)
         elif cmd.name in ("goal", "loop"):
             await self._goal_cmd(log, cmd.name, cmd.arg)
+        elif cmd.name == "schedule":
+            await self._schedule_cmd(log, cmd.arg)
+        elif cmd.name == "watch":
+            await self._watch_cmd(log, cmd.arg)
         else:
-            # known command with no handler yet — honest fallback (Task 2.3 wires /schedule /watch)
+            # known command with no handler yet — honest fallback
             await log.append_line(t("tui.cmd.unwired", name=cmd.name))
 
     async def _undo(self, log) -> None:
@@ -2023,6 +2027,66 @@ class ArgosApp(App):
             await log.append_line(t("tui.goal.submitted", verify_cmd=verify_cmd), kind="system")
 
         await self.start_run(goal_text, verify_cmd=verify_cmd)
+
+    async def _schedule_cmd(self, log, arg: str) -> None:
+        """/schedule <when>: <goal> — 通过 daemon 创建 kind=schedule StandingOrder。"""
+        if not self._with_daemon or not self._daemon_client:
+            await log.append_line(t("tui.schedule.needs_daemon"), kind="system")
+            return
+        # parse "every 1h: summarize logs" → schedule="every 1h", goal="summarize logs"
+        if ":" not in arg:
+            await log.append_line(t("tui.schedule.usage"), kind="system")
+            return
+        when, _, goal = arg.partition(":")
+        when = when.strip()
+        goal = goal.strip()
+        if not when or not goal:
+            await log.append_line(t("tui.schedule.usage"), kind="system")
+            return
+        body = {
+            "utterance": f"/schedule {arg}",
+            "kind": "schedule",
+            "schedule": when,
+            "goal_template": goal,
+        }
+        try:
+            status, data = await self._daemon_client.create_order(body)
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(t("tui.orders.request_failed", err=e), kind="error")
+            return
+        if status == 201:
+            await log.append_line(t("tui.schedule.created", id=data.get("id", "?")), kind="done")
+        else:
+            await log.append_line(t("tui.orders.http_failed", status=status), kind="error")
+
+    async def _watch_cmd(self, log, arg: str) -> None:
+        """/watch <glob> <goal> — 通过 daemon 创建 kind=file_trigger StandingOrder。"""
+        if not self._with_daemon or not self._daemon_client:
+            await log.append_line(t("tui.watch.needs_daemon"), kind="system")
+            return
+        parts = arg.strip().split(None, 1)
+        if len(parts) < 2:
+            await log.append_line(t("tui.watch.usage"), kind="system")
+            return
+        glob_pat, goal = parts[0], parts[1].strip()
+        if not goal:
+            await log.append_line(t("tui.watch.usage"), kind="system")
+            return
+        body = {
+            "utterance": f"/watch {arg}",
+            "kind": "file_trigger",
+            "trigger_glob": glob_pat,
+            "goal_template": goal,
+        }
+        try:
+            status, data = await self._daemon_client.create_order(body)
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(t("tui.orders.request_failed", err=e), kind="error")
+            return
+        if status == 201:
+            await log.append_line(t("tui.watch.created", id=data.get("id", "?")), kind="done")
+        else:
+            await log.append_line(t("tui.orders.http_failed", status=status), kind="error")
 
     async def _routing_set(self, log, arg: str) -> None:
         """#11 /routing set <category> <tier>:原子改写 config.json。"""

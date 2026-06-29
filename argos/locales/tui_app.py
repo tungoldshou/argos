@@ -94,6 +94,16 @@ EN: dict[str, str] = {
     # ── /goal and /loop commands ──────────────────────────────────────────────
     "tui.goal.submitted": "Goal submitted with verify: {verify_cmd}",
 
+    # ── /schedule and /watch commands ─────────────────────────────────────────
+    "tui.schedule.needs_daemon": "/schedule needs the daemon — start argosd or run with the daemon.",
+    "tui.watch.needs_daemon":    "/watch needs the daemon — start argosd or run with the daemon.",
+    "tui.schedule.usage":        "Usage: /schedule <when>: <goal>  (e.g. /schedule every 1h: summarize logs)",
+    "tui.watch.usage":           "Usage: /watch <glob> <goal>  (e.g. /watch *.py run tests)",
+    "tui.schedule.created":      "Standing order created (kind=schedule, id={id}).",
+    "tui.watch.created":         "Standing order created (kind=file_trigger, id={id}).",
+    "tui.orders.http_failed":    "Daemon returned {status} for /orders.",
+    "tui.orders.request_failed": "Failed to reach daemon for /orders: {err}",
+
     # ── /yolo command ────────────────────────────────────────────────────────
     "tui.yolo.activated": (
         "Switched to Autonomous (full autonomy/YOLO) — top bar shows ⏻ YOLO marker."
@@ -485,6 +495,16 @@ ZH: dict[str, str] = {
 
     # ── /goal and /loop commands ──────────────────────────────────────────────
     "tui.goal.submitted": "目标已提交，验证命令：{verify_cmd}",
+
+    # ── /schedule and /watch commands ─────────────────────────────────────────
+    "tui.schedule.needs_daemon": "/schedule 需要 daemon — 请启动 argosd 或使用 daemon 模式运行。",
+    "tui.watch.needs_daemon":    "/watch 需要 daemon — 请启动 argosd 或使用 daemon 模式运行。",
+    "tui.schedule.usage":        "用法：/schedule <时间>: <目标>  （例：/schedule every 1h: summarize logs）",
+    "tui.watch.usage":           "用法：/watch <glob> <目标>  （例：/watch *.py run tests）",
+    "tui.schedule.created":      "常驻指令已创建（kind=schedule，id={id}）。",
+    "tui.watch.created":         "常驻指令已创建（kind=file_trigger，id={id}）。",
+    "tui.orders.http_failed":    "Daemon 返回 {status}（/orders）。",
+    "tui.orders.request_failed": "访问 daemon /orders 失败：{err}",
 
     # ── /yolo command ────────────────────────────────────────────────────────
     "tui.yolo.activated": (
