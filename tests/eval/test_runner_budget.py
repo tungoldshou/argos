@@ -71,24 +71,37 @@ def test_cost_budget_exceeded_marks_failed(tmp_path):
 
 # ── (b) wall-clock budget exceeded ───────────────────────────────────────────
 
+@pytest.mark.slow
 def test_time_budget_exceeded_marks_failed(tmp_path):
-    """budget_s=1; loop sleeps 2s → timed-out failure."""
+    """budget_s=1; loop sleeps 2s → timed-out failure with REAL cost metadata copied."""
 
     class _SlowLoop:
-        steps = 0
-        tokens_in = 0
-        tokens_out = 0
-        cost_usd = 0.0
+        steps = 3
+        tokens_in = 100
+        tokens_out = 50
+        cost_usd = 0.042
 
         def run_sync(self, goal: str, workspace: Path) -> LoopOutcome:
             time.sleep(2)
-            return LoopOutcome(verdict_status=PASS_PASSED, cost_usd=0.0)
+            return LoopOutcome(
+                verdict_status=PASS_PASSED,
+                steps=self.steps,
+                tokens_in=self.tokens_in,
+                tokens_out=self.tokens_out,
+                cost_usd=self.cost_usd,
+            )
 
-    runner = _make_runner(tmp_path, _SlowLoop(), budget_s=1)
+    loop = _SlowLoop()
+    runner = _make_runner(tmp_path, loop, budget_s=1)
     result = runner.run(_make_task(tmp_path), model_tier="fast")
 
     assert result.pass_status == PASS_FAILED
     assert "timed_out" in result.verify_detail
+    # Real metadata must be copied from the outcome (not zero-defaulted — honesty)
+    assert result.steps == loop.steps
+    assert result.tokens_in == loop.tokens_in
+    assert result.tokens_out == loop.tokens_out
+    assert result.cost_usd == loop.cost_usd
 
 
 # ── (c) no budgets → normal completion ───────────────────────────────────────

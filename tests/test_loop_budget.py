@@ -122,21 +122,25 @@ async def test_token_ceiling_triggers_budget_escalation():
     assert "max_tokens_in" in esc.reason, \
         f"reason should name max_tokens_in, got: {esc.reason!r}"
 
-    # Guard fires after step 1 (ceiling=15 < tokens_per_call=20), so at most 1 code result.
+    # Guard fires after the model call but before exec_code (ceiling=15 < tokens_per_call=20),
+    # so the loop breaks before any CodeResult is emitted → 0 code results.
     code_results = [ev for ev in events if isinstance(ev, CodeResult)]
-    assert len(code_results) < 5, \
-        f"loop should stop early on budget breach, ran {len(code_results)} steps"
+    assert len(code_results) == 0, \
+        f"loop should stop before exec on budget breach, got {len(code_results)} code results"
 
 
 @pytest.mark.asyncio
 async def test_no_ceiling_runs_to_completion():
-    """Negative (pure-additive): both ceilings None → no budget Escalation, loop finishes normally."""
+    """Negative (pure-additive): both ceilings None → no budget Escalation across multiple
+    guard evaluations. Uses _TokenBurningModel with max_steps >= 3 so the guard path is
+    exercised multiple times; proves zero-overhead for None ceilings."""
+    max_steps = 4
     loop = AgentLoop(
         store=_FakeStore(), bus=EventBus(), sandbox=_OkSandbox(),
         broker=None,
-        model=_NoCodeModel(tokens_per_call=1000),   # burns many tokens per call
+        model=_TokenBurningModel(tokens_per_call=1000),  # high per-call cost, no ceiling
         verifier=_NullVerifier(),
-        config=LoopConfig(verify_cmd=None, max_rounds=1, max_steps=10,
+        config=LoopConfig(verify_cmd=None, max_rounds=1, max_steps=max_steps,
                           max_tokens_in=None, max_cost_usd=None),  # no ceiling
     )
     events = [ev async for ev in loop.run("do work", "s2")]
@@ -147,6 +151,10 @@ async def test_no_ceiling_runs_to_completion():
     ]
     assert not budget_escalations, \
         f"no ceilings set — must not produce budget Escalation, got {budget_escalations}"
+    # Must have executed all steps (proves loop ran through without early-exit)
+    code_results = [ev for ev in events if isinstance(ev, CodeResult)]
+    assert len(code_results) == max_steps, \
+        f"expected {max_steps} code results, got {len(code_results)}"
 
 
 @pytest.mark.asyncio
