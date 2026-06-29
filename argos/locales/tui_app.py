@@ -93,6 +93,7 @@ EN: dict[str, str] = {
 
     # ── /goal and /loop commands ──────────────────────────────────────────────
     "tui.goal.submitted": "Goal submitted with verify: {verify_cmd}",
+    "tui.goal.usage":     "Usage: /goal <text> [| verify: <cmd>]",
 
     # ── /schedule and /watch commands ─────────────────────────────────────────
     "tui.schedule.needs_daemon": "/schedule needs the daemon — start argosd or run with the daemon.",
@@ -495,6 +496,7 @@ ZH: dict[str, str] = {
 
     # ── /goal and /loop commands ──────────────────────────────────────────────
     "tui.goal.submitted": "目标已提交，验证命令：{verify_cmd}",
+    "tui.goal.usage":     "用法：/goal <目标文本> [| verify: <命令>]",
 
     # ── /schedule and /watch commands ─────────────────────────────────────────
     "tui.schedule.needs_daemon": "/schedule 需要 daemon — 请启动 argosd 或使用 daemon 模式运行。",

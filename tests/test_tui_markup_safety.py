@@ -29,7 +29,7 @@ def test_static_widgets_constructed_markup_false():
 @pytest.mark.asyncio
 async def test_code_result_with_brackets_does_not_crash():
     """复现真崩溃路径:CodeResult.value_repr 含 `[...]` 经 _apply_event → set_result 渲染。"""
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         await app._apply_event(CodeAction(code="print(browser_click('input'))", step=0))
@@ -47,7 +47,7 @@ async def test_code_result_with_brackets_does_not_crash():
 
 @pytest.mark.asyncio
 async def test_user_and_system_lines_with_brackets_render():
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         log = app.query_one("#transcript", Transcript)

@@ -167,7 +167,7 @@ async def test_bell_rings_on_mount(monkeypatch):
 async def test_app_queue_serializes_two_approvals():
     """app FIFO:两个 ApprovalRequest 并发到达 → 同屏只渲染一个;前一个决策后第二个才出现。"""
     gate = ApprovalGate(ApprovalLevel.CONFIRM)
-    app = ArgosApp(loop_factory=lambda: FakeLoop(), gate=gate)
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop(), gate=gate)
     r1 = ApprovalRequest(call_id="c1", action="run_command", args={"command": "a"},
                          description="a", risk="low")
     r2 = ApprovalRequest(call_id="c2", action="run_command", args={"command": "b"},
@@ -192,7 +192,7 @@ async def test_app_queue_serializes_two_approvals():
 async def test_focus_returns_to_prompt_after_decision():
     """决策后焦点还给 #prompt(输入草稿不丢)。"""
     gate = ApprovalGate(ApprovalLevel.CONFIRM)
-    app = ArgosApp(loop_factory=lambda: FakeLoop(), gate=gate)
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop(), gate=gate)
     req = ApprovalRequest(call_id="c1", action="run_command", args={"command": "a"},
                           description="a", risk="low")
     async with app.run_test(size=(120, 40)) as pilot:

@@ -21,7 +21,7 @@ from argos.tui.widgets.splash import StartupSplash
 @pytest.mark.asyncio
 async def test_splash_shown_on_mount_with_mode_badge():
     """挂载后显示 splash,含 ARGOS 品牌字,demo 模式含 DEMO。"""
-    app = ArgosApp(loop_factory=lambda: FakeLoop())   # demo 默认 True
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())   # demo 默认 True
     async with app.run_test() as pilot:
         await pilot.pause()
         sp = list(app.query(StartupSplash))
@@ -33,7 +33,7 @@ async def test_splash_shown_on_mount_with_mode_badge():
 @pytest.mark.asyncio
 async def test_splash_cleared_on_first_run():
     """起一轮后 splash 被清除。"""
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         await app.start_run("演示任务")

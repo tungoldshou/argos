@@ -164,7 +164,7 @@ class ArgosApp(App):
         # 模型不绑定、无档位:活动栏显示的真实模型名取自 config.active_tier()(当前 active profile)。
         # loop_factory() 返回一个有 async run(goal, session_id) -> AsyncIterator[Event] 的对象。
         # 默认 FakeLoop(Phase 6 真 AgentLoop 落地后由入口注入真实工厂)。
-        self._loop_factory = loop_factory or (lambda: FakeLoop())
+        self._loop_factory = loop_factory or (lambda **kw: FakeLoop())
         # demo=True:当前驱动 FakeLoop,产出脚本化假数据 —— 头部常驻 DEMO 标识 + 每轮起手 banner
         # 都如实标注(诚实灵魂:任何脚本化全绿不得在无标识下冒充真实执行)。注入真 loop 时传 demo=False。
         self._demo = demo
@@ -550,6 +550,8 @@ class ArgosApp(App):
             except Exception:  # noqa: BLE001 — 断线 / 退出:静默
                 pass
             finally:
+                # 先令 source 停止轮询(signal stop),再重置引用(worker cancel 亦覆盖此路径)
+                source.stop()
                 self._conductor_source = None
 
         self.run_worker(_stream_conductor(), exclusive=False)
@@ -2049,7 +2051,7 @@ class ArgosApp(App):
 
         if not goal_text:
             await log.append_line(
-                t("tui.cmd.unknown", name=cmd_name),  # 无 goal 文本:诚实报用法错误
+                t("tui.goal.usage"),  # 无 goal 文本:诚实给用法提示(命令已知,是参数缺失)
             )
             return
 
@@ -2084,7 +2086,7 @@ class ArgosApp(App):
             "goal_template": goal,
         }
         try:
-            status, data = await self._daemon_client.create_order(body)
+            status, data = await self._daemon_client.create_order(self._daemon_session_id, body)
         except Exception as e:  # noqa: BLE001
             await log.append_line(t("tui.orders.request_failed", err=e), kind="error")
             return
@@ -2113,7 +2115,7 @@ class ArgosApp(App):
             "goal_template": goal,
         }
         try:
-            status, data = await self._daemon_client.create_order(body)
+            status, data = await self._daemon_client.create_order(self._daemon_session_id, body)
         except Exception as e:  # noqa: BLE001
             await log.append_line(t("tui.orders.request_failed", err=e), kind="error")
             return
@@ -2337,11 +2339,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         # /goal | verify: <cmd> — pass verify_cmd into the factory so it lands in LoopConfig
         # (same dataclasses.replace pattern as build_run_stack; hasattr-assignment was a silent no-op
         # because AgentLoop stores it as _verify_cmd, not verify_cmd).
-        try:
-            loop = self._loop_factory(verify_cmd=verify_cmd)
-        except TypeError:
-            # stubs / FakeLoop injected in tests may be nullary — fall back gracefully
-            loop = self._loop_factory()
+        loop = self._loop_factory(verify_cmd=verify_cmd)
         # Plan mode:把本轮 loop 引用挂到 self;_handle_plan_rendered 经 respond_plan_decision 回传。
         self._current_loop = loop
 

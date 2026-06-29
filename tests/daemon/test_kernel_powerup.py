@@ -398,7 +398,7 @@ async def test_per_run_components_are_distinct_objects(tmp_path: Path):
     captured_ids: list[dict] = []
     close_calls: list[str] = []  # 记录哪些 run_id 的 close 被调用
 
-    def _fake_build_run_stack(c, *, workspace=None, session_id=""):
+    def _fake_build_run_stack(c, *, workspace=None, session_id="", verify_cmd=None):
         # 每次返回全新 MagicMock RunStack(对象 id 不同)
         stack = mock.MagicMock()
         stack_id = len(built_stacks)

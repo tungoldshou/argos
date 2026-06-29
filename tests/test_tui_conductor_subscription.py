@@ -184,3 +184,99 @@ async def test_no_conductor_subscription_in_inline_mode():
 
     assert called == [], "conductor subscription must not start in inline mode"
     assert app._kernel_mode == "inline"
+
+
+# ── T5: conductor reconnect — _conductor_source resets to None after stream ends ──
+
+@pytest.mark.asyncio
+async def test_conductor_source_resets_to_none_after_stream_ends():
+    """_stream_conductor finally block resets _conductor_source → None, allowing restart."""
+    from argos.tui.daemon_source import DaemonEventSource
+
+    app = _make_app()
+
+    captured_coro: list = []
+
+    def _capture_worker(coro, exclusive=False):
+        captured_coro.append(coro)
+        return MagicMock()
+
+    app.run_worker = _capture_worker
+
+    async def _fake_apply(ev):
+        pass
+
+    app._apply_event = _fake_apply  # type: ignore[method-assign]
+
+    # empty stream — terminates immediately
+    async def _empty_subscribe(since: int = 0):
+        return
+        yield  # make it an async generator  # noqa: unreachable
+
+    with patch("argos.tui.daemon_source.DaemonEventSource") as mock_cls:
+        fake_source = DaemonEventSource.__new__(DaemonEventSource)
+        fake_source._stopped = False
+        fake_source._last_seq = 0
+        fake_source._max_retries = 0  # no retries — exit immediately
+        fake_source._run_id = "_conductor"
+        fake_source._session_id = "sess-t"
+        fake_source._socket_path = Path("/tmp/fake.sock")
+        fake_source._subscribe_once = _empty_subscribe  # type: ignore[method-assign]
+        mock_cls.return_value = fake_source
+
+        app._start_conductor_subscription(Path("/tmp/fake.sock"), "sess-t")
+
+    assert len(captured_coro) == 1
+    # _conductor_source is set before stream starts
+    assert app._conductor_source is not None
+
+    # run the stream to completion
+    await captured_coro[0]
+
+    # _conductor_source should be reset to None after stream ends
+    assert app._conductor_source is None, (
+        "_conductor_source must be None after stream completes (finally block)"
+    )
+
+    # can start a new subscription (idempotent guard now cleared)
+    second_captured: list = []
+
+    def _capture2(coro, exclusive=False):
+        second_captured.append(coro)
+        return MagicMock()
+
+    app.run_worker = _capture2
+    with patch("argos.tui.daemon_source.DaemonEventSource") as mock_cls2:
+        mock_cls2.return_value = fake_source
+        app._start_conductor_subscription(Path("/tmp/fake.sock"), "sess-t")
+
+    assert len(second_captured) == 1, "second subscription should start after source reset"
+
+
+# ── T6: create_order HTTP error → tui.orders.http_failed surfaced ────────────
+
+@pytest.mark.asyncio
+async def test_schedule_http_error_surfaces_http_failed_message():
+    """create_order returning status=500 → TUI shows tui.orders.http_failed, no crash."""
+    from argos.tui.app import ArgosApp
+    from argos.tui.commands import parse_slash
+    from argos.tui.fakeloop import FakeLoop
+    from argos.tui.widgets.transcript import Transcript
+    from argos.i18n import t
+
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app._with_daemon = True
+        app._daemon_client = MagicMock()
+        app._daemon_client.create_order = AsyncMock(return_value=(500, {"error": "internal"}))
+        app._daemon_session_id = "sess-err"
+
+        cmd = parse_slash("/schedule every 1h: test task")
+        await app._dispatch_slash(cmd)
+        txt = app.query_one("#transcript", Transcript).rendered_text
+
+    expected = t("tui.orders.http_failed", status=500)
+    assert "500" in txt or expected in txt, (
+        f"TUI should surface http_failed message for status 500, got: {txt!r}"
+    )

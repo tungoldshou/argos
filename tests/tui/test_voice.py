@@ -64,7 +64,7 @@ async def test_voice_toggle_records_then_injects(monkeypatch):
         def transcribe(self, audio, samplerate=16000): return "你好世界"
 
     # 用完整 ArgosApp + FakeLoop 注入 fake recorder/transcriber,这样 Transcript 存在。
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     app._voice_recorder = _FakeRec()
     app._voice_transcriber = _FakeTrans()
     skip_reason = None

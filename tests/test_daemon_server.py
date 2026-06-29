@@ -327,3 +327,48 @@ async def test_list_runs_filter_state(server):
     runs = json.loads(raw.decode("utf-8"))
     assert all(r["state"] == "running" for r in runs)
     assert any(r["run_id"] == rid for r in runs)
+
+
+# ── /orders session-header tests (A + E from final-review) ────────────────────
+
+@pytest.mark.asyncio
+async def test_post_orders_with_session_header_returns_201(server) -> None:
+    """POST /orders WITH valid X-Argos-Session header → 201 (real server, no mock).
+
+    This is the server-side complement of fix A: create_order now sends
+    session_id, so the server's _require_session gate passes.
+    """
+    srv, _ = server
+    sid = await _create_session(srv.socket_path)
+    status, _, raw = await _req(
+        srv.socket_path, "POST", "/orders",
+        session_id=sid,
+        body={
+            "utterance": "/schedule every 1h: test",
+            "kind": "schedule",
+            "schedule": "every 1h",
+            "goal_template": "test",
+        },
+    )
+    assert status == 201, f"expected 201 with valid session, got {status}: {raw.decode()}"
+
+
+@pytest.mark.asyncio
+async def test_post_orders_without_session_header_returns_400(server) -> None:
+    """POST /orders WITHOUT X-Argos-Session header → 400 (missing_session).
+
+    Proves the pre-fix bug: calling create_order without session_id would
+    always hit this gate and fail.
+    """
+    srv, _ = server
+    status, _, raw = await _req(
+        srv.socket_path, "POST", "/orders",
+        # deliberately omit session_id
+        body={
+            "utterance": "/schedule every 1h: test",
+            "kind": "schedule",
+            "schedule": "every 1h",
+            "goal_template": "test",
+        },
+    )
+    assert status == 400, f"expected 400 without session header, got {status}: {raw.decode()}"

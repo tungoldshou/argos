@@ -12,7 +12,7 @@ _ATT = ImageAttachment(data=_PNG, media_type="image/png", source_label="clipboar
 async def test_inline_run_threads_attachments_to_loop():
     """start_run(goal, [att]) → _start_run_inline → loop.run(attachments=[att])。"""
     fake = FakeLoop()
-    app = ArgosApp(loop_factory=lambda: fake)
+    app = ArgosApp(loop_factory=lambda **kw: fake)
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         await app.start_run("看这张图", [_ATT])
@@ -23,7 +23,7 @@ async def test_inline_run_threads_attachments_to_loop():
 @pytest.mark.asyncio
 async def test_handle_input_forwards_attachments_to_start_run():
     """handle_input(text, [att]) → start_run(text, [att])。"""
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     captured = {}
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
@@ -47,7 +47,7 @@ from argos.tui.widgets.prompt import PromptArea
 async def test_ctrl_v_inserts_image_token(monkeypatch):
     import argos.tui.app as appmod
     monkeypatch.setattr(appmod, "read_clipboard_image", lambda: _ATT)
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         await app.action_paste_image()
@@ -64,7 +64,7 @@ async def test_ctrl_v_clipboard_error_is_honest(monkeypatch):
         raise appmod.ClipboardError("剪贴板里没有图片")
 
     monkeypatch.setattr(appmod, "read_clipboard_image", boom)
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         await app.action_paste_image()   # 不该抛

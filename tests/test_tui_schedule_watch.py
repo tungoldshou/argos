@@ -20,7 +20,7 @@ from argos.tui.widgets.transcript import Transcript
 
 
 def _make_app() -> ArgosApp:
-    return ArgosApp(loop_factory=lambda: FakeLoop())
+    return ArgosApp(loop_factory=lambda **kw: FakeLoop())
 
 
 async def _dispatch(app: ArgosApp, text: str) -> str:
@@ -51,11 +51,14 @@ async def test_schedule_posts_order_to_daemon() -> None:
         txt = await _dispatch(app, "/schedule every 1h: summarize logs")
 
     app._daemon_client.create_order.assert_called_once()
-    call_body = app._daemon_client.create_order.call_args[0][0]
+    # create_order(session_id, body) — body is positional arg [1]
+    call_args = app._daemon_client.create_order.call_args
+    assert call_args[0][0] == "sess-1"  # session_id forwarded
+    call_body = call_args[0][1]
     assert call_body["kind"] == "schedule"
     assert call_body["schedule"] == "every 1h"
     assert call_body["goal_template"] == "summarize logs"
-    assert "abc123" in txt or "created" in txt.lower()
+    assert "abc123" in txt  # id always present regardless of locale
 
 
 # ── T2: /watch in daemon mode ─────────────────────────────────────────────────
@@ -74,11 +77,14 @@ async def test_watch_posts_order_to_daemon() -> None:
         txt = await _dispatch(app, "/watch *.py run tests")
 
     app._daemon_client.create_order.assert_called_once()
-    call_body = app._daemon_client.create_order.call_args[0][0]
+    # create_order(session_id, body) — body is positional arg [1]
+    call_args = app._daemon_client.create_order.call_args
+    assert call_args[0][0] == "sess-1"  # session_id forwarded
+    call_body = call_args[0][1]
     assert call_body["kind"] == "file_trigger"
     assert call_body["trigger_glob"] == "*.py"
     assert call_body["goal_template"] == "run tests"
-    assert "abc123" in txt or "created" in txt.lower()
+    assert "abc123" in txt  # id always present regardless of locale
 
 
 # ── T3: inline mode (no daemon) → honest message ─────────────────────────────
@@ -125,7 +131,7 @@ async def test_schedule_malformed_no_colon() -> None:
 
     # usage hint — no order created
     app._daemon_client.create_order.assert_not_called()
-    assert "schedule" in txt.lower()
+    assert "usage" in txt.lower() or "/schedule" in txt.lower()
 
 
 # ── T5: malformed /watch (missing goal) → usage hint ─────────────────────────
