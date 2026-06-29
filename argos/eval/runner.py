@@ -152,8 +152,8 @@ class EvalRunner:
         *,
         worktree: Any,  # WorktreeManager 实例(避免硬引);protocol duck-typed
         base_dir: Path,
-        budget_s: int = 600,
-        budget_cost_usd: float = 1.0,
+        budget_s: int | None = 600,
+        budget_cost_usd: float | None = 1.0,
         loop_factory: LoopFactory | None = None,
         keep_worktree: bool = False,
     ):
@@ -170,11 +170,11 @@ class EvalRunner:
         return self._base
 
     @property
-    def budget_s(self) -> int:
+    def budget_s(self) -> int | None:
         return self._budget_s
 
     @property
-    def budget_cost_usd(self) -> float:
+    def budget_cost_usd(self) -> float | None:
         return self._budget_cost_usd
 
     def run(self, task: EvalTask, *, model_tier: str) -> EvalResult:
@@ -265,10 +265,36 @@ class EvalRunner:
 
         loop 协议(单测桩必备):
           loop.run_sync(goal, workspace) -> LoopOutcome | raises
+
+        Budget 强制(--budget 真实执行):
+          - budget_s:挂线程计时器,超时 → timed_out
+          - budget_cost_usd:跑完后检查 outcome.cost_usd,超限 → over_budget
         """
         # 桩模式:loop.run_sync 直接返 LoopOutcome
         if hasattr(loop, "run_sync"):
-            outcome = loop.run_sync(task.goal, Path(wt_path))
+            # ponytail: thread timer for sync wall-clock timeout; asyncio.wait_for
+            # won't help here since _drive is sync. Upgrade to async when real
+            # AgentLoop streaming is wired in.
+            timed_out = threading.Event()
+            timer: threading.Timer | None = None
+            if self._budget_s is not None:
+                def _flag_timeout():
+                    timed_out.set()
+                timer = threading.Timer(self._budget_s, _flag_timeout)
+                timer.daemon = True
+                timer.start()
+            try:
+                outcome = loop.run_sync(task.goal, Path(wt_path))
+            finally:
+                if timer is not None:
+                    timer.cancel()
+
+            if timed_out.is_set():
+                return LoopOutcome(
+                    verdict_status=PASS_FAILED,
+                    verify_detail=f"timed_out: exceeded {self._budget_s}s wall-clock budget",
+                )
+
             if not isinstance(outcome, LoopOutcome):
                 # 兜底:把任意对象转成 LoopOutcome
                 outcome = LoopOutcome(
@@ -280,6 +306,25 @@ class EvalRunner:
                     tokens_out=int(getattr(outcome, "tokens_out", 0)),
                     cost_usd=getattr(outcome, "cost_usd", 0.0),
                 )
+
+            # cost budget check (post-run; real streaming accumulation deferred to v1.1)
+            if (
+                self._budget_cost_usd is not None
+                and outcome.cost_usd is not None
+                and outcome.cost_usd > self._budget_cost_usd
+            ):
+                return LoopOutcome(
+                    verdict_status=PASS_FAILED,
+                    verify_detail=(
+                        f"over_budget: cost ${outcome.cost_usd:.6f} exceeded"
+                        f" ${self._budget_cost_usd:.6f} limit"
+                    ),
+                    steps=outcome.steps,
+                    tokens_in=outcome.tokens_in,
+                    tokens_out=outcome.tokens_out,
+                    cost_usd=outcome.cost_usd,
+                )
+
             return outcome
         # 真模式占位:v1.1 接 AgentLoop.run()
         return LoopOutcome(
