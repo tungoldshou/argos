@@ -1229,21 +1229,6 @@ class AgentLoop:
             self._store.ensure_session(  # type: ignore[attr-defined]
                 session_id, title=goal[:80], model=self._cfg.model_tier, system_snapshot="",
             )
-        # Task 1.2: 一次性警告:max_cost_usd 对未在 PRICING 表的模型静默无效;
-        # 仅在 run 起始发一次(不进 _hbus,直接 yield 给调用方,走事件流即可)。
-        if self._cfg.max_cost_usd is not None:
-            from argos.core.observability import PRICING
-            _tier = getattr(getattr(self, "_model", None), "tier", None)
-            _model_name = getattr(_tier, "model", None) or self._cfg.model_tier or ""
-            if _model_name not in PRICING:
-                from argos.protocol.events import Error as _Error
-                yield _Error(
-                    message=(
-                        f"warning: max_cost_usd is set but model {_model_name!r} is not in "
-                        "the PRICING table — cost ceiling is inactive. "
-                        "Use max_tokens_in as a model-agnostic guard instead."
-                    )
-                )
         # ── hooks: SessionStart(spec §2.5 触发点表)──────────────────
         from argos import config as _config
         try:
