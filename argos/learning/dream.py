@@ -125,6 +125,18 @@ def _sig(c: StoredCandidate) -> str:
     return f"{c.goal} {c.verify_cmd or ''}"
 
 
+def _cost_rank_key(c: StoredCandidate) -> tuple:
+    """Sort key: passed verdict first, then lower cost_usd, then fewer steps.
+
+    Used to rank candidates within a DreamUnit so synthesize() picks the
+    best-performing source as sources[0] (verify_cmd anchor, narrative focus).
+    ponytail: sort key only, no new framework.
+    """
+    verdict_order = 0 if c.verdict_status == "passed" else 1
+    cost = c.cost_usd if c.cost_usd is not None else float("inf")
+    return (verdict_order, cost, c.steps)
+
+
 def cluster_candidates(
     cands: list[StoredCandidate], *, max_units: int = DEFAULT_MAX_UNITS,
 ) -> list[DreamUnit]:
@@ -412,6 +424,9 @@ class DreamPipeline:
 
         self._emit("dream_progress", stage="scan", detail="", ts=time.time())
         cands = list_unconsumed(self._candidates_root)
+        # Rank by cost-efficiency before clustering so sources[0] in each DreamUnit
+        # is the cheapest verified candidate (synthesize/build_eval_tasks use sources[0]).
+        cands = sorted(cands, key=_cost_rank_key)
         units = cluster_candidates(cands, max_units=self._max_units)
         self._emit("dream_progress", stage="cluster",
                    detail=f"{len(units)} units", ts=time.time())
