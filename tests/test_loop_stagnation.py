@@ -9,7 +9,7 @@ import pytest
 
 from argos.core.loop import AgentLoop, LoopConfig
 from argos.sandbox.backend import ExecResult
-from argos.tui.events import CodeResult, Escalation, EventBus
+from argos.protocol.events import CodeResult, Escalation, EventBus
 
 
 class _StagnatingModel:
@@ -108,3 +108,28 @@ async def test_different_code_blocks_do_not_trigger_stagnation():
     ]
     assert not stagnation_escalations, \
         f"rotating blocks must NOT trigger stagnation, got {stagnation_escalations}"
+
+
+@pytest.mark.asyncio
+async def test_rotating_blocks_with_failing_sandbox_do_not_trigger_stagnation():
+    """Negative (accumulation path guard): different blocks each turn WITH failing sandbox →
+    no stagnation Escalation. Proves different fingerprints do NOT accumulate even when
+    ok=False, so the counter can only grow on truly identical (code, stdout) pairs."""
+    loop = AgentLoop(
+        store=_FakeStore(), bus=EventBus(), sandbox=_FixedSandbox(stdout="err", ok=False),
+        broker=None, model=_RotatingModel(), verifier=_NullVerifier(),
+        config=LoopConfig(verify_cmd=None, max_rounds=1, max_steps=5),
+    )
+    events = [ev async for ev in loop.run("do z", "s")]
+
+    stagnation_escalations = [
+        ev for ev in events
+        if isinstance(ev, Escalation)
+        and ("stagnant" in (ev.last_failure or "").lower()
+             or "stuck" in (ev.last_failure or "").lower()
+             or "cycle" in (ev.last_failure or "").lower())
+    ]
+    assert not stagnation_escalations, (
+        f"rotating blocks with failing sandbox must NOT trigger stagnation, "
+        f"got {stagnation_escalations}"
+    )
