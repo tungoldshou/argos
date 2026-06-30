@@ -153,3 +153,11 @@ class RunStore:
             if ev.get("kind") == "state_change":
                 last = ev.get("to")
         return last
+
+    def last_checkpoint(self, run_id: str) -> dict[str, Any] | None:
+        """返回最近一条 run_checkpoint 事件 dict;无则 None(用于 resume-from-suspended 恢复)。"""
+        last: dict[str, Any] | None = None
+        for ev in self.replay(run_id):
+            if ev.get("kind") == "run_checkpoint":
+                last = ev
+        return last
