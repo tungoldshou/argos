@@ -759,8 +759,17 @@ class RunWorker:
                     _wt = self._worktree
                     _lf = self._loop_factory
 
-                    def _eval_loop_factory(model_tier: str):  # noqa: E731
-                        return _lf()
+                    def _eval_loop_factory(model_tier: str, wt_path: str = "") -> Any:  # noqa: E731
+                        """Return a loop caged to the eval worktree wt_path, not _ws_path."""
+                        loop = _lf()
+                        if wt_path:
+                            from pathlib import Path as _Path
+                            _ws = _Path(wt_path).expanduser().resolve()
+                            _ws.mkdir(parents=True, exist_ok=True)
+                            # Override workspace attrs (same pattern as server._make_run_loop_factory)
+                            loop._workspace = _ws
+                            loop._verify_dir = _ws
+                        return loop
 
                     _base_runner = EvalRunner(
                         worktree=_wt,
