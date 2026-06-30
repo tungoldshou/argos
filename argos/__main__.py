@@ -272,11 +272,11 @@ def main() -> None:
 
     if args.demo_fail:
         from argos.tui.fakeloop import FailingFakeLoop
-        ArgosApp(loop_factory=lambda: FailingFakeLoop()).run()
+        ArgosApp(loop_factory=lambda **kw: FailingFakeLoop()).run()
         return
     if args.demo:
         from argos.tui.fakeloop import FakeLoop
-        ArgosApp(loop_factory=lambda: FakeLoop()).run()
+        ArgosApp(loop_factory=lambda **kw: FakeLoop()).run()
         return
 
     # 真 loop:组装全栈;无 key 诚实落 demo 态(不假装能跑)。
@@ -302,7 +302,7 @@ def main() -> None:
         # 无 key / 无效 profile → 诚实落 demo 态,不假装能跑。
         from argos.tui.fakeloop import FakeLoop
         print(t("cli.no_key_fallback", err=e), file=sys.stderr)
-        ArgosApp(loop_factory=lambda: FakeLoop(), demo=True).run()
+        ArgosApp(loop_factory=lambda **kw: FakeLoop(), demo=True).run()
 
 
 if __name__ == "__main__":

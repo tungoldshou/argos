@@ -48,6 +48,12 @@ class StoredCandidate:
     goal: str
     path: Path
     self_verified: bool = False   # E4 来源记录:True 的候选永远不会出现(双保险见 list_unconsumed)
+    # Performance metrics from distiller (default-safe for old candidates lacking these fields)
+    verdict_status: str | None = None
+    tokens_in: int = 0
+    tokens_out: int = 0
+    cost_usd: float | None = None
+    steps: int = 0
 
 
 def _dir_for(root: Path, name: str, source_run: str) -> Path:
@@ -84,6 +90,12 @@ def save_candidate(cand: Any, *, root: Path, source_run: str,
                 "consumed": False,
                 "consumed_reason": None,
                 "self_verified": bool(self_verified),
+                # Performance metrics from distiller (omitted when absent = old candidates stay compatible)
+                "verdict_status": getattr(cand, "verdict_status", None),
+                "tokens_in": getattr(cand, "tokens_in", 0),
+                "tokens_out": getattr(cand, "tokens_out", 0),
+                "cost_usd": getattr(cand, "cost_usd", None),
+                "steps": getattr(cand, "steps", 0),
             }, ensure_ascii=False, indent=2)),
         ):
             target = d / fname
@@ -114,6 +126,7 @@ def list_unconsumed(root: Path) -> list[StoredCandidate]:
                 log.warning("candidates: 拒绝 self_verified 候选 %s", meta_path.parent)
                 continue
             body = (meta_path.parent / "SKILL.md").read_text(encoding="utf-8")
+            raw_cost = meta.get("cost_usd")
             out.append(StoredCandidate(
                 name=str(meta.get("name", "")),
                 body_markdown=body,
@@ -123,6 +136,11 @@ def list_unconsumed(root: Path) -> list[StoredCandidate]:
                 goal=str(meta.get("goal", "")),
                 path=meta_path.parent,
                 self_verified=bool(meta.get("self_verified", False)),
+                verdict_status=meta.get("verdict_status"),
+                tokens_in=int(meta.get("tokens_in") or 0),
+                tokens_out=int(meta.get("tokens_out") or 0),
+                cost_usd=float(raw_cost) if raw_cost is not None else None,
+                steps=int(meta.get("steps") or 0),
             ))
         except Exception as e:  # noqa: BLE001
             log.warning("candidates: 跳过坏候选 %s: %s", meta_path.parent, e)

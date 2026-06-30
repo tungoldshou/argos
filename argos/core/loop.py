@@ -32,6 +32,7 @@ report 诚实标 NO_TEST_LABEL。配了 verify_cmd 却 unverifiable(篡改/超�
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import re
 import shlex
@@ -47,7 +48,7 @@ from argos.core.honesty import (
 from argos.core.plan_mode import PlanExitDecision, PlanRenderer
 from argos.core.types import ModelTierName, TRIVIAL_VERIFY_BINS
 from argos.protocol.events import (
-    CodeAction, CodeResult, CostUpdate, Error, Event, PhaseChange,
+    CodeAction, CodeResult, CostUpdate, Escalation, Error, Event, PhaseChange,
     MemoryRecallEvent, PlanDecisionRequest, PlanRendered, PlanUpdate,
     TokenDelta, ToolReceipt,
 )
@@ -102,6 +103,9 @@ _GUI_KW_EXP = re.compile(r"""expected_text\s*=\s*['"]([^'"]+)['"]""")
 _PROBE_EXPECTED_MIN = 3
 _DOM_URL_ALLOWED = re.compile(r"^https?://", re.I)
 _DOM_PARAM_MAX = 500  # selector / expected_text 最大长度，防滥用
+
+# ponytail: 2 consecutive identical (code,stdout) pairs = stuck; break + escalate.
+STAGNATION_LIMIT = 2
 
 # 反琐碎集 TRIVIAL_VERIFY_BINS 已上移 argos.core.types(canonical;Verifier 的 canonical 门、
 # loop 的 propose_verify 门、workflow stage verify 校验共用同一份,杜绝多入口门不一致)。
@@ -310,6 +314,11 @@ class LoopConfig:
     # context rot 持续相关性修剪激进度(0=不修剪;0<a<0.66 折叠过期工具输出;
     # a>=0.66 另折叠被取代旧计划/死路错误)。优先修剪而非整体压缩(spec 2026-06-07)。
     prune_aggressiveness: float = 0.5
+    # Task 1.2: hard budget ceilings — None = no limit (pure-additive, behavior identical when unset).
+    max_tokens_in: int | None = None    # cumulative input-token ceiling (works even for un-priced models)
+    # 成本上限(USD)。仅当模型名存在于 PRICING 表时才会触发;不在表内时 cost 计算为 None,
+    # 此分支被静默跳过,用户不会收到任何突破提示。对自部署/未定价模型应优先使用 max_tokens_in。
+    max_cost_usd: float | None = None
 
 
 class AgentLoop:
@@ -338,6 +347,7 @@ class AgentLoop:
         gui_prober: Any = None,  # 2d GUI 探针:GuiProber | None;None=未接入,GUI 验证 lane 跳过
         manage_runtime_context: bool = False,  # inline 路径自建 runtime 上下文(daemon 在 worker 外部自设;此开关给 inline)
         project_mode: bool = False,  # managed 时建立的上下文是否 project 模式(verify_dir==workspace,篡改可见)
+        ledger_store: "Any | None" = None,  # inline 路径账本:LedgerStore | None(daemon 路径经 worker 注入;None=无账本)
     ) -> None:
         self._store = store
         self._bus = bus
@@ -374,6 +384,10 @@ class AgentLoop:
         # (build_run_stack)不开此开关 → worker 仍自管,行为零变更。
         self._manage_runtime_context = manage_runtime_context
         self._project_mode = project_mode
+        # inline 账本:daemon 路径由 worker 注入;inline 路径由 build_loop_factory 注入 LedgerStore。
+        # ponytail: None-check keeps daemon path 100% unchanged; inline path just adds to it
+        self._ledger_store = ledger_store
+        self._ledger_seq = 0  # inline 路径账本序号(per-run 单调递增,与 worker._ledger_seq 对称)
         self._actions = 0
         self._fail_count = 0
         self._started = 0.0
@@ -892,6 +906,10 @@ class AgentLoop:
         try:
             async for ev in self._drive(goal, session_id, attachments=attachments):
                 self._store.append_event(session_id, ev)
+                # inline 账本:ToolReceipt / FileDiff → LedgerEntry 落盘(镜像 daemon worker 路径)。
+                # ponytail: fail-soft; ledger loss must not abort the run
+                if self._ledger_store is not None:
+                    self._inline_maybe_append_ledger(ev, session_id)
                 yield ev
         except Exception as e:  # noqa: BLE001
             chain: list[str] = []
@@ -934,7 +952,7 @@ class AgentLoop:
 
     async def _enter_phase(self, phase: str) -> AsyncIterator["Event"]:
         """W2:经 Harness.enter_phase 推进阶段门(强制不可跳),drain 出 PhaseChange 走主路径。"""
-        await self._harness.enter_phase(phase, actions=self._actions)  # type: ignore[arg-type]
+        await self._harness.enter_phase(phase, actions=self._actions, max_steps=self._cfg.max_steps)  # type: ignore[arg-type]
         for ev in self._hbus.drain():
             yield ev
 
@@ -978,6 +996,68 @@ class AgentLoop:
             "message (press Esc first if busy).\n"
             "</tool_signatures>"
         )
+
+    def _inline_maybe_append_ledger(self, ev: "Any", run_id: str) -> None:
+        """inline 账本:ToolReceipt / FileDiff 事件 → LedgerEntry 落盘。
+
+        镜像 daemon/worker.py:_maybe_append_ledger + _maybe_append_ledger_for_file_diff。
+        fail-soft:任何错误 log warning + 不抛(账本丢失不阻断主流程)。
+        ponytail: inlined from daemon pattern (worker.py:519-654); daemon path unchanged
+        """
+        import time as _time
+        import os as _os
+        from argos.ledger.builder import build_entry
+        from argos.ledger.entry import LedgerEntry
+        try:
+            ev_kind = getattr(ev, "kind", None)
+
+            if ev_kind == "tool_receipt":
+                receipt = getattr(ev, "receipt", None)
+                if receipt is None:
+                    return
+                # 鸭子类型:build_entry 只读 .action/.ts/.sig
+                self._ledger_seq += 1
+                entry = build_entry(
+                    receipt=receipt,
+                    run_id=run_id,
+                    seq=self._ledger_seq,
+                    args={},
+                    undo_token=None,  # inline 路径无 run 起点快照(snapshot 是 daemon-only)
+                )
+                self._ledger_store.append(entry)
+
+            elif ev_kind == "file_diff":
+                path_str = str(getattr(ev, "path", "") or "")
+                if not path_str:
+                    return
+                added = int(getattr(ev, "added", 0))
+                removed = int(getattr(ev, "removed", 0))
+                basename = _os.path.basename(path_str) or path_str
+                # Reuse same i18n keys as daemon/worker.py:634-638 — inline/daemon parity
+                if added or removed:
+                    summary = _i18n_t("daemon.srv.ledger_modified_diff",
+                                      basename=basename, added=added, removed=removed)
+                else:
+                    summary = _i18n_t("daemon.srv.ledger_modified", basename=basename)
+                self._ledger_seq += 1
+                entry = LedgerEntry(
+                    ts=_time.time(),
+                    run_id=run_id,
+                    seq=self._ledger_seq,
+                    action="file_diff",
+                    summary_human=summary,
+                    risk="low",
+                    reversible="unknown",   # type: ignore[arg-type]
+                    undo_token=None,
+                    receipt_sig="",
+                    undo_state="impossible",   # type: ignore[arg-type]
+                )
+                self._ledger_store.append(entry)
+        except Exception as e:  # noqa: BLE001 — 账本路径必须不挂主任务
+            import logging as _log
+            _log.getLogger("argos.ledger.inline").warning(
+                "inline ledger append failed for %s: %s", run_id, e
+            )
 
     async def _maybe_proactive_compact(self, session_id: str, step: int) -> AsyncIterator["Event"]:
         """#12 Context 可视化:主动压缩(spec §9.2)— 每步顶部 1 行 yield,条件不满足
@@ -1163,8 +1243,10 @@ class AgentLoop:
         if _os_cu.environ.get("ARGOS_COMPUTER_USE"):
             from argos.core.honesty import COMPUTER_USE_PROMPT
             safe = safe + "\n\n" + COMPUTER_USE_PROMPT
-        # 工作流段:Phase 5.3 起默认不进提示(重型编排,普通任务用不上);仅 ARGOS_WORKFLOWS=1 注入。
-        if _os_cu.environ.get("ARGOS_WORKFLOWS"):
+        # 工作流段:默认注入(autonomy flip, batch5);ARGOS_WORKFLOWS=0 显式关闭。
+        # ponytail: /workflows TUI toggle is deferred (no in-TUI on/off switch
+        # yet); control via ARGOS_WORKFLOWS env var only for now.
+        if _os_cu.environ.get("ARGOS_WORKFLOWS", "1") != "0":
             from argos.core.honesty import WORKFLOW_PROMPT
             safe = safe + "\n\n" + WORKFLOW_PROMPT
         # LSP 工具段:仅当用户显式创建了 ~/.argos/lsp.json 且 servers 非空才注入 ——
@@ -1311,6 +1393,9 @@ class AgentLoop:
         conversational_done = False  # 人性化:纯对话/纯读问答轮 → 跳过验证门展示(report 不加完成判决行)。
         verify_nudged = False     # H2:改了代码却没声明验证 → 只催一轮(防误催纯读/无限催)。
         compactions = 0           # 上下文压缩次数上限,防压缩仍溢出时无限重试。
+        last_fp: str | None = None   # stagnation guard: fingerprint of last (code, stdout)
+        fp_run: int = 0              # consecutive run-length of the same fingerprint
+        escalation_reason: str = "max_rounds_exceeded"  # telemetry label; overwritten at each escalated=True site
         text = ""                 # 在 while 外初始化:max_steps=0 等边界下收尾仍能安全 text.strip()
         while step < self._cfg.max_steps:
             # context rot 第二层(spec 2026-06-07):持续相关性修剪,优先于整体压缩 ——
@@ -1454,6 +1539,33 @@ class AgentLoop:
                 tier_name=self._current_tier,
             )
 
+            # Task 1.2: hard budget circuit-breaker — checked after each step's accounting.
+            # None ceiling = no limit; both guards use the same running counters as CostUpdate.
+            _budget_msg: str | None = None
+            if self._cfg.max_tokens_in is not None and self._tok_in > self._cfg.max_tokens_in:
+                _budget_msg = (
+                    f"budget exceeded: cumulative input tokens {self._tok_in} "
+                    f"> max_tokens_in {self._cfg.max_tokens_in}"
+                )
+            elif (self._cfg.max_cost_usd is not None
+                  and cost is not None
+                  and cost > self._cfg.max_cost_usd):
+                _budget_msg = (
+                    f"budget exceeded: cumulative cost ${cost:.6f} "
+                    f"> max_cost_usd ${self._cfg.max_cost_usd:.6f}"
+                )
+            if _budget_msg is not None:
+                await self._hbus.emit(Escalation(
+                    reason=_budget_msg,
+                    attempts=step,
+                    last_failure=_budget_msg,
+                ))
+                for ev in self._hbus.drain():
+                    yield ev
+                escalation_reason = "budget_exceeded"
+                escalated = True
+                break
+
             code = extract_code_block(text)
             if code is not None:
                 # ── PreToolUse hook fire(spec §2.5)────────────────
@@ -1539,6 +1651,40 @@ class AgentLoop:
                     step=step, stdout=result.stdout,
                     value_repr=result.value_repr, exc=result.exc, ok=result.ok,
                 )
+                # ── Stagnation guard (Task 1.1) ───────────────────
+                # Same (code, stdout) pair repeated >= STAGNATION_LIMIT consecutive
+                # times on a *failing* execution → model is stuck; break + escalate.
+                # Successful execution resets: idempotent-but-ok code isn't stagnant.
+                # ponytail: 只统计失败重复 —— 这才是真正的死循环信号。相同的成功块（如
+                # 幂等初始化、_DoneModel 重复同一 `# act` 块）不累积，以 max_steps 兜顶。
+                # 若成功路径也出现死循环（更高阈值），再把此守卫扩展到 ok=True 分支。
+                if not result.ok:
+                    _fp = hashlib.sha256(
+                        (code + "\x00" + (result.stdout or "")).encode()
+                    ).hexdigest()
+                    if _fp == last_fp:
+                        fp_run += 1
+                    else:
+                        last_fp = _fp
+                        fp_run = 1
+                else:
+                    last_fp = None
+                    fp_run = 0
+                if fp_run >= STAGNATION_LIMIT:
+                    _stag_msg = (
+                        f"stagnant: identical (code, stdout) repeated "
+                        f"{fp_run} consecutive times"
+                    )
+                    await self._hbus.emit(Escalation(
+                        reason=_stag_msg,
+                        attempts=fp_run,
+                        last_failure=_stag_msg,
+                    ))
+                    for ev in self._hbus.drain():
+                        yield ev
+                    escalation_reason = "stagnation"
+                    escalated = True
+                    break
                 # ── PostToolUse hook fire(spec §2.5)───────────────
                 post_payload = build_post_payload(
                     session_id=session_id, cwd=str(self._workspace),
@@ -1596,10 +1742,8 @@ class AgentLoop:
                 if self._broker is not None and hasattr(self._broker, "take_computer_artifact"):
                     self._pending_screenshot = self._broker.take_computer_artifact()
                 # 工作流提议:agent 本段调了 propose_workflow({...}) → 异步态校验+审批+引擎执行+结果回灌。
-                # Phase 5.3(review #9):工作流默认 off,仅 ARGOS_WORKFLOWS=1 时才 dispatch —— 否则即便
-                # 模型(训练先验/被污染的导入技能)凭空吐 propose_workflow,host 也不跑工作流机器(对称于
-                # 提示词不再宣传它);未开时当普通无副作用文本走常规 feedback。
-                _wf_on = bool(__import__("os").environ.get("ARGOS_WORKFLOWS"))
+                # 工作流默认 on(autonomy flip, batch5);ARGOS_WORKFLOWS=0 显式关闭。
+                _wf_on = __import__("os").environ.get("ARGOS_WORKFLOWS", "1") != "0"
                 _wf_spec = (extract_workflow_spec(text) if "propose_workflow" in text else None)
                 if _wf_spec is not None and _wf_on:
                     async for ev in self._run_workflow(_wf_spec, messages):
@@ -1608,7 +1752,7 @@ class AgentLoop:
                     continue   # 工作流结果已作为 feedback 回灌,跳过常规 exec feedback
                 feedback = self._feedback(result)
                 if _wf_spec is not None and not _wf_on:
-                    # 诚实纠偏:工作流默认关闭时 host 不 dispatch,但沙箱 _propose_workflow_pure 回执仍说
+                    # 诚实纠偏:ARGOS_WORKFLOWS=0 时 host 不 dispatch,但沙箱 _propose_workflow_pure 回执仍说
                     # "待审批后执行"(沙箱子进程不知道 host 的开关)—— 不纠偏会让模型空等一个不会跑的工作流。
                     feedback = _i18n_t("loop.workflow.not_enabled") + "\n" + feedback
                 if self._todos:
@@ -1709,6 +1853,10 @@ class AgentLoop:
             else:
                 # W2:run_verify_gate 跑 verifier 出三态 Verdict,投 VerifyVerdict;真问题超
                 # max_rounds 时它自己投 Escalation。loop 据返回的 verdict 决定 break / bounce。
+                # Propagate the current goal so the self-test reviewer proposer gets real context.
+                _verifier = self._harness.verifier
+                if hasattr(_verifier, "set_goal") and self._current_goal:
+                    _verifier.set_goal(self._current_goal)
                 verdict = await self._harness.run_verify_gate(
                     self._verify_cmd, attempt=self._fail_count + 1
                 )
@@ -1878,7 +2026,7 @@ class AgentLoop:
                 _mem_auto.capture_event(
                     "escalation_decision",
                     project_id=_pid(self._workspace),
-                    reason="max_rounds_exceeded",
+                    reason=escalation_reason,
                     user_reply="escalated",
                 )
             elif (not report_note and step >= 5

@@ -21,18 +21,24 @@
 """
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import os
+import re
 import shlex
 import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import TYPE_CHECKING, Callable, Iterable
 
 from argos import runtime
 from argos.i18n import t
 from argos.tools import ALLOWED_CMDS
+
+if TYPE_CHECKING:
+    from argos.core.models import ModelClient
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,18 +64,113 @@ TestProposer = Callable[[str, Path], tuple[str, str, str] | None]
 
 
 def default_test_proposer(goal: str, workspace: Path) -> tuple[str, str, str] | None:
-    """默认 test proposer 占位:实际生产该走 reviewer 角色的 LLM 子 agent。
+    """默认 test proposer 占位:无 ModelClient 注入时返 None → caller 回退 unverifiable。
 
-    v1 适配器先留接口 + 占位:返 None → TestGenerator 视为"没法造",caller 回退 unverifiable。
-    真 LLM 接入后,此函数应改为:
-      · 起一个 reviewer role 的子 agent(tools 白名单只剩 read + 写测试文件)
-      · 喂 goal + workspace 内容,prompt 它"为一个**不会写代码**的 agent 写一个
-        pytest 测试,这个测试必须**不靠被测函数的具体实现就能跑通**;但当被测函数
-        缺失 / 改坏时,这个测试必须失败"
-      · 解析子 agent 的 ```python write_file(...)``` + 提取候选 cmd
-    留 None 的原因:不替 caller 决定 reviewer LLM 接入的细节(本测只测守卫骨架)。
+    生产路径走 reviewer_llm_proposer(model_client) 构造的独立 reviewer 角色调用。
     """
     return None
+
+
+# ── reviewer-role LLM proposer(生产路径,maker/checker 分离) ────
+
+_REVIEWER_SYSTEM = """\
+You are an INDEPENDENT REVIEWER. Your ONLY job is to write a pytest-style test \
+for a task that a coder agent just attempted. You are NOT the coder — you must \
+not look at the coder's implementation. You only know the GOAL and the files \
+present in the workspace.
+
+Rules (strictly enforced by a canary guard after you respond):
+1. The test MUST FAIL on an EMPTY workspace (no files) — it must genuinely \
+   depend on something the coder was supposed to produce.
+2. The test MUST use only commands in this whitelist: python3, pytest, diff, cat, grep, \
+   head, tail, wc, ls, find, echo, true, false, touch, mkdir, cp, mv, rm, sed, awk, sort, \
+   uniq, xargs, test, uname, date, pwd, env, printenv.
+3. Respond with EXACTLY this structure and nothing else:
+
+CMD: <single shell command to run the test, e.g. "python3 _reviewer_test.py">
+TESTFILE: _reviewer_test.py
+CONTENT:
+```python
+<test code here>
+```
+
+Do not add explanations outside this structure."""
+
+
+def reviewer_llm_proposer(model_client: "ModelClient") -> TestProposer:
+    """Return a TestProposer that calls model_client under a distinct reviewer-role system prompt.
+
+    Maker/checker separation: the reviewer prompt instructs the model to act as an
+    independent inspector, NOT as the coder. The same model weights are used but the
+    role is explicitly different — the coder's implementation context is excluded from
+    the prompt, and the reviewer is told it must not assume the coder's code is correct.
+
+    The async model call is dispatched to a fresh thread (new event loop) so that this
+    sync proposer can be called from either a sync or async context without nesting loops.
+    """
+    def _proposer(goal: str, workspace: Path) -> tuple[str, str, str] | None:
+        # Collect workspace file listing (names only, no content — reviewer must not see impl).
+        try:
+            file_list = "\n".join(
+                str(p.relative_to(workspace))
+                for p in sorted(workspace.rglob("*"))
+                if p.is_file() and not p.name.startswith(".")
+            )
+        except Exception:  # noqa: BLE001
+            file_list = "(unable to list)"
+
+        user_msg = (
+            f"TASK GOAL: {goal}\n\n"
+            f"FILES IN WORKSPACE (names only — do not assume their contents are correct):\n"
+            f"{file_list or '(empty workspace)'}\n\n"
+            "Write a test following the rules in your system prompt."
+        )
+
+        async def _call() -> str:
+            return await model_client.complete(
+                [{"role": "user", "content": user_msg}],
+                system=_REVIEWER_SYSTEM,
+            )
+
+        # Run async call in an isolated thread with its own event loop so this
+        # sync proposer works whether or not there is a running loop on the caller's thread.
+        # ponytail: one-thread executor avoids nest_asyncio dependency
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(asyncio.run, _call())
+            try:
+                response = fut.result(timeout=60.0)
+            except Exception:  # noqa: BLE001 — model error → stay unverifiable
+                return None
+
+        return _parse_reviewer_response(response)
+
+    return _proposer
+
+
+def _parse_reviewer_response(response: str) -> tuple[str, str, str] | None:
+    """Parse the structured reviewer response into (cmd, content, test_path).
+
+    Returns None if the response is malformed or empty — stays unverifiable.
+    """
+    # Extract CMD line
+    cmd_m = re.search(r"^CMD:\s*(.+)$", response, re.MULTILINE)
+    if not cmd_m:
+        return None
+    cmd = cmd_m.group(1).strip().strip('"').strip("'")
+
+    # Extract TESTFILE line
+    tf_m = re.search(r"^TESTFILE:\s*(.+)$", response, re.MULTILINE)
+    test_path = tf_m.group(1).strip() if tf_m else "_reviewer_test.py"
+
+    # Extract ```python ... ``` block
+    code_m = re.search(r"```python\s*\n(.*?)```", response, re.DOTALL)
+    if not code_m:
+        return None
+    content = code_m.group(1)
+
+    if not cmd or not content.strip():
+        return None
+    return cmd, content, test_path
 
 
 # ── canary 守卫:空 workspace 上必非 0,否则废测试 ───────────

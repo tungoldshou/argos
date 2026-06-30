@@ -111,6 +111,10 @@ class DaemonHTTPServer:
         # _dream_starting 在 is_running 检查通过后、create_task 之前同步置 True
         # (此处无 await,无法被抢占),done_callback 复位。
         self._dream_starting: bool = False
+        # 5a.3 自主模式：把 dream_starter 注入 supervisor（有 supervisor 才接线）。
+        # 使用 lambda 延迟绑定，确保引用 self._autonomous_dream_starter 而不是旧值。
+        if conductor_supervisor is not None:
+            conductor_supervisor._dream_starter = self._autonomous_dream_starter
 
     @property
     def registry(self):
@@ -470,6 +474,10 @@ class DaemonHTTPServer:
             except Exception as _snap_err:  # noqa: BLE001
                 log.warning("server: run 起点快照失败(undo 将不可用): %s", _snap_err)
 
+        # per-run verify_cmd(可选):用户在 /goal | verify: <cmd> 中声明的验证命令。
+        # 透传到 build_run_stack → LoopConfig.verify_cmd,让验证门禁用正确退出码。
+        _verify_cmd: str | None = data.get("verify_cmd") or None
+
         # P4 Trust Dial:per-run trust_level 参数(可选,默认沿用现有 approval_level 语义)。
         # trust_level 取枚举名字符串(如 "L1_DANGEROUS_ONLY")或 None(不传 → 不覆盖 approval_level)。
         # 传入时通过 gate.set_trust_level(TrustLevel[name]) 写入;枚举名非法 → 诚实降级(警告+忽略)。
@@ -508,6 +516,7 @@ class DaemonHTTPServer:
                 self._components,
                 workspace=effective_ws_path,
                 session_id=f"run-{run_id}",
+                verify_cmd=_verify_cmd,
             )
             _apply_trust_to_gate(run_stack.gate)
             worker = RunWorker(
@@ -630,11 +639,103 @@ class DaemonHTTPServer:
     async def _handle_resume(self, writer, headers, run_id):
         if (sid := await self._require_owner(writer, headers)) is None:
             return
+        # Check pre-resume state to decide whether we need to spawn a new worker.
+        entry = self._manager.get_run(run_id)
+        if entry is None:
+            return await self._send_error(writer, 404, CODE_NOT_FOUND, "run not found")
+        was_suspended = entry.state == "suspended"
+
         ok = await self._manager.request_resume(run_id)
         if not ok:
             return await self._send_error(writer, 409, CODE_INVALID_TRANSITION,
                                           "run is not paused/suspended (cannot resume)")
+
+        # Paused runs have a live worker blocked on pause_event.wait() — setting the
+        # event above is sufficient.  Suspended runs may have no live worker (e.g.
+        # after a daemon restart).  Spawn one from the persisted metadata + checkpoint.
+        if was_suspended and run_id not in self._workers:
+            if not entry.goal:
+                # Metadata missing (corrupted / test stub) — honest failure.
+                return await self._send_error(
+                    writer, 409, "no_worker",
+                    "run is suspended but has no usable metadata; cannot resume",
+                )
+            spawned = await self._spawn_suspended_resume(run_id, entry)
+            if not spawned:
+                # No loop_factory or components configured: cannot reconstruct worker.
+                return await self._send_error(
+                    writer, 409, "no_worker",
+                    "run is suspended but this server has no loop_factory to resume it",
+                )
+
         await self._send_json(writer, 202, {"state": "resume_requested"})
+
+    async def _spawn_suspended_resume(self, run_id: str, entry) -> bool:
+        """Reconstruct and start a RunWorker for a suspended run that has no live coroutine.
+
+        Returns True if a worker was spawned, False if this server has no loop_factory
+        or components (metadata-only mode) — caller maps False → 409 no_worker.
+
+        Reads the last RunCheckpoint from the JSONL store so that:
+          - _event_seq initialises from last_event_seq (SSE replay cursor not rewound)
+          - _step_count initialises from last_step (step budget continues, not restart-from-0)
+        """
+        from argos.daemon.worker import RunWorker
+        ckpt = self._manager.store.last_checkpoint(run_id)
+        initial_event_seq = ckpt["last_event_seq"] if ckpt else entry.last_event_seq
+        # ponytail: no checkpoint (lost/corrupt JSONL) → start at step 0; safe
+        # (over-budget direction) but wastes steps already done.  Upgrade: write
+        # a sentinel checkpoint on every state_change so this path is never hit.
+        initial_step_count = ckpt["last_step"] if ckpt else 0
+        effective_ws_str = entry.workspace or None
+        effective_ws_path = (
+            Path(effective_ws_str).expanduser().resolve()
+            if effective_ws_str else None
+        )
+        if self._components is not None:
+            from argos.app_factory import build_run_stack
+            run_stack = build_run_stack(
+                self._components,
+                workspace=effective_ws_path,
+                session_id=f"run-{run_id}",
+            )
+            worker = RunWorker(
+                run_id=run_id,
+                manager=self._manager,
+                loop_factory=run_stack.loop_factory,
+                registry=self._registry,
+                worktree=self._worktree,
+                gate=run_stack.gate,
+                run_stack_close=run_stack.close,
+                approval_timeout_s=60.0,
+                ledger_store=self._ledger_store,
+                initial_event_seq=initial_event_seq,
+                initial_step_count=initial_step_count,
+            )
+        elif callable(self._loop_factory):
+            run_loop_factory = self._make_run_loop_factory(effective_ws_str)
+            worker = RunWorker(
+                run_id=run_id,
+                manager=self._manager,
+                loop_factory=run_loop_factory,
+                registry=self._registry,
+                worktree=self._worktree,
+                gate=self._gate,
+                approval_timeout_s=60.0,
+                ledger_store=self._ledger_store,
+                initial_event_seq=initial_event_seq,
+                initial_step_count=initial_step_count,
+            )
+        else:
+            # Metadata-only server (no loop_factory / components): cannot spawn.
+            return False
+        # ponytail: the freshly-built AgentLoop runs its LoopConfig.max_steps from 0,
+        # so a resumed run gets a full fresh step budget — not the remaining budget.
+        # worker._step_count is seeded for checkpoint continuity only (SSE cursor +
+        # honest step display).  Upgrade: thread remaining budget into LoopConfig.max_steps
+        # if resume-budget-accuracy ever matters.
+        self._spawn_worker(worker, run_id, name=f"resume-{run_id}")
+        return True
 
     async def _handle_cancel(self, writer, headers, run_id):
         if (sid := await self._require_owner(writer, headers)) is None:
@@ -1532,6 +1633,37 @@ class DaemonHTTPServer:
             broadcast_fn=_dream_bcast,
         )
         return self._dream_pipeline
+
+    async def _autonomous_dream_starter(self, s) -> bool:
+        """conductor tick 的自主 dream 启动回调（5a.3）。
+
+        与 _start_dream 共用相同三重守卫（is_running / _dream_starting / cross_process_busy），
+        但无 HTTP writer — 结果只记日志，不发 HTTP 响应。
+
+        返回 True = pipeline 任务已派生；False = 守卫拦截（busy / no key），静默跳过。
+        """
+        pipeline = self._get_dream_pipeline()
+        if pipeline is None:
+            log.debug("conductor autonomous dream: 无 pipeline(no key)，本次跳过")
+            return False
+        if pipeline.is_running or self._dream_starting or pipeline.cross_process_busy():
+            log.debug("conductor autonomous dream: pipeline busy，本次跳过")
+            return False
+        # 与 _start_dream 相同的原子窗口（无 await）
+        self._dream_starting = True
+
+        def _reset_starting(_fut):
+            self._dream_starting = False
+            try:
+                exc = _fut.exception() if not _fut.cancelled() else None
+            except Exception:  # noqa: BLE001
+                exc = None
+            if exc is not None:
+                log.warning("conductor autonomous dream-run 任务异常: %s", exc)
+
+        task = asyncio.create_task(pipeline.run(), name="dream-run-autonomous")
+        task.add_done_callback(_reset_starting)
+        return True
 
     async def _start_dream(self, writer):
         """启动一次 Dream（confirm 与 POST /dream/run 共用）。

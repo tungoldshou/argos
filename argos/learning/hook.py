@@ -141,7 +141,31 @@ async def _on_passed(
         # 没产出(没 code_action / store 读不到)→ 不晋升,但也不当失败
         return
 
-    if not tasks or runner_factory is None:
+    # Loop-4: if runner_factory is present but tasks is empty, auto-build an
+    # EvalTask from the candidate's workspace + verify_cmd so the promote branch
+    # is reachable without callers having to pre-construct tasks.
+    effective_tasks: list = list(tasks) if tasks else []
+    if runner_factory is not None and not effective_tasks and workspace and cand.verify_cmd:
+        try:
+            from argos.eval.corpus import EvalTask
+            ws_path = Path(workspace)
+            if ws_path.exists():
+                effective_tasks = [EvalTask(
+                    id=f"learn-{run_id[:12]}",
+                    category="learning",
+                    difficulty="n/a",
+                    title=(goal or "")[:60],
+                    goal=goal or "",
+                    verify_cmd=cand.verify_cmd,
+                    setup_cmd=None,
+                    expected_files=(),
+                    working_dir=ws_path,
+                    corpus_version=0,
+                )]
+        except Exception as e:  # noqa: BLE001
+            log.warning("learning: EvalTask build failed for %s: %s", run_id, e)
+
+    if not effective_tasks or runner_factory is None:
         # 无语料 / 无 runner → 不晋升,但候选落盘进候选区(Dream 夜间整合的材料;
         # 修复:此前直接丢弃,生产路径学习闭环断电)
         if candidates_root is not None:
@@ -157,13 +181,46 @@ async def _on_passed(
 
     try:
         runner = runner_factory()
+        # Build a hinted B-runner so B runs with the candidate skill prepended
+        # to the task goal (same as Dream's HintedRunner path).  A=bare / B=hinted
+        # means a win is genuine improvement, not flakiness on A==B.
+        # ponytail: reuse dream.HintedRunner; no new class needed.
+        try:
+            from argos.learning.dream import HintedRunner
+            runner_b = HintedRunner(inner=runner, hint=cand.body_markdown)
+        except Exception as _hr_err:  # noqa: BLE001
+            log.warning(
+                "learning: HintedRunner unavailable for %s (%s); "
+                "skipping promote (degenerate A==B avoided) → staging candidate",
+                run_id, _hr_err,
+            )
+            if candidates_root is not None:
+                try:
+                    from argos.learning import candidates as _cands
+                    _cands.save_candidate(
+                        cand, root=candidates_root, source_run=run_id,
+                        workspace=workspace, goal=goal,
+                    )
+                except Exception as _ce:  # noqa: BLE001
+                    log.warning("learning: 候选落盘失败 %s: %s", run_id, _ce)
+            return
         promotion_gate.promote(
-            candidate=cand, tasks=tasks, runner=runner,
+            candidate=cand, tasks=effective_tasks, runner=runner,
+            runner_b=runner_b,
             skills_root=skills_root,
         )
     except Exception as e:  # noqa: BLE001
-        log.warning("learning: promote failed for %s: %s", run_id, e)
-        return
+        # Fail-soft: promotion eval failed → stage candidate for Dream instead
+        log.warning("learning: promote failed for %s, staging candidate: %s", run_id, e)
+        if candidates_root is not None:
+            try:
+                from argos.learning import candidates as _cands
+                _cands.save_candidate(
+                    cand, root=candidates_root, source_run=run_id,
+                    workspace=workspace, goal=goal,
+                )
+            except Exception as _ce:  # noqa: BLE001
+                log.warning("learning: 候选落盘失败 %s: %s", run_id, _ce)
 
 
 async def _on_failed(

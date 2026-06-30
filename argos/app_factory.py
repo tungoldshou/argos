@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as _dataclass_replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -42,6 +42,7 @@ from argos.sandbox.broker import CapabilityBroker
 from argos.sandbox.egress import EgressPolicy
 from argos.sandbox.executor import SeatbeltExecutor, select_backend
 from argos.tools.receipts import ReceiptSigner
+from argos.ledger.store import LedgerStore
 from argos.protocol.events import EventBus
 
 # #11 per-task routing
@@ -110,6 +111,9 @@ class AppComponents:
     # 格式:{cap_name: verify_hint_str, ...}；generate() 只消费已知 key(pytest_cmd 等),
     # 其余 key 静默忽略(generate 已测试 test_unknown_hints_ignored)。
     capability_hints: dict[str, str] = field(default_factory=dict)
+    # inline 账本:行为账本共享到 build_loop_factory,使 inline TUI run 也产生 signed receipts。
+    # None = 兼容旧路径(测试 / headless 直建 AppComponents 时)。
+    ledger_store: LedgerStore | None = None
 
     def close(self) -> None:
         self.sandbox.close()
@@ -194,6 +198,7 @@ def build_run_stack(
     *,
     workspace: Path | None = None,
     session_id: str = "",
+    verify_cmd: str | None = None,
 ) -> RunStack:
     """per-run 隔离栈:每次 daemon 分配一个新 run 时调用。
 
@@ -259,6 +264,13 @@ def build_run_stack(
             return _lookup
         gate.set_reversible_lookup(_make_reversible_lookup(_reg))
 
+    # per-run LoopConfig:若 verify_cmd 传入,用它覆盖共享 config;否则复用 c.config(零分配)。
+    # ponytail: dataclass replace over full constructor — fewer fields to touch if LoopConfig grows
+    _run_config = (
+        _dataclass_replace(c.config, verify_cmd=verify_cmd) if verify_cmd is not None
+        else c.config
+    )
+
     def _loop_factory() -> "AgentLoop":
         # A2 L3 DOM 探针：BrowserController 已在 AppComponents 实例化；
         # 构造 DomProber 注入 loop（None=未接入，L3 候选跳过，行为同之前）。
@@ -282,7 +294,7 @@ def build_run_stack(
                 pass
         return AgentLoop(
             store=c.store, bus=EventBus(), sandbox=sandbox,
-            broker=broker, model=c.model, verifier=c.verifier, config=c.config,
+            broker=broker, model=c.model, verifier=c.verifier, config=_run_config,
             workspace=ws, verify_dir=ws,
             workflow_engine_factory=c.workflow_engine_factory,
             router=c.router,
@@ -373,7 +385,20 @@ def build_components(
             return None
     gate.set_reversible_lookup(_reversible_lookup_from_registry)
 
-    verifier = Verifier(max_rounds=max_rounds)
+    # Wire reviewer-role test proposer when ARGOS_SELF_TEST is enabled.
+    # The reviewer is an INDEPENDENT LLM call under a distinct system prompt — the coder
+    # (maker) and the reviewer are separate calls; the coder never grades its own homework.
+    # The exit-code gate + 3-state verdict are completely unchanged; this only adds a
+    # proposer for the unverifiable (no verify_cmd) case behind the ARGOS_SELF_TEST flag.
+    _test_generator = None
+    if os.environ.get("ARGOS_SELF_TEST", "").strip().lower() in ("1", "true", "yes"):
+        try:
+            from argos.verify.self_test import TestGenerator, reviewer_llm_proposer
+            # ponytail: reuse the model client that build_components already constructed (model)
+            _test_generator = TestGenerator(proposer=reviewer_llm_proposer(model))
+        except Exception:  # noqa: BLE001 — wiring failure must not break production Verifier
+            pass
+    verifier = Verifier(max_rounds=max_rounds, test_generator=_test_generator)
 
     # 工作流引擎工厂:子 agent 按 task.model profile 各自造 ModelClient(模型无关 per-agent);
     # 未知 profile / 无指定 → 退当前 active(诚实不崩)。子 agent 事件临时,用 in-memory store。
@@ -444,6 +469,9 @@ def build_components(
     for _w in external_surface_warnings():
         _logging.getLogger("argos.sandbox").warning("[沙箱外执行面] %s", _w)
 
+    # inline 账本:与 daemon/__main__.py:135-136 同模式,写 ~/.argos/ledger/<run_id>.jsonl。
+    ledger_store = LedgerStore()
+
     return AppComponents(
         store=store, broker=broker, verifier=verifier, model=model,
         sandbox=sandbox, gate=gate, config=loop_config, workspace=ws,
@@ -455,15 +483,25 @@ def build_components(
         audit_log=perm_audit,
         registry=registry,   # P2 能力注册表(进程级单注册表)
         capability_hints=_capability_hints,  # P4 策略生成 verify_hint 聚合
+        ledger_store=ledger_store,  # inline 账本(build_loop_factory 透传给 AgentLoop)
     )
 
 
-def build_loop_factory(c: AppComponents) -> Callable[[], AgentLoop]:
-    """产 loop_factory:每轮 run 新建 EventBus,共享其余组件(契约 §3 AgentLoop.__init__)。"""
-    def factory() -> AgentLoop:
+def build_loop_factory(c: AppComponents) -> "Callable[[str | None], AgentLoop]":
+    """产 loop_factory:每轮 run 新建 EventBus,共享其余组件(契约 §3 AgentLoop.__init__)。
+
+    factory 接受可选 verify_cmd — 若传入,用 dataclasses.replace 覆盖 LoopConfig.verify_cmd,
+    与 build_run_stack 保持同一模式(不靠 hasattr 赋值幽灵属性)。
+    """
+    def factory(verify_cmd: str | None = None) -> AgentLoop:
+        # ponytail: same replace-over-shared-config pattern as build_run_stack ~L265
+        run_config = (
+            _dataclass_replace(c.config, verify_cmd=verify_cmd) if verify_cmd is not None
+            else c.config
+        )
         return AgentLoop(
             store=c.store, bus=EventBus(), sandbox=c.sandbox,
-            broker=c.broker, model=c.model, verifier=c.verifier, config=c.config,
+            broker=c.broker, model=c.model, verifier=c.verifier, config=run_config,
             workspace=c.workspace, verify_dir=c.workspace,
             workflow_engine_factory=c.workflow_engine_factory,
             router=c.router,          # #11 per-task routing 透传(spec §10)
@@ -473,5 +511,6 @@ def build_loop_factory(c: AppComponents) -> Callable[[], AgentLoop]:
             # (verify_dir==workspace,篡改可见)。否则 inline 下篡改检测哑、verify 跑错目录。daemon 走
             # build_run_stack(不开此开关),worker.py 仍自管上下文 → 行为零变更。
             manage_runtime_context=True, project_mode=True,
+            ledger_store=c.ledger_store,  # inline 账本(None=旧路径兼容)
         )
     return factory
