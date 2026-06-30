@@ -71,6 +71,60 @@ def _build_namespace(
     )
 
 
+# smolagents 的 LocalPythonExecutor 按模块真实 __name__ 做 authorized_imports 白名单检查。
+# os.path 在 darwin/Linux 上其实是 posixpath 模块 —— 访问 os.path.* 会触发对 "posixpath" 的
+# import 授权,白名单只有 "os" 不够(实测 "os.*" / "os.path" 都不命中,只有真模块名 "posixpath"
+# 命中),缺它 agent 一调 os.path.expanduser 就 InterpreterError: Forbidden access to module:
+# posixpath。这些是纯路径计算、零副作用 —— 真正的写/网络边界由 OS 沙箱(Seatbelt/bwrap)+ broker
+# 兜底,放行它们不扩攻击面。genericpath 是 posixpath 的底层依赖,一并放行防边缘函数误伤。
+# 无副作用的纯计算/数据/编码 stdlib —— agent 高频需要(算 hash、编码、dataclass、deepcopy…),
+# 放行它们到 smolagents AST 层不削弱真边界:网络/进程/动态执行仍被排除(见下),真正的写/网络
+# 边界由 OS 沙箱(Seatbelt/bwrap)+ broker 兜底。
+# 刻意排除(保持拦截,副作用/越权风险):socket ssl urllib.request http subprocess multiprocessing
+#   threading asyncio ctypes pickle marshal shelve importlib shutil sqlite3 —— 这些要走 broker 工具,
+#   不在沙箱里裸跑(网络走 web_search/web_extract,进程走 run_command,文件写走 write_file)。
+# urllib 只放行 urllib.parse(纯 URL 解析),不放行 urllib.request(网络)。
+_DEFAULT_AUTHORIZED_IMPORTS = [
+    # 序列化 / 文本 / 编码(纯)
+    "json", "re", "string", "textwrap", "unicodedata", "difflib", "html",
+    "csv", "io", "struct", "codecs", "base64", "binascii", "pprint",
+    # 哈希 / 标识(纯计算,无副作用)
+    "hashlib", "hmac", "secrets", "uuid",
+    # 数学
+    "math", "cmath", "decimal", "fractions", "statistics", "random", "numbers",
+    # 数据结构 / 算法 / 函数式
+    "collections", "collections.abc", "heapq", "bisect", "array", "queue",
+    "enum", "dataclasses", "typing", "copy", "functools", "itertools",
+    "operator", "contextlib",
+    # 时间
+    "datetime", "time", "calendar",
+    # URL 解析(纯,不含 request)
+    "urllib.parse",
+    # 路径(纯)
+    "pathlib",
+]
+_REQUIRED_AUTHORIZED_IMPORTS = ["os", "posixpath", "genericpath", "sys", "pathlib"]
+
+# 预注入到 executor 命名空间的纯 stdlib —— agent 普遍裸用这些不写 import,缺预注入会 NameError。
+# 全部经 authorized_imports 白名单审查;无副作用(纯数据/路径计算),真正的写/网络边界由 OS 沙箱
+# + broker 兜底,放行不扩攻击面。os/sys/pathlib 也在内(agent 最常裸用)。
+_PREINJECT_MODULES = ["os", "sys", "pathlib", "json", "re", "math",
+                      "itertools", "collections", "datetime"]
+
+
+def _resolve_authorized_imports(authorized: "list[str] | None") -> list[str]:
+    """合并 host 传入(或默认)白名单与必备 stdlib 项,去重保序。
+
+    membership 测试,顺序无关。posixpath/genericpath 是 os.path 的真实模块名 —— 没有它们
+    agent 调 os.path.* 会被 smolagents AST 层拒(Forbidden access to module: posixpath)。
+    """
+    imports = list(authorized) if authorized else list(_DEFAULT_AUTHORIZED_IMPORTS)
+    for need in _REQUIRED_AUTHORIZED_IMPORTS:
+        if need not in imports:
+            imports.append(need)
+    return imports
+
+
 def main() -> None:
     executor = None
     broker = _BrokerStub()
@@ -81,28 +135,18 @@ def main() -> None:
         op = msg.get("op")
         if op == "init":
             from smolagents.local_python_executor import LocalPythonExecutor
-            imports = msg.get("authorized_imports") or ["json", "re", "pathlib", "math",
-                                                         "itertools", "collections", "datetime"]
-            # T7:os/sys/pathlib 必须在白名单 —— prepend 的 `import os, sys, pathlib`(line ~106)
-            # 走 authorized_imports 检查,缺一会 InterpreterError。host 自定义列表场景也得有。
-            # 用 set 去重 + 保序追加,顺序无关紧要(白名单是 membership 测试)。
-            for _need in ("os", "sys", "pathlib"):
-                if _need not in imports:
-                    imports = list(imports) + [_need]
+            imports = _resolve_authorized_imports(msg.get("authorized_imports"))
             allow_workflow = msg.get("allow_workflow", True)
             read_only = msg.get("read_only", False)
             tool_allowlist = msg.get("tool_allowlist")   # None=无角色白名单(走 read_only 派生)
             executor = LocalPythonExecutor(additional_authorized_imports=imports)
             executor.send_tools(_build_namespace(broker, allow_workflow, read_only, tool_allowlist))
-            # T7:agent 普遍用 os.path / sys.exit / pathlib 不写 import 会 NameError;
-            # 预注入 stdlib 到 executor 命名空间(已经过 authorized_imports 白名单审查,
-            # 这些 stdlib 放行对攻击面无可见扩张 —— 不会让 agent 联网 / 写非 workspace 路径)。
-            import os as _os_t7
-            import sys as _sys_t7
-            import pathlib as _pathlib_t7
-            executor.state["os"] = _os_t7
-            executor.state["sys"] = _sys_t7
-            executor.state["pathlib"] = _pathlib_t7
+            # agent 普遍裸用 os/sys/pathlib/json/re/... 不写 import —— 预注入到 executor 命名空间
+            # 防 NameError。已过 authorized_imports 白名单审查;真正的写/网络边界由 OS 沙箱 + broker
+            # 兜底,放行这些纯 stdlib 不扩攻击面。
+            import importlib
+            for _name in _PREINJECT_MODULES:
+                executor.state[_name] = importlib.import_module(_name)
             _emit({"type": "init_ok"})
         elif op == "exec":
             if executor is None:
@@ -110,11 +154,8 @@ def main() -> None:
                        "exc": "RuntimeError: executor not initialized"})
                 continue
             code = msg.get("code", "")
-            # T7:agent 用 os.path / sys.exit / pathlib 不写 import 会 NameError。
-            # pre-inject 到 state["os"] 不够:smolagents 拦 getattr(os, "path") 走 module 拒绝
-            # (posixpath 不在白名单);改 prepend 三个 import 到 code 头,等价于"用就用别想太多"。
-            # 已有同名绑定的不会冲突(import 即 rebind)。
-            code = "import os as __argos_os_t7, sys as __argos_sys_t7, pathlib as __argos_pathlib_t7\n" + code
+            # 裸 os/sys/pathlib 由 init 的 state 预注入提供;os.path.* 由白名单含 posixpath/
+            # genericpath 放行(见 _resolve_authorized_imports)。无需再 prepend import。
             stdout = ""
             value_repr = ""
             exc = ""
