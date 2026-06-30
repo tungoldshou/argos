@@ -347,6 +347,7 @@ class AgentLoop:
         gui_prober: Any = None,  # 2d GUI 探针:GuiProber | None;None=未接入,GUI 验证 lane 跳过
         manage_runtime_context: bool = False,  # inline 路径自建 runtime 上下文(daemon 在 worker 外部自设;此开关给 inline)
         project_mode: bool = False,  # managed 时建立的上下文是否 project 模式(verify_dir==workspace,篡改可见)
+        ledger_store: "Any | None" = None,  # inline 路径账本:LedgerStore | None(daemon 路径经 worker 注入;None=无账本)
     ) -> None:
         self._store = store
         self._bus = bus
@@ -383,6 +384,10 @@ class AgentLoop:
         # (build_run_stack)不开此开关 → worker 仍自管,行为零变更。
         self._manage_runtime_context = manage_runtime_context
         self._project_mode = project_mode
+        # inline 账本:daemon 路径由 worker 注入;inline 路径由 build_loop_factory 注入 LedgerStore。
+        # ponytail: None-check keeps daemon path 100% unchanged; inline path just adds to it
+        self._ledger_store = ledger_store
+        self._ledger_seq = 0  # inline 路径账本序号(per-run 单调递增,与 worker._ledger_seq 对称)
         self._actions = 0
         self._fail_count = 0
         self._started = 0.0
@@ -901,6 +906,10 @@ class AgentLoop:
         try:
             async for ev in self._drive(goal, session_id, attachments=attachments):
                 self._store.append_event(session_id, ev)
+                # inline 账本:ToolReceipt / FileDiff → LedgerEntry 落盘(镜像 daemon worker 路径)。
+                # ponytail: fail-soft; ledger loss must not abort the run
+                if self._ledger_store is not None:
+                    self._inline_maybe_append_ledger(ev, session_id)
                 yield ev
         except Exception as e:  # noqa: BLE001
             chain: list[str] = []
@@ -987,6 +996,68 @@ class AgentLoop:
             "message (press Esc first if busy).\n"
             "</tool_signatures>"
         )
+
+    def _inline_maybe_append_ledger(self, ev: "Any", run_id: str) -> None:
+        """inline 账本:ToolReceipt / FileDiff 事件 → LedgerEntry 落盘。
+
+        镜像 daemon/worker.py:_maybe_append_ledger + _maybe_append_ledger_for_file_diff。
+        fail-soft:任何错误 log warning + 不抛(账本丢失不阻断主流程)。
+        ponytail: inlined from daemon pattern (worker.py:519-654); daemon path unchanged
+        """
+        import time as _time
+        import os as _os
+        from argos.ledger.builder import build_entry
+        from argos.ledger.entry import LedgerEntry
+        try:
+            ev_kind = getattr(ev, "kind", None)
+
+            if ev_kind == "tool_receipt":
+                receipt = getattr(ev, "receipt", None)
+                if receipt is None:
+                    return
+                # 鸭子类型:build_entry 只读 .action/.ts/.sig
+                self._ledger_seq += 1
+                entry = build_entry(
+                    receipt=receipt,
+                    run_id=run_id,
+                    seq=self._ledger_seq,
+                    args={},
+                    undo_token=None,  # inline 路径无 run 起点快照(snapshot 是 daemon-only)
+                )
+                self._ledger_store.append(entry)
+
+            elif ev_kind == "file_diff":
+                path_str = str(getattr(ev, "path", "") or "")
+                if not path_str:
+                    return
+                added = int(getattr(ev, "added", 0))
+                removed = int(getattr(ev, "removed", 0))
+                basename = _os.path.basename(path_str) or path_str
+                # Reuse same i18n keys as daemon/worker.py:634-638 — inline/daemon parity
+                if added or removed:
+                    summary = _i18n_t("daemon.srv.ledger_modified_diff",
+                                      basename=basename, added=added, removed=removed)
+                else:
+                    summary = _i18n_t("daemon.srv.ledger_modified", basename=basename)
+                self._ledger_seq += 1
+                entry = LedgerEntry(
+                    ts=_time.time(),
+                    run_id=run_id,
+                    seq=self._ledger_seq,
+                    action="file_diff",
+                    summary_human=summary,
+                    risk="low",
+                    reversible="unknown",   # type: ignore[arg-type]
+                    undo_token=None,
+                    receipt_sig="",
+                    undo_state="impossible",   # type: ignore[arg-type]
+                )
+                self._ledger_store.append(entry)
+        except Exception as e:  # noqa: BLE001 — 账本路径必须不挂主任务
+            import logging as _log
+            _log.getLogger("argos.ledger.inline").warning(
+                "inline ledger append failed for %s: %s", run_id, e
+            )
 
     async def _maybe_proactive_compact(self, session_id: str, step: int) -> AsyncIterator["Event"]:
         """#12 Context 可视化:主动压缩(spec §9.2)— 每步顶部 1 行 yield,条件不满足

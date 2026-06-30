@@ -38,6 +38,12 @@ class SkillCandidate:
     body_markdown: str
     verify_cmd: str | None
     skill_md_path: Path
+    # Performance metrics captured from replay events (all default-safe for old candidates)
+    verdict_status: str | None = None      # from verify_verdict: "passed"|"failed"|"unverifiable"
+    tokens_in: int = 0                     # from cost_update (cumulative last seen)
+    tokens_out: int = 0                    # from cost_update (cumulative last seen)
+    cost_usd: float | None = None          # from cost_update; None = unknown
+    steps: int = 0                         # from phase_change actions count at verify phase
 
 
 # 名字清洗:从 goal 抽短 slug,降长、剔特殊字符,空则用 fallback
@@ -174,6 +180,11 @@ def distill_run_to_skill(
         return None
 
     snippets: list[str] = []
+    verdict_status: str | None = None
+    tokens_in: int = 0
+    tokens_out: int = 0
+    cost_usd: float | None = None
+    steps: int = 0
     for ev in events:
         if not isinstance(ev, dict):
             continue
@@ -182,6 +193,26 @@ def distill_run_to_skill(
             code = ev.get("code")
             if isinstance(code, str) and code.strip():
                 snippets.append(code.strip())
+        elif kind == "verify_verdict":
+            verdict = ev.get("verdict") or {}
+            if isinstance(verdict, dict):
+                verdict_status = verdict.get("status") or verdict_status
+        elif kind == "cost_update":
+            # Keep last-seen cumulative cost; cost_usd may be None (unknown price)
+            ti = ev.get("tokens_in")
+            to = ev.get("tokens_out")
+            cu = ev.get("cost_usd")
+            if isinstance(ti, int):
+                tokens_in = ti
+            if isinstance(to, int):
+                tokens_out = to
+            if cu is not None:
+                cost_usd = float(cu)
+        elif kind == "phase_change":
+            # actions count at last phase_change (typically highest at verify phase)
+            ac = ev.get("actions")
+            if isinstance(ac, int):
+                steps = ac
 
     if not snippets:
         return None
@@ -195,4 +226,7 @@ def distill_run_to_skill(
     return SkillCandidate(
         name=name, body_markdown=body,
         verify_cmd=verify_cmd, skill_md_path=skill_md_path,
+        verdict_status=verdict_status,
+        tokens_in=tokens_in, tokens_out=tokens_out,
+        cost_usd=cost_usd, steps=steps,
     )

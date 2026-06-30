@@ -204,7 +204,7 @@ WORKFLOW_PROMPT = (
     "adversarial verify). For sequential, single-file, or small work, don't use it — just "
     "work single-threaded. spec is a literal dict {name, description, stages: [{id, op, "
     "over, agent, ...}]}, where op is one of fan_out / pipeline / panel / loop_until / "
-    "synthesize; depth is fixed at 1 (sub-agents can't open workflows). The host validates "
+    "synthesize / best_of_n; depth is fixed at 1 (sub-agents can't open workflows). The host validates "
     "the spec, asks for approval, runs the stages in parallel, and feeds the results back "
     "to you.\n"
     "</workflow>"
