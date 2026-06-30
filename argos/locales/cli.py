@@ -119,6 +119,7 @@ EN: dict[str, str] = {
     "setup.saved_active": "Saved '{name}' and made it the active model.",
     "setup.saved_inactive": "Saved '{name}' (active model unchanged).",
     "setup.key_stored_warning": "Note: the API key is stored in plain text in ~/.argos/.env (permissions 0600), not encrypted.",
+    "setup.key_empty": "No key entered — leaving the key blank can't connect. Re-enter this model (or pick the env-var method if your key lives in the environment).",
     "setup.add_another_prompt": "Add another model? (y/N):",
     "setup.done": "Setup complete. Run `argos` to use the active model.",
     "setup.no_tty": (
@@ -327,6 +328,7 @@ ZH: dict[str, str] = {
     "setup.saved_active": "已保存 '{name}'并设为当前模型。",
     "setup.saved_inactive": "已保存 '{name}'(未改当前默认模型)。",
     "setup.key_stored_warning": "注意:API key 以明文存于 ~/.argos/.env(权限 0600),不加密。",
+    "setup.key_empty": "没输入 key —— 留空连不上。请重配这个模型(或改用环境变量方式,如果 key 在环境里)。",
     "setup.add_another_prompt": "再配一个模型?(y/N):",
     "setup.done": "setup 完成。运行 `argos` 即用当前模型。",
     "setup.no_tty": (
