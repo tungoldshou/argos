@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -200,3 +201,90 @@ def test_cost_over_budget_returns_failed(tmp_path: Path):
     outcome = runner._drive(loop, _task(tmp_path), str(tmp_path))
     assert outcome.verdict_status == PASS_FAILED
     assert "over_budget" in outcome.verify_detail
+
+
+# ── caging: loop factory receives wt_path and cages the loop to it ─────────────
+
+def test_loop_factory_receives_wt_path(tmp_path: Path):
+    """EvalRunner passes wt_path to loop_factory; the loop must be caged to wt_path,
+    NOT to the run's real _ws_path. This locks the isolation fix (caging bug).
+    """
+    wt_path = tmp_path / "eval-wt"
+    wt_path.mkdir()
+    other_ws = tmp_path / "real-repo"
+    other_ws.mkdir()
+
+    recorded_workspace: list[Path] = []
+
+    class _FakeWorktree:
+        def create(self, *, run_id, workspace):
+            return str(wt_path)
+        def cleanup(self, run_id):
+            pass
+
+    class _FakeLoop:
+        _workspace = other_ws  # simulates loop baked to the real run's workspace
+
+        async def run(self, goal: str, session_id: str = ""):
+            from argos.protocol.events import VerifyVerdict
+            from argos.core.types import Verdict
+            recorded_workspace.append(self._workspace)
+            vd = Verdict.passed("ok", None, 1)
+            yield VerifyVerdict(verdict=vd)  # type: ignore[arg-type]
+
+    def _factory(model_tier: str, wt: str) -> "_FakeLoop":
+        loop = _FakeLoop()
+        from pathlib import Path as _P
+        loop._workspace = _P(wt).expanduser().resolve()
+        return loop
+
+    runner = EvalRunner(
+        worktree=_FakeWorktree(),
+        base_dir=tmp_path / "eval",
+        loop_factory=_factory,
+    )
+    task = _task(tmp_path)
+    result = runner.run(task, model_tier="cheap")
+
+    assert len(recorded_workspace) == 1, "loop ran exactly once"
+    assert recorded_workspace[0] == wt_path.resolve(), (
+        f"loop was caged to {recorded_workspace[0]}, expected eval wt {wt_path.resolve()}"
+    )
+    assert recorded_workspace[0] != other_ws.resolve(), (
+        "loop must NOT run in the real run workspace"
+    )
+
+
+# ── real Verdict field: `detail` not `verify_detail` ───────────────────────────
+
+def _real_verdict(status: str, detail: str) -> "Any":
+    """Build a VerifyVerdict backed by the real argos.core.types.Verdict."""
+    from argos.protocol.events import VerifyVerdict
+    from argos.core.types import Verdict
+    if status == "passed":
+        vd = Verdict.passed(detail, None, 1)
+    else:
+        vd = Verdict.failed(detail, None, 1)
+    return VerifyVerdict(verdict=vd)  # type: ignore[arg-type]
+
+
+def test_real_verdict_passed_detail_populated(tmp_path: Path):
+    """VerifyVerdict backed by real Verdict(detail=...) populates verify_detail."""
+    runner = _make_runner(tmp_path)
+    loop = _make_loop([_real_verdict("passed", "all 42 tests green")])
+    outcome = runner._drive(loop, _task(tmp_path), str(tmp_path))
+    assert outcome.verdict_status == PASS_PASSED
+    assert "42 tests green" in outcome.verify_detail, (
+        f"detail not propagated; got verify_detail={outcome.verify_detail!r}"
+    )
+
+
+def test_real_verdict_failed_detail_populated(tmp_path: Path):
+    """VerifyVerdict backed by real Verdict(failed, detail=...) propagates detail."""
+    runner = _make_runner(tmp_path)
+    loop = _make_loop([_real_verdict("failed", "2 assertions failed")])
+    outcome = runner._drive(loop, _task(tmp_path), str(tmp_path))
+    assert outcome.verdict_status == PASS_FAILED
+    assert "assertions failed" in outcome.verify_detail, (
+        f"detail not propagated; got verify_detail={outcome.verify_detail!r}"
+    )

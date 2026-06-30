@@ -113,7 +113,11 @@ class EvalResult:
 
 
 # Loop factory contract(测试桩可注入):
-#   loop = loop_factory(model_tier: str)
+#   loop = loop_factory(model_tier: str, wt_path: str)
+#       The factory MUST cage the returned loop to wt_path (set workspace=wt_path).
+#       Backward-compat: single-arg factories (model_tier only) are still accepted
+#       via try/except TypeError; in that case workspace caging is the factory's
+#       own responsibility (e.g. test stubs that ignore workspace).
 #   loop.run_sync(goal: str, workspace: Path) -> LoopOutcome
 #   loop.steps / loop.tokens_in / loop.tokens_out / loop.cost_usd
 #
@@ -244,7 +248,12 @@ class EvalRunner:
                 t("eval.runner.loop_factory_required"), fallback,
             )
         try:
-            loop = self._loop_factory(model_tier)
+            # Pass wt_path so the factory can cage the loop to the eval worktree.
+            # Backward-compat: single-arg factories (test stubs) accepted via TypeError fallback.
+            try:
+                loop = self._loop_factory(model_tier, wt_path)
+            except TypeError:
+                loop = self._loop_factory(model_tier)
         except Exception as e:  # noqa: BLE001
             return self._mk_error(task, run_id, model_tier, started, wt_path,
                                   f"loop_factory_failed: {type(e).__name__}: {e}", fallback)
@@ -355,10 +364,9 @@ class EvalRunner:
         run asyncio.run() in a fresh thread so this sync method works whether or not
         a running event loop exists on the caller's thread (no nested-loop crash).
 
-        Workspace caging: the eval worktree wt_path is passed as session_id context;
-        the loop itself must be constructed by a factory that sets workspace=wt_path
-        (see worker.py _eval_loop_factory and build_run_stack). We do NOT re-cage
-        here — we trust the factory, and document the requirement.
+        Workspace caging: the loop was already constructed by loop_factory(model_tier, wt_path),
+        which set loop._workspace = loop._verify_dir = Path(wt_path). The eval worktree
+        path is therefore the loop's workspace; it never touches the run's real _ws_path.
         """
         run_id = uuid.uuid4().hex[:8]
         session_id = f"eval-{run_id}"
@@ -378,7 +386,12 @@ class EvalRunner:
                 if isinstance(ev, VerifyVerdict):
                     # Take the LAST verdict seen (loop may emit multiple)
                     verdict_status = ev.verdict.status
-                    verify_detail = getattr(ev.verdict, "verify_detail", "") or ""
+                    # Real Verdict uses `detail`; test stubs may use `verify_detail`
+                    verify_detail = (
+                        getattr(ev.verdict, "detail", "")
+                        or getattr(ev.verdict, "verify_detail", "")
+                        or ""
+                    )
                 elif isinstance(ev, CostUpdate):
                     tokens_in = ev.tokens_in
                     tokens_out = ev.tokens_out
@@ -402,6 +415,12 @@ class EvalRunner:
             )
 
         # Budget: wall-clock timer in a thread (same pattern as run_sync path above).
+        # ponytail: wall-clock budget is post-hoc / non-binding — fut.result(timeout=)
+        # returns early but ThreadPoolExecutor.__exit__ calls shutdown(wait=True), which
+        # blocks until the background thread finishes. The budget cannot pre-emptively
+        # kill the running coroutine; it only prevents reporting a completed result.
+        # Matches the run_sync path's pre-existing limitation. Upgrade path: cooperative
+        # cancellation via asyncio.Task.cancel() injected into the worker's event loop.
         timed_out: threading.Event | None = None
         timer: threading.Timer | None = None
         if self._budget_s is not None:
