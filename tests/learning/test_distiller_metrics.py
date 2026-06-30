@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from argos.learning.distiller import distill_run_to_skill, SkillCandidate
-from argos.learning.candidates import StoredCandidate
+from argos.learning.candidates import StoredCandidate, list_unconsumed, save_candidate
 from argos.learning.dream import _cost_rank_key, cluster_candidates
 
 
@@ -184,16 +184,57 @@ def test_cost_rank_key_none_cost_last():
     assert _cost_rank_key(known) < _cost_rank_key(unknown)
 
 
-def test_dream_ranking_two_candidates_cheaper_first():
-    """cluster_candidates on pre-sorted cands keeps cheaper candidate first in unit.sources."""
+def test_dream_ranking_two_candidates_cheaper_first(tmp_path):
+    """sort(_cost_rank_key) then cluster_candidates keeps cheaper candidate first.
+
+    Uses save_candidate + list_unconsumed → sorted() path, mirroring _run_locked exactly,
+    so removing the sort from _run_locked would break this test.
+    """
     expensive = _sc("a", "fix login bug", verdict_status="passed",
                     cost_usd=0.50, run="run0000000000aa")
     cheap = _sc("b", "fix login bug auth", verdict_status="passed",
                 cost_usd=0.05, run="run0000000000bb")
 
-    # Simulate what _run_locked does: sort then cluster
-    cands = sorted([expensive, cheap], key=_cost_rank_key)
+    root = tmp_path / "candidates"
+    save_candidate(expensive, root=root, source_run="run0000000000aa",
+                   workspace=str(tmp_path), goal="fix login bug")
+    save_candidate(cheap, root=root, source_run="run0000000000bb",
+                   workspace=str(tmp_path), goal="fix login bug auth")
+
+    # Mirror _run_locked (dream.py:429-430): load → sort → cluster
+    loaded = list_unconsumed(root)
+    cands = sorted(loaded, key=_cost_rank_key)
     units = cluster_candidates(cands)
 
     assert len(units) == 1
     assert units[0].sources[0].source_run == "run0000000000bb"  # cheap is first
+
+
+def test_list_unconsumed_backward_compat_old_meta(tmp_path):
+    """Old-format meta.json (missing verdict_status/tokens_in/tokens_out/cost_usd/steps)
+    loads with safe defaults — no KeyError.
+    """
+    root = tmp_path / "candidates"
+    cand_dir = root / "old-skill-run0000000000cc"
+    cand_dir.mkdir(parents=True)
+    # Old meta: only mandatory fields, new metric fields absent
+    old_meta = {
+        "name": "old-skill",
+        "source_run": "run0000000000cc",
+        "workspace": str(tmp_path),
+        "goal": "old goal",
+        "verify_cmd": "pytest -q",
+        "self_verified": False,
+        "consumed": False,
+    }
+    (cand_dir / "meta.json").write_text(json.dumps(old_meta), encoding="utf-8")
+    (cand_dir / "SKILL.md").write_text("# old skill\n```python\nx=1\n```", encoding="utf-8")
+
+    cands = list_unconsumed(root)
+    assert len(cands) == 1, "old-format candidate must load without KeyError"
+    c = cands[0]
+    assert c.verdict_status is None
+    assert c.tokens_in == 0
+    assert c.tokens_out == 0
+    assert c.cost_usd is None
+    assert c.steps == 0

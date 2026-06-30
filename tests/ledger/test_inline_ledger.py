@@ -168,26 +168,129 @@ class TestInlineLedgerFileDiff:
         assert store.replay("run-fd-empty") == []
 
 
+class TestInlineLedgerI18n:
+    """i18n parity: inline file_diff summary must match daemon path under ARGOS_LANG=en."""
+
+    def test_file_diff_summary_english_when_lang_en(self, tmp_path: Path, monkeypatch):
+        """ARGOS_LANG=en → summary_human uses EN locale (same key as daemon/worker.py:635-638)."""
+        monkeypatch.setenv("ARGOS_LANG", "en")
+        store = LedgerStore(tmp_path)
+        loop = _make_loop(store)
+
+        ev = FileDiff(path="src/bar.py", added=5, removed=2, unified="@@...")
+        loop._inline_maybe_append_ledger(ev, "run-i18n-en")
+
+        entries = store.replay("run-i18n-en")
+        assert len(entries) == 1
+        summary = entries[0].summary_human
+        # EN locale key "daemon.srv.ledger_modified_diff" → "modified {basename} (+{added}/-{removed})"
+        assert "bar.py" in summary
+        assert "modified" in summary.lower(), f"expected English 'modified' in {summary!r}"
+        assert "修改了" not in summary, f"Chinese leaked into EN summary: {summary!r}"
+
+    def test_file_diff_no_diff_summary_english(self, tmp_path: Path, monkeypatch):
+        """ARGOS_LANG=en, no diff counts → EN 'modified {basename}' (not Chinese)."""
+        monkeypatch.setenv("ARGOS_LANG", "en")
+        store = LedgerStore(tmp_path)
+        loop = _make_loop(store)
+
+        ev = FileDiff(path="src/baz.py", added=0, removed=0, unified="")
+        loop._inline_maybe_append_ledger(ev, "run-i18n-en-nodiff")
+
+        entries = store.replay("run-i18n-en-nodiff")
+        assert len(entries) == 1
+        summary = entries[0].summary_human
+        assert "修改了" not in summary, f"Chinese leaked into EN summary: {summary!r}"
+        assert "baz.py" in summary
+
+
 class TestInlineLedgerEndToEnd:
     """Integration: AgentLoop.run() passes events through _inline_maybe_append_ledger."""
 
     @pytest.mark.asyncio
-    async def test_run_wires_ledger_store(self, tmp_path: Path):
-        """Full run() call with a ledger_store; check the store receives calls.
+    async def test_run_wires_ledger_store_via_tool_receipt(self, tmp_path: Path):
+        """run() routes a real ToolReceipt through _inline_maybe_append_ledger → disk.
 
-        Uses a model that emits no code block (instant completion) so we don't
-        need a real sandbox execution. The test verifies the wiring is correct —
-        a real ToolReceipt would need a real broker+signer, which is integration-level.
-        We confirm: (a) run completes without error, (b) ledger_store is attached.
+        Uses monkeypatched _drive to inject a ToolReceipt event mid-run, then
+        asserts store.replay returns a non-empty list with the correct action + signature.
+        This closes the unit-vs-integration gap: the prior test only checked
+        loop._ledger_store is store, not that run() actually persisted anything.
         """
+        import unittest.mock as mock
+
         store = LedgerStore(tmp_path)
         loop = _make_loop(store)
-        events = await _collect(loop, session_id="run-e2e-inline")
-        # Run must complete without raising
+
+        signer = ReceiptSigner(key=b"test-inline-key-32bytes-padded!!")
+        receipt = signer.sign(action="write_file", args={"path": "x.py"},
+                              result="ok", exit_code=0)
+        injected_ev = ToolReceipt(receipt=receipt)
+
+        # Patch _drive to yield our ToolReceipt then stop (avoids needing real model/broker)
+        original_drive = loop._drive
+
+        async def _fake_drive(goal, session_id, **kwargs):
+            yield injected_ev
+            # Let original plan phase run so loop terminates cleanly
+            async for ev in original_drive(goal, session_id, **kwargs):
+                yield ev
+
+        with mock.patch.object(loop, "_drive", _fake_drive):
+            events = [ev async for ev in loop.run("test goal", "run-e2e-receipt")]
+
         assert events, "expected at least one event from run()"
-        # ledger_store is attached (no broker → no ToolReceipt → no entries,
-        # but the wiring is confirmed by _ledger_store being set)
-        assert loop._ledger_store is store
+        entries = store.replay("run-e2e-receipt")
+        assert len(entries) >= 1, "run() must persist at least one LedgerEntry via ToolReceipt"
+        e = entries[0]
+        assert e.action == "write_file"
+        assert e.run_id == "run-e2e-receipt"
+        assert e.receipt_sig, "receipt_sig must be non-empty (real HMAC)"
+
+    @pytest.mark.asyncio
+    async def test_run_without_ledger_store_no_crash(self):
+        """Regression: loop with ledger_store=None must not crash (old inline path)."""
+        loop = AgentLoop(
+            store=_FakeStore(), bus=EventBus(), sandbox=_OkSandbox(),
+            broker=None, model=_DoneModel(), verifier=_NullVerifier(),
+            config=LoopConfig(verify_cmd=None, max_rounds=1, max_steps=5),
+            # ledger_store omitted → None (default)
+        )
+        events = await _collect(loop, session_id="run-no-ledger")
+        assert events  # no crash
+
+    def test_ledger_store_present_in_build_loop_factory(self, tmp_path: Path):
+        """build_loop_factory threads ledger_store from AppComponents into AgentLoop."""
+        from argos.app_factory import AppComponents, build_loop_factory
+        from argos.core.loop import LoopConfig
+        from argos.approval import ApprovalLevel
+
+        ls = LedgerStore(tmp_path)
+
+        # Minimal AppComponents stub (only what build_loop_factory accesses)
+        class _StubWorkflow:
+            pass
+
+        import dataclasses
+
+        # We can't call build_components (needs API key) so build AppComponents directly.
+        # Only ledger_store + the fields accessed by the factory lambda matter.
+        comps = AppComponents(
+            store=_FakeStore(),  # type: ignore[arg-type]
+            broker=None,         # type: ignore[arg-type]
+            verifier=_NullVerifier(),  # type: ignore[arg-type]
+            model=_DoneModel(),  # type: ignore[arg-type]
+            sandbox=_OkSandbox(),  # type: ignore[arg-type]
+            gate=None,           # type: ignore[arg-type]
+            config=LoopConfig(verify_cmd=None, max_rounds=1, max_steps=5),
+            workspace=tmp_path,
+            workflow_engine_factory=lambda: _StubWorkflow(),
+            ledger_store=ls,
+        )
+        factory = build_loop_factory(comps)
+        loop = factory()
+        assert loop._ledger_store is ls, (
+            "build_loop_factory must thread ledger_store from AppComponents into AgentLoop"
+        )
 
     @pytest.mark.asyncio
     async def test_run_without_ledger_store_no_crash(self):
