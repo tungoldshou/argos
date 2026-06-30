@@ -2768,35 +2768,39 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             log.warning("daemon pause failed: %s", e)
 
     def action_background(self) -> None:
-        """Ctrl+B:把当前 run 后台化(running → suspended;checkpoint 落盘)。
+        """Ctrl+B:把当前 run 真正后台化 —— POST /suspend,daemon 在下个 step 边界
+        running → suspended(写 checkpoint),稍后 `/runs <id> resume` 续。
 
-        spec §2.6 b 段:daemon 模式才生效;legacy 模式无副作用(诚实:不做假装操作)。
-        后台化后 transcript 显一行 'Run <id> suspended' + 用户可立刻开新目标。
+        daemon 模式才生效;inline 模式无副作用(诚实:不做假装操作)。诚实双阶段:
+        这里只发请求并落一行"后台化中",真正的 suspended 状态由 daemon 的 SSE
+        state_change 确认(它会关流 → 本端 SSE 消费者自然收尾,腾出输入开新目标)。
         """
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
-            # legacy 模式 → no-op(无副作用)
+            # inline 模式 → no-op(无副作用)
             return
         if not self._run_active or not self._daemon_run_id:
             return
-        # 后台化:把 produce_worker cancel(loop 真转 paused/suspended)
-        # 实际状态转换由 daemon 端 worker 协程 mark_suspended 完成
-        # 简化:这里直接 cancel + 期望 daemon 端 catch CancelledError + mark_suspended
-        try:
-            self._produce_worker.cancel()
-        except Exception:  # noqa: BLE001
-            pass
-        # 落一行告知用户
-        try:
+        rid = self._daemon_run_id
+        sid = self._daemon_session_id
+        client = self._daemon_client
+
+        async def _do() -> None:
             log_widget = self.query_one("#transcript", Transcript)
-            self.run_worker(
-                log_widget.append_line(
-                    t("tui.background.suspended", run_id=self._daemon_run_id),
-                    kind="system",
-                ),
-                exclusive=False,
-            )
-        except Exception:  # noqa: BLE001
-            pass
+            try:
+                resp = await client.suspend(sid, rid)
+            except Exception as e:  # noqa: BLE001
+                await log_widget.append_line(
+                    t("tui.background.failed", err=e), kind="error")
+                return
+            if isinstance(resp, dict) and resp.get("state") == "suspend_requested":
+                await log_widget.append_line(
+                    t("tui.background.suspended", run_id=rid), kind="system")
+            else:
+                # 409(run 非 running,无法挂起)/ 意外响应 → 诚实报,不假装成功
+                await log_widget.append_line(
+                    t("tui.background.failed", err=resp), kind="error")
+
+        self.run_worker(_do(), exclusive=False)
 
     # ── TUI v2 行内选择:FIFO 队列(同屏最多一个活动 InlineChoice)──────────
     def _set_blocked_status(self, active: bool) -> None:

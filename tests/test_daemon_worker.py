@@ -78,6 +78,36 @@ async def test_worker_pause_at_step_boundary(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_worker_suspend_at_step_boundary(tmp_path: Path):
+    """Ctrl+B → request_suspend 在 step 边界 → worker 转 suspended + checkpoint 落 +
+    协程干净脱离(非 completed);非 running 时 request_suspend 被状态机拦。"""
+    mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
+    rid = await mgr.create_run(goal="x", workspace="/tmp")
+    worker = RunWorker(
+        run_id=rid, manager=mgr,
+        loop_factory=lambda: FakeLoop(steps=50, delay_s=0.02),
+    )
+    t = asyncio.create_task(worker.run())
+    # 等到 running
+    for _ in range(50):
+        if mgr.get_run(rid).state == "running":
+            break
+        await asyncio.sleep(0.005)
+    assert mgr.get_run(rid).state == "running"
+    # suspend(只有 running 能挂起)
+    assert await mgr.request_suspend(rid) is True
+    # worker 应在下个 step 边界转 suspended 并脱离协程(await t 应正常返回,非超时)
+    await asyncio.wait_for(t, timeout=2.0)
+    assert mgr.get_run(rid).state == "suspended"   # 不是 completed
+    events = list(mgr.store.replay(rid))
+    assert any(e.get("kind") == "run_checkpoint" for e in events)
+    assert any(e.get("kind") == "state_change" and e.get("to") == "suspended"
+               for e in events)
+    # 已 suspended → 再 request_suspend 被状态机拦(只有 running 能挂起)
+    assert await mgr.request_suspend(rid) is False
+
+
+@pytest.mark.asyncio
 async def test_worker_cancel_immediately(tmp_path: Path):
     """POST /cancel → worker 协程 mark_cancelled。"""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")

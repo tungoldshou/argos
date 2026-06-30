@@ -291,7 +291,7 @@ EN: dict[str, str] = {
     "tui.plan.factory_failed": "/plan unavailable (loop factory failed): {err}",
 
     # ── inline / start_run ────────────────────────────────────────────────────
-    "tui.run.demo_banner":     "⚠︎ Demo mode: the following is scripted fake data, not real execution/verification (real AgentLoop pending Phase 6).",
+    "tui.run.demo_banner":     "⚠︎ Demo mode: the following is scripted fake data, not real execution/verification — configure an API key (run argos setup) to run the real agent.",
     "tui.run.thinking":        "Goal received, thinking…",
     "tui.run.interrupted":     "⎋ Current task interrupted.",
     "tui.run.create_failed":   "◉ daemon create_run failed: {err}",
@@ -300,7 +300,8 @@ EN: dict[str, str] = {
     "tui.ctrlc.hint":          "Press Ctrl+C again to quit (or Ctrl+D to quit immediately).",
 
     # ── background (Ctrl+B) ───────────────────────────────────────────────────
-    "tui.background.suspended": "› Run {run_id} backgrounded (suspended). Use /resume {run_id} to continue.",
+    "tui.background.suspended": "› Backgrounding run {run_id}: it will suspend at the next step boundary. Resume with /runs {run_id} resume.",
+    "tui.background.failed": "◉ Background failed: {err}",
 
     # ── event-level render strings ────────────────────────────────────────────
     "tui.event.phase.plan":    "Planning…",
@@ -355,7 +356,7 @@ EN: dict[str, str] = {
 
     # ── app subtitle + demo banner ────────────────────────────────────────────
     "tui.app.subtitle":   "hundred-eyed agent",
-    "tui.app.demo_banner": "DEMO scripted demo (real loop pending Phase 6)",
+    "tui.app.demo_banner": "DEMO scripted demo (no API key — run argos setup)",
 
     # ── BINDINGS labels ───────────────────────────────────────────────────────
     "tui.bind.interrupt_quit": "interrupt/quit",
@@ -694,7 +695,7 @@ ZH: dict[str, str] = {
     "tui.plan.factory_failed": "/plan 不可用(loop factory 失败):{err}",
 
     # ── inline / start_run ────────────────────────────────────────────────────
-    "tui.run.demo_banner":     "⚠︎ 演示模式:以下为脚本化假数据,非真实执行/验证(真 AgentLoop 待 Phase 6 接入)。",
+    "tui.run.demo_banner":     "⚠︎ 演示模式:以下为脚本化假数据,非真实执行/验证 —— 配置 API key(运行 argos setup)即可运行真实 agent。",
     "tui.run.thinking":        "已收到目标,思考中…",
     "tui.run.interrupted":     "⎋ 已打断当前任务。",
     "tui.run.create_failed":   "◉ daemon create_run 失败:{err}",
@@ -703,7 +704,8 @@ ZH: dict[str, str] = {
     "tui.ctrlc.hint":          "再按一次 Ctrl+C 退出(或 Ctrl+D 直接退出)。",
 
     # ── background (Ctrl+B) ───────────────────────────────────────────────────
-    "tui.background.suspended": "› Run {run_id} 后台化(suspended)。可 /resume {run_id} 续。",
+    "tui.background.suspended": "› 后台化 run {run_id}:将在下个步骤边界挂起。可 /runs {run_id} resume 续。",
+    "tui.background.failed": "◉ 后台化失败:{err}",
 
     # ── event-level render strings ────────────────────────────────────────────
     "tui.event.phase.plan":    "规划中…",
@@ -758,7 +760,7 @@ ZH: dict[str, str] = {
 
     # ── app subtitle + demo banner ────────────────────────────────────────────
     "tui.app.subtitle":   "百眼智能体",
-    "tui.app.demo_banner": "DEMO 脚本演示(真 loop 待 Phase 6 接入)",
+    "tui.app.demo_banner": "DEMO 脚本演示(无 API key —— 运行 argos setup)",
 
     # ── BINDINGS labels ───────────────────────────────────────────────────────
     "tui.bind.interrupt_quit": "打断/退出",
