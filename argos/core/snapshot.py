@@ -1,8 +1,7 @@
 """RunSnapshot:一次 run 起点的 workspace 文件快照(纯 stdlib,无新依赖)。
 
-设计(spec §2.1):loop.run 入口拍快照到 tempfile.gettempdir()/argos-snapshots/,
-剪枝目录复用 runtime.SNAPSHOT_PRUNE_DIRS。 run 结束后保留直到下一次 run 覆盖。
-应用退出 / tempdir 清 → 自动失效(不显式清理)。
+设计(spec §2.1):loop.run 入口拍快照到 ~/.argos/snapshots/(持久化,跨重启可用),
+剪枝目录复用 runtime.SNAPSHOT_PRUNE_DIRS。run 结束后由 manager.recover() 剪枝终态快照。
 
 诚实:take/restore 失败不抛异常,所有路径走返回结果(模型/用户决定下一步)。
 
@@ -12,18 +11,25 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 
 from argos.i18n import t
 import tarfile
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-SNAPSHOT_ROOT: Path = Path(tempfile.gettempdir()) / "argos-snapshots"
-"""快照固定根目录:进程级常驻,跨 run 复用路径槽。"""
+
+def _snapshot_root() -> Path:
+    """返回快照根目录:优先 ARGOS_CONFIG_DIR 环境变量,其次 ~/.argos/snapshots/。"""
+    base = Path(os.environ.get("ARGOS_CONFIG_DIR", "") or (Path.home() / ".argos")).expanduser()
+    return base / "snapshots"
+
+
+SNAPSHOT_ROOT: Path = _snapshot_root()
+"""快照固定根目录:持久化在 ~/.argos/snapshots/(同 runs/ ledger/ 等同级),跨重启可用。"""
 
 # 单文件上限:超过此大小的文件跳过(不纳入快照),避免拷贝大型二进制/数据文件
 # (如 SQLite DB、视频、大 JSON)让 /undo 冻结几十秒。10MB 经验值:足以覆盖常见源码文件。
