@@ -679,6 +679,9 @@ class DaemonHTTPServer:
         from argos.daemon.worker import RunWorker
         ckpt = self._manager.store.last_checkpoint(run_id)
         initial_event_seq = ckpt["last_event_seq"] if ckpt else entry.last_event_seq
+        # ponytail: no checkpoint (lost/corrupt JSONL) → start at step 0; safe
+        # (over-budget direction) but wastes steps already done.  Upgrade: write
+        # a sentinel checkpoint on every state_change so this path is never hit.
         initial_step_count = ckpt["last_step"] if ckpt else 0
         effective_ws_str = entry.workspace or None
         effective_ws_path = (
@@ -722,6 +725,11 @@ class DaemonHTTPServer:
         else:
             # Metadata-only server (no loop_factory / components): cannot spawn.
             return False
+        # ponytail: the freshly-built AgentLoop runs its LoopConfig.max_steps from 0,
+        # so a resumed run gets a full fresh step budget — not the remaining budget.
+        # worker._step_count is seeded for checkpoint continuity only (SSE cursor +
+        # honest step display).  Upgrade: thread remaining budget into LoopConfig.max_steps
+        # if resume-budget-accuracy ever matters.
         self._spawn_worker(worker, run_id, name=f"resume-{run_id}")
         return True
 

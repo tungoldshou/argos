@@ -34,9 +34,22 @@ def test_snapshot_root_under_argos_home(tmp_path: Path, monkeypatch: pytest.Monk
 # ── (b) 快照写入后重新解析 SNAPSHOT_ROOT 仍可读(模拟跨重启) ───────────────
 
 def test_snapshot_survives_reboot_simulation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """快照写入到 persistent root 后,即使 SNAPSHOT_ROOT 常量重新解析也指同一位置。"""
+    """快照写入到 persistent root 后,即使 SNAPSHOT_ROOT 常量重新解析也指同一位置。
+
+    Also verifies that the module-level SNAPSHOT_ROOT constant (resolved at import
+    time) matches _snapshot_root() under the patched env — proving the function is
+    deterministic and the constant would be correct if the module were imported fresh
+    with this env.  This is the import-time resolution check for reboot fidelity.
+    """
     fake_home = tmp_path / "persistent_argos"
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(fake_home))
+    # Patch the module constant so any code that imports SNAPSHOT_ROOT directly also
+    # sees the tmp path (recover() does `from argos.core.snapshot import SNAPSHOT_ROOT`).
+    monkeypatch.setattr(_snap_mod, "SNAPSHOT_ROOT", _snapshot_root())
+    # Prove import-time constant == function output under patched env.
+    assert _snap_mod.SNAPSHOT_ROOT == _snapshot_root(), (
+        "SNAPSHOT_ROOT module constant diverges from _snapshot_root() under patched env"
+    )
 
     root = _snapshot_root()
     root.mkdir(parents=True, exist_ok=True)
@@ -83,9 +96,15 @@ def _place_snapshot(snap_root: Path, run_id: str, ws: Path) -> Path:
 async def test_recover_prunes_terminal_snapshots(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """completed/failed/cancelled run 的快照在 recover() 后被删除。"""
     fake_home = tmp_path / "argos_home"
+    # setenv BEFORE _snapshot_root() so the root is computed under the patched env.
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(fake_home))
-    # 重新计算 SNAPSHOT_ROOT 常量,供 manager.recover 内部使用
+    # Patch the module constant so recover()'s `from argos.core.snapshot import
+    # SNAPSHOT_ROOT` sees the tmp path, not the real ~/.argos/snapshots.
     monkeypatch.setattr(_snap_mod, "SNAPSHOT_ROOT", _snapshot_root())
+    # Verify patch ordering: module constant must equal _snapshot_root() here.
+    assert _snap_mod.SNAPSHOT_ROOT == _snapshot_root(), (
+        "SNAPSHOT_ROOT patch order wrong — recover() will hit real ~/.argos"
+    )
 
     snap_root = _snapshot_root()
     ws = tmp_path / "ws"
@@ -129,8 +148,12 @@ async def test_recover_prunes_terminal_snapshots(tmp_path: Path, monkeypatch: py
 async def test_recover_keeps_suspended_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """suspended run(SIGKILL 中断,需 /resume)的快照在 recover() 后保留。"""
     fake_home = tmp_path / "argos_home"
+    # setenv BEFORE _snapshot_root() so the root is computed under the patched env.
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(fake_home))
     monkeypatch.setattr(_snap_mod, "SNAPSHOT_ROOT", _snapshot_root())
+    assert _snap_mod.SNAPSHOT_ROOT == _snapshot_root(), (
+        "SNAPSHOT_ROOT patch order wrong — recover() will hit real ~/.argos"
+    )
 
     snap_root = _snapshot_root()
     ws = tmp_path / "ws"

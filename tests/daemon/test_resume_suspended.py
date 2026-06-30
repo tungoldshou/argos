@@ -1,20 +1,25 @@
 """Test: resume-from-suspended actually spawns a RunWorker.
 
-Three contracts verified:
+Four contracts verified:
   (a) resuming a suspended run with no live worker spawns a worker and
       transitions the run past 'suspended'.
   (b) step budget and SSE cursor continue from checkpoint, not from 0.
   (c) resume with no live worker AND no usable metadata returns 409 no_worker.
+  (d) double /resume while worker is alive does NOT spawn a second worker.
+  (e) checkpoint-restore reads the run_checkpoint event from JSONL so the
+      worker's step counter starts at N, not 0.
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import time
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
 
+from argos.daemon.events import RunCheckpoint
 from argos.daemon.manager import RunManager
 from argos.daemon.server import DaemonHTTPServer
 from argos.daemon.worker import FakeLoop
@@ -188,3 +193,114 @@ async def test_resume_suspended_no_worker_no_factory_returns_409(tmp_path: Path)
     finally:
         await srv.stop()
         manager.close()
+
+
+# ── (d) double-resume guard: second POST /resume must not spawn a second worker ──
+
+@pytest.mark.asyncio
+async def test_double_resume_does_not_spawn_second_worker(loop_server, tmp_path: Path):
+    """POST /resume twice while the first worker is still alive must NOT create
+    a duplicate worker.  The guard `if was_suspended and run_id not in self._workers`
+    (server.py) is what prevents double-spawn; deleting it would allow two workers
+    to race on the same run.
+    """
+    srv, mgr = loop_server
+    sid = await _create_session(srv.socket_path)
+
+    rid = await mgr.create_run(goal="double-spawn check", workspace="")
+    mgr.mark_running(rid)
+    mgr.mark_suspended(rid, last_step=2, msg_count=1, last_event_seq=4)
+    assert rid not in srv._workers
+
+    # First resume — spawns a worker.
+    status1, _, raw1 = await _req(srv.socket_path, "POST", f"/runs/{rid}/resume",
+                                  session_id=sid)
+    assert status1 == 202, f"first resume: {raw1.decode()}"
+
+    # Give the event loop a tick so the worker is registered in _workers.
+    await asyncio.sleep(0.05)
+    assert rid in srv._workers, "worker should appear in _workers after first resume"
+    worker1 = srv._workers[rid]
+
+    # Second resume while worker is still alive.
+    status2, _, raw2 = await _req(srv.socket_path, "POST", f"/runs/{rid}/resume",
+                                  session_id=sid)
+    # The second call can succeed (202) or fail (409 invalid transition) depending on
+    # whether the state has advanced past 'suspended' already — but either way,
+    # the worker in _workers must be the same object (no second spawn).
+    await asyncio.sleep(0.02)
+    worker2 = srv._workers.get(rid)
+    if worker2 is not None:
+        assert worker2 is worker1, (
+            "second /resume must not replace the live worker in _workers; "
+            "got a different object — double-spawn guard broken"
+        )
+
+    # Tear down cleanly.
+    await mgr.request_cancel(rid)
+    worker1.request_hard_cancel()
+    for _ in range(50):
+        if mgr.get_run(rid).state in ("completed", "cancelled", "failed"):
+            break
+        await asyncio.sleep(0.02)
+
+
+# ── (e) checkpoint-restore: worker step counter starts at N from JSONL event ─
+
+@pytest.mark.asyncio
+async def test_checkpoint_restore_reads_jsonl_step(loop_server, tmp_path: Path):
+    """The _spawn_suspended_resume path reads the run_checkpoint event from the
+    JSONL store (store.last_checkpoint) and seeds the worker's step counter from
+    last_step — so the worker starts at N, NOT 0.
+
+    This test writes a run_checkpoint event explicitly into the store BEFORE
+    calling mark_suspended, proving the checkpoint-restore path exercises the
+    JSONL read rather than falling back to 0.
+    """
+    srv, mgr = loop_server
+    sid = await _create_session(srv.socket_path)
+
+    CHECKPOINT_STEP = 13  # an unambiguous N that can't be reached in 50ms
+
+    rid = await mgr.create_run(goal="restore from checkpoint", workspace="")
+    mgr.mark_running(rid)
+
+    # Write an explicit run_checkpoint to the JSONL BEFORE transitioning to
+    # suspended.  This is what _spawn_suspended_resume reads via last_checkpoint().
+    ckpt_event = RunCheckpoint(
+        ts=time.time(),
+        last_step=CHECKPOINT_STEP,
+        messages_count=4,
+        last_event_seq=20,
+    )
+    mgr.store.append(rid, ckpt_event.to_dict())
+
+    # Now suspend (this also writes another checkpoint with last_step=CHECKPOINT_STEP;
+    # last_checkpoint() will return the later one — both have the same step).
+    mgr.mark_suspended(rid, last_step=CHECKPOINT_STEP, msg_count=4, last_event_seq=20)
+    assert rid not in srv._workers
+
+    status, _, raw = await _req(srv.socket_path, "POST", f"/runs/{rid}/resume",
+                                session_id=sid)
+    assert status == 202, f"resume failed: {raw.decode()}"
+
+    # Give the event loop a tick to register the worker.
+    await asyncio.sleep(0.05)
+    worker = srv._workers.get(rid)
+    assert worker is not None, "worker should have been spawned"
+
+    # current_step must start at CHECKPOINT_STEP, NOT 0.
+    # With delay_s=0.01 and sleep=0.05 the worker can advance at most ~5 steps,
+    # so asserting >= CHECKPOINT_STEP proves it started there, not that it ran there.
+    assert worker.current_step >= CHECKPOINT_STEP, (
+        f"worker.current_step should start at checkpoint N={CHECKPOINT_STEP}, "
+        f"got {worker.current_step} — checkpoint-restore from JSONL broken"
+    )
+
+    # Tear down cleanly.
+    await mgr.request_cancel(rid)
+    worker.request_hard_cancel()
+    for _ in range(50):
+        if mgr.get_run(rid).state in ("completed", "cancelled", "failed"):
+            break
+        await asyncio.sleep(0.02)
