@@ -56,11 +56,12 @@ async def test_passed_with_runner_factory_reaches_promote(tmp_path, monkeypatch)
         ),
     )
 
-    def _fake_promote(*, candidate, tasks, runner, skills_root, **kw):
+    def _fake_promote(*, candidate, tasks, runner, runner_b=None, skills_root, **kw):
         promote_calls.append({
             "name": candidate.name,
             "tasks": tasks,
             "runner": runner,
+            "runner_b": runner_b,
         })
         from argos.learning.promotion_gate import PromotionResult
         return PromotionResult(promoted=False, reason="stubbed")
@@ -94,6 +95,15 @@ async def test_passed_with_runner_factory_reaches_promote(tmp_path, monkeypatch)
     assert len(promote_calls) == 1, "promote() must be called when runner_factory is live"
     assert promote_calls[0]["name"] == "loop4-skill"
     assert promote_calls[0]["runner"] is runner_sentinel
+
+    # runner_b must be a HintedRunner wrapping the A runner with candidate body
+    from argos.learning.dream import HintedRunner
+    runner_b = promote_calls[0]["runner_b"]
+    assert isinstance(runner_b, HintedRunner), (
+        "runner_b must be a HintedRunner (A=bare B=hinted); "
+        "regression: A==B would mask real flakiness and never show improvement"
+    )
+    assert runner_b.hint == "# body\n", "HintedRunner.hint must equal candidate.body_markdown"
 
     # auto-built task has correct fields
     tasks = promote_calls[0]["tasks"]

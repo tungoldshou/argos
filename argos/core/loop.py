@@ -1244,6 +1244,8 @@ class AgentLoop:
             from argos.core.honesty import COMPUTER_USE_PROMPT
             safe = safe + "\n\n" + COMPUTER_USE_PROMPT
         # 工作流段:默认注入(autonomy flip, batch5);ARGOS_WORKFLOWS=0 显式关闭。
+        # ponytail: /workflows TUI toggle is deferred (no in-TUI on/off switch
+        # yet); control via ARGOS_WORKFLOWS env var only for now.
         if _os_cu.environ.get("ARGOS_WORKFLOWS", "1") != "0":
             from argos.core.honesty import WORKFLOW_PROMPT
             safe = safe + "\n\n" + WORKFLOW_PROMPT

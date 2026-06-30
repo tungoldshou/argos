@@ -93,12 +93,14 @@ def _enable_in_body(body: str) -> str:
             in_fm = fence_seen == 1
             out.append(line)
             continue
-        if in_fm and stripped == "enabled: false":
-            out.append(line.replace("enabled: false", "enabled: true", 1))
+        if in_fm and stripped.lower().replace(" ", "") == "enabled:false":
+            # ponytail: normalise spacing/case so distiller format drift can't
+            # silently leave a gate-winning skill disabled.
+            out.append(line.replace("enabled: false", "enabled: true", 1)
+                          .replace("enabled:false", "enabled: true", 1)
+                          .replace("enabled: False", "enabled: true", 1))
         else:
             out.append(line)
-        if fence_seen >= 2:
-            in_fm = False
     return "".join(out)
 
 

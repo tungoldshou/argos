@@ -742,11 +742,15 @@ class RunWorker:
             store_dir = self._manager.store.runs_dir()
             skills_root = Path(os.path.expanduser("~/.argos/skills"))
 
-            # Loop-4 wiring: build a sandboxed runner_factory from the per-run
-            # loop_factory + worktree already on this worker.  hook._on_passed
-            # auto-builds an EvalTask from workspace+verify_cmd when tasks=[].
-            # Fail-soft: if either component is missing, fall back to candidate-
-            # staging only (original behaviour).
+            # ponytail: Loop-4 ORCHESTRATION is wired — promote() is reachable,
+            # A=bare/B=hinted runners are correctly separated — but live A/B eval
+            # is inert until EvalRunner._drive drives a real AgentLoop (v1.1
+            # real-loop adapter, shared with Dream).  Real AgentLoop has only
+            # `async def run`, no `run_sync`; _drive returns PASS_ERROR for both
+            # A and B → b_passed(0) <= a_passed(0) → no_improvement → no skill
+            # is ever auto-enabled in a live daemon.  Fails safe: never promotes,
+            # never fakes a pass.  See runner.py:334 (v1.1 TODO) and
+            # tests/learning/test_eval_runner_inert.py for the locked ceiling.
             _runner_factory = None
             if self._loop_factory is not None and self._worktree is not None:
                 try:
