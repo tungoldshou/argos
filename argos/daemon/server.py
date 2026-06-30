@@ -248,6 +248,9 @@ class DaemonHTTPServer:
                 if method == "POST" and rest.endswith("/pause"):
                     rid = rest[:-len("/pause")]
                     return await self._handle_pause(writer, headers, rid)
+                if method == "POST" and rest.endswith("/suspend"):
+                    rid = rest[:-len("/suspend")]
+                    return await self._handle_suspend(writer, headers, rid)
                 if method == "POST" and rest.endswith("/resume"):
                     rid = rest[:-len("/resume")]
                     return await self._handle_resume(writer, headers, rid)
@@ -635,6 +638,16 @@ class DaemonHTTPServer:
             return await self._send_error(writer, 409, CODE_INVALID_TRANSITION,
                                           "run is not running (cannot pause)")
         await self._send_json(writer, 202, {"state": "pause_requested"})
+
+    async def _handle_suspend(self, writer, headers, run_id):
+        """POST /runs/{id}/suspend — Ctrl+B 后台化:running → suspended(下个 step 边界)。"""
+        if (sid := await self._require_owner(writer, headers)) is None:
+            return
+        ok = await self._manager.request_suspend(run_id)
+        if not ok:
+            return await self._send_error(writer, 409, CODE_INVALID_TRANSITION,
+                                          "run is not running (cannot suspend)")
+        await self._send_json(writer, 202, {"state": "suspend_requested"})
 
     async def _handle_resume(self, writer, headers, run_id):
         if (sid := await self._require_owner(writer, headers)) is None:

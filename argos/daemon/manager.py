@@ -50,9 +50,10 @@ class RunManager:
         self._index = StateIndex(index_path)
         self._index.load()
         self._lock = asyncio.Lock()
-        # run_id → pause/cancel requests
+        # run_id → pause/cancel/suspend requests
         self._pause_requested: dict[str, asyncio.Event] = {}
         self._cancel_requested: dict[str, bool] = {}
+        self._suspend_requested: dict[str, bool] = {}
         # run_id → (asyncio.Queue, ...) — fan-out
         self._subscribers: dict[str, set[asyncio.Queue]] = {}
 
@@ -100,10 +101,11 @@ class RunManager:
                 model=model, approval_level=approval_level,
             )
             self._index.save()
-            # 初始化 pause/cancel flag
+            # 初始化 pause/cancel/suspend flag
             self._pause_requested[run_id] = asyncio.Event()
             self._pause_requested[run_id].set()   # 默认 set(不阻塞)
             self._cancel_requested[run_id] = False
+            self._suspend_requested[run_id] = False
         return run_id
 
     def get_run(self, run_id: str) -> IndexEntry | None:
@@ -165,6 +167,19 @@ class RunManager:
 
     def is_cancel_requested(self, run_id: str) -> bool:
         return self._cancel_requested.get(run_id, False)
+
+    async def request_suspend(self, run_id: str) -> bool:
+        """请求 suspend(Ctrl+B 后台化):仅 running 可挂起。worker 在下个 step 边界写
+        checkpoint + mark_suspended + 脱离协程;resume 由 _spawn_suspended_resume 重建。"""
+        async with self._lock:
+            current = read_state(run_id, self._index)
+            if current != "running":
+                return False   # 状态机拦(只有 running 能后台化)
+            self._suspend_requested[run_id] = True
+        return True
+
+    def is_suspend_requested(self, run_id: str) -> bool:
+        return self._suspend_requested.get(run_id, False)
 
     def pause_event(self, run_id: str) -> asyncio.Event:
         return self._pause_requested.setdefault(run_id, asyncio.Event())

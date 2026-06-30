@@ -2,12 +2,12 @@
 
 > 别让一次通过的经验被丢弃。 `argos/learning/` 现在会在夜间把多次相似的已验证 run
 > 聚类、综合成泛化 skill，再过 A/B 晋升门；同时整理记忆、合并重复、优雅衰减。
-> 灵魂一句话：**只有验证通过的经验才能变成能力，夜间管道不擅自执行，建议恒需确认**。
+> 灵魂一句话：**只有验证通过的经验才能变成能力——夜间管道默认自主运行，唯有在真 A/B 验证里严格胜过基线的技能才会自动启用**。
 
 ## 一句话
 
 夜间定时（或手动）扫描未晋升的候选、已晋升 skill、未消费反思，聚类相似的、综合成泛化经验、
-过 A/B 晋升门、整理记忆。全程验证门控，所有建议都需用户确认。
+过 A/B 晋升门、整理记忆。全程验证门控；默认 daemon 下夜间自主运行，A/B 严格胜出的技能自动启用（verify 门即质量闸，无额外人工确认）。
 
 ## 为什么需要
 
@@ -39,7 +39,7 @@
    作为硬防线。
 2. **无证据绝不晋升**：workspace 消失 / 无有效 A/B 任务 → 跳过该簇，候选保留，报告注明原因。
 3. **E4 防火墙**：self-verified 的候选（用户级验证未通过就已为真）永远不进材料库。
-4. **建议恒需确认**：Conductor 的 `requires_confirmation` 恒 `True`；没有"静默夜跑"。
+4. **主动建议恒需确认 / 夜间自主**：Conductor 弹给你的 `ProactiveSuggestion`（文件触发 / cron）`requires_confirmation` 恒 `True`，要 `/confirm`；但内置 `builtin-dream-nightly` 在默认 daemon 下**自主运行**（注入 `dream_starter` 即走自主路径；未注入才退回"发建议待确认"的旧路）——可在 `orders.jsonl` 关闭。
 5. **永不硬删**：记忆整理（合并重复、衰减归档）绝不物理删除条目，只标记衰减或合并。
 
 ## 完整数据流（6 个阶段）
@@ -52,7 +52,7 @@
         │
         ▼ （空料静默，≥1 簇或 ≥3 条未消费材料才建议）
         │
-  ② ProactiveSuggestion(kind=dream) —— 需用户确认
+  ② 默认(daemon)自主直跑 → ③；未注入 dream_starter 时退回 ProactiveSuggestion(kind=dream) 待 /confirm
         │
         ▼
   ③ DreamPipeline（daemon 进程内，host 侧管道）
@@ -198,7 +198,7 @@ Dream 在此基础上再加**两层纵深**：
 - **A 侧**（control）：原始候选，不注入 skill hint。
 - **B 侧**（treatment）：综合产物，带 skill hint（模型可参考）。
 - **晋升条件**：B 严格大于 A（pass_rate、cost、speed 二选一胜出）；同名 skill 自动覆盖。
-- **晋升产物**：`enabled: false`（user review gate，沿用 install 流程）。
+- **晋升产物**：`enabled: true`（自动启用——A/B verify 门即质量闸，无额外人工复核步骤；`promotion_gate.py` 写入即生效，下次 run 起作用）。
 - **无证据拒晋升**：workspace 消失 / 无有效任务 → 报告 `no_tasks_available`，候选保留。
 
 ## 记忆整理（consolidate）
