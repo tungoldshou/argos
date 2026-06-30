@@ -92,6 +92,10 @@ class Verifier:
         self._test_generator = test_generator
         self._goal = goal
 
+    def set_goal(self, goal: str) -> None:
+        """Update the current run goal (called by loop before each verify phase)."""
+        self._goal = goal
+
     def verify(self, verify_cmd: str | None, *, attempts: int = 1) -> Verdict:
         """返回三态 Verdict(passed/failed/unverifiable)。
 
