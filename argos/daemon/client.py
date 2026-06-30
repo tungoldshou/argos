@@ -205,6 +205,12 @@ class DaemonClient:
         )
         return self._check(status, self._parse_json(status, raw), (202, 409))
 
+    async def suspend(self, session_id: str, run_id: str) -> dict:
+        status, _, raw = await self._request(
+            "POST", f"/runs/{run_id}/suspend", session_id=session_id,
+        )
+        return self._check(status, self._parse_json(status, raw), (202, 409))
+
     async def resume(self, session_id: str, run_id: str) -> dict:
         status, _, raw = await self._request(
             "POST", f"/runs/{run_id}/resume", session_id=session_id,

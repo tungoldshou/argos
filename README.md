@@ -195,11 +195,15 @@ The agent cannot self-certify. Three rules enforce this:
 ### OS sandbox
 
 The agent runs inside a macOS Seatbelt profile: no outbound network
-unless explicitly approved, writes confined to the declared workspace,
-reads scoped to the project plus user home. The capability broker on
-top adds egress allowlists (Tavily / DDGS / configured MCP hosts) and
-per-action approval requests. Network is *off* by default — and the
-AUTO (`/yolo`) approval level does not silently flip it on.
+unless explicitly approved, writes confined to the declared workspace.
+Reads are deliberately broad — the agent has to import libraries and
+read your code — but credential paths (`~/.ssh`, `~/.aws`, …) are
+denied, and reading is not the exfiltration path here: with network
+off and writes caged to the workspace, nothing it reads can leave.
+The capability broker on top adds egress allowlists (Tavily / DDGS /
+configured MCP hosts) and per-action approval requests. Network is
+*off* by default — and the AUTO (`/yolo`) approval level does not
+silently flip it on.
 
 ### Smart approval
 
@@ -350,10 +354,13 @@ side-effect layer (the approval gate).
 
 The conductor (`argos/conductor/`) executes standing orders
 without blocking on the user — cron-lite schedules and file-trigger
-watchers — but **never acts without confirmation**. Every suggestion is
-a `ProactiveSuggestion` with `requires_confirmation=True`. The user
-either `/confirm <id>` or `/dismiss <id>`; the engine does not
-auto-execute. `/orders` lists the active standing orders.
+watchers. The proactive *suggestions* it raises for you always need your
+nod: every `ProactiveSuggestion` carries `requires_confirmation=True`, so
+you `/confirm <id>` or `/dismiss <id>` and the engine never auto-executes
+a suggestion. Its one autonomous standing order is the nightly Dream
+consolidation (below): by default it runs on schedule and auto-enables
+self-distilled skills that clear its A/B verify gate, without asking.
+`/orders` lists the active standing orders.
 
 ### Computer use (perception)
 
@@ -388,8 +395,12 @@ them by similarity (goal + verify_cmd token Jaccard ≥ 0.35), synthesizes
 multi-source clusters into a single skill (model writes narrative only;
 code and verify commands are copied verbatim from sources), and runs an
 A/B promotion gate. Fails safely: missing workspaces → "no evidence to
-promote", narrative generation failures → template fallback. All suggestions
-require user confirmation (Conductor `requires_confirmation=true`). Integrates
+promote", narrative generation failures → template fallback. By default the
+nightly run is autonomous, and a synthesized skill is **auto-enabled** only
+when it strictly beats the baseline in a real A/B verify comparison — the
+verify gate is the quality bar, so there is no separate confirmation step
+(disable `builtin-dream-nightly` in `~/.argos/conductor/orders.jsonl` to turn
+it off). Integrates
 with memory consolidation to merge reflections, decay low-confidence entries,
 and archive old experiences (never hard-delete). See `docs/dream.md`.
 

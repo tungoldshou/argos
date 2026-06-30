@@ -368,8 +368,25 @@ class RunWorker:
                 # typed Event 桥:dataclass → dict(兼容 FakeLoop dict 直通)
                 ev_dict = _to_event_dict(ev)
                 ev_kind = ev_dict.get("kind", "")
-                # pause 检测:在 step 边界前阻塞
+                # suspend / pause 检测:在 step 边界
                 if ev_kind in ("code_action", "phase_change"):
+                    # Ctrl+B 后台化:checkpoint + mark_suspended + 脱离协程(早于 pause)。
+                    # resume 时由 server._spawn_suspended_resume 从 checkpoint 重建 worker。
+                    if self._manager.is_suspend_requested(self.run_id):
+                        self._manager.mark_suspended(
+                            self.run_id, last_step=self._step_count,
+                            msg_count=self._message_count, last_event_seq=self._event_seq,
+                        )
+                        if self._registry is not None:
+                            self._registry.mark(run_id=self.run_id, state="suspended")
+                        await self._manager.fanout(self.run_id, {
+                            "kind": "state_change",
+                            "from": "running",
+                            "to": "suspended",
+                            "reason": "user_background",
+                            "ts": time.time(),
+                        })
+                        return  # 脱离:跳过 mark_completed + learning hook;finally 清沙箱/关 SSE
                     if not pause_event.is_set():
                         # 写 checkpoint + state_change + 阻塞
                         self._manager.mark_paused(
