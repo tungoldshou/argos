@@ -1243,8 +1243,10 @@ class AgentLoop:
         if _os_cu.environ.get("ARGOS_COMPUTER_USE"):
             from argos.core.honesty import COMPUTER_USE_PROMPT
             safe = safe + "\n\n" + COMPUTER_USE_PROMPT
-        # 工作流段:Phase 5.3 起默认不进提示(重型编排,普通任务用不上);仅 ARGOS_WORKFLOWS=1 注入。
-        if _os_cu.environ.get("ARGOS_WORKFLOWS"):
+        # 工作流段:默认注入(autonomy flip, batch5);ARGOS_WORKFLOWS=0 显式关闭。
+        # ponytail: /workflows TUI toggle is deferred (no in-TUI on/off switch
+        # yet); control via ARGOS_WORKFLOWS env var only for now.
+        if _os_cu.environ.get("ARGOS_WORKFLOWS", "1") != "0":
             from argos.core.honesty import WORKFLOW_PROMPT
             safe = safe + "\n\n" + WORKFLOW_PROMPT
         # LSP 工具段:仅当用户显式创建了 ~/.argos/lsp.json 且 servers 非空才注入 ——
@@ -1740,10 +1742,8 @@ class AgentLoop:
                 if self._broker is not None and hasattr(self._broker, "take_computer_artifact"):
                     self._pending_screenshot = self._broker.take_computer_artifact()
                 # 工作流提议:agent 本段调了 propose_workflow({...}) → 异步态校验+审批+引擎执行+结果回灌。
-                # Phase 5.3(review #9):工作流默认 off,仅 ARGOS_WORKFLOWS=1 时才 dispatch —— 否则即便
-                # 模型(训练先验/被污染的导入技能)凭空吐 propose_workflow,host 也不跑工作流机器(对称于
-                # 提示词不再宣传它);未开时当普通无副作用文本走常规 feedback。
-                _wf_on = bool(__import__("os").environ.get("ARGOS_WORKFLOWS"))
+                # 工作流默认 on(autonomy flip, batch5);ARGOS_WORKFLOWS=0 显式关闭。
+                _wf_on = __import__("os").environ.get("ARGOS_WORKFLOWS", "1") != "0"
                 _wf_spec = (extract_workflow_spec(text) if "propose_workflow" in text else None)
                 if _wf_spec is not None and _wf_on:
                     async for ev in self._run_workflow(_wf_spec, messages):
@@ -1752,7 +1752,7 @@ class AgentLoop:
                     continue   # 工作流结果已作为 feedback 回灌,跳过常规 exec feedback
                 feedback = self._feedback(result)
                 if _wf_spec is not None and not _wf_on:
-                    # 诚实纠偏:工作流默认关闭时 host 不 dispatch,但沙箱 _propose_workflow_pure 回执仍说
+                    # 诚实纠偏:ARGOS_WORKFLOWS=0 时 host 不 dispatch,但沙箱 _propose_workflow_pure 回执仍说
                     # "待审批后执行"(沙箱子进程不知道 host 的开关)—— 不纠偏会让模型空等一个不会跑的工作流。
                     feedback = _i18n_t("loop.workflow.not_enabled") + "\n" + feedback
                 if self._todos:
@@ -1853,6 +1853,10 @@ class AgentLoop:
             else:
                 # W2:run_verify_gate 跑 verifier 出三态 Verdict,投 VerifyVerdict;真问题超
                 # max_rounds 时它自己投 Escalation。loop 据返回的 verdict 决定 break / bounce。
+                # Propagate the current goal so the self-test reviewer proposer gets real context.
+                _verifier = self._harness.verifier
+                if hasattr(_verifier, "set_goal") and self._current_goal:
+                    _verifier.set_goal(self._current_goal)
                 verdict = await self._harness.run_verify_gate(
                     self._verify_cmd, attempt=self._fail_count + 1
                 )

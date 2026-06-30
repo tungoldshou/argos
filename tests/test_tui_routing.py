@@ -54,9 +54,11 @@ def test_routing_config_set_invalid_category_raises(tmp_path):
         TaskCategory("foo_bar")
 
 
-def test_routing_config_safe_default_when_no_routing(tmp_path):
+def test_routing_config_builtin_default_when_no_routing(tmp_path):
+    """無 routing 段 → 返內置默認映射(出廠激活);by_category 含 cheap/strong 分組。"""
+    from argos.routing.config import _DEFAULT_BY_CATEGORY
     cfg = load_routing(tmp_path)
-    assert cfg.by_category == {}
+    assert cfg.by_category == _DEFAULT_BY_CATEGORY
     assert cfg.tier_force_confirm == []
 
 

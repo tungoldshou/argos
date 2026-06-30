@@ -186,7 +186,7 @@ EN: dict[str, str] = {
 
     # ── /tools command ────────────────────────────────────────────────────────
     "tui.tools.header":      "{n} tools in total:",
-    "tui.tools.wf_off":      "orchestration (workflow, requires ARGOS_WORKFLOWS=1)",
+    "tui.tools.wf_off":      "orchestration (workflow, disabled via ARGOS_WORKFLOWS=0)",
     "tui.tools.wf_on":       "orchestration (workflow)",
     "tui.tools.group.file":          "File",
     "tui.tools.group.cmd":           "Command/Verify/Plan",
@@ -589,7 +589,7 @@ ZH: dict[str, str] = {
 
     # ── /tools command ────────────────────────────────────────────────────────
     "tui.tools.header":      "共 {n} 个工具:",
-    "tui.tools.wf_off":      "编排(工作流,需 ARGOS_WORKFLOWS=1 才执行)",
+    "tui.tools.wf_off":      "编排(工作流,已禁用 ARGOS_WORKFLOWS=0)",
     "tui.tools.wf_on":       "编排(工作流)",
     "tui.tools.group.file":          "文件",
     "tui.tools.group.cmd":           "命令/验证/计划",

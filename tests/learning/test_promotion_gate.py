@@ -168,10 +168,10 @@ def test_promote_swallows_runner_exceptions(tmp_path):
     assert not (tmp_path / "skills" / "learned-boom").exists()
 
 
-def test_promote_writes_frontmatter_enabled_false(tmp_path):
-    """晋升落盘后,SKILL.md 应含 enabled: false(沿用 install 的 user review gate)。
+def test_promote_writes_frontmatter_enabled_true(tmp_path):
+    """晋升落盘后,SKILL.md 应含 enabled: true(A/B gate 通过即自动启用,无需人工二次确认)。
 
-    body 由 distill 阶段生成(带 frontmatter),promotion_gate 透传不重写。
+    body 由 distill 阶段生成(带 enabled: false 占位),promotion_gate 在写盘前翻转为 true。
     """
     tasks = [_make_task("t1"), _make_task("t2")]
     runner = _FakeRunner(sequence_a=["failed", "failed"], sequence_b=["passed", "passed"])
@@ -186,7 +186,8 @@ def test_promote_writes_frontmatter_enabled_false(tmp_path):
         skills_root=tmp_path / "skills",
     )
     skill_md = (tmp_path / "skills" / "learned-review" / "SKILL.md").read_text()
-    assert "enabled: false" in skill_md
+    assert "enabled: true" in skill_md
+    assert "enabled: false" not in skill_md
     assert "learned skill body" in skill_md
 
 

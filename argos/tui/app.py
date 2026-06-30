@@ -1352,10 +1352,9 @@ class ArgosApp(App):
             if _broker is not None:
                 _registry = getattr(_broker, "_registry", None)
         names = _tools.get_tool_names(_registry)
-        # 诚实:工作流默认关闭(ARGOS_WORKFLOWS 未设时 host 不 dispatch propose_workflow)——
-        # 注明这点,别让 /tools 把一个默认 inert 的工具显示成立即可用。
+        # 工作流默认 on(autonomy flip);ARGOS_WORKFLOWS=0 显式关闭时用 off 标签。
         import os as _os_wf
-        _wf_label = t("tui.tools.wf_on") if _os_wf.environ.get("ARGOS_WORKFLOWS") else t("tui.tools.wf_off")
+        _wf_label = t("tui.tools.wf_off") if _os_wf.environ.get("ARGOS_WORKFLOWS", "1") == "0" else t("tui.tools.wf_on")
         groups = [
             (t("tui.tools.group.file"), ["read_file", "write_file", "edit_file", "search_files"]),
             (t("tui.tools.group.cmd"), ["run_command", "propose_verify", "update_plan"]),
