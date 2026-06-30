@@ -1851,6 +1851,10 @@ class AgentLoop:
             else:
                 # W2:run_verify_gate 跑 verifier 出三态 Verdict,投 VerifyVerdict;真问题超
                 # max_rounds 时它自己投 Escalation。loop 据返回的 verdict 决定 break / bounce。
+                # Propagate the current goal so the self-test reviewer proposer gets real context.
+                _verifier = self._harness.verifier
+                if hasattr(_verifier, "set_goal") and self._current_goal:
+                    _verifier.set_goal(self._current_goal)
                 verdict = await self._harness.run_verify_gate(
                     self._verify_cmd, attempt=self._fail_count + 1
                 )
