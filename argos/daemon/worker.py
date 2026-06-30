@@ -742,6 +742,36 @@ class RunWorker:
             store_dir = self._manager.store.runs_dir()
             skills_root = Path(os.path.expanduser("~/.argos/skills"))
 
+            # Loop-4 wiring: build a sandboxed runner_factory from the per-run
+            # loop_factory + worktree already on this worker.  hook._on_passed
+            # auto-builds an EvalTask from workspace+verify_cmd when tasks=[].
+            # Fail-soft: if either component is missing, fall back to candidate-
+            # staging only (original behaviour).
+            _runner_factory = None
+            if self._loop_factory is not None and self._worktree is not None:
+                try:
+                    from argos.eval.runner import EvalRunner
+                    import os as _os_eval
+                    _eval_base = Path(_os_eval.path.expanduser("~/.argos/eval/learning"))
+                    _wt = self._worktree
+                    _lf = self._loop_factory
+
+                    def _eval_loop_factory(model_tier: str):  # noqa: E731
+                        return _lf()
+
+                    _base_runner = EvalRunner(
+                        worktree=_wt,
+                        base_dir=_eval_base,
+                        loop_factory=_eval_loop_factory,
+                    )
+                    _runner_factory = lambda: _base_runner  # noqa: E731
+                except Exception as _rf_err:  # noqa: BLE001
+                    log.warning(
+                        "worker: runner_factory build failed for %s, "
+                        "falling back to candidate-staging: %s",
+                        self.run_id, _rf_err,
+                    )
+
             await on_run_completed(
                 run_id=self.run_id,
                 store_dir=store_dir,
@@ -752,8 +782,8 @@ class RunWorker:
                 skills_root=skills_root,
                 candidates_root=Path(os.path.expanduser("~/.argos/learning/candidates")),
                 workspace=(getattr(entry, "workspace", "") or None),
-                runner_factory=None,   # worker 不持有 EvalRunner;hook 跳过 promote 仅产候选
-                tasks=[],              # 同上
+                runner_factory=_runner_factory,
+                tasks=[],  # hook auto-builds EvalTask from workspace+verify_cmd
             )
         except Exception as e:  # noqa: BLE001 — learning 路径必须不挂主任务
             log.warning("worker: learning hook failed for %s: %s", self.run_id, e)
