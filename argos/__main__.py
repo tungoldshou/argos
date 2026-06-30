@@ -1,8 +1,7 @@
 """`argos` 命令入口(Phase 6 整机集成)。
 
-默认注入真 loop_factory(app_factory 组装的 AgentLoop);无 key → 诚实落 demo 态。
+默认注入真 loop_factory(app_factory 组装的 AgentLoop);无 key → 退出并提示 `argos setup`。
 选项:
-  --demo / --demo-fail   FakeLoop 演示(成功 / escalation 路径,沿用 Phase 5)
   --selftest             不连真模型自检:脚本模型跑一轮四阶段贯通,打印 verdict 退出
   --project PATH         在用户项目目录干活(runtime.use_project)
   --model NAME           本次启动用指定的 config profile(默认当前 active;模型不绑定、无档位)
@@ -30,8 +29,6 @@ def _build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"argos {argos.__version__}",
     )
-    p.add_argument("--demo", action="store_true", help=t("cli.demo.help"))
-    p.add_argument("--demo-fail", action="store_true", help=t("cli.demo_fail.help"))
     p.add_argument("--selftest", action="store_true", help=t("cli.selftest.help"))
     p.add_argument("--project", metavar="PATH", help=t("cli.project.help"))
     p.add_argument("--model", metavar="NAME", help=t("cli.model.help"))
@@ -45,12 +42,13 @@ def _build_parser() -> argparse.ArgumentParser:
     # headless 非交互执行(可脚本化 / CI):argos exec "<任务>"
     from argos.cli import headless as _headless_cli
     _headless_cli.add_subparser(sub)
-    sub.add_parser(
+    sp_setup = sub.add_parser(
         "setup",
         help=t("cli.setup.help"),
         epilog=t("cli.setup.epilog"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    sp_setup.add_argument("--advanced", action="store_true", help=t("cli.setup.advanced_help"))
     sp_update = sub.add_parser(
         "self-update",
         help=t("cli.self_update.help"),
@@ -261,8 +259,13 @@ def main() -> None:
 
     if getattr(args, "command", None) == "setup":
         from argos import setup_wizard
+        _con = None
+        if sys.stdout.isatty():   # 真终端才上色 + spinner;管道/CI 保持纯文本
+            from rich.console import Console
+            _con = Console()
         asyncio.run(setup_wizard.run(
-            reader=lambda prompt="": input(prompt), writer=print))
+            reader=lambda prompt="": input(prompt), writer=print,
+            console=_con, advanced=getattr(args, "advanced", False)))
         return
 
     if args.selftest:
@@ -270,16 +273,7 @@ def main() -> None:
 
     from argos.tui.app import ArgosApp
 
-    if args.demo_fail:
-        from argos.tui.fakeloop import FailingFakeLoop
-        ArgosApp(loop_factory=lambda **kw: FailingFakeLoop()).run()
-        return
-    if args.demo:
-        from argos.tui.fakeloop import FakeLoop
-        ArgosApp(loop_factory=lambda **kw: FakeLoop()).run()
-        return
-
-    # 真 loop:组装全栈;无 key 诚实落 demo 态(不假装能跑)。
+    # 真 loop:组装全栈;无 key → 诚实退出并提示 setup(不滑进啥也干不了的假 TUI)。
     try:
         from argos.app_factory import build_components, build_loop_factory
         from argos.approval import ApprovalLevel
@@ -299,10 +293,9 @@ def main() -> None:
         ).run()
     except (RuntimeError, _TuiConfigError) as e:
         # ConfigError(config.py) subclasses Exception, not RuntimeError → 分开列举。
-        # 无 key / 无效 profile → 诚实落 demo 态,不假装能跑。
-        from argos.tui.fakeloop import FakeLoop
+        # 无 key / 无效 profile → 诚实退出:打印可操作提示 + 非零退出码(不假装能跑、不滑进假 TUI)。
         print(t("cli.no_key_fallback", err=e), file=sys.stderr)
-        ArgosApp(loop_factory=lambda **kw: FakeLoop(), demo=True).run()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
