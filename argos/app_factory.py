@@ -42,6 +42,7 @@ from argos.sandbox.broker import CapabilityBroker
 from argos.sandbox.egress import EgressPolicy
 from argos.sandbox.executor import SeatbeltExecutor, select_backend
 from argos.tools.receipts import ReceiptSigner
+from argos.ledger.store import LedgerStore
 from argos.protocol.events import EventBus
 
 # #11 per-task routing
@@ -110,6 +111,9 @@ class AppComponents:
     # 格式:{cap_name: verify_hint_str, ...}；generate() 只消费已知 key(pytest_cmd 等),
     # 其余 key 静默忽略(generate 已测试 test_unknown_hints_ignored)。
     capability_hints: dict[str, str] = field(default_factory=dict)
+    # inline 账本:行为账本共享到 build_loop_factory,使 inline TUI run 也产生 signed receipts。
+    # None = 兼容旧路径(测试 / headless 直建 AppComponents 时)。
+    ledger_store: LedgerStore | None = None
 
     def close(self) -> None:
         self.sandbox.close()
@@ -452,6 +456,9 @@ def build_components(
     for _w in external_surface_warnings():
         _logging.getLogger("argos.sandbox").warning("[沙箱外执行面] %s", _w)
 
+    # inline 账本:与 daemon/__main__.py:135-136 同模式,写 ~/.argos/ledger/<run_id>.jsonl。
+    ledger_store = LedgerStore()
+
     return AppComponents(
         store=store, broker=broker, verifier=verifier, model=model,
         sandbox=sandbox, gate=gate, config=loop_config, workspace=ws,
@@ -463,6 +470,7 @@ def build_components(
         audit_log=perm_audit,
         registry=registry,   # P2 能力注册表(进程级单注册表)
         capability_hints=_capability_hints,  # P4 策略生成 verify_hint 聚合
+        ledger_store=ledger_store,  # inline 账本(build_loop_factory 透传给 AgentLoop)
     )
 
 
@@ -490,5 +498,6 @@ def build_loop_factory(c: AppComponents) -> "Callable[[str | None], AgentLoop]":
             # (verify_dir==workspace,篡改可见)。否则 inline 下篡改检测哑、verify 跑错目录。daemon 走
             # build_run_stack(不开此开关),worker.py 仍自管上下文 → 行为零变更。
             manage_runtime_context=True, project_mode=True,
+            ledger_store=c.ledger_store,  # inline 账本(None=旧路径兼容)
         )
     return factory

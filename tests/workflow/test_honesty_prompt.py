@@ -10,7 +10,7 @@ from argos.core.honesty import HONESTY_SYSTEM, WORKFLOW_PROMPT
 def test_workflow_prompt_carries_propose_workflow_and_ops():
     s = WORKFLOW_PROMPT
     assert "propose_workflow" in s
-    for op in ("fan_out", "pipeline", "panel", "loop_until", "synthesize"):
+    for op in ("fan_out", "pipeline", "panel", "loop_until", "synthesize", "best_of_n"):
         assert op in s, f"工作流段应提到 op {op}"
 
 
