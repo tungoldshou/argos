@@ -144,15 +144,17 @@ def _unshare_argv(workspace: Path, child_argv: list[str], *,
 
 
 def _linux_spawn(*, backend: str, workspace: Path, child_argv: list[str],
-                 env: dict[str, str] | None = None) -> subprocess.Popen:
+                 env: dict[str, str] | None = None, sandbox: bool = True) -> subprocess.Popen:
     """按 backend 选 bwrap/unshare 包子进程,返 Popen(stdin/stdout 管道)。
 
-    与 seatbelt.spawn_child 签名对齐:caller 给 child_argv + env,内部写 .profile
-    或拼 argv,返可 await 的 Popen。
+    与 seatbelt.spawn_child 签名对齐:caller 给 child_argv + env,内部写 .profile 或拼 argv。
+    sandbox=False(#2 opt-in 默认关)→ 不裹 bwrap/unshare,child_argv 直跑(治理仍在,无内核牢笼)。
     """
     workspace = Path(workspace)
     workspace.mkdir(parents=True, exist_ok=True)
-    if backend == "bwrap":
+    if not sandbox:
+        argv = list(child_argv)   # 未沙箱化:直跑
+    elif backend == "bwrap":
         argv = _bwrap_argv(workspace, child_argv)
     elif backend == "unshare":
         argv = _unshare_argv(workspace, child_argv)
@@ -181,27 +183,32 @@ class _BaseLinuxExecutor:
     def spawn(self, *, workspace: Path, namespace: dict[str, Any],
               allow_workflow: bool = True, read_only: bool = False,
               tool_allowlist: "list[str] | None" = None) -> None:
-        if _AVAILABLE_BACKEND is None:
-            from argos.i18n import t
-            raise RuntimeError(t("sandbox.linux.no_backend_spawn"))
-        if self.backend and self.backend != _AVAILABLE_BACKEND:
-            # 想用 bwrap 但只有 unshare(或反之)—— 降级提示但不抛(让代码继续跑)
-            import warnings
-            warnings.warn(
-                f"沙箱后端退化:想用 {self.backend},实际用 {_AVAILABLE_BACKEND} "
-                f"(前者更强,后者仅保网络隔离)",
-                RuntimeWarning, stacklevel=2,
-            )
-            effective_backend = _AVAILABLE_BACKEND
-        else:
-            effective_backend = self.backend or _AVAILABLE_BACKEND
+        # #2 CC对齐:OS 沙箱 opt-in,默认关。关时不要求后端、不裹 bwrap/unshare(治理仍在)。
+        from argos.config import sandbox_enabled
+        _sandbox = sandbox_enabled()
+        effective_backend = ""
+        if _sandbox:
+            if _AVAILABLE_BACKEND is None:
+                from argos.i18n import t
+                raise RuntimeError(t("sandbox.linux.no_backend_spawn"))
+            if self.backend and self.backend != _AVAILABLE_BACKEND:
+                # 想用 bwrap 但只有 unshare(或反之)—— 降级提示但不抛(让代码继续跑)
+                import warnings
+                warnings.warn(
+                    f"沙箱后端退化:想用 {self.backend},实际用 {_AVAILABLE_BACKEND} "
+                    f"(前者更强,后者仅保网络隔离)",
+                    RuntimeWarning, stacklevel=2,
+                )
+                effective_backend = _AVAILABLE_BACKEND
+            else:
+                effective_backend = self.backend or _AVAILABLE_BACKEND
         self._workspace = Path(workspace)
         # 子进程 tools/files.py 写牢笼按 ARGOS_WORKSPACE 解析(模块级 WORKSPACE);
         # 必须把它对齐到本次 spawn 的 workspace(同 SeatbeltExecutor 行为)。
         child_env = {**os.environ, "ARGOS_WORKSPACE": str(workspace)}
         self._proc = _linux_spawn(
             backend=effective_backend, workspace=Path(workspace),
-            child_argv=seatbelt.python_child_argv(), env=child_env,
+            child_argv=seatbelt.python_child_argv(), env=child_env, sandbox=_sandbox,
         )
         import json
         authorized = namespace.get("__authorized_imports__") or None
