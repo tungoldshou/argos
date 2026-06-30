@@ -55,7 +55,7 @@ def test_title_unknown_prefix_no_tag():
 @pytest.mark.asyncio
 async def test_app_renders_inline_choice_with_secret_subtitle():
     """app._handle_approval:secret 命中 → InlineChoice body 含 did-you-mean 提示 + 标题含标签。"""
-    app = ArgosApp(loop_factory=lambda: FakeLoop(),
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop(),
                    gate=ApprovalGate(ApprovalLevel.CONFIRM))
     req = ApprovalRequest(
         call_id="c1", action="write_file", args={"path": "a.py", "content": "AKIA..."},

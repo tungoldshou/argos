@@ -66,7 +66,7 @@ async def test_plan_rendered_event_pushes_plan_modal():
     不 await start_run —— 因为本测试的 loop 故意挂在 _plan_decision_event(等用户决策),不
     自然结束,await start_run 会让测试 deadlock。"""
     loop = _PlanRenderedLoop()
-    app = ArgosApp(loop_factory=lambda: loop, demo=False,
+    app = ArgosApp(loop_factory=lambda **kw: loop, demo=False,
                    gate=ApprovalGate(ApprovalLevel.CONFIRM))
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
@@ -91,7 +91,7 @@ async def test_plan_rendered_event_pushes_plan_modal():
 async def test_modal_decision_calls_exit_plan_mode_with_approve_start():
     """选 1 (Approve and start) → loop 收到 approve_start 决策。"""
     loop = _PlanRenderedLoop()
-    app = ArgosApp(loop_factory=lambda: loop, demo=False,
+    app = ArgosApp(loop_factory=lambda **kw: loop, demo=False,
                    gate=ApprovalGate(ApprovalLevel.CONFIRM))
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
@@ -114,7 +114,7 @@ async def test_modal_decision_calls_exit_plan_mode_with_approve_start():
 async def test_modal_decision_keep_planning_wakes_loop_for_another_round():
     """选 3 (Keep planning) → loop 收到 keep_planning 决策(本测不真验再一轮,只验决策传回)。"""
     loop = _PlanRenderedLoop()
-    app = ArgosApp(loop_factory=lambda: loop, demo=False,
+    app = ArgosApp(loop_factory=lambda **kw: loop, demo=False,
                    gate=ApprovalGate(ApprovalLevel.CONFIRM))
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()

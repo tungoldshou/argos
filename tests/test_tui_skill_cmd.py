@@ -81,7 +81,7 @@ async def test_pilot_skill_cmd_dispatch(tmp_path, monkeypatch):
 
     _reset_registry()  # 清理前一个测试的 stub
     monkeypatch.chdir(tmp_path)
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 30)) as pilot:
         await pilot.pause()
         # 通过 query prompt 并 submit 触发 /verify

@@ -17,6 +17,7 @@ _COMMAND_KEYS: list[str] = [
     "resume", "clear", "yolo", "trust", "undo", "ledger", "journal", "retry",
     "plan", "hooks", "lsp", "permissions", "runs", "orders", "confirm", "dismiss",
     "dream", "verify", "security-review", "simplify", "eval", "routing", "context",
+    "loop", "goal", "schedule", "watch",
 ]
 
 

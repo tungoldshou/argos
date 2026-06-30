@@ -32,7 +32,7 @@ from argos.tui.fakeloop import FakeLoop
 
 @pytest.mark.asyncio
 async def test_border_idle_then_runs_then_resets():
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
         # idle:中性灰
@@ -51,7 +51,7 @@ async def test_terminal_verdict_glow_survives_report_phase():
     from argos.core.verify_gate import Verdict
     from argos.tui.events import PhaseChange, VerifyVerdict
 
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
         app._glow_start()  # 模拟一轮开始(解锁 + plan 色)
@@ -69,7 +69,7 @@ async def test_passed_verdict_glow_does_not_lock():
     from argos.core.verify_gate import Verdict
     from argos.tui.events import PhaseChange, VerifyVerdict
 
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
         app._glow_start()

@@ -32,7 +32,7 @@ def test_match_commands_prefix_and_param_gate():
 # ── 多行输入 + 反斜杠续行 + 提交 ───────────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_enter_submits_and_clears():
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         prompt = app.query_one("#prompt", PromptArea)
@@ -45,7 +45,7 @@ async def test_enter_submits_and_clears():
 
 @pytest.mark.asyncio
 async def test_backslash_continuation_inserts_newline_not_submit():
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         prompt = app.query_one("#prompt", PromptArea)
@@ -61,7 +61,7 @@ async def test_backslash_continuation_inserts_newline_not_submit():
 # ── slash 菜单显隐 + Tab 补全 ─────────────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_slash_menu_shows_and_tab_completes():
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         prompt = app.query_one("#prompt", PromptArea)
@@ -83,7 +83,7 @@ async def test_slash_menu_shows_and_tab_completes():
 @pytest.mark.asyncio
 async def test_slash_menu_arrow_selects_and_enter_runs_selected():
     """TUI v2 §6.1:菜单可见时 ↑↓ 移动 ▸ 选中项,Enter 执行选中命令(不再只能首项)。"""
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         menu = app.query_one("#slash-menu", SlashMenu)
@@ -105,7 +105,7 @@ async def test_slash_menu_arrow_selects_and_enter_runs_selected():
 @pytest.mark.asyncio
 async def test_slash_menu_tab_completes_arrow_selected():
     """↓ 改选后 Tab 补全的是选中项,不是首项。"""
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         prompt = app.query_one("#prompt", PromptArea)
@@ -122,7 +122,7 @@ async def test_slash_menu_tab_completes_arrow_selected():
 
 @pytest.mark.asyncio
 async def test_slash_menu_hides_for_non_slash():
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         menu = app.query_one("#slash-menu", SlashMenu)
@@ -144,7 +144,7 @@ class _SlowLoop:
 
 @pytest.mark.asyncio
 async def test_escape_interrupts_active_run():
-    app = ArgosApp(loop_factory=lambda: _SlowLoop(), demo=False)
+    app = ArgosApp(loop_factory=lambda **kw: _SlowLoop(), demo=False)
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         app.handle_input("做一件事")          # 起一轮 run(worker)
@@ -161,7 +161,7 @@ async def test_escape_interrupts_active_run():
 
 @pytest.mark.asyncio
 async def test_escape_when_idle_is_noop():
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         await pilot.press("escape")   # 无 run、无菜单 → 不崩、不报错
@@ -171,7 +171,7 @@ async def test_escape_when_idle_is_noop():
 
 @pytest.mark.asyncio
 async def test_escape_closes_slash_menu_before_interrupting():
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         menu = app.query_one("#slash-menu", SlashMenu)

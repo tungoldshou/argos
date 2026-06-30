@@ -33,14 +33,37 @@ class RoutingConfig:
         return tier in self.tier_force_confirm
 
     def is_active(self) -> bool:
-        """是否配置了任何实际路由行为。否则 router 纯 no-op(每步 categorize+select 都解析到
-        default tier、无 force-confirm),不必构造 —— loop 走原路径,省掉每步路由开销(Phase 4.4)。"""
+        """路由表是否有实际路由行为(非空 by_category/by_tool/tier_force_confirm 或非默认 default
+        tier)。内置默认映射已填充 by_category,故出厂即 True。保留此谓词供测试与 app_factory
+        判断——仍需构造 router(不再跳过)。"""
         return bool(self.by_category or self.by_tool or self.tier_force_confirm
                     or self.default != "default")
 
 
+# 内置默认路由映射(自主性 flip:出厂激活,无需用户手写 config.json routing 段)。
+# cheap tier → 快速/只读任务(SIMPLE_READ / PLAN / VERIFY / AUTO_CAPTURE);
+# strong tier → 重量级任务(LONG_RUN / REFACTOR / TEST_WRITE / FILE_EDIT)。
+# 若用户只配了一个 tier,_router_client_factory 在 tier_for(name) 失败时回退到 active tier,
+# 路由退化为 no-op 但绝不报错(单 tier 安全)。用户在 config.json 写了 routing 段则覆盖此默认。
+# ponytail: 两个 tier 名 "cheap"/"strong" 是 argos setup 向导约定的标准名;单 tier 安全靠 app_factory fallback。
+_DEFAULT_BY_CATEGORY: dict[str, str] = {
+    # 轻量 → cheap
+    "simple_read":   "cheap",
+    "plan":          "cheap",
+    "verify":        "cheap",
+    "auto_capture":  "cheap",
+    # 重量 → strong
+    "file_edit":     "strong",
+    "refactor":      "strong",
+    "test_write":    "strong",
+    "long_run":      "strong",
+}
+
+_BUILTIN_DEFAULT = RoutingConfig(by_category=_DEFAULT_BY_CATEGORY)
+
+
 def load_routing(config_dir: Path) -> RoutingConfig:
-    """从 config_dir/config.json 读 routing 段;缺则 safe default(零破坏 spec D17)。"""
+    """从 config_dir/config.json 读 routing 段;缺则返内置默认映射(出厂激活)。"""
     config_dir = Path(config_dir).expanduser()
     cfile = config_dir / "config.json"
     # 任务:JSON 读取走 config_base.read_json_file(OSError 走 silent —— routing 段
@@ -54,10 +77,10 @@ def load_routing(config_dir: Path) -> RoutingConfig:
             raise ConfigError(t("route.config_parse_fail", detail=str(e).split(':', 1)[-1].strip())) from None
         raise
     if raw is None:
-        return RoutingConfig()
+        return _BUILTIN_DEFAULT
     routing = raw.get("routing")
     if not isinstance(routing, dict):
-        return RoutingConfig()
+        return _BUILTIN_DEFAULT
     default = routing.get("default") or "default"
     by_category = dict(routing.get("by_category") or {})
     by_tool = dict(routing.get("by_tool") or {})

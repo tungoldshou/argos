@@ -98,6 +98,7 @@ class PhaseChange:
     kind = "phase_change"
     phase: Phase                     # plan|act|verify|report
     actions: int
+    max_steps: int | None = None     # loopmaxxing budget; None = unknown (safe default)
 
 
 @dataclass(frozen=True, slots=True)

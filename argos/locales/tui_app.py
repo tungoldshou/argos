@@ -41,6 +41,10 @@ EN: dict[str, str] = {
     "cmd.eval":             "Agent self-evaluation + A/B (/eval, /eval run <id>, /eval compare <a> <b>)",
     "cmd.routing":          "View / switch routing config (/routing, /routing set <cat> <tier>)",
     "cmd.context":          "View current LLM context buckets (/context, /context --json)",
+    "cmd.loop":             "Run a task repeatedly until a condition is met (/loop <task> [until: <condition>])",
+    "cmd.goal":             "Submit a goal with a verify exit condition (/goal <task> | verify: <cmd>)",
+    "cmd.schedule":         "Create a timed standing order (/schedule <cron> <task>)",
+    "cmd.watch":            "Watch for file changes and trigger a task (/watch <glob> <task>)",
 
     # ── prompt.py paste / image tokens ───────────────────────────────────────
     "tui.prompt.paste_token": "[pasted text #{n} +{lines} lines]",
@@ -85,6 +89,21 @@ EN: dict[str, str] = {
 
     # ── unknown command ───────────────────────────────────────────────────────
     "tui.cmd.unknown": "Unknown command /{name}",
+    "tui.cmd.unwired": "/{name} is not wired yet — coming in a future batch.",
+
+    # ── /goal and /loop commands ──────────────────────────────────────────────
+    "tui.goal.submitted": "Goal submitted with verify: {verify_cmd}",
+    "tui.goal.usage":     "Usage: /goal <text> [| verify: <cmd>]",
+
+    # ── /schedule and /watch commands ─────────────────────────────────────────
+    "tui.schedule.needs_daemon": "/schedule needs the daemon — start argosd or run with the daemon.",
+    "tui.watch.needs_daemon":    "/watch needs the daemon — start argosd or run with the daemon.",
+    "tui.schedule.usage":        "Usage: /schedule <when>: <goal>  (e.g. /schedule every 1h: summarize logs)",
+    "tui.watch.usage":           "Usage: /watch <glob> <goal>  (e.g. /watch *.py run tests)",
+    "tui.schedule.created":      "Standing order created (kind=schedule, id={id}).",
+    "tui.watch.created":         "Standing order created (kind=file_trigger, id={id}).",
+    "tui.orders.http_failed":    "Daemon returned {status} for /orders.",
+    "tui.orders.request_failed": "Failed to reach daemon for /orders: {err}",
 
     # ── /yolo command ────────────────────────────────────────────────────────
     "tui.yolo.activated": (
@@ -167,7 +186,7 @@ EN: dict[str, str] = {
 
     # ── /tools command ────────────────────────────────────────────────────────
     "tui.tools.header":      "{n} tools in total:",
-    "tui.tools.wf_off":      "orchestration (workflow, requires ARGOS_WORKFLOWS=1)",
+    "tui.tools.wf_off":      "orchestration (workflow, disabled via ARGOS_WORKFLOWS=0)",
     "tui.tools.wf_on":       "orchestration (workflow)",
     "tui.tools.group.file":          "File",
     "tui.tools.group.cmd":           "Command/Verify/Plan",
@@ -425,6 +444,10 @@ ZH: dict[str, str] = {
     "cmd.eval":             "Agent 自我评估 + A/B(/eval, /eval run <id>, /eval compare <a> <b>)",
     "cmd.routing":          "查看 / 切换路由配置(/routing, /routing set <cat> <tier>)",
     "cmd.context":          "查看当前 LLM 上下文分桶(/context, /context --json)",
+    "cmd.loop":             "循环执行直到条件满足(/loop <任务> [until: <条件>])",
+    "cmd.goal":             "提交带验证退出条件的目标(/goal <任务> | verify: <命令>)",
+    "cmd.schedule":         "创建定时任务(standing order)(/schedule <cron> <任务>)",
+    "cmd.watch":            "监视文件变更触发任务(/watch <glob> <任务>)",
 
     # ── prompt.py paste / image tokens ───────────────────────────────────────
     "tui.prompt.paste_token": "[粘贴文本 #{n} +{lines} 行]",
@@ -469,6 +492,21 @@ ZH: dict[str, str] = {
 
     # ── unknown command ───────────────────────────────────────────────────────
     "tui.cmd.unknown": "未知命令 /{name}",
+    "tui.cmd.unwired": "/{name} 命令尚未接线，将在后续批次中实现。",
+
+    # ── /goal and /loop commands ──────────────────────────────────────────────
+    "tui.goal.submitted": "目标已提交，验证命令：{verify_cmd}",
+    "tui.goal.usage":     "用法：/goal <目标文本> [| verify: <命令>]",
+
+    # ── /schedule and /watch commands ─────────────────────────────────────────
+    "tui.schedule.needs_daemon": "/schedule 需要 daemon — 请启动 argosd 或使用 daemon 模式运行。",
+    "tui.watch.needs_daemon":    "/watch 需要 daemon — 请启动 argosd 或使用 daemon 模式运行。",
+    "tui.schedule.usage":        "用法：/schedule <时间>: <目标>  （例：/schedule every 1h: summarize logs）",
+    "tui.watch.usage":           "用法：/watch <glob> <目标>  （例：/watch *.py run tests）",
+    "tui.schedule.created":      "常驻指令已创建（kind=schedule，id={id}）。",
+    "tui.watch.created":         "常驻指令已创建（kind=file_trigger，id={id}）。",
+    "tui.orders.http_failed":    "Daemon 返回 {status}（/orders）。",
+    "tui.orders.request_failed": "访问 daemon /orders 失败：{err}",
 
     # ── /yolo command ────────────────────────────────────────────────────────
     "tui.yolo.activated": (
@@ -551,7 +589,7 @@ ZH: dict[str, str] = {
 
     # ── /tools command ────────────────────────────────────────────────────────
     "tui.tools.header":      "共 {n} 个工具:",
-    "tui.tools.wf_off":      "编排(工作流,需 ARGOS_WORKFLOWS=1 才执行)",
+    "tui.tools.wf_off":      "编排(工作流,已禁用 ARGOS_WORKFLOWS=0)",
     "tui.tools.wf_on":       "编排(工作流)",
     "tui.tools.group.file":          "文件",
     "tui.tools.group.cmd":           "命令/验证/计划",

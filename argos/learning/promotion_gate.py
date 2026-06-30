@@ -62,17 +62,46 @@ def _atomic_write_skill(skill_md: Path, content: str) -> None:
 def _rebuild_index(skills_root: Path) -> None:
     """重新扫描本地 skills 目录,刷新 in-memory index(让 daemon 后续能发现)。
 
-    不调 skills_curator.index.fetch_remote(避免网络);仅触发一次 save_cache 让 index.json
+    不调 skills_curator.index.fetch_remote(避免网络);仅触发一次 load_cache 让 index
     反映本地落盘。失败静默 —— 落盘已成功,index 刷新是 best-effort。
     """
     try:
         from argos.skills_curator import index as _idx
-        # 重新构造一份 cache(只含本地技能,无远端)
-        local_names = sorted(p.parent.name for p in skills_root.glob("*/SKILL.md"))
-        # 不写 cache.json(会覆盖远端 index);仅触发 index.load_cache 校验一致性
-        _idx.load_cache(base_dir=skills_root) if False else None  # 占位,无副作用
+        # ponytail: load_cache is best-effort — failure doesn't block promotion
+        _idx.load_cache(base_dir=skills_root)
     except Exception:  # noqa: BLE001
         pass
+
+
+def _enable_in_body(body: str) -> str:
+    """Rewrite 'enabled: false' → 'enabled: true' in the YAML frontmatter only.
+
+    Scans only the first frontmatter block (lines between the first two '---'
+    fences) to avoid matching body text.  If no such line is found the body is
+    returned unchanged (safe no-op).
+    """
+    lines = body.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return body
+    in_fm = False
+    fence_seen = 0
+    out: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped == "---":
+            fence_seen += 1
+            in_fm = fence_seen == 1
+            out.append(line)
+            continue
+        if in_fm and stripped.lower().replace(" ", "") == "enabled:false":
+            # ponytail: normalise spacing/case so distiller format drift can't
+            # silently leave a gate-winning skill disabled.
+            out.append(line.replace("enabled: false", "enabled: true", 1)
+                          .replace("enabled:false", "enabled: true", 1)
+                          .replace("enabled: False", "enabled: true", 1))
+        else:
+            out.append(line)
+    return "".join(out)
 
 
 def promote(
@@ -179,9 +208,10 @@ def promote(
             a_total=a_total, b_total=b_total,
         )
 
-    # 4. 落盘
+    # 4. 落盘(auto-enable: A/B gate is the quality bar; no extra human step needed)
+    enabled_body = _enable_in_body(body)
     try:
-        _atomic_write_skill(skill_md, body)
+        _atomic_write_skill(skill_md, enabled_body)
     except Exception as e:  # noqa: BLE001
         return PromotionResult(
             promoted=False, reason=f"write_failed:{type(e).__name__}:{e}",
@@ -192,6 +222,11 @@ def promote(
     # 5. best-effort 刷 index(失败不阻断)
     _rebuild_index(skills_root)
 
+    log.info(
+        "auto-enabled skill %r after A/B gate (a=%d/%d → b=%d/%d); "
+        "active on next run",
+        name, a_passed, a_total, b_passed, b_total,
+    )
     return PromotionResult(
         promoted=True, reason="improved",
         a_passed=a_passed, b_passed=b_passed,

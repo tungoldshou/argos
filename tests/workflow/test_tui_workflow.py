@@ -16,7 +16,7 @@ from argos.tui.widgets.workflow_panel import WorkflowPanel
 @pytest.mark.asyncio
 async def test_workflow_events_render_progress_and_summary():
     # AUTO 档:不弹模态,直接渲染进度+汇总
-    app = ArgosApp(loop_factory=lambda: FakeLoop(), gate=ApprovalGate(ApprovalLevel.AUTO))
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop(), gate=ApprovalGate(ApprovalLevel.AUTO))
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         await app._apply_event(WorkflowProposed(name="audit", description="审计",
@@ -34,7 +34,7 @@ async def test_workflow_events_render_progress_and_summary():
 
 @pytest.mark.asyncio
 async def test_workflow_proposed_pushes_modal_under_confirm():
-    app = ArgosApp(loop_factory=lambda: FakeLoop(), gate=ApprovalGate(ApprovalLevel.CONFIRM))
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop(), gate=ApprovalGate(ApprovalLevel.CONFIRM))
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         await app._apply_event(WorkflowProposed(name="x", description="d",
@@ -51,7 +51,7 @@ async def test_workflow_proposed_pushes_modal_under_confirm():
 @pytest.mark.asyncio
 async def test_workflow_panel_marks_error_phase_honestly():
     """诚实:error phase 显失败、不冒充完成;含方括号的 note 不崩(markup=False)。"""
-    app = ArgosApp(loop_factory=lambda: FakeLoop(), gate=ApprovalGate(ApprovalLevel.AUTO))
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop(), gate=ApprovalGate(ApprovalLevel.AUTO))
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         await app._apply_event(WorkflowProposed(name="w", description="d",
@@ -71,7 +71,7 @@ async def test_workflow_panel_marks_error_phase_honestly():
 async def test_workflow_confirm_callback_responds_on_shared_gate():
     """CONFIRM 档批准回调把 decision 打在 app.gate(= broker gate)上,放行 loop 的 await。"""
     gate = ApprovalGate(ApprovalLevel.CONFIRM)
-    app = ArgosApp(loop_factory=lambda: FakeLoop(), gate=gate)
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop(), gate=gate)
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         # 先在 gate 上挂一个与 call_id 对应的待批项(模拟 loop 侧 gate.request)。

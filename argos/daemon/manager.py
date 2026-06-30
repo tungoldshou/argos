@@ -31,6 +31,17 @@ from argos.daemon.store import RunStore
 log = logging.getLogger(__name__)
 
 
+def _prune_snapshot(run_id: str, snapshot_root: "Path") -> None:
+    """删除终态 run 的快照文件(如有)。失败静默,不阻断 recover。"""
+    candidate = snapshot_root / f"run-{run_id}.tar"
+    if candidate.exists():
+        try:
+            candidate.unlink()
+            log.debug("recover: pruned snapshot for terminal run %s", run_id)
+        except OSError as exc:
+            log.warning("recover: failed to prune snapshot %s: %s", candidate, exc)
+
+
 class RunManager:
     """单例;RunManager(runs_dir, index_path) 即可。"""
 
@@ -251,18 +262,22 @@ class RunManager:
     # ── 持久化恢复 ────────────────────────────────────────────────────
 
     def recover(self) -> dict[str, str]:
-        """启动恢复:扫 runs/*.jsonl,对每个 'running' run 改 'suspended'(SIGKILL 中断)。
+        """启动恢复:扫 runs/*.jsonl,对每个 'running' run 改 'suspended'(SIGKILL 中断);
+        同时剪枝终态 run 的快照(completed/failed/cancelled 不再需要 /undo)。
 
         Returns:
             dict[run_id, new_state] 改过的 run;空 dict 表示没改。
         """
+        from argos.core.snapshot import SNAPSHOT_ROOT
+
         recovered: dict[str, str] = {}
         for rid in self._store.list_runs():
             # 找最后 state_change(JSONL 真相源)
             last = self._store.last_state(rid)
             cur = read_state(rid, self._index)
-            # 终态写保护:completed/failed/cancelled 不动
+            # 终态写保护:completed/failed/cancelled 不动;但剪枝其快照
             if cur in TERMINAL_STATES:
+                _prune_snapshot(rid, SNAPSHOT_ROOT)
                 continue
             if cur is None or cur == "pending":
                 # 还没 state_change → 视为 pending 中断 → cancelled
@@ -272,6 +287,7 @@ class RunManager:
                         store=self._store, reason="recover_no_state",
                     )
                     recovered[rid] = "cancelled"
+                    _prune_snapshot(rid, SNAPSHOT_ROOT)
                 # 若 last 是 suspended / completed 等,不再动
                 continue
             if cur == "running":

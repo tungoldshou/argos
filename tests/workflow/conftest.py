@@ -18,8 +18,8 @@ def workflow_loop(tmp_path, scripted_model_factory, requires_sandbox, monkeypatc
 
     requires_sandbox 依赖:无沙箱后端的平台(mac 缺 sandbox-exec、Linux 缺 bwrap/unshare)
     直接 skip,绝不 mock 把沙箱测试假跑过。
-    ARGOS_WORKFLOWS=1:Phase 5.3 后工作流默认 off(host dispatch 也门控,review #9);本 fixture
-    专测工作流路径,显式开启。
+    工作流现已默认 on(autonomy flip, batch5)。本 fixture 保留显式 setenv("ARGOS_WORKFLOWS", "1")
+    以对抗任何上游测试把它改成 "0" 的情况,确保集成路径确定走工作流分支。
     """
     monkeypatch.setenv("ARGOS_WORKFLOWS", "1")
     from argos.core.loop import AgentLoop, LoopConfig

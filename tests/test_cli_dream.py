@@ -148,7 +148,7 @@ async def test_tui_dream_inline_refuses():
         from argos.tui.fakeloop import FakeLoop
         from argos.tui.widgets.transcript import Transcript
 
-        app = ArgosApp(loop_factory=lambda: FakeLoop())
+        app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
         async with app.run_test() as pilot:
             await pilot.pause()
             cmd = parse_slash("/dream")
@@ -175,7 +175,7 @@ async def test_tui_dream_daemon_posts():
 
         # 提取 /dream 纯函数渲染逻辑测试(不经过 Textual app 的 daemon 探测)
         # 直接测 _dream_cmd 实现中的 daemon 分支 — 注入 mock daemon client
-        app = ArgosApp(loop_factory=lambda: FakeLoop())
+        app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
 
         # 手动注入 daemon 客户端 stub(模拟已连上 daemon)
         mock_client = MagicMock()
@@ -223,7 +223,7 @@ async def test_tui_dream_status_non_dict_report_does_not_crash(bad_report):
         from argos.tui.fakeloop import FakeLoop
         from argos.tui.widgets.transcript import Transcript
 
-        app = ArgosApp(loop_factory=lambda: FakeLoop())
+        app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
 
         mock_client = MagicMock()
         mock_client._request = AsyncMock(

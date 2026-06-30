@@ -80,7 +80,7 @@ EN: dict[str, str] = {
 
     # ── workflow notes ───────────────────────────────────────────────────────
     "loop.workflow.not_enabled": (
-        "[note] Workflows are not enabled (ARGOS_WORKFLOWS not set); "
+        "[note] Workflows are disabled (ARGOS_WORKFLOWS=0); "
         "your propose_workflow will not be executed. "
         "Complete the task in a single thread directly, without waiting for it to run."
     ),
@@ -267,7 +267,7 @@ ZH: dict[str, str] = {
 
     # ── 工作流注记 ────────────────────────────────────────────────────────────
     "loop.workflow.not_enabled": (
-        "[note] 工作流未启用(ARGOS_WORKFLOWS 未设),你的 propose_workflow 不会被执行;"
+        "[note] 工作流已禁用(ARGOS_WORKFLOWS=0),你的 propose_workflow 不会被执行;"
         "请直接单线程完成任务,不要等待它运行。"
     ),
 

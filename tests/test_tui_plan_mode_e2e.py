@@ -201,7 +201,7 @@ async def test_e2e_plan_modal_pushed_on_screen_and_dismissed_on_key_1(e2e_loop_f
             yield CostUpdate(tokens_in=10, tokens_out=5, cost_usd=0.0, elapsed_s=0.1)
 
     loop = _MiniLoop()
-    app = ArgosApp(loop_factory=lambda: loop, demo=False,
+    app = ArgosApp(loop_factory=lambda **kw: loop, demo=False,
                    gate=ApprovalGate(ApprovalLevel.CONFIRM))
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()

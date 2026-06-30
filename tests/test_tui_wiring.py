@@ -26,7 +26,7 @@ class _RaisingLoop:
 
 @pytest.mark.asyncio
 async def test_app_boots_with_status_bar_and_transcript():
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         assert app.query_one("#transcript") is not None
@@ -36,7 +36,7 @@ async def test_app_boots_with_status_bar_and_transcript():
 
 @pytest.mark.asyncio
 async def test_run_goal_drives_widgets_from_events():
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         await app.start_run("修个 bug")
@@ -60,7 +60,7 @@ async def test_run_goal_drives_widgets_from_events():
 
 @pytest.mark.asyncio
 async def test_failing_run_shows_escalation_and_failed_verdict():
-    app = ArgosApp(loop_factory=lambda: FailingFakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FailingFakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         await app.start_run("会失败的任务")
@@ -74,7 +74,7 @@ async def test_failing_run_shows_escalation_and_failed_verdict():
 
 @pytest.mark.asyncio
 async def test_slash_yolo_switches_level_and_shows_red_badge():
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         assert app.gate.level is ApprovalLevel.CONFIRM
@@ -87,7 +87,7 @@ async def test_slash_yolo_switches_level_and_shows_red_badge():
 
 @pytest.mark.asyncio
 async def test_slash_status_and_cost_write_to_transcript():
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         app.handle_input("/status")
@@ -101,7 +101,7 @@ async def test_slash_status_and_cost_write_to_transcript():
 
 @pytest.mark.asyncio
 async def test_unknown_slash_is_reported_not_run_as_goal():
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         app.handle_input("/frobnicate")
@@ -116,7 +116,7 @@ async def test_unknown_slash_is_reported_not_run_as_goal():
 @pytest.mark.asyncio
 async def test_loop_exception_degrades_to_error_not_crash():
     """HIGH:loop.run 抛异常时,_produce 捕获并降级为 Error 事件,TUI 不崩溃(诚实上报而非 PANIC)。"""
-    app = ArgosApp(loop_factory=lambda: _RaisingLoop())
+    app = ArgosApp(loop_factory=lambda **kw: _RaisingLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         await app.start_run("会抛异常的任务")
@@ -132,7 +132,7 @@ async def test_loop_exception_degrades_to_error_not_crash():
 @pytest.mark.asyncio
 async def test_demo_mode_marks_subtitle_and_warns_before_run():
     """HIGH:默认 demo 模式头部常驻 DEMO 标识,且每轮起手 banner 声明假数据(诚实)。"""
-    app = ArgosApp(loop_factory=lambda: FakeLoop())  # demo 默认 True
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())  # demo 默认 True
     async with app.run_test() as pilot:
         await pilot.pause()
         assert "DEMO" in app.sub_title
@@ -146,7 +146,7 @@ async def test_demo_mode_marks_subtitle_and_warns_before_run():
 @pytest.mark.asyncio
 async def test_real_loop_has_no_demo_marker():
     """注入真 loop(demo=False)时,DEMO 标识消失 —— 标识与真实状态一致,不撒谎。"""
-    app = ArgosApp(loop_factory=lambda: FakeLoop(), demo=False)
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop(), demo=False)
     async with app.run_test() as pilot:
         await pilot.pause()
         assert "DEMO" not in app.sub_title
@@ -162,7 +162,7 @@ async def test_input_focused_on_mount_and_receives_typing():
     Pilot 跳过的 driver 层(见 test_kitty_keyboard_protocol_disabled_by_default)。"""
     from argos.tui.widgets.prompt import PromptArea
 
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         prompt = app.query_one("#prompt", PromptArea)
@@ -177,7 +177,7 @@ async def test_input_accepts_cjk_characters():
     """回归:输入框能接收汉字(IME 合成后终端送出的字符走与 ASCII 同路径)。"""
     from argos.tui.widgets.prompt import PromptArea
 
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         prompt = app.query_one("#prompt", PromptArea)
@@ -196,7 +196,7 @@ async def test_transcript_fills_main_area_not_collapsed():
     """回归(布局):transcript 必须占主区宽度。此前 ArgosApp 无 CSS → Horizontal 退回默认:
     空 RichLog 收缩到 width=1、CostMeter 撑满整宽 → 对话渲染进 1 列宽 transcript,永远空屏
     (事件其实都写进去了只是不可见)。headless 能量几何,故这条守得住(不像 driver 层 Kitty bug)。"""
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         t = app.query_one("#transcript")
@@ -246,7 +246,7 @@ def test_kitty_disable_respects_explicit_user_optin():
 
 @pytest.mark.asyncio
 async def test_user_goal_echoed_to_transcript():
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         await app.start_run("修个 off-by-one")
@@ -278,7 +278,7 @@ async def test_resume_switches_to_most_recent_session(tmp_path):
     store.append_message("old-sess", role="user", content="做个贪吃蛇")
     store.append_message("old-sess", role="assistant", content="好的,做完了")
 
-    app = ArgosApp(loop_factory=lambda: _LoopWithStore(store), demo=False)
+    app = ArgosApp(loop_factory=lambda **kw: _LoopWithStore(store), demo=False)
     async with app.run_test() as pilot:
         await pilot.pause()
         before = app._session_id                 # 启动是全新 uuid session
@@ -298,7 +298,7 @@ async def test_resume_honest_when_no_history(tmp_path):
     from argos.tui.widgets.transcript import Transcript
 
     store = ArgosStore(db_path=str(tmp_path / "empty.db"))
-    app = ArgosApp(loop_factory=lambda: _LoopWithStore(store), demo=False)
+    app = ArgosApp(loop_factory=lambda **kw: _LoopWithStore(store), demo=False)
     async with app.run_test() as pilot:
         await pilot.pause()
         log = app.query_one("#transcript", Transcript)
@@ -319,7 +319,7 @@ async def test_compacted_event_writes_transcript_line_and_panel():
         PhaseChange(phase="act", actions=1),
         CompactedEvent(before=12, after=4, reduction_pct=0.22, triggered_by="proactive"),
     ]
-    app = ArgosApp(loop_factory=lambda: FakeLoop(script=script))
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop(script=script))
     async with app.run_test() as pilot:
         await pilot.pause()
         await app.start_run("压缩任务")
@@ -338,7 +338,7 @@ async def test_pruned_event_writes_transcript_line():
         PhaseChange(phase="act", actions=1),
         PrunedEvent(before=80, after=60, removed=5, reduction_pct=0.25, aggressiveness=0.5),
     ]
-    app = ArgosApp(loop_factory=lambda: FakeLoop(script=script))
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop(script=script))
     async with app.run_test() as pilot:
         await pilot.pause()
         await app.start_run("修剪任务")
@@ -361,7 +361,7 @@ async def test_status_bar_blocked_on_approval_card_then_cleared():
             description="soft rule: ask git push", risk="medium", trigger="soft rule",
         ),
     ]
-    app = ArgosApp(loop_factory=lambda: FakeLoop(script=script))
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop(script=script))
     async with app.run_test() as pilot:
         await pilot.pause()
         app.run_worker(app.start_run("要审批的任务"), exclusive=False)
@@ -393,7 +393,7 @@ async def test_status_bar_alert_locked_on_failed_verdict_not_overwritten_by_repo
         PhaseChange(phase="report", actions=2),   # 陷阱2:report 不得抹掉告警
         TokenDelta(text="诚实上报失败。\n"),
     ]
-    app = ArgosApp(loop_factory=lambda: FakeLoop(script=script))
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop(script=script))
     async with app.run_test() as pilot:
         await pilot.pause()
         await app.start_run("会失败的验证")
@@ -416,7 +416,7 @@ async def test_status_bar_alert_cleared_on_new_run():
         VerifyVerdict(verdict=Verdict.passed(detail="ok", verify_cmd="pytest", attempts=1)),
     ]
     scripts = iter([fail_script, ok_script])
-    app = ArgosApp(loop_factory=lambda: FakeLoop(script=next(scripts)))
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop(script=next(scripts)))
     async with app.run_test() as pilot:
         await pilot.pause()
         await app.start_run("第一轮失败")
@@ -447,7 +447,7 @@ async def test_memory_recall_line_shown_with_real_store_hits(tmp_path):
             yield MemoryRecallEvent(hits=["上次也改过 auth → passed（similar goal）"])
             yield PhaseChange(phase="plan", actions=0)
 
-    app = ArgosApp(loop_factory=lambda: _LoopWithRecallEvent(), demo=False)
+    app = ArgosApp(loop_factory=lambda **kw: _LoopWithRecallEvent(), demo=False)
     async with app.run_test() as pilot:
         await pilot.pause()
         await app.start_run("改 auth.py")
@@ -460,7 +460,7 @@ async def test_memory_recall_line_shown_with_real_store_hits(tmp_path):
 @pytest.mark.asyncio
 async def test_memory_recall_silent_when_no_store():
     """spec §8.3 诚实边界:demo/FakeLoop 无 store → 不显召回行(没召回别假装召回)。"""
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         await app.start_run("普通任务")
@@ -483,7 +483,7 @@ async def test_apply_event_phase_change_drives_activity_panel_view():
     """
     from argos.tui.widgets.activity_panel import ActivityPanel
 
-    app = ArgosApp(loop_factory=lambda: FakeLoop())
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         ap = app.query_one("#activity", ActivityPanel)

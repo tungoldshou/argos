@@ -17,20 +17,26 @@ def _write_config(dir_: Path, *, models: dict, routing: dict | None = None) -> N
     (dir_ / "config.json").write_text(json.dumps(raw, indent=2))
 
 
-def test_load_routing_no_file_returns_safe_default(tmp_path, monkeypatch):
+def test_load_routing_no_file_returns_builtin_default(tmp_path, monkeypatch):
+    """无 config.json → 返内置默认映射(出厂激活):by_category 有 cheap/strong 分组,is_active()=True。"""
     monkeypatch.chdir(tmp_path)
+    from argos.routing.config import _DEFAULT_BY_CATEGORY
     cfg = load_routing(tmp_path)
     assert cfg.default == "default"
-    assert cfg.by_category == {}
+    assert cfg.by_category == _DEFAULT_BY_CATEGORY
     assert cfg.by_tool == {}
     assert cfg.tier_force_confirm == []
+    assert cfg.is_active() is True
 
 
-def test_load_routing_no_routing_section_returns_safe_default(tmp_path):
+def test_load_routing_no_routing_section_returns_builtin_default(tmp_path):
+    """config.json 无 routing 段 → 返内置默认映射(出厂激活)。"""
     _write_config(tmp_path, models={"default": {"protocol": "anthropic", "base_url": "x", "model": "m"}})
+    from argos.routing.config import _DEFAULT_BY_CATEGORY
     cfg = load_routing(tmp_path)
     assert cfg.default == "default"
-    assert cfg.by_category == {}
+    assert cfg.by_category == _DEFAULT_BY_CATEGORY
+    assert cfg.is_active() is True
 
 
 def test_load_routing_parses_all_fields(tmp_path):
@@ -91,7 +97,10 @@ def test_routing_config_is_force_confirm():
 
 
 def test_routing_config_is_active_default_false():
-    """Phase 4.4:纯 default RoutingConfig 不活跃 → app_factory 不构造 router(loop 走原路径)。"""
+    """bare RoutingConfig() with no by_category/by_tool/tier_force_confirm and default tier
+    name is still inactive — the out-of-the-box active config comes from _BUILTIN_DEFAULT via
+    load_routing(), not from a bare RoutingConfig().  A hand-constructed bare RoutingConfig()
+    is still inactive because all fields are empty and default=="default"."""
     assert RoutingConfig().is_active() is False
 
 
@@ -106,10 +115,12 @@ def test_routing_config_is_active_when_configured(cfg):
     assert cfg.is_active() is True
 
 
-def test_build_components_router_none_when_routing_inactive(monkeypatch, tmp_path):
-    """默认配置(无 routing 段)→ build_components 不构造 router(router=None,省每步路由)。"""
-    monkeypatch.setenv("ARGOS_NO_DAEMON", "1")
-    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))  # 空配置目录 = 无 routing 段
-    from argos.app_factory import build_components
-    c = build_components()
-    assert c.router is None, "无路由表时 router 应为 None(Phase 4.4 opt-in)"
+def test_load_routing_active_by_default(tmp_path):
+    """默认配置(无 config.json)→ load_routing 返内置默认映射且 is_active() True(自主性 flip)。
+    原 test_build_components_router_none_when_routing_inactive 的断言取反并移至 load_routing 层,
+    避免 build_components 需要真 API key 才能运行。"""
+    cfg = load_routing(tmp_path)
+    assert cfg.is_active() is True, "内置默认映射出厂激活,is_active() 应为 True"
+    from argos.routing.resolver import resolve
+    assert resolve(cfg, category=TaskCategory.SIMPLE_READ, tool=None).tier == "cheap"
+    assert resolve(cfg, category=TaskCategory.REFACTOR, tool=None).tier == "strong"

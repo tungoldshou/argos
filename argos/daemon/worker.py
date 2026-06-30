@@ -238,13 +238,16 @@ class RunWorker:
     def __init__(self, *, run_id: str, manager: RunManager, loop_factory,
                  registry=None, worktree=None, gate=None,
                  run_stack_close=None, approval_timeout_s: float = 60.0,
-                 ledger_store=None, snapshot=None, attachments=None):
+                 ledger_store=None, snapshot=None, attachments=None,
+                 initial_event_seq: int = 0, initial_step_count: int = 0):
         self.run_id = run_id
         self._manager = manager
         self._loop_factory = loop_factory
         self._loop = None
-        self._event_seq = 0
-        self._step_count = 0
+        # ponytail: resume-from-suspended restores these from RunCheckpoint so the
+        # SSE cursor and step budget continue rather than restart from 0.
+        self._event_seq = initial_event_seq
+        self._step_count = initial_step_count
         self._message_count = 0
         self._current_phase = "act"
         self._task: asyncio.Task | None = None
@@ -739,6 +742,48 @@ class RunWorker:
             store_dir = self._manager.store.runs_dir()
             skills_root = Path(os.path.expanduser("~/.argos/skills"))
 
+            # ponytail: Loop-4 ORCHESTRATION is wired — promote() is reachable,
+            # A=bare/B=hinted runners are correctly separated — but live A/B eval
+            # is inert until EvalRunner._drive drives a real AgentLoop (v1.1
+            # real-loop adapter, shared with Dream).  Real AgentLoop has only
+            # `async def run`, no `run_sync`; _drive returns PASS_ERROR for both
+            # A and B → b_passed(0) <= a_passed(0) → no_improvement → no skill
+            # is ever auto-enabled in a live daemon.  Fails safe: never promotes,
+            # never fakes a pass.  See runner.py:334 (v1.1 TODO) and
+            # tests/learning/test_eval_runner_inert.py for the locked ceiling.
+            _runner_factory = None
+            if self._loop_factory is not None and self._worktree is not None:
+                try:
+                    from argos.eval.runner import EvalRunner
+                    _eval_base = Path(os.path.expanduser("~/.argos/eval/learning"))
+                    _wt = self._worktree
+                    _lf = self._loop_factory
+
+                    def _eval_loop_factory(model_tier: str, wt_path: str = "") -> Any:  # noqa: E731
+                        """Return a loop caged to the eval worktree wt_path, not _ws_path."""
+                        loop = _lf()
+                        if wt_path:
+                            from pathlib import Path as _Path
+                            _ws = _Path(wt_path).expanduser().resolve()
+                            _ws.mkdir(parents=True, exist_ok=True)
+                            # Override workspace attrs (same pattern as server._make_run_loop_factory)
+                            loop._workspace = _ws
+                            loop._verify_dir = _ws
+                        return loop
+
+                    _base_runner = EvalRunner(
+                        worktree=_wt,
+                        base_dir=_eval_base,
+                        loop_factory=_eval_loop_factory,
+                    )
+                    _runner_factory = lambda: _base_runner  # noqa: E731
+                except Exception as _rf_err:  # noqa: BLE001
+                    log.warning(
+                        "worker: runner_factory build failed for %s, "
+                        "falling back to candidate-staging: %s",
+                        self.run_id, _rf_err,
+                    )
+
             await on_run_completed(
                 run_id=self.run_id,
                 store_dir=store_dir,
@@ -749,8 +794,8 @@ class RunWorker:
                 skills_root=skills_root,
                 candidates_root=Path(os.path.expanduser("~/.argos/learning/candidates")),
                 workspace=(getattr(entry, "workspace", "") or None),
-                runner_factory=None,   # worker 不持有 EvalRunner;hook 跳过 promote 仅产候选
-                tasks=[],              # 同上
+                runner_factory=_runner_factory,
+                tasks=[],  # hook auto-builds EvalTask from workspace+verify_cmd
             )
         except Exception as e:  # noqa: BLE001 — learning 路径必须不挂主任务
             log.warning("worker: learning hook failed for %s: %s", self.run_id, e)
