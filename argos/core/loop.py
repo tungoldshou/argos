@@ -1004,14 +1004,11 @@ class AgentLoop:
         fail-soft:任何错误 log warning + 不抛(账本丢失不阻断主流程)。
         ponytail: inlined from daemon pattern (worker.py:519-654); daemon path unchanged
         """
+        import time as _time
+        import os as _os
+        from argos.ledger.builder import build_entry
+        from argos.ledger.entry import LedgerEntry
         try:
-            from argos.ledger.builder import build_entry
-            from argos.ledger.entry import LedgerEntry
-            import time as _time
-            import os as _os
-            import logging as _log
-
-            _logger = _log.getLogger("argos.ledger.inline")
             ev_kind = getattr(ev, "kind", None)
 
             if ev_kind == "tool_receipt":
@@ -1036,10 +1033,12 @@ class AgentLoop:
                 added = int(getattr(ev, "added", 0))
                 removed = int(getattr(ev, "removed", 0))
                 basename = _os.path.basename(path_str) or path_str
+                # Reuse same i18n keys as daemon/worker.py:634-638 — inline/daemon parity
                 if added or removed:
-                    summary = f"修改了 {basename}(+{added}/-{removed})"
+                    summary = _i18n_t("daemon.srv.ledger_modified_diff",
+                                      basename=basename, added=added, removed=removed)
                 else:
-                    summary = f"修改了 {basename}"
+                    summary = _i18n_t("daemon.srv.ledger_modified", basename=basename)
                 self._ledger_seq += 1
                 entry = LedgerEntry(
                     ts=_time.time(),
@@ -1055,8 +1054,8 @@ class AgentLoop:
                 )
                 self._ledger_store.append(entry)
         except Exception as e:  # noqa: BLE001 — 账本路径必须不挂主任务
-            import logging as _log2
-            _log2.getLogger("argos.ledger.inline").warning(
+            import logging as _log
+            _log.getLogger("argos.ledger.inline").warning(
                 "inline ledger append failed for %s: %s", run_id, e
             )
 
