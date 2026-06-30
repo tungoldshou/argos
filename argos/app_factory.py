@@ -385,7 +385,20 @@ def build_components(
             return None
     gate.set_reversible_lookup(_reversible_lookup_from_registry)
 
-    verifier = Verifier(max_rounds=max_rounds)
+    # Wire reviewer-role test proposer when ARGOS_SELF_TEST is enabled.
+    # The reviewer is an INDEPENDENT LLM call under a distinct system prompt — the coder
+    # (maker) and the reviewer are separate calls; the coder never grades its own homework.
+    # The exit-code gate + 3-state verdict are completely unchanged; this only adds a
+    # proposer for the unverifiable (no verify_cmd) case behind the ARGOS_SELF_TEST flag.
+    _test_generator = None
+    if os.environ.get("ARGOS_SELF_TEST", "").strip().lower() in ("1", "true", "yes"):
+        try:
+            from argos.verify.self_test import TestGenerator, reviewer_llm_proposer
+            # ponytail: reuse the model client that build_components already constructed (model)
+            _test_generator = TestGenerator(proposer=reviewer_llm_proposer(model))
+        except Exception:  # noqa: BLE001 — wiring failure must not break production Verifier
+            pass
+    verifier = Verifier(max_rounds=max_rounds, test_generator=_test_generator)
 
     # 工作流引擎工厂:子 agent 按 task.model profile 各自造 ModelClient(模型无关 per-agent);
     # 未知 profile / 无指定 → 退当前 active(诚实不崩)。子 agent 事件临时,用 in-memory store。
