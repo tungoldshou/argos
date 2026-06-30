@@ -36,7 +36,7 @@ async def test_idle_view_default_and_footer_always_on():
         vis = _visible_titles(ap)
         assert "模型" in vis and "MCP" in vis
         assert "工具" not in vis                       # act 专属,idle 隐藏
-        assert "成本 + 缓存" in vis and "上下文" in vis  # footer 常驻
+        assert "用量 + 缓存" in vis and "上下文" in vis  # footer 常驻
 
 
 @pytest.mark.asyncio
@@ -59,7 +59,7 @@ async def test_phase_drives_view_auto_switch():
         ap.on_run_end()
         assert ap._view == "idle"
         # footer 在每个视图都常驻
-        assert "成本 + 缓存" in _visible_titles(ap)
+        assert "用量 + 缓存" in _visible_titles(ap)
 
 
 @pytest.mark.asyncio

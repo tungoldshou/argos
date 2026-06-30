@@ -281,12 +281,32 @@ class _CollectingBus(EventBus):
         return out
 
 
+def _git_status_snapshot(workspace: Path) -> str:
+    """run 起始的 git 状态快照(对齐 Claude Code 的 environment 块)。非 git 目录 / git 缺失 /
+    超时 / 出错 → 空串(静默,不阻断)。capped 到 ~40 行,大改动不撑爆提示词。"""
+    import subprocess
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(workspace), "status", "--short", "--branch"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except Exception:  # noqa: BLE001 — 无 git / 超时 → 静默无快照
+        return ""
+    if out.returncode != 0:
+        return ""   # 非 git 仓库
+    lines = (out.stdout or "").splitlines()
+    if len(lines) > 40:
+        lines = lines[:40] + [f"… (+{len(lines) - 40} more changed files)"]
+    return "\n".join(lines).strip()
+
+
 def _env_context(workspace: Path) -> str:
-    """运行环境块(可信安全段的一部分):把 cwd/OS/日期前置喂给模型,免得它为了回答
-    "在哪个目录"之类的事实去现场跑 os.getcwd()/pwd(对齐 Claude Code 的 environment 块)。"""
+    """运行环境块(可信安全段的一部分):把 cwd/OS/日期 + git 状态前置喂给模型,免得它为了回答
+    "在哪个目录""改了什么"之类的事实去现场跑 os.getcwd()/git status(对齐 Claude Code 的 environment +
+    git-status 块)。git 快照同样喂给子 agent(它们的 worktree 是完整 checkout)。"""
     import platform
     from datetime import date
-    return (
+    block = (
         "\n\n<environment>\n"
         f"- Working directory (relative paths resolve against it): {workspace}\n"
         f"- OS: {platform.system()} {platform.machine()}\n"
@@ -294,6 +314,15 @@ def _env_context(workspace: Path) -> str:
         "These are known facts — don't probe them at runtime (os.getcwd / pathlib.Path.cwd / pwd).\n"
         "</environment>"
     )
+    gs = _git_status_snapshot(workspace)
+    if gs:
+        block += (
+            "\n\n<git_status>\n"
+            f"{gs}\n"
+            "Snapshot at run start — don't re-run `git status` just to learn this.\n"
+            "</git_status>"
+        )
+    return block
 
 
 @dataclass(frozen=True, slots=True)
@@ -336,6 +365,7 @@ class AgentLoop:
         config: LoopConfig,
         workspace: Path | None = None,
         verify_dir: Path | None = None,
+        project_id: str | None = None,  # #6 CC对齐:worktree 隔离的子 agent 传 base 项目 id,使项目记忆正确加载(否则 worktree 路径算出的 id 与主项目不匹配 → 项目记忆丢)
         allow_workflow: bool = True,
         read_only: bool = False,
         tool_allowlist: "list[str] | None" = None,  # 角色子 agent 的工具白名单(权威);None=旧 read_only 派生
@@ -354,6 +384,7 @@ class AgentLoop:
         self._sandbox = sandbox
         self._broker = broker
         self._model = model
+        self._project_id = project_id   # #6 CC对齐:非 None 时覆盖 project_id_for(workspace)(子 agent worktree 隔离用)
         self._verifier = verifier
         self._cfg = config
         self._workspace = workspace or Path.home() / ".argos" / "workspace"
@@ -835,20 +866,10 @@ class AgentLoop:
 
         顶层兜底:捕获 _drive 内任何未处理异常,挖异常链投 Error(spec §3.3 L5)。
         """
-        # 视觉能力门(spec 2026-06-13):发请求前判定模型能否看图。能力靠"懒触发探针 + 缓存"
-        # 自发现(override→缓存→探针),探不出/看不了 → 诚实阻断,不静默剥图、不假装看到。
-        if attachments:
-            tier = getattr(getattr(self, "_model", None), "tier", None)
-            if tier is not None:
-                from argos.core.vision_capability import (
-                    resolve_vision_capability, VisionCapabilityCache,
-                )
-                ok = await resolve_vision_capability(tier, self._model, VisionCapabilityCache())
-                if not ok:
-                    model_name = getattr(tier, "model", "current model")
-                    raise ValueError(
-                        _i18n_t("loop.vision.unsupported", model_name=model_name)
-                    )
+        # 视觉能力门(spec 2026-06-13):发请求前判定模型能否看图,存 self._vision_capable。
+        # 能力靠"override→缓存→探针"自发现(别信声明,验它)。附件 + 不支持 → 诚实硬阻断;
+        # computer use → 软降级(截图回路据此决定挂图还是转纯文本)。详见 _resolve_vision_capable。
+        await self._resolve_vision_capable(attachments)
         self._reset_run_state()
         # P0 护城河:inline 路径自建 runtime 上下文(daemon 在 worker.py 外部自设;inline 此前漏设 →
         # project_mode=False → guard_project_tests 返 0、verify 跑默认 ~/.argos/verify 而非用户项目)。
@@ -956,17 +977,46 @@ class AgentLoop:
         for ev in self._hbus.drain():
             yield ev
 
+    async def _resolve_vision_capable(self, attachments: "list | None") -> None:
+        """run 起始解析模型能否看图,存 self._vision_capable —— 截图回路与图片附件共用此判定。
+
+        能力靠"override → 缓存 → 探针"自发现(vision_capability.resolve_vision_capability),
+        别信声明、验它(verify-gate 灵魂在视觉上的复刻)。触发条件:有图片附件,或开了
+        computer use(截图回路需要)。纯文本路径不触发 → 零开销、不探针。
+        - attachments 非空且不支持 → 诚实硬阻断(ValueError,经顶层兜底转 Error 事件)。
+        - computer use → 仅软降级:_vision_capable=False 时截图转纯文本,run 照常。
+        """
+        self._vision_capable = None
+        if not (attachments or os.environ.get("ARGOS_COMPUTER_USE")):
+            return
+        tier = getattr(getattr(self, "_model", None), "tier", None)
+        if tier is None:
+            return
+        from argos.core.vision_capability import (
+            resolve_vision_capability, VisionCapabilityCache,
+        )
+        self._vision_capable = await resolve_vision_capability(
+            tier, self._model, VisionCapabilityCache()
+        )
+        if attachments and not self._vision_capable:
+            raise ValueError(
+                _i18n_t("loop.vision.unsupported",
+                        model_name=getattr(tier, "model", "current model"))
+            )
+
     def _maybe_attach_screenshot(self, fb_msg: dict, shot: "tuple | None") -> None:
-        """计算机控制视觉回路:多模态模型 → 把本步截图(path, size)当图像挂到反馈消息
-        (core.protocols.payload 逐消息物化为 image block)。非多模态 / 无截图 / 读图失败 →
-        诚实降级为纯文本(不挂图、不改 content;提示词已要求模型看不清就说 unverifiable)。
+        """计算机控制视觉回路:模型能看图(self._vision_capable,run 起始已解析)→ 把本步截图
+        (path, size)当图像挂到反馈消息(core.protocols.payload 逐消息物化为 image block)。
+        看不了 / 无截图 / 读图失败 → 诚实降级纯文本(不挂图、不改 content;提示词已要求模型
+        看不清就说 unverifiable)。
 
         2c:成功挂图时,在 content 里告知截图像素尺寸 —— 模型按这张图的像素空间给点击坐标。
         """
         if shot is None:
             return
-        tier = getattr(self._model, "tier", None)
-        if tier is None or not getattr(tier, "multimodal", False):
+        # 读 run 起始解析出的真实视觉能力(override→缓存→探针),不再只认用户声明的 override
+        # ——后者默认 None,曾让 computer use 截图被静默丢弃(回路恒死)。None/False = 看不了 → 不挂图。
+        if not getattr(self, "_vision_capable", False):
             return
         try:
             from argos.input.attachments import load_from_path
@@ -977,6 +1027,11 @@ class AgentLoop:
                     f"{fb_msg['content']}"
                     + _i18n_t("loop.screenshot.pixel_note", w=size[0], h=size[1])
                 )
+            # 截图临时文件已读入内存即删 —— perception 用 delete=False,不删长会话会在 /tmp 堆积。
+            try:
+                Path(path).unlink(missing_ok=True)
+            except OSError:
+                pass
         except Exception as exc:  # noqa: BLE001 — 读图失败诚实降级纯文本(不阻断 run)
             __import__("logging").getLogger(__name__).debug("screenshot attach skipped: %s", exc)
 
@@ -1208,7 +1263,7 @@ class AgentLoop:
             from argos.memory import auto as _mem_auto
             _mem_block = _mem_auto._memory_context_block(
                 workspace=self._workspace,
-                project_id=_mem_auto.project_id_for(self._workspace),
+                project_id=self._project_id or _mem_auto.project_id_for(self._workspace),
                 session_id=None,
             )
             if _mem_block:

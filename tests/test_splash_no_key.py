@@ -38,16 +38,6 @@ def test_splash_live_without_key_downgrades_and_warns():
     )
 
 
-def test_splash_demo_mode_unchanged_when_no_key():
-    """live=False(demo 模式)+ has_key=False → 仍显 DEMO 演示(向后兼容);v3 无 star8 前缀。"""
-    from argos.tui.widgets.splash import StartupSplash
-    sp = StartupSplash(model_label="M3", tier="sonnet", live=False, has_key=False)
-    text = sp.renderable_text
-    assert "DEMO" in text
-    assert "LIVE" not in text
-    assert "✳" not in text, f"v3 禁止 ✳ 字形,实际 text={text!r}"
-
-
 def test_splash_default_has_key_true_preserves_existing_callers():
     """默认 has_key=True → 旧调用方(没传 has_key 的)行为不变:显 LIVE,不显未配 key 警告。
     v3:star8(U+2733)字形已处决,徽标改为纯 LIVE。

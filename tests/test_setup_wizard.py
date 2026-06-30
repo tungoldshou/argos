@@ -112,19 +112,17 @@ from argos.setup_wizard import run
 async def test_run_wizard_happy_path(tmp_path, monkeypatch):
     """脚本化输入跑完一轮:选 MiniMax 预设→默认 model→粘贴 key→跳过深探→默认名→不再加→完成。
     MiniMax 是 PRESETS 第 3 项;无 protocol/base_url 问询(预设已填)。
-    reader 调用顺序:选编号→model id→key方式→key值→max_tokens→ctx→price→深探→profile名→再配。
+    默认非 advanced:不问 max_tokens/context_window;价格已移除。
+    reader 调用顺序:选编号→model id→key方式→key值→深探→profile名→再配。
     """
     inputs = iter([
         "3",            # 1. 选 MiniMax(PRESETS 第 3 项,编号稳定)
         "",             # 2. model 用默认 MiniMax-M3
-        "paste",        # 3. key 方式:粘贴
+        "paste",        # 3. key 方式:粘贴(非 TTY 回退文字)
         "secret123",    # 4. key 值
-        "",             # 5. max_tokens 默认
-        "",             # 6. context_window 默认
-        "",             # 7. price 跳过
-        "n",            # 8. 深度探针 跳过
-        "",             # 9. profile 名 留空=默认(minimax-m3)
-        "n",            # 10. 不再加模型
+        "n",            # 5. 深度探针 跳过
+        "",             # 6. profile 名 留空=默认(minimax-m3)
+        "n",            # 7. 不再加模型
     ])
     out_lines = []
     # probe 注入成功(避免真网络):monkeypatch probe_connection
@@ -143,7 +141,8 @@ async def test_run_wizard_happy_path(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_wizard_custom_preset(tmp_path, monkeypatch):
-    """「自定义」预设触发 protocol/base_url 额外询问(spec §6.1 「(问)」)。"""
+    """「自定义」预设触发 protocol/base_url 额外询问(spec §6.1 「(问)」);advanced=True 覆盖
+    max_tokens/context_window/embedding 询问。"""
     import argos.setup_wizard as W
     # "Custom" is the last entry in PRESETS
     custom_idx = str(list(W.PRESETS.keys()).index("Custom") + 1)
@@ -154,20 +153,19 @@ async def test_run_wizard_custom_preset(tmp_path, monkeypatch):
         "my-local-model",                       # 3. model id
         "paste",                                # 4. key 方式
         "localkey",                             # 5. key 值
-        "",                                     # 6. max_tokens 默认
-        "",                                     # 7. context_window 默认
-        "",                                     # 8. price 跳过
-        "nomic-embed-text",                     # 9. embedding 模型(openai 协议才问)
-        "n",                                    # 10. 深度探针 跳过
-        "local",                                # 11. profile 名
-        "n",                                    # 12. 不再加模型
+        "",                                     # 6. max_tokens 默认(advanced)
+        "",                                     # 7. context_window 默认(advanced)
+        "nomic-embed-text",                     # 8. embedding 模型(advanced + openai 协议)
+        "n",                                    # 9. 深度探针 跳过
+        "local",                                # 10. profile 名
+        "n",                                    # 11. 不再加模型
     ])
     out_lines = []
     async def fake_probe(**kw):
         return W.ProbeResult(True, True, "行", "OK")
     monkeypatch.setattr(W, "probe_connection", fake_probe)
     await run(reader=lambda prompt="": next(inputs), writer=out_lines.append,
-              config_dir=tmp_path)
+              config_dir=tmp_path, advanced=True)
     cfg = json.loads((tmp_path / "config.json").read_text())
     assert "local" in cfg["models"]
     prof = cfg["models"]["local"]
@@ -185,15 +183,15 @@ async def test_run_wizard_duplicate_name_appends_index(tmp_path, monkeypatch):
         return W.ProbeResult(True, True, "行", "OK")
     monkeypatch.setattr(W, "probe_connection", fake_probe)
 
-    # 第一轮:profile 名 "mm"
-    it1 = iter(["3", "", "paste", "k", "", "", "", "n", "mm", "n"])
+    # 第一轮:profile 名 "mm"。默认非 advanced:选编号→model→key方式→key→深探→名→再配。
+    it1 = iter(["3", "", "paste", "k", "n", "mm", "n"])
     await run(reader=lambda prompt="": next(it1), writer=lambda _: None, config_dir=tmp_path)
     cfg1 = json.loads((tmp_path / "config.json").read_text())
     assert "mm" in cfg1["models"]
 
     # 第二轮:同名 "mm" → 应自动变 "mm-2"。注意:已有 profile 时多一问「设为当前默认模型?(y/N)」
     # (避免重跑 setup 加模型时静默劫持 active),故输入序列在 name 后、再配前多一个 "n"。
-    it2 = iter(["3", "", "paste", "k", "", "", "", "n", "mm", "n", "n"])
+    it2 = iter(["3", "", "paste", "k", "n", "mm", "n", "n"])
     await run(reader=lambda prompt="": next(it2), writer=lambda _: None, config_dir=tmp_path)
     cfg2 = json.loads((tmp_path / "config.json").read_text())
     assert "mm" in cfg2["models"] and "mm-2" in cfg2["models"]
@@ -258,14 +256,6 @@ def test_ask_int_fail_soft_on_non_numeric():
     assert _ask_int(lambda p="": "abc", out.append, "max:", 4096) == 4096   # 非数字→默认,不抛
     assert _ask_int(lambda p="": "8192", out.append, "max:", 4096) == 8192  # 合法→采用
     assert _ask_int(lambda p="": "", out.append, "max:", 4096) == 4096      # 留空→默认
-
-
-def test_ask_float_or_none_fail_soft():
-    from argos.setup_wizard import _ask_float_or_none
-    out: list = []
-    assert _ask_float_or_none(lambda p="": "abc", out.append, "p:") is None  # 非数字→None,不抛
-    assert _ask_float_or_none(lambda p="": "0.3", out.append, "p:") == 0.3
-    assert _ask_float_or_none(lambda p="": "", out.append, "p:") is None
 
 
 def test_arrow_select_falls_back_when_not_tty():

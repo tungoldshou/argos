@@ -72,9 +72,6 @@ from argos.tui.widgets.thinking import ThinkingIndicator
 from argos.tui.widgets.top_bar import TopBar
 from argos.tui.widgets.transcript import Transcript
 from argos.tui.widgets.verdict_badge import VerdictBadge
-from argos.input.recorder import Recorder, RecorderError
-from argos.input.stt import LocalWhisper, make_transcriber, SttError
-from argos.input.stt_config import load_stt_config
 from argos.input.clipboard_image import read_clipboard_image, ClipboardError
 from argos.tui.widgets.workflow_panel import WorkflowPanel
 from argos.i18n import t
@@ -224,11 +221,6 @@ class ArgosApp(App):
         # v6 P3b §4:当前 plan 决策的 call_id(PlanDecisionRequest 事件到达时设置)。
         # _handle_plan_rendered 据此路由 respond_plan_decision / POST plan_decision。
         self._current_plan_call_id: str | None = None
-        # 语音输入状态(Task 5 voice input):录音/转写/注入循环。
-        self._voice_recording: bool = False
-        self._voice_recorder = None
-        self._voice_transcriber = None
-        self._stt_warmed = False   # 首次本地转写可能要懒下载模型权重 → 首次用更诚实的标签(排查 #4)
         self.sub_title = self._compose_subtitle()
 
     @staticmethod
@@ -242,14 +234,11 @@ class ArgosApp(App):
             return config.DEFAULT_TIER
 
     def _compose_subtitle(self) -> str:
-        """头部副标题 = 基底 + DEMO 标识(脚本演示,demo 模式常驻)+ YOLO 标识(Auto 档)+ plan mode 标识。
-        DEMO 标识诚实告知"这不是真 agent 在跑";真 loop 注入(demo=False)后自动消失。
+        """头部副标题 = 基底 + YOLO 标识(Auto 档)+ plan mode 标识。
         plan mode 标识 [plan mode] 在 /plan 切到后挂上,ExitPlanMode 后摘掉(经 set_plan_mode_indicators)。"""
         parts = [_BASE_SUBTITLE]
         if self._plan_mode:
             parts.append("· [plan mode]")
-        if self._demo:
-            parts.append("· " + t("tui.app.demo_banner"))
         if self._yolo:
             parts.append("· ⏻ YOLO(Auto)")
         return "  ".join(parts)
@@ -651,58 +640,6 @@ class ArgosApp(App):
         # PromptArea 已在内部清空自身;这里只负责分发(slash / goal)。同时收掉 slash 菜单。
         self.query_one("#slash-menu", SlashMenu).hide()
         self.handle_input(event.text, event.attachments)
-
-    # ── 语音输入编排(voice input Task 5)──────────────────────────────────────
-
-    def _get_recorder(self):
-        if self._voice_recorder is None:
-            self._voice_recorder = Recorder()
-        return self._voice_recorder
-
-    def _get_transcriber(self):
-        if self._voice_transcriber is None:
-            self._voice_transcriber = make_transcriber(load_stt_config())
-        return self._voice_transcriber
-
-    async def on_prompt_area_voice_toggle(self, event) -> None:
-        await self._voice_toggle()
-
-    async def _voice_toggle(self) -> None:
-        """开/停录音 → 转写 → 注入输入框(load_text/insert,不模拟粘贴)。
-        每条失败路径诚实落 transcript,不崩、不伪绿。转写不自动提交,由用户回车。"""
-        import asyncio
-        log = self.query_one("#transcript", Transcript)
-        if not self._voice_recording:
-            try:
-                self._get_recorder().start()
-            except RecorderError as e:
-                await log.append_line(t("tui.voice.record_failed", err=e), kind="error")
-                return
-            self._voice_recording = True
-            await log.append_line(t("tui.voice.recording"), kind="system")
-            return
-        # 停止 → 转写
-        self._voice_recording = False
-        try:
-            audio = self._get_recorder().stop()
-        except RecorderError as e:
-            await log.append_line(t("tui.voice.record_failed", err=e), kind="error")
-            return
-        transcriber = self._get_transcriber()
-        # 首次使用本地语音:权重可能要从 HuggingFace 懒下载(约数百 MB),静默"转写中…"会像卡死。
-        # 首次本地转写给更诚实的标签(可能下载),日常转写照旧"转写中…"(2026-06-18 排查 #4)。
-        first_local = (not self._stt_warmed) and isinstance(transcriber, LocalWhisper)
-        await log.show_thinking(
-            t("tui.voice.transcribe_first") if first_local else t("tui.voice.transcribing")
-        )
-        try:
-            text = await asyncio.to_thread(transcriber.transcribe, audio)
-        except SttError as e:
-            await log.append_line(t("tui.voice.transcribe_failed", err=e), kind="error")
-            return
-        self._stt_warmed = True
-        if text:
-            self.query_one("#prompt", PromptArea).insert(text)
 
     # ── #5b 多 run tab 切换 ────────────────────────────────────────
     def on_tab_strip_tab_activated(self, event: TabActivated) -> None:
@@ -2344,12 +2281,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
 
         # 记忆召回提示行
         await self._announce_memory_recall(log, loop, goal)
-        if self._demo:
-            await log.append_line(
-                t("tui.run.demo_banner")
-            )
-        else:
-            await log.show_thinking(t("tui.run.thinking"))
+        await log.show_thinking(t("tui.run.thinking"))
 
         async def _produce() -> None:
             try:

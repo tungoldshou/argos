@@ -85,8 +85,8 @@ class CapabilityRegistry:
         return tuple(self._caps.keys())
 
     def callable_names(self) -> tuple[str, ...]:
-        """返回【模型在沙箱里真正可调用】的能力名（排除 sandbox_callable=False 的宿主专属能力，
-        如 stt_transcribe）。/tools 据此诚实计数(数量 = 真实可调用工具数)。"""
+        """返回【模型在沙箱里真正可调用】的能力名（排除 sandbox_callable=False 的宿主专属
+        能力）。/tools 据此诚实计数(数量 = 真实可调用工具数)。"""
         return tuple(n for n, c in self._caps.items() if c.sandbox_callable)
 
     def by_kind(self, kind: "KindName") -> tuple["Capability", ...]:

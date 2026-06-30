@@ -111,7 +111,7 @@ EN: dict[str, str] = {
     "widget.section_skill": "Skill",
     "widget.section_approval": "Approval",
     "widget.section_verdict": "Verdict",
-    "widget.section_cost": "Cost + Cache",
+    "widget.section_cost": "Tokens + Cache",
     "widget.section_context": "Context",
 
     # activity_panel body strings
@@ -140,7 +140,6 @@ EN: dict[str, str] = {
 
     "widget.splash_subtitle": "hundred-eyed agent · v{version} · {model_label} · ",
     "widget.splash_hint": "type a goal to begin · / for commands · Esc to interrupt · ^C to quit",
-    "widget.splash_badge_demo": "DEMO scripted",
     "widget.splash_badge_no_key": "no key · /setup",
     "widget.splash_badge_live": "LIVE",
     "widget.splash_bad_config_permissions": "permissions",
@@ -152,7 +151,6 @@ EN: dict[str, str] = {
 
     "widget.badge_plan": "plan",
     "widget.badge_yolo": "YOLO",
-    "widget.badge_demo": "DEMO scripted",
     "widget.badge_no_key": "no key",
     "widget.badge_live": "LIVE",
 
@@ -375,7 +373,7 @@ ZH: dict[str, str] = {
     "widget.section_skill": "Skill",
     "widget.section_approval": "Approval",
     "widget.section_verdict": "Verdict",
-    "widget.section_cost": "成本 + 缓存",
+    "widget.section_cost": "用量 + 缓存",
     "widget.section_context": "上下文",
 
     # activity_panel body strings
@@ -404,7 +402,6 @@ ZH: dict[str, str] = {
 
     "widget.splash_subtitle": "百眼智能体 · v{version} · {model_label} · ",
     "widget.splash_hint": "输入目标开始 · / 命令 · Esc 打断 · ^C 退出",
-    "widget.splash_badge_demo": "DEMO 脚本演示",
     "widget.splash_badge_no_key": "未配 key · /setup",
     "widget.splash_badge_live": "LIVE",
     "widget.splash_bad_config_permissions": "permissions",
@@ -416,7 +413,6 @@ ZH: dict[str, str] = {
 
     "widget.badge_plan": "plan",
     "widget.badge_yolo": "YOLO",
-    "widget.badge_demo": "DEMO 脚本演示",
     "widget.badge_no_key": "未配 key",
     "widget.badge_live": "LIVE",
 

@@ -70,20 +70,6 @@ async def test_topbar_phase_eye_changes():
 
 
 @pytest.mark.asyncio
-async def test_topbar_demo_badge_honest():
-    """默认 demo=True → DEMO 徽标常驻(诚实铁律)。"""
-    app = _H()
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        tb = app.query_one("#tb", TopBar)
-        assert any("DEMO" in b for b in tb.badges())
-        # 切真 loop + 有 key → DEMO 消失,且不显 未配 key
-        tb.set_state(demo=False, has_key=True)
-        assert not any("DEMO" in b for b in tb.badges())
-        assert not any("未配 key" in b for b in tb.badges())
-
-
-@pytest.mark.asyncio
 async def test_topbar_no_key_badge_never_lies_live():
     """has_key=False 时绝不出现 LIVE 字样(契约6)。"""
     app = _H()

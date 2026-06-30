@@ -59,17 +59,15 @@ _PLAN_PREFIX = "plan · "
 
 
 def _eye_for_state(*, live: bool, has_key: bool, _eye_stage: str) -> str:
-    """根据 has_key/live 状态和睁眼阶段返回当前状态眼字形。
+    """根据 has_key 状态和睁眼阶段返回当前状态眼字形。
 
     规则(spec §4.2):
     - 无 key → 永远停在 ◌(不见真相眼不睁)
-    - DEMO(live=False) → 眼停在 ◓(半阖)
     - 有 key → 随 _eye_stage 推进;终态 ◉
+    live 参数惰性保留(DEMO 已移除,2026-07-01;入参留作测试构造点兼容)。
     """
     if not has_key:
         return "◌"
-    if not live:
-        return "◓"
     return _EYE_STAGES.get(_eye_stage, "◌")
 
 
@@ -77,24 +75,20 @@ def _compose_text(*, model_label: str, live: bool, plan_mode: bool,
                    has_key: bool = True, eye_stage: str = "init") -> str:
     """组装 splash 渲染文本(Rich markup,markup=True 渲染)。
 
-    三态徽标(诚实底线,契约6):
-    - 有 key + live=True → ◉ + · LIVE ($pass)
-    - live=False → ◓ + DEMO 脚本演示 ($unverif)
+    二态徽标(诚实底线,契约6):
+    - 有 key → ◉ + · LIVE ($pass)
     - has_key=False → ◌ + 未配 key · /setup,绝不出现 LIVE
+    live 参数惰性保留(DEMO 已移除,2026-07-01)。
 
     着色规则(design-audit MEDIUM fix 2026-06-14):
     - 眼字形 → $eye-glow(高亮金,logo 焦点)
     - 副标题行 → $ink-dim
     - LIVE 徽标词 → $pass(绿)
-    - DEMO 徽标词 → $unverif(橙)
     - 提示行 → $ink-faint
     """
     eye = _eye_for_state(live=live, has_key=has_key, _eye_stage=eye_stage)
 
-    if not live:
-        # DEMO:橙色徽标
-        badge_markup = f"[{_COL_UNVERIF}]{t('widget.splash_badge_demo')}[/{_COL_UNVERIF}]"
-    elif not has_key:
+    if not has_key:
         # 未配 key:用 ink-dim,绝不出现 LIVE
         badge_markup = f"[{_COL_INK_DIM}]{t('widget.splash_badge_no_key')}[/{_COL_INK_DIM}]"
     else:
@@ -154,13 +148,9 @@ class StartupSplash(Static):
 
         stage 可取值:'scan'/'half'/'focus'/'open'。
         无 key 时本方法无效(眼永远停在 ◌,契约6)。
-        DEMO 模式眼停在 ◓,不响应 focus/open。
         """
         if not self._has_key:
             # 无 key:眼不睁,什么都不做
-            return
-        if not self._live and stage in ("focus", "open"):
-            # DEMO 最多停在 ◓(半阖)
             return
         self._eye_stage = stage
         self._refresh()

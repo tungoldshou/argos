@@ -101,6 +101,32 @@ def test_extract_failure_returns_error(monkeypatch):
     assert "net down" in out["error"]
 
 
+# ── #8 CC对齐:trafilatura 抽空 → 模型兜底(对齐 CC WebFetch),再退正则 ──────────────────
+def test_extract_model_fallback_when_trafilatura_empty(monkeypatch):
+    """trafilatura 抽空(JS 渲染页)→ 用模型兜底的结果。"""
+    monkeypatch.setattr(web, "_http_get", lambda url: "<html><body>JS app</body></html>")
+    monkeypatch.setattr(web, "_trafilatura_extract", lambda html: None)
+    monkeypatch.setattr(web, "_model_extract", lambda html: "# Clean Markdown\nbody")
+    out = web.extract("http://x")
+    assert out["success"] is True and out["text"] == "# Clean Markdown\nbody"
+
+
+def test_extract_regex_fallback_when_model_unavailable(monkeypatch):
+    """trafilatura 抽空 + 模型不可用(无 key)→ 回落正则去标签,绝不阻断。"""
+    monkeypatch.setattr(web, "_http_get", lambda url: "<html><body><p>plain text</p></body></html>")
+    monkeypatch.setattr(web, "_trafilatura_extract", lambda html: None)
+    monkeypatch.setattr(web, "_model_extract", lambda html: None)   # 模型不可用
+    out = web.extract("http://x")
+    assert out["success"] is True and "plain text" in out["text"]
+
+
+def test_model_extract_returns_none_without_key(monkeypatch):
+    """无 active key → _model_extract 直接返 None(不发任何模型调用)。"""
+    import argos.config as C
+    monkeypatch.setattr(C, "active_key", lambda: None)
+    assert web._model_extract("<html>...</html>") is None
+
+
 # ── 搜索质量护栏(2026-06-22 真机审计:中文天气 query 被拉出色情/约炮 SEO 垃圾)──────────
 
 def test_ddgs_passes_safesearch_on_and_inferred_region(monkeypatch):

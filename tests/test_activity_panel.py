@@ -72,7 +72,9 @@ async def test_model_section_shows_name_not_tier():
 
 
 @pytest.mark.asyncio
-async def test_cost_unknown_shows_na_not_zero():
+async def test_cost_dollar_removed_tokens_kept():
+    # 去花费(2026-07-01):$ 金额(含未知单价的 N/A)已整段移除——各模型单价不同、不想强制配置。
+    # token 流保留(无需配置、仍有用)。
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -80,10 +82,8 @@ async def test_cost_unknown_shows_na_not_zero():
         ap.on_cost(tokens_in=100, tokens_out=50, cost_usd=None, elapsed_s=1.0, cache_read=0)
         await pilot.pause()
         t = ap.snapshot_text()
-        assert "N/A" in t, "单价未知应显 N/A"
-        assert "$(N/A)" not in t, "不应再用 shell 样 $(N/A)(形似命令替换,易被误读为 bug)"
-        # 排除首屏"$0.000"(初始 0 值);不显成本时只有 N/A
-        # 注:新增 Run 区段占 idx 4 不影响 cost idx(6)
+        assert "$" not in t and "N/A" not in t, "费用 $ / N/A 显示应已移除"
+        assert "↑100" in t and "↓50" in t, "token 流应保留"
 
 
 @pytest.mark.asyncio

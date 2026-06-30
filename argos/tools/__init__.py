@@ -71,8 +71,8 @@ def get_tool_names(
     """
     if registry is not None:
         try:
-            # 诚实计数:只数模型在沙箱里【真正可调用】的工具,排除宿主专属能力(如 stt_transcribe,
-            # 语音转写在沙箱外跑、无命名空间包装)。否则 /tools 报的数 > 真实可调用数,违反诚实铁律。
+            # 诚实计数:只数模型在沙箱里【真正可调用】的工具,排除宿主进程专属能力(沙箱外跑、
+            # 无命名空间包装)。否则 /tools 报的数 > 真实可调用数,违反诚实铁律。
             return list(registry.callable_names())
         except Exception:   # noqa: BLE001 — 防御性降级，不因 registry 异常崩
             pass
