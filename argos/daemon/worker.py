@@ -238,13 +238,16 @@ class RunWorker:
     def __init__(self, *, run_id: str, manager: RunManager, loop_factory,
                  registry=None, worktree=None, gate=None,
                  run_stack_close=None, approval_timeout_s: float = 60.0,
-                 ledger_store=None, snapshot=None, attachments=None):
+                 ledger_store=None, snapshot=None, attachments=None,
+                 initial_event_seq: int = 0, initial_step_count: int = 0):
         self.run_id = run_id
         self._manager = manager
         self._loop_factory = loop_factory
         self._loop = None
-        self._event_seq = 0
-        self._step_count = 0
+        # ponytail: resume-from-suspended restores these from RunCheckpoint so the
+        # SSE cursor and step budget continue rather than restart from 0.
+        self._event_seq = initial_event_seq
+        self._step_count = initial_step_count
         self._message_count = 0
         self._current_phase = "act"
         self._task: asyncio.Task | None = None
