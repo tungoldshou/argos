@@ -751,8 +751,7 @@ class RunWorker:
             if self._loop_factory is not None and self._worktree is not None:
                 try:
                     from argos.eval.runner import EvalRunner
-                    import os as _os_eval
-                    _eval_base = Path(_os_eval.path.expanduser("~/.argos/eval/learning"))
+                    _eval_base = Path(os.path.expanduser("~/.argos/eval/learning"))
                     _wt = self._worktree
                     _lf = self._loop_factory
 
