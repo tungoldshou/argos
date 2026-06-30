@@ -111,6 +111,10 @@ class DaemonHTTPServer:
         # _dream_starting 在 is_running 检查通过后、create_task 之前同步置 True
         # (此处无 await,无法被抢占),done_callback 复位。
         self._dream_starting: bool = False
+        # 5a.3 自主模式：把 dream_starter 注入 supervisor（有 supervisor 才接线）。
+        # 使用 lambda 延迟绑定，确保引用 self._autonomous_dream_starter 而不是旧值。
+        if conductor_supervisor is not None:
+            conductor_supervisor._dream_starter = self._autonomous_dream_starter
 
     @property
     def registry(self):
@@ -1629,6 +1633,37 @@ class DaemonHTTPServer:
             broadcast_fn=_dream_bcast,
         )
         return self._dream_pipeline
+
+    async def _autonomous_dream_starter(self, s) -> bool:
+        """conductor tick 的自主 dream 启动回调（5a.3）。
+
+        与 _start_dream 共用相同三重守卫（is_running / _dream_starting / cross_process_busy），
+        但无 HTTP writer — 结果只记日志，不发 HTTP 响应。
+
+        返回 True = pipeline 任务已派生；False = 守卫拦截（busy / no key），静默跳过。
+        """
+        pipeline = self._get_dream_pipeline()
+        if pipeline is None:
+            log.debug("conductor autonomous dream: 无 pipeline(no key)，本次跳过")
+            return False
+        if pipeline.is_running or self._dream_starting or pipeline.cross_process_busy():
+            log.debug("conductor autonomous dream: pipeline busy，本次跳过")
+            return False
+        # 与 _start_dream 相同的原子窗口（无 await）
+        self._dream_starting = True
+
+        def _reset_starting(_fut):
+            self._dream_starting = False
+            try:
+                exc = _fut.exception() if not _fut.cancelled() else None
+            except Exception:  # noqa: BLE001
+                exc = None
+            if exc is not None:
+                log.warning("conductor autonomous dream-run 任务异常: %s", exc)
+
+        task = asyncio.create_task(pipeline.run(), name="dream-run-autonomous")
+        task.add_done_callback(_reset_starting)
+        return True
 
     async def _start_dream(self, writer):
         """启动一次 Dream（confirm 与 POST /dream/run 共用）。

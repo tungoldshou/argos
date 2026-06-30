@@ -3,8 +3,10 @@
 职责：
   - 宿主在 daemon 进程内以独立 asyncio.Task 运行 ConductorEngine.tick() 循环。
   - tick 产出的 ProactiveSuggestion：
-      1. 登记到 pending_suggestions（内存 dict, suggestion_id → ProactiveSuggestion）
-      2. 广播 ProactiveSuggestionEvent 到「全局通道」（run_id 保留为 "_conductor"）
+      - action="dream"（builtin 夜间整合）且材料门放行：若注入了 dream_starter，
+        直接调 dream_starter(s)（自主模式，无需用户确认）；否则走旧路：登记到
+        pending_suggestions + 广播 ProactiveSuggestionEvent（等用户 confirm）。
+      - 其他 action：登记 pending + 广播（永远要用户确认）。
 
 全局通道诚实说明：
   daemon 当前的 SSE 端点是 per-run（/runs/{id}/events），没有跨所有 run 的全局 SSE 流。
@@ -21,6 +23,7 @@ import asyncio
 import logging
 import time
 from pathlib import Path
+from typing import Callable, Coroutine, Any
 
 from argos.conductor import ConductorEngine, OrderStore
 from argos.conductor.orders import StandingOrder
@@ -65,6 +68,10 @@ class ConductorSupervisor:
     装配：daemon __main__.py 启动时调 start()，关闭时调 stop()。
     产出的 suggestion 存入 pending_suggestions dict，
     并通过注入的 _broadcast_fn 广播事件（解耦：不直接引用 manager）。
+
+    dream_starter（可选）：若注入，action=dream 的建议在材料门放行后直接调 dream_starter(s)
+    启动 Dream，不再进 pending、不广播 suggestion 事件（自主模式）。
+    未注入则退回旧路：进 pending + 广播，等用户 confirm（兼容无 daemon 场景）。
     """
 
     def __init__(
@@ -73,10 +80,12 @@ class ConductorSupervisor:
         orders_dir: Path,
         tick_interval: float = 30.0,
         broadcast_fn,  # Callable[[dict], Coroutine]：接收事件 dict，广播到全局通道
+        dream_starter: Callable[[ProactiveSuggestion], Coroutine[Any, Any, None]] | None = None,
     ) -> None:
         self._orders_dir = orders_dir
         self._tick_interval = tick_interval
         self._broadcast_fn = broadcast_fn
+        self._dream_starter = dream_starter
         self._task: asyncio.Task | None = None
         # suggestion_id → ProactiveSuggestion（内存）
         self._pending: dict[str, ProactiveSuggestion] = {}
@@ -145,6 +154,11 @@ class ConductorSupervisor:
                     # 材料门：action=dream 但候选区无未消费材料 → 空料静默(不进 pending、不广播)。
                     if not self._should_emit_dream(s):
                         continue
+                    # 自主模式：builtin dream 直接启动，无需用户确认。
+                    # ponytail: dream_starter 注入时才走自主路径；未注入则退回旧路（向后兼容）。
+                    if s.action == "dream" and self._dream_starter is not None:
+                        await self._start_dream_autonomous(s)
+                        continue
                     self._pending[s.id] = s
                     await self._emit_suggestion(s)
             except asyncio.CancelledError:
@@ -152,6 +166,30 @@ class ConductorSupervisor:
             except Exception as exc:  # noqa: BLE001
                 log.warning("conductor_supervisor: tick 异常(将在下次 tick 重试): %s", exc)
             await asyncio.sleep(self._tick_interval)
+
+    async def _start_dream_autonomous(self, s: ProactiveSuggestion) -> None:
+        """自主启动 Dream — 材料门已通过，guards 由 dream_starter 内部检查。
+
+        dream_starter 返回 True = 已启动；False = 守卫拦截（busy / no key）→ 静默跳过。
+        异常 → log.warning + 不抛（不挂 tick loop）。
+        """
+        assert self._dream_starter is not None  # 调用方已检查
+        try:
+            started = await self._dream_starter(s)
+            if started:
+                log.info(
+                    "conductor_supervisor: Dream 自主启动 (order_id=%s, suggestion_id=%s)",
+                    s.order_id, s.id,
+                )
+            else:
+                log.debug(
+                    "conductor_supervisor: Dream 守卫拦截(busy/no-key),本次跳过 (order_id=%s)",
+                    s.order_id,
+                )
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "conductor_supervisor: dream_starter 异常(静默跳过): %s", exc,
+            )
 
     def _should_emit_dream(self, s: ProactiveSuggestion) -> bool:
         """材料门：action=dream 的建议仅在候选区有未消费材料时才放行。
