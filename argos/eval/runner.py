@@ -18,6 +18,9 @@ D20:报告存 ~/.argos/eval/ 同用户态数据
 """
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
+import inspect
 import logging
 import os
 import subprocess
@@ -331,11 +334,132 @@ class EvalRunner:
                 )
 
             return outcome
-        # 真模式占位:v1.1 接 AgentLoop.run()
+
+        # v1.1 real-loop adapter: loop has async def run (coroutine or async generator)
+        _run_fn = getattr(type(loop), "run", None) or getattr(loop, "run", None)
+        if hasattr(loop, "run") and _run_fn is not None and (
+            inspect.iscoroutinefunction(_run_fn)
+            or inspect.isasyncgenfunction(_run_fn)
+        ):
+            return self._drive_real_loop(loop, task, wt_path)
+
         return LoopOutcome(
             verdict_status=PASS_ERROR,
-            verify_detail="loop has no run_sync method (test stub required for v1)",
+            verify_detail="loop has no run_sync or async run method",
         )
+
+    def _drive_real_loop(self, loop: Any, task: "EvalTask", wt_path: str) -> LoopOutcome:
+        """Drive a real AgentLoop (async def run) to completion, collecting events.
+
+        Async/sync bridge mirrors argos/verify/self_test.py:reviewer_llm_proposer —
+        run asyncio.run() in a fresh thread so this sync method works whether or not
+        a running event loop exists on the caller's thread (no nested-loop crash).
+
+        Workspace caging: the eval worktree wt_path is passed as session_id context;
+        the loop itself must be constructed by a factory that sets workspace=wt_path
+        (see worker.py _eval_loop_factory and build_run_stack). We do NOT re-cage
+        here — we trust the factory, and document the requirement.
+        """
+        run_id = uuid.uuid4().hex[:8]
+        session_id = f"eval-{run_id}"
+
+        async def _collect() -> LoopOutcome:
+            from argos.protocol.events import VerifyVerdict, CostUpdate, PhaseChange, CodeAction
+
+            verdict_status = PASS_UNVERIFIABLE  # honest default: no verdict = unverifiable
+            verify_detail = ""
+            tokens_in = 0
+            tokens_out = 0
+            cost_usd: float | None = None
+            steps = 0
+            code_action_count = 0
+
+            async for ev in loop.run(task.goal, session_id=session_id):
+                if isinstance(ev, VerifyVerdict):
+                    # Take the LAST verdict seen (loop may emit multiple)
+                    verdict_status = ev.verdict.status
+                    verify_detail = getattr(ev.verdict, "verify_detail", "") or ""
+                elif isinstance(ev, CostUpdate):
+                    tokens_in = ev.tokens_in
+                    tokens_out = ev.tokens_out
+                    cost_usd = ev.cost_usd
+                elif isinstance(ev, PhaseChange):
+                    steps = ev.actions
+                elif isinstance(ev, CodeAction):
+                    code_action_count += 1
+
+            # Fallback steps: if PhaseChange never fired, use CodeAction count
+            if steps == 0 and code_action_count:
+                steps = code_action_count
+
+            return LoopOutcome(
+                verdict_status=verdict_status,
+                verify_detail=verify_detail,
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                cost_usd=cost_usd,
+                steps=steps,
+            )
+
+        # Budget: wall-clock timer in a thread (same pattern as run_sync path above).
+        timed_out: threading.Event | None = None
+        timer: threading.Timer | None = None
+        if self._budget_s is not None:
+            timed_out = threading.Event()
+            timer = threading.Timer(self._budget_s, timed_out.set)
+            timer.daemon = True
+            timer.start()
+
+        # Async/sync bridge: run in a fresh thread with its own event loop so we
+        # never nest event loops, whether called from sync or async context.
+        # ponytail: one-thread executor, same pattern as self_test.reviewer_llm_proposer
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                fut = pool.submit(asyncio.run, _collect())
+                timeout = float(self._budget_s) if self._budget_s is not None else None
+                try:
+                    outcome = fut.result(timeout=timeout)
+                except concurrent.futures.TimeoutError:
+                    fut.cancel()
+                    if timer is not None:
+                        timer.cancel()
+                    return LoopOutcome(
+                        verdict_status=PASS_FAILED,
+                        verify_detail=f"timed_out: exceeded {self._budget_s}s wall-clock budget",
+                    )
+        finally:
+            if timer is not None:
+                timer.cancel()
+
+        if timed_out is not None and timed_out.is_set():
+            return LoopOutcome(
+                verdict_status=PASS_FAILED,
+                verify_detail=f"timed_out: exceeded {self._budget_s}s wall-clock budget",
+                steps=outcome.steps,
+                tokens_in=outcome.tokens_in,
+                tokens_out=outcome.tokens_out,
+                cost_usd=outcome.cost_usd,
+            )
+
+        # Cost budget check (mirrors run_sync path)
+        if (
+            self._budget_cost_usd is not None
+            and outcome.cost_usd is not None
+            and outcome.cost_usd > self._budget_cost_usd
+        ):
+            return LoopOutcome(
+                verdict_status=PASS_FAILED,
+                verify_detail=(
+                    f"over_budget: cost ${outcome.cost_usd:.6f} exceeded"
+                    f" ${self._budget_cost_usd:.6f} limit"
+                ),
+                steps=outcome.steps,
+                tokens_in=outcome.tokens_in,
+                tokens_out=outcome.tokens_out,
+                cost_usd=outcome.cost_usd,
+            )
+
+        return outcome
 
     def _mk_error(
         self, task, run_id, model_tier, started, wt_path, error_msg, fallback,
