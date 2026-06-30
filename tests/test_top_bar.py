@@ -33,6 +33,28 @@ async def test_topbar_shows_brand_version_model():
 
 
 @pytest.mark.asyncio
+async def test_topbar_shows_unsandboxed_badge_when_off(monkeypatch):
+    """#2 CC对齐:关沙箱(opt-in 默认)→ 顶栏显式标'未沙箱化'(诚实:无内核牢笼,别让用户误以为有)。"""
+    monkeypatch.setenv("ARGOS_SANDBOX", "0")
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tb = app.query_one("#tb", TopBar)
+        assert "未沙箱化" in tb.render_text
+
+
+@pytest.mark.asyncio
+async def test_topbar_no_unsandboxed_badge_when_on(monkeypatch):
+    """开沙箱(--sandbox / ARGOS_SANDBOX=1)→ 不显'未沙箱化'标。"""
+    monkeypatch.setenv("ARGOS_SANDBOX", "1")
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tb = app.query_one("#tb", TopBar)
+        assert "未沙箱化" not in tb.render_text
+
+
+@pytest.mark.asyncio
 async def test_topbar_logo_eye_glyph_not_star():
     """v3:品牌符从 ✳ 改为眼系字形(◌/◉ 等),不再出现 ✳。"""
     app = _H()

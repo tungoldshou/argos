@@ -5,8 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 Argos — **the hundred-eyed agent** (named for Argus Panoptes, the all-seeing guardian) — runs cheap
-models reliably by wrapping them in a verify hard-gate, an honesty protocol, and an OS-level
-sandbox. Its runtime is a background daemon kernel (auto-spawned) with the Textual TUI as its client,
+models reliably by wrapping them in a verify hard-gate, an honesty protocol, a governance layer
+(broker + approval + egress + AST limits), and an **opt-in** OS-level sandbox (default off). Its
+runtime is a background daemon kernel (auto-spawned) with the Textual TUI as its client,
 falling back to a single inline process when the daemon is unavailable. Model-agnostic
 (Anthropic-Messages and OpenAI-compatible endpoints both first-class).
 See `README.md` for the product story and `docs/argos-product-definition.md` for the spec.
@@ -76,8 +77,13 @@ through four **unskippable** phases: **plan → act → verify → report**.
 `CapabilityBroker` (`sandbox/broker.py`) is the **only** path to side effects. It checks the action
 against the egress policy (v6: manifest-driven from `CapabilityRegistry` + `_NETWORK_ACTIONS`
 fallback), asks the `ApprovalGate` when needed, signs an HMAC receipt, then hands to the executor.
-The sandbox is `SeatbeltExecutor` (`sandbox/executor.py`) — a **separate subprocess** under a macOS
-Seatbelt profile (no network by default, writes caged to the declared workspace).
+The OS sandbox is **opt-in** (#2 CC-aligned: `--sandbox` / `ARGOS_SANDBOX=1`, **default off**, like
+Claude Code's). When **on**, `SeatbeltExecutor` (`sandbox/executor.py`) runs the executor child as a
+**separate subprocess** under a macOS Seatbelt profile (no network, writes caged to the workspace);
+Linux uses bwrap/unshare. When **off** (default), the child runs **unwrapped** — the broker / approval /
+egress / AST governance above still gates side effects (residual risk: AST-permitted raw network/file
+writes aren't OS-contained). `config.sandbox_enabled()` is the single source of truth;
+`seatbelt.spawn_child(sandbox=…)` and `select_backend()` honor it (off → cross-platform unwrapped executor).
 
 - v6 adds `CapabilityRegistry` (`capability/`): a per-process manifest of all capabilities
   (kind, visibility, egress_hosts). `register_builtins()` populates it; broker derives its

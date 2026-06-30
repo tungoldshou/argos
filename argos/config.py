@@ -211,6 +211,16 @@ def _has_config_file() -> bool:
     return (_config_dir() / "config.json").exists()
 
 
+def sandbox_enabled() -> bool:
+    """OS 沙箱是否启用 —— opt-in,**默认关**(对齐 Claude Code:CC 的 OS 沙箱也是 opt-in)。
+    `ARGOS_SANDBOX=1`(或 `--sandbox`)开启 Seatbelt/bwrap 的内核级"网络断 + 写牢笼"。
+
+    关闭时治理**不**塌:broker(唯一副作用路径)+ 审批闸 + egress 策略 + smolagents AST 限制
+    都不依赖 OS 沙箱、继续生效。仅去掉内核级兜底 —— 诚实代价:AST 允许的模块的裸网络/越界写
+    不再被内核拦(与 CC 同档,CC 靠逐命令人工确认补)。关沙箱时启动/UI 必须如实标"未沙箱化"。"""
+    return os.environ.get("ARGOS_SANDBOX", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def active_tier():
     """当前激活模型的 ModelTier(优先 config.json;无则旧 env 回退至 DEFAULT_TIER)。"""
     if _has_config_file():

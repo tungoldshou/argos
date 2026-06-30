@@ -119,6 +119,11 @@ class TopBar(Static):
             out.append(t("widget.badge_no_key"))
         else:
             out.append(t("widget.badge_live"))
+        # #2 CC对齐:OS 沙箱 opt-in。未开(默认)→ 显式标"未沙箱化"——诚实警示:无内核牢笼,
+        # 别让用户误以为有 OS 隔离(治理仍在,但不是 OS 级)。开沙箱(--sandbox)则不显此标。
+        from argos.config import sandbox_enabled
+        if not sandbox_enabled():
+            out.append(t("widget.badge_no_sandbox"))
         # Trust 徽标排最后(README §188)
         if self._trust_level is not None:
             prefix = "⏻ " if self._trust_level == 4 else ""

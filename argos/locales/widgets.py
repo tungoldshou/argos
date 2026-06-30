@@ -153,6 +153,7 @@ EN: dict[str, str] = {
     "widget.badge_yolo": "YOLO",
     "widget.badge_no_key": "no key",
     "widget.badge_live": "LIVE",
+    "widget.badge_no_sandbox": "unsandboxed",
 
     # ── dream_report ──────────────────────────────────────────────────────────
 
@@ -415,6 +416,7 @@ ZH: dict[str, str] = {
     "widget.badge_yolo": "YOLO",
     "widget.badge_no_key": "未配 key",
     "widget.badge_live": "LIVE",
+    "widget.badge_no_sandbox": "未沙箱化",
 
     # ── dream_report ──────────────────────────────────────────────────────────
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -38,6 +39,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--effort", choices=[e.value for e in EffortLevel],
                    default=EffortLevel.MEDIUM.value,
                    help=t("cli.effort.help"))
+    # #2 CC对齐:OS 沙箱 opt-in,默认关(CC 的 OS 沙箱也 opt-in)。开启 = 内核级网络断+写牢笼;
+    # 关闭时 broker+审批+egress+AST 治理仍在。也可用 ARGOS_SANDBOX=1。
+    p.add_argument("--sandbox", action="store_true", help=t("cli.sandbox.help"))
     sub = p.add_subparsers(dest="command")
     # headless 非交互执行(可脚本化 / CI):argos exec "<任务>"
     from argos.cli import headless as _headless_cli
@@ -247,6 +251,10 @@ def main() -> None:
         return
 
     args = _build_parser().parse_args()
+    # #2 CC对齐:--sandbox 开启 OS 沙箱(env 是 config.sandbox_enabled() 的单一真源)。须早于
+    # build_components / TUI 启动设置。不传 = 默认关(opt-in),治理仍由 broker+审批+egress+AST 兜。
+    if getattr(args, "sandbox", False):
+        os.environ["ARGOS_SANDBOX"] = "1"
     # 启动时查更新(同步,失败静默,stderr 提示)。headless `exec` 跳过 —— CI / 脚本化场景
     # 既不该被 5s 网络检查拖慢,也不该往 stderr 喷升级提示污染输出。
     if getattr(args, "command", None) != "exec":

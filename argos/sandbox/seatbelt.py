@@ -126,14 +126,20 @@ def confined_argv(*, workspace: Path, argv: list[str], allow_network: bool = Fal
 
 
 def spawn_child(*, workspace: Path, child_argv: list[str],
-                env: dict[str, str] | None = None) -> subprocess.Popen:
-    """用 Seatbelt profile 包着拉起沙箱子进程,返回 Popen(stdin/stdout 管道)。
-    profile 写到 workspace 内的临时文件(workspace 可写,符合 profile 自身约束)。"""
+                env: dict[str, str] | None = None, sandbox: bool = True) -> subprocess.Popen:
+    """拉起子进程,返回 Popen(stdin/stdout 管道)。
+    sandbox=True(默认)→ 用 Seatbelt profile 裹(网络断 + 写牢笼 workspace+temp);profile 写到
+    workspace 内临时文件(workspace 可写,符合 profile 自身约束)。
+    sandbox=False(opt-in 默认关,#2 CC对齐)→ **不裹 sandbox-exec**,child_argv 直跑 —— 诚实:无
+    内核级牢笼,但 broker + 审批 + egress + AST 治理仍在(它们不依赖 Seatbelt)。"""
     workspace.mkdir(parents=True, exist_ok=True)
-    prof = build_profile(workspace=workspace)
-    prof_file = workspace / ".argos_sandbox.sb"
-    prof_file.write_text(prof, encoding="utf-8")
-    argv = wrap_command(str(prof_file), child_argv)
+    if sandbox:
+        prof = build_profile(workspace=workspace)
+        prof_file = workspace / ".argos_sandbox.sb"
+        prof_file.write_text(prof, encoding="utf-8")
+        argv = wrap_command(str(prof_file), child_argv)
+    else:
+        argv = list(child_argv)   # 未沙箱化:直跑(无 OS 牢笼)
     child_env = dict(env or os.environ)
     return subprocess.Popen(
         argv, cwd=str(workspace), env=child_env,
