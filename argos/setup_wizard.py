@@ -286,6 +286,10 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
                 derive_env = False
             else:
                 api_key = (reader(t("setup.prompt_paste_key")) or "").strip()
+                if not api_key:
+                    # 空 key:别静默拿占位 "x" 去探针换一个迷惑的 401,当场说清并重配本模型。
+                    writer(t("setup.key_empty"))
+                    continue
                 api_key_env = ""        # paste 路径:env 名延后由【唯一 profile 名】派生
                 derive_env = True       # (避免同 model 不同 key 的两 profile 撞同名 env 互相覆盖)
             max_tokens = _ask_int(reader, writer, t("setup.prompt_max_tokens"), 4096)
@@ -352,8 +356,8 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
             if api_key:
                 writer(t("setup.key_stored_warning"))
             if (reader(t("setup.add_another_prompt")) or "n").strip().lower() != "y":
+                writer(t("setup.done"))
                 break
-            writer(t("setup.done"))
     except EOFError:
         # 非 TTY(管道 / CI)兜底:input() 抛 EOFError 时给一条清楚出路(不裸 traceback)。
         # 关键:真用户来用会卡在这,必须显式告诉他"setup 需真终端"+"可以手工写 config"。

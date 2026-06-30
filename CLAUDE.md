@@ -160,10 +160,11 @@ share mutable state. The `ApprovalGate` from `build_components` is shared with t
   `ledger/<run_id>.jsonl`, `conductor/orders.jsonl`,
   `daemon.sock`, `daemon.pid`.
   `ARGOS_NO_MEMORY=1` opts out of auto-memory.
-  `ARGOS_WORKFLOWS=1` opts **in** to Dynamic Workflows (`propose_workflow`/fan-out/best-of-N): the
-  `WORKFLOW_PROMPT` section is injected and the model is steered to use it. Off by default — the
-  default agent isn't burdened with workflow complexity (the `propose_workflow` tool stays callable,
-  it's just not advertised in the system prompt).
+  Dynamic Workflows (`propose_workflow`/fan-out/best-of-N) are **on by default**: the
+  `WORKFLOW_PROMPT` section is injected and the model is steered to use it. `ARGOS_WORKFLOWS=0`
+  opts **out** (drops the prompt section + skips dispatch). The `propose_workflow` tool stays
+  callable regardless; the flag only controls whether it's advertised in the system prompt
+  (`loop.py` reads `ARGOS_WORKFLOWS` defaulting to `'1'`).
 - **Daemon is always-on by default**: TUI probes `~/.argos/daemon.sock` at startup and
   auto-spawns `argosd` if not running; falls back to inline (single-process) mode only on
   failure. There is no `--with-daemon` flag — daemon is the default path. `ARGOS_NO_DAEMON=1`
