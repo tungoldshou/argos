@@ -121,8 +121,7 @@ async def _serve(args: argparse.Namespace) -> int:
     conductor_orders_dir = Path.home() / ".argos" / "conductor"
 
     async def _conductor_broadcast(ev_dict: dict) -> None:
-        """把 conductor 事件存入 _conductor 流并扇出到 SSE 订阅者。"""
-        manager.store.append(CONDUCTOR_RUN_ID, ev_dict)
+        """把 conductor 事件扇出到 SSE 订阅者(纯实时广播,不落盘 —— _conductor 是虚拟总线)。"""
         await manager.fanout(CONDUCTOR_RUN_ID, ev_dict)
 
     conductor_supervisor = ConductorSupervisor(
