@@ -52,11 +52,21 @@ def _safe_path(rel: str) -> Path | None:
     else:
         norm = rel  # 其他路径原样(后续 _ws / norm + relative_to 仍做越界检查)
     p = (ws / norm).resolve()
-    try:
-        p.relative_to(ws)
-    except ValueError:
-        return None
-    return p
+
+    def _within(base) -> bool:
+        try:
+            p.relative_to(base)
+            return True
+        except ValueError:
+            return False
+
+    if _within(ws):
+        return p
+    # #2 CC对齐:--add-dir / ARGOS_ADD_DIRS 授权的额外目录也放行(用户显式授权 → 应用层写牢笼之外可写)。
+    from argos.config import extra_write_dirs
+    if any(_within(extra) for extra in extra_write_dirs()):
+        return p
+    return None
 
 
 def read_file(path: str, offset: int = 0, limit: int | None = None) -> str:

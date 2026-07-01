@@ -221,6 +221,33 @@ def sandbox_enabled() -> bool:
     return os.environ.get("ARGOS_SANDBOX", "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def extra_write_dirs() -> list[Path]:
+    """`--add-dir` / `ARGOS_ADD_DIRS` 授权的额外可写目录(#2 CC对齐:对齐 CC 的 --add-dir /
+    additionalDirectories)。os.pathsep 分隔,expanduser + resolve + 去重。
+
+    语义:这些目录在 workspace 写牢笼【之外】也可写。应用层(write_file/edit_file 的路径 cage +
+    hard-path workspace 边界)恒放行它们;OS 层仅在【开沙箱】时把它们加进 Seatbelt/bwrap 可写集。
+    用户显式授权 → 视同 workspace 内可写(不再"越界")。"""
+    raw = os.environ.get("ARGOS_ADD_DIRS", "")
+    if not raw:
+        return []
+    out: list[Path] = []
+    seen: set[str] = set()
+    for part in raw.split(os.pathsep):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            p = Path(part).expanduser().resolve()
+        except (OSError, RuntimeError):
+            continue
+        s = str(p)
+        if s not in seen:
+            seen.add(s)
+            out.append(p)
+    return out
+
+
 def active_tier():
     """当前激活模型的 ModelTier(优先 config.json;无则旧 env 回退至 DEFAULT_TIER)。"""
     if _has_config_file():

@@ -83,9 +83,16 @@ def _bwrap_argv(workspace: Path, child_argv: list[str], *,
     # / /dev/null(文件)遮蔽 —— 殊途同归:读侧凭据不可读。开"出网阀"(allow_network=True)时尤其
     # 关键(能读 ~/.ssh + 联网 = 真外泄)。复用 seatbelt 的同一份凭据清单,单一真源不漂移。
     argv += _credential_mask_args()
+    # #2 CC对齐:--add-dir 授权的额外目录也 bind 为可写(源须存在——bwrap --bind 要求)。
+    from argos.config import extra_write_dirs
+    extra_binds: list[str] = []
+    for d in extra_write_dirs():
+        if d.exists():
+            extra_binds += ["--bind", str(d), str(d)]
     argv += [
         # 写牢笼:workspace 绑定为可写 —— 最后应用,覆盖只读根的该子树(顺序关键,见 docstring)
         "--bind", str(ws), str(ws),
+        *extra_binds,
         # 跑子进程
         "--chdir", str(ws),
         "--",
