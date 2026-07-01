@@ -36,14 +36,14 @@ def test_status_bar_count_badges_empty():
     assert "⏵" not in bar.render_text
 
 
-def test_status_bar_set_run_summary_renders_in_text():
-    """set_run_summary 推 + render_text 含 badges。"""
+def test_status_bar_run_summary_not_in_text_after_dedup():
+    """去重(2026-07-01):daemon run 计数徽标归右侧 ActivityPanel(_RUN_IDX),底栏 render_text
+    不再重复显示。set_run_summary 仍存(喂数据),render_count_badges 方法仍独立可用(见上)。"""
     from argos.tui.widgets.status_bar import StatusBar
     bar = StatusBar()
     bar.set_run_summary([("a", "running"), ("b", "paused")])
     text = bar.render_text
-    assert "⏵1" in text
-    assert "⏸1" in text
+    assert "⏵" not in text and "⏸" not in text
 
 
 # ── ActivityPanel 'Run' 区段(逻辑测,无 widget 渲染)────────

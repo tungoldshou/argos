@@ -99,7 +99,7 @@ def test_tools_registered_in_all_tool_names():
     for name in ("computer_screenshot", "computer_click", "computer_double_click",
                  "computer_type_text", "computer_key", "computer_scroll", "computer_open_app"):
         assert name in ALL_TOOL_NAMES
-    assert len(ALL_TOOL_NAMES) == 31  # +propose_gui_verify(2d);stt_transcribe 宿主能力不计入
+    assert len(ALL_TOOL_NAMES) == 31  # +propose_gui_verify(2d);宿主专属能力不计入
 
 
 def test_tools_broker_dispatch_lsp_definition():

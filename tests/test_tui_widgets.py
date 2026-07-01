@@ -107,13 +107,11 @@ async def test_status_bar_always_on_fields():
         await pilot.pause()
         # TUI v3 状态眼:阶段眼字形 + 阶段名(◌idle),动作计数走 "动作N" 文字(⚙ 处决,spec §4.9)
         assert "idle" in bar.render_text
-        assert "$0" in bar.render_text
         bar.set_phase("verify", actions=3)
         bar.set_cost(tokens_in=12400, tokens_out=3100, cost_usd=0.013, elapsed_s=4.2)
         await pilot.pause()
         t = bar.render_text
         assert "verify" in t
         assert "动作3" in t
-        assert "12.4k" in t and "3.1k" in t
-        assert "$0.013" in t
-        assert "4.2s" in t
+        # 去重(2026-07-01)+ 去花费:token/花费/耗时归右侧 ActivityPanel,不再在底栏重复
+        assert "12.4k" not in t and "$" not in t and "4.2s" not in t

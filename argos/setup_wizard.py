@@ -117,18 +117,6 @@ def _ask_int(reader, writer, prompt: str, default: int) -> int:
         return default
 
 
-def _ask_float_or_none(reader, writer, prompt: str) -> float | None:
-    """读可选浮点输入(价格)。留空或非数字 → None(非数字时告知,不崩溃)。"""
-    raw = (reader(prompt) or "").strip()
-    if not raw:
-        return None
-    try:
-        return float(raw)
-    except ValueError:
-        writer(t("setup.not_number", val=raw))
-        return None
-
-
 def _append_env(config_dir: Path, name: str, value: str) -> None:
     """把 NAME=value 写进 ~/.argos/.env(已存在同名则替换),权限 0600。
     以 0600 创建临时文件再原子替换 → 明文密钥从落盘第一刻就 0600,无 0644 暴露窗口(TOCTOU)。"""
@@ -232,31 +220,66 @@ async def probe_connection(*, protocol: str, base_url: str, model: str, api_key:
 
 # ── 交互向导编排(spec §6.1) ────────────────────────────────────────────────────
 
-async def run(*, reader, writer, config_dir: Path | None = None) -> None:
-    """CLI 向导编排(spec §6.1)。reader(prompt)->str 注入输入;writer(line) 注入输出;
-    config_dir 注入(测试/打包);默认 ~/.argos。
+def _rule(console, key: str) -> None:
+    """章节分隔线(仅真 CLI 传了 console 时画);测试 / 非 TTY 静默。"""
+    if console is not None:
+        console.rule(f"[dim]{t(key)}[/dim]")
 
-    reader 调用顺序(每轮一个模型):
-      1. 选编号
-      (仅「Custom」预设)2a. 协议 (anthropic/openai)
-      (仅「Custom」预设)2b. base_url
-      2/3. 模型 id(留空=默认)
-      3/4. API key 方式(paste/env)
-      4/5. 若 paste:粘贴 key;若 env:环境变量名
-      5/6. max_tokens(留空=4096)
-      6/7. context_window(留空=200000)
-      7/8. 价格 in(留空=跳过,则跳过 price_out)
-      8/9. 深度探针?(y/N)
-      9/10. profile 名字(留空=model id)
-      10/11. 再配一个模型?(y/N)
+
+def _banner(console) -> None:
+    """向导开场标题(仅真 CLI)。"""
+    if console is not None:
+        console.print(t("setup.banner"), style="bold cyan")
+
+
+def _emit_probe(console, writer, res: "ProbeResult") -> None:
+    """探针评级:有 console 按连通态上色(绿/黄/红);否则纯文本一行。"""
+    line = t("setup.probe_rating", rating=res.rating, message=res.message)
+    if console is not None:
+        console.print(line, style="green" if res.codeact_ok else ("yellow" if res.connected else "red"))
+    else:
+        writer(line)
+
+
+def _select_key_method(reader, writer, console) -> str:
+    """选 key 方式:真终端 ↑↓ 选,非 TTY 回退文字输入。返回 'paste' 或 'env'。"""
+    try:
+        idx = _arrow_select([t("setup.key_method_paste"), t("setup.key_method_env")],
+                            title=t("setup.section_apikey"), writer=writer)
+        return "paste" if idx == 0 else "env"
+    except _NotATTY:
+        return (reader(t("setup.prompt_key_method")) or "paste").strip()
+
+
+async def _probe_with_status(console, writer, *, protocol, base_url, model, api_key) -> "ProbeResult":
+    """连通探针:有 console 用 spinner(干掉 20 秒静默卡屏);否则打一行静态'正在连通…'。"""
+    if console is not None:
+        with console.status(t("setup.probing")):
+            return await probe_connection(protocol=protocol, base_url=base_url, model=model, api_key=api_key)
+    writer(t("setup.probing"))
+    return await probe_connection(protocol=protocol, base_url=base_url, model=model, api_key=api_key)
+
+
+async def run(*, reader, writer, config_dir: Path | None = None,
+              console=None, advanced: bool = False) -> None:
+    """CLI 向导编排(spec §6.1)。reader/writer 注入 I/O(可脚本化、可测);console 可选——真 CLI
+    传 rich Console → 上色 / 章节标题 / 连通探针 spinner;测试不传 → 纯文本。advanced=True 才问
+    max_tokens / context_window / embedding(默认走合理缺省,少打扰首次用户;价格已不再询问)。
+
+    reader 调用顺序(每轮一个模型,默认非 advanced):
+      provider 选 → [Custom: protocol, base_url] → model id → key 方式 → key 值 / env 名
+      → [advanced: max_tokens, context_window, (openai)embedding] → [连不通: 重试?]
+      → 深探?(y/N) → profile 名 → [已有模型: 设为默认?] → 再配?(y/N)
     """
     from argos import config as C
     cdir = config_dir or Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos"))
     names = list(PRESETS)
+    _banner(console)
     # 非 TTY 友好兜底(2026-06-09):管道/CI 跑 setup 时 input() 抛 EOFError,以前裸 traceback
     # 退出,用户完全不知道"setup 需要真终端"或"可以手工写 config"。接住 → 打友好提示 → return。
     try:
         while True:
+            _rule(console, "setup.section_provider")
             # provider 选择:真终端用 ↑↓ 方向键,非 TTY(测试/管道)回退编号输入(保持可测)。
             try:
                 pidx = _arrow_select(names, title=t("setup.choose_provider_title"), writer=writer)
@@ -278,33 +301,37 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
             base_url = preset["base_url"] or (reader(t("setup.prompt_base_url")) or "").strip()
             default_model = preset["model"]
             model = (reader(t("setup.prompt_model", default=default_model)) or default_model).strip()
-            # key 方式:paste 或 env
-            way = (reader(t("setup.prompt_key_method")) or "paste").strip()
+            # API key
+            _rule(console, "setup.section_apikey")
+            way = _select_key_method(reader, writer, console)
             if way == "env":
                 api_key = None
                 api_key_env = (reader(t("setup.prompt_env_var_name")) or "").strip()
                 derive_env = False
             else:
                 api_key = (reader(t("setup.prompt_paste_key")) or "").strip()
+                if not api_key:
+                    # 空 key:别静默拿占位 "x" 去探针换一个迷惑的 401,当场说清并重配本模型。
+                    writer(t("setup.key_empty"))
+                    continue
                 api_key_env = ""        # paste 路径:env 名延后由【唯一 profile 名】派生
                 derive_env = True       # (避免同 model 不同 key 的两 profile 撞同名 env 互相覆盖)
-            max_tokens = _ask_int(reader, writer, t("setup.prompt_max_tokens"), 4096)
-            ctx = _ask_int(reader, writer, t("setup.prompt_context_window"), 200000)
-            price_in = _ask_float_or_none(reader, writer, t("setup.prompt_price_in"))
-            price_out = (_ask_float_or_none(reader, writer, t("setup.prompt_price_out"))
-                         if price_in is not None else None)
-            # 记忆向量语义召回:复用本 provider 的 /embeddings(需一个 embedding 模型名)。
-            # 仅 OpenAI 协议有 /embeddings;Anthropic 端没有 → 不问,记忆走 FTS5 关键词。
-            embedding_model = ""
-            if protocol == "openai":
-                embedding_model = (reader(t("setup.prompt_embedding_model")) or "").strip()
-            else:
-                writer(t("setup.no_embeddings_note"))
+            # 高级项(可选):默认走合理缺省,--advanced 才问。价格不再询问(费用显示已移除)。
+            max_tokens, ctx, embedding_model = 4096, 200_000, ""
+            if advanced:
+                _rule(console, "setup.section_advanced")
+                max_tokens = _ask_int(reader, writer, t("setup.prompt_max_tokens"), 4096)
+                ctx = _ask_int(reader, writer, t("setup.prompt_context_window"), 200000)
+                # 记忆向量语义召回:复用 provider 的 /embeddings(仅 OpenAI 协议有;Anthropic 端没有)。
+                if protocol == "openai":
+                    embedding_model = (reader(t("setup.prompt_embedding_model")) or "").strip()
+                else:
+                    writer(t("setup.no_embeddings_note"))
             # 连通+格式探针(必做)
-            writer(t("setup.probing"))
-            res = await probe_connection(protocol=protocol, base_url=base_url, model=model,
-                                         api_key=api_key)
-            writer(t("setup.probe_rating", rating=res.rating, message=res.message))
+            _rule(console, "setup.section_connect")
+            res = await _probe_with_status(console, writer, protocol=protocol,
+                                           base_url=base_url, model=model, api_key=api_key)
+            _emit_probe(console, writer, res)
             if not res.connected:
                 again = (reader(t("setup.reconnect_prompt")) or "y").strip().lower()
                 if again != "n":
@@ -339,7 +366,6 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
                 write_profile(config_dir=cdir, name=name, protocol=protocol, base_url=base_url,
                               model=model, api_key=api_key, api_key_env=api_key_env,
                               max_tokens=max_tokens, context_window=ctx,
-                              price_in=price_in, price_out=price_out,
                               embedding_model=embedding_model, set_active=make_active)
             except C.ConfigError as e:
                 # fail-closed:配置不合法绝不假成功,也不顶掉原 active;让用户重配这个模型。
@@ -352,8 +378,8 @@ async def run(*, reader, writer, config_dir: Path | None = None) -> None:
             if api_key:
                 writer(t("setup.key_stored_warning"))
             if (reader(t("setup.add_another_prompt")) or "n").strip().lower() != "y":
+                writer(t("setup.done"))
                 break
-            writer(t("setup.done"))
     except EOFError:
         # 非 TTY(管道 / CI)兜底:input() 抛 EOFError 时给一条清楚出路(不裸 traceback)。
         # 关键:真用户来用会卡在这,必须显式告诉他"setup 需真终端"+"可以手工写 config"。

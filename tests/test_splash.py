@@ -20,14 +20,14 @@ from argos.tui.widgets.splash import StartupSplash
 
 @pytest.mark.asyncio
 async def test_splash_shown_on_mount_with_mode_badge():
-    """挂载后显示 splash,含 ARGOS 品牌字,demo 模式含 DEMO。"""
-    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())   # demo 默认 True
+    """挂载后显示 splash,含 ARGOS 品牌字;DEMO 徽标已移除(2026-07-01)。"""
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         sp = list(app.query(StartupSplash))
         assert len(sp) == 1
         assert "ARGOS" in sp[0].renderable_text
-        assert "DEMO" in sp[0].renderable_text          # demo 模式诚实徽标
+        assert "DEMO" not in sp[0].renderable_text       # demo 徽标已移除
 
 
 @pytest.mark.asyncio
@@ -66,14 +66,6 @@ def test_splash_has_key_false_no_live():
     text = sp.renderable_text
     assert "LIVE" not in text, f"无 key 时绝不含 LIVE,实际: {text!r}"
     assert "未配 key" in text
-
-
-def test_splash_demo_badge_v3_text():
-    """demo 模式显 DEMO 脚本演示(v3 文案)。"""
-    sp = StartupSplash(model_label="M3", tier="sonnet", live=False, has_key=False)
-    text = sp.renderable_text
-    assert "DEMO" in text, f"demo 模式应含 DEMO 字样,实际: {text!r}"
-    assert "LIVE" not in text
 
 
 def test_splash_no_key_shows_eye_not_live():

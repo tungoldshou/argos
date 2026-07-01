@@ -33,6 +33,28 @@ async def test_topbar_shows_brand_version_model():
 
 
 @pytest.mark.asyncio
+async def test_topbar_shows_unsandboxed_badge_when_off(monkeypatch):
+    """#2 CC对齐:关沙箱(opt-in 默认)→ 顶栏显式标'未沙箱化'(诚实:无内核牢笼,别让用户误以为有)。"""
+    monkeypatch.setenv("ARGOS_SANDBOX", "0")
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tb = app.query_one("#tb", TopBar)
+        assert "未沙箱化" in tb.render_text
+
+
+@pytest.mark.asyncio
+async def test_topbar_no_unsandboxed_badge_when_on(monkeypatch):
+    """开沙箱(--sandbox / ARGOS_SANDBOX=1)→ 不显'未沙箱化'标。"""
+    monkeypatch.setenv("ARGOS_SANDBOX", "1")
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tb = app.query_one("#tb", TopBar)
+        assert "未沙箱化" not in tb.render_text
+
+
+@pytest.mark.asyncio
 async def test_topbar_logo_eye_glyph_not_star():
     """v3:品牌符从 ✳ 改为眼系字形(◌/◉ 等),不再出现 ✳。"""
     app = _H()
@@ -67,20 +89,6 @@ async def test_topbar_phase_eye_changes():
 
         tb.set_phase("idle")
         assert "◌" in tb.render_text, "idle 阶段应显空态眼 ◌"
-
-
-@pytest.mark.asyncio
-async def test_topbar_demo_badge_honest():
-    """默认 demo=True → DEMO 徽标常驻(诚实铁律)。"""
-    app = _H()
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        tb = app.query_one("#tb", TopBar)
-        assert any("DEMO" in b for b in tb.badges())
-        # 切真 loop + 有 key → DEMO 消失,且不显 未配 key
-        tb.set_state(demo=False, has_key=True)
-        assert not any("DEMO" in b for b in tb.badges())
-        assert not any("未配 key" in b for b in tb.badges())
 
 
 @pytest.mark.asyncio

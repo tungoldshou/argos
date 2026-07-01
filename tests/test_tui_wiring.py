@@ -51,11 +51,10 @@ async def test_run_goal_drives_widgets_from_events():
         assert badge.status == "passed"
         bar = app.query_one("#status-bar", StatusBar)
         # C2(2026-06-22):run 收尾后 phase 复位 idle —— 不再粘在 'report' 与右栏 idle 互相矛盾。
-        # 事件确实驱动过各 widget 由上面的 CodeActionBlock/DiffView/VerdictBadge(passed) 佐证;
-        # 成本数据收尾后仍保留(mark_run_end 只复位 phase/actions,不清成本)。
+        # 事件确实驱动过各 widget 由上面的 CodeActionBlock/DiffView/VerdictBadge(passed) 佐证。
+        # 去重(2026-07-01):成本/token 归右侧 ActivityPanel,底栏 render_text 不再含。
         assert bar.phase == "idle"
-        assert "$0.013" in bar.render_text
-        assert "12.4k" in bar.render_text
+        assert "$" not in bar.render_text and "12.4k" not in bar.render_text
 
 
 @pytest.mark.asyncio
@@ -127,20 +126,6 @@ async def test_loop_exception_degrades_to_error_not_crash():
         assert "◉ 错误" in log.rendered_text
         assert "模型 502" in log.rendered_text
         assert "RuntimeError" in log.rendered_text
-
-
-@pytest.mark.asyncio
-async def test_demo_mode_marks_subtitle_and_warns_before_run():
-    """HIGH:默认 demo 模式头部常驻 DEMO 标识,且每轮起手 banner 声明假数据(诚实)。"""
-    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())  # demo 默认 True
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        assert "DEMO" in app.sub_title
-        await app.start_run("演示任务")
-        await app.workers.wait_for_complete()
-        await pilot.pause()
-        log = app.query_one("#transcript")
-        assert "演示模式" in log.rendered_text
 
 
 @pytest.mark.asyncio

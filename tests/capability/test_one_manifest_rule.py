@@ -203,7 +203,7 @@ def test_get_tool_names_without_registry_returns_static():
 
 def test_get_tool_names_with_registry_returns_callable_names():
     """get_tool_names(registry) 返回 registry.callable_names()(诚实计数):排除宿主专属、
-    沙箱不可调用的能力(stt_transcribe),但含全部真可调用内置工具。不依赖静态表。"""
+    沙箱不可调用的能力,但含全部真可调用内置工具。不依赖静态表。"""
     reg = CapabilityRegistry()
     register_builtins(reg)
     result = get_tool_names(reg)
@@ -211,9 +211,6 @@ def test_get_tool_names_with_registry_returns_callable_names():
     # 断言包含全部内置可调用能力（含 lsp_* 和纯沙箱工具）
     for expected in ALL_TOOL_NAMES:
         assert expected in result, f"{expected!r} 应在 registry 派生结果中"
-    # 宿主专属能力(sandbox_callable=False)不计入可调用数(诚实:数量 = 真实可调用工具数)
-    assert "stt_transcribe" in reg.names(), "stt_transcribe 仍在 registry(清单完整)"
-    assert "stt_transcribe" not in result, "stt_transcribe 不可调用,不应计入 /tools"
 
 
 def test_get_tool_names_registry_includes_new_cap():
@@ -232,11 +229,11 @@ def test_get_tool_names_count_matches_all_tool_names():
 
     确保 register_builtins 覆盖了全部内置工具，计数诚实。
 
-    宿主进程专属能力(非沙箱工具,不进 ALL_TOOL_NAMES):
-      - stt_transcribe:语音 STT 转写,宿主进程跑,沙箱外;+1(voice input Plan 3)。
+    宿主进程专属能力(非沙箱工具,不进 ALL_TOOL_NAMES):目前为空(语音 stt_transcribe 已移除)。
+    若将来再加宿主侧能力,在 _HOST_ONLY_CAPS 登记。
     """
     # 宿主进程专属能力:在 registry 中但不在沙箱命名空间/ALL_TOOL_NAMES 里。
-    _HOST_ONLY_CAPS = {"stt_transcribe"}
+    _HOST_ONLY_CAPS: set[str] = set()
     reg = CapabilityRegistry()
     register_builtins(reg)
     result = get_tool_names(reg)

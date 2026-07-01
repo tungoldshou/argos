@@ -8,6 +8,11 @@ import os
 # 旧断言零改动即绿。en 默认路径由 tests/test_i18n.py 等新测试显式覆盖(用 monkeypatch 切 env)。
 os.environ.setdefault("ARGOS_LANG", "zh")
 
+# #2 CC对齐:OS 沙箱改 opt-in 默认关。测试默认钉【开】,让既有"越界写/网络被拦"的 confinement
+# 断言零改动继续测沙箱开的路径(沙箱机制本身仍是支持的可选路径,值得测)。默认【关】的旁路 +
+# 诚实标注由 tests/test_sandbox_opt_in.py 显式 monkeypatch ARGOS_SANDBOX=0 覆盖。
+os.environ.setdefault("ARGOS_SANDBOX", "1")
+
 import shutil
 import sys
 

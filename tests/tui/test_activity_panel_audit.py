@@ -186,11 +186,12 @@ class TestCacheSparklineCyan:
             f"sparkline line must be $cyan ({_COL_CYAN}), got {style!r}"
         )
 
-    def test_cost_line_still_present(self, panel: ActivityPanel) -> None:
+    def test_cost_dollar_removed_tokens_kept(self, panel: ActivityPanel) -> None:
+        # 去花费(2026-07-01):$ 金额显示已移除(各模型单价不同,不强制配置)。token 流保留。
         rt = self._get_cost_rich(panel, tokens_in=500, tokens_out=100,
                                  cost_usd=0.002, cache_read=0)
         plain = _plain(rt)
-        assert "$0.002" in plain
+        assert "$" not in plain, "费用 $ 显示应已移除"
         assert "↑" in plain and "↓" in plain
 
 

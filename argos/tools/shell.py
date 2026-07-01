@@ -94,10 +94,15 @@ def run_command(command: str, *, workspace: Path | None = None,
     ws = workspace if workspace is not None else _ws()
     ws.mkdir(parents=True, exist_ok=True)
     # ── 平台別沙箱路由 ──────────────────────────────────────────────────────
+    # #2 CC对齐:OS 沙箱 opt-in(默认关)。关时 shell 直跑(cwd=workspace 内),**不裹 OS 牢笼** ——
+    # 诚实:无内核级网络断/写牢笼。但 broker 的危险命令硬规则 + 审批闸在本函数【之前】已裁决
+    # (不依赖沙箱)→ 治理不塌。开沙箱(--sandbox)时按平台裹 Seatbelt/bwrap/unshare。
     # macOS: Seatbelt(sandbox-exec)写牢笼 workspace+temp,凭据读拒,网络默认 OFF。
     # Linux: bwrap(优先)或 unshare;都不可用时 honest-refuse —— 拒绝裸跑(P0 修复)。
-    # 其他平台(Windows 等):暂不支持 → honest-refuse。
-    if sys.platform == "darwin":
+    from argos.config import sandbox_enabled
+    if not sandbox_enabled():
+        argv = parts          # 未沙箱化:直跑
+    elif sys.platform == "darwin":
         argv = seatbelt.confined_argv(workspace=ws, argv=parts, allow_network=allow_network)
     elif sys.platform == "linux":
         backend = _linux_available_backend()

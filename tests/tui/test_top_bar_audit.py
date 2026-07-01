@@ -249,12 +249,6 @@ class TestExistingContractLocked:
         bar.set_state(demo=False, has_key=False)
         assert "LIVE" not in bar.badges(), "LIVE must never appear when has_key=False"
 
-    def test_demo_true_shows_demo_badge(self) -> None:
-        """demo=True 时 badges() 含 'DEMO 脚本演示'。"""
-        bar = _bar()
-        bar.set_state(demo=True)
-        assert "DEMO 脚本演示" in bar.badges()
-
     def test_no_key_no_demo_shows_no_key_badge(self) -> None:
         """demo=False, has_key=False → badges() 含 '未配 key'。"""
         bar = _bar()

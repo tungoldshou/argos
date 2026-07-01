@@ -291,7 +291,6 @@ EN: dict[str, str] = {
     "tui.plan.factory_failed": "/plan unavailable (loop factory failed): {err}",
 
     # ── inline / start_run ────────────────────────────────────────────────────
-    "tui.run.demo_banner":     "⚠︎ Demo mode: the following is scripted fake data, not real execution/verification — configure an API key (run argos setup) to run the real agent.",
     "tui.run.thinking":        "Goal received, thinking…",
     "tui.run.interrupted":     "⎋ Current task interrupted.",
     "tui.run.create_failed":   "◉ daemon create_run failed: {err}",
@@ -354,9 +353,8 @@ EN: dict[str, str] = {
     "tui.computer.generic_line":    "[computer] {mark} {kind}: {detail}",
     "tui.computer.unknown_coord":   "(unknown coordinates)",
 
-    # ── app subtitle + demo banner ────────────────────────────────────────────
+    # ── app subtitle ──────────────────────────────────────────────────────────
     "tui.app.subtitle":   "hundred-eyed agent",
-    "tui.app.demo_banner": "DEMO scripted demo (no API key — run argos setup)",
 
     # ── BINDINGS labels ───────────────────────────────────────────────────────
     "tui.bind.interrupt_quit": "interrupt/quit",
@@ -384,13 +382,6 @@ EN: dict[str, str] = {
     # ── tab strip ────────────────────────────────────────────────────────────
     "tui.tab.focus_failed": "⚠︎ focus failed ({id}…): {err}",
     "tui.tab.switched":     "━━━ switched to run {id}… ━━━",
-
-    # ── voice input ───────────────────────────────────────────────────────────
-    "tui.voice.record_failed":     "⚠︎ recording failed: {err}",
-    "tui.voice.recording":         "🎙 recording… (press space again to stop)",
-    "tui.voice.transcribe_failed": "⚠︎ transcription failed: {err}",
-    "tui.voice.transcribe_first":  "first use · loading voice model (may download ~hundreds MB if not cached, please wait)…",
-    "tui.voice.transcribing":      "transcribing…",
 
     # ── skill run failure ─────────────────────────────────────────────────────
     "tui.skill.run_failed": "/{name} failed: {err}",
@@ -695,7 +686,6 @@ ZH: dict[str, str] = {
     "tui.plan.factory_failed": "/plan 不可用(loop factory 失败):{err}",
 
     # ── inline / start_run ────────────────────────────────────────────────────
-    "tui.run.demo_banner":     "⚠︎ 演示模式:以下为脚本化假数据,非真实执行/验证 —— 配置 API key(运行 argos setup)即可运行真实 agent。",
     "tui.run.thinking":        "已收到目标,思考中…",
     "tui.run.interrupted":     "⎋ 已打断当前任务。",
     "tui.run.create_failed":   "◉ daemon create_run 失败:{err}",
@@ -758,9 +748,8 @@ ZH: dict[str, str] = {
     "tui.computer.generic_line":      "[computer] {mark} {kind}:{detail}",
     "tui.computer.unknown_coord":     "(未知坐标)",
 
-    # ── app subtitle + demo banner ────────────────────────────────────────────
+    # ── app subtitle ──────────────────────────────────────────────────────────
     "tui.app.subtitle":   "百眼智能体",
-    "tui.app.demo_banner": "DEMO 脚本演示(无 API key —— 运行 argos setup)",
 
     # ── BINDINGS labels ───────────────────────────────────────────────────────
     "tui.bind.interrupt_quit": "打断/退出",
@@ -788,13 +777,6 @@ ZH: dict[str, str] = {
     # ── tab strip ────────────────────────────────────────────────────────────
     "tui.tab.focus_failed": "⚠︎ focus 失败({id}…):{err}",
     "tui.tab.switched":     "━━━ 切到 run {id}… ━━━",
-
-    # ── voice input ───────────────────────────────────────────────────────────
-    "tui.voice.record_failed":     "⚠︎ 录音失败:{err}",
-    "tui.voice.recording":         "🎙 录音中…(再按空格停止)",
-    "tui.voice.transcribe_failed": "⚠︎ 转写失败:{err}",
-    "tui.voice.transcribe_first":  "首次使用·加载语音模型(若未缓存需下载约数百 MB,请稍候)…",
-    "tui.voice.transcribing":      "转写中…",
 
     # ── skill run failure ─────────────────────────────────────────────────────
     "tui.skill.run_failed": "/{name} 失败:{err}",

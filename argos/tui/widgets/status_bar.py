@@ -26,7 +26,6 @@ from textual.widgets import Static
 
 from argos.core.types import Phase
 from argos.i18n import t as _t
-from argos.tui.widgets._fmt import fmt_cost, fmt_token_flow
 
 # §3 字形词典：阶段眼映射
 _PHASE_GLYPH: dict[str, str] = {
@@ -140,10 +139,10 @@ class StatusBar(Static):
     def render_text(self) -> str:
         """左侧数据段纯文本（/status 回显与测试断言的单一真源）。"""
         eye, _ = self._resolve_render_state()
-        cost = fmt_cost(self.cost_usd)
 
-        # §4.9 a："动作N"文字格式（⚙ 处决）;token 带 ↑↓ 方向 + tok 单位(共享 _fmt)
-        # show action N/M when budget known, else action N (no "N/None")
+        # §4.9 a："动作N"文字格式（⚙ 处决）。N/M 已知预算时显示,否则只 N(不出 "N/None")。
+        # 去重(2026-07-01):token 流 / 耗时 / ctx% / run 徽标都由右侧 ActivityPanel 独占,底栏只留
+        # "一眼态"——阶段 + 步数(+ 审批阻塞 / plan / 内核标注)。花费($)已整体移除(不再配价格)。
         _action_str = (
             _t("tui.statusbar.action", n=self.actions) + f"/{self.max_steps}"
             if self.max_steps is not None
@@ -152,25 +151,15 @@ class StatusBar(Static):
         parts = [
             f"{eye} {self.phase}",
             _action_str,
-            fmt_token_flow(self.tokens_in, self.tokens_out),
-            cost,
-            f"{self.elapsed_s:.1f}s",
         ]
-        if self.ctx_pct > 0:
-            parts.append(f"ctx {round(self.ctx_pct * 100)}%")
-
         # blocked 模式插入提示段
         if self._blocked:
             parts.insert(1, _t("tui.statusbar.blocked_label"))
-
         if self.plan_mode:
             parts.append(_t("tui.statusbar.plan_mode"))
         # v6 P3b §2 诚实标注：argosd=走协议;inline=单进程 fallback;""=不显示
         if self._kernel_mode:
             parts.append(self._kernel_mode)
-        badges = self.render_count_badges(self._run_summary)
-        if badges:
-            parts.append(badges)
         return " · ".join(parts)
 
     def set_run_summary(self, runs: list[tuple[str, str]]) -> None:

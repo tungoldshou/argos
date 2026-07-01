@@ -82,13 +82,6 @@ class TestComposeTextColorMarkup:
         """_COL_PASS 必须等于 theme.py $pass = #9ECE6A。"""
         assert _COL_PASS == "#9ECE6A", f"Expected #9ECE6A, got {_COL_PASS}"
 
-    def test_demo_badge_wrapped_in_unverif(self) -> None:
-        """DEMO 脚本演示 必须被 $unverif (#FF9E64) 包裹。"""
-        text = _text(live=False, has_key=True)
-        assert _has_color_wrap(text, _COL_UNVERIF, "DEMO"), (
-            f"DEMO badge not wrapped in {_COL_UNVERIF} ($unverif)"
-        )
-
     def test_unverif_hex_matches_theme(self) -> None:
         """_COL_UNVERIF 必须等于 theme.py $unverif = #FF9E64。"""
         assert _COL_UNVERIF == "#FF9E64", f"Expected #FF9E64, got {_COL_UNVERIF}"
@@ -209,11 +202,6 @@ class TestFunctionalNonRegression:
                 f"no-key: stage={stage!r} should still show ◌, not another glyph"
             )
 
-    def test_demo_mode_eye_stops_at_half(self) -> None:
-        """DEMO 模式 live=False 时眼最多停在 ◓(半阖),不进 ◉。"""
-        text = _text(live=False, has_key=True, eye_stage="init")
-        assert _has_color_wrap(text, _COL_EYE_GLOW, "◓"), "DEMO init should show ◓"
-
     def test_advance_eye_updates_text(self) -> None:
         """advance_eye 后 renderable_text 中眼字形变为对应阶段。"""
         w = StartupSplash(model_label="m", tier="t", live=True, has_key=True)
@@ -221,11 +209,6 @@ class TestFunctionalNonRegression:
         assert _has_color_wrap(w.renderable_text, _COL_EYE_GLOW, "◌")
         w.advance_eye("focus")
         assert _has_color_wrap(w.renderable_text, _COL_EYE_GLOW, "◉")
-
-    def test_live_badge_not_in_demo(self) -> None:
-        """DEMO 模式 renderable_text 中绝不含 LIVE 字样。"""
-        w = StartupSplash(model_label="m", tier="t", live=False, has_key=True)
-        assert "LIVE" not in w.renderable_text
 
     def test_live_badge_not_without_key(self) -> None:
         """无 key 时 renderable_text 中绝不含 LIVE 字样。"""

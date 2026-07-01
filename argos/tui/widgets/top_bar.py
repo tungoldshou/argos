@@ -82,6 +82,8 @@ class TopBar(Static):
             self._plan_mode = bool(plan_mode)
         if yolo is not None:
             self._yolo = bool(yolo)
+        # ponytail: demo 参数现为显示惰性 shim —— DEMO 徽标已移除(2026-07-01),保留入参
+        # 仅为兼容既有测试构造点。彻底清理 = 删 demo 入参 + ~17 个测试调用点(留作后续机械 pass)。
         if demo is not None:
             self._demo = bool(demo)
         if has_key is not None:
@@ -103,10 +105,9 @@ class TopBar(Static):
         v3 规则:
         - plan_mode → "plan"(去方括号)
         - yolo → "YOLO"(去 ⏻ 前缀)
-        - demo → "DEMO 脚本演示"
-        - 非 demo + 无 key → "未配 key"
-        - 非 demo + 有 key → "LIVE"(契约6:has_key=False 绝不出现 LIVE)
-        - trust_level 已设置 → "L{n} · {label}"(最后,README §188 顺序:模式徽标+LIVE/DEMO+Trust)
+        - 无 key → "未配 key"
+        - 有 key → "LIVE"(契约6:has_key=False 绝不出现 LIVE)
+        - trust_level 已设置 → "L{n} · {label}"(最后,README §188 顺序:模式徽标+LIVE+Trust)
           L4 时前缀 '⏻ ':README §152 升 L4 顶栏亮红灯
         """
         out: list[str] = []
@@ -114,13 +115,15 @@ class TopBar(Static):
             out.append(t("widget.badge_plan"))
         if self._yolo:
             out.append(t("widget.badge_yolo"))
-        if self._demo:
-            out.append(t("widget.badge_demo"))
-        elif not self._has_key:
+        if not self._has_key:
             out.append(t("widget.badge_no_key"))
         else:
-            # has_key=True + demo=False → 真实运行,显示 LIVE
             out.append(t("widget.badge_live"))
+        # #2 CC对齐:OS 沙箱 opt-in。未开(默认)→ 显式标"未沙箱化"——诚实警示:无内核牢笼,
+        # 别让用户误以为有 OS 隔离(治理仍在,但不是 OS 级)。开沙箱(--sandbox)则不显此标。
+        from argos.config import sandbox_enabled
+        if not sandbox_enabled():
+            out.append(t("widget.badge_no_sandbox"))
         # Trust 徽标排最后(README §188)
         if self._trust_level is not None:
             prefix = "⏻ " if self._trust_level == 4 else ""
@@ -169,7 +172,6 @@ class TopBar(Static):
         _FIXED: dict[str, str] = {
             t("widget.badge_plan"): _PLAN,
             t("widget.badge_yolo"): _FAIL,
-            t("widget.badge_demo"): _UNVERIF,
             t("widget.badge_no_key"): _UNVERIF,
             t("widget.badge_live"): _PASS,
         }

@@ -35,8 +35,9 @@ class _H(App):
 
 # ── 旧兼容（不变 API）────────────────────────────────────────────────
 @pytest.mark.asyncio
-async def test_status_bar_shows_phase_actions_elapsed():
-    """不变 API：set_phase / set_cost → render_text 含阶段/动作/耗时。"""
+async def test_status_bar_shows_phase_and_actions():
+    """不变 API：set_phase → render_text 含阶段 + 动作。去重(2026-07-01)后底栏不再含
+    token/花费/耗时(归右侧 ActivityPanel);set_cost 仍可调(喂数据)但不渲染到底栏。"""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -45,7 +46,8 @@ async def test_status_bar_shows_phase_actions_elapsed():
         sb.set_cost(tokens_in=1, tokens_out=2, cost_usd=0.0, elapsed_s=4.2)
         await pilot.pause()
         t = sb.render_text
-        assert "verify" in t and "3" in t and "4.2" in t
+        assert "verify" in t and "3" in t
+        assert "4.2" not in t and "$" not in t   # 去重 + 去花费:耗时/花费不再在底栏
 
 
 # ── 阶段眼字符映射（v3 §4.9 + §8.4）────────────────────────────────
@@ -235,49 +237,10 @@ async def test_ctx_below_80_no_warn():
         assert not sb.has_class("-ctx-crit"), "ctx=50% 不应有 -ctx-crit"
 
 
-# ── 窄屏降级（v3 §7.2）───────────────────────────────────────────
-@pytest.mark.asyncio
-async def test_narrow_mode_includes_cost_and_ctx():
-    """<80 列降级模式：render_text 仍含阶段、成本、ctx%（不含键提示区但那是 render() 层）。"""
-    app = _H()
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        sb = app.query_one("#sb", StatusBar)
-        sb.set_phase("act", 3)
-        sb.set_cost(tokens_in=12400, tokens_out=3100, cost_usd=0.013, elapsed_s=4.2)
-        sb.update_ctx_pressure(0.34)
-        await pilot.pause()
-        t = sb.render_text
-        assert "act" in t
-        assert "$0.013" in t
-        assert "ctx 34%" in t
-
-
-@pytest.mark.asyncio
-async def test_cost_unknown_renders_na_not_shell_form():
-    """成本未知 → render_text 含 'N/A',不再含 shell 样 '$(N/A)'(真机右侧/底栏观感修复)。"""
-    app = _H()
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        sb = app.query_one("#sb", StatusBar)
-        sb.set_cost(tokens_in=100, tokens_out=50, cost_usd=None, elapsed_s=1.0)
-        await pilot.pause()
-        t = sb.render_text
-        assert "N/A" in t, f"未知成本应显 N/A,实际:{t!r}"
-        assert "$(N/A)" not in t, f"不应再用 shell 样 $(N/A),实际:{t!r}"
-
-
-@pytest.mark.asyncio
-async def test_token_flow_has_unit():
-    """token 段带 'tok' 单位 + 方向箭头(修真机裸数字 ↑37.9k ↓174 无单位)。"""
-    app = _H()
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        sb = app.query_one("#sb", StatusBar)
-        sb.set_cost(tokens_in=37900, tokens_out=174, cost_usd=0.0, elapsed_s=1.0)
-        await pilot.pause()
-        t = sb.render_text
-        assert "↑37.9k" in t and "↓174" in t and "tok" in t, f"实际:{t!r}"
+# 去重(2026-07-01):底栏不再渲染成本/token/耗时/ctx%(归右侧 ActivityPanel),
+# 故删去 test_narrow_mode_includes_cost_and_ctx / test_cost_unknown_renders_na /
+# test_token_flow_has_unit —— 这些字段的格式化由 tests/test_tui_fmt.py(fmt_* 单测)
+# 与 ActivityPanel 测试覆盖。底栏只验阶段/动作/阻塞/plan/内核。
 
 
 # ── 动作计数文字（v3 §4.9 a："动作" 而非 ⚙）──────────────────────

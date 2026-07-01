@@ -8,35 +8,37 @@
 
 Argos is a **coding agent you run in your terminal** — the same lineage as
 Claude Code and Codex: a CodeAct loop that reads your code, writes and edits
-files, runs commands, searches the web, and drives a browser, all inside an
-**OS-level sandbox that's on by default**. It is named for **Argus Panoptes**,
-the hundred-eyed guardian of Greek myth — the watchman who never slept and
-could not be deceived.
+files, runs commands, searches the web, and drives a browser. What it adds on
+top is a layer that keeps a cheap model honest. It is named for **Argus
+Panoptes**, the hundred-eyed guardian of Greek myth — the watchman who never
+slept and could not be deceived.
 
-What makes it pleasant to use:
+What makes it distinct:
 
-- **A sandbox you don't have to think about.** macOS Seatbelt confines the
-  agent at the kernel boundary — no network by default, writes caged to your
-  workspace, credential files (`~/.ssh`, `~/.aws`, …) unreadable. Because the
-  cage *is* the boundary, Argos runs commands and edits inside it without
-  nagging you (Codex's "auto-run inside the sandbox", Claude Code's "~84%
-  fewer prompts"). It asks only at the cage wall: opening network for a
-  `pip install` / `git push`, writing outside the workspace, or a destructive
-  command.
+- **"Done" is an exit code, not a sentence.** A verify hard-gate runs your
+  check (`pytest`, `cargo test`, `tsc`, …) and reads the result — three-state
+  `passed` / `failed` / `unverifiable`, never a fake-green. Completion is the
+  gate's reading of the exit code, never the model's word for it.
+- **Every side effect crosses a governance layer.** The broker is the *only*
+  path to side effects: it checks an egress allowlist, asks the approval gate,
+  signs an HMAC receipt, and the model's code runs under smolagents' AST
+  limits. Every privileged action leaves a signed receipt; every event is
+  persisted to a replayable JSONL journal.
+- **An OS sandbox when you want it.** Run with `--sandbox` (or
+  `ARGOS_SANDBOX=1`) and macOS Seatbelt / Linux bwrap confines the agent at the
+  kernel boundary — no network, writes caged to your workspace, credential
+  files (`~/.ssh`, `~/.aws`, …) unreadable. Opt-in, like Claude Code's sandbox;
+  **off by default**. The TUI shows an `unsandboxed` badge whenever it's off, so
+  the state is never hidden — and the governance layer above still gates every
+  side effect either way.
 - **A permission model that gets out of the way.** Three modes — **Cautious**
-  (default), **Trusted**, **Autonomous** — cycle with `/trust`. A small set of
-  HARD rules (`rm -rf`, system paths, secret writes, financial computer-use)
-  never bypasses, even in Autonomous. No five-level dial, no per-command
-  allowlist; the OS does the heavy lifting.
+  (default), **Trusted**, **Autonomous** — cycle with `/trust`. Cautious
+  auto-approves low-risk actions and pauses on the rest; a small set of HARD
+  rules (`rm -rf`, system paths, secret writes, financial computer-use) never
+  bypasses, even in Autonomous. No five-level dial, no per-command allowlist.
 - **Model-agnostic.** Bring any Anthropic-Messages or OpenAI-compatible
   endpoint — both first-class. `argos setup` probes the connection and the
   CodeAct format for you.
-
-And, quietly, it keeps itself honest: a verify gate reads an exit code rather
-than the model's word for "done" (three-state `passed` / `failed` /
-`unverifiable`, never a fake-green), every privileged action leaves a signed
-receipt, and every event is persisted to a replayable JSONL journal. These run
-in the background — you don't have to manage them.
 
 Built in Python on Textual. A background daemon kernel runs the work and
 survives a closed terminal; the TUI attaches as a protocol client, with a
@@ -49,11 +51,12 @@ single-process fallback when the daemon is unavailable.
 A coding agent should get out of your way when it's safe to, and stop you when
 it isn't. Argos is built around four choices that make that real:
 
-1. **The sandbox is the default, not an opt-in.** The agent works inside a
-   kernel-level cage (Seatbelt) with no network and writes caged to your
-   workspace. That's the convergent 2026 norm — Codex and Cursor ship it by
-   default — and it's what lets Argos auto-run inside the cage instead of
-   prompting on every step.
+1. **Governance every side effect crosses.** The broker is the only path to
+   side effects — egress allowlist, approval gate, signed receipt, smolagents
+   AST limits — applied to every privileged action, whether or not the OS
+   sandbox is on. Add `--sandbox` for a kernel-level cage (Seatbelt/bwrap: no
+   network, writes caged to your workspace) on top; it's opt-in and off by
+   default, the same posture as Claude Code's OS sandbox.
 2. **Permissions are three modes, not a maze.** Cautious / Trusted /
    Autonomous, cycled with `/trust`. A handful of HARD rules (`rm -rf`, system
    paths, secret writes, financial computer-use) never bypass, even in
@@ -88,8 +91,8 @@ uv run argos --selftest   # offline full-machine self-check, prints verdicts
 uv run pytest -q          # run the test suite
 ```
 
-Without an API key, `argos` falls back to an honest demo state — it does
-**not** pretend to run. The TUI tells you to run `argos setup`.
+Without an API key, `argos` exits with a clear message telling you to run
+`argos setup` — it does **not** pretend to run.
 
 ---
 
@@ -103,11 +106,16 @@ Without an API key, `argos` falls back to an honest demo state — it does
 
 ### Platform support
 
-| Platform | Sandbox backend | Write cage | Notes |
+The OS sandbox is **opt-in** (`--sandbox`); the table shows the backend used
+when it's enabled. Without it (the default), Argos runs unsandboxed on every
+platform and the governance layer (broker + approval + egress + AST limits)
+still gates side effects.
+
+| Platform | Sandbox backend (`--sandbox`) | Write cage | Notes |
 |---|---|---|---|
 | **macOS** | Apple Seatbelt (`sandbox-exec`) | Full kernel-level confinement | Recommended; `argosd` daemon supported |
 | **Linux** | `bwrap` (preferred) or `unshare` fallback | `bwrap`: strong; `unshare` fallback: **weaker write cage** — filesystem namespace only, no seccomp | `bwrap` requires bubblewrap ≥ 0.3; `unshare` is a best-effort fallback |
-| **Windows** | Not supported | — | No sandbox backend; `argos` will raise `RuntimeError` at startup |
+| **Windows** | None | — | Runs unsandboxed (default); `--sandbox` is unsupported (no Seatbelt/bwrap) |
 
 > **Linux unshare note.** When `bwrap` is unavailable, Argos falls back to a
 > Linux user-namespace unshare sandbox. This provides basic process isolation
@@ -192,25 +200,31 @@ The agent cannot self-certify. Three rules enforce this:
   JSONL, and the activity panel shows a live signature counter for the
   human to watch.
 
-### OS sandbox
+### OS sandbox (opt-in)
 
-The agent runs inside a macOS Seatbelt profile: no outbound network
-unless explicitly approved, writes confined to the declared workspace.
-Reads are deliberately broad — the agent has to import libraries and
-read your code — but credential paths (`~/.ssh`, `~/.aws`, …) are
-denied, and reading is not the exfiltration path here: with network
-off and writes caged to the workspace, nothing it reads can leave.
-The capability broker on top adds egress allowlists (Tavily / DDGS /
-configured MCP hosts) and per-action approval requests. Network is
-*off* by default — and the AUTO (`/yolo`) approval level does not
-silently flip it on.
+Run with `--sandbox` (or `ARGOS_SANDBOX=1`) and the agent's code executes
+inside a macOS Seatbelt profile (Linux: `bwrap`, with an `unshare` fallback):
+no outbound network unless explicitly approved, writes confined to the declared
+workspace. Reads are deliberately broad — the agent has to import libraries and
+read your code — but credential paths (`~/.ssh`, `~/.aws`, …) are denied.
+
+The OS sandbox is **off by default** (opt-in, the same posture as Claude
+Code's). On or off, the capability broker is the boundary every side effect
+crosses: egress allowlists (Tavily / DDGS / configured MCP hosts), per-action
+approval, signed receipts, and smolagents' AST limits on the model's code —
+and the AUTO (`/yolo`) approval level does not silently open the network. What
+`--sandbox` adds is a kernel-level backstop: without it, a raw `socket` / `open`
+in model-authored code that the AST layer happens to permit is not
+OS-contained (declared tool calls are still gated by the broker). The TUI shows
+an `unsandboxed` badge whenever the sandbox is off, so the state is never
+hidden.
 
 ### Smart approval
 
 Three modes — **Cautious** (default) / **Trusted** / **Autonomous** — cycle
 with `/trust` (bare `/trust` advances to the next; `/trust status` shows the
-current). Cautious auto-runs everything inside the sandbox cage and asks only
-at the cage wall; Trusted remembers the session's approved patterns;
+current). Cautious auto-approves low-risk actions and pauses on high-risk or
+irreversible ones; Trusted remembers the session's approved patterns;
 Autonomous stops asking entirely. A hidden `/trust paranoid` confirms every
 step. Whatever the mode, **certain hard rules never bypass**, even in
 Autonomous:
@@ -269,7 +283,7 @@ executor.
 Tools span the breadth of an engineer's day:
 
 - **Files** — `read_file`, `write_file`, `edit_file`, `search_files`
-- **Shell** — `run_command` (allowlist + Seatbelt + workspace cage)
+- **Shell** — `run_command` (broker-gated + hard-rule denylist; OS-caged under `--sandbox`)
 - **Verification** — `propose_verify` (declare-then-execute, isolated
   from the agent's own code path), `propose_dom_verify` (DOM-level
   verification via CSS selector + expected text)
@@ -319,7 +333,7 @@ Five shapes are supported:
 - **`synthesize`** — roll up results into a single report.
 
 Each sub-agent is a full Argos — its own ModelClient, its own broker,
-its own Seatbelt sandbox, its own verify gate. Sub-agents can be
+its own sandbox (OS-caged under `--sandbox`), its own verify gate. Sub-agents can be
 assigned any config profile, so a cheap tier can do the parallel
 work and a stronger model can adjudicate. `isolation: worktree` gives
 parallel write-agents their own git worktree, with a diff captured
@@ -534,9 +548,10 @@ The defences compose:
    `unverifiable` if the agent can't pass a real test.
 2. **Smart approval** — destructive operations require explicit human
    consent, with a hard wall around the most dangerous patterns.
-3. **OS sandbox** — Seatbelt enforces the workspace cage and the
-   network policy at the kernel boundary, regardless of what the
-   model says.
+3. **Governance layer** — the broker gates every side effect (egress
+   allowlist, approval, signed receipt) and the model's code runs under
+   AST limits, regardless of what the model says. `--sandbox` adds a
+   kernel-level Seatbelt/bwrap cage (workspace + network) on top.
 4. **Audit trail** — every action is signed, persisted, and visible
    in the activity panel. The JSONL journal is the source of truth.
 5. **Memory privacy** — memory never leaves the local filesystem
@@ -545,7 +560,7 @@ The defences compose:
 
 The trust-outs that remain (and the user is told about each):
 
-- **Hooks and LSP servers run outside the Seatbelt sandbox** at the
+- **Hooks and LSP servers run outside the OS sandbox** at the
   user's permission level, since they are user-controlled code by
   design. Argos logs a warning at startup for every configured hook
   and LSP server, and the docs tell you to audit third-party code

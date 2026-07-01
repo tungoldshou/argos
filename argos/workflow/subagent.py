@@ -160,6 +160,9 @@ class SubAgentFactory:
                 compaction=True,
                 approval_level=ApprovalLevel.AUTO,
             )
+            # #6 CC对齐:worktree 隔离下 workdir 路径算出的 project_id 与主项目不同 → 项目记忆丢。
+            # 传 base_workspace 的 project_id,让子 agent 加载与主循环同一份项目记忆(像 CC 继承记忆层级)。
+            from argos.memory.auto import project_id_for as _pid
             loop = AgentLoop(
                 store=self.store_factory(),
                 bus=EventBus(),
@@ -170,6 +173,7 @@ class SubAgentFactory:
                 config=cfg,
                 workspace=workdir,
                 verify_dir=workdir,
+                project_id=_pid(self.base_workspace),
                 allow_workflow=False,   # 深度护栏:子 agent 沙箱不含 propose_workflow
                 read_only=derived_read_only,  # role 派生 / 旧 tool_scope 派生(向后兼容)
                 tool_allowlist=derived_allowlist,  # 角色白名单(权威 ∩);None=走 read_only 派生

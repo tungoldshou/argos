@@ -446,9 +446,10 @@ def build_components(
             t, k = tier, key
         return ModelClient(tier=t, pool=CredentialPool([k] or ["_missing_"]))
 
-    # Phase 4.4(2026-06-20):per-step routing 改为 opt-in —— 仅在真配了路由表(routing_cfg.is_active())
-    # 时才构造 router;否则 router=None,loop 走原路径(不每步 categorize+select,省开销)。绝大多数用户
-    # 没配 routing 段 → default config → router=None。effort 档(routing/effort.py)与此无关,不受影响。
+    # per-step routing(spec §4.4):RoutingConfig.is_active() 出厂即 True(_BUILTIN_DEFAULT 已填充
+    # by_category),故 router 默认构造。注意:单模型配置下这是**空转**—— _router_client_factory 对
+    # 未配置的 tier 名退回当前 active(上面的 except),于是每个 category 都解析到同一个 client。真正
+    # 分流需在 config.json 的 `models` 里加命名 tier(如 cheap/strong)+ routing 段。effort 档与此无关。
     router = (ModelRouter(routing=routing_cfg, client_factory=_router_client_factory)
               if routing_cfg.is_active() else None)
 
