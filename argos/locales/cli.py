@@ -16,6 +16,7 @@ EN: dict[str, str] = {
     "cli.model.help": "Use the named config profile for this run (default: the active one)",
     "cli.effort.help": "Effort tier (step budget: low=8 / medium=40 / high=80; approval mode is set by /trust)",
     "cli.sandbox.help": "Enable the OS sandbox (Seatbelt/bwrap kernel cage: no network, writes caged to the workspace). Opt-in, off by default; governance (approval + egress + AST limits) applies either way. Or set ARGOS_SANDBOX=1.",
+    "cli.add_dir.help": "Grant write access to a directory outside the workspace (repeatable). The file tools and the write-cage treat it as writable; under --sandbox it's also added to the kernel cage. Or set ARGOS_ADD_DIRS (path-separated).",
     # setup sub-command
     "cli.setup.help": "Interactive wizard to connect a model (choose provider → enter key → probe → save)",
     "cli.setup.advanced_help": "Also prompt for max_tokens / context_window / embedding model (defaults used otherwise)",
@@ -230,6 +231,7 @@ ZH: dict[str, str] = {
     "cli.model.help": "本次启动用指定 config profile(默认当前 active)",
     "cli.effort.help": "任务努力档(步数预算:low=8 / medium=40 / high=80;审批档由 /trust 控制)",
     "cli.sandbox.help": "启用 OS 沙箱(Seatbelt/bwrap 内核牢笼:断网、写牢笼 workspace)。opt-in、默认关;无论开关,治理(审批+egress+AST 限制)都在。也可设 ARGOS_SANDBOX=1。",
+    "cli.add_dir.help": "授权 workspace 之外的一个目录可写(可重复)。文件工具与写牢笼视其为可写;开 --sandbox 时也加进内核牢笼。也可设 ARGOS_ADD_DIRS(路径分隔符分隔)。",
     # setup sub-command
     "cli.setup.help": "接入模型的交互向导(选 provider→填 key→连通测试→保存)",
     "cli.setup.advanced_help": "额外询问 max_tokens / context_window / embedding 模型(否则用缺省值)",

@@ -189,19 +189,24 @@ def is_system_path(path: str) -> bool:
 def is_workspace_path(path: str, workspace: str | Path | None) -> bool:
     """workspace 边界 check(D14 锁:host 侧 Path.resolve() early check)。
 
-    workspace 为 None / 空 / 路径不存在 → 返 False(走系统路径 check)。"""
-    if not workspace:
-        return False
+    workspace 为 None / 空且路径不在任何 --add-dir 授权目录内 → 返 False(走系统路径 check)。
+    #2 CC对齐:--add-dir / ARGOS_ADD_DIRS 授权的额外目录视同可写边界内(用户显式授权)。"""
     try:
-        wp = Path(workspace).expanduser().resolve()
         pp = Path(path).expanduser().resolve()
     except (OSError, RuntimeError):
         return False
-    try:
-        pp.relative_to(wp)
+
+    def _within(base) -> bool:
+        try:
+            pp.relative_to(Path(base).expanduser().resolve())
+            return True
+        except (ValueError, OSError, RuntimeError):
+            return False
+
+    if workspace and _within(workspace):
         return True
-    except ValueError:
-        return False
+    from argos.config import extra_write_dirs
+    return any(_within(extra) for extra in extra_write_dirs())
 
 
 def is_env_file(path: str) -> bool:

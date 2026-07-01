@@ -81,7 +81,9 @@ def build_profile(*, workspace: Path, allow_network: bool = False) -> str:
     allow_network=False(默认)→ 网络全拒(安全默认);True → 网络放行(出网阀:broker 经审批/
     Autonomous 决定后才用,跑 pip install/git push 这类联网命令;写牢笼+凭据读拒仍在)。"""
     ws = str(workspace.resolve())
-    write_subpaths = [ws, *(_temp_roots())]
+    # #2 CC对齐:--add-dir / ARGOS_ADD_DIRS 授权的额外可写目录也进 Seatbelt 可写集(workspace+temp 之外)。
+    from argos.config import extra_write_dirs
+    write_subpaths = [ws, *(_temp_roots()), *(str(d) for d in extra_write_dirs())]
     write_rules = "".join(f'\n  (subpath "{p}")' for p in write_subpaths)
     net_rule = "(allow network*)\n" if allow_network else "(deny network*)\n"
     return (

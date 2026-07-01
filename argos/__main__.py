@@ -42,6 +42,9 @@ def _build_parser() -> argparse.ArgumentParser:
     # #2 CC对齐:OS 沙箱 opt-in,默认关(CC 的 OS 沙箱也 opt-in)。开启 = 内核级网络断+写牢笼;
     # 关闭时 broker+审批+egress+AST 治理仍在。也可用 ARGOS_SANDBOX=1。
     p.add_argument("--sandbox", action="store_true", help=t("cli.sandbox.help"))
+    # #2 CC对齐:--add-dir PATH(可重复)授权 workspace 之外的额外可写目录(对齐 CC 的 --add-dir)。
+    p.add_argument("--add-dir", action="append", metavar="PATH", dest="add_dir",
+                   help=t("cli.add_dir.help"))
     sub = p.add_subparsers(dest="command")
     # headless 非交互执行(可脚本化 / CI):argos exec "<任务>"
     from argos.cli import headless as _headless_cli
@@ -255,6 +258,8 @@ def main() -> None:
     # build_components / TUI 启动设置。不传 = 默认关(opt-in),治理仍由 broker+审批+egress+AST 兜。
     if getattr(args, "sandbox", False):
         os.environ["ARGOS_SANDBOX"] = "1"
+    if getattr(args, "add_dir", None):   # --add-dir PATH … → 额外可写目录(env 是 extra_write_dirs() 真源)
+        os.environ["ARGOS_ADD_DIRS"] = os.pathsep.join(args.add_dir)
     # 启动时查更新(同步,失败静默,stderr 提示)。headless `exec` 跳过 —— CI / 脚本化场景
     # 既不该被 5s 网络检查拖慢,也不该往 stderr 喷升级提示污染输出。
     if getattr(args, "command", None) != "exec":
