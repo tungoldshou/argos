@@ -10,9 +10,11 @@
 
 全局通道诚实说明：
   daemon 当前的 SSE 端点是 per-run（/runs/{id}/events），没有跨所有 run 的全局 SSE 流。
-  conductor suggestion 事件使用虚拟 run_id "_conductor" 落盘（RunStore.append）并通过
-  manager.fanout("_conductor", ev_dict) 广播到订阅了 "_conductor" 流的消费者。
-  TUI 客户端可通过 GET /runs/_conductor/events 订阅，或直接 GET /suggestions 轮询。
+  conductor suggestion 事件通过虚拟 run_id "_conductor" 走 manager.fanout("_conductor", ev_dict)
+  纯实时广播到订阅者 —— 绝不落盘（RunStore.append 拒绝 `_` 前缀），避免无 run_meta 头的事件
+  污染 run store 让 replay/recover 崩溃。历史建议的持久化由内存 pending_suggestions +
+  GET /suggestions 负责，不靠事件流回放。
+  TUI 客户端可通过 GET /runs/_conductor/events 订阅（只推实时，不回放），或直接 GET /suggestions 轮询。
   未来可扩展为真正的全局 SSE 端点；当前路径诚实文档化，不假装有全局通道。
 
 取消：daemon 关闭时对 asyncio.Task 调 cancel()，协程通过 CancelledError 干净退出。

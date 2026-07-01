@@ -105,7 +105,7 @@ async def _make_server_with_supervisor(
 
     async def _broadcast(ev_dict: dict) -> None:
         broadcast_events.append(ev_dict)
-        manager.store.append(CONDUCTOR_RUN_ID, ev_dict)
+        # 纯实时 fanout,不落盘(_conductor 是虚拟广播总线;镜像生产 _conductor_broadcast)
         await manager.fanout(CONDUCTOR_RUN_ID, ev_dict)
 
     supervisor = ConductorSupervisor(
