@@ -54,6 +54,14 @@ class RunStore:
         - run_meta 触发 fsync(directory entry 落盘,断电可恢复)
         - 其余事件仅 open(append) 写;PIPE_BUF 限制下 <4KB 行原子
         """
+        if run_id.startswith("_"):
+            # `_` 前缀 = 虚拟广播总线(如 _conductor):纯实时 fanout,绝不落盘。RunStore 只
+            # 存状态机 run(uuid run_id)。历史上 conductor 直写无 run_meta 头的事件,让
+            # replay/recover 抛 CorruptionError 崩 daemon —— 从源头堵死,让 bug 类无法复发。
+            raise ValueError(
+                f"refusing to persist virtual stream {run_id!r} to the run store "
+                "(`_`-prefixed streams are live-only broadcast buses, never persisted)"
+            )
         path = self._path_for(run_id)
         path.parent.mkdir(parents=True, exist_ok=True)
         is_meta = event.get("kind") == "run_meta"

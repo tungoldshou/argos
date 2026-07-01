@@ -109,6 +109,16 @@ def test_runstore_corruption_first_line_not_meta(tmp_path: Path):
         list(store.replay(run_id))
 
 
+def test_runstore_rejects_virtual_underscore_streams(tmp_path: Path):
+    """`_` 前缀虚拟流(如 _conductor)绝不落盘 —— append 直接拒绝,从源头堵死
+    "无 run_meta 头的事件污染 run store → replay/recover 崩 daemon" 这类 bug。"""
+    store = RunStore(tmp_path)
+    with pytest.raises(ValueError, match="virtual"):
+        store.append("_conductor", {"kind": "proactive_suggestion", "goal": "x"})
+    # 文件绝不被创建
+    assert not (store._path_for("_conductor")).exists()
+
+
 def test_runstore_list_runs(tmp_path: Path):
     """list_runs() 扫 .jsonl 文件名。"""
     store = RunStore(tmp_path)
