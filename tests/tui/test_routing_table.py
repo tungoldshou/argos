@@ -26,7 +26,7 @@ _CYAN       = "#7DCFFF"   # $cyan  — cheap tier
 _INK        = "#C8CCDA"   # $ink   — default tier
 _INK_BRIGHT = "#ECEEF5"   # $ink-bright — strong tier
 _INK_DIM    = "#7E869C"   # $ink-dim    — category name, echo
-_INK_FAINT  = "#525A73"   # $ink-faint  — hint/footer
+_INK_FAINT  = "#6B7494"   # $ink-faint  — hint/footer
 _UNVERIF    = "#FF9E64"   # $unverif    — ❂ force confirm
 _EYE        = "#D9A85C"   # $eye
 

@@ -325,6 +325,32 @@ def _env_context(workspace: Path) -> str:
     return block
 
 
+def _governance_context(approval_level) -> str:
+    """运行时治理状态块(可信安全段的一部分):把本轮【真实】的沙箱/审批模式如实喂给模型 —— 对齐
+    Codex 的 ENVIRONMENT_CONTEXT。identity 段不再无条件断言"沙箱关着副作用";真实开关状态在这里
+    说实话:沙箱默认关时,诚实锚点是治理层(broker+审批+egress+AST)+ verify 门,而非内核牢笼。
+    便宜模型无从自行推断本轮能干什么 —— 直接告诉它,收窄决策空间(避免瞎猜自己是否被隔离)。"""
+    from argos import config as _config
+    level = getattr(approval_level, "name", str(approval_level))
+    if _config.sandbox_enabled():
+        cage = (
+            "ON — an OS sandbox cages side effects this session "
+            "(no network, writes confined to the workspace)."
+        )
+    else:
+        cage = (
+            "OFF — side effects are NOT OS-contained this session; the capability broker, "
+            "approval gate, egress policy and AST limits govern them, and the verify gate "
+            "still checks your work. Don't assume a kernel cage will catch a mistake."
+        )
+    return (
+        "\n\n<runtime>\n"
+        f"- OS-level sandbox: {cage}\n"
+        f"- Approval mode: {level}\n"
+        "</runtime>"
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class LoopConfig:
     """契约 §9 锁#6 — model_tier: ModelTierName, approval_level: ApprovalLevel。"""
@@ -1257,6 +1283,7 @@ class AgentLoop:
         safe = (
             HONESTY_SYSTEM
             + _env_context(self._workspace)
+            + _governance_context(self._cfg.approval_level)
         )
         # #9 T6:<memory_context> 段(spec §5.3)— CLAUDE.md / AGENTS.md + 4 tier 召回
         try:
@@ -1315,8 +1342,21 @@ class AgentLoop:
         except Exception:  # noqa: BLE001 — LSP 配置读取失败诚实降级为不注入(不阻断 run)
             pass
 
+        # 便宜/弱 tier lazy-antidote(ARGOS_WEAK_MODEL=1 门控;强模型默认不付这几个 token)。放提示词
+        # 【真末位】—— 弱模型有效注意力短,终端位置权重高(Aider lazy_prompt 同款)。有召回时,末位在
+        # untrusted 段【之后】(fence 已 CLOSE,此提醒是可信 tail,不进围栏);无召回时直接接 safe 末尾。
+        # env flag 门控、不猜模型家族、不建 routing 矩阵,与 sandbox/computer 开关同风格。
+        from argos import config as _cfg_wm
+        _weak_reminder = (
+            "\n\n<final_reminder>\n"
+            "Implement completely. Never leave a function body as a comment, a truncation "
+            "like \"# ...\" or \"// ...\", a TODO, or a stub where working code was asked "
+            "for. If you wrote a file, run it through run_command before you call it done.\n"
+            "</final_reminder>"
+        ) if _cfg_wm.weak_model() else ""
+
         if not self._cfg.recall:
-            return (safe, "")
+            return (safe + _weak_reminder, "")
 
         # ── untrusted 段:skills(独立于 store,零模型兜底) + memory(需 store.recall)──
         skill_bodies: list[str] = []
@@ -1343,6 +1383,13 @@ class AgentLoop:
                 memory_lines = []
 
         dynamic = format_untrusted(skill_bodies=skill_bodies, memory_lines=memory_lines)
+        # 弱 tier 提醒接在 untrusted 段【之后】= 整个提示词真末位(fence 已 CLOSE,可信 tail,不进围栏);
+        # dynamic 为空(召回无实质内容)时退回接 safe,避免造一个只含 reminder 的动态段。
+        if _weak_reminder:
+            if dynamic:
+                dynamic = dynamic + _weak_reminder
+            else:
+                safe = safe + _weak_reminder
         return (safe, dynamic)
 
     async def _drive(self, goal: str, session_id: str,

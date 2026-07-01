@@ -221,6 +221,14 @@ def sandbox_enabled() -> bool:
     return os.environ.get("ARGOS_SANDBOX", "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def weak_model() -> bool:
+    """是否为便宜/弱/本地模型档做提示词加固(opt-in,`ARGOS_WEAK_MODEL=1`)。开启时 loop 在系统
+    提示【末位】追加一行 lazy-antidote(完整实现、不留 stub/TODO/截断) —— 弱模型有效注意力短,终端
+    位置权重高。刻意用 env flag 而非猜模型家族:启发式家族判定会误判,env flag 零误判、零 routing
+    矩阵,与 ARGOS_SANDBOX / ARGOS_COMPUTER_USE 开关风格一致。强模型默认不付这几个 token。"""
+    return os.environ.get("ARGOS_WEAK_MODEL", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def extra_write_dirs() -> list[Path]:
     """`--add-dir` / `ARGOS_ADD_DIRS` 授权的额外可写目录(#2 CC对齐:对齐 CC 的 --add-dir /
     additionalDirectories)。os.pathsep 分隔,expanduser + resolve + 去重。

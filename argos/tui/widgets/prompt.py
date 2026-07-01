@@ -29,7 +29,7 @@ _PASTE_THRESHOLD = 10000  # >10000 字符的粘贴折成占位 chip(对齐 Claud
 # Rich Text 层无法引用 CSS $token 名,直接用 hex 值(与 theme.py 对应 token 保持同步)
 _EYE        = "#D9A85C"   # $eye:▸ 选中光标 / 选中项名
 _INK_DIM    = "#7E869C"   # $ink-dim:说明文字
-_INK_FAINT  = "#525A73"   # $ink-faint:键提示行
+_INK_FAINT  = "#6B7494"   # $ink-faint:键提示行
 _INK_BRIGHT = "#ECEEF5"   # $ink-bright:选中项名 bold
 _RAISE_2    = "#23263A"   # $raise-2:二级浮起 — slash 菜单选中行底色块
 

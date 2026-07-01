@@ -39,7 +39,7 @@ _COL_CYAN        = "#7DCFFF"   # $cyan       — cheap tier
 _COL_INK         = "#C8CCDA"   # $ink        — default tier / 散文正文
 _COL_INK_BRIGHT  = "#ECEEF5"   # $ink-bright — strong tier
 _COL_INK_DIM     = "#7E869C"   # $ink-dim    — category 名 / echo 前缀
-_COL_INK_FAINT   = "#525A73"   # $ink-faint  — hint / footer
+_COL_INK_FAINT   = "#6B7494"   # $ink-faint  — hint / footer
 _COL_UNVERIF     = "#FF9E64"   # $unverif    — ❂ force confirm 尾缀
 
 # 8 类别固定枚举，按 spec 顺序渲染
