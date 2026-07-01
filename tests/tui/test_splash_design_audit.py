@@ -7,7 +7,7 @@
     - 副标题行(版本/模型/徽标) → $ink-dim (#7E869C) 包裹
     - LIVE 徽标 → $pass    (#9ECE6A) 包裹
     - DEMO 脚本演示 → $unverif (#FF9E64) 包裹
-    - 提示行 → $ink-faint  (#525A73) 包裹
+    - 提示行 → $ink-faint  (#6B7494) 包裹
     - DEFAULT_CSS 不含 color: $ink-bright(旧压制色已移除)
   markup=True 在构造调用中生效(测试 _compose_text 返回值含 Rich markup 格式标签)
   功能不回退:
@@ -101,7 +101,7 @@ class TestComposeTextColorMarkup:
         assert _COL_INK_DIM == "#7E869C", f"Expected #7E869C, got {_COL_INK_DIM}"
 
     def test_hint_line_wrapped_in_ink_faint(self) -> None:
-        """提示行(输入目标开始…)必须被 $ink-faint (#525A73) 包裹。"""
+        """提示行(输入目标开始…)必须被 $ink-faint (#6B7494) 包裹。"""
         text = _text()
         assert _has_color_wrap(text, _COL_INK_FAINT, "输入目标开始"), (
             f"hint line not wrapped in {_COL_INK_FAINT} ($ink-faint)"

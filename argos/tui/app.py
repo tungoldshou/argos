@@ -113,6 +113,7 @@ class ArgosApp(App):
         display: block;
     }
     #prompt { border: none; border-top: solid $hairline; background: $well; }
+    #prompt:focus { border-top: solid $eye; }
     ArgosApp.-narrow #activity { display: none; }
     """
 

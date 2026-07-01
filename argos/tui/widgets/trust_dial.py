@@ -33,7 +33,7 @@ _COL_EYE        = "#D9A85C"  # $eye: 金系主强调 — 当前行 ▸ cursor
 _COL_INK_BRIGHT = "#ECEEF5"  # $ink-bright: bold 强调 — 当前行标签
 _COL_INK        = "#C8CCDA"  # $ink: 正文 — 当前行 hint
 _COL_INK_DIM    = "#7E869C"  # $ink-dim: 次要 — 铁律行基底 / 非选中 hint
-_COL_INK_FAINT  = "#525A73"  # $ink-faint: 极淡 — 非当前行文字 / footer
+_COL_INK_FAINT  = "#6B7494"  # $ink-faint: 极淡 — 非当前行文字 / footer
 _COL_FAIL       = "#F7768E"  # $fail: 红色 — ⏻ 红灯 + 铁律三处类别
 _COL_UNVERIF    = "#FF9E64"  # $unverif: 橙色 — (保留,用于升档警示卡)
 

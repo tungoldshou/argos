@@ -12,7 +12,7 @@ v4 着色修正(design-audit 2026-06-14 MEDIUM fix):
 - 副标题行(版本/模型) → $ink-dim (#7E869C)
 - LIVE 徽标 → $pass (#9ECE6A)
 - 真相不确定 / unverifiable → $unverif (#FF9E64)
-- 提示行 → $ink-faint (#525A73)
+- 提示行 → $ink-faint (#6B7494)
 - DEFAULT_CSS 不再写死 color: $ink-bright;CSS 槽只控制布局
 """
 from __future__ import annotations

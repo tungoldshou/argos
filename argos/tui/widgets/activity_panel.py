@@ -55,7 +55,7 @@ class _Section(Static):
         height: auto;
         padding: 0 1;
         margin: 0 0 1 0;
-        border-top: solid $hairline;
+        border-top: solid $hairline-lit;
         border-title-color: $eye-soft;
         border-title-style: bold;
         border-title-align: left;

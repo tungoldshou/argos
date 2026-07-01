@@ -381,9 +381,9 @@ class TestColorDiscipline:
         assert _COL_INK_DIM.upper() == "#7E869C"
 
     def test_col_ink_faint_matches_theme(self):
-        """_COL_INK_FAINT = '#525A73' ($ink-faint)。"""
+        """_COL_INK_FAINT = '#6B7494' ($ink-faint)。"""
         from argos.tui.widgets.trust_dial import _COL_INK_FAINT
-        assert _COL_INK_FAINT.upper() == "#525A73"
+        assert _COL_INK_FAINT.upper() == "#6B7494"
 
     def test_col_ink_matches_theme(self):
         """_COL_INK = '#C8CCDA' ($ink)。"""

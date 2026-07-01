@@ -275,7 +275,9 @@ def test_codeact_contract_in_honesty_system():
     实测:缺这段时 MiniMax-M3 吐 JSON 工具调用 → extract_code_block 抽不到 → agent 对编码任务恒为 no-op。"""
     from argos.core.honesty import HONESTY_SYSTEM
     assert "```python" in HONESTY_SYSTEM, "必须给出 ```python 围栏示例/要求"
-    assert "JSON" in HONESTY_SYSTEM and "silently never runs" in HONESTY_SYSTEM, "必须明确禁止 JSON 工具调用"
+    # 2026-07-01 重写:禁 JSON 工具调用锚点 = "never as JSON" + "Wrong (never runs)" JSON 反例
+    assert "JSON" in HONESTY_SYSTEM and "never as JSON" in HONESTY_SYSTEM, "必须明确禁止 JSON 工具调用"
+    assert "Wrong (never runs)" in HONESTY_SYSTEM, "必须含 JSON 反例(never runs)"
     assert "write_file(path, content)" in HONESTY_SYSTEM, "应文档化工具的 Python 函数签名"
 
 

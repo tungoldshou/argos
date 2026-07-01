@@ -42,7 +42,7 @@ _GLYPH_BLOCKED = "◓"
 _STYLE_EYE      = "#D9A85C"   # $eye：当前阶段
 _STYLE_BLOCKED  = "#FF9E64"   # $unverif：用户阻塞
 _STYLE_INK_DIM  = "#7E869C"   # $ink-dim：数据段
-_STYLE_INK_FAINT = "#525A73"  # $ink-faint：键提示
+_STYLE_INK_FAINT = "#6B7494"  # $ink-faint：键提示
 
 def _hints() -> str:
     return _t("tui.statusbar.hints")
