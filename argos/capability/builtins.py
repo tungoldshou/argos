@@ -45,14 +45,6 @@ _SEARCH_EGRESS: tuple[str, ...] = (
     "lite.duckduckgo.com",
 )
 
-# 云端 STT 出网 host(spec §7:注册进 egress 白名单作单一真值表;
-# 注:本地 STT 无 egress;云端 STT 在宿主进程跑,egress 主要为审计/一致性)。
-_STT_EGRESS: tuple[str, ...] = (
-    "api.openai.com",
-    "api.deepgram.com",
-    "api.groq.com",
-)
-
 
 def _builtin_capabilities() -> tuple[Capability, ...]:
     """返回所有内置能力 manifest（dispatch=None → 由 broker 既有 if/elif 执行）。
@@ -164,15 +156,6 @@ def _builtin_capabilities() -> tuple[Capability, ...]:
             reversible=True,
             egress_hosts=("*",),    # 目标 url 动态,egress check 由 broker 直接校验
             visibility="all",
-        ),
-        Capability(
-            name="stt_transcribe",
-            kind="tool",
-            risk="medium",
-            reversible=True,
-            egress_hosts=_STT_EGRESS,
-            visibility="all",
-            sandbox_callable=False,   # 宿主进程语音转写,沙箱外跑、无命名空间包装 → 不计入 /tools 可调用数
         ),
         # ── 浏览器（计算机控制）────────────────────────────────────────────
         Capability(name="browser_navigate",   kind="browser", risk="low",  reversible=True,  visibility="all"),

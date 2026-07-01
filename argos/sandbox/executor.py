@@ -48,8 +48,10 @@ class SeatbeltExecutor:
         # (常是 ~/.argos/workspace),再被 Seatbelt 挡成 "Operation not permitted" 静默失败。
         # worktree 隔离尤其依赖这条:子 agent 的写要落进 worktree,拆前才抓得到 diff。
         child_env = {**os.environ, "ARGOS_WORKSPACE": str(workspace)}
+        from argos.config import sandbox_enabled
         self._proc = seatbelt.spawn_child(
             workspace=workspace, child_argv=seatbelt.python_child_argv(), env=child_env,
+            sandbox=sandbox_enabled(),   # #2 CC对齐:opt-in,默认关 → 不裹 sandbox-exec(治理仍在)
         )
         authorized = namespace.get("__authorized_imports__") or None
         self._send({"op": "init", "authorized_imports": authorized,
@@ -146,11 +148,18 @@ def LinuxExecutor(broker_handler=None):  # type: ignore[no-redef]
 
 
 def select_backend():
-    """按平台 + 工具可用性选后端类。懒转 linux.select_backend()。
+    """按平台 + 工具可用性选执行器类。懒转 linux.select_backend()。
 
-    macOS → SeatbeltExecutor;Linux + bwrap → BwrapExecutor;Linux + 仅 unshare → UnshareExecutor;
-    win32 → 明确拒绝(诚实错误,不走 Linux 路径后无声失败);其他/都无 → RuntimeError。
+    #2 CC对齐:OS 沙箱 opt-in。**关沙箱(默认)→ 任意平台返 SeatbeltExecutor** —— 它 spawn 时见
+    sandbox_enabled()=False 不裹 sandbox-exec,纯 subprocess 直跑(无需任何 OS 后端)→ 让无 bwrap 的
+    Linux / Windows 也能跑(未沙箱化,治理仍在)。开沙箱才挑平台后端,无可用后端则诚实 RuntimeError。
+
+    开沙箱时:macOS → SeatbeltExecutor;Linux + bwrap → BwrapExecutor;Linux + 仅 unshare →
+    UnshareExecutor;win32 → 拒绝(无 Seatbelt/bwrap);其他/都无 → RuntimeError。
     """
+    from argos.config import sandbox_enabled
+    if not sandbox_enabled():
+        return SeatbeltExecutor   # 关沙箱:跨平台 unwrapped 执行器(spawn 内 sandbox=False 不裹)
     if sys.platform == "darwin":
         return SeatbeltExecutor
     if sys.platform == "win32":

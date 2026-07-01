@@ -11,14 +11,15 @@ from __future__ import annotations
 
 EN: dict[str, str] = {
     # __main__.py argparse flags
-    "cli.demo.help": "FakeLoop success demo",
-    "cli.demo_fail.help": "FailingFakeLoop escalation demo",
     "cli.selftest.help": "Offline self-check (scripted model, four-phase run)",
     "cli.project.help": "Work inside the given project directory",
     "cli.model.help": "Use the named config profile for this run (default: the active one)",
     "cli.effort.help": "Effort tier (step budget: low=8 / medium=40 / high=80; approval mode is set by /trust)",
+    "cli.sandbox.help": "Enable the OS sandbox (Seatbelt/bwrap kernel cage: no network, writes caged to the workspace). Opt-in, off by default; governance (approval + egress + AST limits) applies either way. Or set ARGOS_SANDBOX=1.",
+    "cli.add_dir.help": "Grant write access to a directory outside the workspace (repeatable). The file tools and the write-cage treat it as writable; under --sandbox it's also added to the kernel cage. Or set ARGOS_ADD_DIRS (path-separated).",
     # setup sub-command
     "cli.setup.help": "Interactive wizard to connect a model (choose provider → enter key → probe → save)",
+    "cli.setup.advanced_help": "Also prompt for max_tokens / context_window / embedding model (defaults used otherwise)",
     "cli.setup.epilog": (
         "The wizard writes ~/.argos/config.json (profile table + active pointer)"
         " and ~/.argos/.env (key, 0600).\n\n"
@@ -94,6 +95,13 @@ EN: dict[str, str] = {
     "setup.preset_item": "  {i}. {name}",
     "setup.invalid_choice": "Invalid choice, try again.",
     "setup.arrow_hint": "(↑↓ to select, Enter to confirm)\r\n",
+    "setup.banner": "✦ Argos setup — connect a model",
+    "setup.section_provider": "Provider",
+    "setup.section_apikey": "API key",
+    "setup.section_advanced": "Advanced (optional)",
+    "setup.section_connect": "Connection test",
+    "setup.key_method_paste": "Paste an API key",
+    "setup.key_method_env": "Use an existing environment variable",
     "setup.prompt_protocol": "Protocol (anthropic/openai):",
     "setup.prompt_base_url": "base_url:",
     "setup.prompt_model": "Model id [{default}]:",
@@ -102,8 +110,6 @@ EN: dict[str, str] = {
     "setup.prompt_paste_key": "Paste API key:",
     "setup.prompt_max_tokens": "max_tokens [4096]:",
     "setup.prompt_context_window": "context_window [200000]:",
-    "setup.prompt_price_in": "Price in (USD per 1M tokens, leave blank to skip):",
-    "setup.prompt_price_out": "Price out (USD per 1M tokens, leave blank to skip):",
     "setup.prompt_embedding_model": "Embedding model (blank = keyword recall, no extra model call; e.g. text-embedding-3-small):",
     "setup.no_embeddings_note": "(This provider uses the Anthropic protocol — no /embeddings endpoint; memory falls back to keyword recall.)",
     "setup.probing": "Running connection probe…",
@@ -119,6 +125,7 @@ EN: dict[str, str] = {
     "setup.saved_active": "Saved '{name}' and made it the active model.",
     "setup.saved_inactive": "Saved '{name}' (active model unchanged).",
     "setup.key_stored_warning": "Note: the API key is stored in plain text in ~/.argos/.env (permissions 0600), not encrypted.",
+    "setup.key_empty": "No key entered — leaving the key blank can't connect. Re-enter this model (or pick the env-var method if your key lives in the environment).",
     "setup.add_another_prompt": "Add another model? (y/N):",
     "setup.done": "Setup complete. Run `argos` to use the active model.",
     "setup.no_tty": (
@@ -129,9 +136,8 @@ EN: dict[str, str] = {
         "      ~/.argos/.env          ← API key (permissions 0600)\n"
         "    File schema: `argos setup --help` or docs/setup-wizard.md"
     ),
-    # setup_wizard.py _ask_int / _ask_float_or_none fail-soft messages
+    # setup_wizard.py _ask_int fail-soft message
     "setup.not_integer": "'{val}' is not an integer; using the default {default}.",
-    "setup.not_number": "'{val}' is not a number; skipping that price.",
     # setup_wizard.py probe ratings (ProbeResult.rating field)
     "setup.probe_rating_ok": "ok",
     "setup.probe_rating_marginal": "marginal",
@@ -220,14 +226,15 @@ EN: dict[str, str] = {
 
 ZH: dict[str, str] = {
     # __main__.py argparse flags
-    "cli.demo.help": "FakeLoop 成功演示",
-    "cli.demo_fail.help": "FailingFakeLoop escalation 演示",
     "cli.selftest.help": "不连真模型自检(脚本模型跑四阶段)",
     "cli.project.help": "在用户项目目录干活",
     "cli.model.help": "本次启动用指定 config profile(默认当前 active)",
     "cli.effort.help": "任务努力档(步数预算:low=8 / medium=40 / high=80;审批档由 /trust 控制)",
+    "cli.sandbox.help": "启用 OS 沙箱(Seatbelt/bwrap 内核牢笼:断网、写牢笼 workspace)。opt-in、默认关;无论开关,治理(审批+egress+AST 限制)都在。也可设 ARGOS_SANDBOX=1。",
+    "cli.add_dir.help": "授权 workspace 之外的一个目录可写(可重复)。文件工具与写牢笼视其为可写;开 --sandbox 时也加进内核牢笼。也可设 ARGOS_ADD_DIRS(路径分隔符分隔)。",
     # setup sub-command
     "cli.setup.help": "接入模型的交互向导(选 provider→填 key→连通测试→保存)",
+    "cli.setup.advanced_help": "额外询问 max_tokens / context_window / embedding 模型(否则用缺省值)",
     "cli.setup.epilog": (
         "向导写入 ~/.argos/config.json(profile 表 + active 指针)和 ~/.argos/.env(key, 0600)。\n\n"
         "config.json 最小示例:\n"
@@ -302,6 +309,13 @@ ZH: dict[str, str] = {
     "setup.preset_item": "  {i}. {name}",
     "setup.invalid_choice": "无效编号,重来。",
     "setup.arrow_hint": "(↑↓ 选,回车确认)\r\n",
+    "setup.banner": "✦ Argos 配置向导 —— 接入一个模型",
+    "setup.section_provider": "模型提供方",
+    "setup.section_apikey": "API 密钥",
+    "setup.section_advanced": "高级(可选)",
+    "setup.section_connect": "连通测试",
+    "setup.key_method_paste": "粘贴一个 API 密钥",
+    "setup.key_method_env": "使用已有的环境变量",
     "setup.prompt_protocol": "协议 (anthropic/openai):",
     "setup.prompt_base_url": "base_url:",
     "setup.prompt_model": "模型 id [{default}]:",
@@ -310,8 +324,6 @@ ZH: dict[str, str] = {
     "setup.prompt_paste_key": "粘贴 API key:",
     "setup.prompt_max_tokens": "max_tokens [4096]:",
     "setup.prompt_context_window": "context_window [200000]:",
-    "setup.prompt_price_in": "价格 in (USD/1M, 留空跳过):",
-    "setup.prompt_price_out": "价格 out (USD/1M, 留空跳过):",
     "setup.prompt_embedding_model": "embedding 模型(留空=记忆走关键词,不额外调模型;如 text-embedding-3-small):",
     "setup.no_embeddings_note": "(此 provider 是 Anthropic 端,无 embeddings;记忆走关键词召回)",
     "setup.probing": "正在连通测试…",
@@ -327,6 +339,7 @@ ZH: dict[str, str] = {
     "setup.saved_active": "已保存 '{name}'并设为当前模型。",
     "setup.saved_inactive": "已保存 '{name}'(未改当前默认模型)。",
     "setup.key_stored_warning": "注意:API key 以明文存于 ~/.argos/.env(权限 0600),不加密。",
+    "setup.key_empty": "没输入 key —— 留空连不上。请重配这个模型(或改用环境变量方式,如果 key 在环境里)。",
     "setup.add_another_prompt": "再配一个模型?(y/N):",
     "setup.done": "setup 完成。运行 `argos` 即用当前模型。",
     "setup.no_tty": (
@@ -337,9 +350,8 @@ ZH: dict[str, str] = {
         "      ~/.argos/.env          ← API key(权限 0600)\n"
         "    文件 schema 见 `argos setup --help` 或 docs/setup-wizard.md"
     ),
-    # setup_wizard.py _ask_int / _ask_float_or_none fail-soft messages
+    # setup_wizard.py _ask_int fail-soft message
     "setup.not_integer": "'{val}' 不是整数,改用默认 {default}。",
-    "setup.not_number": "'{val}' 不是数字,跳过该价格。",
     # setup_wizard.py probe ratings (ProbeResult.rating field)
     "setup.probe_rating_ok": "行",
     "setup.probe_rating_marginal": "勉强",

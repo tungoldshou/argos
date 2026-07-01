@@ -1,6 +1,6 @@
 """CORE2 cluster catalog — verify_gate / snapshot / harness / models / loop residuals /
 contracts / runtime / config_base / external_surfaces / app_factory / protocol/events /
-ledger / sandbox_child / fakeloop / tui widgets / input (stt / recorder / attachments).
+ledger / sandbox_child / fakeloop / tui widgets / input (attachments).
 
 ZH values = verbatim original Chinese strings (so ARGOS_LANG=zh legacy assertions pass).
 EN values = natural, precise English equivalents.
@@ -114,26 +114,6 @@ EN: dict[str, str] = {
 
     # ── tui/widgets/thinking ─────────────────────────────────────────────────
     "core2.thinking.label": "Thinking…",
-
-    # ── input/stt ────────────────────────────────────────────────────────────
-    "core2.stt.local_unavailable": (
-        "Local STT unavailable: faster-whisper is not installed "
-        "(should be bundled with the base install)."
-    ),
-    "core2.stt.local_failed": "Local transcription failed: {error}",
-    "core2.stt.cloud_sdk_missing": (
-        "Cloud STT requires the openai SDK: pip install 'argos-agent[cloud-stt]'."
-    ),
-    "core2.stt.cloud_failed": "Cloud transcription failed: {error}",
-
-    # ── input/recorder ────────────────────────────────────────────────────────
-    "core2.recorder.backend_unavailable": (
-        "Cannot load audio backend (sounddevice/PortAudio). "
-        "On Linux: `apt install libportaudio2`; other platforms should bundle the wheel."
-    ),
-    "core2.recorder.start_failed": "Failed to start recording (no microphone?): {error}",
-    "core2.recorder.not_recording": "Not currently recording.",
-    "core2.recorder.no_audio": "No audio captured (microphone may have no input).",
 
     # ── input/attachments ────────────────────────────────────────────────────
     "core2.attachments.unsupported_format": (
@@ -250,25 +230,6 @@ ZH: dict[str, str] = {
 
     # ── tui/widgets/thinking ─────────────────────────────────────────────────
     "core2.thinking.label": "思考中…",
-
-    # ── input/stt ────────────────────────────────────────────────────────────
-    "core2.stt.local_unavailable": (
-        "本地 STT 不可用:未安装 faster-whisper(语音应随基础安装自带)。"
-    ),
-    "core2.stt.local_failed": "本地转写失败:{error}",
-    "core2.stt.cloud_sdk_missing": (
-        "云端 STT 需要 openai SDK:pip install 'argos-agent[cloud-stt]'。"
-    ),
-    "core2.stt.cloud_failed": "云端转写失败:{error}",
-
-    # ── input/recorder ────────────────────────────────────────────────────────
-    "core2.recorder.backend_unavailable": (
-        "无法加载音频后端(sounddevice/PortAudio)。Linux 需 `apt install libportaudio2`;其余"
-        "平台 wheel 应自带。"
-    ),
-    "core2.recorder.start_failed": "开始录音失败(可能无麦克风):{error}",
-    "core2.recorder.not_recording": "当前未在录音。",
-    "core2.recorder.no_audio": "没有录到音频(可能麦克风无输入)。",
 
     # ── input/attachments ────────────────────────────────────────────────────
     "core2.attachments.unsupported_format": (

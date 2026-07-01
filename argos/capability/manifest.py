@@ -37,7 +37,7 @@ class Capability:
         visibility    — "all" 对所有用户可见；"developer" 仅开发者可见（LSP 等）。
         dispatch      — host 侧执行 Callable；None=由 broker 既有路径（if/elif）处理的内置能力。
         sandbox_callable — True=模型在沙箱命名空间里有可调用包装（绝大多数工具）；
-                       False=宿主进程专属能力（如 stt_transcribe 语音转写，沙箱外跑、模型调不动）。
+                       False=宿主进程专属能力（沙箱外跑、模型调不动）。
                        /tools 计数据此排除不可调用能力，兑现"数量 = 真实可调用工具数"的诚实承诺。
     """
     name: str
