@@ -24,8 +24,8 @@ uv run argos
 
 看到 `✳ LIVE` 状态 + 底部输入框 → 直接输入目标开始。
 
-> ⚠️ 没配 key 时 TUI 会落 demo 态(`⚠ DEMO`),诚实标"无 API key",
-> 不会假装能跑。配好 `uv run argos setup` 后自动转 LIVE。
+> ⚠️ 没配 key 时 `argos` 直接退出并提示你跑 `argos setup`(不假装能跑,也不进任何 demo 态)。
+> 配好后再 `uv run argos` 即见 `✳ LIVE`。
 
 ## 2. 看 best_of_n 故事(1 task, < 2min)
 

@@ -153,9 +153,9 @@ Section: utils
 Priority: optional
 Architecture: amd64
 Maintainer: tungoldshou <tungoldshou@users.noreply.github.com>
-Description: Argos — 诚实可靠的终端编码超级智能体
- Argos is a terminal super-agent (TUI) with self-built CodeAct engine,
- verify hard-gate, and OS sandbox.
+Description: Argos — 诚实可靠的百眼终端编码智能体
+ Argos is the hundred-eyed terminal coding agent (TUI) with a self-built CodeAct
+ engine, a verify hard-gate, and an opt-in OS sandbox.
 Depends: libc6, libstdc++6
 EOF
 cp "$BIN" "$DEB_DIR/usr/bin/argos"
@@ -184,13 +184,13 @@ if command -v rpmbuild >/dev/null 2>&1; then
 Name: argos-agent
 Version: ${ARGOS_VERSION}
 Release: 1%{?dist}
-Summary: Argos — terminal super-agent (CodeAct + verify gate)
+Summary: Argos — the hundred-eyed agent (CodeAct + verify gate)
 License: MIT
 URL: https://github.com/tungoldshou/argos
 Requires: glibc, libstdc++
 %description
-Argos is a terminal super-agent with self-built CodeAct engine, verify
-hard-gate, and OS sandbox.
+Argos is the hundred-eyed terminal coding agent with a self-built CodeAct
+engine, a verify hard-gate, and an opt-in OS sandbox.
 %install
 mkdir -p %{buildroot}/usr/bin
 cp ${BIN} %{buildroot}/usr/bin/argos

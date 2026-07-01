@@ -6,15 +6,15 @@ PackageLocale: en-US
 Publisher: tungoldshou
 PackageName: Argos
 License: MIT
-ShortDescription: The hundred-eyed agent (CodeAct + verify gate + OS sandbox)
+ShortDescription: The hundred-eyed agent (CodeAct + verify gate + governance)
 Description: |
   Argos, the hundred-eyed agent, is a verifiable coding agent — a daemon
-  kernel with pluggable clients (terminal TUI today, desktop shell in
-  progress). It self-builds a
-  framework-free CodeAct loop with a verify hard-gate, an honesty protocol,
-  and an OS-sandboxed executor. The soul of the project is making cheap
-  models reliable: every change must pass a real verifier before it is
-  considered done, and the agent never silently swallows errors.
+  kernel with a terminal TUI client. It self-builds a framework-free CodeAct
+  loop with a verify hard-gate, an honesty protocol, a governance layer
+  (broker + approval + egress + AST limits), and an opt-in OS sandbox. The
+  soul of the project is making cheap models reliable: every change must pass
+  a real verifier before it is considered done, and the agent never silently
+  swallows errors.
   Argos runs anywhere Python 3.12+ runs: macOS, Linux, and Windows. It ships
   a single bundled binary on each platform (no Python install required for
   end users), integrates the OpenAI-compatible and Anthropic APIs, exposes
