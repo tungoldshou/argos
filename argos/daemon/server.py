@@ -1798,7 +1798,9 @@ class DaemonHTTPServer:
     async def _handle_sse(self, writer, headers, run_id, query):
         if (sid := await self._require_session(writer, headers)) is None:
             return
-        if not self._manager.get_run(run_id):
+        # 虚拟 `_` 流(如 _conductor)是实时广播总线:无 index 条目、无持久化 —— 允许订阅,
+        # 只推实时 fanout(见 RunStore.append / replay 守卫)。非虚拟 run 仍需存在,否则 404。
+        if not run_id.startswith("_") and not self._manager.get_run(run_id):
             return await self._send_error(writer, 404, CODE_NOT_FOUND, "run not found")
         # 解析 ?since=N
         since = 0

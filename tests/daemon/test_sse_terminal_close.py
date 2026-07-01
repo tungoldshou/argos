@@ -215,3 +215,29 @@ async def test_daemon_event_source_stream_ends_on_completion(server):
     if not done:
         task.cancel()
     assert done, "DaemonEventSource.stream() 未随 run 完成而收尾 → bus 永不关 → guard 卡死"
+
+
+# ── conductor 虚拟流 SSE:不 404,只推实时 fanout ─────────────────────────────
+
+@pytest.mark.asyncio
+async def test_conductor_sse_subscribes_without_404(server):
+    """虚拟 `_conductor` 流无 index 条目、无持久化,SSE 必须【允许】订阅(不 404)并推实时 fanout。
+
+    回归:get_run('_conductor') 恒 None,_handle_sse 的存在性守卫(2026-06-06 起)一直
+    404 掉 conductor 订阅;daemon 修活后才显形(TUI 报 "daemon SSE: HTTP 404")。
+    """
+    from argos.daemon.conductor_supervisor import CONDUCTOR_RUN_ID
+
+    srv, mgr = server
+    sid = await _create_session(srv.socket_path)
+
+    client = DaemonClient(srv.socket_path, timeout=10.0)
+    gen = client.subscribe_events(CONDUCTOR_RUN_ID, sid, since=0)
+    # 触发连接 + 服务端订阅建立;404 会让生成器空手结束(anext → StopAsyncIteration)。
+    first = asyncio.create_task(anext(gen))
+    await asyncio.sleep(0.4)   # 让服务端 subscribe(_conductor) 就位
+    await mgr.fanout(CONDUCTOR_RUN_ID, {"kind": "proactive_suggestion", "goal": "x"})
+
+    ev = await asyncio.wait_for(first, timeout=5.0)
+    assert ev["kind"] == "proactive_suggestion", "conductor 订阅者必须收到实时 fanout 事件"
+    await gen.aclose()
