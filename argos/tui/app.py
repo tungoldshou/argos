@@ -141,7 +141,7 @@ class ArgosApp(App):
     ]
 
     def __init__(
-        self, *, loop_factory: Callable[[], object] | None = None, demo: bool = True,
+        self, *, loop_factory: Callable[[], object] | None = None,
         gate: ApprovalGate | None = None,
         workspace: Path | str | None = None,
     ) -> None:
@@ -161,10 +161,8 @@ class ArgosApp(App):
         # 模型不绑定、无档位:活动栏显示的真实模型名取自 config.active_tier()(当前 active profile)。
         # loop_factory() 返回一个有 async run(goal, session_id) -> AsyncIterator[Event] 的对象。
         # 默认 FakeLoop(Phase 6 真 AgentLoop 落地后由入口注入真实工厂)。
+        # 默认 FakeLoop 仅作测试桩(生产恒经 __main__ 注入真工厂);DEMO 概念已移除 2026-07-01。
         self._loop_factory = loop_factory or (lambda **kw: FakeLoop())
-        # demo=True:当前驱动 FakeLoop,产出脚本化假数据 —— 头部常驻 DEMO 标识 + 每轮起手 banner
-        # 都如实标注(诚实灵魂:任何脚本化全绿不得在无标识下冒充真实执行)。注入真 loop 时传 demo=False。
-        self._demo = demo
         # 给了共享 gate(真 loop 路径:= broker.gate)就用它 —— 这样工作流/工具审批 respond
         # 落在 loop 真正 await 的那个 gate 上(否则打错实例,审批永远不放行)。
         # 没给(demo/fake 路径)自建一个 CONFIRM 档,行为不变。
@@ -271,7 +269,7 @@ class ArgosApp(App):
             tl = self._resolve_trust_level()
             self.query_one("#top-bar", TopBar).set_state(
                 plan_mode=self._plan_mode, yolo=self._yolo,
-                demo=self._demo, has_key=bool(config.active_key()),
+                has_key=bool(config.active_key()),
                 trust_level=int(tl), trust_label=tl.label_human,
             )
         except Exception:  # noqa: BLE001 — 未 mount(测试直构)时静默,数据已在字段里
@@ -330,7 +328,7 @@ class ArgosApp(App):
         self.query_one("#transcript", Transcript).mount(
             StartupSplash(
                 model_label=tier.model, tier=tier.name,
-                live=not self._demo, has_key=bool(config.active_key()),
+                live=True, has_key=bool(config.active_key()),
             )
         )
         # 启动时根据 _plan_mode 状态把指示器对齐(默认 False;若 /plan 已触发过则 True)。
@@ -387,8 +385,11 @@ class ArgosApp(App):
         except Exception:  # noqa: BLE001
             pass
         # v6 P3b §2:daemon 模式探测 + 拉起(后台 worker,探测期间 TUI 正常可用)。
-        # 诚实:探测结果决定 _kernel_mode 标注,绝不在确认前假装已连通。
-        if not self._demo:
+        # 诚实:探测结果决定 _kernel_mode 标注,绝不在确认前假装已连通。测试隔离靠 ARGOS_NO_DAEMON=1
+        # (conftest 钉)→ _setup_daemon_mode 内部强制 inline。
+        # DEMO 移除后恒跑(旧 demo=True 会跳过);但若已手动接了 daemon 客户端(测试预置真 server),
+        # 跳过 auto-setup 免得把预置态覆盖成 inline。生产 _daemon_client 恒 None(__init__)→ 照常探测。
+        if self._daemon_client is None:
             self.run_worker(self._setup_daemon_mode(), exclusive=False)
 
     async def _setup_daemon_mode(self) -> None:
@@ -396,7 +397,7 @@ class ArgosApp(App):
 
         成功 → _kernel_mode="argosd", _with_daemon=True, _daemon_client/session_id 就绪。
         失败 → _kernel_mode="inline", _with_daemon=False(inline fallback,诚实标注)。
-        Demo 模式跳过(demo=True 时不调本方法)。
+        ARGOS_NO_DAEMON=1(测试钉)→ 强制 inline,不探测真 daemon。
         """
         import os
         from argos.tui.daemon_spawn import probe_or_spawn

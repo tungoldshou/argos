@@ -301,7 +301,7 @@ def main() -> None:
         # 用 broker 的 gate 作 app.gate(同一实例)→ 工作流/工具审批 respond 落在 loop 真正
         # await 的那个 gate 上;顺带让 /yolo 对真 gate 生效(不再是 app 自建的孤儿 gate)。
         ArgosApp(
-            loop_factory=factory, gate=components.gate, demo=False,
+            loop_factory=factory, gate=components.gate,
             workspace=effective_ws or components.workspace,
         ).run()
     except (RuntimeError, _TuiConfigError) as e:

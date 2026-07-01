@@ -144,7 +144,7 @@ class _SlowLoop:
 
 @pytest.mark.asyncio
 async def test_escape_interrupts_active_run():
-    app = ArgosApp(loop_factory=lambda **kw: _SlowLoop(), demo=False)
+    app = ArgosApp(loop_factory=lambda **kw: _SlowLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         app.handle_input("做一件事")          # 起一轮 run(worker)

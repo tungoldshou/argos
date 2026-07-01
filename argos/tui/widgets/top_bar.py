@@ -1,15 +1,15 @@
 # argos/tui/widgets/top_bar.py
 """TopBar:自绘单行顶栏(TUI v3 spec §4.1),替代 stock Header + sub_title 机制。
 
-左:眼(随阶段) Argos v{version} · {model};右:状态徽标(plan / YOLO / DEMO / 未配 key / LIVE)。
-徽标全部来自真实状态(诚实铁律:DEMO 标识绝不可省;真 loop 注入 demo=False 后自动消失;
-has_key=False 时绝不出现 LIVE(契约6);有 key 且非 demo 时显 LIVE)。
+左:眼(随阶段) Argos v{version} · {model};右:状态徽标(plan / YOLO / 未配 key / LIVE / 未沙箱化)。
+徽标全部来自真实状态(诚实铁律:has_key=False 时绝不出现 LIVE(契约6);有 key 时显 LIVE)。
+DEMO 概念已移除(2026-07-01);FakeLoop 仅作测试桩,生产不跑。
 用 render() 返回 Rich Text 做左右对齐与分段着色 —— 不走 markup 解析(防任意文本崩)。
 
 v3 变更:
 - 品牌符 ✳ → 状态眼(idle=◌ plan=◔ act=◉ verify=❂ report/done=◕)
 - 新增 set_phase(phase) 接收阶段切换
-- 新增 LIVE 徽标(有 key + 非 demo 时显示)
+- 新增 LIVE 徽标(有 key 时显示)
 - 徽标去方括号:[plan mode] → plan;⏻ YOLO → YOLO
 - DEFAULT_CSS 底色改 $well
 """
@@ -54,7 +54,6 @@ class TopBar(Static):
         self._model = model_label
         self._plan_mode = False
         self._yolo = False
-        self._demo = True
         self._has_key = True
         self._phase = "idle"
         # Trust 徽标状态(README §152/§188;默认无 trust 信息时不显示)
@@ -66,7 +65,6 @@ class TopBar(Static):
         model_label: str | None = None,
         plan_mode: bool | None = None,
         yolo: bool | None = None,
-        demo: bool | None = None,
         has_key: bool | None = None,
         trust_level: int | None = None,
         trust_label: str | None = None,
@@ -82,10 +80,6 @@ class TopBar(Static):
             self._plan_mode = bool(plan_mode)
         if yolo is not None:
             self._yolo = bool(yolo)
-        # ponytail: demo 参数现为显示惰性 shim —— DEMO 徽标已移除(2026-07-01),保留入参
-        # 仅为兼容既有测试构造点。彻底清理 = 删 demo 入参 + ~17 个测试调用点(留作后续机械 pass)。
-        if demo is not None:
-            self._demo = bool(demo)
         if has_key is not None:
             self._has_key = bool(has_key)
         if trust_level is not None:

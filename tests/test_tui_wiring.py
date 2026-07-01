@@ -129,15 +129,6 @@ async def test_loop_exception_degrades_to_error_not_crash():
 
 
 @pytest.mark.asyncio
-async def test_real_loop_has_no_demo_marker():
-    """注入真 loop(demo=False)时,DEMO 标识消失 —— 标识与真实状态一致,不撒谎。"""
-    app = ArgosApp(loop_factory=lambda **kw: FakeLoop(), demo=False)
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        assert "DEMO" not in app.sub_title
-
-
-@pytest.mark.asyncio
 async def test_input_focused_on_mount_and_receives_typing():
     """回归:启动后输入框必须自动获焦,否则按键被其它可聚焦兄弟抢走,用户打不了任何字。
 
@@ -263,7 +254,7 @@ async def test_resume_switches_to_most_recent_session(tmp_path):
     store.append_message("old-sess", role="user", content="做个贪吃蛇")
     store.append_message("old-sess", role="assistant", content="好的,做完了")
 
-    app = ArgosApp(loop_factory=lambda **kw: _LoopWithStore(store), demo=False)
+    app = ArgosApp(loop_factory=lambda **kw: _LoopWithStore(store))
     async with app.run_test() as pilot:
         await pilot.pause()
         before = app._session_id                 # 启动是全新 uuid session
@@ -283,7 +274,7 @@ async def test_resume_honest_when_no_history(tmp_path):
     from argos.tui.widgets.transcript import Transcript
 
     store = ArgosStore(db_path=str(tmp_path / "empty.db"))
-    app = ArgosApp(loop_factory=lambda **kw: _LoopWithStore(store), demo=False)
+    app = ArgosApp(loop_factory=lambda **kw: _LoopWithStore(store))
     async with app.run_test() as pilot:
         await pilot.pause()
         log = app.query_one("#transcript", Transcript)
@@ -432,7 +423,7 @@ async def test_memory_recall_line_shown_with_real_store_hits(tmp_path):
             yield MemoryRecallEvent(hits=["上次也改过 auth → passed（similar goal）"])
             yield PhaseChange(phase="plan", actions=0)
 
-    app = ArgosApp(loop_factory=lambda **kw: _LoopWithRecallEvent(), demo=False)
+    app = ArgosApp(loop_factory=lambda **kw: _LoopWithRecallEvent())
     async with app.run_test() as pilot:
         await pilot.pause()
         await app.start_run("改 auth.py")

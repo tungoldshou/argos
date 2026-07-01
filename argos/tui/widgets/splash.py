@@ -4,7 +4,6 @@ v3 变更:
 - 旧 box-drawing 巨眼 logo(╔╗╚╝)裁决判死,改为 ▄▀█ 像素风块字
 - 状态眼单行:◌/◔/◓/◉ 随 advance_eye(stage) 推进睁眼仪式
 - 无 key 永远停在 ◌,绝不出现 LIVE(契约6)
-- DEMO 模式眼停在 ◓
 - 新增 advance_eye(stage) 方法驱动睁眼仪式
 
 v4 着色修正(design-audit 2026-06-14 MEDIUM fix):
@@ -12,7 +11,7 @@ v4 着色修正(design-audit 2026-06-14 MEDIUM fix):
 - 眼 ◉ → $eye-glow (#F0C078)
 - 副标题行(版本/模型) → $ink-dim (#7E869C)
 - LIVE 徽标 → $pass (#9ECE6A)
-- DEMO 脚本演示 → $unverif (#FF9E64)
+- 真相不确定 / unverifiable → $unverif (#FF9E64)
 - 提示行 → $ink-faint (#525A73)
 - DEFAULT_CSS 不再写死 color: $ink-bright;CSS 槽只控制布局
 """
