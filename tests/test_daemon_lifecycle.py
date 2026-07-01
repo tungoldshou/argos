@@ -134,3 +134,28 @@ async def test_index_state_machine_full_transitions(tmp_path: Path):
                            store=mgr.store, reason="test")
             except Exception as e:  # noqa: BLE001
                 pytest.fail(f"legal transition {frm}->{to} failed: {e}")
+
+
+def test_recover_skips_corrupt_and_virtual_streams(tmp_path: Path) -> None:
+    """损坏文件 / 虚拟事件总线(_conductor)不该让 daemon 启动崩溃。
+
+    regression: ConductorSupervisor 直写 proactive_suggestion 到 _conductor.jsonl
+    (无 run_meta 头)→ recover() 里 last_state() 抛 CorruptionError 冒到 asyncio.run(),
+    argosd 绑 socket 前就死 → auto-spawn 每次退回 inline(后台/跨 session 永久失效)。
+    """
+    import json
+    runs_dir = tmp_path / "runs"
+    runs_dir.mkdir(parents=True)
+    # 虚拟事件总线:首行非 run_meta(直写事件,无头)→ 靠 "_" 前缀跳过
+    (runs_dir / "_conductor.jsonl").write_text(
+        json.dumps({"kind": "proactive_suggestion", "goal": "x"}) + "\n",
+        encoding="utf-8",
+    )
+    # 另一个真损坏的 run 文件(非 _ 前缀)→ 靠 CorruptionError 兜底跳过
+    (runs_dir / "deadbeef1234.jsonl").write_text(
+        json.dumps({"kind": "token_delta", "text": "x"}) + "\n",
+        encoding="utf-8",
+    )
+    mgr = RunManager(runs_dir=runs_dir, index_path=tmp_path / "index.json")
+    # 不该抛;两个文件都被跳过,recover() 返回空
+    assert mgr.recover() == {}

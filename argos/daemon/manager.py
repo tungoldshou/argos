@@ -26,7 +26,7 @@ from argos.daemon.index import IndexEntry, StateIndex
 from argos.daemon.state_machine import (
     TERMINAL_STATES, InvalidTransition, read_state, transition,
 )
-from argos.daemon.store import RunStore
+from argos.daemon.store import CorruptionError, RunStore
 
 log = logging.getLogger(__name__)
 
@@ -287,8 +287,16 @@ class RunManager:
 
         recovered: dict[str, str] = {}
         for rid in self._store.list_runs():
-            # 找最后 state_change(JSONL 真相源)
-            last = self._store.last_state(rid)
+            if rid.startswith("_"):
+                # 虚拟事件总线(如 _conductor):非状态机 run,无恢复态,跳过。
+                continue
+            # 找最后 state_change(JSONL 真相源)。单个损坏文件不该崩整个 daemon
+            # 启动 —— 否则 auto-spawn 每次都退回 inline,后台/跨 session 永久失效。
+            try:
+                last = self._store.last_state(rid)
+            except CorruptionError as exc:
+                log.warning("recover: skipping corrupt run file %s: %s", rid, exc)
+                continue
             cur = read_state(rid, self._index)
             # 终态写保护:completed/failed/cancelled 不动;但剪枝其快照
             if cur in TERMINAL_STATES:
