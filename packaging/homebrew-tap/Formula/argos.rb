@@ -1,5 +1,5 @@
 class Argos < Formula
-  desc "Argos — terminal super-agent (CodeAct loop + verify hard-gate + OS sandbox)"
+  desc "Argos — the hundred-eyed agent (CodeAct loop + verify hard-gate + opt-in OS sandbox)"
   homepage "https://github.com/tungoldshou/argos"
   url "https://github.com/tungoldshou/argos/releases/download/v#{version}/Argos-#{version}-x86_64.AppImage"
   sha256 "PLACEHOLDER_FROM_BUMP"   # 由 .github/workflows/bump-homebrew-formula.yml 注入

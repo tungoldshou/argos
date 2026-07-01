@@ -140,6 +140,33 @@ async def test_run_wizard_happy_path(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_run_uses_console_for_sections_spinner_and_color(tmp_path, monkeypatch):
+    """#1 翻新真验证:传 console 时,向导用 console.rule(章节)+ console.status(探针 spinner)+
+    console.print(banner + 上色评级)。console=None 路径由 happy_path 覆盖,这里锁死 rich 集成真执行。"""
+    import argos.setup_wizard as W
+    calls = {"rule": 0, "status": 0, "print": 0}
+
+    class _FakeStatus:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    class _FakeConsole:
+        def rule(self, *a, **k): calls["rule"] += 1
+        def status(self, *a, **k): calls["status"] += 1; return _FakeStatus()
+        def print(self, *a, **k): calls["print"] += 1
+
+    async def fake_probe(**kw):
+        return W.ProbeResult(True, True, "行", "OK")
+    monkeypatch.setattr(W, "probe_connection", fake_probe)
+    inputs = iter(["3", "", "paste", "k", "n", "", "n"])   # 同 happy_path(非 advanced)
+    await W.run(reader=lambda p="": next(inputs), writer=lambda _: None,
+                config_dir=tmp_path, console=_FakeConsole())
+    assert calls["rule"] >= 2, calls        # 至少 provider + apikey + connect 分区
+    assert calls["status"] >= 1, calls      # 探针 spinner(干掉 20 秒静默卡屏)
+    assert calls["print"] >= 1, calls       # banner / 上色评级
+
+
+@pytest.mark.asyncio
 async def test_run_wizard_custom_preset(tmp_path, monkeypatch):
     """「自定义」预设触发 protocol/base_url 额外询问(spec §6.1 「(问)」);advanced=True 覆盖
     max_tokens/context_window/embedding 询问。"""
