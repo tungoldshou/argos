@@ -104,7 +104,7 @@ def _compose_text(*, model_label: str, live: bool, plan_mode: bool,
         _LOGO
         + "\n                   ARGOS\n"
         + f"\n                    [{_COL_EYE_GLOW}]{eye}[/{_COL_EYE_GLOW}]\n"
-        + f"\n[{_COL_INK_DIM}]{t('widget.splash_subtitle', version=_VERSION, model_label=model_label)}[/{_COL_INK_DIM}]"
+        + f"\n[{_COL_INK_DIM}]{t('widget.splash_subtitle', version=_VERSION)}[/{_COL_INK_DIM}]"
         + badge_markup
         + f"\n[{_COL_INK_FAINT}]{t('widget.splash_hint')}[/{_COL_INK_FAINT}]"
     )

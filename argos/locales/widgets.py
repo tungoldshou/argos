@@ -138,7 +138,7 @@ EN: dict[str, str] = {
 
     # ── splash ────────────────────────────────────────────────────────────────
 
-    "widget.splash_subtitle": "hundred-eyed agent · v{version} · {model_label} · ",
+    "widget.splash_subtitle": "hundred-eyed agent · v{version} · ",
     "widget.splash_hint": "type a goal to begin · / for commands · Esc to interrupt · ^C to quit",
     "widget.splash_badge_no_key": "no key · /setup",
     "widget.splash_badge_live": "LIVE",
@@ -401,7 +401,7 @@ ZH: dict[str, str] = {
 
     # ── splash ────────────────────────────────────────────────────────────────
 
-    "widget.splash_subtitle": "百眼智能体 · v{version} · {model_label} · ",
+    "widget.splash_subtitle": "百眼智能体 · v{version} · ",
     "widget.splash_hint": "输入目标开始 · / 命令 · Esc 打断 · ^C 退出",
     "widget.splash_badge_no_key": "未配 key · /setup",
     "widget.splash_badge_live": "LIVE",

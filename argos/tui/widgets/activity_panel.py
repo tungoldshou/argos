@@ -145,7 +145,7 @@ class ActivityPanel(Vertical):
         yield _Section(t_("widget.section_approval"), t_("widget.empty"))
         yield _Section(t_("widget.section_verdict"), t_("widget.empty"))
         yield _Section(t_("widget.section_cost"), f"{fmt_token_flow(0, 0)}\n" + t_("widget.cache_hit_line", cache_read=0, elapsed_s=0.0))
-        yield _Section(t_("widget.section_context"), "")
+        yield _Section(t_("widget.section_context"), t_("widget.empty"))
 
     def on_mount(self) -> None:
         self._apply_view()
@@ -494,6 +494,8 @@ class ActivityPanel(Vertical):
         self._set(self._RUN_IDX, t_("widget.empty"))
         self._set(self._APPROVAL_IDX, t_("widget.empty"))
         self._set(self._VERDICT_IDX, t_("widget.empty"))
+        # footer:Context 段也要复位,否则上一个 run 的 context 进度条残留到下一个 run。
+        self._set(self._CTX_IDX, t_("widget.empty"))
 
     # ── Run 段(spec §2.6 b/c 段)──────────────────────────────────
     def on_run_summary(self, *, active: int, paused: int, suspended: int, history: int) -> None:

@@ -386,3 +386,19 @@ class TestTokenKAbbreviation:
         plain = _plain(captured[0])
         assert "↑50" in plain
         assert "↓20" in plain
+
+
+# ── [MEDIUM] Context footer reset — no stale bleed across runs ────────────────
+
+class TestContextReset:
+    """Context 是常驻 footer:reset_run() 必须像其他区块一样把它复位,否则上一个 run
+    的 context 进度条会残留到下一个 run 的 idle 屏(下一个 run 若在 plan 阶段就失败、
+    永不触发 on_context,残留会永久留在屏上)。"""
+
+    def test_reset_run_clears_context_section(self, panel: ActivityPanel) -> None:
+        from argos.i18n import t as t_
+        captured: dict[int, "str | Text"] = {}
+        panel._set = lambda idx, body: captured.__setitem__(idx, body)  # type: ignore[method-assign,assignment]
+        panel.reset_run()
+        assert panel._CTX_IDX in captured, "reset_run must reset the Context footer section"
+        assert captured[panel._CTX_IDX] == t_("widget.empty")
