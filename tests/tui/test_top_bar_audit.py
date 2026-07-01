@@ -109,7 +109,7 @@ class TestTrustBadgePresence:
     def test_no_trust_badge_by_default(self) -> None:
         """默认不设置 trust_level 时,badges() 不含任何 Trust 徽标(Ln 格式)。"""
         bar = _bar()
-        bar.set_state(demo=False, has_key=True)
+        bar.set_state(has_key=True)
         bs = bar.badges()
         # Trust 徽标匹配模式:L后跟数字(0-4)或 '⏻ ' 前缀;排除 'LIVE'
         import re
@@ -119,14 +119,14 @@ class TestTrustBadgePresence:
     def test_trust_l1_badge_text(self) -> None:
         """trust_level=1, trust_label='只有危险操作才问' → 徽标文本 'L1 · 只有危险操作才问'。"""
         bar = _bar()
-        bar.set_state(demo=False, has_key=True, trust_level=1, trust_label="只有危险操作才问")
+        bar.set_state(has_key=True, trust_level=1, trust_label="只有危险操作才问")
         bs = bar.badges()
         assert "L1 · 只有危险操作才问" in bs, f"badges()={bs}"
 
     def test_trust_badge_is_last(self) -> None:
         """Trust 徽标排在所有其他徽标之后(README §188 顺序)。"""
         bar = _bar()
-        bar.set_state(demo=False, has_key=True, plan_mode=True, trust_level=2, trust_label="foo")
+        bar.set_state(has_key=True, plan_mode=True, trust_level=2, trust_label="foo")
         bs = bar.badges()
         assert bs[-1].startswith("L2"), f"Trust badge must be last: {bs}"
 
@@ -134,7 +134,7 @@ class TestTrustBadgePresence:
         """LIVE 出现时 Trust 徽标仍排在 LIVE 之后。"""
         import re
         bar = _bar()
-        bar.set_state(demo=False, has_key=True, trust_level=0, trust_label="全自动")
+        bar.set_state(has_key=True, trust_level=0, trust_label="全自动")
         bs = bar.badges()
         live_idx = next((i for i, b in enumerate(bs) if b == "LIVE"), None)
         trust_idx = next((i for i, b in enumerate(bs) if re.match(r"^(⏻ )?L\d", b)), None)
@@ -147,7 +147,7 @@ class TestTrustBadgePresence:
     def test_trust_l4_prefix(self) -> None:
         """trust_level=4 → 徽标文本以 '⏻ L4' 开头(README §152 升 L4 顶栏亮红灯)。"""
         bar = _bar()
-        bar.set_state(demo=False, has_key=True, trust_level=4, trust_label="每步都问")
+        bar.set_state(has_key=True, trust_level=4, trust_label="每步都问")
         bs = bar.badges()
         trust_badge = next((b for b in bs if "L4" in b), None)
         assert trust_badge is not None, f"L4 trust badge missing: {bs}"
@@ -158,7 +158,7 @@ class TestTrustBadgePresence:
     def test_trust_without_label(self) -> None:
         """trust_level 无 trust_label 时,徽标文本为 'L{n}'(无 ' · ' 后缀)。"""
         bar = _bar()
-        bar.set_state(demo=False, has_key=True, trust_level=3)
+        bar.set_state(has_key=True, trust_level=3)
         bs = bar.badges()
         trust_badge = next((b for b in bs if "L3" in b), None)
         assert trust_badge is not None, f"L3 badge missing: {bs}"
@@ -169,7 +169,7 @@ class TestTrustBadgePresence:
     def test_trust_badge_in_render_text(self) -> None:
         """Trust 徽标文本出现在 render_text 快照里。"""
         bar = _bar()
-        bar.set_state(demo=False, has_key=True, trust_level=2, trust_label="谨慎")
+        bar.set_state(has_key=True, trust_level=2, trust_label="谨慎")
         text = bar.render_text
         assert "L2" in text, f"L2 not in render_text: {text!r}"
         assert "谨慎" in text, f"trust_label not in render_text: {text!r}"
@@ -186,7 +186,7 @@ class TestTrustBadgeColor:
     def test_trust_l0_l3_style_is_eye_soft(self, level: int) -> None:
         """L0–L3 Trust 徽标 _badge_style → $eye-soft (#A8854A)。"""
         bar = _bar()
-        bar.set_state(demo=False, has_key=True, trust_level=level, trust_label="test")
+        bar.set_state(has_key=True, trust_level=level, trust_label="test")
         bs = bar.badges()
         trust_badge = next(b for b in bs if f"L{level}" in b)
         style = bar._badge_style(trust_badge)
@@ -197,7 +197,7 @@ class TestTrustBadgeColor:
     def test_trust_l4_style_is_fail(self) -> None:
         """L4 Trust 徽标 _badge_style → $fail (#F7768E)。"""
         bar = _bar()
-        bar.set_state(demo=False, has_key=True, trust_level=4, trust_label="每步都问")
+        bar.set_state(has_key=True, trust_level=4, trust_label="每步都问")
         bs = bar.badges()
         trust_badge = next(b for b in bs if "L4" in b)
         style = bar._badge_style(trust_badge)
@@ -208,7 +208,7 @@ class TestTrustBadgeColor:
     def test_live_badge_style_unchanged(self) -> None:
         """Trust 徽标的加入不影响 LIVE → $pass (#9ECE6A) 着色。"""
         bar = _bar()
-        bar.set_state(demo=False, has_key=True, trust_level=1)
+        bar.set_state(has_key=True, trust_level=1)
         assert bar._badge_style("LIVE") == _PASS
 
     def test_yolo_badge_style_unchanged(self) -> None:
@@ -246,13 +246,13 @@ class TestExistingContractLocked:
     def test_has_key_false_no_live(self) -> None:
         """契约6:has_key=False 时 badges() 绝不含 'LIVE'。"""
         bar = _bar()
-        bar.set_state(demo=False, has_key=False)
+        bar.set_state(has_key=False)
         assert "LIVE" not in bar.badges(), "LIVE must never appear when has_key=False"
 
     def test_no_key_no_demo_shows_no_key_badge(self) -> None:
-        """demo=False, has_key=False → badges() 含 '未配 key'。"""
+        """has_key=False → badges() 含 '未配 key'。"""
         bar = _bar()
-        bar.set_state(demo=False, has_key=False)
+        bar.set_state(has_key=False)
         assert "未配 key" in bar.badges()
 
     def test_plan_mode_badge(self) -> None:

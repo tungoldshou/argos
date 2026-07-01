@@ -86,7 +86,7 @@ async def test_daemon_unreachable_inline_fallback() -> None:
     # 用最小 mock 构造 ArgosApp 实例
     from argos.tui.app import ArgosApp
 
-    app = ArgosApp(demo=True)  # demo=True:不真连模型,仅测 daemon 状态机
+    app = ArgosApp()  # :不真连模型,仅测 daemon 状态机
 
     # mock StatusBar.set_kernel_mode 用于断言
     status_bar_mock = MagicMock()
@@ -122,7 +122,7 @@ async def test_daemon_available_sets_argosd_mode(monkeypatch) -> None:
     from argos.daemon.client import DaemonClient
 
     monkeypatch.delenv("ARGOS_NO_DAEMON", raising=False)
-    app = ArgosApp(demo=True)
+    app = ArgosApp()
 
     status_bar_mock = MagicMock()
     status_bar_mock.set_kernel_mode = MagicMock()

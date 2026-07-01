@@ -48,7 +48,7 @@ def test_daemon_error_plain_message_defaults_safe():
 def _app_with_fake_client(create_run_side_effect, *, new_sid="sess-new"):
     from argos.tui.app import ArgosApp
 
-    app = ArgosApp(demo=True)
+    app = ArgosApp()
     app._with_daemon = True
     app._workspace = Path("/tmp")
     app._daemon_session_id = "sess-old"
@@ -103,7 +103,7 @@ async def test_heartbeat_tick_pings_daemon():
     """tick 给当前会话续命(调 client.heartbeat)。"""
     from argos.tui.app import ArgosApp
 
-    app = ArgosApp(demo=True)
+    app = ArgosApp()
     app._with_daemon = True
     app._daemon_session_id = "sess-1"
     fake = AsyncMock()
@@ -120,7 +120,7 @@ async def test_heartbeat_tick_rehandshakes_when_session_reaped():
     """tick 撞 missing_session(空闲太久被回收)→ 重建会话,使下一次 run 不再撞 401。"""
     from argos.tui.app import ArgosApp
 
-    app = ArgosApp(demo=True)
+    app = ArgosApp()
     app._with_daemon = True
     app._daemon_session_id = "sess-old"
     fake = AsyncMock()
@@ -141,7 +141,7 @@ async def test_heartbeat_tick_noop_when_inline():
     """inline 模式(无 daemon)tick 安全空转,不调用 client。"""
     from argos.tui.app import ArgosApp
 
-    app = ArgosApp(demo=True)
+    app = ArgosApp()
     app._with_daemon = False
     app._daemon_client = None
     app._daemon_session_id = None

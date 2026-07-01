@@ -17,9 +17,9 @@ import pytest
 # ── helpers ────────────────────────────────────────────────────────────────
 
 def _make_app():
-    """构造最小 ArgosApp(demo=True, 不起 TUI 事件循环)。"""
+    """构造最小 ArgosApp(不起 TUI 事件循环)。"""
     from argos.tui.app import ArgosApp
-    app = ArgosApp(demo=True)
+    app = ArgosApp()
     app.run_worker = MagicMock()  # 不真起 Textual worker
     return app
 

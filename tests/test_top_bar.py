@@ -98,7 +98,7 @@ async def test_topbar_no_key_badge_never_lies_live():
     async with app.run_test() as pilot:
         await pilot.pause()
         tb = app.query_one("#tb", TopBar)
-        tb.set_state(demo=False, has_key=False)
+        tb.set_state(has_key=False)
         # 不能有 LIVE
         assert "LIVE" not in tb.render_text, (
             f"无 key 时 render_text 绝不含 LIVE,实际: {tb.render_text!r}"
@@ -108,12 +108,12 @@ async def test_topbar_no_key_badge_never_lies_live():
 
 @pytest.mark.asyncio
 async def test_topbar_live_badge_present_with_key():
-    """has_key=True + demo=False → badges 含 LIVE(v3 新增)。"""
+    """has_key=True +  → badges 含 LIVE(v3 新增)。"""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
         tb = app.query_one("#tb", TopBar)
-        tb.set_state(demo=False, has_key=True)
+        tb.set_state(has_key=True)
         assert any("LIVE" in b for b in tb.badges()), (
             f"有 key 时 badges 应含 LIVE,实际: {tb.badges()!r}"
         )
@@ -146,7 +146,7 @@ async def test_topbar_no_bullet_before_live():
     async with app.run_test() as pilot:
         await pilot.pause()
         tb = app.query_one("#tb", TopBar)
-        tb.set_state(demo=False, has_key=True)
+        tb.set_state(has_key=True)
         t = tb.render_text
         # ● 是被处决字形,绝不出现
         assert "●" not in t, f"v3 ● 被处决,不应出现在渲染文本中,实际: {t!r}"

@@ -54,7 +54,7 @@ async def test_app_compose_mounts_tab_strip():
     from argos.tui.app import ArgosApp
     from argos.tui.widgets.tab_strip import TabStrip
 
-    app = ArgosApp(demo=True)
+    app = ArgosApp()
     async with app.run_test() as pilot:
         strip = app.query_one(TabStrip)
         assert strip is not None
@@ -68,7 +68,7 @@ async def test_app_calls_focus_on_tab_change(mr_daemon, tmp_path: Path):
     from argos.tui.app import ArgosApp
     from argos.tui.widgets.tab_strip import TabStrip
 
-    app = ArgosApp(demo=True)
+    app = ArgosApp()
     app._daemon_client = DaemonClient(srv.socket_path)
     app._with_daemon = True   # 让 _on_tab_activated 不 early-return
     sid = await app._daemon_client.create_session()
@@ -88,7 +88,7 @@ async def test_app_calls_focus_on_tab_change(mr_daemon, tmp_path: Path):
     )
     assert status == 200
     assert reg.get(rid2).focus_session_id == sid
-    # 现在测 app 内部 _on_tab_activated 也调
+    # 现在测 app 内部 _on_tab_activated 也调(app 已手动接 daemon 客户端 → on_mount 跳过 auto-setup)
     async with app.run_test() as pilot:
         strip = app.query_one(TabStrip)
         strip.update_tabs(
@@ -113,7 +113,7 @@ async def test_app_handles_tab_activated_message(mr_daemon, tmp_path: Path):
     from argos.daemon.client import DaemonClient
     from argos.tui.app import ArgosApp
 
-    app = ArgosApp(demo=True)
+    app = ArgosApp()
     async with app.run_test() as pilot:
         # 加一个 mock client
         class FakeClient:
@@ -145,7 +145,7 @@ async def test_runs_command_shows_all_runs_with_cost(mr_daemon, tmp_path: Path):
     from argos.tui.app import ArgosApp
 
     srv, _, reg = mr_daemon
-    app = ArgosApp(demo=True)
+    app = ArgosApp()
     app._daemon_client = DaemonClient(srv.socket_path)
     sid = await app._daemon_client.create_session()
     app._daemon_session_id = sid
@@ -185,7 +185,7 @@ async def test_runs_command_observer_shows_readonly_banner(mr_daemon, tmp_path: 
     from argos.tui.app import ArgosApp
 
     srv, _, _ = mr_daemon
-    app = ArgosApp(demo=True)
+    app = ArgosApp()
     app._daemon_client = DaemonClient(srv.socket_path)
     sid1 = await app._daemon_client.create_session()
     sid2 = await app._daemon_client.create_session()   # observer
@@ -206,7 +206,7 @@ async def test_app_handles_observer_readonly_focus():
     """observer 调 focus 端点 → 403,app 应有兜底(不崩)。"""
     from argos.tui.app import ArgosApp
 
-    app = ArgosApp(demo=True)
+    app = ArgosApp()
     class FakeClient:
         async def _request(self, method, path, *, session_id=None, body=None):
             if "/focus" in path:
