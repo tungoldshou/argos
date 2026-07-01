@@ -1631,9 +1631,9 @@ class DaemonHTTPServer:
             )
 
         async def _dream_bcast(ev: dict) -> None:
-            # T8 已留契约注释：caller 必须注入 run_id。Dream 事件走 _conductor 虚拟通道。
+            # T8 已留契约注释：caller 必须注入 run_id。Dream 事件走 _conductor 虚拟通道
+            # (纯实时 fanout,不落盘 —— 虚拟总线,见 RunStore.append 守卫)。
             payload = {**ev, "run_id": CONDUCTOR_RUN_ID}
-            self._manager.store.append(CONDUCTOR_RUN_ID, payload)
             await self._manager.fanout(CONDUCTOR_RUN_ID, payload)
 
         self._dream_pipeline = DreamPipeline(
@@ -1742,7 +1742,7 @@ class DaemonHTTPServer:
             "dream": True,
             "ts": time.time(),
         }
-        self._manager.store.append(CONDUCTOR_RUN_ID, confirm_ev)
+        # 纯实时 fanout,不落盘(_conductor 是虚拟广播总线;审计留痕由 ledger 负责)
         await self._manager.fanout(CONDUCTOR_RUN_ID, confirm_ev)
         await self._send_json(writer, 202, {
             "state": "dream_started",
@@ -1815,12 +1815,13 @@ class DaemonHTTPServer:
             b"X-Accel-Buffering: no\r\n\r\n"
         )
         await writer.drain()
-        # replay 起始
-        try:
-            for ev in self._manager.store.replay(run_id, since_seq=since):
-                await self._send_sse_event(writer, ev)
-        except Exception as e:  # noqa: BLE001
-            log.warning("SSE replay error for %s: %s", run_id, e)
+        # replay 起始(虚拟 `_` 流是实时广播总线,无持久化,不回放 —— 见 RunStore.append 守卫)
+        if not run_id.startswith("_"):
+            try:
+                for ev in self._manager.store.replay(run_id, since_seq=since):
+                    await self._send_sse_event(writer, ev)
+            except Exception as e:  # noqa: BLE001
+                log.warning("SSE replay error for %s: %s", run_id, e)
         # 订阅新事件。keepalive 周期 2s:断连只能在【下一次写】时被发现
         # (BrokenPipe),15s 周期意味着客户端断开后 server 端最多挂 15s 才感知
         # —— 每个 SSE 测试 teardown 白等 15s,daemon 资源也多挂 15s。2s 是
