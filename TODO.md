@@ -140,6 +140,7 @@ Last updated: 2026-07-04
 - Removed old `0.1.0` / pre-release changelog history and cleaned Chinese from code comments/docstrings so the repo now treats Argos as not formally released yet.
 - Repaired the cleanup regressions with English-only source-doc contracts and reran broad non-slow verification plus the code comment/docstring Chinese scanner.
 - Changed the public `curl | bash` docs to use the `v0.1.1` raw tag URL instead of a default-branch raw installer URL, and verified README/install/publish release tests.
+- Pushed release commit `89fa66b` to `origin/codex/ship-readiness` and ran `publish.yml`; remote CI/build passed, and TestPyPI failed on trusted publisher configuration (`invalid-publisher`).
 
 ## In Progress
 
@@ -150,8 +151,8 @@ Last updated: 2026-07-04
 
 ## Next
 
-- Commit and push the release branch, run the manual `publish.yml` TestPyPI preflight for `0.1.1`, verify `uv tool install --index-url https://test.pypi.org/simple/ argos-agent`, then publish fresh tag `v0.1.1` to PyPI and verify the tag-pinned raw GitHub `curl | bash` installer.
-- Commit root `install.sh` before release; it is staged and covered by the raw-GitHub installer tracking gate.
+- Configure TestPyPI trusted publishing for repository `tungoldshou/argos`, workflow `.github/workflows/publish.yml`, environment `testpypi`, then rerun `publish.yml` on `codex/ship-readiness` or after merging to `main`.
+- Verify `uv tool install --index-url https://test.pypi.org/simple/ argos-agent`, then publish fresh tag `v0.1.1` to PyPI and verify the tag-pinned raw GitHub `curl | bash` installer.
 - Use a fresh release tag for the next public launch; the old GitHub `v0.1.0` release and remote tag were deleted after user confirmation.
 - Keep future code comments/docstrings English-only; do not convert intentional Chinese locale/test strings or Chinese documentation prose merely for this rule.
 - Review the remaining instruction/memory diffs before PR/release handoff.
