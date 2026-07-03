@@ -6,26 +6,28 @@
 
 ## 一句话
 
-写 `CLAUDE.md`、跑 `/remember`、让 agent 撞过的坑自己记下来 — 下次开会话,LLM **自动看到**。
+写 `AGENTS.md`、跑 `/remember`、让 agent 撞过的坑自己记下来 — 下次开会话,LLM **自动看到**。
 
 ## 4 层记忆
 
 | Tier | 路径 | 寿命 | 谁会用到 |
 |---|---|---|---|
-| **User** | `~/.argos/memory/user.jsonl` | 永久 + decay | 你(所有项目共享) |
-| **Project** | `~/.argos/memory/projects/<hash>.jsonl` | 永久 + decay | 当前 repo |
-| **Skill** | `~/.argos/memory/skills/<name>.jsonl` | 永久 | 该 skill 的失败模式 |
-| **Session** | `~/.argos/memory/sessions/<sid>.jsonl` | **30 天** | 本 run 临时 |
+| **User** | Argos config directory 下的 `memory/user.jsonl` | 永久 + decay | 你(所有项目共享) |
+| **Project** | Argos config directory 下的 `memory/projects/<hash>.jsonl` | 永久 + decay | 当前 repo |
+| **Skill** | Argos config directory 下的 `memory/skills/<name>.jsonl` | 永久 | 该 skill 的失败模式 |
+| **Session** | Argos config directory 下的 `memory/sessions/<sid>.jsonl` | **30 天** | 本 run 临时 |
 
 **project_id = sha1(cwd 绝对路径)[:16]** — 换项目自动隔离。
 
 ## 用法
 
-### 1. 写 CLAUDE.md(项目根)
+Argos config directory 默认是 `~/.argos`,也可用 `ARGOS_CONFIG_DIR` 改到别处。
+
+### 1. 写 AGENTS.md(项目根)
 
 ```bash
 # 写你的约定
-cat > CLAUDE.md <<'EOF'
+cat > AGENTS.md <<'EOF'
 # 项目约定
 - 缩进用 tabs 不是 spaces
 - 测试命令是 `uv run pytest -q`
@@ -33,14 +35,14 @@ cat > CLAUDE.md <<'EOF'
 EOF
 ```
 
-下次开会话,Argos 自动把 `CLAUDE.md` 装进系统提示的 `<memory_context>` 段。
+下次开会话,Argos 自动把 `AGENTS.md` 装进系统提示的 `<memory_context>` 段。
 
 也支持:
-- `AGENTS.md`(跨工具命名)
-- `~/.argos/CLAUDE.md`(全局 dev notes,用户私)
-- `~/.argos/AGENTS.md`(全局)
+- `CLAUDE.md`(兼容已有项目)
+- Argos config directory 下的 `CLAUDE.md`(全局 dev notes,用户私)
+- Argos config directory 下的 `AGENTS.md`(全局)
 
-**优先级**:子目录 CLAUDE.md 覆盖父目录 → 全局 → 项目。
+**注入顺序**:全局文档 → 项目目录从子到父。同一目录里 `CLAUDE.md` 与 `AGENTS.md` 都会读取。
 
 ### 2. `/remember <text>`
 
@@ -115,10 +117,10 @@ Argos 在以下事件自动写记忆:
 ```xml
 <memory_context>
 [global: CLAUDE.md]
-(global rules from ~/.argos/CLAUDE.md)
+(global rules from Argos config directory)
 
-[project: CLAUDE.md]
-(project rules from /path/to/CLAUDE.md)
+[project: AGENTS.md]
+(project rules from /path/to/AGENTS.md)
 
 [Recalled memories]
   - failure: verify_fail.pytest = ... (conf=0.80, used 3x)
@@ -155,7 +157,7 @@ confidence < 0.3 的条目不参与 ranking,但物理条目仍在(`/forget` 才�
 ## 关闭
 
 - 一次性:`ARGOS_NO_MEMORY=1` 跳过系统提示注入
-- 全关:删 `~/.argos/memory/`
+- 全关:删 Argos config directory 下的 `memory/`
 
 ## 召回机制
 
@@ -177,17 +179,17 @@ Dream 在每天 03:00 由 conductor 触发(cron 任务),需用户确认后执行
 
 ## 故障排查
 
-**CLAUDE.md 没被看到?**
+**AGENTS.md / CLAUDE.md 没被看到?**
 - 路径不对 — `cd <项目根>` 启动 argos
 - 太大 — 单文件 > 20k 字符会被截
 - `ARGOS_NO_MEMORY=1` — 检查 `echo $ARGOS_NO_MEMORY`
 
 **/memory 看不到东西?**
-- 启动后写过才能记起;CLAUDE.md 不算"记忆",是"文档注入"
+- 启动后写过才能记起;AGENTS.md / CLAUDE.md 不算"记忆",是"文档注入"
 - decay 过了 0.3 阈值就不入 ranking,但物理条目还在 `/forget` 还能找到
 
 **误把 secret 写进去了?**
-- 自动 redact 应该已经处理;不放心就 `cat ~/.argos/memory/user.jsonl | grep -i "sk-"` 检查
+- 自动 redact 应该已经处理;不放心就检查 Argos config directory 下的 `memory/user.jsonl`
 - `/forget <id>` 软删 + 后台 prune
 
 ## 相关文件

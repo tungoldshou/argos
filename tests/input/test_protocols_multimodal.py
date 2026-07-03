@@ -1,11 +1,4 @@
-"""protocols.py 多模态扩展 TDD 验收(spec §5)。
-
-覆盖：
-  - _coalesce_consecutive_roles 带 attachments 的合并行为
-  - AnthropicProtocol.payload 图片块形状
-  - OpenAIProtocol.payload 图片块形状
-  - 无附件消息行为与现状逐字节一致(零回归)
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import base64
@@ -25,10 +18,9 @@ def _tier(multimodal: bool = True):
                      multimodal=multimodal)
 
 
-# ── _coalesce_consecutive_roles 扩展 ─────────────────────────────────────────
 
 def test_coalesce_no_attachments_unchanged():
-    """无 attachments 消息 → 行为与改造前一致(零回归)。"""
+    """Internal documentation."""
     from argos.core.protocols import _coalesce_consecutive_roles
     msgs = [
         {"role": "user", "content": "hi"},
@@ -42,7 +34,7 @@ def test_coalesce_no_attachments_unchanged():
 
 
 def test_coalesce_consecutive_same_role_text_joined():
-    """连续同 role 纯文本 → content 换行拼接(现有行为保留)。"""
+    """Internal documentation."""
     from argos.core.protocols import _coalesce_consecutive_roles
     msgs = [
         {"role": "user", "content": "a"},
@@ -54,7 +46,7 @@ def test_coalesce_consecutive_same_role_text_joined():
 
 
 def test_coalesce_consecutive_same_role_attachments_concat():
-    """连续同 role 且有 attachments → attachments 列表拼接。"""
+    """Internal documentation."""
     from argos.core.protocols import _coalesce_consecutive_roles
     att1 = _att(b"A", source_label="a.png")
     att2 = _att(b"B", source_label="b.png")
@@ -69,7 +61,7 @@ def test_coalesce_consecutive_same_role_attachments_concat():
 
 
 def test_coalesce_attachment_message_followed_by_plain_different_role():
-    """带 attachments 的 user 后接 assistant(不同 role)→ 不合并。"""
+    """Internal documentation."""
     from argos.core.protocols import _coalesce_consecutive_roles
     att = _att()
     msgs = [
@@ -79,14 +71,12 @@ def test_coalesce_attachment_message_followed_by_plain_different_role():
     result = _coalesce_consecutive_roles(msgs)
     assert len(result) == 2
     assert result[0]["attachments"] == [att]
-    # assistant 消息无 attachments 字段
     assert "attachments" not in result[1]
 
 
-# ── AnthropicProtocol.payload 图片块 ─────────────────────────────────────────
 
 def test_anthropic_payload_no_attachments_content_is_plain_string():
-    """无附件 → Anthropic payload messages[0]['content'] 仍是裸字符串(零回归)。"""
+    """Internal documentation."""
     from argos.core.protocols import AnthropicProtocol
     p = AnthropicProtocol()
     payload = p.payload(
@@ -99,7 +89,7 @@ def test_anthropic_payload_no_attachments_content_is_plain_string():
 
 
 def test_anthropic_payload_with_attachment_content_becomes_list():
-    """带附件 → Anthropic payload message['content'] 变成 list(text + image blocks)。"""
+    """Internal documentation."""
     from argos.core.protocols import AnthropicProtocol
     att = _att(b"\x89PNG\x00\x00\x00", "image/png", "screen.png")
     p = AnthropicProtocol()
@@ -109,9 +99,7 @@ def test_anthropic_payload_with_attachment_content_becomes_list():
     )
     content = payload["messages"][0]["content"]
     assert isinstance(content, list)
-    # 第一块 = text
     assert content[0] == {"type": "text", "text": "see this"}
-    # 第二块 = image
     img_block = content[1]
     assert img_block["type"] == "image"
     assert img_block["source"]["type"] == "base64"
@@ -121,7 +109,7 @@ def test_anthropic_payload_with_attachment_content_becomes_list():
 
 
 def test_anthropic_payload_multiple_attachments():
-    """多图附件 → content list 包含 1 text + N image blocks。"""
+    """Internal documentation."""
     from argos.core.protocols import AnthropicProtocol
     att1 = _att(b"A", "image/png", "a.png")
     att2 = _att(b"B", "image/jpeg", "b.jpg")
@@ -139,24 +127,22 @@ def test_anthropic_payload_multiple_attachments():
     assert content[2]["source"]["media_type"] == "image/jpeg"
 
 
-# ── OpenAIProtocol.payload 图片块 ────────────────────────────────────────────
 
 def test_openai_payload_no_attachments_content_is_plain_string():
-    """无附件 → OpenAI payload 用户消息 content 仍是裸字符串(零回归)。"""
+    """Internal documentation."""
     from argos.core.protocols import OpenAIProtocol
     p = OpenAIProtocol()
     payload = p.payload(
         [{"role": "user", "content": "hello"}],
         system="S", tier=_tier(),
     )
-    # system 是第一条，用户是第二条
     user_msg = next(m for m in payload["messages"] if m["role"] == "user")
     assert isinstance(user_msg["content"], str)
     assert user_msg["content"] == "hello"
 
 
 def test_openai_payload_with_attachment_content_becomes_list():
-    """带附件 → OpenAI payload 用户消息 content 变成 list(text_url + image_url blocks)。"""
+    """Internal documentation."""
     from argos.core.protocols import OpenAIProtocol
     att = _att(b"\xff\xd8\xff\xe0", "image/jpeg", "photo.jpg")
     p = OpenAIProtocol()
@@ -167,9 +153,7 @@ def test_openai_payload_with_attachment_content_becomes_list():
     user_msg = next(m for m in payload["messages"] if m["role"] == "user")
     content = user_msg["content"]
     assert isinstance(content, list)
-    # 第一块 = text
     assert content[0] == {"type": "text", "text": "look"}
-    # 第二块 = image_url (data URI)
     img_block = content[1]
     assert img_block["type"] == "image_url"
     expected_b64 = base64.b64encode(b"\xff\xd8\xff\xe0").decode()
@@ -177,7 +161,7 @@ def test_openai_payload_with_attachment_content_becomes_list():
 
 
 def test_openai_payload_multiple_attachments():
-    """多图附件 → content list 包含 1 text + N image_url blocks。"""
+    """Internal documentation."""
     from argos.core.protocols import OpenAIProtocol
     att1 = _att(b"A", "image/png", "a.png")
     att2 = _att(b"B", "image/webp", "b.webp")

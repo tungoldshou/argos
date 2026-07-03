@@ -12,7 +12,6 @@ def test_get_messages_returns_thread_in_order(tmp_path):
     assert [m["role"] for m in msgs] == ["user", "assistant", "user"]
     assert msgs[0]["content"] == "第一轮目标"
     assert msgs[-1]["content"] == "第二轮:继续"
-    # 跨 session 隔离
     store.ensure_session("s2", title="t", model="worker", system_snapshot="")
     assert store.get_messages("s2") == []
     store.close()

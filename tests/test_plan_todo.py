@@ -1,7 +1,4 @@
-"""Task 12:`update_plan` 工具 + `PlanUpdate` 事件 + ActivityPanel todo 渲染。
-
-PlanUpdate 走"一份事件三用":序列化/反序列化 round-trip(持久化 + replay)必须完好。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from argos.tui.events import PlanUpdate, deserialize_event, serialize_event

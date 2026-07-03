@@ -1,13 +1,5 @@
 # tests/test_status_bar.py
-"""StatusBar v3「黑曜石之眼」测试套件。
-
-覆盖：
-- 阶段眼字符映射（◔plan / ◉act / ❂verify / ◕report / ◌idle）
-- set_blocked(True) → ◓开头 + 含"审批挂起"，即便 phase=verify
-- set_alert(True) → CSS 类 -alert 加持
-- ctx≥80% → -ctx-warn；ctx≥95% → -ctx-crit
-- 不变 API 兼容（行为契约）
-"""
+"""Internal documentation."""
 import pytest
 from textual.app import App, ComposeResult
 
@@ -16,14 +8,10 @@ from argos.tui.widgets.status_bar import StatusBar
 
 
 class _H(App):
-    """最小测试宿主：注入 argos-night token 以便 DEFAULT_CSS 中 $token 名能在 CSS 解析阶段解析。
-
-    override get_theme_variable_defaults() 是在 CSS 解析前就让 $token 可用的唯一手段——
-    register_theme + self.theme 发生在 on_mount，晚于 DEFAULT_CSS 首次解析。
-    """
+    """Internal documentation."""
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
-        """把 ARGOS_NIGHT variables 作为 CSS token 兜底注入。"""
+        """Internal documentation."""
         defaults = super().get_theme_variable_defaults()
         if ARGOS_NIGHT.variables:
             defaults.update(ARGOS_NIGHT.variables)
@@ -33,11 +21,9 @@ class _H(App):
         yield StatusBar(id="sb")
 
 
-# ── 旧兼容（不变 API）────────────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_status_bar_shows_phase_and_actions():
-    """不变 API：set_phase → render_text 含阶段 + 动作。去重(2026-07-01)后底栏不再含
-    token/花费/耗时(归右侧 ActivityPanel);set_cost 仍可调(喂数据)但不渲染到底栏。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -47,13 +33,12 @@ async def test_status_bar_shows_phase_and_actions():
         await pilot.pause()
         t = sb.render_text
         assert "verify" in t and "3" in t
-        assert "4.2" not in t and "$" not in t   # 去重 + 去花费:耗时/花费不再在底栏
+        assert "4.2" not in t and "$" not in t
 
 
-# ── 阶段眼字符映射（v3 §4.9 + §8.4）────────────────────────────────
 @pytest.mark.asyncio
 async def test_phase_eye_plan():
-    """plan 阶段 → 眼字形 ◔。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -65,7 +50,7 @@ async def test_phase_eye_plan():
 
 @pytest.mark.asyncio
 async def test_phase_eye_act():
-    """act 阶段 → 眼字形 ◉。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -77,7 +62,7 @@ async def test_phase_eye_act():
 
 @pytest.mark.asyncio
 async def test_phase_eye_verify():
-    """verify 阶段 → 眼字形 ❂。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -89,7 +74,7 @@ async def test_phase_eye_verify():
 
 @pytest.mark.asyncio
 async def test_phase_eye_report():
-    """report 阶段 → 眼字形 ◕。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -101,20 +86,18 @@ async def test_phase_eye_report():
 
 @pytest.mark.asyncio
 async def test_phase_eye_idle():
-    """idle 阶段 → 眼字形 ◌。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
         sb = app.query_one("#sb", StatusBar)
-        # 默认即 idle
         await pilot.pause()
         assert sb.render_text.startswith("◌"), f"期望 ◌ 开头，实际：{sb.render_text!r}"
 
 
-# ── 优先级状态机（v3 §8.4 裁决铁律）────────────────────────────────
 @pytest.mark.asyncio
 async def test_set_blocked_overrides_verify_phase():
-    """用户阻塞态优先级最高：phase=verify 但 set_blocked(True) → ◓ 开头 + 含"审批挂起"。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -129,7 +112,7 @@ async def test_set_blocked_overrides_verify_phase():
 
 @pytest.mark.asyncio
 async def test_set_blocked_false_restores_phase():
-    """set_blocked(False) → 恢复阶段眼（◉ act）。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -144,7 +127,7 @@ async def test_set_blocked_false_restores_phase():
 
 @pytest.mark.asyncio
 async def test_set_alert_adds_css_class():
-    """set_alert(True) → widget 上有 -alert CSS 类。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -157,7 +140,7 @@ async def test_set_alert_adds_css_class():
 
 @pytest.mark.asyncio
 async def test_set_alert_false_removes_css_class():
-    """set_alert(False) → 移除 -alert CSS 类。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -170,7 +153,7 @@ async def test_set_alert_false_removes_css_class():
 
 @pytest.mark.asyncio
 async def test_alert_does_not_override_phase_eye_glyph():
-    """告警锁色时眼仍随阶段（字形不变为 ◓），整条锁红靠 CSS。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -179,13 +162,12 @@ async def test_alert_does_not_override_phase_eye_glyph():
         sb.set_alert(True)
         await pilot.pause()
         t = sb.render_text
-        # alert 时眼仍随阶段（◉），不是 ◓（◓ 只属于 blocked）
         assert t.startswith("◉"), f"alert 时阶段眼应保持 ◉，实际：{t!r}"
 
 
 @pytest.mark.asyncio
 async def test_blocked_beats_alert():
-    """blocked > alert 优先级：两者同时 True → ◓。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -198,10 +180,9 @@ async def test_blocked_beats_alert():
         assert t.startswith("◓"), f"blocked+alert 时期望 ◓ 优先，实际：{t!r}"
 
 
-# ── ctx 压力 CSS 类（v3 §4.9 d）──────────────────────────────────
 @pytest.mark.asyncio
 async def test_ctx_warn_at_80_percent():
-    """ctx≥80% → CSS 类 -ctx-warn。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -214,7 +195,7 @@ async def test_ctx_warn_at_80_percent():
 
 @pytest.mark.asyncio
 async def test_ctx_crit_at_95_percent():
-    """ctx≥95% → CSS 类 -ctx-crit（且不保留 -ctx-warn）。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -226,7 +207,7 @@ async def test_ctx_crit_at_95_percent():
 
 @pytest.mark.asyncio
 async def test_ctx_below_80_no_warn():
-    """ctx<80% → 无 -ctx-warn / -ctx-crit。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -237,16 +218,11 @@ async def test_ctx_below_80_no_warn():
         assert not sb.has_class("-ctx-crit"), "ctx=50% 不应有 -ctx-crit"
 
 
-# 去重(2026-07-01):底栏不再渲染成本/token/耗时/ctx%(归右侧 ActivityPanel),
-# 故删去 test_narrow_mode_includes_cost_and_ctx / test_cost_unknown_renders_na /
-# test_token_flow_has_unit —— 这些字段的格式化由 tests/test_tui_fmt.py(fmt_* 单测)
-# 与 ActivityPanel 测试覆盖。底栏只验阶段/动作/阻塞/plan/内核。
 
 
-# ── 动作计数文字（v3 §4.9 a："动作" 而非 ⚙）──────────────────────
 @pytest.mark.asyncio
 async def test_action_count_label():
-    """动作计数使用"动作N"文字格式（⚙ 已处决，v3 字形铁律）。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -255,21 +231,18 @@ async def test_action_count_label():
         await pilot.pause()
         t = sb.render_text
         assert "动作7" in t, f"期望'动作7'，实际：{t!r}"
-        # ⚙ 是处决字形
         assert "⚙" not in t, f"⚙ 是处决字形，不应出现：{t!r}"
 
 
 def test_action_label_en_has_space():
-    """EN 文案 'action {n}' 数字与词之间有空格 —— 修真机里 'action0' 像标识符的观感。
-    (ZH '动作{n}' 按 CJK 习惯不加空格,保持不变 —— 见 test_action_count_label。)"""
+    """Internal documentation."""
     from argos.locales.tui_app import EN
     assert EN["tui.statusbar.action"].format(n=0) == "action 0"
     assert EN["tui.statusbar.action"].format(n=7) == "action 7"
 
 
-# ── set_blocked / set_alert 签名存在性（公开 API 门禁）──────────────
 def test_public_api_set_blocked_exists():
-    """set_blocked(active: bool) 必须存在（P9 接线要调用）。"""
+    """Internal documentation."""
     import inspect
     sig = inspect.signature(StatusBar.set_blocked)
     params = list(sig.parameters)
@@ -277,24 +250,17 @@ def test_public_api_set_blocked_exists():
 
 
 def test_public_api_set_alert_exists():
-    """set_alert(kind: str | None) 或 set_alert(active: bool) 必须存在。"""
+    """Internal documentation."""
     import inspect
     assert hasattr(StatusBar, "set_alert"), "StatusBar 缺 set_alert 公开方法"
     sig = inspect.signature(StatusBar.set_alert)
     params = list(sig.parameters)
-    # 第一个非 self 参数须存在
     assert len(params) >= 2, f"set_alert 签名参数不足，实际：{params}"
 
 
-# ── 设计审计修复：blocked 眼色（2026-06-14）────────────────────
 @pytest.mark.asyncio
 async def test_blocked_eye_glyph_color_is_gold_not_orange():
-    """AUDIT FIX [LOW]: blocked 眼 ◓ 应始终染 $eye 金色(#D9A85C)，不是 $unverif 橙色(#FF9E64)。
-
-    设计稿 05 组件变体 line 316 明确：blocked 行整体文字染 $unverif 橙，但眼 ◓ 本身仍金
-    (与其他阶段眼一致)。现有代码第 239 行 eye_style = _STYLE_BLOCKED if self._blocked else _STYLE_EYE
-    强制 blocked 时用橙，与设计的二色对比(金眼+橙文)不符。修复：eye_style 恒为 _STYLE_EYE。
-    """
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -303,34 +269,22 @@ async def test_blocked_eye_glyph_color_is_gold_not_orange():
         sb.set_blocked(True)
         await pilot.pause()
 
-        # 生成 render() Rich Text
         rt = sb.render()
         plain = rt.plain
         assert plain.startswith("◓"), f"blocked 时期望 ◓ 开头，实际：{plain!r}"
 
-        # 检查首字 ◓ 的样式：应该是 gold _STYLE_EYE，不是 orange _STYLE_BLOCKED
-        # Rich Text 的 stylize 会在指定范围内设置样式；我们验证首个字符的样式不是 orange
-        # 由于 render() 显式 stylize 首字符，我们检查 render() 输出不含 _STYLE_BLOCKED(#FF9E64) 的直接证据
-        # 更直接：render() 调用 stylize(_STYLE_EYE, 0, 1) 表示位置 0 长度 1 应用金色
-        # 检查 render() 中是否有 _STYLE_EYE (#D9A85C) 而非 _STYLE_BLOCKED (#FF9E64)
-        # 由于 Textual 不暴露 Span 细节，我们用间接法：生成 render() 并反检查代码逻辑
         from argos.tui.widgets.status_bar import _STYLE_EYE, _STYLE_BLOCKED
 
-        # 从源代码验证：blocked 眼应染 _STYLE_EYE，不是 _STYLE_BLOCKED
-        # StatusBar.render() 第 238-241 行：eye_style = _STYLE_EYE（修复后）
-        # 直接读源验证修复生效
         import inspect
         render_src = inspect.getsource(sb.render)
         assert "_STYLE_EYE" in render_src, "render() 应使用 _STYLE_EYE 给眼着色"
-        # 更严格：不应出现 if self._blocked ... eye_style = _STYLE_BLOCKED 的分支
-        # 即应该写成 eye_style = _STYLE_EYE（无条件）
         assert "eye_style = _STYLE_EYE" in render_src, "eye_style 应恒为 _STYLE_EYE"
-        assert "if self._blocked" not in render_src.split("eye_style = _STYLE_EYE")[0].split('\n')[-1], \
+        assert "if self._blocked" not in render_src.split("eye_style = _STYLE_EYE")[0].split('\n')[-1],\
             "eye_style = _STYLE_EYE 之前不应有 if self._blocked 分支"
 
 
 def test_mark_run_end_resets_phase_to_idle():
-    """C2(2026-06-22 真机:run 结束后底栏 phase 粘在 'report' 与右栏 idle 矛盾)。"""
+    """Internal documentation."""
     from argos.tui.widgets.status_bar import StatusBar
     bar = StatusBar()
     bar.set_phase("report", 5)
@@ -359,7 +313,7 @@ def test_status_bar_action_without_max_steps():
     text = bar.render_text
     assert "7" in text, f"期望 '7' 在 render_text 中，实际：{text!r}"
     assert "/None" not in text, f"不应出现 '/None'，实际：{text!r}"
-    assert "7/40" not in text  # 无 max_steps 不应显示分母
+    assert "7/40" not in text
 
 
 def test_phase_change_max_steps_field_defaults_none():

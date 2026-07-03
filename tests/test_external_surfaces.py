@@ -1,6 +1,4 @@
-"""#9:沙箱外执行面启动警告 —— lsp/hooks/mcp 子系统在 OS 沙箱【外】以子进程运行用户控制的
-代码/命令(不受 Seatbelt 约束)。CLAUDE.md 承诺 "warned at startup",过去未兑现。本测试锁住
-启动检测:用户配置了这些 config → 发警告,诚实告知信任边界。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -48,3 +46,19 @@ def test_default_path_honors_argos_config_dir(tmp_path: Path, monkeypatch):
     w = external_surface_warnings()
 
     assert len(w) == 1 and "mcp" in w[0]
+
+
+def test_warning_mentions_configured_path(tmp_path: Path):
+    cfg_dir = tmp_path / "custom-config"
+    cfg_dir.mkdir()
+    (cfg_dir / "hooks.json").write_text("{}", encoding="utf-8")
+    (cfg_dir / "lsp.json").write_text("{}", encoding="utf-8")
+    (cfg_dir / "mcp.json").write_text("{}", encoding="utf-8")
+
+    warnings = external_surface_warnings(cfg_dir)
+    joined = "\n".join(warnings)
+
+    assert str(cfg_dir / "hooks.json") in joined
+    assert str(cfg_dir / "lsp.json") in joined
+    assert str(cfg_dir / "mcp.json") in joined
+    assert "~/.argos" not in joined

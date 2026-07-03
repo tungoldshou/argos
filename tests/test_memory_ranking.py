@@ -1,4 +1,4 @@
-"""#9 T2: loader + recency × confidence ranking + type 优先级 + threshold 过滤。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -25,7 +25,6 @@ def _entry(**overrides) -> mem_auto.MemoryEntry:
     return mem_auto.MemoryEntry(**base)
 
 
-# ── load: 多 tier 合并 + 过滤 ────────────────────────────────────────────────
 def test_load_returns_recent_first(mem_root):
     p = mem_auto._user_path()
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -41,7 +40,7 @@ def test_confidence_below_threshold_excluded(mem_root):
     p = mem_auto._user_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     good = _entry(key="good", confidence=0.5)
-    bad = _entry(key="bad", confidence=0.2)  # 低于 0.3 阈值
+    bad = _entry(key="bad", confidence=0.2)
     mem_auto._append_jsonl(p, good)
     mem_auto._append_jsonl(p, bad)
     out = mem_auto.load(scope="user", limit=10)
@@ -58,7 +57,6 @@ def test_failure_type_outranks_fact(mem_root):
     mem_auto._append_jsonl(p, fact)
     mem_auto._append_jsonl(p, fail)
     out = mem_auto.load(scope="user", limit=10)
-    # failure type priority(5) > fact(1),即便 conf 低
     assert out[0].key == "fail"
 
 
@@ -89,7 +87,7 @@ def test_limit_truncates(mem_root):
 
 # ── score / recency ─────────────────────────────────────────────────────────
 def test_score_decays_with_age(monkeypatch, mem_root):
-    """100 天前的条目 score < 今天的(同 conf)。"""
+    """Internal documentation."""
     p = mem_auto._user_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     now = time.time()
@@ -99,7 +97,7 @@ def test_score_decays_with_age(monkeypatch, mem_root):
 
 
 def test_use_count_boost_confidence(monkeypatch, mem_root):
-    """touch 后 confidence + 0.02,use_count + 1,last_used_at 更新。"""
+    """Internal documentation."""
     p = mem_auto._user_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     e = _entry(key="k", confidence=0.5, use_count=0, last_used_at=0.0)
@@ -113,13 +111,11 @@ def test_use_count_boost_confidence(monkeypatch, mem_root):
     assert after.last_used_at > before.last_used_at
 
 
-# ── dedup: 24h 内同 (scope,key,value) 重复检测 ──────────────────────────────
 def test_dedup_returns_true_within_24h(mem_root):
     p = mem_auto._user_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     e = _entry(key="k", value="v", ts=time.time())
     mem_auto._append_jsonl(p, e)
-    # 同一 (scope,key,value) 立即再查 → 应命中
     assert mem_auto._dedup("user", "k", "v", path=p) is True
 
 
@@ -132,9 +128,9 @@ def test_dedup_returns_false_when_value_changed(mem_root):
 
 
 def test_dedup_returns_false_when_old(mem_root):
-    """> 24h 的同 key+value 不算 dup(过完窗口期可重写)。"""
+    """Internal documentation."""
     p = mem_auto._user_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    e = _entry(key="k", value="v", ts=time.time() - 86400 * 2)  # 2 天前
+    e = _entry(key="k", value="v", ts=time.time() - 86400 * 2)
     mem_auto._append_jsonl(p, e)
     assert mem_auto._dedup("user", "k", "v", path=p, hours=24) is False

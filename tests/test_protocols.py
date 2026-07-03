@@ -19,21 +19,19 @@ def test_anthropic_payload_system_toplevel_and_coalesced():
     p = AnthropicProtocol()
     pl = p.payload([{"role": "user", "content": "a"}, {"role": "user", "content": "b"}],
                    system="sys", tier=_tier())
-    assert pl["system"][-1]["text"] == "sys"   # system 以内容块承载(见 caching 测试),原文保留
+    assert pl["system"][-1]["text"] == "sys"
     assert pl["model"] == "m" and pl["max_tokens"] == 99 and pl["stream"] is True
     assert len(pl["messages"]) == 1 and pl["messages"][0]["content"] == "a\nb"  # coalesced
 
 
 def test_anthropic_payload_marks_system_for_prompt_caching():
-    """Anthropic 缓存是显式 opt-in:system 必须作带 cache_control 的内容块,否则永远 0 命中。
-    缓存最大、最稳、每个 CodeAct 步都原样重发的系统提示 → 同一 run 内第二步起全命中。
-    (OpenAI 协议靠服务端自动缓存、不认此字段 —— 见 test_openai_payload_*,system 仍是纯消息。)"""
+    """Internal documentation."""
     p = AnthropicProtocol()
     pl = p.payload([{"role": "user", "content": "a"}], system="sys", tier=_tier())
     assert isinstance(pl["system"], list), "system 应为内容块列表(才能挂 cache_control)"
     block = pl["system"][-1]
-    assert block["type"] == "text" and block["text"] == "sys"   # 原文保留
-    assert block["cache_control"] == {"type": "ephemeral"}        # 缓存断点已打
+    assert block["type"] == "text" and block["text"] == "sys"
+    assert block["cache_control"] == {"type": "ephemeral"}
 
 
 def test_anthropic_endpoint_and_headers():
@@ -56,18 +54,12 @@ def test_anthropic_text_delta_and_usage():
 
 
 def test_anthropic_captures_output_tokens_from_message_start():
-    """保真修复:output_tokens 也从 message_start 捕获(Anthropic 规范该帧含此字段)。
-
-    此前只在 message_delta 抓 output —— 第三方 Anthropic 兼容端点若那帧形态不标准/缺字段,
-    该轮 output 静默记 0,累计被低估(真机 agnes-2.0-flash:输入 37.9k 但输出仅 174)。
-    从两帧都抓 = 最大化诚实提取;标准端点 message_delta 的累积值仍覆盖 message_start 初值。
-    """
+    """Internal documentation."""
     p = AnthropicProtocol()
     u = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0, "cache_creation": 0}
     p.capture_usage({"type": "message_start", "message": {"usage": {
         "input_tokens": 100, "output_tokens": 7}}}, u)
-    assert u["output_tokens"] == 7   # 不再只在 message_delta 抓
-    # message_delta 的累积值仍覆盖 message_start 初值(标准流:最终 output 在 message_delta)
+    assert u["output_tokens"] == 7
     p.capture_usage({"type": "message_delta", "usage": {"output_tokens": 523}}, u)
     assert u["output_tokens"] == 523
 
@@ -81,7 +73,6 @@ def test_modelclient_selects_protocol_by_tier():
 
 
 def test_coalesce_still_importable_from_models():
-    # 向后兼容:旧测试/代码 from argos.core.models import _coalesce_consecutive_roles
     from argos.core.models import _coalesce_consecutive_roles as c
     assert c([{"role": "user", "content": "a"}, {"role": "user", "content": "b"}])[0]["content"] == "a\nb"
 
@@ -90,8 +81,8 @@ def test_openai_payload_system_as_message_and_stream_options():
     p = OpenAIProtocol()
     pl = p.payload([{"role": "user", "content": "a"}, {"role": "user", "content": "b"}],
                    system="sys", tier=_tier(protocol="openai", base="http://localhost:11434/v1"))
-    assert pl["messages"][0] == {"role": "system", "content": "sys"}   # system 作首条消息
-    assert pl["messages"][1]["content"] == "a\nb"                       # 其余 coalesced
+    assert pl["messages"][0] == {"role": "system", "content": "sys"}
+    assert pl["messages"][1]["content"] == "a\nb"
     assert pl["model"] == "m" and pl["max_tokens"] == 99
     assert pl["stream"] is True and pl["stream_options"] == {"include_usage": True}
 
@@ -105,7 +96,7 @@ def test_openai_endpoint_and_headers():
 def test_openai_text_delta_and_done():
     p = OpenAIProtocol()
     assert p.text_delta({"choices": [{"delta": {"content": "hi"}}]}) == "hi"
-    assert p.text_delta({"choices": [{"delta": {"role": "assistant"}}]}) == ""   # role-only 首块
+    assert p.text_delta({"choices": [{"delta": {"role": "assistant"}}]}) == ""
     assert p.is_done({"choices": [{"finish_reason": "stop", "delta": {}}]}) is True
     assert p.is_done({"choices": [{"finish_reason": None, "delta": {"content": "x"}}]}) is False
 
@@ -124,8 +115,6 @@ from argos.core.models import ModelClient, CredentialPool
 
 @pytest.mark.asyncio
 async def test_openai_stream_end_to_end_mock():
-    # 真实 OpenAI include_usage 形态:usage 在 finish_reason 之后的【单独一帧】(choices:[]),
-    # 不在完成帧里。stream 必须读到该尾帧才抓得到 usage(回归:此前一 is_done 即 break → usage 恒 0)。
     sse = (b'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n'
            b'data: {"choices":[{"delta":{"content":"he"}}]}\n\n'
            b'data: {"choices":[{"delta":{"content":"llo"}}]}\n\n'
@@ -143,13 +132,12 @@ async def test_openai_stream_end_to_end_mock():
                      pool=CredentialPool(["K"]), transport=httpx.MockTransport(handler))
     out = "".join([c async for c in mc.stream([{"role": "user", "content": "hi"}], system="s")])
     assert out == "hello"
-    # usage 来自完成帧【之后】的单独 usage-only 帧,必须被抓到(否则 OpenAI 成本恒 0)
     assert mc.last_usage["input_tokens"] == 10 and mc.last_usage["output_tokens"] == 2
     assert mc.last_usage["cache_read"] == 4
 
 
 def test_anthropic_context_total_is_input_plus_cache():
-    """D1:Anthropic 口径 input_tokens 不含缓存 → context_total = input + cache_read + cache_creation。"""
+    """Internal documentation."""
     p = AnthropicProtocol()
     u: dict = {}
     p.capture_usage({"type": "message_start", "message": {"usage": {
@@ -159,11 +147,10 @@ def test_anthropic_context_total_is_input_plus_cache():
 
 
 def test_openai_context_total_does_not_double_count_cache():
-    """D1(2026-06-22:OpenAI 路径上下文 % 高估):prompt_tokens 已含 cached_tokens,
-    context_total 必须 == prompt_tokens,不能再加 cache_read,否则缓存部分被重复计。"""
+    """Internal documentation."""
     p = OpenAIProtocol()
     u: dict = {}
     p.capture_usage({"usage": {"prompt_tokens": 1000, "completion_tokens": 45,
                                "prompt_tokens_details": {"cached_tokens": 400}}}, u)
     assert u["context_total"] == 1000, "不得 == 1400(重复计 cached)"
-    assert u["cache_read"] == 400      # cache_read 仍如实记录(供缓存命中显示)
+    assert u["cache_read"] == 400

@@ -1,4 +1,4 @@
-"""T10:/lsp + /lsp reload slash 命令 + 启动 splash 坏配置 banner。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -8,22 +8,20 @@ from pathlib import Path
 import pytest
 
 
-# ── /lsp COMMAND_HELP 注册 ───────────────────────────────────────
 
 
 def test_command_help_includes_lsp():
-    """COMMAND_HELP 含 'lsp' 描述,含 'reload' 关键字。"""
+    """Internal documentation."""
     from argos.tui.commands import COMMAND_HELP
     assert "lsp" in COMMAND_HELP
     assert "reload" in COMMAND_HELP["lsp"]
 
 
-# ── /lsp reload 错误处理 ────────────────────────────────────────
 
 
 @pytest.fixture
 def isolated_lsp_home(monkeypatch):
-    """每测试 HOME 临时目录 → ~/.argos/lsp.json 独立。"""
+    """Internal documentation."""
     tmp = tempfile.mkdtemp()
     monkeypatch.setenv("HOME", tmp)
     yield Path(tmp) / ".argos"
@@ -32,7 +30,7 @@ def isolated_lsp_home(monkeypatch):
 
 
 def test_lsp_reload_invalid_keeps_old(isolated_lsp_home, monkeypatch):
-    """reload 时新配不合规 → 保旧 + 抛 LspConfigError。"""
+    """Internal documentation."""
     from argos.lsp import _reset_config, get_config, reload_config, LspConfigError
     from argos.lsp import config as _lsp_config
     isolated_lsp_home.mkdir(parents=True, exist_ok=True)
@@ -52,11 +50,10 @@ def test_lsp_reload_invalid_keeps_old(isolated_lsp_home, monkeypatch):
     assert get_config() is cfg_old
 
 
-# ── splash 坏配置 banner ────────────────────────────────────────
 
 
 def test_bad_config_splash_banner_lsp_message():
-    """StartupSplash.set_bad_config('LSP ...') → renderable_text 含 'LSP 已禁用'。"""
+    """Internal documentation."""
     from argos.tui.widgets.splash import StartupSplash
     sp = StartupSplash(model_label="x", tier="default", live=True)
     sp.set_bad_config("LSP parse error: bad json at line 3")
@@ -66,15 +63,10 @@ def test_bad_config_splash_banner_lsp_message():
     assert "parse error" in text
 
 
-# ── /lsp 列出 servers ──────────────────────────────────────────
 
 
 def test_lsp_cmd_lists_servers(isolated_lsp_home, monkeypatch):
-    """/lsp 列当前生效 server(3 个 server,disabled=True 在 config 而非 status)。
-
-    状态机(spec §2.6):disabled=True 是用户配置;NotStarted/Ready/Crashed 是运行时
-    状态。未启动时所有 server 都是 NotStarted;`disabled` 在 `list_servers()` 透出
-    给 /lsp 渲染用(command 字符串后显 'disabled' 标识)。"""
+    """Internal documentation."""
     from argos.lsp import _reset_config, reload_config
     from argos.lsp import config as _lsp_config
     isolated_lsp_home.mkdir(parents=True, exist_ok=True)
@@ -100,13 +92,42 @@ def test_lsp_cmd_lists_servers(isolated_lsp_home, monkeypatch):
     statuses = {s["name"]: s["status"] for s in servers_info}
     assert statuses["python"] == "NotStarted"
     assert statuses["rust"] == "NotStarted"
-    # disabled_one: config.disabled=True → 反映在 LspServerConfig.disabled(给 /lsp 渲染用)
     assert cfg.servers["disabled_one"].disabled is True
 
 
 @pytest.mark.asyncio
+async def test_lsp_empty_mentions_configured_path(tmp_path, monkeypatch):
+    from argos import config as C
+    from argos.lsp import _reset_config
+    from argos.lsp import config as _lsp_config
+    from argos.tui.app import ArgosApp
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir()
+    (cfg_dir / "lsp.json").write_text(json.dumps({"version": 1, "servers": {}}))
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
+    monkeypatch.setattr(_lsp_config, "LSP_CONFIG_PATH", None)
+    _reset_config()
+
+    log = Log()
+    await ArgosApp()._lsp_cmd(log, "")
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert str(cfg_dir / "lsp.json") in text
+    assert "~/.argos" not in text
+
+
+@pytest.mark.asyncio
 async def test_lsp_unknown_arg_prints_usage(isolated_lsp_home, monkeypatch):
-    """/lsp 只接受空参数或 reload,未知参数应报用法。"""
+    """Internal documentation."""
     from argos.lsp import _reset_config
     from argos.lsp import config as _lsp_config
     from argos.tui.app import ArgosApp

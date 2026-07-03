@@ -1,14 +1,7 @@
 #!/usr/bin/env bash
-# Argos Linux 打包:PyInstaller onefile → AppImage + .deb + .rpm 三种格式。
-# spec §5 锁 AppImage 为主推(跨 glibc),.deb 走 apt 路线,.rpm 走 dnf 路线。
-# 跑在 ubuntu-24.04 runner(本地装 fuse / dpkg-dev / rpm 即可)。
-# Apple Silicon Mac 跑可加 ARGOS_TARGET=aarch64 出 ARM64 包。
 set -euo pipefail
-cd "$(dirname "$0")/.."   # 仓库根
+cd "$(dirname "$0")/.."
 
-# 版本号(spec §2.6):
-# - 优先环境变量 ARGOS_VERSION(CI 从 git tag 解析用)
-# - fallback 读 packaging/VERSION
 if [ -z "${ARGOS_VERSION:-}" ]; then
   if [ -f packaging/VERSION ]; then
     ARGOS_VERSION=$(cat packaging/VERSION)
@@ -16,21 +9,18 @@ if [ -z "${ARGOS_VERSION:-}" ]; then
     ARGOS_VERSION="0.0.0+unknown"
   fi
 fi
+ARGOS_VERSION="${ARGOS_VERSION#v}"
 export ARGOS_VERSION
 echo "=== Building Argos $ARGOS_VERSION (linux) ==="
 
 TARGET_ARCH="${ARGOS_TARGET:-x86_64}"
 echo "   target arch: $TARGET_ARCH"
 
-# 1. 确保 pyinstaller 在 venv
 uv run python -c "import PyInstaller" 2>/dev/null || uv add --dev pyinstaller
 
-# 2. 清理 dist(避免旧产物污染)
 rm -rf dist build
 mkdir -p dist
 
-# 3. PyInstaller onefile(目标 arch 默认 amd64)
-#    注:不用 packaging/argos.spec(macOS arm64 only);Linux 走 inline --add-data
 PYI_ARGS=(
   --clean --noconfirm
   --target-arch "$TARGET_ARCH"
@@ -57,9 +47,8 @@ uv run pyinstaller "${PYI_ARGS[@]}"
 BIN=dist/argos
 [ -f "$BIN" ] || { echo "FATAL: 缺 $BIN"; exit 1; }
 chmod +x "$BIN"
-file "$BIN" || true   # 期望 ELF 64-bit LSB executable
+file "$BIN" || true
 
-# 4. AppImage(主推,跨 glibc)
 echo "=== Pack AppImage ==="
 APPIMAGE_DIR=dist/Argos.AppDir
 rm -rf "$APPIMAGE_DIR"
@@ -79,8 +68,6 @@ Terminal=true
 Categories=Development;Utility;
 EOF
 
-# 简单占位 PNG(spec §D18 占位即可;v1.1 补真品牌)
-# 1×1 透明 PNG(最小合法 PNG)
 python3 - <<'PY'
 import struct, zlib, sys
 def png_1x1():
@@ -105,17 +92,16 @@ exec "$(dirname "$0")/usr/bin/argos" "$@"
 EOF
 chmod +x "$APPIMAGE_DIR/AppRun"
 
-# appimagetool(若没装,下到 /tmp)
 if [ ! -x /usr/local/bin/appimagetool ] && [ ! -x ./appimagetool ]; then
   echo "   下载 appimagetool..."
   if [ "$TARGET_ARCH" = "x86_64" ]; then
     curl -fsSL -o /tmp/appimagetool \
       "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" \
-      || { echo "WARN: appimagetool 下载失败,跳 AppImage"; }
+      || { echo "FATAL: appimagetool download failed"; exit 1; }
   else
     curl -fsSL -o /tmp/appimagetool \
       "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage" \
-      || { echo "WARN: appimagetool 下载失败,跳 AppImage"; }
+      || { echo "FATAL: appimagetool download failed"; exit 1; }
   fi
   if [ -f /tmp/appimagetool ]; then
     chmod +x /tmp/appimagetool
@@ -128,18 +114,25 @@ fi
 if [ -x "${APPIMAGETOOL:-/nonexistent}" ] || ([ -f "${APPIMAGETOOL:-/nonexistent}" ] && [ -x "${APPIMAGETOOL:-/nonexistent}" ]); then
   cd dist
   ARCH_DIR=$([ "$TARGET_ARCH" = "x86_64" ] && echo x86_64 || echo aarch64)
-  "$APPIMAGETOOL" Argos.AppDir "Argos-${ARGOS_VERSION}-${ARCH_DIR}.AppImage" 2>&1 || \
-    echo "WARN: appimagetool 失败,跳 AppImage 产物"
+  "$APPIMAGETOOL" Argos.AppDir "Argos-${ARGOS_VERSION}-${ARCH_DIR}.AppImage" 2>&1 || {
+    echo "FATAL: appimagetool failed"
+    exit 1
+  }
   cd ..
   if [ -f "dist/Argos-${ARGOS_VERSION}-${ARCH_DIR}.AppImage" ]; then
     chmod +x "dist/Argos-${ARGOS_VERSION}-${ARCH_DIR}.AppImage"
     shasum -a 256 "dist/Argos-${ARGOS_VERSION}-${ARCH_DIR}.AppImage"
   fi
 else
-  echo "WARN: 无 appimagetool,跳 AppImage 产物"
+  echo "FATAL: appimagetool not found"
+  exit 1
 fi
 
-# 5. .deb(走 dpkg-deb,免 fpm)
+[ -f "dist/Argos-${ARGOS_VERSION}-${ARCH_DIR}.AppImage" ] || {
+  echo "FATAL: AppImage missing"
+  exit 1
+}
+
 echo "=== Pack .deb ==="
 DEB_DIR=dist/argos-deb
 rm -rf "$DEB_DIR"
@@ -171,16 +164,19 @@ if command -v dpkg-deb >/dev/null 2>&1; then
   shasum -a 256 "dist/argos_${ARGOS_VERSION}_${DEB_ARCH}.deb" 2>/dev/null || \
     sha256sum "dist/argos_${ARGOS_VERSION}_${DEB_ARCH}.deb"
 else
-  echo "WARN: dpkg-deb 不在 PATH(非 ubuntu 主机),跳 .deb 产物"
+  echo "FATAL: dpkg-deb not found" >&2
+  exit 1
 fi
 
-# 6. .rpm(走 rpmbuild)
 echo "=== Pack .rpm ==="
-if command -v rpmbuild >/dev/null 2>&1; then
-  RPMBUILD_DIR=dist/rpmbuild
-  rm -rf "$RPMBUILD_DIR"
-  mkdir -p "$RPMBUILD_DIR"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-  cat > "$RPMBUILD_DIR/SPECS/argos.spec" <<EOF
+command -v rpmbuild >/dev/null 2>&1 || {
+  echo "FATAL: rpmbuild not found" >&2
+  exit 1
+}
+RPMBUILD_DIR=dist/rpmbuild
+rm -rf "$RPMBUILD_DIR"
+mkdir -p "$RPMBUILD_DIR"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+cat > "$RPMBUILD_DIR/SPECS/argos.spec" <<EOF
 Name: argos-agent
 Version: ${ARGOS_VERSION}
 Release: 1%{?dist}
@@ -198,18 +194,24 @@ chmod 755 %{buildroot}/usr/bin/argos
 %files
 /usr/bin/argos
 EOF
-  rpmbuild --define "_topdir $RPMBUILD_DIR" -bb "$RPMBUILD_DIR/SPECS/argos.spec" || \
-    echo "WARN: rpmbuild 失败,跳 .rpm 产物"
-  RPM_ARCH=$([ "$TARGET_ARCH" = "x86_64" ] && echo x86_64 || echo aarch64)
-  if ls "$RPMBUILD_DIR"/RPMS/"${RPM_ARCH}"/argos-agent-*.rpm 2>/dev/null; then
-    cp "$RPMBUILD_DIR"/RPMS/"${RPM_ARCH}"/argos-agent-*.rpm dist/
-    # 重命名对齐 spec
-    mv dist/argos-agent-${ARGOS_VERSION}-1.*."${RPM_ARCH}".rpm \
-       "dist/argos-${ARGOS_VERSION}-1.${RPM_ARCH}.rpm" 2>/dev/null || true
-    shasum -a 256 dist/argos-*.rpm 2>/dev/null || sha256sum dist/argos-*.rpm
-  fi
+rpmbuild --define "_topdir $RPMBUILD_DIR" -bb "$RPMBUILD_DIR/SPECS/argos.spec" || {
+  echo "FATAL: rpmbuild failed" >&2
+  exit 1
+}
+RPM_ARCH=$([ "$TARGET_ARCH" = "x86_64" ] && echo x86_64 || echo aarch64)
+if ls "$RPMBUILD_DIR"/RPMS/"${RPM_ARCH}"/argos-agent-*.rpm 2>/dev/null; then
+  cp "$RPMBUILD_DIR"/RPMS/"${RPM_ARCH}"/argos-agent-*.rpm dist/
+  mv dist/argos-agent-${ARGOS_VERSION}-1.*."${RPM_ARCH}".rpm \
+     "dist/argos-${ARGOS_VERSION}-1.${RPM_ARCH}.rpm"
+  [ -f "dist/argos-${ARGOS_VERSION}-1.${RPM_ARCH}.rpm" ] || {
+    echo "FATAL: RPM asset missing" >&2
+    exit 1
+  }
+  shasum -a 256 "dist/argos-${ARGOS_VERSION}-1.${RPM_ARCH}.rpm" 2>/dev/null || \
+    sha256sum "dist/argos-${ARGOS_VERSION}-1.${RPM_ARCH}.rpm"
 else
-  echo "WARN: rpmbuild 不在 PATH(非 fedora/rhel 主机),跳 .rpm 产物"
+  echo "FATAL: RPM missing" >&2
+  exit 1
 fi
 
 echo "=== Linux build done ==="

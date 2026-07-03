@@ -1,6 +1,4 @@
-"""#12 Context 可视化:T4 render.py 文本表格 + JSON(契约 §12;spec §7)。
-
-7 测试覆盖对齐 + method 后缀 + 颜色 markup + JSON 字段序 + 不可序列化兜底。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -20,7 +18,7 @@ def _b(system=100, memory=50, tools=80, messages=200, total=430, window=1000):
 
 
 def test_format_table_contains_all_buckets():
-    """5 个段名(system / memory / tools / messages / total)都在输出。"""
+    """Internal documentation."""
     out = format_table(_b())
     assert "system" in out
     assert "memory" in out
@@ -30,16 +28,15 @@ def test_format_table_contains_all_buckets():
 
 
 def test_format_table_method_suffix_per_bucket():
-    """每桶数字带 [est] 或 [api] 后缀(spec §12.1 锁)。"""
+    """Internal documentation."""
     out = format_table(_b())
-    # system/tools/memory 估:[est]
     assert "[est]" in out
     # messages API:[api]
     assert "[api]" in out
 
 
 def test_format_table_memory_details_expanded():
-    """memory 段展开 4 个 sub(user / project / skill / session)。"""
+    """Internal documentation."""
     out = format_table(_b())
     assert "user" in out
     assert "project" in out
@@ -58,30 +55,29 @@ def test_format_table_health_color_yellow():
 
 
 def test_format_table_no_ansi_codes():
-    """输出不含 ANSI 转义(只走 Textual markup,CLI 也能干净打印)。"""
+    """Internal documentation."""
     out = format_table(_b())
     assert "\x1b[" not in out
     assert "\033[" not in out
 
 
 def test_format_json_keys_in_spec_order():
-    """JSON 顶层键序 spec D13:system/memory/tools/messages/total/window/pct/health/method。"""
+    """Internal documentation."""
     out = format_json(_b())
     keys = list(json.loads(out).keys())
     assert keys == ["system", "memory", "tools", "messages", "total", "window", "pct", "health", "method"]
 
 
 def test_strip_markup_removes_tags():
-    """#15: strip_markup 剥去 [green]/[/green] 等 Rich/Textual markup 标签。"""
+    """Internal documentation."""
     assert strip_markup("[green]hello[/green]") == "hello"
     assert strip_markup("[bold red]text[/bold red]") == "text"
     assert strip_markup("no tags here") == "no tags here"
-    # 保留其他内容
     assert strip_markup("[est]  100 tok  [est]") == "  100 tok  "
 
 
 def test_format_table_plain_no_markup_tags():
-    """#15: format_table_plain 输出不含 Rich/Textual markup 标签(CLI 安全打印)。"""
+    """Internal documentation."""
     out = format_table_plain(_b())
     assert "[green]" not in out
     assert "[/green]" not in out
@@ -92,7 +88,7 @@ def test_format_table_plain_no_markup_tags():
 
 
 def test_format_table_plain_still_contains_content():
-    """format_table_plain 剥 markup 后仍含核心内容(不丢数据)。"""
+    """Internal documentation."""
     out = format_table_plain(_b())
     assert "system" in out
     assert "memory" in out
@@ -103,18 +99,17 @@ def test_format_table_plain_still_contains_content():
 
 
 def test_format_table_markup_preserved_for_tui():
-    """format_table(不是 plain)仍保留 markup,供 TUI 渲染颜色。"""
+    """Internal documentation."""
     out = format_table(_b())
     assert "[green]" in out or "[yellow]" in out or "[red]" in out
 
 
 def test_format_json_serializable():
-    """format_json 输出可被 json.loads 再 parse 回去(默认 default=str 兜底)。"""
+    """Internal documentation."""
     out = format_json(_b())
     parsed = json.loads(out)
     assert parsed["system"]["tokens"] == 100
     assert parsed["memory"]["entries"] == 4
-    # memory details 是 list of [name, tokens](dataclass asdict 序列化为 list)
     assert parsed["memory"]["details"] == [["user", 0], ["project", 30], ["skill", 10], ["session", 10]]
     assert parsed["total"] == 430
     assert parsed["health"] == "green"

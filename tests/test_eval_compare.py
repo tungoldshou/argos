@@ -1,4 +1,4 @@
-"""#7 T5 A/B 对比 + 报告生成器测试。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -49,7 +49,6 @@ def test_run_pair_runs_both_models(tmp_path):
     wt = FakeWorktree(base / "wt")
     loop_cheap = make_fake_loop(verdict=PASS_PASSED, cost_usd=0.013, tokens_in=1000, tokens_out=500)
     loop_strong = make_fake_loop(verdict=PASS_PASSED, cost_usd=0.087, tokens_in=5000, tokens_out=2000)
-    # 改 fake factory:不同 model_tier 返不同 loop
     def factory(model_tier: str):
         return loop_cheap if model_tier == "cheap" else loop_strong
     runner = EvalRunner(worktree=wt, base_dir=base, loop_factory=factory)
@@ -130,7 +129,7 @@ def test_generate_report_picks_cost_winner():
 def test_generate_report_handles_none_cost():
     a = _make_result(cost_usd=None)
     b = _make_result(cost_usd=0.05)
-    assert _winner_cost(a, b) == "b"  # b 有 cost,b 赢
+    assert _winner_cost(a, b) == "b"
     md = generate_report(a, b)
     assert "$N/A" in md
 
@@ -213,11 +212,10 @@ def test_write_report_json_machine_readable(tmp_path):
     assert data["winner_cost"] in ("a", "b", "tie", "unknown")
 
 
-# ── 失败模式 ──────────────────────────────────────────────────────────
 
 
 def test_run_pair_first_crash_still_runs_second(tmp_path):
-    """第一遍崩 → runner 返 error EvalResult;第二遍仍跑(spec §5.4 失败兜底)。"""
+    """Internal documentation."""
     base = tmp_path / "eval"
     wt = FakeWorktree(base / "wt")
     loop_crash = make_fake_loop(raise_on_run=True)

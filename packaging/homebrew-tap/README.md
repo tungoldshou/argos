@@ -2,6 +2,9 @@
 
 Personal tap for [Argos](https://github.com/tungoldshou/argos) — the terminal super-agent.
 
+> Draft mirror. This tap is not published yet; the commands below are the
+> intended install path after release assets and checksums exist.
+
 ## Install
 
 ```bash
@@ -12,7 +15,7 @@ brew install --cask argos    # macOS GUI (Cask, installs Argos.app)
 
 ## What lives here
 
-- `Formula/argos.rb` — Linux/CLI install via the published AppImage (built by
+- `Formula/argos.rb` — Linux/CLI install via the planned AppImage asset (built by
   `packaging/build_linux.sh` on the `ubuntu-24.04` GitHub Actions runner).
 - `Casks/argos.rb` — macOS GUI install of `Argos.app` (built by
   `packaging/build_arm64.sh` on the `macos-14` runner).

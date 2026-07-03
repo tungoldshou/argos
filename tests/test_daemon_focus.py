@@ -1,4 +1,4 @@
-"""/runs/{id}/focus 端点测试(#5b T2)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -77,18 +77,15 @@ async def test_focus_missing_session_returns_400(focus_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_multiple_focus_calls_last_wins(focus_server, tmp_path: Path):
-    """owner(sid1)先后 focus 两次 → 最后一次胜出。"""
+    """Internal documentation."""
     srv, _, reg = focus_server
     sid1 = await _create_session(srv.socket_path)   # owner
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",
                                  session_id=sid1, body={"goal": "x"})
     rid = json.loads(raw.decode("utf-8"))["run_id"]
-    # owner 第一次 focus
     await _req(srv.socket_path, "POST", f"/runs/{rid}/focus", session_id=sid1)
     assert reg.get(rid).focus_session_id == sid1
-    # 新 session(变 owner 自动 promote 后)再次 focus
     sid2 = await _create_session(srv.socket_path)
-    # sid1 退 → sid2 promote
     await _req(srv.socket_path, "DELETE", f"/sessions/{sid1}")
     status, _, _ = await _req(srv.socket_path, "POST", f"/runs/{rid}/focus",
                                session_id=sid2)
@@ -98,7 +95,7 @@ async def test_multiple_focus_calls_last_wins(focus_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_focus_can_clear_session(focus_server, tmp_path: Path):
-    """focus 也能置空(PASS /runs/{id}/focus with sid 仍能设;本期不实现 clear,留 v1.1)。"""
+    """Internal documentation."""
     srv, _, reg = focus_server
     sid = await _create_session(srv.socket_path)
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",

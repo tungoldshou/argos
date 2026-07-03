@@ -1,4 +1,4 @@
-"""D5 锁铁证 + D20 backward-compat 专门测试(spec 2026-06-06 §2.5 D5)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -20,7 +20,7 @@ def _reset(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_d5_default_auto_cannot_bypass_hard_rule_no_soft_rule():
-    """default_level=AUTO + 无 soft rule + `rm -rf /` → 仍 deny(基础 D5 锁)。"""
+    """Internal documentation."""
     Path("/tmp/d5_perm_test.json").write_text(json.dumps({"version": 1, "default_level": "auto"}))
     from argos.permissions import config as _cfg
     from argos.permissions import reload_config
@@ -34,7 +34,7 @@ async def test_d5_default_auto_cannot_bypass_hard_rule_no_soft_rule():
 
 @pytest.mark.asyncio
 async def test_d5_soft_allow_cannot_bypass_hard_rule_with_allow_rm():
-    """default_level=AUTO + soft allow `^rm ` + `rm -rf /` → 仍 deny(D5 + D15 锁联防)。"""
+    """Internal documentation."""
     from argos.permissions import config as _cfg
     from argos.permissions import reload_config
     Path(_cfg.CONFIG_PATH).write_text(json.dumps({
@@ -51,7 +51,7 @@ async def test_d5_soft_allow_cannot_bypass_hard_rule_with_allow_rm():
 
 @pytest.mark.asyncio
 async def test_d5_other_hard_rules_still_deny():
-    """其他 hard rule 在 default_level=AUTO 下也拒。"""
+    """Internal documentation."""
     from argos.permissions import config as _cfg
     from argos.permissions import reload_config
     Path(_cfg.CONFIG_PATH).write_text(json.dumps({"version": 1, "default_level": "auto"}))
@@ -70,10 +70,9 @@ async def test_d5_other_hard_rules_still_deny():
 
 
 def test_d20_no_config_file_backward_compat():
-    """D20:无 permissions.json → get_config() 返 empty(沿用 ApprovalGate.level)。"""
+    """Internal documentation."""
     from argos.permissions import config as _cfg
     from argos.permissions import reload_config
-    # 没写入 permissions.json
     cfg = reload_config()
     assert cfg.allow == ()
     assert cfg.deny == ()

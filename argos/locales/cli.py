@@ -1,13 +1,6 @@
-"""CLI + setup wizard 用户可见串目录。
-
-key 命名空间:cli.* / setup.*。
-
-ZH 值与重构前的**原始中文串逐字一致**,确保 ARGOS_LANG=zh 下旧测试断言不破。
-EN 值是面向英文漏斗用户的默认文案(README/品牌基调:calm, precise)。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
-# ── __main__.py 及 headless.py argparse help / description ─────────────────
 
 EN: dict[str, str] = {
     # __main__.py argparse flags
@@ -15,24 +8,24 @@ EN: dict[str, str] = {
     "cli.project.help": "Work inside the given project directory",
     "cli.model.help": "Use the named config profile for this run (default: the active one)",
     "cli.effort.help": "Effort tier (step budget: low=8 / medium=40 / high=80; approval mode is set by /trust)",
-    "cli.sandbox.help": "Enable the OS sandbox (Seatbelt/bwrap kernel cage: no network, writes caged to the workspace). Opt-in, off by default; governance (approval + egress + AST limits) applies either way. Or set ARGOS_SANDBOX=1.",
+    "cli.sandbox.help": "Enable the OS sandbox (Seatbelt/bwrap kernel cage: CodeAct child has no direct network, writes caged to the workspace; broker web_search/web_extract still use governed host-side network). Opt-in, off by default; governance (approval + egress + AST limits) applies either way. Or set ARGOS_SANDBOX=1.",
     "cli.add_dir.help": "Grant write access to a directory outside the workspace (repeatable). The file tools and the write-cage treat it as writable; under --sandbox it's also added to the kernel cage. Or set ARGOS_ADD_DIRS (path-separated).",
     # setup sub-command
     "cli.setup.help": "Interactive wizard to connect a model (choose provider → key source → probe → save)",
     "cli.setup.advanced_help": "Also prompt for max_tokens / context_window / embedding model / image input override (defaults used otherwise)",
     "cli.setup.status.help": "Print current setup status and exit",
     "cli.setup.epilog": (
-        "The wizard writes ~/.argos/config.json (profile table + active pointer). "
-        "Paste-key mode also writes ~/.argos/.env (0600); existing environment variable mode stores only api_key_env.\n\n"
+        "The wizard writes {config_path} (profile table + active pointer). "
+        "Paste-key mode also writes {env_path} (0600); existing environment variable mode stores only api_key_env.\n\n"
         "Minimal config.json example:\n"
-        '  { "active": "default",\n'
-        '    "models": { "default": {\n'
+        '  {{ "active": "default",\n'
+        '    "models": {{ "default": {{\n'
         '      "protocol": "anthropic",   # or "openai"\n'
         '      "base_url": "https://api.anthropic.com",\n'
         '      "model": "claude-sonnet-4-6",\n'
         '      "api_key_env": "ANTHROPIC_API_KEY",\n'
         '      "max_tokens": 4096, "context_window": 200000,\n'
-        '      "price_in": 3.00, "price_out": 15.00 } } }\n\n'
+        '      "price_in": 3.00, "price_out": 15.00 }} }} }}\n\n'
         "Full field reference: docs/setup-wizard.md\n"
         "For non-TTY environments (Docker/CI), write config.json and provide the key via .env or an existing environment variable."
     ),
@@ -129,7 +122,7 @@ EN: dict[str, str] = {
     "setup.save_failed_io": "Save failed: {err} — check disk space or file permissions, then reconfigure this model.",
     "setup.saved_active": "Saved '{name}' and made it the active model.",
     "setup.saved_inactive": "Saved '{name}' (active model unchanged).",
-    "setup.key_stored_warning": "Note: the API key is stored in plain text in ~/.argos/.env (permissions 0600), not encrypted.",
+    "setup.key_stored_warning": "Note: the API key is stored in plain text in {path} (permissions 0600), not encrypted.",
     "setup.key_empty": "No key entered — leaving the key blank can't connect. Re-enter this model (or pick the env-var method if your key lives in the environment).",
     "setup.key_invalid": "API key must be a single line.",
     "setup.env_var_empty": "No environment variable name entered — re-enter this model or choose paste-key instead.",
@@ -157,8 +150,8 @@ EN: dict[str, str] = {
         "\n⚠ stdin is closed (`argos setup` needs an interactive terminal).\n"
         "  • Run it in a real terminal: `argos setup` (or `uv run argos setup`)\n"
         "  • For non-interactive environments (scripts / CI), write config by hand:\n"
-        "      ~/.argos/config.json   ← provider / model / base_url declaration\n"
-        "      ~/.argos/.env          ← optional API key file (permissions 0600)\n"
+        "      {config_path}   ← provider / model / base_url declaration\n"
+        "      {env_path}          ← optional API key file (permissions 0600)\n"
         "    Or set an existing environment variable named by api_key_env.\n"
         "    File schema: `argos setup --help` or docs/setup-wizard.md"
     ),
@@ -249,6 +242,9 @@ EN: dict[str, str] = {
     "cli.pkg.check_import_failed": "argospkg check: import failed: {exc_type}: {err}",
     "cli.pkg.manifest_ready": "argospkg manifest: winget files ready for manual release review",
     "cli.pkg.manifest_missing": "argospkg manifest: missing {path}",
+    "cli.pkg.manifest_missing_files": "argospkg manifest: missing required files {files}",
+    "cli.pkg.manifest_placeholder": "argospkg manifest: placeholder values remain in {files}",
+    "cli.pkg.manifest_invalid_sha": "argospkg manifest: invalid InstallerSha256 in {files}",
 }
 
 ZH: dict[str, str] = {
@@ -257,24 +253,24 @@ ZH: dict[str, str] = {
     "cli.project.help": "在用户项目目录干活",
     "cli.model.help": "本次启动用指定 config profile(默认当前 active)",
     "cli.effort.help": "任务努力档(步数预算:low=8 / medium=40 / high=80;审批档由 /trust 控制)",
-    "cli.sandbox.help": "启用 OS 沙箱(Seatbelt/bwrap 内核牢笼:断网、写牢笼 workspace)。opt-in、默认关;无论开关,治理(审批+egress+AST 限制)都在。也可设 ARGOS_SANDBOX=1。",
+    "cli.sandbox.help": "启用 OS 沙箱(Seatbelt/bwrap 内核牢笼:CodeAct 子进程不能直连网络、写牢笼 workspace;broker web_search/web_extract 仍可走受治理的宿主网络)。opt-in、默认关;无论开关,治理(审批+egress+AST 限制)都在。也可设 ARGOS_SANDBOX=1。",
     "cli.add_dir.help": "授权 workspace 之外的一个目录可写(可重复)。文件工具与写牢笼视其为可写;开 --sandbox 时也加进内核牢笼。也可设 ARGOS_ADD_DIRS(路径分隔符分隔)。",
     # setup sub-command
     "cli.setup.help": "接入模型的交互向导(选 provider→key 来源→连通测试→保存)",
     "cli.setup.advanced_help": "额外询问 max_tokens / context_window / embedding 模型 / 图片输入 override(否则用缺省值)",
     "cli.setup.status.help": "打印当前 setup 状态并退出",
     "cli.setup.epilog": (
-        "向导写入 ~/.argos/config.json(profile 表 + active 指针)。"
-        "粘贴 key 时也写 ~/.argos/.env(0600);使用已有环境变量时只保存 api_key_env。\n\n"
+        "向导写入 {config_path}(profile 表 + active 指针)。"
+        "粘贴 key 时也写 {env_path}(0600);使用已有环境变量时只保存 api_key_env。\n\n"
         "config.json 最小示例:\n"
-        '  { "active": "default",\n'
-        '    "models": { "default": {\n'
+        '  {{ "active": "default",\n'
+        '    "models": {{ "default": {{\n'
         '      "protocol": "anthropic",   # 或 "openai"\n'
         '      "base_url": "https://api.anthropic.com",\n'
         '      "model": "claude-sonnet-4-6",\n'
         '      "api_key_env": "ANTHROPIC_API_KEY",\n'
         '      "max_tokens": 4096, "context_window": 200000,\n'
-        '      "price_in": 3.00, "price_out": 15.00 } } }\n\n'
+        '      "price_in": 3.00, "price_out": 15.00 }} }} }}\n\n'
         "完整字段说明见 docs/setup-wizard.md 。\n"
         "非 TTY 场景(Docker/CI)请手动写 config.json,并通过 .env 或已有环境变量提供 key。"
     ),
@@ -371,7 +367,7 @@ ZH: dict[str, str] = {
     "setup.save_failed_io": "保存失败:{err} —— 请检查磁盘空间或文件权限,然后重新配置这个模型。",
     "setup.saved_active": "已保存 '{name}'并设为当前模型。",
     "setup.saved_inactive": "已保存 '{name}'(未改当前默认模型)。",
-    "setup.key_stored_warning": "注意:API key 以明文存于 ~/.argos/.env(权限 0600),不加密。",
+    "setup.key_stored_warning": "注意:API key 以明文存于 {path}(权限 0600),不加密。",
     "setup.key_empty": "没输入 key —— 留空连不上。请重配这个模型(或改用环境变量方式,如果 key 在环境里)。",
     "setup.key_invalid": "API key 必须是单行文本。",
     "setup.env_var_empty": "没输入环境变量名 —— 请重配这个模型,或改用粘贴 key。",
@@ -399,8 +395,8 @@ ZH: dict[str, str] = {
         "\n⚠ 检测到 stdin 关闭(`argos setup` 需交互终端)。\n"
         "  • 在真终端直接跑:`argos setup`(或 `uv run argos setup`)\n"
         "  • 非交互场景(脚本/CI)手工写配置:\n"
-        "      ~/.argos/config.json   ← provider / model / base_url 声明\n"
-        "      ~/.argos/.env          ← 可选 API key 文件(权限 0600)\n"
+        "      {config_path}   ← provider / model / base_url 声明\n"
+        "      {env_path}          ← 可选 API key 文件(权限 0600)\n"
         "    或设置 api_key_env 指向的已有环境变量。\n"
         "    文件 schema 见 `argos setup --help` 或 docs/setup-wizard.md"
     ),
@@ -490,4 +486,7 @@ ZH: dict[str, str] = {
     "cli.pkg.check_import_failed": "argospkg check: import 失败:{exc_type}: {err}",
     "cli.pkg.manifest_ready": "argospkg manifest: winget 文件已就绪,供人工发布审阅",
     "cli.pkg.manifest_missing": "argospkg manifest: 缺少 {path}",
+    "cli.pkg.manifest_missing_files": "argospkg manifest: 缺少必需文件 {files}",
+    "cli.pkg.manifest_placeholder": "argospkg manifest: {files} 仍含 placeholder 值",
+    "cli.pkg.manifest_invalid_sha": "argospkg manifest: {files} 的 InstallerSha256 无效",
 }

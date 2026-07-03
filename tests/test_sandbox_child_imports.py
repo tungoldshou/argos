@@ -1,10 +1,4 @@
-"""沙箱白名单回归:os.path 等无副作用 stdlib 子模块不应被 smolagents AST 层误伤。
-
-根因:smolagents LocalPythonExecutor 按模块真实 __name__ 做 authorized_imports 检查。
-os.path 在 darwin/Linux 上其实是 posixpath 模块 —— 白名单只有 "os" 不够(也不是 "os.*"/
-"os.path",实测只有真模块名 "posixpath" 命中),缺它 agent 一调 os.path.expanduser 就抛
-InterpreterError: Forbidden access to module: posixpath。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from argos.sandbox._sandbox_child import (
@@ -16,22 +10,20 @@ from argos.sandbox._sandbox_child import (
 def test_preinject_modules_all_importable():
     import importlib
 
-    # 预注入清单里每个模块都必须真能 import(否则 child init 直接崩)。
     for name in _PREINJECT_MODULES:
         assert importlib.import_module(name) is not None
 
 
 def test_required_imports_include_posixpath():
     out = _resolve_authorized_imports(None)
-    # posixpath 是修复的核心 —— os.path 的真实模块名。
     assert "posixpath" in out
     assert "os" in out and "sys" in out and "pathlib" in out
 
 
 def test_host_authorized_list_is_augmented_not_replaced():
     out = _resolve_authorized_imports(["requests"])
-    assert "requests" in out          # host 自定义保留
-    assert "posixpath" in out         # 必备项仍补上
+    assert "requests" in out
+    assert "posixpath" in out
 
 
 def test_no_duplicates_when_already_present():
@@ -41,7 +33,7 @@ def test_no_duplicates_when_already_present():
 
 
 def test_os_path_executes_under_resolved_imports():
-    """端到端证据:用 child 解析出的白名单跑真 smolagents,os.path.* 不再 forbidden。"""
+    """Internal documentation."""
     import os
     import pathlib
     import sys

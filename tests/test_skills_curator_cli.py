@@ -1,4 +1,4 @@
-"""#10 T1+T6 `argos skills` CLI 子命令测试。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import io
@@ -11,7 +11,7 @@ import pytest
 
 
 def _run_cli(argv: list[str], *, monkeypatch, env_setup=None) -> tuple[int, str, str]:
-    """跑 `argos skills <argv>` 走 main(),返 (exit, stdout, stderr)."""
+    """Internal documentation."""
     from argos.__main__ import main
     out = io.StringIO()
     err = io.StringIO()
@@ -30,11 +30,10 @@ def _run_cli(argv: list[str], *, monkeypatch, env_setup=None) -> tuple[int, str,
 
 
 def test_skills_refresh_writes_index(monkeypatch, tmp_path):
-    """mock 远端 → 跑 refresh → 写 index.json."""
+    """Internal documentation."""
     from argos.skills_curator.index import _skills_root
 
     monkeypatch.setattr(_skills_root.__module__ + "._skills_root", lambda: tmp_path)
-    # 上面写法不工作,改用 module 级别 patch
     import argos.skills_curator.index as _idx
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
 
@@ -87,7 +86,6 @@ def test_skills_list_empty(tmp_path, monkeypatch):
 def test_skills_list_with_installed(tmp_path, monkeypatch):
     import argos.skills_curator.index as _idx
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
-    # 装一个 skill
     skill_dir = tmp_path / "user-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(
@@ -103,7 +101,6 @@ def test_skills_list_with_installed(tmp_path, monkeypatch):
 def test_skills_install_unknown_errors(tmp_path, monkeypatch):
     import argos.skills_curator.index as _idx
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
-    # 无 cache → 自动 refresh;mock refresh 失败
     import urllib.request
     monkeypatch.setattr(urllib.request, "urlopen",
                         lambda url, timeout=10.0: (_ for _ in ()).throw(TimeoutError("no net")))
@@ -129,7 +126,7 @@ def test_skills_test_not_installed(tmp_path, monkeypatch):
 
 
 def test_skills_help_lists_subcommands(capsys):
-    """`argos skills --help` 列子命令(解析层 sanity)."""
+    """Internal documentation."""
     from argos.__main__ import _build_parser
     p = _build_parser()
     try:
@@ -143,7 +140,6 @@ def test_skills_help_lists_subcommands(capsys):
 def test_skills_subparser_registers_all_five():
     from argos.__main__ import _build_parser
     p = _build_parser()
-    # 直接 parse 5 个子命令
     for sub in ("refresh", "list", "install", "remove", "test"):
         args = p.parse_args(["skills", sub] if sub in ("refresh", "list") else ["skills", sub, "x"])
         assert args.skills_command == sub

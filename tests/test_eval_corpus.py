@@ -1,4 +1,4 @@
-"""#7 T1 corpus schema + 任务解析测试。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -10,7 +10,7 @@ from tests.eval._seed_corpus import write_seed_corpus
 
 @pytest.fixture
 def seed_corpus(tmp_path, monkeypatch):
-    """落 14 个种子任务到 tmp_path/corpus,设 ARGOS_EVAL_CORPUS_DIR 指过去。"""
+    """Internal documentation."""
     root = tmp_path / "corpus"
     write_seed_corpus(root)
     monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", str(root))
@@ -43,7 +43,6 @@ def test_corpus_version_corrupt_json_returns_0(tmp_path, monkeypatch):
 def test_list_tasks_returns_all_14_seeds(seed_corpus):
     tasks = list_tasks()
     assert len(tasks) == 14
-    # 按 id 升序
     ids = [t.id for t in tasks]
     assert ids == sorted(ids)
 
@@ -64,7 +63,6 @@ def test_list_tasks_missing_corpus_json_returns_empty(tmp_path, monkeypatch):
 
 
 def test_list_tasks_skips_entries_with_missing_dir(seed_corpus):
-    # 删一个 task 目录的内容 → list_tasks 跳过该条目
     import shutil
     shutil.rmtree(seed_corpus / "bug_fix_001_off_by_one")
     tasks = list_tasks()
@@ -106,10 +104,9 @@ def test_load_task_missing_goal_md_raises(tmp_path, monkeypatch):
 
 
 def test_load_task_with_setup_sh(tmp_path, monkeypatch):
-    """task 含 setup.sh → setup_cmd 字段被填。"""
+    """Internal documentation."""
     from tests.eval._seed_corpus import write_seed_corpus
     p = tmp_path / "corpus"
-    # 在 seed 之上额外加一个含 setup.sh 的 task
     write_seed_corpus(p)
     extra = p / "task_with_setup"
     extra.mkdir()
@@ -118,7 +115,6 @@ def test_load_task_with_setup_sh(tmp_path, monkeypatch):
     (extra / "setup.sh").write_text("#!/bin/bash\necho ok\n", encoding="utf-8")
     (extra / "category").write_text("bug_fix", encoding="utf-8")
     (extra / "difficulty").write_text("easy", encoding="utf-8")
-    # 加到 manifest
     import json
     manifest = json.loads((p / "corpus.json").read_text("utf-8"))
     manifest["tasks"].append({"id": "task_with_setup", "category": "bug_fix", "difficulty": "easy", "title": "x"})
@@ -166,9 +162,33 @@ def test_load_task_notes_md_first_line_becomes_title(tmp_path, monkeypatch):
 
 
 def test_corpus_env_var_overrides_root(monkeypatch, tmp_path):
-    """ARGOS_EVAL_CORPUS_DIR 覆盖 ~/.argos/eval/corpus/。"""
+    """Internal documentation."""
     other = tmp_path / "other"
     write_seed_corpus(other, version=3)
     monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", str(other))
     assert corpus_version() == 3
+    assert len(list_tasks()) == 14
+
+
+def test_corpus_env_var_expands_user_home(monkeypatch, tmp_path):
+    """Internal documentation."""
+    fake_home = tmp_path / "home"
+    root = fake_home / "eval-corpus"
+    write_seed_corpus(root, version=5)
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", "~/eval-corpus")
+
+    assert corpus_version() == 5
+    assert len(list_tasks()) == 14
+
+
+def test_corpus_default_root_follows_argos_config_dir(monkeypatch, tmp_path):
+    """Internal documentation."""
+    monkeypatch.delenv("ARGOS_EVAL_CORPUS_DIR", raising=False)
+    cfg_dir = tmp_path / "cfg"
+    root = cfg_dir / "eval" / "corpus"
+    write_seed_corpus(root, version=4)
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+
+    assert corpus_version() == 4
     assert len(list_tasks()) == 14

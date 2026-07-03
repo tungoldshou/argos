@@ -1,10 +1,4 @@
-"""打包 C 阶段 — install-deb.sh 结构测试(plan T5)。
-
-沿用 B 阶段 packaging/install.sh 测试风格(契约 §5 锁):
-  1. 脚本存在
-  2. 走 dpkg -i (不是 tar / brew / pip)
-  3. SHA256 校验(对齐 B 阶段)
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -23,15 +17,42 @@ def test_install_deb_script_exists_and_executable():
 
 
 def test_install_deb_script_uses_dpkg_i_and_apt_f():
-    """脚本走 dpkg -i 装 + apt-get install -f -y 修依赖(spec §7 锁)。"""
+    """Internal documentation."""
     txt = SCRIPT.read_text()
     assert "dpkg -i" in txt, "脚本缺 dpkg -i 装包"
     assert "apt-get install -f" in txt, "脚本缺 apt-get install -f 修依赖"
 
 
 def test_install_deb_script_uses_sha256_verification():
-    """脚本含 SHA256 校验(沿用 B 阶段 install.sh 模式)。"""
+    """Internal documentation."""
     txt = SCRIPT.read_text()
     assert "sha256sum" in txt, "脚本缺 sha256sum 校验"
     assert "SHA256SUMS" in txt or "SHA256" in txt, "脚本缺 SHA256SUMS 资产拉"
     assert "mismatch" in txt.lower() or "verified" in txt.lower(), "脚本缺 mismatch/verified 提示"
+
+
+def test_install_deb_script_requires_sha256sums():
+    """Internal documentation."""
+    txt = SCRIPT.read_text()
+    assert "skipping verification" not in txt
+    assert "Could not find SHA256SUMS" in txt
+    assert "Could not fetch SHA256SUMS" in txt
+
+
+def test_install_deb_script_is_marked_as_deferred_binary_installer():
+    """Internal documentation."""
+    header = "\n".join(SCRIPT.read_text().splitlines()[:5]).lower()
+    assert "deferred" in header
+    assert "not the public launch installer" in header
+
+
+def test_install_deb_fallback_uses_current_source_install_path():
+    """Internal documentation."""
+    txt = SCRIPT.read_text()
+    assert "brew install --cask argos" not in txt
+    assert "brew install argos" not in txt
+    assert "pip install argos-agent" not in txt
+    assert "winget" not in txt
+    assert ".exe zip" not in txt
+    assert "git clone https://github.com/tungoldshou/argos" in txt
+    assert "uv sync" in txt

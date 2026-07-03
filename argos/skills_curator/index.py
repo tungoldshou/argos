@@ -1,17 +1,4 @@
-"""#10 T1 Index schema + 本地 cache + refresh。
-
-远端 raw GitHub `index.json`(只读,作者 PR 维护):
-  {version, generated_at, skills: [{name, version, author, sha256, description,
-   skill_md_url, compatibility, capabilities, size_bytes}, ...]}
-
-本地 `~/.argos/skills/index.json` 是远端副本(atomic write)。
-sha256 校验:对账 index.json 自身的哈希(远端维护者写的 sha 在 index.json.sha256 旁)
-
-D1:GitHub raw 托管
-D4:schema 宽松兼容(未知字段忽略)
-D7:builtin 3 名(verify/security-review/simplify)受保护
-D9:不重写 skills.py / skills_runtime
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -34,7 +21,6 @@ VALID_CAPABILITIES: frozenset[str] = frozenset({"read", "write", "execute", "net
 
 BUILTIN_NAMES: frozenset[str] = frozenset({"verify", "security-review", "simplify"})
 
-# 名称格式(spec §4.3)
 _NAME_RE = re.compile(r"^[a-z][a-z0-9-]{2,32}$")
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(-[a-z0-9.]+)?$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -70,7 +56,7 @@ class IndexCache:
 
 
 class IndexFetchError(RuntimeError):
-    """远端 index 拉取失败(网络 / 404 / JSON 解析)。"""
+    """Internal documentation."""
 
 
 def _skills_root() -> Path:
@@ -105,7 +91,7 @@ def _parse_entry(raw: dict) -> IndexEntry:
 
 
 def fetch_remote(*, url: str = DEFAULT_INDEX_URL, timeout: float = 10.0) -> IndexCache:
-    """HTTP GET index.json,parse,validate known fields(未知字段忽略)。"""
+    """Internal documentation."""
     try:
         with urllib.request.urlopen(url, timeout=timeout) as r:
             data = json.loads(r.read().decode("utf-8"))
@@ -128,7 +114,7 @@ def fetch_remote(*, url: str = DEFAULT_INDEX_URL, timeout: float = 10.0) -> Inde
         try:
             entries.append(_parse_entry(raw))
         except (ValueError, KeyError):
-            continue  # D4 宽松:坏行跳过,不 crash 整 cache
+            continue
 
     return IndexCache(
         version=int(data.get("version", 1)),
@@ -138,7 +124,7 @@ def fetch_remote(*, url: str = DEFAULT_INDEX_URL, timeout: float = 10.0) -> Inde
 
 
 def save_cache(cache: IndexCache, *, base_dir: Path | None = None) -> Path:
-    """原子写 `index.json` 到 base_dir;base 缺省 = ~/.argos/skills/."""
+    """Internal documentation."""
     root = base_dir or _skills_root()
     root.mkdir(parents=True, exist_ok=True)
     target = root / "index.json"

@@ -1,8 +1,4 @@
-"""TUI conductor SSE 订阅测试(Task 2.5).
-
-验收:_conductor DaemonEventSource 上推送的 ProactiveSuggestionEvent
-通过 _start_conductor_subscription 最终到达 _apply_event 并触发渲染。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -17,10 +13,10 @@ import pytest
 # ── helpers ────────────────────────────────────────────────────────────────
 
 def _make_app():
-    """构造最小 ArgosApp(不起 TUI 事件循环)。"""
+    """Internal documentation."""
     from argos.tui.app import ArgosApp
     app = ArgosApp()
-    app.run_worker = MagicMock()  # 不真起 Textual worker
+    app.run_worker = MagicMock()
     return app
 
 
@@ -35,14 +31,13 @@ def _fake_suggestion_event():
     )
 
 
-# ── T1: _start_conductor_subscription 幂等 ────────────────────────────────
 
 def test_conductor_subscription_idempotent():
-    """_start_conductor_subscription 第二次调用不重复起 worker。"""
+    """Internal documentation."""
     from argos.tui.daemon_source import DaemonEventSource
 
     app = _make_app()
-    app._conductor_source = MagicMock()  # 模拟已存在订阅
+    app._conductor_source = MagicMock()
 
     with patch("argos.tui.daemon_source.DaemonEventSource") as mock_cls:
         app._start_conductor_subscription(Path("/tmp/fake.sock"), "sess-x")
@@ -51,11 +46,10 @@ def test_conductor_subscription_idempotent():
     assert app.run_worker.call_count == 0
 
 
-# ── T2: _setup_daemon_mode 成功后启动 conductor 订阅 ──────────────────────
 
 @pytest.mark.asyncio
 async def test_setup_daemon_mode_starts_conductor_subscription(monkeypatch):
-    """daemon 连通后 _setup_daemon_mode 应调用 _start_conductor_subscription。"""
+    """Internal documentation."""
     from argos.tui.app import ArgosApp
     from argos.daemon.client import DaemonClient
 
@@ -77,7 +71,7 @@ async def test_setup_daemon_mode_starts_conductor_subscription(monkeypatch):
         called_with.append((sock, sid))
 
     app._start_conductor_subscription = _fake_start
-    app._start_daemon_heartbeat = MagicMock()  # 不起 set_interval
+    app._start_daemon_heartbeat = MagicMock()
 
     with patch("argos.tui.daemon_spawn.probe_or_spawn", new=AsyncMock(return_value=True)):
         with patch.object(DaemonClient, "create_session", new=AsyncMock(return_value="sess-abc")):
@@ -89,25 +83,16 @@ async def test_setup_daemon_mode_starts_conductor_subscription(monkeypatch):
     assert sid == "sess-abc"
 
 
-# ── T3: conductor SSE 事件到达 _apply_event ────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_conductor_event_reaches_apply_event():
-    """_conductor 流上的 ProactiveSuggestionEvent 经 _start_conductor_subscription 到达 _apply_event。
-
-    模式:
-      1. 构造 DaemonEventSource,monkey-patch _subscribe_once yield 一个事件后结束。
-      2. 调用 _start_conductor_subscription — 它 run_worker 一个协程。
-      3. 捕获该协程并 await 它(绕过 Textual worker 调度)。
-      4. 断言 _apply_event 被调用且收到正确事件。
-    """
+    """Internal documentation."""
     from argos.tui.daemon_source import DaemonEventSource
     from argos.protocol.events import ProactiveSuggestionEvent
 
     app = _make_app()
     suggestion = _fake_suggestion_event()
 
-    # 捕获 run_worker 的 work 参数(Textual 接受 async function 或 awaitable)
     captured_work: list = []
 
     def _capture_worker(work, exclusive=False):
@@ -162,11 +147,10 @@ async def test_conductor_event_reaches_apply_event():
     assert ev.goal == suggestion.goal
 
 
-# ── T4: inline 模式下不起 conductor 订阅 ─────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_no_conductor_subscription_in_inline_mode():
-    """ARGOS_NO_DAEMON=1(inline 模式)时 _setup_daemon_mode 不调 _start_conductor_subscription。"""
+    """Internal documentation."""
     app = _make_app()
     called = []
     app._start_conductor_subscription = lambda *a: called.append(a)

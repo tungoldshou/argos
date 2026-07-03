@@ -1,4 +1,4 @@
-"""SessionRegistry owner/observer 角色 + promote + _require_owner 端点限权测试(#5b T5)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -14,7 +14,6 @@ from argos.daemon.sessions import SessionRegistry
 from argos.daemon.worktree import WorktreeManager
 
 
-# ── SessionRegistry 角色单元测试 ──────────────────────────────────────
 
 
 @pytest.mark.asyncio
@@ -40,7 +39,7 @@ async def test_remove_owner_promotes_oldest_observer():
     b = await reg.create()
     c = await reg.create()
     new_owner = await reg.promote_oldest_observer_after_remove(a.session_id)
-    assert new_owner == b.session_id   # b 比 c 早
+    assert new_owner == b.session_id
     rec_b = reg.get(b.session_id)
     assert rec_b.role == "owner"
 
@@ -67,7 +66,7 @@ async def test_remove_observer_does_not_promote():
 
 @pytest.mark.asyncio
 async def test_promote_only_observer():
-    """删 owner + 只剩 1 observer → 该 observer promote。"""
+    """Internal documentation."""
     reg = SessionRegistry()
     a = await reg.create()
     b = await reg.create()
@@ -75,7 +74,6 @@ async def test_promote_only_observer():
     assert reg.get(b.session_id).role == "owner"
 
 
-# ── 端点级限权 ────────────────────────────────────────────────────────
 
 
 @pytest_asyncio.fixture
@@ -120,7 +118,7 @@ async def test_owner_can_create_run(owner_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_observer_cannot_create_run(owner_server, tmp_path: Path):
-    """第 2 个 session = observer → POST /runs 拿 403。"""
+    """Internal documentation."""
     srv, _, _ = owner_server
     sid1 = await _create_session(srv.socket_path)   # owner
     sid2 = await _create_session(srv.socket_path)   # observer
@@ -137,12 +135,10 @@ async def test_observer_cannot_pause(owner_server, tmp_path: Path):
     srv, _, reg = owner_server
     sid1 = await _create_session(srv.socket_path)
     sid2 = await _create_session(srv.socket_path)
-    # owner 建一个 run
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",
                                  session_id=sid1, body={"goal": "x"})
     rid = json.loads(raw.decode("utf-8"))["run_id"]
     reg.mark(run_id=rid, state="running")
-    # observer 想 pause
     status, _, raw = await _req(srv.socket_path, "POST", f"/runs/{rid}/pause",
                                  session_id=sid2)
     assert status == 403
@@ -178,7 +174,7 @@ async def test_observer_cannot_cancel(owner_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_observer_cannot_focus(owner_server, tmp_path: Path):
-    """observer 调 focus 拿 403。"""
+    """Internal documentation."""
     srv, _, reg = owner_server
     sid1 = await _create_session(srv.socket_path)
     sid2 = await _create_session(srv.socket_path)
@@ -192,31 +188,27 @@ async def test_observer_cannot_focus(owner_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_observer_can_read(owner_server, tmp_path: Path):
-    """observer 仍能 GET /runs, /runs/{id}, SSE(events)。"""
+    """Internal documentation."""
     srv, _, _ = owner_server
     sid1 = await _create_session(srv.socket_path)
     sid2 = await _create_session(srv.socket_path)
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",
                                  session_id=sid1, body={"goal": "x"})
     rid = json.loads(raw.decode("utf-8"))["run_id"]
-    # observer 读 list
     status, _, _ = await _req(srv.socket_path, "GET", "/runs", session_id=sid2)
     assert status == 200
-    # observer 读单 run
     status, _, _ = await _req(srv.socket_path, "GET", f"/runs/{rid}", session_id=sid2)
     assert status == 200
 
 
 @pytest.mark.asyncio
 async def test_owner_delete_session_promotes_observer(owner_server, tmp_path: Path):
-    """owner DELETE /sessions/{id} → 下一个 observer 自动 promote 为 owner。"""
+    """Internal documentation."""
     srv, _, _ = owner_server
     sid1 = await _create_session(srv.socket_path)
     sid2 = await _create_session(srv.socket_path)
-    # owner 退出
     status, _, _ = await _req(srv.socket_path, "DELETE", f"/sessions/{sid1}")
     assert status == 204
-    # 现在 sid2 应该是 owner(能建 run)
     status, _, _ = await _req(srv.socket_path, "POST", "/runs",
                                session_id=sid2, body={"goal": "x"})
     assert status == 201
@@ -224,13 +216,11 @@ async def test_owner_delete_session_promotes_observer(owner_server, tmp_path: Pa
 
 @pytest.mark.asyncio
 async def test_owner_lifecycle_sid_first_call_works(owner_server, tmp_path: Path):
-    """owner 自己建 run → sid1 是 owner,能用。"""
+    """Internal documentation."""
     srv, _, _ = owner_server
     sid = await _create_session(srv.socket_path)
-    # 验证 role
     rec = srv.sessions.get(sid)
     assert rec.role == "owner"
-    # 能正常建
     status, _, _ = await _req(srv.socket_path, "POST", "/runs",
                                session_id=sid, body={"goal": "x"})
     assert status == 201

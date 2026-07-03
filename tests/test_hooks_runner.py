@@ -1,4 +1,4 @@
-"""子进程集成 — 真起进程,无 mock(spec §4.3)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -16,7 +16,7 @@ from argos.hooks.runner import fire, HookFireResult
 
 @pytest.fixture(autouse=True)
 def _isolated_singleton(monkeypatch):
-    """每个测试重置模块级 _config,避免互相污染。"""
+    """Internal documentation."""
     from argos.hooks import _reset_config
     _reset_config()
     yield
@@ -24,7 +24,7 @@ def _isolated_singleton(monkeypatch):
 
 
 def _set_config(*entries_for_pre):
-    """helpers:构造 1 事件的 HooksConfig(PreToolUse)。"""
+    """Internal documentation."""
     cfg = HooksConfig(entries={"PreToolUse": list(entries_for_pre)})
     from argos.hooks import _config
     import argos.hooks as h
@@ -60,14 +60,13 @@ async def test_fire_exit_nonzero_fail():
 
 @pytest.mark.asyncio
 async def test_fire_timeout_kills_process():
-    """command='sleep 5' timeout=200ms → 超时杀进程(returncode is None or 非 0)。"""
+    """Internal documentation."""
     h = HookHandler(type="command", command="sleep 5", timeout=200)
     _set_config(HookMatcherEntry(matcher="*", hooks=(h,)))
     payload = build_pre_payload(session_id="s", cwd="/tmp", code="x", tool_names=[])
     t0 = time.time()
     r = await fire("PreToolUse", payload, cwd="/tmp", session_id="s")
     elapsed = time.time() - t0
-    # 应该在 1s 内返回(200ms + 2s SIGKILL 兜底)
     assert elapsed < 3.0
     assert r.success is False
     assert r.timed_out is True
@@ -75,7 +74,7 @@ async def test_fire_timeout_kills_process():
 
 @pytest.mark.asyncio
 async def test_fire_passes_stdin_json():
-    """command='cat' + payload 'abc' → hook stdin 收到 'abc'(stdout 回显验证)。"""
+    """Internal documentation."""
     h = HookHandler(type="command", command="cat", timeout=5000)
     _set_config(HookMatcherEntry(matcher="*", hooks=(h,)))
     payload = build_pre_payload(
@@ -83,13 +82,12 @@ async def test_fire_passes_stdin_json():
     )
     expected = json.dumps(payload, ensure_ascii=False)
     r = await fire("PreToolUse", payload, cwd="/tmp", session_id="s")
-    # cat 把 stdin 写回 stdout
     assert r.stdout.strip() == expected
 
 
 @pytest.mark.asyncio
 async def test_fire_parallel_3_hooks_faster_than_serial():
-    """3 个 sleep 0.5 hook 并行 → 总耗时 < 1.5s(若串行将 ~1.5s,留余量)。"""
+    """Internal documentation."""
     h1 = HookHandler(type="command", command="sleep 0.5 && echo a", timeout=10000)
     h2 = HookHandler(type="command", command="sleep 0.5 && echo b", timeout=10000)
     h3 = HookHandler(type="command", command="sleep 0.5 && echo c", timeout=10000)
@@ -104,7 +102,7 @@ async def test_fire_parallel_3_hooks_faster_than_serial():
 
 @pytest.mark.asyncio
 async def test_fire_stdout_invalid_json_ignored():
-    """hook stdout 非 JSON → 不解析,按 exit code 判;stop_reason=None。"""
+    """Internal documentation."""
     h = HookHandler(type="command", command="echo 'not json'", timeout=5000)
     _set_config(HookMatcherEntry(matcher="*", hooks=(h,)))
     payload = build_pre_payload(session_id="s", cwd="/tmp", code="x", tool_names=[])
@@ -115,7 +113,7 @@ async def test_fire_stdout_invalid_json_ignored():
 
 @pytest.mark.asyncio
 async def test_fire_stdout_json_stop_reason():
-    """stdout 是 {\"stopReason\": \"x\"} → result.stop_reason == 'x'。"""
+    """Internal documentation."""
     h = HookHandler(
         type="command", command="printf %s '{\"stopReason\":\"blocked by audit\"}'",
         timeout=5000,
@@ -128,7 +126,7 @@ async def test_fire_stdout_json_stop_reason():
 
 @pytest.mark.asyncio
 async def test_fire_command_not_found():
-    """command='nonexistent-bin-xyz' → FileNotFoundError 捕,result.not_found=True。"""
+    """Internal documentation."""
     h = HookHandler(
         type="command", command="nonexistent-bin-xyz-12345", timeout=5000,
     )
@@ -141,7 +139,7 @@ async def test_fire_command_not_found():
 
 @pytest.mark.asyncio
 async def test_fire_env_argos_hook_event_injected():
-    """env 注入 ARGOS_HOOK_EVENT=PreToolUse;hook 读 env 回显。"""
+    """Internal documentation."""
     h = HookHandler(
         type="command", command="bash -c 'echo $ARGOS_HOOK_EVENT'", timeout=5000,
     )
@@ -153,7 +151,7 @@ async def test_fire_env_argos_hook_event_injected():
 
 @pytest.mark.asyncio
 async def test_fire_template_replacement_cwd(tmp_path):
-    """{cwd} / {tool_names} 模板替换。"""
+    """Internal documentation."""
     h = HookHandler(
         type="command", command="echo cwd={cwd} tools={tool_names}",
         timeout=5000,
@@ -169,7 +167,7 @@ async def test_fire_template_replacement_cwd(tmp_path):
 
 @pytest.mark.asyncio
 async def test_fire_event_with_no_handlers_noop():
-    """事件下 0 hook → fire 返 success=True(空 result),无 subprocess。"""
+    """Internal documentation."""
     payload = build_pre_payload(session_id="s", cwd="/tmp", code="x", tool_names=[])
     r = await fire("PostToolUse", payload, cwd="/tmp", session_id="s")
     assert r.success is True
@@ -179,11 +177,10 @@ async def test_fire_event_with_no_handlers_noop():
 
 @pytest.mark.asyncio
 async def test_fire_pre_blocking_sets_success_false_for_any_nonzero():
-    """PreToolUse 时任一 hook 返非 0 → result.success=False(给 loop 判 blocking 用)。"""
+    """Internal documentation."""
     h_ok = HookHandler(type="command", command="true", timeout=5000)
     h_fail = HookHandler(type="command", command="false", timeout=5000)
     _set_config(HookMatcherEntry(matcher="*", hooks=(h_ok, h_fail)))
     payload = build_pre_payload(session_id="s", cwd="/tmp", code="x", tool_names=[])
     r = await fire("PreToolUse", payload, cwd="/tmp", session_id="s")
-    # PreToolUse 时 success=False(任一 fail)→ loop 据此阻塞
     assert r.success is False

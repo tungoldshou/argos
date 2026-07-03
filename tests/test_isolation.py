@@ -1,4 +1,4 @@
-"""isolation 测试 —— sandbox 子目录 / git worktree / 非 git 降级。"""
+"""Internal documentation."""
 import subprocess
 from pathlib import Path
 
@@ -16,6 +16,37 @@ def reroot(tmp_path, monkeypatch):
 
 def _git(*args, cwd):
     subprocess.run(["git", *args], cwd=str(cwd), check=True, capture_output=True)
+
+
+def test_default_sandbox_root_honors_argos_config_dir(tmp_path, monkeypatch):
+    from argos import config as C
+
+    cfg = tmp_path / "cfg"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg))
+    monkeypatch.setattr(C, "_ENV", {})
+
+    ws, vd = isolation.acquire_sandbox("cfgsess")
+
+    assert ws == (cfg / "runs" / "cfgsess" / "workspace").resolve()
+    assert vd == (cfg / "runs" / "cfgsess" / "verify").resolve()
+
+
+def test_default_worktree_root_honors_argos_config_dir(tmp_path, monkeypatch):
+    from argos import config as C
+
+    cfg = tmp_path / "cfg"
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    _git("init", cwd=proj)
+    _git("-c", "user.email=a@b.c", "-c", "user.name=t", "commit", "--allow-empty", "-m", "init", cwd=proj)
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg))
+    monkeypatch.setattr(C, "_ENV", {})
+
+    wt, vd = isolation.acquire_worktree("cfgwt", str(proj))
+
+    assert wt == (cfg / "worktrees" / "cfgwt").resolve()
+    assert vd == wt
+    isolation.release_worktree("cfgwt", str(proj))
 
 
 def test_acquire_sandbox_makes_isolated_dirs(reroot):
@@ -46,7 +77,6 @@ def test_acquire_worktree_creates_and_reuses(reroot, tmp_path):
     ws1, vd1 = isolation.acquire_worktree("sessW", str(proj))
     assert ws1.exists() and ws1 == vd1
     (ws1 / "scratch.txt").write_text("x", encoding="utf-8")
-    # 同会话第二次复用同一 worktree(不报错、路径不变)
     ws2, _ = isolation.acquire_worktree("sessW", str(proj))
     assert ws2 == ws1 and (ws2 / "scratch.txt").exists()
 
@@ -62,7 +92,7 @@ def test_acquire_worktree_raises_on_non_git(reroot, tmp_path):
 
 
 def test_acquire_worktree_reusable_after_release(reroot, tmp_path):
-    """release 后能重新 acquire(分支残留不再撞车) —— I1 回归。"""
+    """Internal documentation."""
     proj = tmp_path / "proj2"
     proj.mkdir()
     _git("init", cwd=proj)
@@ -70,14 +100,13 @@ def test_acquire_worktree_reusable_after_release(reroot, tmp_path):
     ws1, _ = isolation.acquire_worktree("reacq", str(proj))
     isolation.release_worktree("reacq", str(proj))
     assert not ws1.exists()
-    # 关键:再 acquire 不报 "branch already exists"
     ws2, _ = isolation.acquire_worktree("reacq", str(proj))
     assert ws2.exists()
     isolation.release_worktree("reacq", str(proj))
 
 
 def test_path_traversal_session_id_rejected(reroot):
-    """恶意 session_id 不能逃出隔离根 —— C1 回归。"""
+    """Internal documentation."""
     with pytest.raises(isolation.IsolationError):
         isolation.acquire_sandbox("../../etc/evil")
     with pytest.raises(isolation.IsolationError):
@@ -85,7 +114,7 @@ def test_path_traversal_session_id_rejected(reroot):
 
 
 def test_release_sandbox_removes_dir(reroot):
-    """release_sandbox 真的删目录 —— M3。"""
+    """Internal documentation."""
     ws, _ = isolation.acquire_sandbox("delme")
     assert ws.exists()
     isolation.release_sandbox("delme")

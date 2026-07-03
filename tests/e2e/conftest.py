@@ -1,11 +1,4 @@
-"""e2e 共享 fixture:tmp ArgosStore、in_project、build_real_loop(真栈 + ScriptedModelClient)。
-
-接线对齐 canonical(tests/test_e2e_loop_sandbox.py 范本):
-  · 沙箱 = SeatbeltExecutor(broker_handler 同步桥),不预 spawn —— loop.run() 自己 spawn/close。
-  · EgressPolicy(*, llm_hosts, search_hosts, mcp_hosts)(无 from_config)。
-  · in_project 设 ARGOS_WORKSPACE env(子进程 files.py 模块级 WORKSPACE 据此解析)。
-  · workspace=verify_dir=项目目录,传给 AgentLoop(项目模式)。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -34,8 +27,7 @@ def store(tmp_path, monkeypatch):
 
 @pytest.fixture
 def in_project(tmp_path, monkeypatch):
-    """切到 tmp 项目目录(workspace=verify_dir=该目录,project 模式),沿用现 runtime API。
-    设 ARGOS_WORKSPACE 让沙箱子进程 files.py 把 write_file 落到该目录。"""
+    """Internal documentation."""
     proj = tmp_path / "proj"
     proj.mkdir()
     monkeypatch.setenv("ARGOS_WORKSPACE", str(proj))
@@ -46,13 +38,7 @@ def in_project(tmp_path, monkeypatch):
 
 @pytest.fixture
 def build_real_loop(store, in_project, requires_sandbox):
-    """工厂:给定脚本 + verify_cmd + approval_level → 真栈 AgentLoop(只换 model 为脚本替身)。
-
-    沙箱不预 spawn:loop.run() 在开头 spawn、finally close(loop.py)。teardown 兜底 close(幂等)。
-
-    requires_sandbox 依赖:无沙箱后端的平台(mac 缺 sandbox-exec、Linux 缺 bwrap/unshare)
-    直接 skip,绝不 mock 把沙箱测试假跑过。
-    """
+    """Internal documentation."""
     created: list = []
 
     def _make(scripts, *, verify_cmd=None, level=ApprovalLevel.AUTO, max_rounds=3, gated=False):
@@ -64,17 +50,13 @@ def build_real_loop(store, in_project, requires_sandbox):
         )
 
         if gated:
-            # 生产同步桥:request_blocking(host_loop 由 loop.run() 自动注入)→ 完整 gating +
-            # ②交互审批。用于断言"沙箱工具调用真经审批闸"(否则下面快路径绕过 gating)。
             def broker_handler(action, args):
                 return broker.request_blocking(action, args)
         else:
-            # 旧 e2e 快路径:直调 _execute(无 gating),保留既有用例行为。
             def broker_handler(action, args):
                 value, _exit = broker._execute(action, args)
                 return value
 
-        # 平台感知:macOS → Seatbelt,Linux → bwrap/unshare。
         sandbox = select_backend()(broker_handler=broker_handler)
         model = ScriptedModelClient(scripts)
         verifier = Verifier(max_rounds=max_rounds)
@@ -92,5 +74,5 @@ def build_real_loop(store, in_project, requires_sandbox):
 
 
 async def drain(loop, goal: str, session_id: str) -> list:
-    """跑一轮 run,收齐所有 Event(契约 §3 AgentLoop.run 返回 AsyncIterator[Event])。"""
+    """Internal documentation."""
     return [ev async for ev in loop.run(goal, session_id)]

@@ -1,11 +1,7 @@
-"""StandingOrder + OrderStore — 常驻指令持久层（设计 §9 自治面）。
+"""Standing order persistence for dreams and conductor state.
 
-Standing Order = 用户用人话立下的一条自治规矩，可以是：
-  - schedule 类：cron/间隔表达式触发（"每天早上九点…"）
-  - file_trigger 类：glob 文件变化触发（"每次 requirements.txt 改变就…"）
-
-存储路径：~/.argos/conductor/orders.jsonl（可注入目录，便于测试）
-格式：每行一条 StandingOrder.to_dict() 序列化的 JSON。
+Dream state uses ARGOS_CONFIG_DIR/dreams and conductor orders use
+ARGOS_CONFIG_DIR/conductor.
 """
 from __future__ import annotations
 
@@ -20,10 +16,8 @@ from argos.i18n import t
 
 log = logging.getLogger("argos.conductor.orders")
 
-# 常驻指令类型
 OrderKind = Literal["schedule", "file_trigger"]
 
-# 触发后的执行类型（"run" = confirm 后 create_run；"dream" = confirm 后跑 DreamPipeline）
 OrderAction = Literal["run", "dream"]
 
 def _default_orders_dir() -> Path:
@@ -34,24 +28,7 @@ def _default_orders_dir() -> Path:
 
 @dataclass(frozen=True, slots=True)
 class StandingOrder:
-    """一条常驻自治指令（frozen dataclass — 不可变、可哈希）。
-
-    字段说明：
-        id              唯一 ID（uuid4 十六进制，不含连字符）
-        utterance       用户的原始人话描述
-                        例："每天早上九点把昨天的日志整理成摘要"
-        kind            "schedule"（定时）或 "file_trigger"（文件变化触发）
-        schedule        cron-lite 表达式（kind=schedule 时必填，否则 None）
-                        例："09:00"、"every 1h"、"@daily"、"0 9 * * *"
-        trigger_glob    文件 glob 模式（kind=file_trigger 时必填，否则 None）
-                        例："**/requirements*.txt"
-        goal_template   传给 AgentLoop 的 goal 模板；可含 {date}/{path} 占位符
-        enabled         False → ConductorEngine tick 时跳过
-        created_at      创建时间（Unix float）
-        last_fired_at   最近一次产出 ProactiveSuggestion 的时间（None = 从未触发）
-        action          触发后的执行类型："run"（默认，confirm 后 create_run）或
-                        "dream"（confirm 后跑 DreamPipeline 夜间整合）
-    """
+    """Internal documentation."""
     id: str
     utterance: str
     kind: OrderKind
@@ -61,10 +38,10 @@ class StandingOrder:
     enabled: bool
     created_at: float
     last_fired_at: float | None
-    action: OrderAction = "run"   # 带默认值放最后（frozen slots dataclass 规则）
+    action: OrderAction = "run"
 
     def __post_init__(self) -> None:
-        """字段一致性断言（构造时立即检查，fail-loud）。"""
+        """Internal documentation."""
         if self.kind == "schedule" and not self.schedule:
             raise ValueError(t("cond.order.schedule_required", id=self.id))
         if self.kind == "file_trigger" and not self.trigger_glob:
@@ -73,11 +50,10 @@ class StandingOrder:
             raise ValueError(t("cond.order.action_invalid", action=self.action, id=self.id))
 
     # ------------------------------------------------------------------
-    # 序列化 / 反序列化
     # ------------------------------------------------------------------
 
     def to_dict(self) -> dict:
-        """序列化为 dict（供 JSONL 落盘）。"""
+        """Internal documentation."""
         return {
             "id": self.id,
             "utterance": self.utterance,
@@ -93,7 +69,7 @@ class StandingOrder:
 
     @staticmethod
     def from_dict(d: dict) -> "StandingOrder":
-        """从落盘 dict 还原 StandingOrder。旧数据无 action 键时默认 'run'（向前兼容）。"""
+        """Internal documentation."""
         return StandingOrder(
             id=str(d["id"]),
             utterance=str(d["utterance"]),
@@ -108,29 +84,23 @@ class StandingOrder:
         )
 
     def with_last_fired(self, ts: float) -> "StandingOrder":
-        """返回已更新 last_fired_at 的新 StandingOrder（frozen 不可变，返回副本）。"""
+        """Internal documentation."""
         import dataclasses
         return dataclasses.replace(self, last_fired_at=ts)
 
     def with_enabled(self, enabled: bool) -> "StandingOrder":
-        """返回已更新 enabled 状态的新 StandingOrder。"""
+        """Internal documentation."""
         import dataclasses
         return dataclasses.replace(self, enabled=enabled)
 
 
 def _new_order_id() -> str:
-    """生成新 StandingOrder ID（uuid4，不含连字符）。"""
+    """Internal documentation."""
     return uuid.uuid4().hex
 
 
 class OrderStore:
-    """常驻指令的 JSONL 持久化 CRUD。
-
-    存储格式：每行一条 StandingOrder.to_dict()，每条 order 独立一行。
-    - 文件不存在 → 自动创建（首次 add 时）。
-    - IO 失败 → log.warning + 不抛（best-effort 语义，不阻断主流程）。
-    - 删改通过覆写整文件实现（orders 数量通常很小，< 1000 条）。
-    """
+    """Internal documentation."""
 
     def __init__(self, orders_dir: Path | None = None) -> None:
         self._dir = Path(orders_dir).expanduser() if orders_dir else _default_orders_dir()
@@ -138,19 +108,14 @@ class OrderStore:
 
     @property
     def path(self) -> Path:
-        """JSONL 文件路径（供测试检查）。"""
+        """Internal documentation."""
         return self._path
 
     # ------------------------------------------------------------------
-    # 读操作
     # ------------------------------------------------------------------
 
     def list(self) -> list[StandingOrder]:
-        """返回所有 StandingOrder 列表（按 created_at 升序）。
-
-        文件不存在 → 返回空列表。
-        解析失败的行 → log.warning + 跳过。
-        """
+        """Internal documentation."""
         if not self._path.exists():
             return []
         orders: list[StandingOrder] = []
@@ -171,21 +136,17 @@ class OrderStore:
         return orders
 
     def get(self, order_id: str) -> StandingOrder | None:
-        """按 ID 查找 StandingOrder，不存在返回 None。"""
+        """Internal documentation."""
         for o in self.list():
             if o.id == order_id:
                 return o
         return None
 
     # ------------------------------------------------------------------
-    # 写操作
     # ------------------------------------------------------------------
 
     def add(self, order: StandingOrder) -> None:
-        """追加一条新 StandingOrder。
-
-        不检查重复 ID（调用方负责用 _new_order_id() 生成唯一 ID）。
-        """
+        """Internal documentation."""
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             line = json.dumps(order.to_dict(), ensure_ascii=False) + "\n"
@@ -195,10 +156,7 @@ class OrderStore:
             log.warning("orders: add 写入失败: %s", exc)
 
     def update(self, order: StandingOrder) -> bool:
-        """替换同 ID 的 StandingOrder，返回 True = 成功找到并替换；False = ID 不存在。
-
-        实现：读 → 替换目标行 → 覆写整文件。
-        """
+        """Internal documentation."""
         existing = self.list()
         updated = [order if o.id == order.id else o for o in existing]
         if updated == existing and all(o.id != order.id for o in existing):
@@ -210,7 +168,7 @@ class OrderStore:
         return True
 
     def delete(self, order_id: str) -> bool:
-        """删除指定 ID 的 StandingOrder，返回 True = 成功删除；False = ID 不存在。"""
+        """Internal documentation."""
         existing = self.list()
         filtered = [o for o in existing if o.id != order_id]
         if len(filtered) == len(existing):
@@ -219,11 +177,10 @@ class OrderStore:
         return True
 
     # ------------------------------------------------------------------
-    # 内部辅助
     # ------------------------------------------------------------------
 
     def _write_all(self, orders: list[StandingOrder]) -> None:
-        """覆写整个 JSONL 文件。IO 失败 log + 不抛。"""
+        """Internal documentation."""
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             with self._path.open("w", encoding="utf-8") as fh:

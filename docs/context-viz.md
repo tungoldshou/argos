@@ -62,7 +62,8 @@ $ argos context show --json
 
 ### Proactive compaction
 
-阈值默认 `0.8`(占 80% 触发)。可在 `~/.argos/config.json` 持久化修改:
+阈值默认 `0.8`(占 80% 触发)。可在 Argos config directory 下的 `config.json`
+持久化修改(config directory 默认 `~/.argos`,可用 `ARGOS_CONFIG_DIR` 改到别处):
 
 ```json
 { "compact_threshold": 0.7 }

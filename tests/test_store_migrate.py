@@ -1,4 +1,4 @@
-"""Phase 2:migrate_jsonl 非破坏迁入旧记忆(契约 §2 / spec §5.2)。"""
+"""Internal documentation."""
 import json
 
 import pytest
@@ -35,7 +35,6 @@ def test_migrate_is_idempotent_by_id(store, tmp_path):
     jl = tmp_path / "memory.jsonl"
     _write_jsonl(jl, [{"id": "a1", "goal": "g", "verdict": "passed", "model": "m", "fact": None, "ts": 1.0}])
     assert store.migrate_jsonl(str(jl)) == 1
-    # 重跑:同 id 不重复插(INSERT OR IGNORE),返回新迁入 0
     assert store.migrate_jsonl(str(jl)) == 0
     cnt = store._con.execute("SELECT count(*) FROM memory").fetchone()[0]
     assert cnt == 1
@@ -49,14 +48,14 @@ def test_migrate_skips_bad_lines(store, tmp_path):
         '{"id":"b2","goal":"g2","verdict":null,"model":null,"fact":null,"ts":2.0}\n',
         encoding="utf-8",
     )
-    assert store.migrate_jsonl(str(jl)) == 2  # 坏行跳过,迁入 2
+    assert store.migrate_jsonl(str(jl)) == 2
 
 
 def test_migrate_does_not_delete_source(store, tmp_path):
     jl = tmp_path / "memory.jsonl"
     _write_jsonl(jl, [{"id": "a1", "goal": "g", "verdict": "passed", "model": "m", "fact": None, "ts": 1.0}])
     store.migrate_jsonl(str(jl))
-    assert jl.exists()  # 非破坏:源文件保留
+    assert jl.exists()
 
 
 def test_migrate_missing_file_returns_zero(store, tmp_path):
@@ -67,11 +66,23 @@ def test_migrate_default_path_uses_env(store, tmp_path, monkeypatch):
     jl = tmp_path / "env_memory.jsonl"
     _write_jsonl(jl, [{"id": "z9", "goal": "g", "verdict": "passed", "model": "m", "fact": None, "ts": 1.0}])
     monkeypatch.setenv("ARGOS_MEMORY_FILE", str(jl))
-    assert store.migrate_jsonl(None) == 1  # None → 读 ARGOS_MEMORY_FILE
+    assert store.migrate_jsonl(None) == 1
+
+
+def test_migrate_env_path_expands_user_home(store, tmp_path, monkeypatch):
+    """Internal documentation."""
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    jl = fake_home / "memory.jsonl"
+    _write_jsonl(jl, [{"id": "h1", "goal": "g", "verdict": "passed", "model": "m", "fact": None, "ts": 1.0}])
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("ARGOS_MEMORY_FILE", "~/memory.jsonl")
+
+    assert store.migrate_jsonl(None) == 1
 
 
 def test_migrate_bad_ts_does_not_abort_migration(store, tmp_path):
-    """I-1:合法 JSON 但 ts 非数值不得中断整个迁移(否则其后记录静默丢失)。"""
+    """Internal documentation."""
     jl = tmp_path / "memory.jsonl"
     jl.write_text(
         '{"id":"x","goal":"坏ts","verdict":"passed","model":"m","fact":null,"ts":"bad"}\n'
@@ -79,10 +90,10 @@ def test_migrate_bad_ts_does_not_abort_migration(store, tmp_path):
         encoding="utf-8",
     )
     n = store.migrate_jsonl(str(jl))
-    assert n == 2  # 坏 ts 行不中断,两条都迁入
+    assert n == 2
     rows = store._con.execute(
         "SELECT id, ts FROM memory ORDER BY id"
     ).fetchall()
     by_id = {r["id"]: r["ts"] for r in rows}
-    assert by_id["x"] == 0.0  # 坏 ts → 0.0,不丢
-    assert by_id["y"] == 2.0  # 其后的合法记录仍迁入
+    assert by_id["x"] == 0.0
+    assert by_id["y"] == 2.0

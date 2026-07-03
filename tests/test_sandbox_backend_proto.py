@@ -1,4 +1,4 @@
-"""Phase 3:SandboxBackend 协议形状 + ExecResult 字段/ok 属性(契约 §5)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import dataclasses
@@ -25,6 +25,5 @@ def test_exec_result_ok_property():
 
 
 def test_sandbox_backend_protocol_methods():
-    # Protocol 必须声明 spawn / exec_code / close
     for name in ("spawn", "exec_code", "close"):
         assert hasattr(SandboxBackend, name), f"SandboxBackend 缺方法 {name}"

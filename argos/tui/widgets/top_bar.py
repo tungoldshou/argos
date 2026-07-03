@@ -1,18 +1,5 @@
 # argos/tui/widgets/top_bar.py
-"""TopBar:自绘单行顶栏(TUI v3 spec §4.1),替代 stock Header + sub_title 机制。
-
-左:眼(随阶段) Argos v{version} · {model};右:状态徽标(plan / YOLO / 未配 key / LIVE / 未沙箱化)。
-徽标全部来自真实状态(诚实铁律:has_key=False 时绝不出现 LIVE(契约6);有 key 时显 LIVE)。
-DEMO 概念已移除(2026-07-01);FakeLoop 仅作测试桩,生产不跑。
-用 render() 返回 Rich Text 做左右对齐与分段着色 —— 不走 markup 解析(防任意文本崩)。
-
-v3 变更:
-- 品牌符 ✳ → 状态眼(idle=◌ plan=◔ act=◉ verify=❂ report/done=◕)
-- 新增 set_phase(phase) 接收阶段切换
-- 新增 LIVE 徽标(有 key 时显示)
-- 徽标去方括号:[plan mode] → plan;⏻ YOLO → YOLO
-- DEFAULT_CSS 底色改 $well
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from rich.text import Text
@@ -20,26 +7,23 @@ from textual.widgets import Static
 
 from argos.i18n import t
 
-# 与 theme.ARGOS_NIGHT 同源的固定色(Rich style 无法引用 Textual CSS 变量)
-# v3 新色 token 映射(theme.py 里的真实值)
-_EYE_SOFT = "#A8854A"   # $eye-soft:idle 暗金之眼
-_EYE = "#D9A85C"        # $eye:主强调眼、当前阶段字形
-_INK_BRIGHT = "#ECEEF5" # $ink-bright:品牌名
-_INK_DIM = "#7E869C"    # $ink-dim:model label、阶段标签(spec §4.1)
-_PLAN = "#7AA2F7"       # $plan:plan mode 蓝
-_FAIL = "#F7768E"       # $fail:YOLO 危险红(裁决②)
-_PASS = "#9ECE6A"       # $pass:LIVE 绿
-_UNVERIF = "#FF9E64"    # $unverif:DEMO/未配key 橙
+_EYE_SOFT = "#A8854A"
+_EYE = "#D9A85C"
+_INK_BRIGHT = "#ECEEF5" # Internal note.
+_INK_DIM = "#7E869C"
+_PLAN = "#7AA2F7"
+_FAIL = "#F7768E"
+_PASS = "#9ECE6A"
+_UNVERIF = "#FF9E64"
 
-# 眼系字形:phase → glyph(spec §3.1 词典)
 _PHASE_GLYPH: dict[str, str] = {
-    "idle":    "◌",   # U+25CC 空态
-    "plan":    "◔",   # U+25D4 扫视
-    "act":     "◉",   # U+25C9 注视
-    "verify":  "❂",   # U+2742 聚焦
-    "report":  "◕",   # U+25D5 阅毕
-    "done":    "◕",   # done 与 report 同形
-    "blocked": "◓",   # U+25D3 审批/硬确认挂起 — $unverif 橙(字形铁律 README §字形铁律 line 85)
+    "idle":    "◌",
+    "plan":    "◔",
+    "act":     "◉",
+    "verify":  "❂",
+    "report":  "◕",
+    "done":    "◕",
+    "blocked": "◓",
 }
 
 
@@ -56,9 +40,8 @@ class TopBar(Static):
         self._yolo = False
         self._has_key = True
         self._phase = "idle"
-        # Trust 徽标状态(README §152/§188;默认无 trust 信息时不显示)
-        self._trust_level: int | None = None   # 0–4;None=未设置,不渲染 Trust 徽标
-        self._trust_label: str = ""            # e.g. "只有危险操作才问"
+        self._trust_level: int | None = None
+        self._trust_label: str = ""
 
     def set_state(
         self, *,
@@ -69,11 +52,7 @@ class TopBar(Static):
         trust_level: int | None = None,
         trust_label: str | None = None,
     ) -> None:
-        """app 侧状态变化的单入口(任意子集更新);只重渲,不解析。
-
-        trust_level: 0–4(L0 最宽松/L4 最严格);None=不更改当前值。
-        trust_label: 与 trust_level 配套的短描述(如 '只有危险操作才问')。
-        """
+        """Internal documentation."""
         if model_label is not None:
             self._model = model_label
         if plan_mode is not None:
@@ -89,21 +68,12 @@ class TopBar(Static):
         self.refresh()
 
     def set_phase(self, phase: str) -> None:
-        """接收阶段切换(plan/act/verify/report/done/idle),更新品牌眼字形。"""
+        """Internal documentation."""
         self._phase = phase
         self.refresh()
 
     def badges(self) -> list[str]:
-        """当前应显示的徽标文本列表(渲染与测试断言共用的单一真源)。
-
-        v3 规则:
-        - plan_mode → "plan"(去方括号)
-        - yolo → "YOLO"(去 ⏻ 前缀)
-        - 无 key → "未配 key"
-        - 有 key → "LIVE"(契约6:has_key=False 绝不出现 LIVE)
-        - trust_level 已设置 → "L{n} · {label}"(最后,README §188 顺序:模式徽标+LIVE+Trust)
-          L4 时前缀 '⏻ ':README §152 升 L4 顶栏亮红灯
-        """
+        """Internal documentation."""
         out: list[str] = []
         if self._plan_mode:
             out.append(t("widget.badge_plan"))
@@ -113,12 +83,9 @@ class TopBar(Static):
             out.append(t("widget.badge_no_key"))
         else:
             out.append(t("widget.badge_live"))
-        # #2 CC对齐:OS 沙箱 opt-in。未开(默认)→ 显式标"未沙箱化"——诚实警示:无内核牢笼,
-        # 别让用户误以为有 OS 隔离(治理仍在,但不是 OS 级)。开沙箱(--sandbox)则不显此标。
         from argos.config import sandbox_enabled
         if not sandbox_enabled():
             out.append(t("widget.badge_no_sandbox"))
-        # Trust 徽标排最后(README §188)
         if self._trust_level is not None:
             prefix = "⏻ " if self._trust_level == 4 else ""
             label_part = f" · {self._trust_label}" if self._trust_label else ""
@@ -127,13 +94,11 @@ class TopBar(Static):
 
     @property
     def render_text(self) -> str:
-        """纯文本快照(测试断言用)。"""
+        """Internal documentation."""
         return str(self.render())
 
     def render(self) -> Text:
-        # 左侧:状态眼 + 品牌名 + 模型
         glyph = _PHASE_GLYPH.get(self._phase, "◌")
-        # blocked 相(◓)染 $unverif 橙;idle 染 $eye-soft 暗金;其余染 $eye 亮金
         if self._phase == "blocked":
             eye_color = _UNVERIF
         elif self._phase == "idle":
@@ -145,8 +110,6 @@ class TopBar(Static):
         left.append(f"Argos v{self._version}", style=f"bold {_INK_BRIGHT}")
         left.append(f" · {self._model}", style=_INK_DIM)
 
-        # 右侧:徽标区(v3 颜色规则)
-        # Trust 徽标动态颜色:L4 → $fail 红;L0–L3 → $eye-soft 暗金(README §152/§188)
         right = Text()
         for i, b in enumerate(self.badges()):
             if i:
@@ -159,10 +122,7 @@ class TopBar(Static):
         return Text.assemble(left, " " * pad, right) if right.cell_len else left
 
     def _badge_style(self, badge: str) -> str:
-        """返回徽标对应的 Rich style 字符串(单一真源,渲染与测试共用)。
-
-        固定徽标用字典查表;Trust 徽标(含 'L' 前缀或 '⏻' 前缀)按 level 动态着色。
-        """
+        """Internal documentation."""
         _FIXED: dict[str, str] = {
             t("widget.badge_plan"): _PLAN,
             t("widget.badge_yolo"): _FAIL,
@@ -171,7 +131,6 @@ class TopBar(Static):
         }
         if badge in _FIXED:
             return _FIXED[badge]
-        # Trust 徽标:L4(或含 '⏻')→ $fail 红;其余 → $eye-soft 暗金
         if self._trust_level == 4:
             return _FAIL
         return _EYE_SOFT

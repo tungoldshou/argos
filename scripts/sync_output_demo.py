@@ -1,29 +1,4 @@
-"""Sync output 协议(DECSET 2026)的 A/B 对比 demo。
-
-目的:让真人能在自己终端里直观看到同步输出协议对流式渲染的影响。
-不是为了 benchmark(没统计 Δ),只是"看一眼就懂"。
-
-原理:
-- 同步输出协议 = xterm / Kitty / iTerm2 / Ghostty 支持的 DECSET 2026
-- 模式开启(CSI ?2026 h)后,终端把后续输出攒住不渲染,直到收到关闭(CSI ?2026 l)才一次性显示
-- 老终端 / 不支持 → 透明 no-op;支持 → 流式 chunk 一次性"啪"地落屏,无"逐行蹦出"
-
-用法(必须在你自己的真终端里跑):
-
-    uv run python scripts/sync_output_demo.py                 # 默认:auto(现场 probe)
-    uv run python scripts/sync_output_demo.py --sync          # 强制开
-    uv run python scripts/sync_output_demo.py --no-sync      # 强制关
-    uv run python scripts/sync_output_demo.py --chunks 200 --chunk-size 30 --delay-ms 30
-                                                          # 调慢,差异更明显
-
-注意:
-- 非 TTY(piped)跑不出来效果——必须真终端
-- 默认 --delay-ms 30 适合一般终端;SSH 远程 / 老终端建议 --delay-ms 80-100
-- 推荐 a/b 步骤:
-    1. 跑 --no-sync(看 baseline:逐行蹦出)
-    2. 跑 --sync(看同步:整块啪地落)
-    3. 跑默认(auto)看 probe 自动判断
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -31,7 +6,6 @@ import sys
 import time
 from pathlib import Path
 
-# 让脚本可以直接 import argos
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from argos.tui.sync_output import probe_sync_output, sync_batch
@@ -44,14 +18,7 @@ def stream_demo(
     delay_ms: int,
     use_sync: bool | None,
 ) -> None:
-    """流 N 个 chunk,每个之间睡 delay_ms 毫秒,模拟 token-by-token 输出。
-
-    use_sync:
-        True  → 整批包在 sync_batch(enabled=True),强制走 BSU/ESU
-        False → 完全不开(等价 sync_batch(enabled=False))
-        None  → sync_batch(enabled=None)现场 probe 决定(auto)
-    """
-    # 头部标记:本次用什么模式,方便肉眼区分两次跑
+    """Internal documentation."""
     mode_label = {True: "SYNC ON", False: "SYNC OFF", None: "AUTO(probe)"}[use_sync]
     header = f"─── {mode_label} · {chunks} chunks × {chunk_size} chars · {delay_ms}ms delay ───\n"
     sys.stdout.write(header)
@@ -60,13 +27,11 @@ def stream_demo(
     t0 = time.perf_counter()
     with sync_batch(sys.stdout, enabled=use_sync):
         for i in range(chunks):
-            # 把 chunk 序号混进 payload,这样能看清"是否分多次落屏"
             chunk = f"[{i:04d}]".ljust(chunk_size)[:chunk_size]
             sys.stdout.write(chunk)
             sys.stdout.flush()
             if delay_ms > 0:
                 time.sleep(delay_ms / 1000.0)
-    # flush + newline 在 with 外,确保 ESU 之后再换行
     sys.stdout.write("\n")
     sys.stdout.flush()
 

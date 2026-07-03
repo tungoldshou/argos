@@ -1,4 +1,4 @@
-"""#9 T3: CLAUDE.md / AGENTS.md auto-walk + 合并 + secret redact。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -11,8 +11,7 @@ from argos.memory import auto as mem_auto
 
 @pytest.fixture
 def cwd_tree(monkeypatch, tmp_path):
-    """建一个临时目录树用于 walk 测试。"""
-    # 模拟 workspace 目录
+    """Internal documentation."""
     ws = tmp_path / "ws"
     ws.mkdir()
     yield ws
@@ -26,16 +25,14 @@ def test_walk_finds_own_dir(cwd_tree, monkeypatch):
 
 
 def test_walk_finds_parent_chain(cwd_tree, monkeypatch):
-    """子目录里的 CLAUDE.md + 父目录里的 CLAUDE.md 都收。"""
+    """Internal documentation."""
     (cwd_tree / "CLAUDE.md").write_text("parent", encoding="utf-8")
     sub = cwd_tree / "sub"
     sub.mkdir()
     (sub / "CLAUDE.md").write_text("child", encoding="utf-8")
     out = mem_auto.walk_claude_md_files(sub)
-    # 两个文件都在
     assert (sub / "CLAUDE.md") in out
     assert (cwd_tree / "CLAUDE.md") in out
-    # 子优先于父(sub 比 parent 索引小)
     assert out.index(sub / "CLAUDE.md") < out.index(cwd_tree / "CLAUDE.md")
 
 
@@ -53,12 +50,11 @@ def test_walk_skips_nonexistent(cwd_tree, monkeypatch):
 
 
 def test_walk_handles_dot_git_like_dirs(cwd_tree, monkeypatch):
-    """即使没 .git 也应正常 walk 到 root,不断。"""
+    """Internal documentation."""
     (cwd_tree / "CLAUDE.md").write_text("x", encoding="utf-8")
     out = mem_auto.walk_claude_md_files(cwd_tree)
     assert len(out) >= 1
-    # 不会无限循环
-    assert len(out) < 100  # 任意上限
+    assert len(out) < 100
 
 
 # ── merge_claude_documents ───────────────────────────────────────────────────
@@ -83,9 +79,7 @@ def test_merge_truncates_per_file_to_20k(cwd_tree, monkeypatch):
     p = cwd_tree / "big.md"
     p.write_text("x" * 25000, encoding="utf-8")
     out = mem_auto.merge_claude_documents([p])
-    # 截到 20k 之内
     assert "<truncated>" in out
-    # 单文件 <= 20k 字符(标记之后)
     assert len("x" * 25000) > 20000  # sanity
 
 

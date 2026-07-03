@@ -1,5 +1,5 @@
 # tests/test_loop_compaction.py
-"""批3 Task 11:长上下文压缩——溢出触发 compact_messages + 重试;store 压缩保留最近 N。"""
+"""Internal documentation."""
 import pytest
 
 from argos.core.loop import AgentLoop, LoopConfig
@@ -10,7 +10,7 @@ from argos.memory.store import ArgosStore
 
 
 class _OverflowThenOkModel:
-    """第一次 stream 抛 context_length_exceeded,压缩后第二次正常。"""
+    """Internal documentation."""
     def __init__(self) -> None:
         self.calls = 0
 
@@ -40,7 +40,6 @@ def test_compact_messages_keeps_recent(tmp_path):
         store.append_message("s", role="user", content=f"msg{i}")
     store.compact_messages("s", keep_recent=3)
     msgs = store.get_messages("s")
-    # 摘要(1) + 最近 3 = 4;顺序:摘要在最前,最近逐字在后
     assert len(msgs) == 4, f"压缩后应剩 摘要+3,实得 {len(msgs)}"
     assert "早期对话摘要" in msgs[0]["content"]
     assert msgs[-1]["content"] == "msg9"

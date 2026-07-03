@@ -1,16 +1,4 @@
-"""契约层 —— Argos 唯一有实测数据(MiniMax 上结构化任务冲突 8→0)的差异化资产。
-
-从旧 TS contracts.ts 移植。核心思想:对【结构化工程任务】(REST API / DB schema /
-状态机 / 配置),给便宜模型一份覆盖完整的"必检约定 checklist",逼它把会打架的形式约定
-(命名/类型/时区/枚举vs布尔/并发令牌/封装/长度/对齐自检)显式定死,从"拼不起来"变成
-"零冲突可组装"。
-
-边界(已实测):只对结构化工程任务有效;对开放式写作/分析无效甚至有害(15>10)。所以
-domain 判定为非结构化时,【不注入契约】,退回裸 agent。
-
-在 Python agent 里的用法:任务被判为某结构化领域时,把对应契约模板拼进 system_prompt,
-约束 agent 的产出对齐。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -18,7 +6,6 @@ from typing import Literal
 
 Domain = Literal["rest-api", "db-schema", "state-machine", "config", "generic", "none"]
 
-# ── 各领域的"必检约定"骨架(便宜模型会漏的形式约定 = 护城河知识)──────────────
 REST_API = """[C1] Primary key id type and format (e.g. string/UUIDv4)
 [C2] JSON field naming convention (snake_case or camelCase — globally consistent)
 [C3] Timestamp field names and format (field name, type, timezone — e.g. created_at/updated_at, ISO 8601 UTC Z)
@@ -72,7 +59,6 @@ _TEMPLATES: dict[str, tuple[str, str]] = {
     "generic": ("Generic", GENERIC),
 }
 
-# 关键词分类(0 成本兜底)。命中多个按 rest>schema>状态机>config 优先。
 _KEYWORDS: list[tuple[Domain, re.Pattern]] = [
     ("rest-api", re.compile(r"\b(rest|api|endpoint|http|route)\b|端点|接口|路由", re.I)),
     ("db-schema", re.compile(r"\b(schema|table|migration|ddl|orm|foreign\s*key)\b|数据库|表结构|外键|建表|迁移", re.I)),
@@ -80,7 +66,6 @@ _KEYWORDS: list[tuple[Domain, re.Pattern]] = [
     ("config", re.compile(r"\b(config|yaml|toml|settings|feature\s*flag)\b|\.env|配置|参数文件", re.I)),
 ]
 
-# 非结构化信号(写作/分析)——命中则【不注入契约】(实测契约有害)。
 _NON_STRUCTURED = re.compile(
     r"\b(write|essay|article|blog|story|summary|analy|review|compare|opinion)\b"
     r"|写一?篇|文章|博客|故事|总结|分析|评论|横评|观点|心得",
@@ -89,21 +74,19 @@ _NON_STRUCTURED = re.compile(
 
 
 def classify(goal: str) -> Domain:
-    """判定目标的契约领域。非结构化(写作/分析)→ 'none'(不注入契约)。
-    纯关键词,0 成本;LLM 语义分类是可选增强,这里先用兜底(够用且不烧 token)。"""
+    """Internal documentation."""
     if _NON_STRUCTURED.search(goal):
         return "none"
     for dom, pat in _KEYWORDS:
         if pat.search(goal):
             return dom
-    # 含明显工程信号词才当 generic 结构化,否则也不强加契约。
     if re.search(r"\b(function|class|interface|type|json|model|field|enum)\b|函数|类|字段|模型|类型|枚举", goal, re.I):
         return "generic"
     return "none"
 
 
 def contract_for(goal: str) -> tuple[Domain, str | None]:
-    """返回 (领域, 契约约束文本或None)。None=非结构化,不注入。"""
+    """Internal documentation."""
     dom = classify(goal)
     if dom == "none":
         return dom, None
@@ -118,5 +101,5 @@ def contract_for(goal: str) -> tuple[Domain, str | None]:
 
 
 def all_domains() -> list[tuple[str, str]]:
-    """(领域id, 显示名) 列表,供 UI 展示覆盖范围。"""
+    """Internal documentation."""
     return [(k, v[0]) for k, v in _TEMPLATES.items()]

@@ -1,20 +1,5 @@
 # tests/tui/test_activity_panel.py
-"""Regression tests for activity_panel design-audit fixes (2026-06-14).
-
-Covers the five audit findings applied to ActivityPanel:
-  [HIGH]   Verdict 三态语义着色 — passed/$pass, failed/$fail,
-           unverifiable/$unverif, self-verified/$pass-weak
-  [MEDIUM] 缓存 sparkline 整行 $cyan 着色
-  [MEDIUM] 上下文进度条 ▓→$eye / ░→$ink-ghost / pct%→$ink-dim
-  [LOW]    TODO/phase 条目亮度分级(in_progress/$ink-bright,
-           completed/$ink-dim, pending/$ink-faint)
-  [LOW]    Token 计数千分缩写(↑12.4k ↓3.1k)
-
-Tests operate on the widget in "headless" mode (no Textual app):
-_render_* helpers and the _set(idx, body) path are exercised at the
-data/Rich-Text level, not through the mounted DOM.  This matches the
-pattern in tests/tui/test_trust_dial.py.
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import types
@@ -84,10 +69,9 @@ def panel() -> ActivityPanel:
     return ActivityPanel(model_label="test-model", tier="default")
 
 
-# ── [HIGH] Verdict 三态着色 ───────────────────────────────────────────────────
 
 class TestVerdictColoring:
-    """Verdict section must colour status word by state (三态铁律)."""
+    """Internal documentation."""
 
     def _get_verdict_rich(self, panel: ActivityPanel, verdict) -> "str | Text":
         """Call on_verdict and capture what _set receives."""
@@ -187,7 +171,6 @@ class TestCacheSparklineCyan:
         )
 
     def test_cost_dollar_removed_tokens_kept(self, panel: ActivityPanel) -> None:
-        # 去花费(2026-07-01):$ 金额显示已移除(各模型单价不同,不强制配置)。token 流保留。
         rt = self._get_cost_rich(panel, tokens_in=500, tokens_out=100,
                                  cost_usd=0.002, cache_read=0)
         plain = _plain(rt)
@@ -391,9 +374,7 @@ class TestTokenKAbbreviation:
 # ── [MEDIUM] Context footer reset — no stale bleed across runs ────────────────
 
 class TestContextReset:
-    """Context 是常驻 footer:reset_run() 必须像其他区块一样把它复位,否则上一个 run
-    的 context 进度条会残留到下一个 run 的 idle 屏(下一个 run 若在 plan 阶段就失败、
-    永不触发 on_context,残留会永久留在屏上)。"""
+    """Internal documentation."""
 
     def test_reset_run_clears_context_section(self, panel: ActivityPanel) -> None:
         from argos.i18n import t as t_

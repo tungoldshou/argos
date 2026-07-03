@@ -21,7 +21,7 @@
 > 死栈已清除(详见 CHANGELOG 2026-06-05)。灵魂与三道防线(§2)不变。
 >
 > **v6 变更(2026-06-12)**:形态升级为 **daemon 内核 + 可插拔客户端**。`argosd` 常驻后台
-> (Unix socket `~/.argos/daemon.sock`),TUI 作为主要客户端以协议方式接入;daemon 不可用时
+> (Unix socket `daemon.sock` under the Argos config directory),TUI 作为主要客户端以协议方式接入;daemon 不可用时
 > 透明降级为单进程 inline 模式(`ARGOS_NO_DAEMON=1` 强制 inline)。
 
 ---
@@ -91,7 +91,7 @@ agent 声称「完成」时,Argos 不信文字,强制跑一条可机检的验证
 ## 5. 架构(v6,daemon 内核 + 可插拔客户端)
 
 ```
-argosd  ←──────────────────── daemon 内核(Unix socket ~/.argos/daemon.sock)
+argosd  ←──────────────────── daemon 内核(Unix socket under the Argos config directory)
   │  7 态状态机 · 每 run 独立 build_run_stack()
   │    └─ 每 run 专属:SeatbeltExecutor + ApprovalGate + CapabilityBroker
   │       (并发 run 不共享可变状态)

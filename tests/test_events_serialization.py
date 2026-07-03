@@ -1,9 +1,4 @@
-"""Phase 2:§1 事件类冻结性 + serialize/deserialize round-trip。
-
-events.py 是「一份事件三用」(spec §12.6)的源:UI 渲染 = events 表持久化 = replay 重建。
-本测试锁死:① 14 个事件类齐全且 frozen+slots;② kind 常量 = 类名 snake_case;
-③ 不含 Receipt/Verdict 的简单事件 round-trip 无损。
-"""
+"""Internal documentation."""
 import dataclasses
 
 import pytest
@@ -16,21 +11,21 @@ ALL_EVENT_KINDS = {
     "tool_receipt", "verify_verdict", "phase_change", "cost_update",
     "approval_request", "approval_response", "escalation", "error",
     "plan_update", "workflow_progress", "workflow_proposed", "workflow_done",
-    "plan_rendered",  # plan mode spec §2.5:plan 阶段产出 markdown 后 TUI 弹 PlanModal 用
-    "hook_fired",  # hooks spec §2.4:HookFired 经 EventBus 走 TUI 活动栏
-    "lsp_server_event",  # lsp spec §10.1:server 生命周期(spawn/ready/crash/disabled)
-    "lsp_diagnostic_event",  # lsp spec §10.1:diagnostics 数据流(publishDiagnostics 推送)
-    "skill_run_start",  # skills spec §2.6:on-demand skill 开始
-    "skill_run_end",  # skills spec §2.6:on-demand skill 结束
-    "compacted",  # #12 Context 可视化:主动压缩事件(spec §4.3 / D10 扩展字面量)
-    "pruned",  # context rot spec 2026-06-07:第二层 _maybe_prune 每步顶部折叠过期工具输出/被取代旧计划
-    "plan_decision_request",  # v6 §4 ACP:plan 决策请求事件(去 TUI 对 loop 直接引用)
-    "memory_recall",          # v6 §4 ACP:记忆召回结果事件(修 store 穿透)
-    "ledger_entry",           # P3b §6 行为账本:每条 ToolReceipt 沉淀为可读账本条目
-    "proactive_suggestion",     # P5b §9 自治面:conductor 主动建议事件
-    "computer_action",          # P6a §10 computer use:OS 级动作执行结果
-    "dream_progress",           # T10 Dream 夜间整合进度(daemon → client SSE)
-    "dream_report",             # T10 Dream 整合结果汇总(诚实计数)
+    "plan_rendered",
+    "hook_fired",
+    "lsp_server_event",
+    "lsp_diagnostic_event",
+    "skill_run_start",
+    "skill_run_end",
+    "compacted",
+    "pruned",
+    "plan_decision_request",
+    "memory_recall",
+    "ledger_entry",
+    "proactive_suggestion",
+    "computer_action",
+    "dream_progress",
+    "dream_report",
 }
 
 
@@ -104,7 +99,6 @@ def test_serialize_deserialize_workflow_done_notes_back_to_tuple():
     back = E.deserialize_event(E.serialize_event(ev))
     assert isinstance(back, E.WorkflowDone)
     assert back.name == "审计" and back.synthesis == "结论已汇总"
-    # notes 声明为 tuple:JSON round-trip 必须还原回 tuple 且精确相等(非 list)。
     assert isinstance(back.notes, tuple)
     assert back.notes == ("cap 截断", "1 个子任务失败")
 
@@ -119,11 +113,9 @@ def test_workflow_done_default_notes_empty_tuple_roundtrip():
 def test_error_default_chain_is_empty_list():
     e = E.Error(message="boom")
     assert e.chain == []
-    # frozen:默认工厂不共享同一引用
     assert E.Error(message="x").chain is not e.chain
 
 
-# ── M7:嵌套 dataclass(Receipt/Verdict)round-trip 回真对象,不是 dict ──────────────
 def test_tool_receipt_roundtrip_keeps_receipt_dataclass():
     from argos.tools.receipts import Receipt, ReceiptSigner
     signer = ReceiptSigner(key=b"m7-test")
@@ -136,7 +128,6 @@ def test_tool_receipt_roundtrip_keeps_receipt_dataclass():
     assert back.receipt.action == "run_command"
     assert back.receipt.exit_code == 0
     assert back.receipt.sig == rec.sig
-    # 还原后签名仍可验(同 key)
     assert signer.verify(back.receipt) is True
 
 
@@ -161,15 +152,14 @@ def test_verify_verdict_unverifiable_roundtrip_with_tampered():
     assert back.verdict.tampered == ["a.py", "b.py"]
 
 
-# ── Hooks(spec §2.4):HookFired 经 EventBus 走 TUI 活动栏 ─────────────────────
 def test_hook_fired_in_kind_to_class():
-    """HookFired 注册到 _KIND_TO_CLASS(否则 deserialize 抛 ValueError,events.py:259)。"""
+    """Internal documentation."""
     from argos.hooks.events import HookFired
     assert E._KIND_TO_CLASS.get("hook_fired") is HookFired
 
 
 def test_hook_fired_serialize_roundtrip():
-    """HookFired serialize → deserialize → 等价。"""
+    """Internal documentation."""
     from argos.hooks.events import HookFired
     ev = HookFired(
         event_name="PreToolUse", command="echo ok",
@@ -187,19 +177,19 @@ def test_hook_fired_serialize_roundtrip():
 
 # ── LSP(spec 2026-06-06 §10.1):LspServerEvent / LspDiagnosticEvent ─────────
 def test_lsp_server_event_in_kind_to_class():
-    """LspServerEvent 注册到 _KIND_TO_CLASS(否则 deserialize 抛 ValueError)。"""
+    """Internal documentation."""
     from argos.lsp.events import LspServerEvent
     assert E._KIND_TO_CLASS.get("lsp_server_event") is LspServerEvent
 
 
 def test_lsp_diagnostic_event_in_kind_to_class():
-    """LspDiagnosticEvent 注册到 _KIND_TO_CLASS。"""
+    """Internal documentation."""
     from argos.lsp.events import LspDiagnosticEvent
     assert E._KIND_TO_CLASS.get("lsp_diagnostic_event") is LspDiagnosticEvent
 
 
 def test_lsp_server_event_serialize_roundtrip():
-    """LspServerEvent serialize → deserialize → 等价。"""
+    """Internal documentation."""
     from argos.lsp.events import LspServerEvent
     ev = LspServerEvent(
         server_name="python", status="ready", command="pyright-langserver --stdio",
@@ -219,7 +209,7 @@ def test_lsp_server_event_serialize_roundtrip():
 
 
 def test_lsp_diagnostic_event_serialize_roundtrip():
-    """LspDiagnosticEvent serialize → deserialize → 等价。"""
+    """Internal documentation."""
     from argos.lsp.events import LspDiagnosticEvent
     ev = LspDiagnosticEvent(
         server_name="python", uri="file:///a.py", count=3,
@@ -238,7 +228,7 @@ def test_lsp_diagnostic_event_serialize_roundtrip():
 
 
 def test_lsp_event_kinds_in_event_kind_literal():
-    """EventKind Literal 联合含 lsp_server_event / lsp_diagnostic_event。"""
+    """Internal documentation."""
     args = set(E.EventKind.__args__)
     assert "lsp_server_event" in args
     assert "lsp_diagnostic_event" in args

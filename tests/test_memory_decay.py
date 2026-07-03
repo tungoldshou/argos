@@ -1,4 +1,4 @@
-"""#9 T7: decay / prune / 容量 cap / session 30 天清理。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -35,7 +35,6 @@ def test_decay_reduces_confidence_for_old_entries(mem_root):
     n = mem_auto.decay_pass()
     assert n >= 1
     got = mem_auto._read_jsonl(p)[0]
-    # 100 天 → 大约 confidence -= 1.0 → ≤ 0
     assert got.confidence < 0.9
 
 
@@ -47,7 +46,6 @@ def test_decay_does_not_apply_to_recently_used(mem_root):
     mem_auto._append_jsonl(p, fresh)
     mem_auto.decay_pass()
     got = mem_auto._read_jsonl(p)[0]
-    # last_used_at = now → 不衰减
     assert got.confidence == pytest.approx(0.5, abs=1e-9)
 
 
@@ -72,12 +70,10 @@ def test_prune_removes_zero_confidence(mem_root):
     p.parent.mkdir(parents=True, exist_ok=True)
     e = _entry(key="k", confidence=0.5)
     mem_auto._append_jsonl(p, e)
-    # 软删
     mem_auto.forget("k")
     n = mem_auto.prune()
     assert n >= 1
     got = mem_auto._read_jsonl(p)
-    # 0 confidence 的被物理删
     assert all(g.confidence > 0 for g in got)
 
 
@@ -87,15 +83,12 @@ def test_prune_idempotent(mem_root):
     assert n1 == 0 and n2 == 0
 
 
-# ── cap 强制 ────────────────────────────────────────────────────────────────
 def test_cap_enforced_on_write(mem_root, tmp_path):
-    """写入超 cap → 触发 prune,把最旧的删到 < cap。"""
+    """Internal documentation."""
     pid = mem_auto.project_id_for(tmp_path)
     p = mem_auto._project_path(pid)
     p.parent.mkdir(parents=True, exist_ok=True)
-    # cap 设小(1KB)便于测
     cap = 1024
-    # 写很多大条目
     for i in range(20):
         big = _entry(
             key=f"k{i}", scope="project", project_id=pid,
@@ -103,11 +96,9 @@ def test_cap_enforced_on_write(mem_root, tmp_path):
         )
         mem_auto._append_jsonl(p, big)
         mem_auto._enforce_cap(p, max_bytes=cap)
-    # 文件应 < cap
-    assert p.stat().st_size < cap + 500  # 容差
+    assert p.stat().st_size < cap + 500
 
 
-# ── session 30 天清理 ───────────────────────────────────────────────────────
 def test_session_tier_purged_after_30_days(mem_root, tmp_path):
     p = mem_auto._session_path("s-old")
     p.parent.mkdir(parents=True, exist_ok=True)

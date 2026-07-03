@@ -1,8 +1,4 @@
-"""git worktree RAII —— 并行写子 agent 的隔离。诚实:非 git 工作区退共享 + 注记无硬隔离。
-RAII:上下文退出必拆 worktree(含异常路径),不留残留。
-
-底层 git 原语统一在 `argos.git_worktree`(与 daemon 的 WorktreeManager 共用一份),
-本模块只负责 RAII 编排 + 子 agent 工作目录命名 + 降级注记。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import contextlib
@@ -16,8 +12,7 @@ from argos.i18n import t
 
 @contextlib.contextmanager
 def worktree_for(base: Path, agent_id: str, isolation: str) -> Iterator[tuple[Path, str | None]]:
-    """yield (workdir, note)。isolation=worktree 且 base 是 git 仓 → 独立 worktree;
-    否则退 base 共享(note 说明原因)。退出时拆 worktree。"""
+    """Internal documentation."""
     if isolation != "worktree":
         yield base, None
         return
@@ -30,7 +25,7 @@ def worktree_for(base: Path, agent_id: str, isolation: str) -> Iterator[tuple[Pa
     if wt.exists():
         shutil.rmtree(wt, ignore_errors=True)
     try:
-        gw.add_worktree(repo=base, path=wt, branch=None)  # 游离头,不建命名分支
+        gw.add_worktree(repo=base, path=wt, branch=None)
     except gw.WorktreeError as e:
         yield base, t("wf.worktree.create_failed", error=str(e)[:80])
         return

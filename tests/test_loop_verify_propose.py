@@ -1,9 +1,4 @@
-"""批2 Task 8:agent 在 act 阶段 propose_verify(cmd) → harness 在 verify 阶段独立跑该命令。
-
-真验证门:agent 只能【声明】验证命令,真执行在 host 的 verify 阶段(隔离 verify_dir,退出
-码为准),agent 碰不到执行 —— 防 agent 篡改评判它的测试作弊。无 propose 时维持现 NO_TEST_LABEL
-诚实路径。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -12,11 +7,11 @@ from argos.core.loop import AgentLoop, LoopConfig
 from argos.core.verify_gate import Verdict
 from argos.sandbox.backend import ExecResult
 from argos.tui.events import EventBus, VerifyVerdict
-from tests.test_loop_codeact import FakeStore  # 复用
+from tests.test_loop_codeact import FakeStore
 
 
 class _ProposeSandbox:
-    """exec_code 时若代码含 propose_verify(...) 模拟把 cmd 回传(经 broker_handler 风格)。"""
+    """Internal documentation."""
     def __init__(self, on_propose): self._on_propose = on_propose
     def spawn(self, *, workspace, namespace, allow_workflow=True, read_only=False): pass
     def exec_code(self, code):
@@ -36,8 +31,7 @@ class _RecordingVerifier:
 
 
 def test_propose_verify_rejects_trivial_noop_commands():
-    """H1 修复:propose_verify 拒绝 echo/true/ls/pwd/cat 等永远通过的伪验证命令(防假绿)。
-    伪命令不登记 → 不产生 verdict.passed,落回"未机检验证"诚实路径;真命令(pytest)正常登记。"""
+    """Internal documentation."""
     from tests.test_loop_codeact import FakeModel
     loop = AgentLoop(store=FakeStore(), bus=EventBus(),
                      sandbox=_ProposeSandbox(lambda c: None), broker=None,
@@ -49,11 +43,11 @@ def test_propose_verify_rejects_trivial_noop_commands():
         assert loop._verify_cmd is None, f"{fake!r} 不该被当验证命令登记(伪验证)"
     loop._verify_cmd = None
     loop._on_propose_verify("pytest tests/test_x.py")
-    assert loop._verify_cmd == "pytest tests/test_x.py"   # 真命令照常登记
+    assert loop._verify_cmd == "pytest tests/test_x.py"
 
 
 class _RecModel:
-    """记录每次 stream 收到的 messages(用于断言催促被回灌);按脚本逐段出 text。"""
+    """Internal documentation."""
     def __init__(self, scripts): self._s = scripts; self._i = 0; self.seen = []
     async def stream(self, messages, *, system, system_dynamic=None):
         self.seen.append([m.get("content", "") for m in messages])
@@ -64,13 +58,12 @@ class _RecModel:
 
 @pytest.mark.asyncio
 async def test_h2_nudges_to_verify_when_code_changed_without_verify_cmd():
-    """H2:agent 改了代码(write_file 真跑过)却没声明验证命令 → 回灌一次催促声明真验证;
-    仍不声明则诚实收尾(不无限催)。"""
+    """Internal documentation."""
     from argos.core.verify_gate import Verifier
     model = _RecModel([
-        "```python\nwrite_file('x.py', 'x=1')\n```",   # 改代码
-        "完成。",                                        # 宣布完成、无 propose_verify → 该被催一次
-        "完成。",                                        # 仍不声明 → 诚实收尾(不再催)
+        "```python\nwrite_file('x.py', 'x=1')\n```",
+        "完成。",
+        "完成。",
     ])
     loop = AgentLoop(store=FakeStore(), bus=EventBus(), sandbox=_ProposeSandbox(lambda c: None),
                      broker=None, model=model, verifier=Verifier(),
@@ -79,16 +72,15 @@ async def test_h2_nudges_to_verify_when_code_changed_without_verify_cmd():
         pass
     flat = "\n".join(msg for call in model.seen for msg in call)
     assert "propose_verify" in flat and "没有声明验证" in flat, "改了代码却没声明验证 → 应回灌一次催促"
-    # 只催一轮:催促文本只应出现一次(防无限催)
     assert flat.count("没有声明验证") == 1
 
 
 @pytest.mark.asyncio
 async def test_h2_no_nudge_for_readonly_task():
-    """纯读任务(只 read_file,没写)→ 不催验证(避免误催纯读/问答任务)。"""
+    """Internal documentation."""
     from argos.core.verify_gate import Verifier
     model = _RecModel([
-        "```python\nprint(read_file('x.py'))\n```",   # 只读,没改
+        "```python\nprint(read_file('x.py'))\n```",
         "完成。",
     ])
     loop = AgentLoop(store=FakeStore(), bus=EventBus(), sandbox=_ProposeSandbox(lambda c: None),
@@ -102,10 +94,9 @@ async def test_h2_no_nudge_for_readonly_task():
 
 @pytest.mark.asyncio
 async def test_fake_verify_command_does_not_produce_false_green():
-    """H1 端到端回归:模型声明 `echo ok` 当验证 → 被拒不登记 → verify 落 unverifiable(未机检验证),
-    绝不报 passed 假绿。修复前 echo 在白名单、跑出 exit 0 → 会误判 passed(本测试即守此回归)。"""
+    """Internal documentation."""
     from tests.test_loop_codeact import FakeModel
-    from argos.core.verify_gate import Verifier   # 真 Verifier:verify_cmd=None → unverifiable
+    from argos.core.verify_gate import Verifier
     model = FakeModel([
         "```python\npropose_verify('echo ok')\nwrite_file('x.py','x=1')\n```",
         "完成。",
@@ -126,7 +117,6 @@ async def test_agent_proposed_cmd_is_run_by_harness():
     verifier = _RecordingVerifier()
     proposed = {}
     sandbox = _ProposeSandbox(lambda cmd: proposed.update(cmd=cmd))
-    # 第一段:提议验证命令 + 写代码;第二段:完成。
     from tests.test_loop_codeact import FakeModel
     model = FakeModel([
         "```python\npropose_verify('pytest tests/test_x.py')\nwrite_file('x.py','...')\n```",
@@ -134,7 +124,6 @@ async def test_agent_proposed_cmd_is_run_by_harness():
     ])
     loop = AgentLoop(store=FakeStore(), bus=EventBus(), sandbox=sandbox, broker=None,
                      model=model, verifier=verifier, config=LoopConfig(verify_cmd=None))
-    # loop 需暴露一个 hook 让 sandbox 把 proposed cmd 传回:见实现(broker_handler 或 namespace 回调)
     verdicts = []
     async for ev in loop.run("g", "s"):
         if isinstance(ev, VerifyVerdict):

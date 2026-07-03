@@ -1,4 +1,4 @@
-"""learning hook 验收 — 任务:对主任务无副作用,后台跑,失败降级。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -40,13 +40,9 @@ def _failed_events() -> list[dict]:
     ]
 
 
-# ── 验收 d: 整个过程对主任务无副作用 ────────────────────
 @pytest.mark.asyncio
 async def test_passed_run_triggers_distill_and_promote(tmp_path, monkeypatch):
-    """passed → distill + promotion_gate 都跑(monkeypatch 看到调用)。
-
-    tasks 传一个 placeholder(让 hook 走到 promote 分支);promote 本身被 stub,不真评估。
-    """
+    """Internal documentation."""
     distill_calls: list[dict] = []
     promote_calls: list[dict] = []
 
@@ -70,7 +66,6 @@ async def test_passed_run_triggers_distill_and_promote(tmp_path, monkeypatch):
     run_id = "r#passed"
     _write_run_store(tmp_path, run_id, _passed_events())
 
-    # tasks 传一个 placeholder 对象;promote 被 stub,不读字段
     placeholder_tasks = [object()]
 
     await hook.on_run_completed(
@@ -88,7 +83,7 @@ async def test_passed_run_triggers_distill_and_promote(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_failed_run_triggers_reflection_only(tmp_path, monkeypatch):
-    """failed → reflection 调 + distill【不】调 + promote【不】调。"""
+    """Internal documentation."""
     reflect_calls: list[dict] = []
     distill_calls: list[dict] = []
     promote_calls: list[dict] = []
@@ -125,7 +120,7 @@ async def test_failed_run_triggers_reflection_only(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_hook_swallows_distill_exceptions(tmp_path, monkeypatch):
-    """distill 抛异常 → on_run_completed 不抛(caller 放心 await)。"""
+    """Internal documentation."""
     from argos.learning import distiller, promotion_gate
 
     def _boom(**kw):
@@ -135,7 +130,6 @@ async def test_hook_swallows_distill_exceptions(tmp_path, monkeypatch):
 
     run_id = "r#boom"
     _write_run_store(tmp_path, run_id, _passed_events())
-    # 不抛
     await hook.on_run_completed(
         run_id=run_id, store_dir=tmp_path / "runs",
         goal="x", verify_cmd="pytest -q",
@@ -148,7 +142,7 @@ async def test_hook_swallows_distill_exceptions(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_hook_does_not_modify_store_events(tmp_path):
-    """主 run 的 store 文件内容不被 hook 改动(append-only 假设)。"""
+    """Internal documentation."""
     run_id = "r#no-touch"
     _write_run_store(tmp_path, run_id, _passed_events())
     p = tmp_path / "runs" / f"{run_id}.jsonl"
@@ -168,7 +162,7 @@ async def test_hook_does_not_modify_store_events(tmp_path):
 
 @pytest.mark.asyncio
 async def test_hook_is_awaitable_and_returns_none(tmp_path):
-    """hook 是 async 函数,返 None(caller 不依赖返回值)。"""
+    """Internal documentation."""
     run_id = "r#await"
     _write_run_store(tmp_path, run_id, _passed_events())
     result = await hook.on_run_completed(
@@ -182,19 +176,13 @@ async def test_hook_is_awaitable_and_returns_none(tmp_path):
     assert result is None
 
 
-# ── Task 3:无 runner 时候选落盘(修复:候选丢弃断电) ─────────────────────────────
 
 
 def test_passed_without_runner_persists_candidate(tmp_path, monkeypatch):
-    """无 runner 时候选必须落盘(修复:当场丢弃)。
-
-    评审 I2:monkeypatch distiller 返回固定候选,解耦 distiller 内部行为
-    (hook 内 `from ... import distiller` 后调模块属性,patch 可拦截)。
-    """
+    """Internal documentation."""
     store_dir = tmp_path / "runs"
     store_dir.mkdir()
     run_id = "abc123def456"
-    # store 文件需存在,内容随意(distill 已被 stub,不读它)
     (store_dir / f"{run_id}.jsonl").write_text(
         json.dumps({"kind": "run_meta", "run_id": run_id}), encoding="utf-8")
 
@@ -385,9 +373,7 @@ async def test_real_promote_b_wins_skill_written(tmp_path, monkeypatch):
 
 
 def test_self_verified_passed_never_calls_save_candidate(tmp_path, monkeypatch):
-    """E4 防火墙(评审 B1 加固):不只断言候选区为空(那会因路由本来就不
-    落盘而平凡通过),用 spy 钉死 save_candidate 在 self_verified 路径上
-    从未被调用 —— 防火墙断在调用层,不是碰巧没产物。"""
+    """Internal documentation."""
     store_dir = tmp_path / "runs"
     store_dir.mkdir()
     run_id = "abc123def456"
@@ -408,6 +394,6 @@ def test_self_verified_passed_never_calls_save_candidate(tmp_path, monkeypatch):
         candidates_root=tmp_path / "candidates",
         runner_factory=None, tasks=[],
     ))
-    assert calls == []                                     # 调用层防线
+    assert calls == []
     from argos.learning.candidates import list_unconsumed
-    assert list_unconsumed(tmp_path / "candidates") == []  # 产物层防线
+    assert list_unconsumed(tmp_path / "candidates") == []

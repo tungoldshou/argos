@@ -1,15 +1,4 @@
-"""Capability manifest 值对象测试（§5 能力模型）。
-
-覆盖：
-- 正常构造（各字段默认值）
-- 冻结不可变（frozen dataclass）
-- name 空串拒绝
-- kind 非法值拒绝
-- visibility 非法值拒绝
-- egress_hosts 默认为空 tuple
-- dispatch=None 合法（内置能力占位）
-- dispatch 可赋可调用
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import dataclasses
@@ -19,11 +8,10 @@ from argos.capability.manifest import Capability
 
 
 # ------------------------------------------------------------------
-# 辅助工厂
 # ------------------------------------------------------------------
 
 def _cap(**kwargs) -> Capability:
-    """带默认值的 Capability 工厂，便于各 test 只覆写关心的字段。"""
+    """Internal documentation."""
     defaults = dict(
         name="web_search",
         kind="tool",
@@ -34,11 +22,10 @@ def _cap(**kwargs) -> Capability:
 
 
 # ------------------------------------------------------------------
-# 正常构造 + 默认值
 # ------------------------------------------------------------------
 
 def test_basic_construction():
-    """最小字段构造成功，默认值符合规范。"""
+    """Internal documentation."""
     cap = _cap()
     assert cap.name == "web_search"
     assert cap.kind == "tool"
@@ -52,7 +39,7 @@ def test_basic_construction():
 
 
 def test_full_construction():
-    """所有字段都能正确赋值。"""
+    """Internal documentation."""
     def _exec(**kw):
         return "result"
 
@@ -78,79 +65,76 @@ def test_full_construction():
 
 
 def test_risk_none_allowed_in_manifest():
-    """manifest 本身允许 risk=None（注册期才被 registry fail-closed 拦截）。"""
+    """Internal documentation."""
     cap = _cap(risk=None)
     assert cap.risk is None
 
 
 def test_reversible_can_be_true_false_or_none():
-    """reversible 三态：True / False / None 都合法。"""
+    """Internal documentation."""
     assert _cap(reversible=True).reversible is True
     assert _cap(reversible=False).reversible is False
     assert _cap(reversible=None).reversible is None
 
 
 # ------------------------------------------------------------------
-# 不可变性
 # ------------------------------------------------------------------
 
 def test_frozen_immutable():
-    """frozen=True：任何字段赋值都应抛 FrozenInstanceError。"""
+    """Internal documentation."""
     cap = _cap()
     with pytest.raises(dataclasses.FrozenInstanceError):
         cap.name = "other"  # type: ignore[misc]
 
 
 def test_frozen_egress_hosts_tuple():
-    """egress_hosts 是 tuple（不可变），不是 list。"""
+    """Internal documentation."""
     cap = _cap(egress_hosts=("api.openai.com", "duckduckgo.com"))
     assert isinstance(cap.egress_hosts, tuple)
 
 
 # ------------------------------------------------------------------
-# 构造期校验 fail-closed
 # ------------------------------------------------------------------
 
 def test_empty_name_rejected():
-    """name 为空串时 __post_init__ 抛 ValueError。"""
+    """Internal documentation."""
     with pytest.raises(ValueError, match="name"):
         _cap(name="")
 
 
 def test_whitespace_only_name_rejected():
-    """name 全为空白字符时拒绝。"""
+    """Internal documentation."""
     with pytest.raises(ValueError, match="name"):
         _cap(name="   ")
 
 
 def test_invalid_kind_rejected():
-    """kind 非法值抛 ValueError。"""
+    """Internal documentation."""
     with pytest.raises(ValueError, match="kind"):
         _cap(kind="unknown_kind")  # type: ignore[arg-type]
 
 
 def test_invalid_visibility_rejected():
-    """visibility 非法值抛 ValueError。"""
+    """Internal documentation."""
     with pytest.raises(ValueError, match="visibility"):
         _cap(visibility="admin")  # type: ignore[arg-type]
 
 
 # ------------------------------------------------------------------
-# 各 kind / visibility 合法值枚举
 # ------------------------------------------------------------------
 
 @pytest.mark.parametrize("kind", [
     "tool", "mcp", "computer", "browser", "hook", "skill", "lsp", "plugin",
 ])
 def test_all_valid_kinds(kind):
-    """每个合法 kind 都能注册。"""
+    """Internal documentation."""
     cap = _cap(kind=kind)
     assert cap.kind == kind
 
 
 @pytest.mark.parametrize("vis", ["all", "developer"])
 def test_all_valid_visibility(vis):
-    """两种合法 visibility 都能设置。"""
+    """Internal documentation."""
     cap = _cap(visibility=vis)
     assert cap.visibility == vis
 
@@ -160,7 +144,7 @@ def test_all_valid_visibility(vis):
 # ------------------------------------------------------------------
 
 def test_dispatch_callable():
-    """dispatch 可以是任何可调用对象。"""
+    """Internal documentation."""
     called = []
 
     def handler(**kw):
@@ -174,6 +158,6 @@ def test_dispatch_callable():
 
 
 def test_dispatch_none_is_default():
-    """dispatch=None 表示由 broker 既有路径处理（内置能力）。"""
+    """Internal documentation."""
     cap = _cap()
     assert cap.dispatch is None

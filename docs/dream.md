@@ -65,20 +65,20 @@
         │
         ├─→ 记忆整理（同 key 合并，衰减归档）
         │
-        └─→ 报告落盘（~/.argos/dreams/<date>.jsonl）
+        └─→ 报告落盘（<config-dir>/dreams/<date>.jsonl）
 ```
 
 ## 目录与文件布局
 
 ```
-~/.argos/
+<config-dir>/
 ├── learning/
 │   └── candidates/                  # 候选区（晋升前）
 │       ├── <name>-<run_id12>/
 │       │   ├── SKILL.md             # distiller 产物原文
 │       │   └── meta.json            # {source_run, verify_cmd, workspace, created_at, consumed, consumed_reason, self_verified}
 │       └── ...
-├── dreams/                          # Dream 报告（可覆盖为 ARGOS_DREAMS_DIR）
+├── dreams/                          # Dream 报告（可用 ARGOS_DREAMS_DIR 覆盖）
 │   ├── 2026-06-13.jsonl            # {kind, status, sources, details, timestamp}
 │   └── ...
 └── memory/
@@ -145,11 +145,12 @@ Dream 在此基础上再加**两层纵深**：
 
 ### 环境变量
 
-- `ARGOS_DREAMS_DIR` — 报告目录（默认 `~/.argos/dreams/`）
+- `ARGOS_CONFIG_DIR` — Argos config directory（默认 `~/.argos`）
+- `ARGOS_DREAMS_DIR` — 报告目录（默认 `<config-dir>/dreams/`）
 
 ### 关闭夜间自动整合
 
-在 `~/.argos/conductor/orders.jsonl` 中，找到 `builtin-dream-nightly` 那一行，将 `enabled` 改为 `false`（每行一个独立 JSON 对象）：
+在 `<config-dir>/conductor/orders.jsonl` 中，找到 `builtin-dream-nightly` 那一行，将 `enabled` 改为 `false`（每行一个独立 JSON 对象）：
 
 ```jsonl
 {"id": "builtin-dream-nightly", "trigger": {"kind": "cron", "pattern": "03:00"}, "enabled": false, "action": "dream"}

@@ -1,4 +1,4 @@
-"""打包 C 阶段 — Linux build script 结构测试(plan T3)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -19,7 +19,7 @@ def test_build_linux_script_exists_and_executable():
 
 
 def test_build_linux_script_runs_pyinstaller_onefile():
-    """脚本 grep 含 pyinstaller + --onefile + --console。"""
+    """Internal documentation."""
     txt = SCRIPT.read_text()
     assert "pyinstaller" in txt, "脚本缺 pyinstaller 调用"
     assert "--onefile" in txt, "脚本缺 --onefile"
@@ -28,29 +28,58 @@ def test_build_linux_script_runs_pyinstaller_onefile():
 
 
 def test_build_linux_script_packs_appimage_deb_rpm():
-    """脚本 grep 含 appimagetool + dpkg-deb --build + rpmbuild -bb。"""
+    """Internal documentation."""
     txt = SCRIPT.read_text()
     assert "appimagetool" in txt, "脚本缺 appimagetool 调用"
     assert "dpkg-deb --build" in txt, "脚本缺 dpkg-deb --build"
     assert "rpmbuild" in txt and "-bb" in txt, "脚本缺 rpmbuild -bb"
 
 
+def test_build_linux_script_fails_when_required_package_assets_are_missing():
+    """Internal documentation."""
+    txt = SCRIPT.read_text()
+    assert "跳 .deb" not in txt
+    assert "跳 .rpm" not in txt
+    assert "WARN: rpmbuild 失败" not in txt
+    assert "FATAL: dpkg-deb not found" in txt
+    assert "FATAL: rpmbuild not found" in txt
+    assert "FATAL: rpmbuild failed" in txt
+    assert "FATAL: RPM missing" in txt
+    assert "FATAL: RPM asset missing" in txt
+    assert "mv dist/argos-agent-${ARGOS_VERSION}-1.*.\"${RPM_ARCH}\".rpm \\" in txt
+    assert "mv dist/argos-agent-${ARGOS_VERSION}-1.*.\"${RPM_ARCH}\".rpm \\\n       \"dist/argos-${ARGOS_VERSION}-1.${RPM_ARCH}.rpm\" 2>/dev/null || true" not in txt
+
+
+def test_build_linux_script_fails_when_appimage_is_missing():
+    """Internal documentation."""
+    txt = SCRIPT.read_text()
+    assert "跳 AppImage" not in txt
+    assert "FATAL: appimagetool" in txt
+    assert "FATAL: AppImage missing" in txt
+
+
 def test_build_linux_script_reads_argos_version():
-    """脚本 grep 含 ARGOS_VERSION env 读取 + packaging/VERSION fallback。"""
+    """Internal documentation."""
     txt = SCRIPT.read_text()
     assert "${ARGOS_VERSION:-}" in txt, "脚本缺 ARGOS_VERSION env fallback"
     assert "cat packaging/VERSION" in txt, "脚本缺 packaging/VERSION fallback"
 
 
+def test_build_linux_script_strips_release_tag_v_prefix():
+    """Internal documentation."""
+    txt = SCRIPT.read_text()
+    assert 'ARGOS_VERSION="${ARGOS_VERSION#v}"' in txt
+
+
 def test_build_linux_script_excludes_dead_stacks():
-    """脚本排除 langchain/langgraph/fastapi/uvicorn(沿用 build_arm64.sh)。"""
+    """Internal documentation."""
     txt = SCRIPT.read_text()
     for dead in ("langchain", "langgraph", "fastapi", "uvicorn"):
         assert f"--exclude-module {dead}" in txt, f"脚本缺 --exclude-module {dead}"
 
 
 def test_build_linux_script_adds_data_files():
-    """脚本显式 add schema.sql / VERSION / Info.plist(沿用 arm64 spec)。"""
+    """Internal documentation."""
     txt = SCRIPT.read_text()
     for data in ("schema.sql", "packaging/VERSION", "packaging/Info.plist"):
         assert data in txt, f"脚本缺 {data} add-data"

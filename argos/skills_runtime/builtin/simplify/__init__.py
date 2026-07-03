@@ -1,4 +1,4 @@
-"""`/simplify` skill 编排(3 pass 顺序跑,spec §2.5)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -43,7 +43,7 @@ def _summarize(verdict: str, findings: list[Finding], top: int, duration_ms: int
 
 
 async def run(args: dict, ctx: AnalysisSkillContext) -> AnalysisSkillResult:
-    """`/simplify` 入口 — 3 pass 顺序跑(同 §2.4 失败不阻断)。"""
+    """Internal documentation."""
     start_ms = int(time.monotonic() * 1000)
     path_arg = args.get("path")
     top = int(args.get("top", _DEFAULT_TOP))  # type: ignore[arg-type]

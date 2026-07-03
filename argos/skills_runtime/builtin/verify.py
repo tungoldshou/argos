@@ -1,11 +1,4 @@
-"""`/verify` skill — 用户显式触发 Verifier.verify 入口(spec §2.3 / D9 / D13)。
-
-**关键澄清(D9 / D13)**:
-- `/verify` 是用户从 TUI 输入 slash 命令走的路径。
-- 它**直接**调 `Verifier.verify(verify_cmd, attempts=1)`,**不**走 `propose_verify`。
-- `propose_verify` 是 agent 从 code block 声明 verify_cmd 走的路径(两条独立路径不混)。
-- verify_cmd 来源:`LoopConfig.verify_cmd` 或 `~/.argos/config.json` 全局默认。
-  本期 v1 简化:走 `~/.argos/config.json` 全局(下一 v1.1 接 LoopConfig)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -22,8 +15,6 @@ from argos.skills_runtime.analysis import (
 )
 
 
-# 故意**不**import propose_verify —— 本模块**不**走该路径(D9/D13)。
-# 测试通过 patch `propose_verify` 验证该属性。
 propose_verify = None  # type: ignore[assignment]
 
 
@@ -33,7 +24,7 @@ def _config_path() -> Path:
 
 
 def _read_verify_cmd() -> str | None:
-    """从 ~/.argos/config.json 读 verify_cmd;不存在 / 解析失败 → None。"""
+    """Internal documentation."""
     try:
         text = _config_path().read_text(encoding="utf-8")
     except (FileNotFoundError, OSError):
@@ -49,19 +40,17 @@ def _read_verify_cmd() -> str | None:
 
 
 async def run(args: dict, ctx: AnalysisSkillContext) -> AnalysisSkillResult:
-    """`/verify` 入口 — 调 Verifier.verify,转 5 态 AnalysisSkillResult。"""
+    """Internal documentation."""
     start_ms = int(time.monotonic() * 1000)
     verify_cmd = _read_verify_cmd()
     verifier = Verifier()
     v = await asyncio.to_thread(verifier.verify, verify_cmd, attempts=1)
 
-    # 优先用 verdict.verify_cmd(verifier 实际跑过的),fallback 到本地的 cmd
     actual_cmd = v.verify_cmd or verify_cmd
 
     if v.status == "passed":
         verdict = "passed"
         findings: tuple[Finding, ...] = ()
-        # E4 防火墙:summary 显式标 self_verified,绝不冒充用户级 passed
         if getattr(v, "self_verified", False):
             summary = t("verify.skill.self_verified_summary", cmd=actual_cmd)
         else:
@@ -81,12 +70,10 @@ async def run(args: dict, ctx: AnalysisSkillContext) -> AnalysisSkillResult:
             f"[1 finding] F-error · verify"
         )
     else:  # unverifiable
-        # unverifiable(无论 verify_cmd 是否设置)→ partial(spec §2.3 / 6 态)
         verdict = "partial"
         findings = ()
         summary = f"/verify · partial\nverify_cmd: {actual_cmd} · {v.detail or ''}"
         if not actual_cmd:
-            # 提示加在 summary,不进 findings(spec §2.3 unverifiable 例子)
             summary += f"\n(hint: configure verify_cmd in {_config_path()})"
 
     duration_ms = int(time.monotonic() * 1000) - start_ms

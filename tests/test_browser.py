@@ -1,11 +1,4 @@
-"""计算机控制(浏览器)测试 —— 不依赖真 chromium。
-
-覆盖三层:
-  ① BrowserController._dispatch:每个动作映射到正确的 page 调用 + 返回可读结果(用 fake page)。
-  ② BrowserController 线程化路径:在专线程跑 _dispatch、host 侧 _call 投命令取结果(注入 fake page)。
-  ③ broker._execute 把 browser_* 动作转给单例 controller(monkeypatch get_controller)。
-诚实:启动失败(无 chromium)→ 返回诚实错误串,不崩。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -15,7 +8,7 @@ from argos.browser import BrowserController, _Cmd
 
 
 class FakePage:
-    """记录调用的假 Playwright page。"""
+    """Internal documentation."""
     def __init__(self, *, title="Example", url="https://example.com", body="hello world"):
         self._title = title
         self._url = url
@@ -47,7 +40,6 @@ class FakePage:
         self.calls.append(("screenshot", kw.get("path")))
 
 
-# ── ① _dispatch 单元(纯函数,fake page) ──────────────────────────────────────
 def test_dispatch_navigate():
     page = FakePage(title="Argos")
     out = BrowserController._dispatch(_Cmd("navigate", {"url": "https://a.com"}), page)
@@ -88,14 +80,11 @@ def test_dispatch_page_error_is_honest_string():
     assert out.startswith("错误:浏览器动作 navigate 失败") and "net down" in out
 
 
-# ── ② 线程化路径:注入 fake page,验证 host 侧 _call 投递→取结果走通 ────────────
 def test_controller_threaded_call_with_fake_page(monkeypatch):
-    """跳过真 Playwright launch:直接驱动 _run 的命令循环逻辑等价物 —— 用 controller 的
-    队列协议 + fake page 跑一条 navigate,证明 host 侧 navigate() 能拿到结果。"""
+    """Internal documentation."""
     ctrl = BrowserController()
     page = FakePage(title="Z")
 
-    # 替换 _run:用 fake page 跑同样的"ready→命令循环"协议(不连真 chromium)。
     def fake_run(self):
         self._res_q.put("__READY__")
         while True:
@@ -115,7 +104,7 @@ def test_controller_threaded_call_with_fake_page(monkeypatch):
 
 
 def test_controller_launch_failure_is_honest(monkeypatch):
-    """启动线程即报错(模拟无 chromium)→ _call 返回诚实错误串,后续调用也一致返回。"""
+    """Internal documentation."""
     ctrl = BrowserController()
 
     def boom_run(self):
@@ -124,11 +113,9 @@ def test_controller_launch_failure_is_honest(monkeypatch):
     monkeypatch.setattr(BrowserController, "_run", boom_run)
     out = ctrl.navigate("https://a.com")
     assert out.startswith("错误:浏览器启动失败")
-    # 启动失败被记住,再次调用仍诚实返回(不反复起线程)。
     assert ctrl.snapshot().startswith("错误:浏览器")
 
 
-# ── ③ broker._execute 把 browser_* 转给单例 controller ────────────────────────
 def test_broker_execute_routes_browser_actions(monkeypatch):
     from argos.sandbox.broker import CapabilityBroker, _RISK
 
@@ -148,25 +135,22 @@ def test_broker_execute_routes_browser_actions(monkeypatch):
 
     monkeypatch.setattr("argos.browser.get_controller", lambda: FakeCtrl())
 
-    # 直接测 _execute 的路由(它是 request 的内部裸执行;此处只验 action→controller 映射)。
     broker = object.__new__(CapabilityBroker)
-    broker._mcp_manager = None        # 无注入 → fallback 到模块级单例(但此测试不走 mcp_call)
-    broker._browser_controller = None  # 无注入 → fallback 到 monkeypatched get_controller
+    broker._mcp_manager = None
+    broker._browser_controller = None
     assert broker._execute("browser_navigate", {"url": "https://x.com"})[0] == "NAV ok"
     assert broker._execute("browser_snapshot", {"max_chars": 50})[0] == "SNAP ok"
     assert broker._execute("browser_click", {"selector": "#b"})[0] == "CLICK ok"
     assert broker._execute("browser_type", {"selector": "#i", "text": "hi"})[0] == "TYPE ok"
     assert broker._execute("browser_screenshot", {"path": "a.png"})[0] == "SHOT ok"
     assert captured[0] == ("navigate", "https://x.com")
-    # 5 个 browser 动作都在风险表里(审批弹窗能描述)。
     for a in ("browser_navigate", "browser_snapshot", "browser_click",
               "browser_type", "browser_screenshot"):
         assert a in _RISK
 
 
-def test_browser_actions_are_gated_not_in_network_egress():
-    """浏览器动作经审批闸(_RISK 有项),但不在 _NETWORK_ACTIONS(egress allowlist 针对
-    web_search/extract 的 provider host;浏览器导航任意站点是其本职,不套出网白名单)。"""
+def test_browser_navigate_is_gated_and_ssrf_checked():
+    """Internal documentation."""
     from argos.sandbox.broker import _NETWORK_ACTIONS, _RISK
     assert "browser_navigate" in _RISK
-    assert "browser_navigate" not in _NETWORK_ACTIONS
+    assert "browser_navigate" in _NETWORK_ACTIONS

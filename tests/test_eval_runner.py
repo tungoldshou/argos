@@ -1,6 +1,4 @@
-"""#7 T2/T3 EvalRunner 测试。
-
-复用 tests/eval/_fakes.py 的 FakeWorktree / make_fake_loop。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -21,7 +19,6 @@ from tests.eval._fakes import FakeWorktree, make_fake_loop, make_fake_loop_facto
 from tests.eval._seed_corpus import write_seed_corpus
 
 
-# ── fixtures(本文件内,因 conftest discovery 在多目录项目里不可靠) ──────
 
 
 @pytest.fixture
@@ -78,7 +75,7 @@ def test_run_captures_duration(runner_with_fake):
 
 
 def test_run_uses_worktree_manager(runner_with_fake):
-    """runner keep_worktree=True → 跑完 worktree 仍在(供断言 / 调试)。"""
+    """Internal documentation."""
     runner, wt, loop, task = runner_with_fake
     runner2 = EvalRunner(
         worktree=wt, base_dir=runner.base_dir, loop_factory=make_fake_loop_factory(loop),
@@ -109,7 +106,7 @@ def test_run_passes_goal_to_loop(runner_with_fake):
 
 
 def test_run_pass_status_uses_verifier_not_model(runner_with_fake):
-    """verdict 来自 fake loop,但 fake loop 必须用 verify 退出码(桩模拟)。"""
+    """Internal documentation."""
     runner, wt, loop, task = runner_with_fake
     loop2 = make_fake_loop(verdict=PASS_FAILED, detail="1 failed")
     runner2 = EvalRunner(
@@ -119,11 +116,10 @@ def test_run_pass_status_uses_verifier_not_model(runner_with_fake):
     assert r.pass_status == PASS_FAILED
 
 
-# ── 失败模式 ───────────────────────────────────────────────────────────
 
 
 def test_run_setup_failure_returns_setup_failed(tmp_path, monkeypatch):
-    """seed 装一个带 setup.sh 失败 exit code 的 task → setup_failed。"""
+    """Internal documentation."""
     p = tmp_path / "corpus"
     write_seed_corpus(p)
     extra = p / "task_setup_fail"
@@ -187,11 +183,10 @@ def test_run_unverifiable_passes_through(runner_with_fake):
     assert "tests/test_x.py" in r.tampered
 
 
-# ── T3:worktree 集成细节 ──────────────────────────────────────────────
 
 
 def test_run_temp_fallback_records_fallback(tmp_path, eval_task):
-    """workspace 非 git repo → isolation_fallback='temp'。"""
+    """Internal documentation."""
     base = tmp_path / "eval"
     wt = FakeWorktree(base / "wt")
 
@@ -207,7 +202,7 @@ def test_run_temp_fallback_records_fallback(tmp_path, eval_task):
 
 
 def test_run_keep_worktree_skips_cleanup(tmp_path, eval_task):
-    """keep_worktree=True → 不调 cleanup。"""
+    """Internal documentation."""
     base = tmp_path / "eval"
     wt = FakeWorktree(base / "wt")
     loop = make_fake_loop()
@@ -229,7 +224,7 @@ def test_run_default_cleans_up_worktree(runner_with_fake):
 
 
 def test_run_result_json_roundtrip(runner_with_fake):
-    """EvalResult.to_json / from_json 序列化无字段丢失。"""
+    """Internal documentation."""
     runner, wt, loop, task = runner_with_fake
     r = runner.run(task, model_tier="cheap")
     s = r.to_json()
@@ -242,7 +237,7 @@ def test_run_result_json_roundtrip(runner_with_fake):
 
 
 def test_run_with_real_worktree_manager(tmp_path, eval_task):
-    """用 #5b 真 WorktreeManager 验接(若 git 不可用 → skip)。"""
+    """Internal documentation."""
     if not shutil.which("git"):
         pytest.skip("git not in PATH")
     repo = tmp_path / "repo"
@@ -264,4 +259,4 @@ def test_run_with_real_worktree_manager(tmp_path, eval_task):
     runner = EvalRunner(worktree=wt, base_dir=base, loop_factory=make_fake_loop_factory(loop))
     r = runner.run(eval_task_with_repo, model_tier="cheap")
     assert r.pass_status == PASS_PASSED
-    assert r.isolation_fallback is None  # 真 git repo
+    assert r.isolation_fallback is None

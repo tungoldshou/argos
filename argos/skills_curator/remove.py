@@ -1,8 +1,4 @@
-"""#10 T4 remove 流程:backup_to_trash + builtin 保护 + 30d recoverable。
-
-D7:builtin 3 名硬拒
-D18:30d trash 提示
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import time

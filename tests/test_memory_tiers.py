@@ -1,4 +1,4 @@
-"""#9 T1: 4 tier dataclass + JSONL 读写 + 损坏行跳过。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -12,21 +12,49 @@ from argos.memory import auto as mem_auto
 
 @pytest.fixture
 def mem_root(monkeypatch, tmp_path):
-    """重定位 memory 根目录到 tmp_path,测试隔离。"""
+    """Internal documentation."""
     root = tmp_path / "memory"
     monkeypatch.setenv("ARGOS_MEMORY_DIR", str(root))
-    # 清掉模块级缓存(若有)
     if hasattr(mem_auto, "_PROJECT_ID_CACHE"):
         mem_auto._PROJECT_ID_CACHE.clear()
     return root
 
 
-# ── 路径解析 ─────────────────────────────────────────────────────────────────
 def test_user_tier_path_resolves_under_argos_home(monkeypatch, tmp_path):
     monkeypatch.setenv("ARGOS_MEMORY_DIR", str(tmp_path / "memory"))
     p = mem_auto._user_path()
     assert p.name == "user.jsonl"
     assert p.parent == tmp_path / "memory"
+
+
+def test_memory_root_defaults_to_argos_config_dir(monkeypatch, tmp_path):
+    monkeypatch.delenv("ARGOS_MEMORY_DIR", raising=False)
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))
+
+    assert mem_auto._root() == tmp_path / "cfg" / "memory"
+
+
+def test_memory_root_expands_explicit_env_override(monkeypatch, tmp_path):
+    fake_home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("ARGOS_MEMORY_DIR", "~/argos-memory")
+
+    assert mem_auto._root() == fake_home / "argos-memory"
+
+
+def test_global_instruction_home_defaults_to_argos_config_dir(monkeypatch, tmp_path):
+    monkeypatch.delenv("ARGOS_HOME", raising=False)
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))
+
+    assert mem_auto._ARGOS_HOME() == tmp_path / "cfg"
+
+
+def test_global_instruction_home_expands_explicit_env_override(monkeypatch, tmp_path):
+    fake_home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("ARGOS_HOME", "~/argos-home")
+
+    assert mem_auto._ARGOS_HOME() == fake_home / "argos-home"
 
 
 def test_project_tier_path_includes_hash(monkeypatch, tmp_path):
@@ -56,7 +84,7 @@ def test_project_id_for_deterministic(monkeypatch, tmp_path):
     a = mem_auto.project_id_for(tmp_path)
     b = mem_auto.project_id_for(tmp_path)
     assert a == b
-    assert len(a) == 16  # sha1 前 16
+    assert len(a) == 16
 
 
 def test_project_id_for_different_paths_differ(monkeypatch, tmp_path):
@@ -86,7 +114,6 @@ def test_memory_entry_default_optional_fields():
     assert e.session_id is None
 
 
-# ── 读写 ─────────────────────────────────────────────────────────────────────
 def test_read_jsonl_missing_file_returns_empty(mem_root):
     assert mem_auto._read_jsonl(mem_root / "nope.jsonl") == []
 

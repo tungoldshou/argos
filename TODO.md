@@ -1,21 +1,165 @@
 # TODO
 
-Last updated: 2026-07-03
+Last updated: 2026-07-04
 
-## Active
+## Completed
 
-- Preserve the existing `AGENTS.md` instructions and avoid overwriting project memory files.
-- For the next coding task, inspect the broad pre-existing worktree changes before editing touched files.
-- If the next target touches config, TUI, setup, or eval/daemon paths, run the smallest matching pytest slice with `--no-cov`.
-- Align daemon custom socket and pid-path handling so stale-daemon cleanup uses the same pid file the spawned daemon writes.
-- Audit user-facing docs/TUI copy that still hard-codes `~/.argos/...` for paths whose runtime source is `ARGOS_CONFIG_DIR`.
-- Add a small ActivityPanel widget-level regression proving MCP configured-state display follows `ARGOS_CONFIG_DIR`.
-
-## Done
-
+- Upgraded the user/project Codex workflow configuration so ordinary tasks can be written in natural language, `/goal` is treated as the outer long-running loop, and subagent/worktree/PR/conflict rules stay optional and safety-bounded.
 - Created missing project memory files: `PROJECT_STATE.md`, `TODO.md`, and `DECISIONS.md`.
 - Completed a dynamic-workflow read-only project analysis with an `explorer` subagent; no business code was changed.
 - Completed dynamic-workflow product closeout for `ARGOS_CONFIG_DIR` path drift across MCP, LSP prompt gating, external-surface warnings, skills, Dream candidates/CLI/material gate, and permissions audit logs.
 - Changed `argos --selftest` to use the current Python interpreter for its verification command instead of assuming `python3` exists.
 - Preserved packaged-binary selftest behavior by falling back to `python3` when `sys.executable` is a frozen Argos binary or otherwise not accepted by the verify whitelist.
 - Fixed Dream CLI startup error semantics so missing-key fallback remains memory-only, while malformed config/runtime initialization errors return failure instead of being reported as no-key mode.
+- Fixed TUI daemon auto-spawn pid alignment so stale-daemon cleanup uses the same `daemon.pid` path that the spawned daemon writes.
+- Fixed daemon socket defaults so `ARGOS_CONFIG_DIR` moves `daemon.sock` consistently across TUI probing and `argosd` defaults unless `ARGOS_DAEMON_SOCKET` is explicit.
+- Ran the broad non-slow pytest slice for the ship-readiness checkpoint: `4754 passed, 15 skipped, 37 deselected`.
+- Fixed TUI `/setup`, `/hooks`, `/lsp`, and `/mcp` path hints so they show the active `ARGOS_CONFIG_DIR` files instead of hard-coded `~/.argos/...` paths.
+- Fixed CLI `argos setup --help`, paste-key warnings, and non-TTY setup fallback instructions so they show the active `ARGOS_CONFIG_DIR` files instead of hard-coded `~/.argos/...` paths.
+- Fixed MCP empty-configuration errors so they show the configured `mcp.json` path instead of hard-coded `~/.argos/mcp.json`.
+- Fixed TUI `/dream` inline-mode daemon hints so they show the active `ARGOS_CONFIG_DIR/daemon.sock` path instead of hard-coded `~/.argos/daemon.sock`.
+- Removed remaining `~/.argos` hard-coding from runtime locale messages for external surface warnings and egress denial guidance.
+- Updated README and setup wizard docs so user-facing setup/routing/reset/config examples explain `~/.argos` as the default config directory and point to `ARGOS_CONFIG_DIR` when moved.
+- Verified Python release artifacts with `uv build`, clean wheel install, `argos --version`, and installed-wheel `argos --selftest`.
+- Verified packaging helper entry points with `argospkg info/check/manifest` from the working tree and `argospkg check` from the built wheel in a clean temporary venv.
+- Verified the A1 setup/status/selftest smoke path with a temporary `ARGOS_CONFIG_DIR`.
+- Respected the user's decision to keep `CLAUDE.md` and `AGENTS.md.bak` deleted; project instructions remain in `AGENTS.md`.
+- Documented `argos setup status` `.env.local` development fallback behavior and verified the relevant docs/status tests.
+- Added the ActivityPanel MCP widget regression proving configured-state display follows `ARGOS_CONFIG_DIR/mcp.json`.
+- Refreshed broad pre-handoff verification after docs/test changes: non-slow pytest slice, selftest, and diff check all passed.
+- Fixed permission hard-rule handling so `ARGOS_CONFIG_DIR/.env` is recognized as Argos' own key file.
+- Fixed self-update cache handling so `.last_update_check` follows `ARGOS_CONFIG_DIR`.
+- Fixed default memory database handling so `argos.db` follows `ARGOS_CONFIG_DIR` unless `ARGOS_DB_PATH` is explicit.
+- Fixed default behavior ledger handling so JSONL journals follow `ARGOS_CONFIG_DIR/ledger` unless a path is explicitly injected.
+- Fixed default isolation roots so sandbox runs and daemon worktrees follow `ARGOS_CONFIG_DIR`.
+- Fixed main app default workspace handling so `build_components()` follows `ARGOS_CONFIG_DIR/workspace` unless explicitly overridden.
+- Fixed direct `AgentLoop` default workspace/verify directories so they follow `ARGOS_CONFIG_DIR` unless explicitly provided.
+- Fixed runtime sandbox defaults and legacy file-tool helpers so workspace/verify directories follow `ARGOS_CONFIG_DIR` unless explicit env or test overrides are present.
+- Fixed eval corpus defaults so task manifests load from `ARGOS_CONFIG_DIR/eval/corpus` unless `ARGOS_EVAL_CORPUS_DIR` is explicitly set.
+- Fixed embedding cache defaults so `embeddings.json` follows `ARGOS_CONFIG_DIR` unless `ARGOS_EMB_CACHE` or a test override is present.
+- Fixed workflow subagent diff journals so full diff references follow `ARGOS_CONFIG_DIR/workflow/diffs`.
+- Fixed auto-memory defaults so JSONL tiers and global instruction lookup follow `ARGOS_CONFIG_DIR` unless `ARGOS_MEMORY_DIR` or `ARGOS_HOME` is explicit.
+- Fixed Terminal-Bench eval CLI defaults so runner data follows `ARGOS_CONFIG_DIR/eval`.
+- Fixed daemon Dream report override handling so `ARGOS_DREAMS_DIR=~/...` expands to the user's home directory.
+- Fixed auto-memory explicit override handling so `ARGOS_MEMORY_DIR=~/...` and `ARGOS_HOME=~/...` expand to the user's home directory.
+- Fixed eval corpus explicit override handling so `ARGOS_EVAL_CORPUS_DIR=~/...` expands to the user's home directory.
+- Fixed legacy memory migration override handling so `ARGOS_MEMORY_FILE=~/...` expands to the user's home directory.
+- Fixed memory database override handling so `ARGOS_DB_PATH=~/...` expands to the user's home directory.
+- Refreshed broad ship-readiness verification after path-root fixes: non-slow pytest, source selftest, package build, and clean installed-wheel selftest all passed.
+- Ignored local `.learnings/` agent notes and future local `CLAUDE.md` copies so PR/release handoff status does not include local agent files.
+- Aligned README/CONTRIBUTING with current project guide and config-root memory paths.
+- Aligned auto-memory docs with current `AGENTS.md` project guide and config-root memory/global-instruction paths.
+- Aligned daemon socket docs with `ARGOS_CONFIG_DIR/daemon.sock` behavior.
+- Aligned eval user docs with `ARGOS_CONFIG_DIR/eval` behavior.
+- Aligned per-task routing docs with `ARGOS_CONFIG_DIR/config.json` behavior.
+- Aligned context visualization docs with `ARGOS_CONFIG_DIR/config.json` behavior.
+- Aligned MCP acceptance checklist docs with `ARGOS_CONFIG_DIR/mcp.json` behavior.
+- Aligned skills curator docs with `ARGOS_CONFIG_DIR/skills` behavior.
+- Aligned voice/image input docs with Argos config directory STT path behavior.
+- Aligned Dream docs with `ARGOS_CONFIG_DIR/dreams` and `ARGOS_CONFIG_DIR/conductor` behavior.
+- Aligned multirun docs with `ARGOS_CONFIG_DIR/worktrees` behavior.
+- Aligned eval source docstrings with `ARGOS_CONFIG_DIR/eval` behavior.
+- Aligned Dream/conductor source docstrings with `ARGOS_CONFIG_DIR/dreams` and `ARGOS_CONFIG_DIR/conductor` behavior.
+- Aligned MCP/LSP/hooks external-surface source docstrings with `ARGOS_CONFIG_DIR/{mcp,lsp,hooks}.json` behavior.
+- Aligned core config/setup/routing/verify source docstrings with `ARGOS_CONFIG_DIR/config.json` and `ARGOS_CONFIG_DIR/.env` behavior.
+- Aligned persistence source docstrings with `ARGOS_CONFIG_DIR` paths for snapshots, ledger journals, memory DB, daemon index/pid state, and worktrees.
+- Aligned TUI command source docstrings with `ARGOS_CONFIG_DIR` paths for hooks, LSP, permissions, and MCP config files.
+- Aligned runtime source docstrings with `ARGOS_CONFIG_DIR` paths for workspace, verify, and MCP defaults.
+- Aligned learning, vision, and skills source docstrings with `ARGOS_CONFIG_DIR` paths for caches, candidates, locks, and installed skills.
+- Fixed Seatbelt sandbox read denies so active `ARGOS_CONFIG_DIR` `.env`, `config.json`, and `mcp.json` files are protected.
+- Fixed TUI multirun focus handling so non-200 daemon focus responses do not switch the active tab locally.
+- Fixed Linux bwrap credential masking so raw and resolved active `ARGOS_CONFIG_DIR` `.env`, `config.json`, and `mcp.json` files are hidden behind `/dev/null`.
+- Refreshed current package verification after the Linux bwrap masking fix: `uv build`, clean installed-wheel `argos --version`, installed-wheel `argos --selftest`, and installed-wheel `argospkg check` all passed.
+- Aligned SECURITY with current config-dir hooks wording, macOS Seatbelt / Linux bwrap sandbox coverage, and the current no-published-binary-assets release status.
+- Aligned release installer fallback messaging with current packaging channels: macOS installer now points to stage #13, and Linux `.deb` fallback recommends the Linux Homebrew formula instead of the macOS cask.
+- Fixed macOS and Linux one-line installers so missing or unavailable `SHA256SUMS` stops installation instead of skipping verification.
+- Fixed `argospkg manifest` so WinGet placeholder values make the release manifest gate fail instead of reporting ready.
+- Fixed the Homebrew tap bump workflow token gate so release automation can run when `HOMEBREW_TAP_TOKEN` is configured.
+- Fixed GitHub release checksum generation so `SHA256SUMS` is built from nested artifact files and no longer hides directory-hash failures.
+- Fixed GitHub release creation so missing downloaded artifacts stop the release job before an empty `SHA256SUMS` can be published.
+- Fixed GitHub release creation so checksum-only asset lists stop before `gh release create`.
+- Fixed GitHub release build artifact uploads so empty `dist/` outputs fail the build job.
+- Fixed PyPI publish workflow hygiene so stale `dist/` files are removed before build and `twine check` failures block publishing.
+- Fixed PyPI publish artifact upload so an empty `dist/` fails before the publish job.
+- Fixed WinGet manifest bump automation so a missing Windows zip digest stops the workflow instead of committing a half-updated manifest.
+- Fixed WinGet manifest bump automation so missing manifest files stop the workflow instead of being silently skipped.
+- Fixed Homebrew and WinGet bump workflow manual triggers so they require an explicit release tag instead of using an empty release-event tag.
+- Fixed Homebrew tap bump automation so missing AppImage or macOS tarball digests stop the workflow instead of leaving placeholder SHA values.
+- Fixed Homebrew tap bump automation so later releases replace existing `sha256` values instead of only replacing placeholders.
+- Fixed shell hard-rule coverage so destructive `rm -rf` root/home variants are denied before auto-approval.
+- Fixed Linux packaging so AppImage generation is release-blocking instead of warning and continuing.
+- Fixed Linux packaging so missing `.deb` / `.rpm` tools, failed rpm builds, and missing exact rpm release assets stop the build instead of uploading partial artifacts.
+- Reduced the public launch install surface to PyPI / `uv tool` plus source checkout, and moved binary/package-manager channels to deferred backlog.
+- Changed binary `release.yml` to manual `workflow_dispatch` so PyPI tag publishing is not blocked by draft binary channels.
+- Fixed WinGet manifest review so `argospkg manifest` lists all three manifests and rejects invalid non-placeholder `InstallerSha256` values.
+- Fixed malformed `permissions.json` first-load handling so bad policy files fail closed instead of becoming empty auto-approval policy.
+- Fixed malformed `hooks.json` first-load handling so bad hook files fail closed instead of disabling all hooks.
+- Fixed PreToolUse timeout handling so timed-out hooks block tool execution.
+- Fixed sync-bridge `run_command` handling so headless/subagent fallback paths deny host shell execution when the OS sandbox is disabled.
+- Fixed `argospkg manifest` so missing required WinGet manifest files fail the local release gate.
+- Fixed Linux `.deb` missing-asset fallback so it no longer recommends unpublished PyPI/Homebrew channels.
+- Marked the Homebrew tap mirror as draft and the legacy Homebrew cask as template-only until published release assets exist.
+- Aligned README Trust Dial summary with the current three public modes plus hidden `/trust paranoid`.
+- Marked packaging-C channel commands as planned until release assets are published, including Homebrew tap mirror wording.
+- Normalized Linux and Windows release script versions so `v0.1.0` tags produce `0.1.0` artifact names and MSI versions.
+- Fixed Cautious mode so local `run_command` auto-approval requires OS sandboxing.
+- Expanded destructive shell hard-rule coverage for `//`, `/.`, `~/`, `$HOME/`, `${HOME}/`, and `/Users/<name>/` wipe targets.
+- Fixed `/permissions reload` so first bad reload fails closed to observe and successful reloads update the current TUI gate.
+- Fixed PyPI publish workflow so manual dispatch can build/test but cannot publish, and tag publishing smokes the built wheel before artifact upload.
+- Fixed sync bridge fallback so `mcp_call`, browser write actions, and `computer_*` actions require the host-loop approval bridge instead of executing without interaction.
+- Fixed sync bridge browser hardening so no-host-loop fallback denies all `browser_*` actions, browser navigation is SSRF-checked, and browser screenshots cannot write outside the active workspace.
+- Fixed permission evaluator exception handling so writes and high-risk/interactive actions fail closed instead of falling through to legacy AUTO approval.
+- Fixed new daemon/app run permissions reload drift by making `build_run_stack()` read the current module-level permissions config for each run.
+- Replaced suffix-wide GitHub release asset discovery with an exact `release-assets.txt` manifest and manifest-driven `SHA256SUMS`.
+- Fixed TUI `UserPromptSubmit` hook failure visibility by routing `HookFired` events into ActivityPanel while allowing the run to continue.
+- Aligned the legacy release workflow structure test with the exact release asset manifest behavior and refreshed broad non-slow verification.
+- Fixed daemon-mode multi-turn context loss by persisting the owner TUI session id on each run and passing that stable id into `AgentLoop.run()` instead of `run-<run_id>`.
+- Fixed PyPI/readme release wording so PyPI install instructions are release-neutral while binary channels remain marked as not live until GitHub release assets exist.
+- Fixed `argospkg info` so it does not read `packaging/VERSION` from the caller's current directory.
+- Fixed Windows release packaging so zip assets use PowerShell `Compress-Archive` instead of relying on a bare `zip` CLI on `windows-latest`.
+- Fixed WinGet locale metadata so it no longer claims unpublished non-Windows install channels are already live.
+- Fixed WinGet multi-file manifest schema drift so the root file is a `version` manifest, the locale file declares `defaultLocale`, and installer `UpgradeBehavior` uses a schema-valid scalar.
+- Fixed macOS arm64 release packaging so tag versions drive the app bundle `Info.plist` without mutating the source plist template.
+- Added a root `install.sh` so the public install path can be advertised as `curl | bash` while still installing through `uv tool install/upgrade argos-agent`.
+- Fixed root `install.sh` so users without preinstalled `uv` are bootstrapped through Astral's official installer before the same `uv tool` Argos install continues.
+- Hardened root `install.sh` so it verifies the installed command through `uv tool dir --bin` instead of assuming `argos` is already on `PATH`.
+- Staged root `install.sh` and added a release gate proving the raw GitHub installer script is tracked before release.
+- Marked old binary installer scripts under `packaging/` as deferred and not the public launch installer.
+- Added a TestPyPI publish preflight job so manual `publish.yml` dispatch verifies the real package upload path before a fresh tag publishes to PyPI.
+- Added PyPI workflow gate coverage for `needs: [test, build]`, `environment: pypi`, and OIDC permissions.
+- Fixed long TUI conversation review so `PageUp` / `PageDown`, bubbled mouse-wheel events, and clicking the main transcript let users review history without breaking prompt-first startup.
+- Fixed external-info prompt routing so weather/latest-fact requests prefer `web_search` / `web_extract` / browser tools instead of ad-hoc `curl` or Python HTTP inside CodeAct.
+- Fixed sandbox/web wording across runtime context, CLI help, and README so users and models do not read OS sandbox networking limits as broker web-tool unavailability.
+- Tightened README/SECURITY wording so broker governance is claimed for declared privileged tools, while raw model-authored Python is described as OS-contained only with opt-in `--sandbox`.
+- Fixed CodeAct fence extraction so ordinary Markdown fences in prose do not execute as Python actions; only explicit ` ```python` blocks run.
+- Fixed CodeAct confirmation handling so replies that ask for user approval before `web_search` / `web_extract` do not execute the following ` ```python` block in the same turn.
+- Fixed CodeAct no-action handling so "look it up / fetch the README" research promises are nudged into actual tool use on the same task instead of requiring repeated user prompts.
+- Fixed TUI ActivityPanel cache metric display so cache-hit and sparkline values show abbreviated token counts with `tok` units.
+- Fixed TUI context pressure so missing provider usage is estimated and incoming `CostUpdate.context_used` updates the bottom-bar ctx state.
+- Deleted the old GitHub `v0.1.0` release and remote tag after user confirmation, then moved the fresh public launch target to `v0.1.1`.
+- Removed old `0.1.0` / pre-release changelog history and cleaned Chinese from code comments/docstrings so the repo now treats Argos as not formally released yet.
+- Repaired the cleanup regressions with English-only source-doc contracts and reran broad non-slow verification plus the code comment/docstring Chinese scanner.
+- Changed the public `curl | bash` docs to use the `v0.1.1` raw tag URL instead of a default-branch raw installer URL, and verified README/install/publish release tests.
+- Pushed release commit `89fa66b` to `origin/codex/ship-readiness` and ran `publish.yml`; remote CI/build passed, and TestPyPI failed on trusted publisher configuration (`invalid-publisher`).
+- Opened draft PR #29 for the `v0.1.1` launch branch with the TestPyPI trusted-publisher blocker documented.
+- Marked PR #29 ready for review after PR CI passed and GitHub reported a clean merge state.
+
+## In Progress
+
+- Preserve the existing `AGENTS.md` instructions and avoid overwriting project memory files.
+- For the next coding task, inspect the broad pre-existing worktree changes before editing touched files.
+- If the next target touches config, TUI, setup, or eval/daemon paths, run the smallest matching pytest slice with `--no-cov`.
+- Keep using `uv run pytest -m "not slow" --no-cov` as the broad pre-handoff signal while this branch remains a ship-readiness branch.
+
+## Next
+
+- Configure TestPyPI trusted publishing for repository `tungoldshou/argos`, workflow `.github/workflows/publish.yml`, environment `testpypi`, then rerun `publish.yml` on `codex/ship-readiness` or after merging to `main`.
+- If TestPyPI trusted publishing is configured for branch `main` only, merge PR #29 first, then rerun `publish.yml` from `main` before tagging `v0.1.1`.
+- Verify `uv tool install --index-url https://test.pypi.org/simple/ argos-agent`, then publish fresh tag `v0.1.1` to PyPI and verify the tag-pinned raw GitHub `curl | bash` installer.
+- Use a fresh release tag for the next public launch; the old GitHub `v0.1.0` release and remote tag were deleted after user confirmation.
+- Keep future code comments/docstrings English-only; do not convert intentional Chinese locale/test strings or Chinese documentation prose merely for this rule.
+- Review the remaining instruction/memory diffs before PR/release handoff.
+
+## Backlog
+
+- Continue pruning PR/release handoff risk in the remaining dirty diff.

@@ -1,5 +1,4 @@
-"""Phase 5 审批:ApprovalGate 4 级 respond(契约 §6.3,canonical 接口)+ InlineChoice 流内审批
-(TUI v2:1=once 2=session 3=always 4=deny,↑↓+Enter 与数字双通道,Esc=deny)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -21,7 +20,7 @@ def test_gate_level_default_and_set():
 
 
 def test_decision_kinds():
-    """canonical Decision:kind 字段 + approved property,无 scope。"""
+    """Internal documentation."""
     assert Decision(kind="deny").approved is False
     assert Decision(kind="deny").kind == "deny"
     assert Decision(kind="once").approved is True
@@ -31,20 +30,16 @@ def test_decision_kinds():
 
 @pytest.mark.asyncio
 async def test_gate_request_then_respond_session_resolves():
-    g = ApprovalGate()  # 默认 CONFIRM,会挂起等 respond
+    g = ApprovalGate()
 
     async def _caller() -> Decision:
-        # timeout=30s:测的是审批放行语义,不测超时路径 —— 宽松避免 xdist 高负载下
-        # 轮询耗尽 pending 窗口(原 5s)前 request 自己超时把 _pending 弹出。
         return await g.request(
             "run_command", {"command": "pytest"},
             description="执行命令 pytest", risk="medium", timeout=30.0,
         )
 
     task = asyncio.create_task(_caller())
-    # 等 pending 出现。xdist 并行时 worker 可能有 CPU 争抢,用更大的轮询窗口(最多 20s)。
-    # 关键:request timeout(30s) >> 轮询窗口(20s),保证 pending 项不在轮询期间超时被弹出。
-    for _ in range(2000):   # 最多 20s(2000 × 10ms);正常 <50ms
+    for _ in range(2000):
         await asyncio.sleep(0.01)
         if g.pending():
             break
@@ -63,11 +58,7 @@ _TOOL_OPTIONS = [
 
 
 class _ChoiceHost(App):
-    """挂一个工具审批 InlineChoice 的临时宿主(对位旧 _ModalHost)。
-
-    注入 argos-night token:InlineChoice DEFAULT_CSS 引用 $raise/$unverif 等 v3 token,
-    需在 CSS 解析前(即 get_theme_variable_defaults)注入才能解析。
-    """
+    """Internal documentation."""
 
     def __init__(self, req: ApprovalRequest) -> None:
         super().__init__()
@@ -75,7 +66,7 @@ class _ChoiceHost(App):
         self.result: str | None = None
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
-        """把 ARGOS_NIGHT variables 作为 CSS token 兜底注入。"""
+        """Internal documentation."""
         defaults = super().get_theme_variable_defaults()
         if ARGOS_NIGHT.variables:
             defaults.update(ARGOS_NIGHT.variables)
@@ -104,7 +95,7 @@ async def test_choice_key_1_returns_once():
     app = _ChoiceHost(req)
     async with app.run_test() as pilot:
         await pilot.pause()
-        await pilot.press("1")   # TUI v2:1 = once(安全向前走排第一)
+        await pilot.press("1")
         await pilot.pause()
         assert app.result == "once"
 
@@ -137,7 +128,7 @@ async def test_choice_key_3_returns_always():
 
 @pytest.mark.asyncio
 async def test_choice_escape_returns_deny():
-    """Esc = 安全默认拒绝(fail-closed)。"""
+    """Internal documentation."""
     req = ApprovalRequest(
         call_id="abc123", action="git_push", args={}, description="git push", risk="high",
     )
@@ -151,7 +142,7 @@ async def test_choice_escape_returns_deny():
 
 @pytest.mark.asyncio
 async def test_choice_arrow_down_enter_returns_session():
-    """↑↓ + Enter 通道:↓ 一次选中第 2 项(session)。"""
+    """Internal documentation."""
     req = ApprovalRequest(
         call_id="abc123", action="run_command",
         args={"command": "ls"}, description="ls", risk="low",

@@ -1,13 +1,4 @@
-"""ProactiveSuggestion + propose() 测试。
-
-覆盖：
-  - requires_confirmation 契约（构造 False → ValueError）
-  - frozen 不变量
-  - propose() 正确填充 goal_template 占位符
-  - propose() schedule/file_trigger 两种 reason_human
-  - 缺失占位符键保持原样（不抛 KeyError）
-  - 注入假时钟（0 真实 sleep）
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import dataclasses
@@ -19,7 +10,6 @@ from argos.conductor.proposals import ProactiveSuggestion, propose
 
 
 # ---------------------------------------------------------------------------
-# 辅助
 # ---------------------------------------------------------------------------
 
 def _make_schedule_order(
@@ -59,7 +49,6 @@ def _make_file_trigger_order(
 
 
 # ---------------------------------------------------------------------------
-# ProactiveSuggestion 契约：requires_confirmation 永远 True
 # ---------------------------------------------------------------------------
 
 class TestRequiresConfirmationContract:
@@ -75,7 +64,7 @@ class TestRequiresConfirmationContract:
         assert s.requires_confirmation is True
 
     def test_construction_with_false_raises(self):
-        """requires_confirmation=False → ValueError（契约级）。"""
+        """Internal documentation."""
         with pytest.raises(ValueError, match="requires_confirmation"):
             ProactiveSuggestion(
                 id="s1",
@@ -83,18 +72,17 @@ class TestRequiresConfirmationContract:
                 goal="do something",
                 reason_human="定时触发",
                 suggested_at=1000.0,
-                requires_confirmation=False,  # 违反契约
+                requires_confirmation=False,
             )
 
     def test_propose_always_returns_requires_confirmation_true(self):
-        """propose() 产出的 suggestion requires_confirmation 永远为 True。"""
+        """Internal documentation."""
         order = _make_schedule_order()
         s = propose(order, {"date": "2024-01-01"}, clock=lambda: 1000.0)
         assert s.requires_confirmation is True
 
 
 # ---------------------------------------------------------------------------
-# ProactiveSuggestion frozen 不变量
 # ---------------------------------------------------------------------------
 
 class TestProactiveSuggestionFrozen:
@@ -122,7 +110,6 @@ class TestProactiveSuggestionFrozen:
 
 
 # ---------------------------------------------------------------------------
-# propose() — goal_template 填充
 # ---------------------------------------------------------------------------
 
 class TestProposeGoalTemplate:
@@ -138,14 +125,14 @@ class TestProposeGoalTemplate:
         assert "/repo/requirements.txt" in s.goal
 
     def test_missing_key_kept_as_placeholder(self):
-        """缺失占位符键 → 保持 {key} 原样，不抛 KeyError。"""
+        """Internal documentation."""
         order = _make_schedule_order(goal_template="整理 {date} 的 {missing} 日志")
         s = propose(order, {"date": "2024-01-01"}, clock=lambda: 1.0)
         assert "{missing}" in s.goal
         assert "2024-01-01" in s.goal
 
     def test_empty_context(self):
-        """空 context → 模板原样返回。"""
+        """Internal documentation."""
         order = _make_schedule_order(goal_template="每日汇报")
         s = propose(order, {}, clock=lambda: 1.0)
         assert s.goal == "每日汇报"
@@ -157,7 +144,6 @@ class TestProposeGoalTemplate:
 
 
 # ---------------------------------------------------------------------------
-# propose() — order_id 绑定 + 时间戳
 # ---------------------------------------------------------------------------
 
 class TestProposeFields:
@@ -182,11 +168,10 @@ class TestProposeFields:
         order = _make_schedule_order()
         s1 = propose(order, {}, clock=lambda: 1.0)
         s2 = propose(order, {}, clock=lambda: 1.0)
-        assert s1.id != s2.id  # uuid4 应不同
+        assert s1.id != s2.id
 
 
 # ---------------------------------------------------------------------------
-# propose() — reason_human 内容
 # ---------------------------------------------------------------------------
 
 class TestProposeReasonHuman:
@@ -212,7 +197,6 @@ class TestProposeReasonHuman:
 
 
 # ---------------------------------------------------------------------------
-# action 字段透传
 # ---------------------------------------------------------------------------
 
 def test_propose_carries_order_action():

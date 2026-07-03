@@ -1,4 +1,4 @@
-"""#10 T4+T5 remove + smoke test 测试。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -69,7 +69,7 @@ def test_remove_recoverable_until_30_days(tmp_path, monkeypatch):
 
 
 def test_smoke_test_generic_probe_passes(tmp_path):
-    """无 tests/smoke.md → 跑通用探针 → pass."""
+    """Internal documentation."""
     skill_dir = tmp_path / "no-smoke"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_make_skill(name="no-smoke"), encoding="utf-8")

@@ -1,4 +1,4 @@
-"""诚实栈(契约 §3 HONESTY 不变量;spec §3.5/§12.1):HONESTY_SYSTEM 搬迁 + 注入顺序 + Scrubber。"""
+"""Internal documentation."""
 import pytest
 
 from argos.core.honesty import (
@@ -12,14 +12,12 @@ from argos.core.honesty import (
 
 
 def test_honesty_system_content_preserved():
-    # 搬迁不丢内容:诚实协议三条 + 工具声明仍在(全英文化后断言英文)。
     assert "<honesty>" in HONESTY_SYSTEM
     assert "web_search" in HONESTY_SYSTEM
     assert "exit code" in HONESTY_SYSTEM
 
 
 def test_compose_system_locks_order():
-    # 安全段(HONESTY)永远在 untrusted 之前(契约 §3 / spec §12.1)。
     untrusted = format_untrusted(["[skill] x\nbody"], [])
     composed = compose_system(HONESTY_SYSTEM, untrusted)
     assert composed.index(HONESTY_SYSTEM) < composed.index(UNTRUSTED_OPEN)
@@ -46,7 +44,6 @@ def test_scrubber_strips_fence_in_single_chunk():
 
 
 def test_scrubber_strips_fence_split_across_chunks():
-    # 围栏标记被切成两半跨 chunk —— 状态机必须跨 chunk 识别并吞掉。
     s = StreamingContextScrubber()
     half = len(UNTRUSTED_OPEN) // 2
     out = ""
@@ -66,10 +63,9 @@ def test_scrubber_passes_clean_text_unchanged():
 
 
 def test_scrubber_holdback_partial_marker_until_flush():
-    # chunk 以"可能是围栏开头的前缀"结尾 → 必须 holdback,不能急着外发(否则切半泄露)。
     s = StreamingContextScrubber()
     prefix = UNTRUSTED_OPEN[:3]
     out1 = s.feed("文字" + prefix)
-    assert prefix not in out1            # 前缀被 holdback
-    out2 = s.flush()                     # 流结束证明它不是围栏 → 补发
+    assert prefix not in out1
+    out2 = s.flush()
     assert (out1 + out2) == "文字" + prefix

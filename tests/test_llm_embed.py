@@ -1,4 +1,4 @@
-"""embedding 客户端测试 —— httpx monkeypatch,不连真网络。"""
+"""Internal documentation."""
 import json
 import pytest
 from pathlib import Path
@@ -8,6 +8,15 @@ from argos import llm_embed
 
 def test_embed_dim_is_1536():
     assert llm_embed.EMBED_DIM == 1536
+
+
+def test_default_cache_path_follows_argos_config_dir(tmp_path, monkeypatch):
+    monkeypatch.delenv("ARGOS_EMB_CACHE", raising=False)
+    monkeypatch.setattr(llm_embed, "CACHE_PATH", None)
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+
+    assert llm_embed._cache_path() == cfg_dir / "embeddings.json"
 
 
 def test_embed_text_hits_endpoint_and_returns_vectors(monkeypatch, tmp_path):
@@ -24,7 +33,7 @@ def test_embed_text_hits_endpoint_and_returns_vectors(monkeypatch, tmp_path):
 
     monkeypatch.setattr(llm_embed.httpx, "post", fake_post)
     monkeypatch.setattr(llm_embed, "EMBED_URL", "http://test-emb/v1/embeddings")
-    monkeypatch.setattr(llm_embed, "CACHE_PATH", tmp_path / "emb.json")  # 隔离:不读真磁盘缓存
+    monkeypatch.setattr(llm_embed, "CACHE_PATH", tmp_path / "emb.json")
     monkeypatch.setenv("VITE_MINIMAX_KEY", "k123")
 
     out = llm_embed.embed_text(["hello", "world"])
@@ -54,7 +63,7 @@ def test_embed_text_uses_disk_cache(tmp_path, monkeypatch):
     monkeypatch.setenv("VITE_MINIMAX_KEY", "k123")
 
     a = llm_embed.embed_text(["hello"])
-    b = llm_embed.embed_text(["hello"])  # 应走缓存
+    b = llm_embed.embed_text(["hello"])
     assert calls["n"] == 1
     assert a == b
 

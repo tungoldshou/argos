@@ -1,4 +1,4 @@
-"""系统路径 denylist + workspace 边界 + .env 特殊处理(spec §2.3, D14)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,11 +20,10 @@ def _home(p: str) -> str:
 
 
 def test_denylist_nonempty():
-    """HARD_PATH_DENYLIST 至少 6 条(spec §2.3 列 12+ 系统路径 / 用户私密)。"""
+    """Internal documentation."""
     assert len(HARD_PATH_DENYLIST) >= 6
 
 
-# ── 系统路径拒 ──────────────────────────────────────────────────────
 def test_etc_path_denied():
     assert is_system_path("/etc/passwd") is True
 
@@ -49,13 +48,23 @@ def test_aws_credentials_denied():
     assert is_system_path(_home("~/.aws/credentials")) is True
 
 
-def test_argos_own_env_allowed():
-    """~/.argos/.env 是 Argos 自己的 config,不 lock 自己。"""
+def test_argos_own_env_allowed(monkeypatch):
+    """Internal documentation."""
+    from argos import config as C
+
+    monkeypatch.delenv("ARGOS_CONFIG_DIR", raising=False)
+    monkeypatch.setattr(C, "_ENV", {})
     assert is_argos_own_env(_home("~/.argos/.env")) is True
 
 
+def test_argos_own_env_honors_argos_config_dir(tmp_path, monkeypatch):
+    cfg_dir = tmp_path / "argos-config"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    assert is_argos_own_env(str(cfg_dir / ".env")) is True
+
+
 def test_workspace_file_allowed():
-    """workspace 内文件 → 不算 system path(由 is_workspace_path 判定)。"""
+    """Internal documentation."""
     assert is_system_path("/Users/zc/Projects/argos/CLAUDE.md") is False
 
 
@@ -63,7 +72,6 @@ def test_tmp_allowed():
     assert is_system_path("/tmp/x") is False
 
 
-# ── workspace 边界 ───────────────────────────────────────────────────
 def test_workspace_inside(tmp_path):
     p = tmp_path / "a.py"
     p.write_text("")
@@ -75,13 +83,13 @@ def test_workspace_outside(tmp_path):
 
 
 def test_workspace_traversal_denied(tmp_path):
-    """../outside_workspace/x → workspace 外。"""
+    """Internal documentation."""
     p = (tmp_path / ".." / "outside" / "x").resolve()
     assert is_workspace_path(str(p), tmp_path) is False
 
 
 def test_workspace_none_means_outside():
-    """workspace=None → 返 False(走系统路径 check)。"""
+    """Internal documentation."""
     assert is_workspace_path("/etc/passwd", None) is False
 
 
@@ -89,7 +97,6 @@ def test_workspace_empty_means_outside():
     assert is_workspace_path("/etc/passwd", "") is False
 
 
-# ── .env 特殊路径 ─────────────────────────────────────────────────
 def test_is_env_file():
     assert is_env_file("/x/.env") is True
     assert is_env_file("/x/.env.local") is True
@@ -101,4 +108,4 @@ def test_is_env_template():
     assert is_env_template("/x/.env.example") is True
     assert is_env_template("/x/.env.sample") is True
     assert is_env_template("/x/.env.template") is True
-    assert is_env_template("/x/.env") is False   # 裸 .env 不是模板
+    assert is_env_template("/x/.env") is False

@@ -144,7 +144,7 @@ async def test_watch_no_daemon_is_error() -> None:
 
 @pytest.mark.asyncio
 async def test_schedule_malformed_no_colon_inline_prints_usage() -> None:
-    """参数本身 malformed 时,即使 inline 模式也应先给用法。"""
+    """Internal documentation."""
     app = _make_app()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -156,7 +156,7 @@ async def test_schedule_malformed_no_colon_inline_prints_usage() -> None:
 
 @pytest.mark.asyncio
 async def test_watch_malformed_no_goal_inline_prints_usage() -> None:
-    """参数本身 malformed 时,即使 inline 模式也应先给用法。"""
+    """Internal documentation."""
     app = _make_app()
     async with app.run_test() as pilot:
         await pilot.pause()

@@ -1,7 +1,4 @@
-"""Phase 2:FTS5 字面 + CJK 搜(契约 §2 / spec §5.3)。
-
-trigram 对 >=3 字(含中文)命中稳;本测试用 >=3 字 query。2 字 CJK 召回靠 vec
-(test_store_recall.py 覆盖)。"""
+"""Internal documentation."""
 import pytest
 
 from argos.memory.store import ArgosStore, MessageRow
@@ -34,7 +31,6 @@ def test_search_no_match_returns_empty(store):
 
 
 def test_search_special_chars_dont_crash(store):
-    # FTS5 语法字符不应让查询崩(应被转义/引号包裹)
     assert store.search('"', limit=5) == [] or isinstance(store.search('"', limit=5), list)
     assert isinstance(store.search("a OR b", limit=5), list)
 

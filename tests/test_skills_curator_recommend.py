@@ -1,4 +1,4 @@
-"""#10 T7 推荐引擎测试。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -28,7 +28,6 @@ def _install(*, name: str, enabled: bool = True, tmp_path, monkeypatch) -> None:
     )
 
 
-# ── 13 规则触发 ────────────────────────────────────────────
 
 
 def test_r1_py_files_recommends_python_lint():
@@ -110,7 +109,6 @@ def test_r12_long_session_recommends_simplify():
     assert any(r.name == "simplify" for r in recs)
 
 
-# ── 跳过/去重/聚合 ─────────────────────────────────────────
 
 
 def test_recommend_skips_already_enabled_skills(tmp_path, monkeypatch):
@@ -121,7 +119,7 @@ def test_recommend_skips_already_enabled_skills(tmp_path, monkeypatch):
 
 
 def test_recommend_includes_unreviewed_installed(tmp_path, monkeypatch):
-    """已装但 enabled=false → 仍推荐(spec §8.4 unreviewed 段)."""
+    """Internal documentation."""
     _install(name="python-lint", enabled=False, tmp_path=tmp_path, monkeypatch=monkeypatch)
     a = SessionActivity(files_edited=("a.py", "b.py", "c.py"))
     recs = recommend(a, installed=set())
@@ -135,13 +133,12 @@ def test_recommend_returns_empty_when_no_match():
 
 
 def test_recommend_combines_scores_for_same_skill():
-    """R1 + R2 都 hit python-lint(test) → 分数累加."""
+    """Internal documentation."""
     a = SessionActivity(
         files_edited=("a.py", "b.py", "c.py", "tests/test_x.py"),
         verify_failures=1,
     )
     recs = recommend(a, installed=set())
-    # python-lint 只 hit R1;test-debugger hit R2 + R3 → 分数 2
     td = next((r for r in recs if r.name == "test-debugger"), None)
     assert td is not None
     assert td.score >= 1.5
@@ -164,5 +161,5 @@ def test_build_activity_from_session_returns_empty():
 
 
 def test_default_rules_is_tuple_of_12():
-    """R13 memory 留 v1.1,本期 12 条."""
+    """Internal documentation."""
     assert len(DEFAULT_RULES) == 12

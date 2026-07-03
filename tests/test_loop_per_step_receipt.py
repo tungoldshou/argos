@@ -1,9 +1,4 @@
-"""I2 铁证:ToolReceipt 只在【本步新签了 Receipt】时投,不重投陈旧回执。
-
-旧 bug:loop 每个 code-action 后读 broker.last_receipt,只要非 None 就投 ToolReceipt;
-broker.last_receipt 从不清空 → 第二步(被拒/无副作用)会把第一步的成功回执张冠李戴重投。
-修复:broker.take_receipt() 返回并清空,loop 只在拿到新回执时投事件。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -59,8 +54,7 @@ class FakeStore:
 
 
 class StepBroker:
-    """模拟 CapabilityBroker 的 last_receipt / take_receipt 契约:
-    第一次代码动作签一个 Receipt;之后(被拒/无副作用)不再签。"""
+    """Internal documentation."""
 
     def __init__(self):
         self._signer = ReceiptSigner(key=b"i2-test")
@@ -69,7 +63,6 @@ class StepBroker:
 
     @property
     def signer(self):
-        # W2(§6.5):loop 在投 ToolReceipt 前经 Harness.accept_receipt 核验回执 —— 需 host signer。
         return self._signer
 
     def sign_step_one(self):
@@ -89,15 +82,14 @@ async def test_exactly_one_receipt_across_two_code_actions():
 
     class SignOnSpawnSandbox(FakeSandbox):
         def exec_code(self, code):
-            # 第一步代码里含 'broker' 标记 → 模拟一次成功的 broker 动作签了回执。
             if "DO_BROKER" in code and not broker._signed_once:
                 broker.sign_step_one()
                 broker._signed_once = True
             return ExecResult(stdout="ran", value_repr="", exc="")
 
     scripts = [
-        "第一步\n```python\nx = 'DO_BROKER'\n```",   # 触发签回执
-        "第二步\n```python\ny = 1\n```",             # 无新回执
+        "第一步\n```python\nx = 'DO_BROKER'\n```",
+        "第二步\n```python\ny = 1\n```",
         "完成。",
     ]
     loop = AgentLoop(
@@ -116,8 +108,8 @@ async def test_exactly_one_receipt_across_two_code_actions():
 
 @pytest.mark.asyncio
 async def test_no_receipt_when_no_broker_action():
-    """全程无 broker 动作 → 0 个 ToolReceipt(陈旧回执不会被凭空重投)。"""
-    broker = StepBroker()  # 从不 sign
+    """Internal documentation."""
+    broker = StepBroker()
     scripts = [
         "```python\na = 1\n```",
         "```python\nb = 2\n```",

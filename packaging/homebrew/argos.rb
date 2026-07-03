@@ -1,6 +1,7 @@
+# template-only: not published; packaging/homebrew-tap/Casks/argos.rb is the tap mirror.
 cask "argos" do
-  version "0.1.0"   # 由 release script 自动更新(spec §2.2)
-  sha256 "PLACEHOLDER_SHA256_AT_RELEASE_TIME"  # 由 release script 自动更新
+  version "0.1.1"
+  sha256 "PLACEHOLDER_SHA256_AT_RELEASE_TIME"
 
   url "https://github.com/tungoldshou/argos/releases/download/v#{version}/Argos-#{version}-arm64-mac.tar.gz"
   name "Argos"

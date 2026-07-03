@@ -1,20 +1,4 @@
-"""TUI v3「黑曜石之眼」截图脚本。
-
-用法:
-    uv run python scripts/tui_v3_screenshots.py
-
-产出目录:/tmp/argos-tui-v3-shots/
-产出格式:SVG(必有) + PNG(qlmanage / rsvg-convert 均可用时自动转换)
-
-截图列表:
-  splash-idle.svg      — 启动后 idle 态(StartupSplash 终态,DEMO + 无 key 提示)
-  run-act.svg          — run 进行中(用户目标 + assistant token + CodeAction/Result + DiffView,右栏 act 视图)
-  approval.svg         — 行内审批卡挂起(InlineChoice mount,StatusBar ◓ blocked 态)
-  verdict-passed.svg   — verify 通过绿色 VerdictBadge
-  verdict-failed.svg   — verify 失败红色 VerdictBadge + StatusBar -alert 告警色
-
-幂等:每次运行先清空输出目录再重建。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -22,12 +6,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-# ── 输出目录 ───────────────────────────────────────────────────────────────
 OUT_DIR = Path("/tmp/argos-tui-v3-shots")
 
 
 def _ensure_outdir() -> None:
-    """清空并重建输出目录(幂等)。"""
+    """Internal documentation."""
     import shutil
     if OUT_DIR.exists():
         shutil.rmtree(OUT_DIR)
@@ -42,17 +25,14 @@ def _save_svg(name: str, svg: str) -> Path:
 
 
 def _try_png(svg_path: Path) -> Path | None:
-    """尝试 qlmanage(macOS) 或 rsvg-convert 把 SVG 转 PNG。
-    失败时只打印警告,不抛异常。"""
+    """Internal documentation."""
     png_path = svg_path.with_suffix(".png")
 
-    # 方法 1: qlmanage (macOS Quick Look)
     try:
         result = subprocess.run(
             ["qlmanage", "-t", "-s", "1600", "-o", str(OUT_DIR), str(svg_path)],
             capture_output=True, timeout=15,
         )
-        # qlmanage 输出到 <filename>.png(带后缀名)
         candidate = OUT_DIR / (svg_path.name + ".png")
         if candidate.exists():
             candidate.rename(png_path)
@@ -61,7 +41,6 @@ def _try_png(svg_path: Path) -> Path | None:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
-    # 方法 2: rsvg-convert
     try:
         result = subprocess.run(
             ["rsvg-convert", "-w", "1600", str(svg_path), "-o", str(png_path)],
@@ -77,36 +56,29 @@ def _try_png(svg_path: Path) -> Path | None:
     return None
 
 
-# ── 截图协程 ───────────────────────────────────────────────────────────────
 
 async def shot_splash_idle() -> None:
-    """截图 1:splash-idle — 启动后 idle 态,StartupSplash 已完成呈现,DEMO 模式。"""
+    """Internal documentation."""
     from argos.tui.app import ArgosApp
     from argos.tui.fakeloop import FakeLoop
 
     app = ArgosApp(loop_factory=lambda: FakeLoop(), demo=True)
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
-        await pilot.pause()  # 等 on_mount 完成 + StartupSplash 渲染完
+        await pilot.pause()
         svg = app.export_screenshot()
     path = _save_svg("splash-idle.svg", svg)
     _try_png(path)
 
 
 async def shot_run_act() -> None:
-    """截图 2:run-act — act 阶段进行中(右栏 act 视图):用户行 + assistant token + CodeAction/Result + FileDiff。
-
-    实现说明:不走 start_run(它的 finally 块会调 on_run_end → set_view("idle"),截图时右栏已回 idle)。
-    改为直接逐一 await _apply_event,模拟 run 进行中状态,截图时右栏保持 act 视图。
-    这是 by-design 行为:spec §4.8 规定 run 收尾自动回 idle;截图必须在 run 结束前捕获 act 视图。
-    """
+    """Internal documentation."""
     from argos.tui.app import ArgosApp
     from argos.tui.fakeloop import FakeLoop
     from argos.tui.events import PhaseChange, TokenDelta, CodeAction, CodeResult, FileDiff, CostUpdate
     import time
 
     t0 = time.monotonic()
-    # 直接投事件而不走 start_run,避免 finally on_run_end() 把视图重置回 idle
     act_events = [
         PhaseChange(phase="plan", actions=0),
         TokenDelta(text="分析目标:修复 off-by-one 错误…\n"),
@@ -124,10 +96,8 @@ async def shot_run_act() -> None:
     app = ArgosApp(loop_factory=lambda: FakeLoop(), demo=True)
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
-        # 回显用户目标行(模拟 start_run 的 user_line 调用)
         from argos.tui.widgets.transcript import Transcript
         await app.query_one("#transcript", Transcript).user_line("修复 src/parser.py 的 off-by-one 错误")
-        # 直接投事件:run 中间态,on_run_end 不会被调用,右栏停留在 act 视图
         for ev in act_events:
             await app._apply_event(ev)
         await pilot.pause()
@@ -137,7 +107,7 @@ async def shot_run_act() -> None:
 
 
 async def shot_approval() -> None:
-    """截图 3:approval — InlineChoice 行内审批卡挂起,StatusBar ◓ blocked 态。"""
+    """Internal documentation."""
     from argos.tui.app import ArgosApp
     from argos.tui.fakeloop import FakeLoop
     from argos.tui.events import PhaseChange, TokenDelta, ApprovalRequest
@@ -161,7 +131,6 @@ async def shot_approval() -> None:
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
         app.run_worker(app.start_run("把当前改动推送到 GitHub"), exclusive=False)
-        # 等 InlineChoice mount(loop 投 ApprovalRequest 后挂起等用户决策)
         for _ in range(60):
             await pilot.pause()
             if list(app.query(InlineChoice)):
@@ -173,7 +142,7 @@ async def shot_approval() -> None:
 
 
 async def shot_verdict_passed() -> None:
-    """截图 4a:verdict-passed — verify 通过,VerdictBadge 绿色 passed 态。"""
+    """Internal documentation."""
     from argos.tui.app import ArgosApp
     from argos.tui.fakeloop import FakeLoop
     from argos.core.types import Verdict
@@ -205,7 +174,7 @@ async def shot_verdict_passed() -> None:
 
 
 async def shot_verdict_failed() -> None:
-    """截图 4b:verdict-failed — verify 失败,VerdictBadge 红色 failed 态 + StatusBar -alert。"""
+    """Internal documentation."""
     from argos.tui.app import ArgosApp
     from argos.tui.fakeloop import FakeLoop
     from argos.core.types import Verdict
@@ -231,10 +200,9 @@ async def shot_verdict_failed() -> None:
     _try_png(path)
 
 
-# ── 主入口 ─────────────────────────────────────────────────────────────────
 
 async def main() -> None:
-    """依次产出全部截图。每张独立 App 实例,互不污染。"""
+    """Internal documentation."""
     _ensure_outdir()
     print(f"\n产出目录:{OUT_DIR}\n")
 

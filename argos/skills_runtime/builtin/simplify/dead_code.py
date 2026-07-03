@@ -1,12 +1,4 @@
-"""Pass 3 — dead code heuristic(未使用公共符号,spec §2.5 Pass 3 / D7)。
-
-- 符号提取:regex 找 `def name(` / `function name(` / `const name =` / `let name =` /
-  `export function name(` / `pub fn name(`(Rust)。
-- 使用扫描:全 workspace `\\b<name>\\b` 模式(排除定义行)。
-- 判定"可能死代码"(三条件 AND):(a) 函数体 > 5 行;(b) workspace 无 `\\b<name>\\b`;
-  (c) 不在 `__all__` + 文件名非 `__init__.py` + 无 docstring。
-- severity=info(启发,可能反射/插件加载等场景,用户决定)。
-- 白名单:`tests/**` 跳过;`**/cli.py` 跳过;`**/__main__.py` 跳过。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -44,13 +36,13 @@ def _is_source_file(p: Path) -> bool:
 
 
 def _has_docstring(text: str, name_offset: int) -> bool:
-    """函数体起始后 1 行内是否含 docstring。"""
+    """Internal documentation."""
     after = text[name_offset: name_offset + 200]
     return bool(_DOCSTRING_RE.match(after))
 
 
 def _function_body_length(text: str, name_offset: int) -> int:
-    """简化:从 def 起到下一个 def 同缩进行(行数)。"""
+    """Internal documentation."""
     indent_match = re.match(r"^(\s*)", text[name_offset:])
     if not indent_match:
         return 0
@@ -73,7 +65,7 @@ def _function_body_length(text: str, name_offset: int) -> int:
 
 
 def _in_all(all_content: str, name: str) -> bool:
-    """__all__ 列表里是否含 name(粗略 token match)。"""
+    """Internal documentation."""
     return bool(re.search(rf"\b{re.escape(name)}\b", all_content))
 
 

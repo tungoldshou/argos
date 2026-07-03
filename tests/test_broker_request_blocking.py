@@ -1,6 +1,4 @@
-"""同步桥交互审批:broker.request_blocking 把 request() 提交回 host_loop,工作线程阻塞等;
-主循环 gate.respond 唤醒 → 完整 gating(egress+审批+执行+回执)生效。
-host_loop 未设 → 回退 execute_sync(零回归)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -32,7 +30,7 @@ async def _respond_first_pending(gate, kind: str) -> bool:
 
 @pytest.mark.asyncio
 async def test_request_blocking_bridges_to_interactive_approval(monkeypatch):
-    """host_loop 已设:request_blocking 在工作线程提交 request() 回主循环,主循环 respond 后放行执行。"""
+    """Internal documentation."""
     def fake_run(command, *, workspace=None, allow_network=False):
         return ("ran:" + command, 0)
     monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
@@ -45,13 +43,13 @@ async def test_request_blocking_bridges_to_interactive_approval(monkeypatch):
     )
     assert await _respond_first_pending(br.gate, "once"), "请求从未挂起(桥没把 request 送回主循环?)"
     value = await worker
-    assert value == "ran:echo hi"                                   # 批准后真执行
-    assert br.last_receipt is not None and br.last_receipt.action == "run_command"  # 回执签发
+    assert value == "ran:echo hi"
+    assert br.last_receipt is not None and br.last_receipt.action == "run_command"
 
 
 @pytest.mark.asyncio
 async def test_request_blocking_denied_returns_refusal(monkeypatch):
-    """拒绝 → 返回拒绝串、不执行、不签回执(无副作用)。"""
+    """Internal documentation."""
     def fake_run(command, *, workspace=None, allow_network=False):
         return ("SHOULD-NOT-RUN", 0)
     monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
@@ -71,8 +69,7 @@ async def test_request_blocking_denied_returns_refusal(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_request_blocking_run_command_auto_runs_under_yolo(monkeypatch):
-    """2026-06-20:YOLO(AUTO)下 run_command 经桥【自动跑】、不再逐条弹审批(兑现"全自治";
-    危险命令仍被 HARD RULES 拦)。此前 _FORCE_CONFIRM 把它强制弹卡,YOLO 名不副实"太鸡肋"。"""
+    """Internal documentation."""
     def fake_run(command, *, workspace=None, allow_network=False):
         return ("ran", 0)
     monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
@@ -87,12 +84,12 @@ async def test_request_blocking_run_command_auto_runs_under_yolo(monkeypatch):
 
 
 def test_request_blocking_fallback_no_host_loop(monkeypatch):
-    """host_loop 未设(headless/旧路径)→ 回退 execute_sync(无交互审批,零回归;仍签回执)。"""
+    """Internal documentation."""
     def fake_run(command, *, workspace=None, allow_network=False):
         return ("ran:" + command, 0)
     monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
 
-    br = _broker(level=ApprovalLevel.AUTO)   # 无 host_loop
+    br = _broker(level=ApprovalLevel.AUTO)
     value = br.request_blocking("run_command", {"command": "ls"})
     assert value == "ran:ls"
     assert br.last_receipt is not None

@@ -1,18 +1,20 @@
 name: Bump Homebrew formula
-# spec §7.4:release published → 拉 release JSON 拿 sha256 → 注入 Formula/argos.rb + Casks/argos.rb
-# → commit 推回 tungoldshou/homebrew-argos 仓。需 secrets.HOMEBREW_TAP_TOKEN(PAT,写 tap 仓权限)。
-# 注:本期不真触发(本仓库的 homebrew-tap/ 暂是同仓镜像,真正 tap 仓等用户手动建);workflow
-# 写好待 v0.2.0 切真 tap 时启用。
 on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to bump, for example v0.1.0"
+        required: true
 
 jobs:
   bump:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      HAS_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN != '' }}
     steps:
       - name: Checkout tap repo (when HOMEBREW_TAP_TOKEN set)
         if: ${{ env.HAS_TOKEN == 'true' }}
@@ -24,7 +26,7 @@ jobs:
 
       - name: Detect (dry-run) — print what would change
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
           VERSION="${TAG#v}"
           echo "Would update Formula/argos.rb + Casks/argos.rb to version ${VERSION}"
@@ -33,27 +35,27 @@ jobs:
       - name: Update Formula + Cask (live, when token present)
         if: ${{ env.HAS_TOKEN == 'true' }}
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
           set -e
           VERSION="${TAG#v}"
           cd tap
-          # python 脚本拿 sha256 digest(base64 编码避开 YAML 解析坑)
           cat > /tmp/digest.b64 <<'B64'
           aW1wb3J0IGpzb24sIHN5cwp0YXJnZXQgPSBzeXMuYXJndlsxXQpkID0ganNvbi5sb2FkKHN5cy5zdGRpbikKZm9yIGEgaW4gZC5nZXQoImFzc2V0cyIsIFtdKToKICAgIGlmIG5vdCBhWyJuYW1lIl0uZW5kc3dpdGgodGFyZ2V0KToKICAgICAgICBjb250aW51ZQogICAgZGlnID0gYS5nZXQoImRpZ2VzdCIsICIiKSBvciAiIgogICAgaWYgZGlnLnN0YXJ0c3dpdGgoInNoYTI1NjoiKToKICAgICAgICBwcmludChkaWcuc3BsaXQoIjoiLCAxKVsxXSkKICAgICAgICBicmVhaw==
           B64
           python3 -c "import base64; open('/tmp/digest.py','w').write(base64.b64decode(open('/tmp/digest.b64').read().strip()).decode())"
           SHA256_ARM64=$(curl -fsSL "https://api.github.com/repos/tungoldshou/argos/releases/tags/v${VERSION}" | python3 /tmp/digest.py "-arm64-mac.tar.gz" 2>/dev/null || true)
           SHA256_APPIMAGE=$(curl -fsSL "https://api.github.com/repos/tungoldshou/argos/releases/tags/v${VERSION}" | python3 /tmp/digest.py ".AppImage" 2>/dev/null || true)
-          # 注入
           sed -i "s/version \".*\"/version \"${VERSION}\"/" Formula/argos.rb Casks/argos.rb
-          [ -n "${SHA256_APPIMAGE:-}" ] && sed -i "s/sha256 \"PLACEHOLDER_FROM_BUMP\"/sha256 \"${SHA256_APPIMAGE}\"/" Formula/argos.rb
-          [ -n "${SHA256_ARM64:-}" ] && sed -i "s/sha256 \"PLACEHOLDER_FROM_BUMP\"/sha256 \"${SHA256_ARM64}\"/" Casks/argos.rb
+          [ -n "${SHA256_APPIMAGE:-}" ] || { echo "ERROR: 缺 AppImage digest" >&2; exit 1; }
+          [ -n "${SHA256_ARM64:-}" ] || { echo "ERROR: 缺 macOS arm64 digest" >&2; exit 1; }
+          sed -i "s/sha256 \".*\"/sha256 \"${SHA256_APPIMAGE}\"/" Formula/argos.rb
+          sed -i "s/sha256 \".*\"/sha256 \"${SHA256_ARM64}\"/" Casks/argos.rb
           cat Formula/argos.rb Casks/argos.rb
 
       - name: Commit + push
         if: ${{ env.HAS_TOKEN == 'true' }}
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "bump argos to v${{ github.event.release.tag_name }}"
+          commit_message: "bump argos to ${{ github.event.release.tag_name || inputs.tag }}"
           working_directory: tap

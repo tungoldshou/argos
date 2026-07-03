@@ -1,4 +1,4 @@
-"""#7 T4 Result JSONL 持久化测试。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -79,7 +79,6 @@ def test_default_runs_dir_honors_argos_config_dir(tmp_path, monkeypatch):
 
 
 def test_list_runs_returns_in_reverse_date_order(tmp_path):
-    # 造 2 个不同日期的 run
     r_old = _make_result(run_id="old111old111", finished_at=time.time() - 3 * 86400)
     r_new = _make_result(run_id="new222new222", finished_at=time.time())
     append(r_old, base=tmp_path)
@@ -154,10 +153,9 @@ def test_summary_aggregates_per_model_per_category(tmp_path):
 
 def test_summary_only_includes_past_n_days(tmp_path):
     now = time.time()
-    append(_make_result(run_id="r1r1r1r1r11", finished_at=now - 10 * 86400), base=tmp_path)  # 10 天前
+    append(_make_result(run_id="r1r1r1r1r11", finished_at=now - 10 * 86400), base=tmp_path)
     append(_make_result(run_id="r2r2r2r2r22", finished_at=now), base=tmp_path)
     s = summary(base=tmp_path, since_days=7)
-    # r1 已被 since=7 过滤;r2 留下
     assert s == {"cheap": {"bug_fix": {"passed": 1, "total": 1, "pass_rate": 1.0}}}
 
 
@@ -165,7 +163,6 @@ def test_summary_excludes_old_with_strict_window(tmp_path):
     now = time.time()
     append(_make_result(run_id="r1r1r1r1r11", finished_at=now - 10 * 86400), base=tmp_path)
     s = summary(base=tmp_path, since_days=7)
-    # 严格 since_days=7 → r1 不在窗口内
     assert s == {}
 
 
@@ -173,14 +170,12 @@ def test_summary_empty_returns_empty_dict(tmp_path):
     assert summary(base=tmp_path) == {}
 
 
-# ── 容错 ─────────────────────────────────────────────────────────────
 
 
 def test_corrupt_jsonl_line_skipped(tmp_path):
-    """坏 JSONL 行 → 跳过,不影响其他行。"""
+    """Internal documentation."""
     r = _make_result(run_id="good1good1g")
     append(r, base=tmp_path)
-    # 手注坏行
     today = time.strftime("%Y-%m-%d", time.localtime(r.finished_at))
     p = tmp_path / "runs" / today / "good1good1g.jsonl"
     with p.open("a", encoding="utf-8") as fh:

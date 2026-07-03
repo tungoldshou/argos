@@ -1,5 +1,4 @@
-"""item 3:write_file/edit_file 经 broker gate-only —— hard-path 系统路径拒 / 密钥 fail-closed /
-签回执 / 返回放行哨兵;真正落盘留在沙箱子进程(wrapper 在 child 内写)。无 broker 命名空间无写工具。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -10,7 +9,7 @@ from argos.sandbox.egress import EgressPolicy
 from argos.tools import build_child_namespace, files
 from argos.tools.receipts import ReceiptSigner
 
-_AWS = "AKIAIOSFODNN7EXAMPLE"   # AWS 示例 access-key(密钥检测命中)
+_AWS = "AKIAIOSFODNN7EXAMPLE"
 
 
 @pytest.fixture(autouse=True)
@@ -33,7 +32,6 @@ def _broker(level=ApprovalLevel.CONFIRM, workspace=None):
                             signer=ReceiptSigner(key=b"k"), workspace=workspace)
 
 
-# ── evaluate_sync(broker 用它做同步 gate-only 决策)──────────────────────────
 def test_evaluate_sync_system_path_denied():
     m = ApprovalGate(ApprovalLevel.AUTO).evaluate_sync("write_file", {"path": "/etc/passwd", "content": "x"})
     assert m is not None and m.decision == "deny"
@@ -44,18 +42,17 @@ def test_evaluate_sync_secret_flagged():
     assert m is not None and m.secret_pattern is not None
 
 
-# ── broker request()(异步桥路径)gate-only ─────────────────────────────────
 @pytest.mark.asyncio
 async def test_request_write_system_path_denied():
     br = _broker(level=ApprovalLevel.AUTO)
     v = await br.request("write_file", {"path": "/etc/shadow", "content": "x"})
     assert ("/etc/" in str(v)) or ("拒绝" in str(v))
-    assert br.last_receipt is None                       # hard-path 拒不签回执
+    assert br.last_receipt is None
 
 
 @pytest.mark.asyncio
 async def test_request_write_workspace_auto_applies_with_receipt(tmp_path):
-    """CONFIRM 档普通工作区写:gate-only 自动放行(不阻塞)→ 哨兵 + 签回执(Codex 式自动应用)。"""
+    """Internal documentation."""
     br = _broker(level=ApprovalLevel.CONFIRM, workspace=tmp_path)
     v = await br.request("write_file", {"path": "a.py", "content": "print(1)"})
     assert v == files.WRITE_APPROVED_SENTINEL
@@ -67,10 +64,9 @@ async def test_request_write_secret_denied():
     br = _broker(level=ApprovalLevel.AUTO)
     v = await br.request("write_file", {"path": "a.py", "content": _AWS})
     assert "密钥" in str(v)
-    assert br.last_receipt is None                       # 密钥 fail-closed,不签回执
+    assert br.last_receipt is None
 
 
-# ── broker execute_sync()(无 host_loop 回退路径)gate-only ─────────────────
 def test_execute_sync_write_sentinel(tmp_path):
     br = _broker(level=ApprovalLevel.AUTO, workspace=tmp_path)
     v, code = br.execute_sync("write_file", {"path": "a.py", "content": "ok"})
@@ -84,7 +80,42 @@ def test_execute_sync_write_system_path_denied():
     assert code == 1 and br.last_receipt is None
 
 
-# ── child wrapper:收到哨兵才在子进程内真正落盘 ─────────────────────────────
+def test_execute_sync_write_denied_when_evaluator_fails(monkeypatch):
+    """Internal documentation."""
+    import argos.permissions as _perms
+
+    monkeypatch.setattr(_perms, "evaluate", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    br = _broker(level=ApprovalLevel.AUTO)
+
+    v, code = br.execute_sync("write_file", {"path": "/etc/passwd", "content": _AWS})
+
+    assert code == 1
+    assert "evaluator" in str(v)
+    assert br.last_receipt is None
+
+
+@pytest.mark.asyncio
+async def test_request_computer_denied_when_evaluator_fails(monkeypatch):
+    """Internal documentation."""
+    import argos.permissions as _perms
+
+    ran = {"v": False}
+
+    def fake_execute(action, args, run_ctx=None, _gated=False, allow_network=False):
+        ran["v"] = True
+        return ("SHOULD-NOT-RUN", 0)
+
+    monkeypatch.setattr(_perms, "evaluate", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    br = _broker(level=ApprovalLevel.AUTO)
+    monkeypatch.setattr(br, "_execute", fake_execute)
+
+    v = await br.request("computer_type_text", {"text": "hello"})
+
+    assert "evaluator" in str(v)
+    assert ran["v"] is False
+    assert br.last_receipt is None
+
+
 def test_wrapper_writes_on_sentinel(tmp_path, monkeypatch):
     monkeypatch.setattr(files, "WORKSPACE", tmp_path.resolve())
 
@@ -122,12 +153,12 @@ def test_edit_wrapper_passes_new_as_content(tmp_path, monkeypatch):
 
     ns = build_child_namespace(_Spy())
     ns["edit_file"]("a.py", "old", "newval")
-    assert seen.get("content") == "newval"               # 密钥检测能看到替换后的新文本
+    assert seen.get("content") == "newval"
     assert (tmp_path / "a.py").read_text() == "newval"
 
 
 def test_no_broker_namespace_has_no_write_tools():
-    """无 broker(纯沙箱)= 无写工具(诚实 fail-closed:不能治理就不给写),只读工具仍在。"""
+    """Internal documentation."""
     ns = build_child_namespace(None)
     assert "write_file" not in ns and "edit_file" not in ns
     assert "read_file" in ns and "search_files" in ns

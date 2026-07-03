@@ -1,4 +1,4 @@
-"""Audit log 写 / 跨日 / 30 天清理 / IO 失败 continue(spec §2.7, D7 / D17 锁)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -49,7 +49,7 @@ def test_audit_log_appends_jsonl(tmp_path, monkeypatch):
 
 
 def test_audit_log_io_failure_continues(tmp_path, monkeypatch):
-    """写失败(模拟 OSError)→ log warning + 继续(不抛,spec §2.7)。"""
+    """Internal documentation."""
     p = tmp_path / "audit"
     monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)
     log = AuditLog(session_id="s1")
@@ -61,9 +61,7 @@ def test_audit_log_io_failure_continues(tmp_path, monkeypatch):
             raise OSError("disk full")
         return real_open(*a, **kw)
     monkeypatch.setattr("builtins.open", _broken)
-    # 不抛(行为正确)
     log.log(tool="x", args="y", decision="approved", trigger="level:auto", by="level", risk="low")
-    # 不抛即过(spec §2.7 锁)
 
 
 def test_audit_log_secret_pattern_field(tmp_path, monkeypatch):
@@ -80,7 +78,7 @@ def test_audit_log_secret_pattern_field(tmp_path, monkeypatch):
 
 
 def test_audit_log_cleanup_old(tmp_path, monkeypatch):
-    """30 天前文件启动时被删(D7 锁)。"""
+    """Internal documentation."""
     p = tmp_path / "audit"
     monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)
     p.mkdir()
@@ -95,7 +93,7 @@ def test_audit_log_cleanup_old(tmp_path, monkeypatch):
 
 
 def test_audit_log_user_deny_by_field(tmp_path, monkeypatch):
-    """用户手动 deny 时 by='user'。"""
+    """Internal documentation."""
     p = tmp_path / "audit"
     monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)
     log = AuditLog(session_id="s1")
@@ -105,7 +103,7 @@ def test_audit_log_user_deny_by_field(tmp_path, monkeypatch):
 
 
 def test_audit_log_schema_fields(tmp_path, monkeypatch):
-    """audit row 字段全(必填 + 可选)。"""
+    """Internal documentation."""
     p = tmp_path / "audit"
     monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)
     log = AuditLog(session_id="s1")
@@ -114,12 +112,11 @@ def test_audit_log_schema_fields(tmp_path, monkeypatch):
         trigger="hard_rule:rm_rf_root", by="rule", risk="high",
     )
     obj = json.loads(next(p.glob("approvals-*.jsonl")).read_text().strip())
-    # 必填字段
     for k in ("ts", "session_id", "tool", "args", "decision", "trigger", "by", "risk"):
         assert k in obj
     assert obj["ts"].endswith("Z") is False  # ISO 8601 with ms, no Z (local time)
 
 
 def test_audit_log_retain_days_default():
-    """D7 锁:30 天保留期。"""
+    """Internal documentation."""
     assert RETAIN_DAYS == 30

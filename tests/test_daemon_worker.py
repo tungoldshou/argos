@@ -1,4 +1,4 @@
-"""RunWorker 集成测试(spec §2.11):fake loop 跑 N 步 → 触发 pause / cancel。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -21,7 +21,7 @@ def _meta(run_id: str = "abc123def456") -> RunMeta:
 
 @pytest.mark.asyncio
 async def test_worker_runs_to_completion(tmp_path: Path):
-    """fake loop yield 5 步,worker → state_change(running → completed)。"""
+    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     worker = RunWorker(
@@ -36,17 +36,15 @@ async def test_worker_runs_to_completion(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_pause_at_step_boundary(tmp_path: Path):
-    """POST /pause 在 step 2 → worker 在 step 2 边界转 paused,checkpoint 落 JSONL。"""
+    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
-    # 用大 delay 保证 pause 能插上
     worker = RunWorker(
         run_id=rid, manager=mgr,
         loop_factory=lambda: FakeLoop(steps=50, delay_s=0.02),
     )
 
     t = asyncio.create_task(worker.run())
-    # 等到 running 状态
     for _ in range(50):
         if mgr.get_run(rid).state == "running":
             break
@@ -54,7 +52,6 @@ async def test_worker_pause_at_step_boundary(tmp_path: Path):
     assert mgr.get_run(rid).state == "running"
     # pause
     assert await mgr.request_pause(rid) is True
-    # 等到 paused
     for _ in range(50):
         if mgr.get_run(rid).state == "paused":
             break
@@ -62,7 +59,6 @@ async def test_worker_pause_at_step_boundary(tmp_path: Path):
     assert mgr.get_run(rid).state == "paused"
     # resume
     assert await mgr.request_resume(rid) is True
-    # cancel + 等 worker 收尾
     await mgr.request_cancel(rid)
     try:
         await asyncio.wait_for(t, timeout=2.0)
@@ -72,15 +68,13 @@ async def test_worker_pause_at_step_boundary(tmp_path: Path):
             await t
         except (asyncio.CancelledError, Exception):
             pass
-    # checkpoint 落 JSONL
     events = list(mgr.store.replay(rid))
     assert any(e.get("kind") == "run_checkpoint" for e in events)
 
 
 @pytest.mark.asyncio
 async def test_worker_suspend_at_step_boundary(tmp_path: Path):
-    """Ctrl+B → request_suspend 在 step 边界 → worker 转 suspended + checkpoint 落 +
-    协程干净脱离(非 completed);非 running 时 request_suspend 被状态机拦。"""
+    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     worker = RunWorker(
@@ -88,28 +82,24 @@ async def test_worker_suspend_at_step_boundary(tmp_path: Path):
         loop_factory=lambda: FakeLoop(steps=50, delay_s=0.02),
     )
     t = asyncio.create_task(worker.run())
-    # 等到 running
     for _ in range(50):
         if mgr.get_run(rid).state == "running":
             break
         await asyncio.sleep(0.005)
     assert mgr.get_run(rid).state == "running"
-    # suspend(只有 running 能挂起)
     assert await mgr.request_suspend(rid) is True
-    # worker 应在下个 step 边界转 suspended 并脱离协程(await t 应正常返回,非超时)
     await asyncio.wait_for(t, timeout=2.0)
-    assert mgr.get_run(rid).state == "suspended"   # 不是 completed
+    assert mgr.get_run(rid).state == "suspended"
     events = list(mgr.store.replay(rid))
     assert any(e.get("kind") == "run_checkpoint" for e in events)
     assert any(e.get("kind") == "state_change" and e.get("to") == "suspended"
                for e in events)
-    # 已 suspended → 再 request_suspend 被状态机拦(只有 running 能挂起)
     assert await mgr.request_suspend(rid) is False
 
 
 @pytest.mark.asyncio
 async def test_worker_cancel_immediately(tmp_path: Path):
-    """POST /cancel → worker 协程 mark_cancelled。"""
+    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     worker = RunWorker(
@@ -118,14 +108,12 @@ async def test_worker_cancel_immediately(tmp_path: Path):
     )
 
     t = asyncio.create_task(worker.run())
-    # 等 running
     for _ in range(20):
         if mgr.get_run(rid).state == "running":
             break
         await asyncio.sleep(0.01)
     # cancel
     assert await mgr.request_cancel(rid) is True
-    # 等 worker 收尾
     try:
         await asyncio.wait_for(t, timeout=2.0)
     except asyncio.TimeoutError:
@@ -139,7 +127,7 @@ async def test_worker_cancel_immediately(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_sse_fanout(tmp_path: Path):
-    """2 个 subscriber 收到同事件。"""
+    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     q1 = mgr.subscribe(rid)
@@ -153,7 +141,7 @@ async def test_worker_sse_fanout(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_sse_slow_subscriber_drops(tmp_path: Path):
-    """慢 subscriber 队列满 → 丢事件 + 走 log 警告。"""
+    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     q = mgr.subscribe(rid, maxsize=2)
@@ -165,7 +153,7 @@ async def test_worker_sse_slow_subscriber_drops(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_exception_marks_failed(tmp_path: Path):
-    """loop 抛异常 → state_change(failed) + run_failure 行。"""
+    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
 
@@ -183,7 +171,7 @@ async def test_worker_exception_marks_failed(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_suspended_keeps_run(tmp_path: Path):
-    """Ctrl+B 后台化 → state_change(running → suspended) + checkpoint 落。"""
+    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     mgr.mark_running(rid)
@@ -196,7 +184,7 @@ async def test_worker_suspended_keeps_run(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_event_seq_increments(tmp_path: Path):
-    """worker 跑 → event_seq 单调递增。"""
+    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     worker = RunWorker(
@@ -204,17 +192,14 @@ async def test_worker_event_seq_increments(tmp_path: Path):
     )
     await worker.run()
     seqs = [e.get("_seq") for e in mgr.store.replay(rid) if e.get("_seq") is not None]
-    assert len(seqs) >= 9   # 3 步 × 3 events
+    assert len(seqs) >= 9
     assert seqs == sorted(seqs)
     assert len(set(seqs)) == len(seqs)
 
 
 @pytest.mark.asyncio
 async def test_worker_drives_loop_in_project_mode(tmp_path: Path):
-    """P0 防假绿:daemon worker 的 verify_dir==workspace(测试与解同目录),这是 project_mode 的
-    定义场景——也是唯一让 guard_project_tests/detect_tampering 通电的开关。worker 过去以
-    project_mode=False 驱动 loop → 篡改检测整条死掉:agent 在 workspace 改自己的测试,verify 跑
-    被改后的测试拿假绿且不可见。worker 必须以 project_mode=True 驱动 loop。"""
+    """Internal documentation."""
     from argos import runtime
 
     captured: dict = {}
@@ -224,7 +209,7 @@ async def test_worker_drives_loop_in_project_mode(tmp_path: Path):
             ctx = runtime.current()
             captured["project_mode"] = ctx.project_mode
             captured["verify_eq_ws"] = ctx.verify_dir == ctx.workspace
-            for _ in ():        # 空 async generator
+            for _ in ():
                 yield {}
 
     ws = tmp_path / "ws"
@@ -238,14 +223,35 @@ async def test_worker_drives_loop_in_project_mode(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_worker_uses_run_conversation_session(tmp_path: Path):
+    """Internal documentation."""
+    captured: dict = {}
+
+    class _SpyLoop:
+        async def run(self, goal, session_id=None, **kwargs):
+            captured["goal"] = goal
+            captured["session_id"] = session_id
+            for _ in ():
+                yield {}
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
+    rid = await mgr.create_run(
+        goal="成都", workspace=str(ws), session_id="tui-session-1",
+    )
+    worker = RunWorker(run_id=rid, manager=mgr, loop_factory=lambda: _SpyLoop())
+    await worker.run()
+    assert captured == {"goal": "成都", "session_id": "tui-session-1"}
+
+
+@pytest.mark.asyncio
 async def test_worker_hard_cancel_interrupts_blocked_loop(tmp_path: Path):
-    """P2:manager.request_cancel 只 set flag,worker 在事件边界轮询 → 卡在 stream(loop 不 yield)
-    时收不到,跑到底(用户取消后可继续 ~5min)。worker.request_hard_cancel() 直接 cancel 包装本
-    协程的 task,在 await 点抛 CancelledError 中断,worker 标 cancelled。"""
+    """Internal documentation."""
     class _BlockingLoop:
         async def run(self, goal, session_id=None, **kwargs):
-            yield {"kind": "token_delta", "text": "start"}   # 触发 running
-            await asyncio.sleep(100)                          # 卡住(模拟 stream 不返)
+            yield {"kind": "token_delta", "text": "start"}
+            await asyncio.sleep(100)
             yield {"kind": "token_delta", "text": "never"}
 
     ws = tmp_path / "ws"
@@ -254,13 +260,13 @@ async def test_worker_hard_cancel_interrupts_blocked_loop(tmp_path: Path):
     rid = await mgr.create_run(goal="x", workspace=str(ws))
     worker = RunWorker(run_id=rid, manager=mgr, loop_factory=lambda: _BlockingLoop())
     task = asyncio.create_task(worker.run())
-    for _ in range(200):                                       # 等进入 running 且卡住
+    for _ in range(200):
         if mgr.get_run(rid).state == "running":
             break
         await asyncio.sleep(0.01)
     assert mgr.get_run(rid).state == "running"
-    await mgr.request_cancel(rid)                              # 老机制:set flag,不中断 sleep
-    assert worker.request_hard_cancel() is True               # 新机制:硬中断
+    await mgr.request_cancel(rid)
+    assert worker.request_hard_cancel() is True
     with pytest.raises(asyncio.CancelledError):
-        await asyncio.wait_for(task, timeout=2.0)             # 2s 内结束 = 真被中断
+        await asyncio.wait_for(task, timeout=2.0)
     assert mgr.get_run(rid).state == "cancelled"

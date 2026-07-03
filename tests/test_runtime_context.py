@@ -1,4 +1,4 @@
-"""runtime ContextVar 隔离测试 —— 承重墙主铁证(并发不串台)。"""
+"""Internal documentation."""
 import asyncio
 from pathlib import Path
 
@@ -27,10 +27,10 @@ def test_use_project_returns_token_and_sets_project_mode(tmp_path):
 
 
 def test_concurrent_tasks_isolated(tmp_path):
-    """两个并发 task 各设各的 RunContext,各读自己的 —— 探针 ['A','B'] 的代码级落地。"""
+    """Internal documentation."""
     async def worker(tag: str) -> str:
         token = runtime.set_context(RunContext(workspace=tmp_path / tag, verify_dir=tmp_path / tag))
-        await asyncio.sleep(0.01)  # 给调度机会交错
+        await asyncio.sleep(0.01)
         seen = runtime.current().workspace.name
         runtime.reset(token)
         return seen
@@ -42,7 +42,7 @@ def test_concurrent_tasks_isolated(tmp_path):
 
 
 def test_guard_and_detect_read_contextvar(tmp_path):
-    """guard_files/detect_tampering 读 ContextVar 的 RunContext(不再读全局)。"""
+    """Internal documentation."""
     ws = tmp_path / "proj"
     ws.mkdir()
     t = ws / "test_x.py"
@@ -55,7 +55,3 @@ def test_guard_and_detect_read_contextvar(tmp_path):
         assert any("test_x.py" in c for c in runtime.detect_tampering())
     finally:
         runtime.reset(token)
-
-
-# 旧 build_agent_with_gate / _llm(LangChain 路径)测试随 2026-06-05 死栈清理移除 ——
-# 活引擎模型工厂走 core/models.py(由 test_models_*.py 覆盖)。

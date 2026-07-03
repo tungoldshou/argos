@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
-# Argos Windows 打包:PyInstaller onefile → .exe zip 主推 + .msi (可选 WiX 简化方案)。
-# 跑在 windows-latest runner(spec D3 锁 .msi 失败仅警告,仅 .exe zip 兜底)。
-# 注:本脚本在 windows-latest 跑;若本地 macOS 跑只是 syntax check,不能真产 .exe。
 set -euo pipefail
-cd "$(dirname "$0")/.."   # 仓库根
+cd "$(dirname "$0")/.."
 
-# 版本号(spec §2.6):CI ARGOS_VERSION > packaging/VERSION > unknown
 if [ -z "${ARGOS_VERSION:-}" ]; then
   if [ -f packaging/VERSION ]; then
     ARGOS_VERSION=$(cat packaging/VERSION)
@@ -13,17 +9,22 @@ if [ -z "${ARGOS_VERSION:-}" ]; then
     ARGOS_VERSION="0.0.0+unknown"
   fi
 fi
+ARGOS_VERSION="${ARGOS_VERSION#v}"
 export ARGOS_VERSION
 echo "=== Building Argos $ARGOS_VERSION (windows) ==="
 
-# 1. 清理 dist
+zip_with_powershell() {
+  local src="$1"
+  local dest="$2"
+  powershell.exe -NoProfile -Command \
+    "Compress-Archive -Path '$src' -DestinationPath '$dest' -Force"
+}
+
 rm -rf dist build
 mkdir -p dist
 
-# 2. 确保 pyinstaller 在 venv
 uv run python -c "import PyInstaller" 2>/dev/null || uv add --dev pyinstaller
 
-# 3. PyInstaller onefile(Windows 注意:用 ; 作 add-data 分隔符,不是 :)
 PYI_ARGS=(
   --clean --noconfirm
   --name argos
@@ -48,18 +49,15 @@ uv run pyinstaller "${PYI_ARGS[@]}"
 
 BIN=dist/argos.exe
 [ -f "$BIN" ] || { echo "FATAL: 缺 $BIN"; exit 1; }
-file "$BIN" 2>/dev/null || true   # 期望 PE32+ executable
+file "$BIN" 2>/dev/null || true
 
-# 4. zip 打包(主推)
 cd dist
-zip "Argos-${ARGOS_VERSION}-x86_64-windows.zip" argos.exe
+zip_with_powershell "argos.exe" "Argos-${ARGOS_VERSION}-x86_64-windows.zip"
 cd ..
 SHASUM=shasum
 command -v sha256sum >/dev/null 2>&1 && SHASUM=sha256sum
 $SHASUM "dist/Argos-${ARGOS_VERSION}-x86_64-windows.zip" 2>/dev/null || true
 
-# 5. .msi 简化方案(可选;spec D3 锁失败不卡,仅警告)
-#    走 WiX (candle/light);若不在 PATH 跳(仅警告)
 if command -v candle >/dev/null 2>&1 && command -v light >/dev/null 2>&1; then
   echo "=== Pack .msi (WiX 简化方案) ==="
   cat > dist/argos.wxs <<EOF
@@ -85,7 +83,7 @@ EOF
       echo "WARN: light 失败,跳 .msi"
     if [ -f "dist/Argos-${ARGOS_VERSION}-x86_64.msi" ]; then
       cd dist
-      zip "Argos-${ARGOS_VERSION}-x86_64.msi.zip" "Argos-${ARGOS_VERSION}-x86_64.msi"
+      zip_with_powershell "Argos-${ARGOS_VERSION}-x86_64.msi" "Argos-${ARGOS_VERSION}-x86_64.msi.zip"
       cd ..
       $SHASUM "dist/Argos-${ARGOS_VERSION}-x86_64.msi.zip" 2>/dev/null || true
     fi

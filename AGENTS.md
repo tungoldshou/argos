@@ -63,3 +63,18 @@ uv run pytest -q
 - The worktree may contain user changes. Do not revert unrelated changes.
 - Do not run destructive git commands unless the user explicitly asks.
 - Main is PR-only; use a branch for changes intended to land.
+
+## Codex Project Workflow
+
+This project follows the user's global Codex workflow.
+
+Important project-specific rules:
+
+- Natural language tasks are allowed. Do not require artificial prefixes.
+- Use `/goal` only for larger long-running objectives.
+- For normal coding tasks, classify the task and choose the workflow automatically.
+- Read `PROJECT_STATE.md`, `TODO.md`, `CHANGELOG.md`, and `DECISIONS.md` before non-trivial work.
+- Update project memory files after meaningful coding progress.
+- Prefer branch or worktree for complex or risky changes.
+- Do not merge main unless explicitly authorized.
+- Stop and report high-risk conflicts.

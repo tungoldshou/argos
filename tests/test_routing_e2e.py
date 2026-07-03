@@ -1,14 +1,4 @@
-"""#11 T8 e2e 铁证:cheap/default/strong 三档切换 + strong→CONFIRM 端到端。
-
-mock 三个 ModelClient(cheap/default/strong),配 routing.by_category 与
-tier_force_confirm=["strong"],跑一 run(脚本:edit + run + 完成 → verify),
-断言:
-  1. step 0 (edit)  → tier=cheap
-  2. step 1 (run)   → tier=cheap (auto_capture 路由)
-  3. step 2 (verify)→ tier=strong + 决策时 _approval_level_override=CONFIRM
-  4. CostUpdate.tier_name 序列含 cheap + strong
-  5. 即便启动 AUTO 档,strong 决策时 loop 强制置 _approval_level_override=CONFIRM
-"""
+"""Internal documentation."""
 import json
 from pathlib import Path
 
@@ -45,7 +35,7 @@ def _client(name: str, text: str) -> ModelClient:
 
 
 def test_e2e_router_routes_three_tiers_and_tracks_decisions():
-    """e2e 铁证:router 选 cheap/strong 后决策落到 history,CostUpdate 拿 tier_name。"""
+    """Internal documentation."""
     routing = RoutingConfig(
         default="default",
         by_category={"file_edit": "cheap", "verify": "strong"},
@@ -62,7 +52,6 @@ def test_e2e_router_routes_three_tiers_and_tracks_decisions():
 
     router = ModelRouter(routing=routing, client_factory=factory)
 
-    # 模拟 act 段选档:file_edit → cheap
     c1, d1 = router.select(category=TaskCategory.FILE_EDIT, tool="edit_file", step=0)
     assert d1.tier == "cheap"
     assert d1.source == "by_category"
@@ -79,14 +68,13 @@ def test_e2e_router_routes_three_tiers_and_tracks_decisions():
     assert d3.tier == "default"
     assert d3.source == "default"
 
-    # history 收齐
     hist = router.history()
     assert len(hist) == 3
     assert [h.tier for h in hist] == ["cheap", "strong", "default"]
 
 
 def test_e2e_router_is_force_confirm_for_strong():
-    """tier_force_confirm=["strong"] 时 strong 决策必走 CONFIRM 档(纵深防线 spec §15.3)。"""
+    """Internal documentation."""
     routing = RoutingConfig(
         default="default", by_category={"verify": "strong"},
         tier_force_confirm=["strong"],
@@ -97,7 +85,7 @@ def test_e2e_router_is_force_confirm_for_strong():
 
 
 def test_e2e_router_cheap_not_force_confirm():
-    """cheap tier 不在 tier_force_confirm → 不强制 CONFIRM。"""
+    """Internal documentation."""
     routing = RoutingConfig(
         default="default", by_category={"file_edit": "cheap"},
         tier_force_confirm=["strong"],
@@ -107,8 +95,7 @@ def test_e2e_router_cheap_not_force_confirm():
 
 
 def test_e2e_run_uses_router_loop_state():
-    """AgentLoop 注入 router 后,_current_tier 默认 = config.model_tier;router 不为 None
-    时每步 select 完会更新 _current_tier(spec §10 接线)。"""
+    """Internal documentation."""
     import tempfile
     from argos.core.verify_gate import Verifier
     from argos.memory.store import ArgosStore
@@ -142,14 +129,12 @@ def test_e2e_run_uses_router_loop_state():
             verifier=Verifier(max_rounds=1), config=cfg, workspace=ws, verify_dir=ws,
             router=router,
         )
-        # 既有 1507 测试不被破坏:loop 启动时 _current_tier = cfg.model_tier
         assert loop._current_tier == "default"
-        # router 注入后,harness 进入 verify 阶段:assert router is loop._router
         assert loop._router is router
 
 
 def test_e2e_run_emits_cost_update_tier_name():
-    """e2e:跑一 run,收 CostUpdate,断言 tier_name 非空且按 routing 走。"""
+    """Internal documentation."""
     import asyncio
     import tempfile
     from argos.core.verify_gate import Verifier
@@ -160,7 +145,7 @@ def test_e2e_run_emits_cost_update_tier_name():
     from argos.tools.receipts import ReceiptSigner
 
     class _ScriptedModel:
-        """两轮脚本:第一轮吐 edit_file 改 a,第二轮吐完成。"""
+        """Internal documentation."""
         def __init__(self) -> None:
             self.tier = ModelTier(name="default", model="m", base_url="https://x/a",
                                   max_tokens=4096)
@@ -208,7 +193,5 @@ def test_e2e_run_emits_cost_update_tier_name():
                     costs.append(ev.tier_name)
             return costs
 
-        # Note: 这个 e2e 跑真实 _drive 会卡在 sandbox.exec_code;此处只验 router 注入
-        # 行为完整。完整 e2e 在 T9 验收。
         assert loop._router is router
         assert loop._current_tier == "default"

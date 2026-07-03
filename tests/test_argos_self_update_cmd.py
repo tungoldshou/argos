@@ -1,18 +1,52 @@
-"""`argos self-update` 子命令:跳过缓存,主动查,有新版则打印升级指南。
-
-注意:不下载,只告诉用户怎么升级(Cask / curl install.sh)。
-"""
+"""Internal documentation."""
 import argparse
 import json
 import subprocess
 from unittest.mock import patch
 
 
-def test_self_update_subcommand_registered():
-    """`python -m argos self-update --help` 不应抛错(子命令已注册)。
+def test_self_update_cache_honors_argos_config_dir(tmp_path, monkeypatch, capsys):
+    from argos import config as C
+    from argos.__main__ import _cmd_self_update
 
-    subprocess 测 argparse 接线(没有 mock 需求,直接走真 CLI)。
-    """
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(C, "_ENV", {})
+
+    seen = {}
+
+    def fake_check(**kwargs):
+        seen["cache_path"] = kwargs["cache_path"]
+        return None
+
+    with patch("argos.core.updater.check_github_release", side_effect=fake_check):
+        rc = _cmd_self_update(argparse.Namespace())
+    capsys.readouterr()
+
+    assert rc == 0
+    assert seen["cache_path"] == tmp_path / ".last_update_check"
+
+
+def test_startup_update_cache_honors_argos_config_dir(tmp_path, monkeypatch):
+    from argos import config as C
+    from argos.__main__ import _spawn_update_check
+
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(C, "_ENV", {})
+
+    seen = {}
+
+    def fake_check(**kwargs):
+        seen["cache_path"] = kwargs["cache_path"]
+        return None
+
+    with patch("argos.core.updater.check_github_release", side_effect=fake_check):
+        _spawn_update_check()
+
+    assert seen["cache_path"] == tmp_path / ".last_update_check"
+
+
+def test_self_update_subcommand_registered():
+    """Internal documentation."""
     result = subprocess.run(
         ["python", "-m", "argos", "self-update", "--help"],
         capture_output=True, text=True, timeout=10,
@@ -22,13 +56,7 @@ def test_self_update_subcommand_registered():
 
 
 def test_self_update_skips_cache(capsys):
-    """`self-update` 强制 force=True(跳过 7 天缓存),直接查 GitHub。
-
-    mock 远端返新版,assert stdout 有 'available'。
-
-    注意:不能走 subprocess — unittest.mock.patch 不跨进程传播。
-    必须 in-process 直接调 _cmd_self_update,这样 patch 才生效。
-    """
+    """Internal documentation."""
     payload = json.dumps({"tag_name": "v0.99.0"}).encode()
     from argos.__main__ import _cmd_self_update
 
@@ -48,8 +76,8 @@ def test_self_update_skips_cache(capsys):
 
 
 def test_self_update_no_newer_version(capsys):
-    """mock 远端返同版本,assert stdout 提示 'up to date' / 'latest'。"""
-    payload = json.dumps({"tag_name": "v0.1.0"}).encode()  # 同 current
+    """Internal documentation."""
+    payload = json.dumps({"tag_name": "v0.1.0"}).encode()
     from argos.__main__ import _cmd_self_update
 
     mock_resp = type("R", (), {

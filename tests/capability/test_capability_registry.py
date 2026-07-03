@@ -1,16 +1,4 @@
-"""CapabilityRegistry 测试（§5 能力模型）。
-
-覆盖：
-- 注册成功 / 重名拒绝 / risk=None 拒绝
-- get() 成功 / KeyError
-- names() 顺序
-- by_kind() 过滤
-- risk_table() 快照
-- egress_hosts() 聚合（空/单/多/去重）
-- visible_names() 角色过滤（all / developer）
-- __len__ / __contains__
-- 注册后注册表与原 Capability 无共享可变状态（不变式）
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -20,7 +8,6 @@ from argos.capability.registry import CapabilityRegistry
 
 
 # ------------------------------------------------------------------
-# 辅助工厂
 # ------------------------------------------------------------------
 
 def _cap(
@@ -42,7 +29,7 @@ def _cap(
 
 
 def _reg(*caps: Capability) -> CapabilityRegistry:
-    """构造含指定 capabilities 的 registry。"""
+    """Internal documentation."""
     r = CapabilityRegistry()
     for cap in caps:
         r.register(cap)
@@ -50,11 +37,10 @@ def _reg(*caps: Capability) -> CapabilityRegistry:
 
 
 # ------------------------------------------------------------------
-# 注册 — 正常路径
 # ------------------------------------------------------------------
 
 def test_register_single():
-    """单个 capability 注册成功。"""
+    """Internal documentation."""
     r = CapabilityRegistry()
     cap = _cap()
     r.register(cap)
@@ -63,7 +49,7 @@ def test_register_single():
 
 
 def test_register_multiple_in_order():
-    """多个 capability 按注册顺序保留。"""
+    """Internal documentation."""
     r = CapabilityRegistry()
     r.register(_cap("a", "tool", "low"))
     r.register(_cap("b", "mcp", "medium"))
@@ -72,11 +58,10 @@ def test_register_multiple_in_order():
 
 
 # ------------------------------------------------------------------
-# 注册 — fail-closed
 # ------------------------------------------------------------------
 
 def test_register_duplicate_name_raises():
-    """重名注册抛 ValueError（全局唯一约束）。"""
+    """Internal documentation."""
     r = CapabilityRegistry()
     r.register(_cap("web_search"))
     with pytest.raises(ValueError, match="web_search"):
@@ -84,7 +69,7 @@ def test_register_duplicate_name_raises():
 
 
 def test_register_none_risk_raises():
-    """risk=None 注册期 fail-closed 抛 ValueError。"""
+    """Internal documentation."""
     r = CapabilityRegistry()
     cap = _cap(risk=None)
     with pytest.raises(ValueError, match="risk"):
@@ -92,7 +77,7 @@ def test_register_none_risk_raises():
 
 
 def test_register_none_risk_message_mentions_name():
-    """错误消息应含 capability 名，方便排查。"""
+    """Internal documentation."""
     r = CapabilityRegistry()
     cap = _cap(name="mystery_tool", risk=None)
     with pytest.raises(ValueError, match="mystery_tool"):
@@ -104,7 +89,7 @@ def test_register_none_risk_message_mentions_name():
 # ------------------------------------------------------------------
 
 def test_get_existing():
-    """get() 返回已注册的 Capability。"""
+    """Internal documentation."""
     cap = _cap("run_command", "tool", "high")
     r = _reg(cap)
     result = r.get("run_command")
@@ -112,7 +97,7 @@ def test_get_existing():
 
 
 def test_get_missing_raises_key_error():
-    """get() 未知名抛 KeyError。"""
+    """Internal documentation."""
     r = CapabilityRegistry()
     with pytest.raises(KeyError, match="not_here"):
         r.get("not_here")
@@ -123,13 +108,13 @@ def test_get_missing_raises_key_error():
 # ------------------------------------------------------------------
 
 def test_names_empty():
-    """空注册表返回空 tuple。"""
+    """Internal documentation."""
     r = CapabilityRegistry()
     assert r.names() == ()
 
 
 def test_names_order_preserved():
-    """names() 保持注册顺序。"""
+    """Internal documentation."""
     r = _reg(
         _cap("z", "tool", "low"),
         _cap("a", "mcp", "medium"),
@@ -143,7 +128,7 @@ def test_names_order_preserved():
 # ------------------------------------------------------------------
 
 def test_by_kind_returns_matching():
-    """by_kind('tool') 只返回 tool 类型。"""
+    """Internal documentation."""
     r = _reg(
         _cap("tool_a", "tool", "low"),
         _cap("mcp_b", "mcp", "medium"),
@@ -156,7 +141,7 @@ def test_by_kind_returns_matching():
 
 
 def test_by_kind_empty_when_none_match():
-    """by_kind() 无匹配返回空 tuple。"""
+    """Internal documentation."""
     r = _reg(_cap("web_search", "tool", "low"))
     assert r.by_kind("browser") == ()
 
@@ -165,7 +150,7 @@ def test_by_kind_empty_when_none_match():
     "tool", "mcp", "computer", "browser", "hook", "skill", "lsp", "plugin",
 ])
 def test_by_kind_all_valid_kinds(kind):
-    """每个合法 kind 都能用 by_kind 查询（不报错）。"""
+    """Internal documentation."""
     r = _reg(_cap(f"cap_{kind}", kind, "low"))
     result = r.by_kind(kind)  # type: ignore[arg-type]
     assert len(result) == 1
@@ -177,7 +162,7 @@ def test_by_kind_all_valid_kinds(kind):
 # ------------------------------------------------------------------
 
 def test_risk_table_correct_mapping():
-    """risk_table() 返回正确的 name → RiskLevel 映射。"""
+    """Internal documentation."""
     r = _reg(
         _cap("web_search", "tool", "low"),
         _cap("run_command", "tool", "high"),
@@ -192,16 +177,15 @@ def test_risk_table_correct_mapping():
 
 
 def test_risk_table_is_snapshot():
-    """risk_table() 返回的字典是副本，修改不影响注册表。"""
+    """Internal documentation."""
     r = _reg(_cap("web_search", "tool", "low"))
     table = r.risk_table()
-    table["web_search"] = "high"  # 修改副本
-    # 原注册表不变
+    table["web_search"] = "high"
     assert r.get("web_search").risk == "low"
 
 
 def test_risk_table_empty():
-    """空注册表返回空 dict。"""
+    """Internal documentation."""
     r = CapabilityRegistry()
     assert r.risk_table() == {}
 
@@ -211,20 +195,20 @@ def test_risk_table_empty():
 # ------------------------------------------------------------------
 
 def test_egress_hosts_empty_when_no_caps():
-    """空注册表 egress_hosts() 返回空 frozenset。"""
+    """Internal documentation."""
     r = CapabilityRegistry()
     assert r.egress_hosts() == frozenset()
 
 
 def test_egress_hosts_single_cap():
-    """单个 cap 的 egress_hosts 正确聚合。"""
+    """Internal documentation."""
     cap = _cap("web_search", "tool", "low", egress_hosts=("duckduckgo.com",))
     r = _reg(cap)
     assert r.egress_hosts() == frozenset({"duckduckgo.com"})
 
 
 def test_egress_hosts_multiple_caps_union():
-    """多个 cap 的 egress_hosts 取并集。"""
+    """Internal documentation."""
     r = _reg(
         _cap("web_search", "tool", "low", egress_hosts=("duckduckgo.com",)),
         _cap("web_extract", "tool", "low", egress_hosts=("example.com",)),
@@ -233,7 +217,7 @@ def test_egress_hosts_multiple_caps_union():
 
 
 def test_egress_hosts_deduplication():
-    """两个 cap 声明同一个 host，只出现一次（frozenset 去重）。"""
+    """Internal documentation."""
     r = _reg(
         _cap("cap_a", "tool", "low", egress_hosts=("shared.com",)),
         _cap("cap_b", "mcp", "medium", egress_hosts=("shared.com",)),
@@ -244,16 +228,16 @@ def test_egress_hosts_deduplication():
 
 
 def test_egress_hosts_cap_with_no_egress():
-    """无出网声明的 cap 不贡献 egress_hosts。"""
+    """Internal documentation."""
     r = _reg(
-        _cap("local_tool", "tool", "low"),           # 无 egress
+        _cap("local_tool", "tool", "low"),
         _cap("web_tool", "tool", "low", egress_hosts=("api.example.com",)),
     )
     assert r.egress_hosts() == frozenset({"api.example.com"})
 
 
 def test_egress_hosts_returns_frozenset():
-    """egress_hosts() 返回 frozenset（不可变）。"""
+    """Internal documentation."""
     r = _reg(_cap("a", "tool", "low", egress_hosts=("x.com",)))
     result = r.egress_hosts()
     assert isinstance(result, frozenset)
@@ -264,7 +248,7 @@ def test_egress_hosts_returns_frozenset():
 # ------------------------------------------------------------------
 
 def test_visible_names_all_role_sees_only_all():
-    """role='all' 只看到 visibility='all' 的能力。"""
+    """Internal documentation."""
     r = _reg(
         _cap("public_tool", "tool", "low", visibility="all"),
         _cap("lsp_action", "lsp", "low", visibility="developer"),
@@ -275,7 +259,7 @@ def test_visible_names_all_role_sees_only_all():
 
 
 def test_visible_names_developer_sees_all():
-    """role='developer' 看到全部能力（all + developer）。"""
+    """Internal documentation."""
     r = _reg(
         _cap("public_tool", "tool", "low", visibility="all"),
         _cap("lsp_action", "lsp", "low", visibility="developer"),
@@ -285,7 +269,7 @@ def test_visible_names_developer_sees_all():
 
 
 def test_visible_names_preserves_registration_order():
-    """visible_names() 保持注册顺序。"""
+    """Internal documentation."""
     r = _reg(
         _cap("first", "tool", "low", visibility="all"),
         _cap("second", "tool", "low", visibility="all"),
@@ -295,7 +279,7 @@ def test_visible_names_preserves_registration_order():
 
 
 def test_visible_names_empty_registry():
-    """空注册表两种角色都返回空 tuple。"""
+    """Internal documentation."""
     r = CapabilityRegistry()
     assert r.visible_names("all") == ()
     assert r.visible_names("developer") == ()
@@ -327,25 +311,24 @@ def test_not_contains_unregistered():
 
 
 # ------------------------------------------------------------------
-# 不变式：注册表独立于 Capability 对象
 # ------------------------------------------------------------------
 
 def test_registry_holds_same_object():
-    """register() 存储的是同一个 Capability 对象，无拷贝。"""
+    """Internal documentation."""
     cap = _cap("run_command", "tool", "high")
     r = _reg(cap)
     assert r.get("run_command") is cap
 
 
 def test_names_returns_tuple_not_list():
-    """names() 返回 tuple，保证外部不能 append。"""
+    """Internal documentation."""
     r = _reg(_cap())
     result = r.names()
     assert isinstance(result, tuple)
 
 
 def test_by_kind_returns_tuple_not_list():
-    """by_kind() 返回 tuple（不可变视图）。"""
+    """Internal documentation."""
     r = _reg(_cap("t", "tool", "low"))
     result = r.by_kind("tool")
     assert isinstance(result, tuple)

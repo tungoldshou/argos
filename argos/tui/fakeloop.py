@@ -1,8 +1,4 @@
-"""FakeLoop:按脚本投 Event 的测试/演示替身(契约 §3 run 签名形状)。
-
-真 AgentLoop(Phase 3)落地前,TUI 接线靠它驱动;落地后只换注入对象,TUI 零改动。
-默认脚本走一遍 plan→act→verify→report,覆盖 12 类事件里 UI 关心的主路径。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -25,7 +21,7 @@ from argos.tui.events import (
 
 
 class FakeLoop:
-    """run(goal, session_id) 产出一串脚本化 Event。script 可注入自定义序列。"""
+    """Internal documentation."""
 
     def __init__(self, script: list[Event] | None = None) -> None:
         self._script = script
@@ -51,7 +47,6 @@ class FakeLoop:
 
     async def run(self, goal: str, session_id: str,
                   attachments: list | None = None) -> AsyncIterator[Event]:
-        # attachments:与真 AgentLoop.run 同签名(演示/测试不消费,仅记录供断言)。
         self.last_attachments = list(attachments or [])
         script = self._script if self._script is not None else self._default_script(goal)
         for ev in script:
@@ -59,7 +54,7 @@ class FakeLoop:
 
 
 class FailingFakeLoop(FakeLoop):
-    """演示/测试 escalation + error 路径。"""
+    """Internal documentation."""
 
     def _default_script(self, goal: str) -> list[Event]:
         return [

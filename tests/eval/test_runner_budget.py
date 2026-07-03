@@ -1,12 +1,4 @@
-"""#7 EvalRunner --budget 强制执行测试。
-
-覆盖:
-  (a) budget_cost_usd 超限 → EvalResult.pass_status == "failed",error 含 "over_budget"
-  (b) budget_s 超时 → EvalResult.pass_status == "failed",error 含 "timed_out"
-  (c) 两个 budget 都为 None → 正常完成,无 over-budget 标记(纯加法,零副作用)
-
-构造模式镜像 tests/eval/_fakes.py:FakeWorktree + make_fake_loop_factory。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import time

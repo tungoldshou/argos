@@ -6,10 +6,10 @@ from argos.core.types import ModelTierName  # noqa
 
 
 class _H(App):
-    """最小测试宿主:注入 ARGOS_NIGHT tokens 以便 DEFAULT_CSS 中 $token 可解析。"""
+    """Internal documentation."""
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
-        """把 ARGOS_NIGHT.variables 作为 CSS token 兜底注入。"""
+        """Internal documentation."""
         defaults = super().get_theme_variable_defaults()
         if ARGOS_NIGHT.variables:
             defaults.update(ARGOS_NIGHT.variables)
@@ -26,12 +26,10 @@ async def test_panel_sections_present_and_honest_empty():
         await pilot.pause()
         ap = app.query_one("#ap", ActivityPanel)
         txt = ap.snapshot_text()
-        assert "MiniMax-M3" in txt                              # 模型(真,只显模型名不露档位)
-        # Skills 已接进活 loop:诚实显真实可用数(内置 4 个)或"无可用",绝不谎报。
+        assert "MiniMax-M3" in txt
         assert ("可用" in txt or "无可用" in txt)
-        # MCP 诚实显配置态:'未配置'(零预配)或 'N 个已配置';绝不谎报连接数。
         assert ("未配置" in txt or "已配置" in txt)
-        assert "缓存" in txt                                      # 成本含缓存区
+        assert "缓存" in txt
 
 
 @pytest.mark.asyncio
@@ -56,13 +54,13 @@ async def test_receipt_and_cost_update():
         ap.on_cost(tokens_in=12400, tokens_out=3100, cost_usd=0.013, elapsed_s=4.2, cache_read=179)
         await pilot.pause()
         t = ap.snapshot_text()
-        assert "write_file" in t           # 工具计数 + 回执
-        assert "179" in t                  # 缓存命中
+        assert "write_file" in t
+        assert "179" in t
 
 
 @pytest.mark.asyncio
 async def test_model_section_shows_name_not_tier():
-    app = _H()  # _H 已在该文件:yield ActivityPanel(id="ap", model_label="MiniMax-M3", tier="worker")
+    app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
         ap = app.query_one("#ap", ActivityPanel)
@@ -73,8 +71,6 @@ async def test_model_section_shows_name_not_tier():
 
 @pytest.mark.asyncio
 async def test_cost_dollar_removed_tokens_kept():
-    # 去花费(2026-07-01):$ 金额(含未知单价的 N/A)已整段移除——各模型单价不同、不想强制配置。
-    # token 流保留(无需配置、仍有用)。
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -88,7 +84,7 @@ async def test_cost_dollar_removed_tokens_kept():
 
 @pytest.mark.asyncio
 async def test_cost_line_token_flow_has_unit():
-    """成本行 token 段带 'tok' 单位 + 方向箭头(修裸数字无单位)。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -100,9 +96,23 @@ async def test_cost_line_token_flow_has_unit():
 
 
 @pytest.mark.asyncio
+async def test_cache_lines_use_token_unit_and_abbrev():
+    """Internal documentation."""
+    app = _H()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        ap = app.query_one("#ap", ActivityPanel)
+        ap.on_cost(tokens_in=7200, tokens_out=355, cost_usd=None, elapsed_s=26.0, cache_read=13568)
+        await pilot.pause()
+        cost = str(ap._sections()[ap._COST_IDX].content)
+        assert "cache hit 13.6k tok" in cost or "缓存命中 13.6k tok" in cost, f"实际:{cost!r}"
+        assert "cache " in cost and "13.6k tok" in cost, f"实际:{cost!r}"
+        assert "cache hit 13568" not in cost and "cache " + "13568" not in cost, f"实际:{cost!r}"
+
+
+@pytest.mark.asyncio
 async def test_context_section_no_redundant_model_or_window():
-    """上下文区去冗余(2026-06-22):window 只以人类可读 '1000k' 出现一次(无原始 1,000,000 重复);
-    pct 只在进度条出现一次(不再 badge 内重复);model 不再在此重复(已在 Model 段)。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -118,7 +128,7 @@ async def test_context_section_no_redundant_model_or_window():
 
 @pytest.mark.asyncio
 async def test_cache_idle_line_has_elapsed_label():
-    """无缓存命中时,耗时带标签 + 分隔(不再是裸 31.9s 紧贴 'cache —' 字段)。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -145,20 +155,18 @@ async def test_context_section_shows_usage_bar():
 
 @pytest.mark.asyncio
 async def test_panel_is_scrollable():
-    """修复:活动栏内容超出可视高度时必须可滚(overflow-y: auto);
-    此前继承 Vertical 默认 overflow-y: hidden,区块被裁死、滚轮/拖拽全失效。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
         ap = app.query_one("#ap", ActivityPanel)
-        assert ap.styles.overflow_y == "auto", \
+        assert ap.styles.overflow_y == "auto",\
             f"活动栏应 overflow-y: auto 才能滚动,实际 {ap.styles.overflow_y}"
 
 
 @pytest.mark.asyncio
 async def test_section_title_not_transparent():
-    """修复:区块标题此前 border-title-color 落到透明默认(alpha=0)完全看不见;
-    须为不透明可读色($eye-soft)。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -173,19 +181,17 @@ async def test_in_progress_phase_shows_ellipsis_not_zero():
     async with app.run_test() as pilot:
         await pilot.pause()
         ap = app.query_one("#ap", ActivityPanel)
-        ap.on_phase("plan", 0)  # 刚进 plan,进行中
+        ap.on_phase("plan", 0)
         await pilot.pause()
-        # Textual 8.2.7 的 Static 用 .content 暴露正文(无 .renderable)
-        sec = str(ap._sections()[1].content)  # 任务进度区
+        sec = str(ap._sections()[1].content)
         assert "0.0s" not in sec, "进行中阶段不应显 0.0s"
         assert "…" in sec, "进行中阶段应显占位 …"
 
 
-# ── v3 视觉更新:字形词典断言 ─────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_phase_glyphs_v3():
-    """v3 字形词典:plan=◔ act=◉ verify=❂ report=◕(spec §3.1)。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -195,24 +201,21 @@ async def test_phase_glyphs_v3():
         ap.on_phase("verify", 2)
         ap.on_phase("report", 3)
         snap = ap.snapshot_text()
-        # 新字形应出现
         assert "◔" in snap, "plan 阶段应用 ◔ 字形(v3 §3.1)"
         assert "◉" in snap, "act 阶段应用 ◉ 字形(v3 §3.1)"
         assert "❂" in snap, "verify 阶段应用 ❂ 字形(v3 §3.1)"
         assert "◕" in snap, "report 阶段应用 ◕ 字形(v3 §3.1)"
-        # 被处决字形不应出现
         assert "✦" not in snap, "✦ 已被处决(v3),不应出现"
         assert "◇" not in snap, "◇ 已被处决(v3),不应出现"
 
 
 @pytest.mark.asyncio
 async def test_empty_state_uses_lenticular_glyph():
-    """空态一律用 ◌ + $ink-faint(spec §4.8);被处决字形不出现。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
         ap = app.query_one("#ap", ActivityPanel)
-        # reset 后,多个区段应显 ◌ 空态
         ap.reset_run()
         await pilot.pause()
         snap = ap.snapshot_text()
@@ -221,7 +224,7 @@ async def test_empty_state_uses_lenticular_glyph():
 
 @pytest.mark.asyncio
 async def test_width_is_34():
-    """v3 宽度 32→34(裁决:容纳四列对齐网格,spec §4.8)。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -232,18 +235,18 @@ async def test_width_is_34():
 
 @pytest.mark.asyncio
 async def test_no_border_left_uses_background_for_separation():
-    """v3 用背景色差分栏,不画竖线:DEFAULT_CSS 不含 border-left(spec §4.8 b)。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
         ap = app.query_one("#ap", ActivityPanel)
-        assert "border-left" not in ap.DEFAULT_CSS, \
+        assert "border-left" not in ap.DEFAULT_CSS,\
             "v3 ActivityPanel 应用背景色差分栏,不用 border-left"
 
 
 @pytest.mark.asyncio
 async def test_cache_sparkline_in_cost_section():
-    """on_cost(cache_read>0) → snapshot_text 含 sparkline 字符(▁▂▃▄▅▆▇,spec §4.8 a)。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -253,20 +256,18 @@ async def test_cache_sparkline_in_cost_section():
                        elapsed_s=1.0, cache_read=2000 * (i + 1))
         await pilot.pause()
         snap = ap.snapshot_text()
-        # sparkline 字符之一应出现
         sparkline_chars = "▁▂▃▄▅▆▇█"
-        assert any(c in snap for c in sparkline_chars), \
+        assert any(c in snap for c in sparkline_chars),\
             f"on_cost(cache_read>0) 应产出 sparkline,实际 {snap!r}"
 
 
 @pytest.mark.asyncio
 async def test_compacted_event_new_method():
-    """on_compacted 是纯新增方法,调用后 snapshot_text 含 ↯ 压缩行(spec §4.8 c)。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
         ap = app.query_one("#ap", ActivityPanel)
-        # 方法必须存在
         assert hasattr(ap, "on_compacted"), "ActivityPanel 必须有 on_compacted 方法"
         ap.on_compacted(before=12, after=4, reduction_pct=22.0)
         await pilot.pause()
@@ -277,7 +278,7 @@ async def test_compacted_event_new_method():
 
 @pytest.mark.asyncio
 async def test_pruned_event_new_method():
-    """on_pruned 是纯新增方法,调用后 snapshot_text 含修剪信息(spec §4.8 c)。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -291,7 +292,7 @@ async def test_pruned_event_new_method():
 
 @pytest.mark.asyncio
 async def test_memory_recall_new_method():
-    """on_memory_recall 是纯新增方法,调用后 Run 区段含召回信息(spec §4.8 c)。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -305,7 +306,7 @@ async def test_memory_recall_new_method():
 
 @pytest.mark.asyncio
 async def test_receipt_no_emoji():
-    """v3:回执区段不得包含处决 emoji(🧾 等),改用纯文字(spec §3.3)。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -319,7 +320,7 @@ async def test_receipt_no_emoji():
 
 @pytest.mark.asyncio
 async def test_verdict_empty_state_uses_lenticular():
-    """idle/verify 视图 Verdict 区段空态显 ◌ (无)(spec §4.8 诚实空态)。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -330,10 +331,9 @@ async def test_verdict_empty_state_uses_lenticular():
         assert "◌" in snap, "Verdict 空态应显 ◌ (无)"
 
 
-# ── Hooks(spec §2.4):ActivityPanel 'Hook' 区段 + 3 态渲染 + deque 50 ───────────
 @pytest.mark.asyncio
 async def test_activity_panel_has_hook_section():
-    """ActivityPanel.compose 含 'Hook' 区段(标题)。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -344,7 +344,7 @@ async def test_activity_panel_has_hook_section():
 
 @pytest.mark.asyncio
 async def test_activity_panel_on_hook_fired_ok():
-    """on_hook_fired(success=True) → 区段体含 'ok' / 命令名。"""
+    """Internal documentation."""
     from argos.hooks.events import HookFired
     app = _H()
     async with app.run_test() as pilot:
@@ -361,7 +361,7 @@ async def test_activity_panel_on_hook_fired_ok():
 
 @pytest.mark.asyncio
 async def test_activity_panel_on_hook_fired_fail_red():
-    """on_hook_fired(success=False, returncode=2) → 显 fail 红色标记(行内含 'fail' 或 'exit 2')。"""
+    """Internal documentation."""
     from argos.hooks.events import HookFired
     app = _H()
     async with app.run_test() as pilot:
@@ -376,7 +376,7 @@ async def test_activity_panel_on_hook_fired_fail_red():
 
 @pytest.mark.asyncio
 async def test_activity_panel_on_hook_fired_timeout():
-    """on_hook_fired(timed_out=True) → 显 timeout 标记。"""
+    """Internal documentation."""
     from argos.hooks.events import HookFired
     app = _H()
     async with app.run_test() as pilot:
@@ -391,7 +391,7 @@ async def test_activity_panel_on_hook_fired_timeout():
 
 @pytest.mark.asyncio
 async def test_activity_panel_hook_deque_caps_at_50():
-    """on_hook_fired 触发 60 次 → deque 最多 50 条(最近 50)。"""
+    """Internal documentation."""
     from argos.hooks.events import HookFired
     app = _H()
     async with app.run_test() as pilot:
@@ -403,13 +403,12 @@ async def test_activity_panel_hook_deque_caps_at_50():
                 success=True, returncode=0, elapsed_ms=10,
             )
             ap.on_hook_fired(ev)
-        # 内部 _hook_log 是 deque(maxlen=50)
         assert len(ap._hook_log) == 50
 
 
 @pytest.mark.asyncio
 async def test_activity_panel_reset_run_clears_hook_log():
-    """reset_run 清空 hook log(每轮独立)。"""
+    """Internal documentation."""
     from argos.hooks.events import HookFired
     app = _H()
     async with app.run_test() as pilot:
@@ -426,7 +425,7 @@ async def test_activity_panel_reset_run_clears_hook_log():
 # ── LSP(spec 2026-06-06 §2.7)────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_activity_panel_has_lsp_section():
-    """ActivityPanel.compose 含 'LSP' 区段(标题)。"""
+    """Internal documentation."""
     from argos.lsp.events import LspServerEvent
     app = _H()
     async with app.run_test() as pilot:
@@ -438,7 +437,7 @@ async def test_activity_panel_has_lsp_section():
 
 @pytest.mark.asyncio
 async def test_activity_panel_on_lsp_server_event_ready():
-    """status='ready' + elapsed_ms=820 → 区段体显 'python' + 'ready' + 耗时。"""
+    """Internal documentation."""
     from argos.lsp.events import LspServerEvent
     app = _H()
     async with app.run_test() as pilot:
@@ -456,7 +455,7 @@ async def test_activity_panel_on_lsp_server_event_ready():
 
 @pytest.mark.asyncio
 async def test_activity_panel_on_lsp_server_event_disabled():
-    """status='disabled' → 区段体显 'disabled'。"""
+    """Internal documentation."""
     from argos.lsp.events import LspServerEvent
     app = _H()
     async with app.run_test() as pilot:
@@ -472,7 +471,7 @@ async def test_activity_panel_on_lsp_server_event_disabled():
 
 @pytest.mark.asyncio
 async def test_activity_panel_on_lsp_server_event_crash():
-    """status='crash' + error → 区段体显 'crash' + 错误。"""
+    """Internal documentation."""
     from argos.lsp.events import LspServerEvent
     app = _H()
     async with app.run_test() as pilot:
@@ -489,7 +488,7 @@ async def test_activity_panel_on_lsp_server_event_crash():
 
 @pytest.mark.asyncio
 async def test_activity_panel_lsp_diag_change_detection():
-    """lsp_diagnostic_event 同 uri 同 count → 不重渲;新 count → 渲。"""
+    """Internal documentation."""
     from argos.lsp.events import LspDiagnosticEvent
     app = _H()
     async with app.run_test() as pilot:
@@ -500,10 +499,8 @@ async def test_activity_panel_lsp_diag_change_detection():
             severity_counts={"error": 3}, cached=False, cwd="",
         )
         ap.on_lsp_diagnostic_event(ev_a)
-        # 第二次同 uri 同 count → 内部 cache 不变
         ap.on_lsp_diagnostic_event(ev_a)
         assert ap._lsp_diag_cache.get("file:///a.py") == 3
-        # 第三次同 uri 新 count=5 → cache 更新
         ap.on_lsp_diagnostic_event(LspDiagnosticEvent(
             server_name="python", uri="file:///a.py", count=5,
             severity_counts={"error": 5}, cached=False, cwd="",
@@ -513,7 +510,7 @@ async def test_activity_panel_lsp_diag_change_detection():
 
 @pytest.mark.asyncio
 async def test_activity_panel_lsp_diag_dedup_no_cache_growth():
-    """同 uri 同 count 重复推 → _lsp_diag_cache 不增(5 次推 → 1 个 entry)。"""
+    """Internal documentation."""
     from argos.lsp.events import LspDiagnosticEvent
     app = _H()
     async with app.run_test() as pilot:
@@ -530,7 +527,7 @@ async def test_activity_panel_lsp_diag_dedup_no_cache_growth():
 
 @pytest.mark.asyncio
 async def test_activity_panel_reset_run_clears_lsp_log():
-    """reset_run 清空 LSP cache(每轮独立)。"""
+    """Internal documentation."""
     from argos.lsp.events import LspDiagnosticEvent
     app = _H()
     async with app.run_test() as pilot:
@@ -547,8 +544,7 @@ async def test_activity_panel_reset_run_clears_lsp_log():
 
 @pytest.mark.asyncio
 async def test_run_section_shows_active_run_not_none():
-    """C1(2026-06-22 真机:active run 期间 Run 段显 '(none)')。
-    on_run_active 应让 Run 段显当前 run 标签,而非诚实空态。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         ap = app.query_one("#ap", ActivityPanel)
@@ -573,12 +569,12 @@ async def test_run_active_label_truncated():
 
 @pytest.mark.asyncio
 async def test_verdict_no_check_fallback_for_conversational_run():
-    """C3:纯对话/只读 run 不投 VerifyVerdict → 收尾给诚实 '无机检' 兜底,不是误导性 '(none)'。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         ap = app.query_one("#ap", ActivityPanel)
         ap.reset_run()
-        ap.on_run_end()                       # 全程无 on_verdict
+        ap.on_run_end()
         await pilot.pause()
         verdict_sec = str(ap._sections()[ap._VERDICT_IDX].content)
         assert "无机检" in verdict_sec, f"应诚实兜底,实际:{verdict_sec!r}"
@@ -587,7 +583,7 @@ async def test_verdict_no_check_fallback_for_conversational_run():
 
 @pytest.mark.asyncio
 async def test_verdict_kept_when_run_was_verified():
-    """有真实 verdict 的 run:收尾不得用兜底覆盖真实裁决。"""
+    """Internal documentation."""
     class _V:
         status = "passed"; verify_cmd = "pytest"; detail = ""; self_verified = False; no_test = False
     app = _H()
@@ -604,7 +600,7 @@ async def test_verdict_kept_when_run_was_verified():
 
 @pytest.mark.asyncio
 async def test_cost_hides_cache_hit_zero_until_cache_seen():
-    """D2:非缓存 provider(cache_read 恒 0)不显误导性 'cache hit 0';真见过缓存后才切回完整行。"""
+    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         ap = app.query_one("#ap", ActivityPanel)
@@ -612,8 +608,7 @@ async def test_cost_hides_cache_hit_zero_until_cache_seen():
         await pilot.pause()
         cost_sec = str(ap._sections()[ap._COST_IDX].content)
         assert "命中 0" not in cost_sec and "hit 0" not in cost_sec, f"不应显 cache hit 0:{cost_sec!r}"
-        assert "缓存" in cost_sec   # 仍有中性缓存行
-        # 一旦真见过缓存命中 → 切回完整 "缓存命中 N"
+        assert "缓存" in cost_sec
         ap.on_cost(tokens_in=77000, tokens_out=400, cost_usd=None, elapsed_s=70.0, cache_read=512)
         await pilot.pause()
         cost_sec2 = str(ap._sections()[ap._COST_IDX].content)

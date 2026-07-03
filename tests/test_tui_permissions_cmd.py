@@ -1,4 +1,4 @@
-"""/permissions + /permissions reload slash 命令测试。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -37,7 +37,7 @@ def test_match_commands_permissions():
 
 
 def test_permissions_reload_returns_new_count(tmp_path, monkeypatch):
-    """reload 改 json 后切新(同 hooks 模式)。"""
+    """Internal documentation."""
     from argos.permissions import config as _cfg
     monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")
     _cfg._reset_config()
@@ -60,7 +60,7 @@ def test_permissions_reload_returns_new_count(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_permissions_unknown_arg_prints_usage(tmp_path, monkeypatch):
-    """/permissions 只接受空参数或 reload,未知参数应报用法。"""
+    """Internal documentation."""
     from argos.permissions import config as _cfg
     from argos.tui.app import ArgosApp
 
@@ -106,3 +106,31 @@ async def test_permissions_reload_arg_is_case_insensitive(tmp_path, monkeypatch)
     text = "\n".join(line for line, _kind in log.lines)
     assert "Usage" not in text and "用法" not in text
     assert any(kind == "system" for _line, kind in log.lines)
+
+
+@pytest.mark.asyncio
+async def test_permissions_reload_updates_current_gate_config(tmp_path, monkeypatch):
+    """Internal documentation."""
+    from argos.permissions import config as _cfg
+    from argos.permissions.config import PermissionsConfig
+    from argos.tui.app import ArgosApp
+
+    monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")
+    _cfg._reset_config()
+    (tmp_path / "permissions.json").write_text(json.dumps({
+        "version": 1,
+        "default_level": "observe",
+    }))
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    app = ArgosApp()
+    app.gate._permissions_config = PermissionsConfig.empty()
+    await app._permissions_cmd(Log(), "reload")
+
+    assert app.gate._permissions_config.default_level == "observe"

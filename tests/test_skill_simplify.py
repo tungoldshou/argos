@@ -1,4 +1,4 @@
-"""`/simplify` 3-pass 单元测试(spec §2.5 / D6 / D7)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -36,7 +36,7 @@ def _ctx(workspace: Path) -> AnalysisSkillContext:
 # ── Pass 1 duplicate(spec §2.5 Pass 1)────────────────────────
 
 def test_duplicate_token_level_same_block_3_files(tmp_path):
-    """完全相同 25-token 块在 3 个文件 → 1 finding(3 occurrences)。"""
+    """Internal documentation."""
     block = "def validate_user_input(value, max_length=100, *, raise_on_missing=True):\n    if not value:\n        return False\n"
     for name in ("a.py", "b.py", "c.py"):
         (tmp_path / name).write_text(block)
@@ -45,7 +45,7 @@ def test_duplicate_token_level_same_block_3_files(tmp_path):
 
 
 def test_duplicate_similar_blocks_no_match(tmp_path):
-    """改 1 字符的 30-token 函数体 → token-level 不匹(0 duplicate finding)。"""
+    """Internal documentation."""
     for i, name in enumerate(("a.py", "b.py")):
         body = f"def f(x):\n    y = x + {i}\n    return y * 2\n"
         (tmp_path / name).write_text(body)
@@ -54,7 +54,7 @@ def test_duplicate_similar_blocks_no_match(tmp_path):
 
 
 def test_duplicate_whitelist_tests_dir_skipped(tmp_path):
-    """tests/fixtures/** 命中 → 跳过(白名单,spec §2.5)。"""
+    """Internal documentation."""
     (tmp_path / "tests" / "fixtures").mkdir(parents=True)
     block = "def f():\n    return 'value-to-match-twice-twice-twice-twice-twice-twice-twice-twice-twice'\n"
     (tmp_path / "tests" / "fixtures" / "a.py").write_text(block)
@@ -65,7 +65,7 @@ def test_duplicate_whitelist_tests_dir_skipped(tmp_path):
 
 
 def test_duplicate_large_file_skipped(tmp_path):
-    """> 5000 token 文件 → 跳过该 pass(防 token 化慢)。"""
+    """Internal documentation."""
     big = "x = 1\n" * 3000
     f = tmp_path / "big.py"
     f.write_text(big)
@@ -76,7 +76,7 @@ def test_duplicate_large_file_skipped(tmp_path):
 # ── Pass 2 complexity(spec §2.5 Pass 2 / D6)────────────────
 
 def test_complexity_16_branches_yields_finding(tmp_path):
-    """函数体含 16 个分支 → 1 finding(severity=warning)。"""
+    """Internal documentation."""
     body_lines = ["def f(x):"] + [f"    if x > {i}:" for i in range(8)] + [f"    elif x == {i}:" for i in range(8)] + ["        return x"]
     f = tmp_path / "comp.py"
     f.write_text("\n".join(body_lines) + "\n")
@@ -85,7 +85,7 @@ def test_complexity_16_branches_yields_finding(tmp_path):
 
 
 def test_complexity_under_threshold_no_finding(tmp_path):
-    """< 15 分支 → 0 finding。"""
+    """Internal documentation."""
     body_lines = ["def f(x):"] + [f"    if x > {i}:" for i in range(5)] + ["        return x"]
     f = tmp_path / "simple.py"
     f.write_text("\n".join(body_lines) + "\n")
@@ -94,7 +94,7 @@ def test_complexity_under_threshold_no_finding(tmp_path):
 
 
 def test_complexity_tests_whitelist_skipped(tmp_path):
-    """tests/ 命中 → 跳过(spec §2.5)。"""
+    """Internal documentation."""
     (tmp_path / "tests").mkdir()
     body_lines = ["def f(x):"] + [f"    if x > {i}:" for i in range(20)] + ["        return x"]
     f = tmp_path / "tests" / "test_x.py"
@@ -106,7 +106,7 @@ def test_complexity_tests_whitelist_skipped(tmp_path):
 # ── Pass 3 dead code(spec §2.5 Pass 3 / D7)─────────────────
 
 def test_dead_code_unused_function_detected(tmp_path):
-    """未使用的 public 函数 → 1 info finding。"""
+    """Internal documentation."""
     (tmp_path / "mod.py").write_text(
         "def unused_func(x, y, z):\n    return x + y + z\n\n"
         "def main():\n    return 42\n"
@@ -116,7 +116,7 @@ def test_dead_code_unused_function_detected(tmp_path):
 
 
 def test_dead_code_used_function_not_flagged(tmp_path):
-    """被用的函数 → 0 finding。"""
+    """Internal documentation."""
     (tmp_path / "mod.py").write_text(
         "def used_func():\n    return 1\n\nprint(used_func())\n"
     )
@@ -125,7 +125,7 @@ def test_dead_code_used_function_not_flagged(tmp_path):
 
 
 def test_dead_code_all_whitelist_function_skipped(tmp_path):
-    """`__all__` 里的函数 → 跳(导出为 API 表面)。"""
+    """Internal documentation."""
     (tmp_path / "mod.py").write_text(
         "__all__ = ['public_api']\n"
         "def public_api(x, y, z):\n    return x + y + z\n"
@@ -135,7 +135,7 @@ def test_dead_code_all_whitelist_function_skipped(tmp_path):
 
 
 def test_dead_code_cli_main_skipped(tmp_path):
-    """cli.py / __main__.py 文件 → 跳过(main entry point 常被反射调)。"""
+    """Internal documentation."""
     (tmp_path / "cli.py").write_text(
         "def entry_point(x, y, z):\n    return x + y + z\n"
     )
@@ -143,7 +143,6 @@ def test_dead_code_cli_main_skipped(tmp_path):
     assert not any("entry_point" in f.message for f in findings)
 
 
-# ── 整合 run() ──────────────────────────────────────────────
 
 def test_simplify_full_pipeline_planted_duplicate(tmp_path):
     """planted duplicate → 1 finding → verdict=failed。"""
@@ -156,14 +155,14 @@ def test_simplify_full_pipeline_planted_duplicate(tmp_path):
 
 
 def test_simplify_zero_findings_workspace(tmp_path):
-    """空 workspace → verdict=passed, summary 含 '0 findings'。"""
+    """Internal documentation."""
     result = asyncio.run(simp_run({"path": None}, _ctx(tmp_path)))
     assert result.verdict == "passed"
     assert "0 findings" in result.summary
 
 
 def test_simplify_top_10_truncation(tmp_path):
-    """> 10 finding → top-N 截断(spec §2.5 D6)。"""
+    """Internal documentation."""
     for i in range(15):
         block = f"def fn_{i}():\n    return '{'x' * 50}'\n" * 3
         (tmp_path / f"a_{i}.py").write_text(block)

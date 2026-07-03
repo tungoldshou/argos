@@ -55,6 +55,15 @@ def test_dreams_dir_honors_argos_config_dir(tmp_path: Path, monkeypatch):
     assert _make_server(tmp_path)._dreams_dir() == cfg_dir / "dreams"
 
 
+def test_dreams_dir_expands_explicit_env_override(tmp_path: Path, monkeypatch):
+    """Internal documentation."""
+    fake_home = tmp_path / "home"
+    monkeypatch.setenv("ARGOS_DREAMS_DIR", "~/argos-dreams")
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    assert _make_server(tmp_path)._dreams_dir() == fake_home / "argos-dreams"
+
+
 def test_dream_pipeline_paths_honor_argos_config_dir(tmp_path: Path, monkeypatch):
     from types import SimpleNamespace
     from argos import config as C

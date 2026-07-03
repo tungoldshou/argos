@@ -1,4 +1,4 @@
-"""config.json 的 multimodal override 三态读取:未设→None;true→True;false→False。"""
+"""Internal documentation."""
 import json
 from pathlib import Path
 

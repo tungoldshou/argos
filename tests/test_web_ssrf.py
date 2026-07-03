@@ -1,6 +1,4 @@
-"""#6 SSRF 防护:web_extract 的 _http_get 拒私网/保留/loopback/link-local 地址 + 云元数据端点,
-并逐跳校验 redirect(防白名单 host redirect 到内网绕过 egress)。egress 白名单是域名层第一防线,
-此处是 IP 层第二防线(直接 IP url / redirect 到 IP / 云元数据)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from argos.tools.web import extract_url_blocked
@@ -8,8 +6,7 @@ from argos.web import _is_blocked_host, extract
 
 
 def test_extract_url_blocked_allows_public_denies_internal():
-    """broker 对 web_extract 的出网判据:任意公网 URL 放行,私网/回环/保留/云元数据 + 无法解析 → 拒。
-    URL 可带 scheme/端口/路径,也可裸 host。"""
+    """Internal documentation."""
     for ok in ("https://news.example.com/a?x=1", "http://example.com", "example.com/page",
                "https://93.184.216.34/"):
         assert extract_url_blocked(ok) is False, ok
@@ -20,7 +17,7 @@ def test_extract_url_blocked_allows_public_denies_internal():
 
 
 def test_blocks_cloud_metadata_endpoint():
-    assert _is_blocked_host("169.254.169.254") is True   # AWS/GCP/Azure 元数据端点(link-local)
+    assert _is_blocked_host("169.254.169.254") is True
 
 
 def test_blocks_loopback_private_linklocal():
@@ -31,11 +28,10 @@ def test_blocks_loopback_private_linklocal():
 
 def test_allows_public_host():
     assert _is_blocked_host("example.com") is False
-    assert _is_blocked_host("93.184.216.34") is False    # 公网 IP
+    assert _is_blocked_host("93.184.216.34") is False
 
 
 def test_extract_rejects_private_url_before_request():
-    # 私网/元数据 url → 在发请求【前】被拒(success=False),不触发任何网络副作用。
     out = extract("http://169.254.169.254/latest/meta-data/")
     assert out["success"] is False
     assert "SSRF" in out["error"] or "私网" in out["error"] or "169.254" in out["error"]

@@ -1,13 +1,4 @@
-"""tests/verify_strategy/test_strategy.py
-
-验证梯子策略生成器的全套测试：
-  · 各任务类型策略生成 + 梯子降序
-  · 发送类红线（绝无 L3/cmd 型策略，首位即 L5）
-  · fallback 永远存在（空 goal / 胡乱输入也返回 L5）
-  · probe_workspace 只读（不创建文件）
-  · capability verify_hint 被消费进 rationale/target
-  · VerifyStrategy 不变量（confidence 越界、L5 kind 不符均报错）
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -27,11 +18,10 @@ from argos.verify.strategy import (
 
 
 # ═══════════════════════════════════════════════════════
-# 基础不变量
 # ═══════════════════════════════════════════════════════
 
 class TestVerifyStrategyInvariants:
-    """VerifyStrategy dataclass 不变量测试。"""
+    """Internal documentation."""
 
     def test_valid_strategy_ok(self) -> None:
         s = VerifyStrategy(
@@ -79,11 +69,10 @@ class TestVerifyStrategyInvariants:
 
 
 # ═══════════════════════════════════════════════════════
-# fallback 永远存在
 # ═══════════════════════════════════════════════════════
 
 class TestFallbackAlwaysPresent:
-    """任何输入都必须返回至少一个 L5 evidence_trail 策略。"""
+    """Internal documentation."""
 
     def _has_l5(self, strategies: tuple[VerifyStrategy, ...]) -> bool:
         return any(s.level == "L5" and s.kind == "evidence_trail" for s in strategies)
@@ -109,20 +98,16 @@ class TestFallbackAlwaysPresent:
         assert self._last_is_l5(strats)
 
     def test_result_never_empty(self) -> None:
-        """generate 永远非空。"""
+        """Internal documentation."""
         strats = generate("", workspace_facts=WorkspaceFacts())
         assert len(strats) >= 1
 
 
 # ═══════════════════════════════════════════════════════
-# 发送类红线测试（最重要）
 # ═══════════════════════════════════════════════════════
 
 class TestSendTaskRedLine:
-    """发送/购买/通知类任务：绝无 L3/cmd 型策略，首位即 L5，绝不假绿。
-
-    红线：策略集中若出现 cmd 含 curl/http/wget 给发送类任务 → bug。
-    """
+    """Internal documentation."""
 
     SEND_GOALS = [
         "send an email to alice@example.com",
@@ -141,21 +126,17 @@ class TestSendTaskRedLine:
 
     def _assert_send_red_line(self, goal: str) -> None:
         strats = generate(goal, workspace_facts=WorkspaceFacts())
-        # 1. 永远非空
         assert len(strats) >= 1, f"策略集不能为空: {goal!r}"
-        # 2. 首位必须是 L5
         assert strats[0].level == "L5", (
             f"发送类任务首位必须是 L5 退路，实际是 {strats[0].level}: {goal!r}"
         )
         assert strats[0].kind == "evidence_trail", (
             f"发送类任务首位 kind 必须是 evidence_trail: {goal!r}"
         )
-        # 3. 绝无 L3 策略
         l3_strats = [s for s in strats if s.level == "L3"]
         assert len(l3_strats) == 0, (
             f"发送类任务不允许有 L3 策略: {goal!r}\n找到: {l3_strats}"
         )
-        # 4. 绝无 cmd 含 curl/http/wget 的策略
         bad_cmds = [
             s for s in strats
             if s.cmd and any(
@@ -165,7 +146,6 @@ class TestSendTaskRedLine:
         assert len(bad_cmds) == 0, (
             f"发送类任务策略 cmd 不能含 curl/http/wget: {goal!r}\n找到: {bad_cmds}"
         )
-        # 5. 整体只有一条（L5），不会混入 L1/L2
         assert len(strats) == 1, (
             f"发送类任务应只有一条 L5 策略，实际有 {len(strats)} 条: {goal!r}\n{strats}"
         )
@@ -175,7 +155,7 @@ class TestSendTaskRedLine:
         self._assert_send_red_line(goal)
 
     def test_send_with_workspace_facts_still_l5_only(self) -> None:
-        """即使工作区有 pytest，发送类任务仍只返回 L5。"""
+        """Internal documentation."""
         facts = WorkspaceFacts(has_pytest=True, has_cargo=True)
         strats = generate(
             "send email report to manager",
@@ -185,7 +165,7 @@ class TestSendTaskRedLine:
         assert strats[0].level == "L5"
 
     def test_send_with_capability_hints_still_l5_only(self) -> None:
-        """即使有 capability hints，发送类任务仍只返回 L5。"""
+        """Internal documentation."""
         strats = generate(
             "notify all users via push notification",
             workspace_facts=WorkspaceFacts(),
@@ -196,11 +176,10 @@ class TestSendTaskRedLine:
 
 
 # ═══════════════════════════════════════════════════════
-# 代码任务 + 测试框架策略生成
 # ═══════════════════════════════════════════════════════
 
 class TestCodeTaskStrategies:
-    """代码任务 + 测试框架存在 → L1 策略出现。"""
+    """Internal documentation."""
 
     def test_pytest_workspace_yields_l1(self) -> None:
         facts = WorkspaceFacts(has_pytest=True)
@@ -230,21 +209,21 @@ class TestCodeTaskStrategies:
         assert any(c and "npm test" in c for c in l1_cmds)
 
     def test_no_framework_no_l1(self) -> None:
-        """无框架信号、无代码信号 → 无 L1。"""
+        """Internal documentation."""
         facts = WorkspaceFacts()
         strats = generate("write a report about the market", workspace_facts=facts)
         l1 = [s for s in strats if s.level == "L1"]
         assert len(l1) == 0, f"无框架写作任务不应有 L1: {l1}"
 
     def test_strategies_ordered_l1_before_l5(self) -> None:
-        """L1 策略必须在 L5 之前。"""
+        """Internal documentation."""
         facts = WorkspaceFacts(has_pytest=True)
         strats = generate("implement sorting", workspace_facts=facts)
         levels = [s.level for s in strats]
         assert levels.index("L1") < levels.index("L5")
 
     def test_capability_hint_pytest_cmd_consumed(self) -> None:
-        """pytest_cmd capability hint 被嵌入 L1 策略的 cmd 和 rationale 中。"""
+        """Internal documentation."""
         facts = WorkspaceFacts(has_pytest=True)
         strats = generate(
             "implement feature",
@@ -254,16 +233,14 @@ class TestCodeTaskStrategies:
         l1 = [s for s in strats if s.level == "L1"]
         assert l1, "有 pytest 应有 L1"
         assert "pytest tests/unit -x" in l1[0].cmd
-        # rationale 提到 hint
         assert "pytest tests/unit -x" in l1[0].rationale_human or "capability" in l1[0].rationale_human.lower()
 
 
 # ═══════════════════════════════════════════════════════
-# 声明产物文件 → L2 策略
 # ═══════════════════════════════════════════════════════
 
 class TestArtifactStrategies:
-    """声明产物文件 → L2 artifact_exists / schema 策略。"""
+    """Internal documentation."""
 
     def test_declared_file_yields_l2(self) -> None:
         facts = WorkspaceFacts(declared_files=("output.json",))
@@ -274,7 +251,7 @@ class TestArtifactStrategies:
         assert any("output.json" in (t or "") for t in targets)
 
     def test_json_file_in_goal_yields_schema_check(self) -> None:
-        """goal 文本中出现 .json 文件名 → 生成 artifact_schema 策略（JSON 合法性检查）。"""
+        """Internal documentation."""
         strats = generate(
             "write the analysis to report.json",
             workspace_facts=WorkspaceFacts(),
@@ -292,7 +269,7 @@ class TestArtifactStrategies:
         assert content_strats, "CSV 文件目标应有 content_assert 策略"
 
     def test_artifact_target_in_rationale_or_target(self) -> None:
-        """verify_file capability hint 被消费进 target / rationale。"""
+        """Internal documentation."""
         strats = generate(
             "create output",
             workspace_facts=WorkspaceFacts(),
@@ -312,11 +289,10 @@ class TestArtifactStrategies:
 
 
 # ═══════════════════════════════════════════════════════
-# 网页/DOM 策略
 # ═══════════════════════════════════════════════════════
 
 class TestWebStrategies:
-    """网页改动 + dom hint → L3 dom_assert；但发送类不得生成 L3。"""
+    """Internal documentation."""
 
     def test_web_goal_with_hints_yields_l3(self) -> None:
         strats = generate(
@@ -332,7 +308,7 @@ class TestWebStrategies:
         assert any("h1.headline" in (s.target or "") for s in l3)
 
     def test_web_goal_without_hints_no_l3(self) -> None:
-        """没有 dom hints → 不生成 L3（无法填充 selector/url，不造空策略）。"""
+        """Internal documentation."""
         strats = generate(
             "update the webpage layout",
             workspace_facts=WorkspaceFacts(),
@@ -352,11 +328,10 @@ class TestWebStrategies:
 
 
 # ═══════════════════════════════════════════════════════
-# probe_workspace 只读性
 # ═══════════════════════════════════════════════════════
 
 class TestProbeWorkspace:
-    """probe_workspace 只读：不创建文件、不修改状态。"""
+    """Internal documentation."""
 
     def test_empty_dir_returns_all_false(self, tmp_path: Path) -> None:
         facts = probe_workspace(tmp_path)
@@ -373,7 +348,7 @@ class TestProbeWorkspace:
         assert facts == WorkspaceFacts()
 
     def test_does_not_create_files(self, tmp_path: Path) -> None:
-        """探测前后目录内容不变。"""
+        """Internal documentation."""
         before = set(tmp_path.iterdir())
         probe_workspace(tmp_path)
         after = set(tmp_path.iterdir())
@@ -385,20 +360,19 @@ class TestProbeWorkspace:
         assert facts.has_pytest
 
     def test_pyproject_only_no_pytest(self, tmp_path: Path) -> None:
-        """Phase 5.2:纯 pyproject.toml（无测试文件）不算 has_pytest —— 否则在没测试的项目里
-        推 pytest 会收集 0 个、以退出码 5 误判失败。"""
+        """Internal documentation."""
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n')
         assert probe_workspace(tmp_path).has_pytest is False
 
     def test_pyproject_plus_test_files_is_pytest(self, tmp_path: Path) -> None:
-        """有可收集的测试文件（tests/test_*.py）→ has_pytest=True（弱信号 + 真测试）。"""
+        """Internal documentation."""
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n')
         (tmp_path / "tests").mkdir()
         (tmp_path / "tests" / "test_thing.py").write_text("def test_a():\n    assert True\n")
         assert probe_workspace(tmp_path).has_pytest is True
 
     def test_top_level_test_file_is_pytest(self, tmp_path: Path) -> None:
-        """顶层 test_*.py 也算 has_pytest（pytest 默认能收集）。"""
+        """Internal documentation."""
         (tmp_path / "test_top.py").write_text("def test_a():\n    assert True\n")
         assert probe_workspace(tmp_path).has_pytest is True
 
@@ -433,12 +407,11 @@ class TestProbeWorkspace:
         assert facts.csv_output
 
     def test_does_not_recurse_subdirs(self, tmp_path: Path) -> None:
-        """probe 只看顶层文件，不递归（保持只读 + 快速）。"""
+        """Internal documentation."""
         sub = tmp_path / "subdir"
         sub.mkdir()
         (sub / "data.json").write_text("{}")
         facts = probe_workspace(tmp_path)
-        # 顶层没有 .json → json_output 应为 False
         assert not facts.json_output
 
     def test_probe_multiple_times_idempotent(self, tmp_path: Path) -> None:
@@ -449,11 +422,10 @@ class TestProbeWorkspace:
 
 
 # ═══════════════════════════════════════════════════════
-# capability_hints 消费测试
 # ═══════════════════════════════════════════════════════
 
 class TestCapabilityHintsConsumed:
-    """capability hints 被消费进 rationale 或 target。"""
+    """Internal documentation."""
 
     def test_verify_file_hint_in_target(self) -> None:
         strats = generate(
@@ -480,13 +452,13 @@ class TestCapabilityHintsConsumed:
         assert ".hero-title" in t or "localhost:8080" in t
 
     def test_none_hints_treated_as_empty(self) -> None:
-        """capability_hints=None 不报错，行为与 {} 相同。"""
+        """Internal documentation."""
         strats_none = generate("implement feature", workspace_facts=WorkspaceFacts(), capability_hints=None)
         strats_empty = generate("implement feature", workspace_facts=WorkspaceFacts(), capability_hints={})
         assert strats_none == strats_empty
 
     def test_unknown_hints_ignored(self) -> None:
-        """未知 hint key 不影响生成（不报错，不产生奇怪策略）。"""
+        """Internal documentation."""
         strats = generate(
             "implement feature",
             workspace_facts=WorkspaceFacts(has_pytest=True),
@@ -496,16 +468,15 @@ class TestCapabilityHintsConsumed:
 
 
 # ═══════════════════════════════════════════════════════
-# 梯子降序保证
 # ═══════════════════════════════════════════════════════
 
 class TestLadderOrdering:
-    """验证梯子降序：L1 > L2 > L3 > L5（有多个级别时顺序正确）。"""
+    """Internal documentation."""
 
     LEVEL_ORDER = {"L1": 1, "L2": 2, "L3": 3, "L5": 5}
 
     def _is_non_decreasing(self, strategies: tuple[VerifyStrategy, ...]) -> bool:
-        """策略序列按梯子等级单调不减（允许同级相邻）。"""
+        """Internal documentation."""
         prev = 0
         for s in strategies:
             cur = self.LEVEL_ORDER[s.level]
@@ -534,17 +505,15 @@ class TestLadderOrdering:
 
     def test_all_zeros_workspace_just_l5(self) -> None:
         strats = generate("describe the algorithm", workspace_facts=WorkspaceFacts())
-        # 无代码/框架/产物信号 → 只有 L5
         levels = {s.level for s in strats}
         assert levels == {"L5"}, f"无信号任务应只有 L5: {levels}"
 
 
 # ═══════════════════════════════════════════════════════
-# 去重保证
 # ═══════════════════════════════════════════════════════
 
 class TestDeduplication:
-    """相同 (level, kind, cmd, target) 不重复出现。"""
+    """Internal documentation."""
 
     def test_no_duplicate_strategies(self) -> None:
         facts = WorkspaceFacts(has_pytest=True, declared_files=("output.json",))
@@ -556,7 +525,7 @@ class TestDeduplication:
         assert len(keys) == len(set(keys)), f"策略出现重复: {keys}"
 
     def test_only_one_l5(self) -> None:
-        """L5 退路只出现一次。"""
+        """Internal documentation."""
         facts = WorkspaceFacts(has_pytest=True, has_cargo=True, has_package_json=True)
         strats = generate(
             "implement multi-framework project",
@@ -567,11 +536,10 @@ class TestDeduplication:
 
 
 # ═══════════════════════════════════════════════════════
-# L5 内容检查
 # ═══════════════════════════════════════════════════════
 
 class TestL5Content:
-    """L5 退路策略内容检查（人话 + cmd=None）。"""
+    """Internal documentation."""
 
     def test_l5_cmd_is_none(self) -> None:
         strats = generate("", workspace_facts=WorkspaceFacts())
@@ -589,21 +557,17 @@ class TestL5Content:
         assert all(len(s.rationale_human.strip()) > 0 for s in l5)
 
     def test_send_l5_rationale_explains_why(self) -> None:
-        """发送类任务的 L5 rationale 应解释传输层成功 ≠ 任务正确。"""
+        """Internal documentation."""
         strats = generate("send email to boss", workspace_facts=WorkspaceFacts())
         l5 = strats[0]
         assert "传输层" in l5.rationale_human or "200" in l5.rationale_human or "发送" in l5.rationale_human
 
 
 # ═══════════════════════════════════════════════════════
-# 反向护栏：代码任务不被发送/git 词误伤(终审 major 修正的防回归钉)
 # ═══════════════════════════════════════════════════════
 
 class TestCodeTaskNotHijackedBySendWords:
-    """含 commit/push/merge/post/order 等词的【代码任务】在有 pytest 的工作区
-    必须仍产 L1 策略 —— 防止发送类红线过度触发把日常代码任务压成 L5-only
-    (验证强度无谓回退)。红线不变量(无 curl/http 型策略)对这些任务依然成立。
-    """
+    """Internal documentation."""
 
     CODE_GOALS_WITH_TRICKY_WORDS = [
         "implement a sort function and commit it",
@@ -622,54 +586,40 @@ class TestCodeTaskNotHijackedBySendWords:
         assert "L1" in levels, (
             f"代码任务被发送词误伤压成 {levels}(应含 L1): {goal!r}"
         )
-        # L5 退路仍在末位(梯子完整)
         assert strats[-1].level == "L5", f"末位必须是 L5 退路: {goal!r}"
-        # 红线全局不变量:仍然绝无传输探活型策略
         bad = [s for s in strats if s.cmd and any(
             kw in s.cmd.lower() for kw in ("curl", "http", "wget", "requests"))]
         assert not bad, f"出现传输探活型策略(假绿红线): {goal!r}\n{bad}"
 
     def test_pure_send_still_red_lined(self) -> None:
-        """修正后纯发送任务红线不松动(双向都钉死)。"""
+        """Internal documentation."""
         strats = generate("send an email to bob", workspace_facts=WorkspaceFacts(has_pytest=True))
         assert len(strats) == 1 and strats[0].level == "L5"
 
 
 # ═══════════════════════════════════════════════════════
-# VLM/截图红线契约测试(P6a §10)
 # ═══════════════════════════════════════════════════════
 
 class TestVlmScreenshotRedline:
-    """P6a §10 VLM/截图红线:任何 VerifyStrategy 候选都不得以 screenshot 为唯一证据产出 cmd。
+    """Internal documentation."""
 
-    规则来源:spec §10 + CLAUDE.md §3:
-      · 截图/VLM 结果永不单独产出 "passed"。
-      · 任何策略的 cmd 字段都不得仅依赖截图命令(screencapture / screenshot / scrot)
-        来给出 passed 判断。
-      · L5 evidence_trail(cmd=None)是唯一合法的"无机检退路"——它诚实声明 unverifiable。
-      · 防未来回归:无论如何修改 generate() 或新增策略类型,此契约测试必须继续通过。
-    """
-
-    # screenshot 命令关键词集合(防未来回归:若新增截图工具也应加入此集合)
     _SCREENSHOT_CMD_PATTERNS = (
         "screencapture",
         "screenshot",
         "scrot",
-        "import -window",   # ImageMagick 截图
+        "import -window",
         "gnome-screenshot",
     )
 
     def _has_screenshot_only_cmd(self, strategy: VerifyStrategy) -> bool:
-        """判断该策略是否以截图命令为唯一验证手段(cmd 非 None 且仅含截图)。"""
+        """Internal documentation."""
         cmd = strategy.cmd
         if cmd is None:
-            return False  # cmd=None 是 L5 诚实退路,不是截图验证
+            return False
         cmd_lower = cmd.lower()
-        # 命令仅含截图指令(不含测试/断言/文件存在等其他验证手段)
         has_screenshot = any(kw in cmd_lower for kw in self._SCREENSHOT_CMD_PATTERNS)
         if not has_screenshot:
             return False
-        # 若同时含有 test/assert/grep/python/pytest/cargo 等,说明是混合命令不算纯截图
         real_verify_keywords = ("pytest", "cargo", "assert", "grep", "test -f", "python", "node")
         has_real_verify = any(kw in cmd_lower for kw in real_verify_keywords)
         return not has_real_verify
@@ -688,11 +638,7 @@ class TestVlmScreenshotRedline:
         "random gibberish xyz 123",
     ])
     def test_no_screenshot_only_cmd_in_any_goal(self, goal: str) -> None:
-        """任何 goal 的策略序列中,均不得出现以截图命令为唯一验证手段的候选。
-
-        这是防未来回归的契约测试:即便将来新增了 VLM/截图相关策略生成逻辑,
-        也绝不允许以"截图成功 = 任务通过"逻辑产生 cmd 型策略。
-        """
+        """Internal documentation."""
         facts = WorkspaceFacts(
             has_pytest=True,
             has_cargo=False,
@@ -708,7 +654,7 @@ class TestVlmScreenshotRedline:
         )
 
     def test_no_screenshot_only_cmd_with_screenshot_hints(self) -> None:
-        """即便 capability_hints 中含有截图相关 hint,也不得产出截图唯一验证策略。"""
+        """Internal documentation."""
         facts = WorkspaceFacts()
         hints = {
             "screenshot_path": "/tmp/test.png",
@@ -726,10 +672,7 @@ class TestVlmScreenshotRedline:
         )
 
     def test_l5_is_always_last_and_cmd_is_none(self) -> None:
-        """L5 退路永远在末位,且 cmd=None(诚实 unverifiable,不是截图验证)。
-
-        这是红线的另一面:L5 不含 cmd 就是诚实说"无法机检",不能被截图 cmd 替换。
-        """
+        """Internal documentation."""
         for goal in ("take a screenshot", "capture screen", "verify UI visually"):
             facts = WorkspaceFacts()
             strats = generate(goal, workspace_facts=facts)

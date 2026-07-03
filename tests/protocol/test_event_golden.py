@@ -1,13 +1,4 @@
-"""ABI 冻结测试:为每种 Event kind 构造代表实例,serialize_event 输出与
-写死的期望 JSON dict 逐字段比对(防协议漂移)。
-
-这不是 round-trip 测试 — 专门锁死序列化输出格式。
-
-同时验证:
-1. round-trip:serialize → deserialize 等值
-2. 架构契约:argos/core/ 与 argos/protocol/ 源文件中不含 'tui.events' 字样
-   (用文本扫描实现,防回归)
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -20,10 +11,9 @@ import argos
 import argos.protocol.events as PE
 
 
-# ── 辅助 ──────────────────────────────────────────────────────────────────────
 
 def _round(ev):
-    """serialize → deserialize 并断言类型相同、值相等。"""
+    """Internal documentation."""
     blob = PE.serialize_event(ev)
     back = PE.deserialize_event(blob)
     assert type(back) is type(ev), f"类型不匹配:{type(back)} != {type(ev)}"
@@ -31,7 +21,7 @@ def _round(ev):
 
 
 def _golden(ev, expected_data: dict) -> None:
-    """serialize 输出的 data 字段必须逐字段匹配 expected_data(ABI 冻结)。"""
+    """Internal documentation."""
     obj = json.loads(PE.serialize_event(ev))
     assert obj["kind"] == expected_data.get("_kind") or obj["kind"] == type(ev).kind
     actual_data = obj["data"]
@@ -124,7 +114,7 @@ def test_cost_update_golden():
 
 
 def test_cost_update_none_cost_usd_golden():
-    """cost_usd=None 诚实序列化为 null,不编造成本。"""
+    """Internal documentation."""
     ev = PE.CostUpdate(tokens_in=5, tokens_out=3, cost_usd=None, elapsed_s=1.0)
     obj = json.loads(PE.serialize_event(ev))
     assert obj["data"]["cost_usd"] is None
@@ -256,7 +246,7 @@ def test_workflow_done_golden():
 
 
 def test_workflow_done_notes_tuple_roundtrip():
-    """JSON 不分 tuple/list:round-trip 必须还原回 tuple。"""
+    """Internal documentation."""
     ev = PE.WorkflowDone(name="x", synthesis="y", notes=("a", "b"))
     back = _round(ev)
     assert isinstance(back.notes, tuple)
@@ -304,7 +294,7 @@ def test_memory_recall_golden():
 
 
 def test_memory_recall_empty_golden():
-    """hits=[] 诚实序列化为空列表(无命中不编造)。"""
+    """Internal documentation."""
     ev = PE.MemoryRecallEvent()
     obj = json.loads(PE.serialize_event(ev))
     assert obj["data"]["hits"] == []
@@ -458,7 +448,6 @@ def test_skill_run_end_roundtrip():
     assert back.verdict == "failed" and back.finding_count == 3
 
 
-# ── ToolReceipt (嵌套 dataclass) ──────────────────────────────────────────────
 
 def test_tool_receipt_roundtrip_keeps_receipt_dataclass():
     from argos.tools.receipts import Receipt, ReceiptSigner
@@ -471,7 +460,6 @@ def test_tool_receipt_roundtrip_keeps_receipt_dataclass():
     assert signer.verify(back.receipt) is True
 
 
-# ── VerifyVerdict (嵌套 dataclass) ────────────────────────────────────────────
 
 def test_verify_verdict_passed_roundtrip():
     from argos.core.verify_gate import Verdict
@@ -494,7 +482,7 @@ def test_verify_verdict_unverifiable_roundtrip():
 # ── ProactiveSuggestionEvent ─────────────────────────────────────────────────
 
 def test_proactive_suggestion_golden():
-    """P5b §9:conductor 主动建议事件黄金测试(ABI 冻结)。"""
+    """Internal documentation."""
     ev = PE.ProactiveSuggestionEvent(
         suggestion_id="abc123def456",
         order_id="order001",
@@ -515,7 +503,7 @@ def test_proactive_suggestion_golden():
 
 
 def test_proactive_suggestion_roundtrip():
-    """ProactiveSuggestionEvent 序列化 → 反序列化等值。"""
+    """Internal documentation."""
     ev = PE.ProactiveSuggestionEvent(
         suggestion_id="deadbeef0011",
         order_id="ord_x",
@@ -532,7 +520,7 @@ def test_proactive_suggestion_roundtrip():
 
 
 def test_proactive_suggestion_action_dream_roundtrip():
-    """ProactiveSuggestionEvent action='dream' 序列化 → 反序列化往返。"""
+    """Internal documentation."""
     ev = PE.ProactiveSuggestionEvent(
         suggestion_id="deadbeef0022",
         order_id="ord_dream",
@@ -548,7 +536,7 @@ def test_proactive_suggestion_action_dream_roundtrip():
 
 
 def test_proactive_suggestion_requires_confirmation_always_true():
-    """requires_confirmation 序列化输出必须是 True（协议级不可覆盖）。"""
+    """Internal documentation."""
     ev = PE.ProactiveSuggestionEvent(
         suggestion_id="s1",
         order_id="o1",
@@ -564,13 +552,13 @@ def test_proactive_suggestion_requires_confirmation_always_true():
 # ── DreamProgressEvent ────────────────────────────────────────────────────────
 
 def test_dream_progress_golden():
-    """Dream 夜间整合进度事件黄金测试(ABI 冻结)。"""
+    """Internal documentation."""
     ev = PE.DreamProgressEvent(stage="cluster", detail="3 units", ts=1700000000.0)
     _golden(ev, {"stage": "cluster", "detail": "3 units", "ts": 1700000000.0})
 
 
 def test_dream_progress_roundtrip():
-    """DreamProgressEvent 序列化 → 反序列化等值。"""
+    """Internal documentation."""
     ev = PE.DreamProgressEvent(stage="scan", detail="", ts=1700001234.5)
     back = _round(ev)
     assert back.stage == "scan" and back.detail == "" and back.ts == 1700001234.5
@@ -579,7 +567,7 @@ def test_dream_progress_roundtrip():
 # ── DreamReportEvent ──────────────────────────────────────────────────────────
 
 def test_dream_report_golden():
-    """Dream 整合结果汇总事件黄金测试(诚实计数,ABI 冻结)。"""
+    """Internal documentation."""
     ev = PE.DreamReportEvent(
         units_total=3, promoted=1, rejected=1, skipped=1,
         memory_merged=2, memory_archived=5,
@@ -593,7 +581,7 @@ def test_dream_report_golden():
 
 
 def test_dream_report_roundtrip():
-    """DreamReportEvent 序列化 → 反序列化等值。"""
+    """Internal documentation."""
     ev = PE.DreamReportEvent(
         units_total=0, promoted=0, rejected=0, skipped=0,
         memory_merged=0, memory_archived=0, report_path="", ts=0.0,
@@ -602,24 +590,18 @@ def test_dream_report_roundtrip():
     assert back.units_total == 0 and back.report_path == ""
 
 
-# ── _KIND_TO_CLASS 完整性 ────────────────────────────────────────────────────
 
 def test_all_kinds_in_kind_to_class():
-    """所有 EventKind 值都必须注册在 _KIND_TO_CLASS 中。"""
+    """Internal documentation."""
     all_kinds = set(PE.EventKind.__args__)
     registered = set(PE._KIND_TO_CLASS.keys())
     missing = all_kinds - registered
     assert not missing, f"未注册的 kind:{missing}"
 
 
-# ── 架构契约:core/ 与 protocol/ 中不含 tui.events 字样 ──────────────────────
 
 def _scan_for_tui_events_import(dirpath: str, *, skip_dirs: tuple[str, ...] = ()) -> list[tuple[str, int, str]]:
-    """扫描目录下所有 .py 文件,收集包含 'tui.events' 字样的非注释行。
-
-    v6 P0 收尾后 EventBus 已搬入 protocol/events.py,生产代码(tui/ 之外)
-    不再有任何从 tui.events import 的正当理由 —— 零豁免。
-    """
+    """Internal documentation."""
     hits: list[tuple[str, int, str]] = []
     for root, _dirs, files in os.walk(dirpath):
         if "__pycache__" in root:
@@ -636,7 +618,6 @@ def _scan_for_tui_events_import(dirpath: str, *, skip_dirs: tuple[str, ...] = ()
                 continue
             for lineno, line in enumerate(lines, 1):
                 stripped = line.strip()
-                # 跳过注释行
                 if stripped.startswith("#"):
                     continue
                 if "tui.events" not in line:
@@ -646,11 +627,7 @@ def _scan_for_tui_events_import(dirpath: str, *, skip_dirs: tuple[str, ...] = ()
 
 
 def test_production_no_tui_events_import():
-    """argos/ 全树(tui/ 自身除外)零 tui.events 引用(防回归,零豁免)。
-
-    tui/ 包内部(app.py/fakeloop.py 等)允许走自家 shim;其余一切生产代码
-    必须 import argos.protocol.events。
-    """
+    """Internal documentation."""
     root = Path(argos.__file__).parent
     hits = _scan_for_tui_events_import(str(root), skip_dirs=("tui",))
     assert not hits, (
@@ -660,7 +637,7 @@ def test_production_no_tui_events_import():
 
 
 def test_protocol_no_tui_events_import():
-    """argos/protocol/ 中不应有 tui.events import(防循环依赖)。"""
+    """Internal documentation."""
     root = Path(argos.__file__).parent / "protocol"
     hits = _scan_for_tui_events_import(str(root))
     assert not hits, (

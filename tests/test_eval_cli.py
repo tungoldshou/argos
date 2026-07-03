@@ -1,4 +1,4 @@
-"""#7 T6 argos eval CLI 子命令测试。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -8,14 +8,13 @@ from pathlib import Path
 import pytest
 
 
-# ── 必备:把 argos/ 注入 sys.path,让 `python -m argos eval ...` 跑通 ─
 
 
 # ── cmd_list ──────────────────────────────────────────────────────────
 
 
 def test_eval_list_no_runs_prints_message(capsys, tmp_path, monkeypatch):
-    """无 run 跑过 → 友好提示,不假绿。"""
+    """Internal documentation."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from argos.eval import results as _results
     monkeypatch.setattr(_results, "_RUNS_DIR", tmp_path / "eval" / "runs")
@@ -27,7 +26,7 @@ def test_eval_list_no_runs_prints_message(capsys, tmp_path, monkeypatch):
 
 
 def test_eval_list_with_runs_prints_table(capsys, tmp_path, monkeypatch):
-    """落 1 个 result → 表格渲出。"""
+    """Internal documentation."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from argos.eval import results as _results
     monkeypatch.setattr(_results, "_RUNS_DIR", tmp_path / "eval" / "runs")
@@ -42,9 +41,6 @@ def test_eval_list_with_runs_prints_table(capsys, tmp_path, monkeypatch):
         worktree_path="/tmp", isolation_fallback=None, error=None,
         corpus_version=1, goal="g",
     )
-    # append 用 base=tmp_path/"eval"(因为 _runs_dir 在 base 路径下加 /runs)
-    # list_runs() 用 monkeypatch 后的 _RUNS_DIR = tmp_path/"eval"/"runs"
-    # 两边都指向同一目录
     append(r, base=tmp_path / "eval")
     from argos.cli import eval as cli
     rc = cli.cmd_list(_ns(limit=20))
@@ -79,7 +75,7 @@ def test_eval_corpus_prints_task_list(capsys, tmp_path, monkeypatch):
 
 
 def test_eval_run_invokes_runner(capsys, tmp_path, monkeypatch):
-    """cmd_run 调 EvalRunner + 落 JSONL + 打印结果。"""
+    """Internal documentation."""
     from argos.cli import eval as cli
     from argos import config as C
     from tests.eval._seed_corpus import write_seed_corpus
@@ -127,7 +123,7 @@ def test_eval_run_unknown_task_raises(capsys, tmp_path, monkeypatch):
 
 
 def test_eval_run_returns_nonzero_on_failure(capsys, tmp_path, monkeypatch):
-    """弱模型跑挂(setup_failed / failed) → CLI 返非零。"""
+    """Internal documentation."""
     from argos.cli import eval as cli
     from tests.eval._seed_corpus import write_seed_corpus
     from tests.eval._fakes import FakeWorktree, make_fake_loop, make_fake_loop_factory
@@ -150,7 +146,7 @@ def test_eval_run_returns_nonzero_on_failure(capsys, tmp_path, monkeypatch):
 
 
 def test_make_runner_wires_real_loop_factory(tmp_path, monkeypatch):
-    """默认 CLI runner 必须接真实 loop_factory,不能再是 loop_factory_required stub。"""
+    """Internal documentation."""
     from argos.cli import eval as cli
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -208,14 +204,12 @@ def test_eval_compare_writes_report(capsys, tmp_path, monkeypatch):
     assert len(md_files) == 1
 
 
-# ── subparser 注册 ────────────────────────────────────────────────────
 
 
 def test_eval_subcommand_registered_in_main(monkeypatch):
-    """__main__.py 注册了 eval subparser + list/run/compare/corpus 子命令。"""
+    """Internal documentation."""
     from argos.__main__ import _build_parser
     p = _build_parser()
-    # `argos eval --help` 不应崩
     import argparse
     try:
         args = p.parse_args(["eval", "list", "--limit", "10"])
@@ -239,6 +233,6 @@ def test_eval_compare_subparser_registers_required_args():
 
 
 def _ns(**kwargs):
-    """构造 argparse.Namespace 的便利 wrapper(只用于直接调 cmd_*,不走 parse_args)。"""
+    """Internal documentation."""
     import argparse
     return argparse.Namespace(**kwargs)

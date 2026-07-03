@@ -1,4 +1,4 @@
-"""视觉能力检测:cache 持久 + probe 确定性 + resolve 级联(注入,不发真网络)。"""
+"""Internal documentation."""
 from pathlib import Path
 from argos.core.vision_capability import VisionCapabilityCache
 

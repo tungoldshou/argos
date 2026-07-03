@@ -1,7 +1,4 @@
-"""契约层分类器测试 —— 守住"结构化才注入契约"的边界(实测:非结构化注入有害)。
-
-分类错 = 用错契约/给写作硬塞契约 = 护城河白搭甚至反效果。纯逻辑,快。
-"""
+"""Internal documentation."""
 import pytest
 
 from argos.contracts import classify, contract_for
@@ -29,7 +26,6 @@ def test_classify_structured_domains(goal, expected):
     "讲个故事",
 ])
 def test_non_structured_returns_none(goal):
-    # 非结构化(写作/分析)绝不注入契约 —— 实测有害(15>10)。
     assert classify(goal) == "none"
     dom, contract = contract_for(goal)
     assert dom == "none"
@@ -37,7 +33,6 @@ def test_non_structured_returns_none(goal):
 
 
 def test_generic_for_field_level_engineering():
-    # 含字段/类型/模型等工程信号但无明确领域 → generic 结构化。
     assert classify("实现一个带 id 字段和 status 枚举的数据模型") == "generic"
 
 
@@ -45,11 +40,10 @@ def test_contract_injected_for_structured():
     dom, contract = contract_for("设计一个 REST API 接口")
     assert dom == "rest-api"
     assert contract is not None
-    assert "C10" in contract  # 关键的对齐自检条款在
+    assert "C10" in contract
 
 
 def test_plain_chitchat_no_contract():
-    # 纯闲聊不该被当结构化。
     dom, contract = contract_for("你好,今天天气怎么样")
     assert dom == "none"
     assert contract is None

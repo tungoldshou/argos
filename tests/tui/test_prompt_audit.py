@@ -1,20 +1,5 @@
 # tests/tui/test_prompt_audit.py
-"""Regression tests for PromptArea + SlashMenu design-audit fixes (2026-06-14).
-
-Covers:
-  [MEDIUM] Slash 菜单选中行整行 $raise-2 底色块
-           视觉稿 line 293 / README §126 §304 — 选中行(▸ + 命令名 + 描述)
-           整体须带 bgcolor $raise-2 (#23263A).  以前的实现用死 CSS 规则
-           (.menu-selected) 对无子-widget 的单个 Static 无效;
-           fix: _render_items() 里对选中行的每段 Rich Style 直接注入 bgcolor.
-  [LOW]    PromptArea border: tall $eye-soft drift (lives in app.py:116,
-           NOT in prompt.py — noted in report, not code-patched here).
-
-Tests operate headless (no mounted Textual app):
-  - SlashMenu is instantiated directly.
-  - show_matches() / move() / _render_items() are exercised at the
-    Rich-Text level by monkey-patching update().
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -113,15 +98,9 @@ def menu() -> SlashMenu:
     return m
 
 
-# ── [MEDIUM] 选中行整行 $raise-2 底色块 ──────────────────────────────────────
 
 class TestSelectedRowRaise2Bgcolor:
-    """MEDIUM: 视觉稿 line 293 — selected row wrapped in $raise-2 bg block.
-
-    Every segment of the selected row (▸ prefix, /cmd name, description)
-    must carry bgcolor=#23263A (=$raise-2).  Non-selected rows must NOT
-    carry that bgcolor.
-    """
+    """Internal documentation."""
 
     def _setup_two_items(self, menu: SlashMenu) -> Text:
         """Load two commands, first selected (cursor=0), render."""

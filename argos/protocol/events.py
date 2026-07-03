@@ -1,16 +1,4 @@
-"""类型化事件(SHARED INTERFACE CONTRACT §1)——内核/客户端共享协议层。
-
-v6 P0 搬家：原 tui/events.py 的全部内容搬至此处；
-tui 包下的 events.py 已降为转发 shim（兼容层，新代码请 import 本模块）。
-
-一份事件三用(spec §12.6):自建 loop 投这些冻结事件 → ① TUI 渲染源
-② ArgosStore.events 持久化记录 ③ replay() 重建源。事件名 = dataclass 类名的
-snake_case,由 Event.kind 类属性常量携带,便于持久化与 replay。
-
-Phase 3(loop)落地:EventBus 的 async 投递/消费。
-EventBus 与 Event 类型族同住本模块(v6 P0 收尾:总线是内核基础设施,不属于 TUI;
-tui 包经 shim 转发,旧 import 路径不破)。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -21,7 +9,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Literal
 from argos.core.types import Phase, RiskLevel, DecisionKind
 from argos.i18n import t
 
-if TYPE_CHECKING:  # Phase 3 落地;Phase 2 只序列化其 dict 形态
+if TYPE_CHECKING:
     from argos.core.types import Verdict, Receipt  # noqa: F401
     from argos.hooks.events import HookFired  # noqa: F401
     from argos.skills_runtime.events import SkillRunStart, SkillRunEnd  # noqa: F401
@@ -32,34 +20,34 @@ EventKind = Literal[
     "approval_request", "approval_response", "escalation", "error",
     "plan_update", "workflow_progress", "workflow_proposed", "workflow_done",
     "plan_rendered",
-    "plan_decision_request",  # ← P2 新增(§4 ACP:去 TUI 对 loop 的直接引用)
-    "memory_recall",          # ← P2 新增(§4 ACP:修 store 穿透)
+    "plan_decision_request",
+    "memory_recall",
     "hook_fired",
     "lsp_server_event",
     "lsp_diagnostic_event",
-    "skill_run_start",   # ← 新增
-    "skill_run_end",     # ← 新增
-    "compacted",         # ← #12 新增(spec D10 扩展字面量;deserialize_event 未知 kind 走 pass)
-    "pruned",            # ← context rot 修剪事件(spec 2026-06-07)
-    "ledger_entry",      # ← P3b 新增(§6 行为账本:每条 ToolReceipt 沉淀为可读账本条目)
-    "proactive_suggestion",     # ← P5b 新增(§9 自治面:conductor 主动建议事件)
-    "computer_action",          # ← P6a 新增(§10 computer use:OS 级动作执行结果)
-    "dream_progress",           # ← Dream 新增(夜间整合进度;daemon → client SSE)
-    "dream_report",             # ← Dream 新增(夜间整合结果汇总,诚实计数)
+    "skill_run_start",
+    "skill_run_end",
+    "compacted",
+    "pruned",
+    "ledger_entry",
+    "proactive_suggestion",
+    "computer_action",
+    "dream_progress",
+    "dream_report",
 ]
 
 
 @dataclass(frozen=True, slots=True)
 class TokenDelta:
     kind = "token_delta"
-    text: str                        # 仅 text 增量,thinking 已剥离
+    text: str
 
 
 @dataclass(frozen=True, slots=True)
 class CodeAction:
     kind = "code_action"
     code: str
-    step: int                        # loop 步序号,从 0 起
+    step: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,9 +55,9 @@ class CodeResult:
     kind = "code_result"
     step: int
     stdout: str
-    value_repr: str                  # 末尾表达式 repr(),无则 ""
-    exc: str                         # 异常文本(含类型),无则 ""
-    ok: bool                         # exc == "" 即 True
+    value_repr: str
+    exc: str
+    ok: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,13 +72,13 @@ class FileDiff:
 @dataclass(frozen=True, slots=True)
 class ToolReceipt:
     kind = "tool_receipt"
-    receipt: "Receipt"               # §6 Receipt(host broker 已签);Phase 3 落地
+    receipt: "Receipt"
 
 
 @dataclass(frozen=True, slots=True)
 class VerifyVerdict:
     kind = "verify_verdict"
-    verdict: "Verdict"               # §6 三态 Verdict;Phase 3 落地
+    verdict: "Verdict"
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,28 +94,22 @@ class CostUpdate:
     kind = "cost_update"
     tokens_in: int
     tokens_out: int
-    cost_usd: float | None    # 单价未知诚实置 None(不编造成本);渲染为 $N/A
+    cost_usd: float | None
     elapsed_s: float
     cache_read: int = 0
-    context_used: int = 0     # 当前窗口占用 token(输入侧 input+cache),供上下文用量条;非会话累计
-    # #11 per-task routing:实际跑这步的 profile(默认 ""=沿用 active;空串保旧事件兼容)。
+    context_used: int = 0
     tier_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class ApprovalRequest:
     kind = "approval_request"
-    call_id: str                     # 与 ApprovalResponse.call_id 对应(12 hex)
+    call_id: str
     action: str
     args: dict[str, Any]
     description: str
     risk: RiskLevel
-    # Smart approval(spec 2026-06-06 §2.6 / D6):evaluator 把决策来源贴上标签,
-    # TUI ApprovalModal 据此渲染 [hard rule: X] / [soft rule: ask Y] / [secret: Z] / [level: confirm]
-    # 副标题,让用户一眼看清"为什么要审批"。空串 = 无标签(向后兼容,纯走 gate.level 走默认审批语义)。
     trigger: str = ""
-    # secret pattern 命中时的 pattern name(secret:AWS access key 之类),用于副标题二行
-    # "did you mean to commit this?";None = 非 secret 触发。
     secret_pattern: str | None = None
 
 
@@ -150,21 +132,18 @@ class Escalation:
 class Error:
     kind = "error"
     message: str
-    chain: list[str] = field(default_factory=list)  # 异常链(挖 4 层真因)
+    chain: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
 class PlanUpdate:
     kind = "plan_update"
-    # [{content, status: pending|in_progress|completed, activeForm}] —— 真 TODO 拆解
-    # (借 Claude Code TodoWrite),活动栏据此渲染子任务进度。
     todos: list[dict] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
 class WorkflowProgress:
     kind = "workflow_progress"
-    # Dynamic Workflows:子 agent 阶段流转汇进活动栏(stage 内第 N 个 agent 的 phase)。
     stage_id: str
     agent_id: str
     phase: str
@@ -174,37 +153,26 @@ class WorkflowProgress:
 @dataclass(frozen=True, slots=True)
 class WorkflowProposed:
     kind = "workflow_proposed"
-    # Dynamic Workflows:agent 在 act 段调 propose_workflow({...}) → loop 校验出 spec 后投此事件。
-    # call_id 与 ApprovalGate 的待批项对应(TUI 据它调 gate.respond 放行/拒绝)。
     name: str
     description: str
-    preview: str                     # render_preview(spec) —— 人类可读的工作流编排预览
+    preview: str
     call_id: str
 
 
 @dataclass(frozen=True, slots=True)
 class CompactedEvent:
-    """#12 Context 可视化:主动压缩事件(spec §4.3 / §9.4)。
-    主动压 + error 应急压 共享事件类型,triggered_by 区分:
-      · "proactive":阈值触发(本期新增)
-      · "error":API 报 context_length_exceeded 触发(既有路径,本期不动)
-    既有 1507 测试 0 破坏(replay 路径下 deserialize_event 走未知 kind 兜底 pass)。"""
+    """Internal documentation."""
     kind = "compacted"
     before: int
     after: int
-    reduction_pct: float             # (before-after)/before,钳到 0-1
+    reduction_pct: float
     triggered_by: str                # "proactive" | "error"
-    session_id: str = ""             # 留 trace;空串保旧事件兼容
+    session_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class LedgerEntryEvent:
-    """P3b §6 行为账本:每条 ToolReceipt 沉淀后广播的账本条目事件。
-
-    协议 ABI:ts/run_id/seq/action/summary_human/risk/reversible/undo_state
-    反映 LedgerEntry 字段的子集(不含 receipt_sig/undo_token —— 这两字段属内部审计,不广播)。
-    客户端(TUI/桌面)消费此事件驱动账本 UI,无需直接读 JSONL。
-    """
+    """Internal documentation."""
     kind = "ledger_entry"
     ts: float
     run_id: str
@@ -218,23 +186,19 @@ class LedgerEntryEvent:
 
 @dataclass(frozen=True, slots=True)
 class PrunedEvent:
-    """context rot 持续相关性修剪事件(spec 2026-06-07)。
-    在触发整体压缩之前就持续做的、优先于压缩的轻量折叠——折叠过期工具输出/被取代的旧计划/
-    死路错误,核心原样保留。让 TUI 的 context 可视化能看到"修剪发生了"(区别于整体压缩)。"""
+    """Internal documentation."""
     kind = "pruned"
-    before: int                      # 修剪前估算 token
-    after: int                       # 修剪后估算 token
-    removed: int                     # 折叠的消息条数
-    reduction_pct: float             # (before-after)/before,钳到 0-1
-    aggressiveness: float            # 本次修剪激进度(LoopConfig.prune_aggressiveness)
-    session_id: str = ""             # 留 trace;空串保旧事件兼容
+    before: int
+    after: int
+    removed: int
+    reduction_pct: float
+    aggressiveness: float
+    session_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class WorkflowDone:
     kind = "workflow_done"
-    # 工作流引擎跑完:综合结论 + 诚实注记(cap 截断/部分失败/表决结果等)。
-    # notes 是 tuple(不可变);序列化走 JSON 会摊成 list,deserialize 时还原回 tuple。
     name: str
     synthesis: str
     notes: tuple[str, ...] = ()
@@ -242,36 +206,25 @@ class WorkflowDone:
 
 @dataclass(frozen=True, slots=True)
 class PlanRendered:
-    """Plan mode spec §2.5:plan 阶段产出 → host 拼 markdown → 投此事件 → TUI 弹 PlanModal。
-    loop 在投事件后挂起(asyncio.Event)等用户决策,决策经 `ExitPlanMode` 落 `loop._plan_decision`
-    后 set event 唤醒 loop,4 分支按 spec §2.5 处理。"""
+    """Internal documentation."""
     kind = "plan_rendered"
-    plan_md: str                     # PlanRenderer.render() 产出的 user-facing markdown
+    plan_md: str
 
 
 @dataclass(frozen=True, slots=True)
 class ProactiveSuggestionEvent:
-    """P5b §9 自治面:conductor 主动建议事件（daemon → client 方向，SSE 推送）。
-
-    conductor tick 产出 ProactiveSuggestion 后广播此事件。
-    客户端（TUI）收到后在活动栏展示，等用户点击「运行」或「忽略」。
-
-    requires_confirmation 协议级恒 True，不可覆盖——建议永远要用户明确确认，
-    conductor 绝不擅自 create_run。
-    """
+    """Internal documentation."""
     kind = "proactive_suggestion"
     suggestion_id: str      # ProactiveSuggestion.id
-    order_id: str           # 来源 StandingOrder.id
-    goal: str               # 已填充占位符的 goal（直接可传给 create_run）
-    reason_human: str       # 供 TUI 展示的人话原因（触发来源说明）
-    suggested_at: float     # Unix 时间戳
-    requires_confirmation: bool = True   # 协议级恒 True；客户端只读
-    # "run" = confirm 后 create_run；"dream" = confirm 后跑 DreamPipeline
-    # （内联 Literal：protocol 层不许 import conductor）
+    order_id: str
+    goal: str
+    reason_human: str
+    suggested_at: float
+    requires_confirmation: bool = True
     action: Literal["run", "dream"] = "run"
 
     def __post_init__(self) -> None:
-        """协议校验：action 只接受 'run' 或 'dream'（坏数据 fail-loud）。"""
+        """Internal documentation."""
         if self.action not in ("run", "dream"):
             raise ValueError(
                 t("core2.events.proactive_action_invalid", action=self.action)
@@ -280,31 +233,12 @@ class ProactiveSuggestionEvent:
 
 @dataclass(frozen=True, slots=True)
 class ComputerActionEvent:
-    """P6a §10 computer use:OS 级动作执行结果事件。
-
-    ComputerExecutor 每次执行 ComputerAction 后广播此事件至 EventBus,
-    TUI 活动栏/账本消费它记录操作历史。
-
-    诚实性约定:
-      · text_preview 仅保留 text 字段前 80 字符(防止敏感输入全量进事件流)。
-      · screenshot/VLM 结果永不单独产出 "passed"——本事件仅记录 ok/detail,
-        不含验收判断。
-      · ok=False 时 detail 含人话错误原因(含权限指引),不含原始错误堆栈。
-
-    字段:
-      kind_action   — 动作 kind(screenshot|click|double_click|type_text|key|scroll|open_app)
-      x             — 屏幕 x 坐标(像素),无坐标动作为 None
-      y             — 屏幕 y 坐标(像素),无坐标动作为 None
-      text_preview  — text 字段前 80 字符截断;type_text/key 时有值,其余为 ""
-      ok            — 执行是否成功
-      detail        — 人话说明(成功摘要 / 失败原因+权限指引)
-      artifact_path — 截图 PNG 路径(screenshot 成功时);其余为 None
-    """
+    """Internal documentation."""
     kind = "computer_action"
-    kind_action: str          # ActionKind 的字符串值
+    kind_action: str
     x: int | None
     y: int | None
-    text_preview: str         # text 截断 80 字符,防敏感信息全量进流
+    text_preview: str
     ok: bool
     detail: str
     artifact_path: str | None = None
@@ -312,12 +246,7 @@ class ComputerActionEvent:
 
 @dataclass(frozen=True, slots=True)
 class DreamProgressEvent:
-    """Dream 夜间整合进度(daemon → client,SSE 推送,_conductor 通道)。
-
-    DreamPipeline 每跨一个阶段广播一次,供 TUI/桌面展示"夜间在干什么"。
-    stage 取值:scan | cluster | synthesize | promote | memory | done。
-    detail 是人话补充(如 "3 units" / promote 的 reason),诚实不编造。
-    """
+    """Internal documentation."""
     kind = "dream_progress"
     stage: str        # scan | cluster | synthesize | promote | memory | done
     detail: str
@@ -326,11 +255,7 @@ class DreamProgressEvent:
 
 @dataclass(frozen=True, slots=True)
 class DreamReportEvent:
-    """Dream 整合结果汇总(诚实计数,直接来自 DreamReport)。
-
-    一次 Dream 收尾时广播,字段逐一映射 DreamReport —— 客户端无需读 JSONL
-    即可展示"今晚整合了多少、晋升几个、归档几条记忆"。
-    """
+    """Internal documentation."""
     kind = "dream_report"
     units_total: int
     promoted: int
@@ -344,48 +269,25 @@ class DreamReportEvent:
 
 @dataclass(frozen=True, slots=True)
 class PlanDecisionRequest:
-    """v6 §4 ACP:plan 决策请求事件——去掉 TUI 对 loop 实例的直接引用。
-
-    机制与 ApprovalRequest 同构:loop 在投 PlanRendered 后同时投此事件,
-    call_id 由调用方按 call_id 路由到对应 asyncio.Event 唤醒 loop;
-    daemon 路径通过 POST /runs/{id}/plan_decision 响应;
-    TUI inline 路径通过 ExitPlanMode(loop, ...) 响应(保持向后兼容)。
-    超时 fail-closed:默认拒绝计划继续(cancel,诚实事件)。
-    """
+    """Internal documentation."""
     kind = "plan_decision_request"
-    call_id: str                     # 12 hex,与 PlanDecisionResponse.call_id 对应
-    plan_md: str                     # 同 PlanRendered.plan_md(冗余,方便 daemon 路径独立消费)
+    call_id: str
+    plan_md: str
 
 
 @dataclass(frozen=True, slots=True)
 class MemoryRecallEvent:
-    """v6 §4 ACP:记忆召回结果事件——修 store 穿透(TUI 不再 getattr(loop, '_store') 直访)。
-
-    loop.run() 起始召回记忆后投此事件;TUI 消费此事件渲染"记忆召回 N 条"行,
-    活动栏 on_memory_recall(n) 同样经此事件驱动,不再绕过协议层直访 loop._store。
-    hits 为召回的 goal→verdict 摘要字符串列表(每项对应一条 ArgosStore.recall 命中);
-    空列表 = 无命中(诚实:不显行,不编造计数)。
-    """
+    """Internal documentation."""
     kind = "memory_recall"
     hits: list[str] = field(default_factory=list)  # ["goal → verdict（reason）", ...]
 
 
-# ── Hooks(spec 2026-06-06 §2.4):HookFired 在 hooks/events.py 定义(spec 强制在
-#  hooks 子模块独立 dataclass,不让 tui 反向依赖 hooks 配置);TUI Event 联合
-# 通过 `from argos.hooks.events import HookFired` 接进来。───────────────
 from argos.hooks.events import HookFired  # noqa: E402
 
 
-# ── LSP(spec 2026-06-06 §10.1):LspServerEvent / LspDiagnosticEvent 在
-# lsp/events.py 定义(同 hooks 模式:spec 强制 lsp 子模块独立 dataclass,不让
-# tui 反向依赖 lsp 配置 / manager);TUI Event 联合通过 `from argos.lsp.events
-# import ...` 接进来。
 from argos.lsp.events import LspServerEvent, LspDiagnosticEvent  # noqa: E402
 
 
-# ── Skills runtime(spec 2026-06-06 §2.2):SkillRunStart / SkillRunEnd 在
-# skills_runtime/events.py 定义(同 hooks/lsp 模式:spec 强制 skills 子模块独立
-# dataclass,不让 tui 反向依赖 skills_runtime 配置 / registry)。
 from argos.skills_runtime.events import SkillRunStart, SkillRunEnd  # noqa: E402
 
 
@@ -394,18 +296,17 @@ Event = (
     | VerifyVerdict | PhaseChange | CostUpdate | ApprovalRequest
     | ApprovalResponse | Escalation | Error | PlanUpdate | WorkflowProgress
     | WorkflowProposed | WorkflowDone | PlanRendered
-    | PlanDecisionRequest | MemoryRecallEvent  # ← P2 新增(§4 ACP)
+    | PlanDecisionRequest | MemoryRecallEvent
     | HookFired
     | LspServerEvent | LspDiagnosticEvent
-    | SkillRunStart | SkillRunEnd   # ← 新增
+    | SkillRunStart | SkillRunEnd
     | CompactedEvent | PrunedEvent  # ← context rot(spec 2026-06-07)
-    | LedgerEntryEvent              # ← P3b 新增(§6 行为账本)
-    | ProactiveSuggestionEvent      # ← P5b 新增(§9 自治面:conductor 主动建议)
-    | ComputerActionEvent           # ← P6a 新增(§10 computer use:OS 级动作执行结果)
-    | DreamProgressEvent | DreamReportEvent  # ← Dream 新增(夜间整合进度 + 结果汇总)
+    | LedgerEntryEvent
+    | ProactiveSuggestionEvent
+    | ComputerActionEvent
+    | DreamProgressEvent | DreamReportEvent
 )
 
-# kind 常量 → 类,用于反序列化派发
 _KIND_TO_CLASS: dict[str, type] = {
     c.kind: c
     for c in (
@@ -413,53 +314,44 @@ _KIND_TO_CLASS: dict[str, type] = {
         VerifyVerdict, PhaseChange, CostUpdate, ApprovalRequest,
         ApprovalResponse, Escalation, Error, PlanUpdate, WorkflowProgress,
         WorkflowProposed, WorkflowDone, PlanRendered,
-        PlanDecisionRequest, MemoryRecallEvent,  # ← P2 新增(§4 ACP)
+        PlanDecisionRequest, MemoryRecallEvent,
         HookFired,
         LspServerEvent, LspDiagnosticEvent,
-        SkillRunStart, SkillRunEnd,   # ← 新增
-        CompactedEvent, PrunedEvent,  # ← context rot(spec 2026-06-07):可正确反序列化
-        LedgerEntryEvent,             # ← P3b 新增(§6 行为账本)
-        ProactiveSuggestionEvent,     # ← P5b 新增(§9 自治面:conductor 主动建议)
-        ComputerActionEvent,          # ← P6a 新增(§10 computer use:OS 级动作执行结果)
-        DreamProgressEvent, DreamReportEvent,  # ← Dream 新增(夜间整合进度 + 结果汇总)
+        SkillRunStart, SkillRunEnd,
+        CompactedEvent, PrunedEvent,
+        LedgerEntryEvent,
+        ProactiveSuggestionEvent,
+        ComputerActionEvent,
+        DreamProgressEvent, DreamReportEvent,
     )
 }
 
 
 def event_kind(ev: "Event") -> str:
-    """取事件的 kind 常量(= 类名 snake_case)。"""
+    """Internal documentation."""
     return type(ev).kind  # type: ignore[attr-defined]
 
 
 def serialize_event(ev: "Event") -> str:
-    """事件 → JSON 串(存进 events 表)。kind 随 payload 一起写,便于反序列化派发。
-
-    ToolReceipt/VerifyVerdict 含嵌套 dataclass(Receipt/Verdict),asdict 递归展开;
-    Phase 2 这两类只走持久化(loop 未接),round-trip 在 Phase 3 接 Receipt/Verdict 后补测。
-    """
+    """Internal documentation."""
     payload = asdict(ev)  # type: ignore[arg-type]
     return json.dumps({"kind": event_kind(ev), "data": payload}, ensure_ascii=False)
 
 
 def _decode_receipt(data: dict[str, Any]) -> "Receipt":
-    """M7:把持久化的 receipt dict 还原成 Receipt dataclass(replay §5.8 要真对象,非 dict)。"""
+    """Internal documentation."""
     from argos.tools.receipts import Receipt as _Receipt
     return _Receipt(**data)
 
 
 def _decode_verdict(data: dict[str, Any]) -> "Verdict":
-    """M7:把持久化的 verdict dict 还原成 Verdict dataclass(replay §5.8 要真对象,非 dict)。"""
+    """Internal documentation."""
     from argos.core.verify_gate import Verdict as _Verdict
     return _Verdict(**data)
 
 
 def deserialize_event(blob: str) -> "Event":
-    """JSON 串 → 事件。未知 kind → ValueError(fail-loud,坏数据不静默吞)。
-
-    M7:ToolReceipt.receipt / VerifyVerdict.verdict 是嵌套 dataclass —— serialize 时 asdict
-    把它们摊成 dict,deserialize 必须显式还原成 Receipt/Verdict,否则 replay 会拿到 dict
-    而非 dataclass(下游 .action/.status 等属性访问会炸)。已是 dataclass(直接构造)则原样保留。
-    """
+    """Internal documentation."""
     obj = json.loads(blob)
     kind = obj.get("kind")
     cls = _KIND_TO_CLASS.get(kind)
@@ -471,37 +363,34 @@ def deserialize_event(blob: str) -> "Event":
     elif kind == "verify_verdict" and isinstance(data.get("verdict"), dict):
         data["verdict"] = _decode_verdict(data["verdict"])
     elif kind == "workflow_done" and isinstance(data.get("notes"), list):
-        # JSON 不分 tuple/list:WorkflowDone.notes 声明为 tuple,还原回 tuple 保持精确相等。
         data["notes"] = tuple(data["notes"])
     return cls(**data)
 
 
-# ── EventBus(v6 P0 收尾:从 tui/events.py 搬入 —— 总线是内核基础设施) ──────────
 
 class _Sentinel:
-    """流结束哨兵(内部用,不入 Event 联合)。"""
+    """Internal documentation."""
 
 
 _END = _Sentinel()
 
 
 class EventBus:
-    """loop 与客户端的唯一交汇点(契约 §1)。Phase 3(loop)落地。
-    close() 投哨兵令消费侧 async-for 自然结束(客户端 start_run 收尾用)。"""
+    """Internal documentation."""
 
     def __init__(self) -> None:
         self._q: "asyncio.Queue[Event | _Sentinel]" = asyncio.Queue()
 
     async def emit(self, ev: Event) -> None:
-        """loop 侧投递事件。"""
+        """Internal documentation."""
         await self._q.put(ev)
 
     async def close(self) -> None:
-        """投哨兵,令 __aiter__ 自然结束(loop/start_run 收尾时调)。"""
+        """Internal documentation."""
         await self._q.put(_END)
 
     async def __aiter__(self) -> AsyncIterator[Event]:
-        """客户端消费侧。遇哨兵自然结束。"""
+        """Internal documentation."""
         while True:
             item = await self._q.get()
             if isinstance(item, _Sentinel):

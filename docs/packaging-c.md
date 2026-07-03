@@ -1,77 +1,52 @@
-# 打包 C 阶段 — PyPI + Linux/Windows + 全包管理(跨平台)
+# Packaging backlog — deferred binary/package-manager channels
 
-> Road-map #13 / spec `2026-06-07-packaging-c-design.md` 的用户文档。
-> C 阶段把"用啥系统都能装上、升级快、可信源"做成现实,从 macOS arm64 only
-> 扩到 6 个 OS 通道。
+> Road-map #13 / spec `2026-06-07-packaging-c-design.md` 的后台记录。
+> 首发安装面已收敛到 PyPI / `uv tool` 和 source checkout；本页记录推迟的
+> binary/package-manager 工作，不作为公开安装指南。
 
-> **发布状态**: GitHub release `v0.1.0` 已存在，但目前没有可安装的二进制资产
-> （只有校验文件）。macOS / Linux / Windows / PyPI / Homebrew tap / Nix 通道均为
-> 计划中，尚未正式发布。
+> **发布状态**: 旧 GitHub `v0.1.0` release/tag 已删除；当前首发目标是
+> TestPyPI → PyPI 的 Python package 路径。macOS / Linux / Windows /
+> Homebrew tap / WinGet / Nix 均为 deferred backlog。
 
-## 各通道安装命令(按推荐顺序)
-
-### 1. PyPI(任何平台,推荐;计划中 #13,PyPI 未发布)
+## 首发安装面
 
 ```bash
-pip install argos-agent        # 或 uv tool install argos-agent(计划中 #13,PyPI 未发布)
-argos --version                # 验证
+curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/v0.1.1/install.sh | bash
 ```
 
-`pip install` 安装两个入口点：`argos`（主命令）和 `argospkg`（打包辅助工具），均自动进 PATH。
-
-### 2. macOS arm64(计划中;尚无可安装 release 资产)
+等价手动命令:
 
 ```bash
-# Planned once Argos-X.Y.Z-arm64-mac.tar.gz is uploaded:
-curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash
-# Planned local cask smoke test:
-brew install --cask -s packaging/homebrew/argos.rb
+uv tool install argos-agent    # 或 pip install argos-agent
+argos setup
+argos
 ```
 
-### 3. Linux 3 格式
+如果 `argos` 不在 PATH,先跑 `uv tool update-shell` 并重开 shell。
+
+源码 checkout 仍是贡献者和预发布验证路径:
 
 ```bash
-# AppImage(主推,跨 glibc)
-curl -fsSL https://github.com/tungoldshou/argos/releases/latest/download/Argos-X.Y.Z-x86_64.AppImage -o argos
-chmod +x argos && ./argos --version
-
-# .deb(apt 路线;Debian/Ubuntu/Mint)
-curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install-deb.sh | bash
-# 或手动:
-sudo dpkg -i argos_X.Y.Z_amd64.deb && sudo apt-get install -f -y
-
-# .rpm(Fedora/RHEL/openSUSE)
-sudo dnf install ./argos-X.Y.Z-1.x86_64.rpm   # 或 yum / zypper
+git clone https://github.com/tungoldshou/argos
+cd argos
+uv sync
+uv run argos setup
+uv run argos
 ```
 
-### 4. Windows
+## Deferred packaging backlog
 
-```powershell
-# WinGet(主推;待 winget 审核通过)
-winget install tungoldshou.argos
+These channels are intentionally not launch blockers:
 
-# 或直接下 .exe zip
-Invoke-WebRequest -Uri "https://github.com/tungoldshou/argos/releases/latest/download/Argos-X.Y.Z-x86_64-windows.zip" -OutFile argos.zip
-Expand-Archive argos.zip
-.\argos.exe --version
-```
+- macOS app tarball and one-line installer
+- Linux standalone assets
+- Windows standalone assets
+- Homebrew tap
+- WinGet manifest submission
+- Nix flake / nixpkgs work
 
-### 5. Homebrew tap(Linux CLI / macOS TUI (.app wrapper))
-
-```bash
-brew tap tungoldshou/argos
-brew install argos           # Linux CLI:AppImage
-brew install --cask argos    # macOS TUI (.app wrapper):.app bundle
-```
-
-### 6. Nix
-
-```bash
-# flake(本期简化版;v1.1 走 nixpkgs 完整版)
-nix run github:tungoldshou/argos#argos
-# 或:
-nix profile install github:tungoldshou/argos#argos
-```
+Keep their scripts and manifests as draft release engineering assets until the
+PyPI path is stable and a real user need justifies each additional channel.
 
 ## 各通道对应产物(release 资产)
 
@@ -87,59 +62,37 @@ nix profile install github:tungoldshou/argos#argos
 
 ## 升级
 
-- **PyPI**:`pip install --upgrade argos-agent` 或 `uv tool upgrade argos-agent`
-- **macOS TUI (.app wrapper)**:`brew upgrade --cask argos`,或重跑 `install.sh`
-- **Linux AppImage**:重下最新版替换原文件
-- **.deb**:`sudo apt-get install --only-upgrade argos-agent`(若装过)
-- **WinGet**:`winget upgrade tungoldshou.argos`
-- **Nix**:`nix profile upgrade`
+- **PyPI**:发布后 `pip install --upgrade argos-agent` 或 `uv tool upgrade argos-agent`
 
 `argos self-update`(已存在):启动时 7 天缓存 background check GitHub latest,仅
 **提示**新版本不下载;用户主动跑升级。
 
 ## 已知限制(spec §1 风险 / §15 风险 + 未来 v1.1)
 
-- **PyPI wheel 不含 `argos-agent` 同名 Linux binary**:wheel 是源码包,装后走 `python -m
-  argos.__main__`;Linux 上要单 binary 装用 AppImage/.deb/.rpm/brew。
-- **WinGet 审核期**(首次提交到 `microsoft/winget-pkgs` 走审核,几小时-几天):
-  期间 `winget install` 装不到,README 标"待审";直接下 .exe zip 兜底。
-- **Nix 简化版依赖不全**:`ddgs` / `mlx-embeddings` / `sqlite-vec` / `playwright` /
-  `trafilatura` 当前不在 nixpkgs(或在但版本不匹配);本期 flake 只引现成的
-  smolagents / textual / httpx / numpy。v1.1 走 `buildPythonPackage` + override 完整化。
+- **PyPI wheel 不含平台原生 binary**:wheel 是 Python 包,装后走 `argos` console script。
+- **WinGet / Homebrew / Nix 审核和维护成本**:首次上线不承担这些通道；后续按用户需求逐个开放。
 - **Code signing / notarize / SmartScreen 跳警**:**全平台 unsigned**(spec §1 风险 6)。
-  Windows 上首次跑 .exe 弹 SmartScreen "未知发布者"警告,点"仍要运行"即可。v1.1 接 EV
-  cert + Developer ID。
+  二进制分发恢复前不作为公开安装路径。
 - **macOS x86_64 / Linux aarch64 / Linux musl (Alpine)**:本期不发;v1.1 视用户量决定。
-- **apt PPA**:本期无(简化 .deb + install-deb.sh 兜底);PPA 上 Launchpad 复杂度高,
-  v1.1 再说。
+- **apt PPA**:本期无;PPA 上 Launchpad 复杂度高, v1.1 再说。
 
 ## CI 端到端
 
-打 `v*` tag → GitHub Actions 走 `release.yml` 3 OS 矩阵:
-1. `build-macos`(macos-14)→ 产 `Argos-X.Y.Z-arm64-mac.tar.gz`
-2. `build-linux`(ubuntu-24.04)→ 产 AppImage / .deb / .rpm 3 件
-3. `build-windows`(windows-latest)→ 产 .exe zip(可选 .msi)
-4. `release` job → `gh release create` 一把发出,生成 SHA256SUMS
+手动触发 `publish.yml` → 发布到 TestPyPI 预演。
+打新的 `v*` tag → `publish.yml` 发布正式 PyPI。
 
-并行触发:
-- `publish.yml` → `pypa/gh-action-pypi-publish@release/v1` 走 OIDC trusted publishing
-- `bump-homebrew-formula.yml` → 推 tap 仓(需 `secrets.HOMEBREW_TAP_TOKEN`)
-- `bump-winget-manifest.yml` → 同步本仓 `packaging/winget/` 3 件
+`release.yml` 是手动 binary workflow，等二进制渠道恢复时再触发；不要让它阻塞 PyPI 首发。
 
 ## 故障排查
 
 | 现象 | 原因 | 修法 |
 |---|---|---|
-| `winget install tungoldshou.argos` 装不到 | winget 审核未过 | 用 .exe zip 兜底;README 标"待审" |
-| `nix run` 缺依赖 | nixpkgs 暂缺 | 用 pip install / brew install / AppImage 兜底 |
-| `brew install argos` 报 404 | tap 仓没建好 | `brew tap tungoldshou/argos` 先建 |
+| package-manager channel unavailable | deferred backlog | Use PyPI/uv tool or source checkout |
 | Windows SmartScreen 跳警 | unsigned | 点"仍要运行"(spec §1 风险 6) |
-| `dpkg -i` 报依赖缺 | libc / libstdc++ 没装 | `sudo apt-get install -f -y` 修依赖 |
-| AppImage 跑不起来 | fuse 缺 | `sudo apt install -y fuse libfuse2` |
 
 ## 链接
 
 - Spec:`docs/superpowers/specs/2026-06-07-packaging-c-design.md`
 - Plan:`docs/superpowers/plans/2026-06-07-packaging-c.md`
-- macOS arm64 安装脚本草案:`packaging/install.sh` + `packaging/argos.spec` + README
+- Draft binary packaging scripts:`packaging/`
 - 上游项目:https://github.com/tungoldshou/argos

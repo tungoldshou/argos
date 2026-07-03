@@ -1,13 +1,4 @@
-"""pygls 薄 async 适配层(spec §2.1 / D1)。
-
-pygls(BSD-3,~5k LOC)处理 JSON-RPC 帧 + handshake + 能力协商 + cancel + progress 等
-LSP 规范边角;Argos 贡献此薄包装:
-- `encode_frame(message)`:把 dict 编码为 Content-Length framed bytes
-- `parse_frames(stream)`:从 async byte stream 切帧,返 async iterator of dict
-- `LspClient`:桥 pygls 同步 stdin/stdout 与 asyncio(进程级 asyncio subprocess 包装)
-
-不手写 JSON-RPC 协议细节(交给 pygls 的 framing);不引协议层 stdlib 替代品。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -16,27 +7,22 @@ from typing import AsyncIterable, AsyncIterator, Any
 
 
 class LspProtocolError(Exception):
-    """LSP 帧 / JSON 解析失败 → manager 走 crash 路径(spec §3)。"""
+    """Internal documentation."""
 
 
 class LspStreamClosed(Exception):
-    """LSP server 流关闭(EOF)→ manager 走 crash 路径(spec §3)。"""
+    """Internal documentation."""
 
 
 def encode_frame(message: dict) -> bytes:
-    """dict → `Content-Length: N\\r\\n\\r\\n{json}` bytes(N 按 UTF-8 字节数)。"""
+    """Internal documentation."""
     body = json.dumps(message, ensure_ascii=False).encode("utf-8")
     header = f"Content-Length: {len(body)}\r\n\r\n".encode("ascii")
     return header + body
 
 
 async def parse_frames(stream: AsyncIterable[bytes]) -> AsyncIterator[dict]:
-    """async byte stream → async iterator of JSON-RPC messages。
-
-    - 按 Content-Length 头切帧,bytes 累加
-    - 半帧残留留在 buffer(下次继续)
-    - 声称 length > EOF → 抛 LspProtocolError
-    """
+    """Internal documentation."""
     buffer = bytearray()
     async for chunk in stream:
         if not chunk:
@@ -66,19 +52,15 @@ async def parse_frames(stream: AsyncIterable[bytes]) -> AsyncIterator[dict]:
                 yield json.loads(body.decode("utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
                 raise LspProtocolError(f"malformed JSON-RPC body: {e}") from e
-    # stream ended → buffer 残留半帧则视同协议错(manager 走 crash 路径)
     if buffer:
         raise LspProtocolError(
             f"stream ended with partial frame in buffer ({len(buffer)} bytes)"
         )
 
 
-# ── LspClient:进程 stdio ↔ asyncio 桥 ─────────────────────────────
 
 class _StreamLike:
-    """Stream 适配层:接受 (StreamWriter, StreamReader) OR asyncio.Stream 对,统一
-    暴露 `stdin.write` / `stdin.drain` / `stdout` 属性 —— 让 LspClient 不依赖
-    asyncio.subprocess.Process 的具体形态(in-process fake 协程也能塞进来)。"""
+    """Internal documentation."""
 
     def __init__(self, stdin: Any, stdout: Any) -> None:
         self.stdin = stdin
@@ -86,17 +68,9 @@ class _StreamLike:
 
 
 class LspClient:
-    """单 server 进程 + 双向 stdio 桥。
-
-    使用方式:
-        proc = await asyncio.create_subprocess_exec(...)
-        client = LspClient(proc)   # proc.stdin / proc.stdout 可用
-        # 写请求:await client.send_request("initialize", {...})  → 响应 dict
-        # 收通知:async for notif in client.notifications(): ...
-    """
+    """Internal documentation."""
 
     def __init__(self, proc_or_streams: Any) -> None:
-        # proc_or_streams 可为 asyncio.subprocess.Process 或任何有 .stdin / .stdout 的对象
         self._proc = proc_or_streams
         self._next_id = 1
         self._pending: dict[int, asyncio.Future[dict]] = {}
@@ -104,12 +78,12 @@ class LspClient:
         self._reader_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
-        """起后台 reader 协程。"""
+        """Internal documentation."""
         if self._reader_task is None:
             self._reader_task = asyncio.create_task(self._reader_loop())
 
     async def stop(self) -> None:
-        """取消 reader 协程(进程由调用方 close / kill)。"""
+        """Internal documentation."""
         if self._reader_task is not None:
             self._reader_task.cancel()
             try:
@@ -119,13 +93,7 @@ class LspClient:
             self._reader_task = None
 
     async def _reader_loop(self) -> None:
-        """持续从 proc.stdout 读帧;response 按 id 路由,notification 入队。
-
-        异常处理:
-        - LspProtocolError(帧格式坏字)→ 让所有 pending future 失败
-        - 任何非 CancelledError 异常 → 同样让所有 pending future 失败
-        - 正常 EOF(stream ended,buffer empty)→ 让所有 pending future 失败(manager 走 crash)
-        """
+        """Internal documentation."""
         stream = self._proc.stdout
         protocol_error: Exception | None = None
         try:
@@ -147,7 +115,6 @@ class LspClient:
             protocol_error = e
         except Exception as e:  # noqa: BLE001
             protocol_error = e
-        # 流结束(EOF 或协议错):让所有挂起 future 失败,manager 据此走 crash 路径
         msg = "LSP stream closed" if protocol_error is None else f"LSP protocol error: {protocol_error}"
         for fut in self._pending.values():
             if not fut.done():
@@ -159,7 +126,7 @@ class LspClient:
     async def send_request(
         self, method: str, params: dict | None = None, *, timeout: float = 5.0,
     ) -> Any:
-        """发 request → 等 response(5s 默认超时,spec §2.6)。"""
+        """Internal documentation."""
         msg_id = self._next_id
         self._next_id += 1
         loop = asyncio.get_event_loop()
@@ -172,14 +139,14 @@ class LspClient:
         return await asyncio.wait_for(fut, timeout=timeout)
 
     async def send_notification(self, method: str, params: dict | None = None) -> None:
-        """发 notification(无 id,不期待响应)。"""
+        """Internal documentation."""
         msg = {"jsonrpc": "2.0", "method": method, "params": params or {}}
         stdin = self._proc.stdin
         stdin.write(encode_frame(msg))
         await stdin.drain()
 
     async def notifications(self) -> AsyncIterator[dict]:
-        """async iter 所有 server 主动发的消息(诊断/日志/进度等)。"""
+        """Internal documentation."""
         while True:
             msg = await self._notifications.get()
             yield msg

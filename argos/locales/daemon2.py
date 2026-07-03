@@ -1,9 +1,4 @@
-"""Daemon server / worker / client / conductor_supervisor / tui.daemon_source 用户可见文案。
-
-key 命名空间:daemon.srv.*。
-ZH 值 = 原始中文串(逐字照搬,保证既有测试 assert 仍通过)。
-EN 值 = 对应的自然英文翻译。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 EN: dict[str, str] = {

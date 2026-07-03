@@ -1,4 +1,4 @@
-"""#4 async recall 测试:store.arecall + OpenAIEmbedder.aembed + timeout 降级。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -32,7 +32,7 @@ class TestOpenAIEmbedderAembed:
         vecs = await emb.aembed(["hello world"])
         assert len(vecs) == 1
         assert vecs[0] == pytest.approx([0.1, 0.2, 0.3])
-        assert emb.dim == 3  # 惰性 dim 设置
+        assert emb.dim == 3
 
     @pytest.mark.asyncio
     async def test_aembed_raises_on_error(self):
@@ -46,9 +46,8 @@ class TestOpenAIEmbedderAembed:
             await emb.aembed(["hello"])
 
     def test_sync_embed_uses_short_timeout(self, monkeypatch):
-        """同步 embed 应使用 _RECALL_ASYNC_TIMEOUT_S(5s) 而非旧的 30s。"""
+        """Internal documentation."""
         from argos.memory import embedding as emb_mod
-        # 5s 上限已硬编码在模块;确认不是 30s
         assert emb_mod._RECALL_ASYNC_TIMEOUT_S <= 10.0
 
 
@@ -70,22 +69,19 @@ class TestStoreArecall:
 
     @pytest.mark.asyncio
     async def test_arecall_falls_back_to_fts5_when_no_embedder(self, tmp_path):
-        """无 embedder → arecall 退到 to_thread(recall) → FTS5 字面匹配。"""
+        """Internal documentation."""
         from argos.memory.store import ArgosStore
         store = ArgosStore(db_path=str(tmp_path / "test.db"), embedder=None)
-        # 写入一条记忆
         store._write(
             "INSERT INTO memory(id, goal, verdict, model, fact, ts) VALUES (?,?,?,?,?,?)",
             ("id1", "排序算法优化任务", "passed", "m1", None, 1.0),
         )
         hits = await store.arecall("排序算法")
-        # FTS5 LIKE 字面匹配应命中或返回 [] (LIKE 精确子串,goal 含"排序算法")
-        # 只要 arecall 不抛异常即满足最基本的诚实降级
         assert isinstance(hits, list)
 
     @pytest.mark.asyncio
     async def test_arecall_with_failing_aembed_falls_back_to_sync(self, tmp_path):
-        """aembed 失败 → arecall 降级到 to_thread(recall),不抛异常。"""
+        """Internal documentation."""
         class FailingEmbedder:
             dim = 3
             def embed(self, texts):
@@ -96,5 +92,4 @@ class TestStoreArecall:
         from argos.memory.store import ArgosStore
         store = ArgosStore(db_path=str(tmp_path / "test.db"), embedder=FailingEmbedder())
         hits = await store.arecall("some goal")
-        # 降级后不抛;返回 [] 或字面匹配结果均可
         assert isinstance(hits, list)

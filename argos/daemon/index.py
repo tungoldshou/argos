@@ -1,12 +1,4 @@
-"""StateIndex:小 JSON 索引文件 `~/.argos/runs/index.json`(spec §2.4)。
-
-- in-memory dict + atomic 写(写 tmp + os.replace)
-- 启动 load + save 全覆盖式(内容小,<10KB 启动 <1ms)
-- 真相源 = JSONL;index 是缓存(recover 时以 JSONL tail 为准)
-
-字段:version + runs: dict[run_id, IndexEntry]
-IndexEntry 字段:state / goal / workspace / created_at / updated_at / pid / last_event_seq
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -31,23 +23,11 @@ class IndexEntry:
     pid: int | None = None
     model: str = ""
     approval_level: str = "confirm"
+    session_id: str = ""
 
 
 class StateIndex:
-    """小 JSON 索引,atomic 写(spec §2.4 + D10)。
-
-    启动:
-        index = StateIndex(path)
-        index.load()    # 读盘 → 内存
-
-    更新:
-        index.upsert(run_id, state=..., goal=..., ...)
-        index.save()    # atomic 写盘
-
-    查询:
-        index.get(run_id) -> IndexEntry | None
-        index.list() -> list[(run_id, IndexEntry)]
-    """
+    """Internal documentation."""
 
     def __init__(self, path: Path):
         self._path = Path(path)
@@ -58,7 +38,7 @@ class StateIndex:
         return self._path
 
     def load(self) -> None:
-        """读盘到内存;文件不存在 / 坏 JSON → 空 dict(不抛,recover 路径重扫)。"""
+        """Internal documentation."""
         if not self._path.exists():
             self._runs = {}
             return
@@ -83,12 +63,13 @@ class StateIndex:
                     pid=raw.get("pid"),
                     model=raw.get("model", ""),
                     approval_level=raw.get("approval_level", "confirm"),
+                    session_id=raw.get("session_id", ""),
                 )
             except (TypeError, ValueError):
                 continue
 
     def save(self) -> None:
-        """atomic 写:写 tmp + os.replace(同名替换原子,POSIX 语义)。"""
+        """Internal documentation."""
         self._path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self._path.with_suffix(self._path.suffix + ".tmp")
         payload = {
@@ -117,8 +98,9 @@ class StateIndex:
         pid: int | None = None,
         model: str | None = None,
         approval_level: str | None = None,
+        session_id: str | None = None,
     ) -> None:
-        """upsert 一条 run 记录;未传的字段保留旧值。"""
+        """Internal documentation."""
         existing = self._runs.get(run_id)
         now = time.time()
         if existing is None:
@@ -132,6 +114,7 @@ class StateIndex:
                 pid=pid,
                 model=model or "",
                 approval_level=approval_level or "confirm",
+                session_id=session_id or "",
             )
         else:
             if state is not None:
@@ -152,7 +135,9 @@ class StateIndex:
                 existing.model = model
             if approval_level is not None:
                 existing.approval_level = approval_level
+            if session_id is not None:
+                existing.session_id = session_id
 
     def remove(self, run_id: str) -> None:
-        """从 index 移除(用户显式 discard / 30 天 cleanup)。"""
+        """Internal documentation."""
         self._runs.pop(run_id, None)

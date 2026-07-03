@@ -1,4 +1,4 @@
-"""LSP 配置 dataclass 单元测试(spec §2.2) + 加载/校验/单例流程(spec §2.2 / §3 / D11)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -17,10 +17,9 @@ from argos.lsp.config import (
 from argos.lsp import get_config, reload_config, _reset_config
 
 
-# ── Task 1: dataclass 单元测试 ─────────────────────────────────────
 
 def test_lsp_server_config_frozen():
-    """LspServerConfig 是 frozen dataclass;含 command/filetypes/disabled/init_options/env 字段。"""
+    """Internal documentation."""
     s = LspServerConfig(
         command=("pyright-langserver", "--stdio"),
         filetypes=(".py", ".pyi"),
@@ -35,7 +34,7 @@ def test_lsp_server_config_frozen():
 
 
 def test_lsp_server_config_with_init_options():
-    """init_options 走 dict,env 同(spec §2.2)。"""
+    """Internal documentation."""
     s = LspServerConfig(
         command=("rust-analyzer",),
         filetypes=(".rs",),
@@ -49,25 +48,25 @@ def test_lsp_server_config_with_init_options():
 
 
 def test_lsp_server_config_empty_command_raises():
-    """command 空 → ValueError(防 spawn 空 argv)。"""
+    """Internal documentation."""
     with pytest.raises(ValueError, match="command"):
         LspServerConfig(command=(), filetypes=(".py",))
 
 
 def test_lsp_server_config_empty_filetypes_raises():
-    """filetypes 空 → ValueError(0 server 服务 = 死代码)。"""
+    """Internal documentation."""
     with pytest.raises(ValueError, match="filetypes"):
         LspServerConfig(command=("x",), filetypes=())
 
 
 def test_lsp_server_config_filetype_no_dot_raises():
-    """filetype 必须以 . 开头(spec §2.2)。"""
+    """Internal documentation."""
     with pytest.raises(ValueError, match=r"\."):
         LspServerConfig(command=("x",), filetypes=("py",))
 
 
 def test_lsp_config_construction():
-    """LspConfig 含 version + servers dict。"""
+    """Internal documentation."""
     s = LspServerConfig(command=("pyright-langserver", "--stdio"), filetypes=(".py",))
     cfg = LspConfig(version=1, servers={"python": s})
     assert cfg.version == 1
@@ -76,21 +75,21 @@ def test_lsp_config_construction():
 
 
 def test_lsp_config_server_name_special_chars_raises():
-    """server name 允许 ASCII 字母数字 + _ + -(spec §2.2);含特殊字符 → ValueError。"""
+    """Internal documentation."""
     s = LspServerConfig(command=("x",), filetypes=(".py",))
     with pytest.raises(ValueError, match="name"):
         LspConfig(version=1, servers={"py thon": s})
 
 
 def test_lsp_config_empty():
-    """LspConfig.empty() → 全等 manager 禁用(0 server)的配置。"""
+    """Internal documentation."""
     cfg = LspConfig.empty()
     assert cfg.version == 1
     assert cfg.servers == {}
 
 
 def test_builtin_default_has_python_only():
-    """BUILTIN_DEFAULT_CONFIG 仅含 python server(spec §2.2)。"""
+    """Internal documentation."""
     assert "python" in BUILTIN_DEFAULT_CONFIG.servers
     assert BUILTIN_DEFAULT_CONFIG.servers["python"].command == ("pyright-langserver", "--stdio")
     assert "rust" not in BUILTIN_DEFAULT_CONFIG.servers
@@ -98,13 +97,12 @@ def test_builtin_default_has_python_only():
 
 
 def test_lsp_config_error_is_exception():
-    """LspConfigError 是 Exception 子类,带 message。"""
+    """Internal documentation."""
     err = LspConfigError("bad json")
     assert isinstance(err, Exception)
     assert "bad json" in str(err)
 
 
-# ── Task 2: 加载 / 校验 / 单例 ─────────────────────────────────────
 
 def test_load_default_path_honors_argos_config_dir(tmp_path, monkeypatch):
     from argos import config as C
@@ -122,7 +120,7 @@ def test_load_default_path_honors_argos_config_dir(tmp_path, monkeypatch):
 
 
 def test_load_missing_file_returns_builtin(tmp_path, monkeypatch):
-    """lsp.json 不存在 → load() 返 BUILTIN_DEFAULT_CONFIG(单 python)。"""
+    """Internal documentation."""
     monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", tmp_path / "nope.json")
     cfg = load()
     assert "python" in cfg.servers
@@ -130,7 +128,7 @@ def test_load_missing_file_returns_builtin(tmp_path, monkeypatch):
 
 
 def test_load_valid_minimal(tmp_path, monkeypatch):
-    """合法最小配置:1 server(无 init_options/disabled/env)。"""
+    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -145,7 +143,7 @@ def test_load_valid_minimal(tmp_path, monkeypatch):
 
 
 def test_load_valid_multi_server(tmp_path, monkeypatch):
-    """合法配置:3 server + 带 init_options / env / disabled。"""
+    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -173,7 +171,7 @@ def test_load_valid_multi_server(tmp_path, monkeypatch):
 
 
 def test_load_invalid_json_raises(tmp_path, monkeypatch):
-    """JSON 坏字 → LspConfigError(绝不部分加载,spec D11)。"""
+    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text("{not valid json")
     monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
@@ -182,7 +180,7 @@ def test_load_invalid_json_raises(tmp_path, monkeypatch):
 
 
 def test_load_missing_version_raises(tmp_path, monkeypatch):
-    """version 缺 → LspConfigError。"""
+    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({"servers": {}}))
     monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
@@ -191,7 +189,7 @@ def test_load_missing_version_raises(tmp_path, monkeypatch):
 
 
 def test_load_wrong_version_raises(tmp_path, monkeypatch):
-    """version 不匹配(本机 v1,文件 v2)→ 报错 + 拒载。"""
+    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({"version": 2, "servers": {}}))
     monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
@@ -200,7 +198,7 @@ def test_load_wrong_version_raises(tmp_path, monkeypatch):
 
 
 def test_load_command_not_array_raises(tmp_path, monkeypatch):
-    """command 非 array → LspConfigError(spec §2.2:argv 数组,不是 shell 字符串)。"""
+    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -212,7 +210,7 @@ def test_load_command_not_array_raises(tmp_path, monkeypatch):
 
 
 def test_load_filetypes_empty_raises(tmp_path, monkeypatch):
-    """filetypes 空数组 → LspConfigError(0 server 服务 = 死代码)。"""
+    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -224,7 +222,7 @@ def test_load_filetypes_empty_raises(tmp_path, monkeypatch):
 
 
 def test_load_server_name_with_space_raises(tmp_path, monkeypatch):
-    """server name 含空格 → LspConfigError(spec §2.2:仅 ASCII 字母数字 + _ + -)。"""
+    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -236,7 +234,7 @@ def test_load_server_name_with_space_raises(tmp_path, monkeypatch):
 
 
 def test_load_unreadable_file_treated_as_missing(tmp_path, monkeypatch):
-    """权限不可读文件 → 视同"不存在"走 built-in 默认(spec §3)。"""
+    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({"version": 1, "servers": {}}))
     p.chmod(0o000)
@@ -249,7 +247,7 @@ def test_load_unreadable_file_treated_as_missing(tmp_path, monkeypatch):
 
 
 def test_reload_replaces_singleton(tmp_path, monkeypatch):
-    """reload 改 ~/.argos/lsp.json 后,get_config() 返新配置。"""
+    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -271,7 +269,7 @@ def test_reload_replaces_singleton(tmp_path, monkeypatch):
 
 
 def test_reload_invalid_keeps_old(tmp_path, monkeypatch):
-    """reload 时新配置不合规 → 保旧 + 报错(spec §3 reload 行)。"""
+    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({
         "version": 1,

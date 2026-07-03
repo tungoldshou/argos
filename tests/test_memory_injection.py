@@ -1,4 +1,4 @@
-"""#9 T6: 系统提示 <memory_context> 段注入。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -64,7 +64,7 @@ def test_block_honors_no_memory_env(mem_root, monkeypatch):
 
 
 def test_block_uses_global_claude_md(mem_root):
-    """~/.argos/CLAUDE.md 也要包含。"""
+    """Internal documentation."""
     g = mem_root.parent / "argos_home" / "CLAUDE.md"
     g.parent.mkdir(parents=True, exist_ok=True)
     g.write_text("global rule: 先跑测试", encoding="utf-8")
@@ -74,12 +74,11 @@ def test_block_uses_global_claude_md(mem_root):
 
 
 def test_block_integration_in_build_system(mem_root, monkeypatch):
-    """集成:实际跑 _build_system 看是否含 <memory_context> 段。"""
+    """Internal documentation."""
     from argos.core.loop import AgentLoop
     p = mem_root / "CLAUDE.md"
     p.write_text("本项目用 tabs 缩进", encoding="utf-8")
     pid = mem_auto.project_id_for(mem_root)
-    # 极简 smoke:直接调 _memory_context_block(避免构造完整 AgentLoop)
     out = mem_auto._memory_context_block(workspace=mem_root, project_id=pid)
     assert "<memory_context>" in out
     assert "本项目用 tabs 缩进" in out

@@ -1,4 +1,4 @@
-"""#11 T5+T6 --effort CLI + CostUpdate.tier_name + AgentLoop 注入 router 扩展 测试。"""
+"""Internal documentation."""
 import json
 
 import httpx
@@ -50,7 +50,6 @@ def test_cost_update_serialize_with_tier_name_round_trip():
 
 
 def test_cost_update_legacy_event_without_tier_name_deserializes():
-    # 旧 JSON 没 tier_name 字段 → 反序列化时 dataclass 字段默认值生效
     blob = json.dumps({"kind": "cost_update",
                        "data": {"tokens_in": 0, "tokens_out": 0, "cost_usd": None,
                                 "elapsed_s": 0.0, "cache_read": 0, "context_used": 0}})
@@ -59,7 +58,6 @@ def test_cost_update_legacy_event_without_tier_name_deserializes():
     assert restored.tier_name == ""
 
 
-# ── T6:AgentLoop 注入 router 扩展 ──────────────────────────────────
 
 
 def _sse_transport(text: str) -> httpx.MockTransport:
@@ -89,7 +87,7 @@ def _build_router(cheap: bool = True) -> ModelRouter:
 
 
 def test_agent_loop_no_router_uses_existing_model_and_tier():
-    """既有路径 0 破坏:无 router → CostUpdate.tier_name = cfg.model_tier。"""
+    """Internal documentation."""
     from argos.core.loop import AgentLoop
     from argos.core.verify_gate import Verifier
     from argos.memory.store import ArgosStore
@@ -119,12 +117,11 @@ def test_agent_loop_no_router_uses_existing_model_and_tier():
             store=store, bus=EventBus(), sandbox=sandbox, broker=broker, model=model,
             verifier=Verifier(max_rounds=1), config=cfg, workspace=ws, verify_dir=ws,
         )
-        # 直接断言 _current_tier 默认值
         assert loop._current_tier == "default"
 
 
 def test_agent_loop_strong_tier_sets_approval_level_override():
-    """router 选 strong → loop 端 _approval_level_override=CONFIRM(纵深防线 spec §11)。"""
+    """Internal documentation."""
     routing = RoutingConfig(
         default="default", by_category={"file_edit": "strong"},
         tier_force_confirm=["strong"],
@@ -147,7 +144,6 @@ def test_agent_loop_strong_tier_sets_approval_level_override():
             return self._cfg
 
     router = _StaticRouter(routing)
-    # 模拟 select 后 loop 应该置 _approval_level_override=CONFIRM
     from argos.routing.resolver import RouteDecision
     decision = RouteDecision(TaskCategory.FILE_EDIT, "edit_file", "strong", "by_category", 1)
     if router.routing.is_force_confirm(decision.tier):
@@ -158,16 +154,15 @@ def test_agent_loop_strong_tier_sets_approval_level_override():
 
 
 def test_app_factory_build_components_constructs_router():
-    """build_components 应构造 ModelRouter + AppComponents 含 router 字段。"""
+    """Internal documentation."""
     from argos.app_factory import AppComponents
-    # 静态检查 AppComponents dataclass 字段含 router
     import dataclasses
     fields = {f.name for f in dataclasses.fields(AppComponents)}
     assert "router" in fields
 
 
 def test_agent_loop_router_kw_accepted():
-    """AgentLoop.__init__ 接受 router kw-only 参数(默认 None 零破坏)。"""
+    """Internal documentation."""
     from argos.core.loop import AgentLoop
     import inspect
     sig = inspect.signature(AgentLoop.__init__)

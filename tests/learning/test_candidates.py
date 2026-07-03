@@ -1,4 +1,4 @@
-"""candidates:候选落盘/读取/消费标记。"""
+"""Internal documentation."""
 from pathlib import Path
 
 from argos.learning.candidates import (
@@ -47,7 +47,6 @@ def test_mark_consumed_excludes_from_list(tmp_path: Path):
                        workspace=None, goal="g")
     mark_consumed(p, reason="promoted")
     assert list_unconsumed(tmp_path) == []
-    # 标记是写 meta,不是删目录(审计可见)
     assert (p / "meta.json").exists()
 
 
@@ -56,7 +55,7 @@ def test_list_skips_corrupt_meta(tmp_path: Path):
     d.mkdir()
     (d / "SKILL.md").write_text("x", encoding="utf-8")
     (d / "meta.json").write_text("{not json", encoding="utf-8")
-    assert list_unconsumed(tmp_path) == []  # 坏目录跳过,不抛
+    assert list_unconsumed(tmp_path) == []
 
 
 def test_save_is_idempotent_per_run(tmp_path: Path):
@@ -64,26 +63,22 @@ def test_save_is_idempotent_per_run(tmp_path: Path):
                    workspace=None, goal="g")
     save_candidate(_cand(), root=tmp_path, source_run="abc123def45678",
                    workspace=None, goal="g")
-    assert len(list_unconsumed(tmp_path)) == 1  # 同 run 同名只存一份
+    assert len(list_unconsumed(tmp_path)) == 1
 
 
 def test_save_sanitizes_path_traversal_name(tmp_path: Path):
-    """I1 防穿越:name 含 ../ 不得逃出 root,落盘必须留在 tmp_path 内。"""
+    """Internal documentation."""
     p = save_candidate(_cand(name="../evil"), root=tmp_path,
                        source_run="abc123def45678", workspace=None, goal="g")
     assert p is not None
-    assert p.resolve().is_relative_to(tmp_path.resolve())  # 没逃出候选区
-    assert len(list_unconsumed(tmp_path)) == 1  # 仍可读到这 1 条
-    # root 之外(tmp_path 的父目录)绝不能出现 evil 开头的目录
+    assert p.resolve().is_relative_to(tmp_path.resolve())
+    assert len(list_unconsumed(tmp_path)) == 1
     assert not [d for d in tmp_path.parent.iterdir()
                 if d.name.startswith("evil")]
 
 
 def test_save_candidate_redacts_meta(tmp_path: Path):
-    """save_candidate 落盘的 meta.json 不得含明文密钥。
-
-    回退验证:注释掉 candidates.save_candidate 里的脱敏调用,本测试必须 FAIL。
-    """
+    """Internal documentation."""
     import json
     from argos.learning.candidates import save_candidate
     from argos.learning.distiller import SkillCandidate
@@ -102,30 +97,24 @@ def test_save_candidate_redacts_meta(tmp_path: Path):
     )
     assert p is not None
     meta = json.loads((p / "meta.json").read_text(encoding="utf-8"))
-    # 明文密钥不得出现在任何 meta 字段
     meta_str = json.dumps(meta)
-    assert "sk-ant-xxxxxxxxxxxxxxxxxxxx" not in meta_str, \
+    assert "sk-ant-xxxxxxxxxxxxxxxxxxxx" not in meta_str,\
         "sk-ant- 明文出现在 meta.json — 脱敏失效"
-    assert "hunter2" not in meta_str, \
+    assert "hunter2" not in meta_str,\
         "password=hunter2 明文出现在 meta.json — 脱敏失效"
-    assert "AKIA1234567890123456" not in meta_str, \
+    assert "AKIA1234567890123456" not in meta_str,\
         "AKIA 明文出现在 meta.json — 脱敏失效"
-    # 脱敏占位符应存在
     assert "<redacted:secret>" in meta_str, "脱敏后应有 <redacted:secret> 占位符"
 
 
 def test_list_drops_self_verified_candidates(tmp_path: Path):
-    """E4 纵深防御(评审 B1):候选是持久产物,上游防线之外这里必须再挡一道。
-
-    meta 标 self_verified=True 的候选绝不能进 Dream 材料 —— 万一上游路由
-    变化或有人手工放入,材料层兜底。
-    """
+    """Internal documentation."""
     import json
     p = save_candidate(_cand(), root=tmp_path, source_run="abc123def45678",
                        workspace=None, goal="g")
     meta_path = p / "meta.json"
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    assert meta["self_verified"] is False  # 默认必须显式落盘 False(来源可审计)
+    assert meta["self_verified"] is False
     meta["self_verified"] = True
     meta_path.write_text(json.dumps(meta), encoding="utf-8")
     assert list_unconsumed(tmp_path) == []

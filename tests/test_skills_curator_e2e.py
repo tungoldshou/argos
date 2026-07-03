@@ -1,4 +1,4 @@
-"""#10 T8 端到端铁证:refresh → install → test → list → recommend → remove 全链路。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import io
@@ -31,16 +31,15 @@ class _Resp(io.BytesIO):
 
 @pytest.fixture
 def fresh_root(tmp_path, monkeypatch):
-    """隔离 ~/.argos/skills/ 到 tmp_path."""
+    """Internal documentation."""
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     return tmp_path
 
 
-# ── e2e 1: refresh → install → list → remove 全链路 ──────
 
 
 def test_e2e_refresh_install_list_remove_cycle(fresh_root, monkeypatch):
-    """mock 远端 → refresh → install good skill → list 显 → remove → 目录进 .trash."""
+    """Internal documentation."""
     content = make_skill_md(name="python-lint", capabilities=["read", "execute"])
     sha = sha256_of(content)
     index_payload = make_index(entries=[
@@ -77,21 +76,18 @@ def test_e2e_refresh_install_list_remove_cycle(fresh_root, monkeypatch):
     out = list_installed(base_dir=fresh_root)
     assert len(out) == 1
     assert out[0].name == "python-lint"
-    assert out[0].enabled is False  # 装后强制 false
+    assert out[0].enabled is False
 
-    # 4) remove → 目录进 .trash
     from argos.skills_curator.remove import remove
     r = remove("python-lint", base_dir=fresh_root)
     assert not (fresh_root / "python-lint").exists()
     assert r.trash_path.exists()
 
 
-# ── e2e 2: malicious sha 不匹配 → 拒装 ──────────────
 
 
 def test_e2e_install_malicious_sha_mismatch_rejected(fresh_root, monkeypatch):
     content = make_skill_md(name="malicious", capabilities=["read"])
-    # index 声明的 sha 与实际 content 的 sha 不一致
     index_payload = make_index(entries=[
         make_index_entry(
             name="malicious", content=content,
@@ -115,11 +111,9 @@ def test_e2e_install_malicious_sha_mismatch_rejected(fresh_root, monkeypatch):
     from argos.skills_curator.install import install, InstallError
     with pytest.raises(InstallError, match="sha_mismatch"):
         install("malicious", base_dir=fresh_root, run_smoke=False)
-    # 目录不应创建
     assert not (fresh_root / "malicious").exists()
 
 
-# ── e2e 3: install builtin → 拒 ──────────────
 
 
 def test_e2e_install_builtin_verify_rejected(fresh_root, monkeypatch):
@@ -128,7 +122,6 @@ def test_e2e_install_builtin_verify_rejected(fresh_root, monkeypatch):
         install("verify", base_dir=fresh_root, run_smoke=False)
 
 
-# ── e2e 4: remove builtin → 拒 ──────────────
 
 
 def test_e2e_remove_builtin_verify_rejected(fresh_root, monkeypatch):
@@ -145,7 +138,6 @@ def test_e2e_recommend_after_py_edits(fresh_root, monkeypatch):
     from argos.skills_curator.recommend import (
         SessionActivity, build_activity_from_session, recommend,
     )
-    # 模拟装一个别的 skill;python-lint 未装 → 应被推荐
     other = fresh_root / "other-skill"
     other.mkdir()
     (other / "SKILL.md").write_text(
@@ -162,7 +154,6 @@ def test_e2e_recommend_after_py_edits(fresh_root, monkeypatch):
     assert "test-debugger" in names
 
 
-# ── e2e 6: size_drift warning 落地 ──────────────
 
 
 def test_e2e_size_drift_warning_in_install_output(fresh_root, monkeypatch):
@@ -171,7 +162,7 @@ def test_e2e_size_drift_warning_in_install_output(fresh_root, monkeypatch):
     index_payload = make_index(entries=[
         make_index_entry(
             name="big", content=content, sha256=sha,
-            size_bytes=10,  # 严重不符
+            size_bytes=10,
             capabilities=["read"],
         ),
     ])
@@ -194,7 +185,6 @@ def test_e2e_size_drift_warning_in_install_output(fresh_root, monkeypatch):
     assert any("size_drift" in w for w in r.warnings)
 
 
-# ── e2e 7: network skill 需 env 确认 ──────────────
 
 
 def test_e2e_install_network_skill_requires_confirmation(fresh_root, monkeypatch):
@@ -230,7 +220,6 @@ def test_e2e_install_network_skill_requires_confirmation(fresh_root, monkeypatch
     os.environ.pop("ARGOS_SKILLS_NETWORK_OK", None)
 
 
-# ── e2e 8: CLI 集成 refresh → list 链路 ──────────────
 
 
 def test_e2e_cli_refresh_then_list(fresh_root, monkeypatch, capsys):

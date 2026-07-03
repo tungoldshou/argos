@@ -1,8 +1,9 @@
 # WinGet locale manifest (en-US) for Argos
-# spec §8.2:PackageLocale en-US,长描述
 PackageIdentifier: tungoldshou.argos
-PackageVersion: 0.1.0
+PackageVersion: 0.1.1
 PackageLocale: en-US
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
 Publisher: tungoldshou
 PackageName: Argos
 License: MIT
@@ -20,9 +21,9 @@ Description: |
   end users), integrates the OpenAI-compatible and Anthropic APIs, exposes
   web search and structured page extraction as live tools, and remembers
   project conventions across sessions via a local four-tier memory store.
-  Install on Windows via `winget install tungoldshou.argos`, on macOS via
-  Homebrew Cask or the curl one-liner, and on Linux via pip, AppImage, .deb,
-  or .rpm. See https://github.com/tungoldshou/argos for full docs.
+  Install on Windows via `winget install tungoldshou.argos` after this
+  manifest is accepted. See https://github.com/tungoldshou/argos for release
+  notes, source checkout instructions, and non-Windows channel status.
 Moniker: argos
 Tags:
   - agent

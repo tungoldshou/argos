@@ -2,18 +2,17 @@
 
 ## 0. 装好并配 key
 
-目前唯一可用路径是从源码运行(v0.1.0 tag 已打但 GitHub release 尚无二进制产物,
-一行安装脚本 / PyPI / Homebrew cask 均待 stage #13 发布后才可用)。
+当前稳定路径是从源码运行；首个公开包发布目标为 `v0.1.1`。
 
 ```bash
-# 从源码运行(当前唯一可用路径,需 Python 3.12+ 和 uv)
+# Run from source. Requires Python 3.12+ and uv.
 git clone https://github.com/tungoldshou/argos
 cd argos
 uv sync
 
-# 配模型 + key(交互向导)
+# Configure the model and API key.
 uv run argos setup
-# 选 provider → 填 key → 连通测试 → 保存
+# Pick a provider, enter the key, test connectivity, then save.
 ```
 
 ## 1. 第一次启动 TUI
@@ -45,13 +44,13 @@ N=1(单候选)和 N=3(3 个候选独立 worktree 选最好)各跑一遍。
 ## 3. 跑完整 Terminal-Bench(4-6 task, ≈ 30min)
 
 ```bash
-# 准备:克隆 TB 任务源(241 task,挑 4-6 个 supported 的)
+# Prepare the Terminal-Bench task source.
 git clone https://github.com/laude-institute/terminal-bench /tmp/tb-inspect
 
-# 跑(走当前 active profile,即 `argos setup` 配的那个)
+# Run with the active profile configured by `argos setup`.
 uv run python scripts/tb_pass_at_1_benchmark.py --tb-source /tmp/tb-inspect --n 3
 
-# 想用环境变量里的模型(覆盖 active)就加 --use-env-override
+# Use environment model settings instead of the active profile.
 uv run python scripts/tb_pass_at_1_benchmark.py --tb-source /tmp/tb-inspect --n 3 --use-env-override
 ```
 

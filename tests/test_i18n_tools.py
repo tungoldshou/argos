@@ -1,13 +1,4 @@
-"""Wave 2c i18n guard — tools layer English discriminator path.
-
-Confirms that under ARGOS_LANG=en:
-  - Tool error strings start with "Error:" (not "错误:")
-  - argos.i18n.is_error_result() detects them correctly
-  - Non-error strings are NOT flagged as errors
-
-These guards catch EN-path regressions that the zh-default suite
-(conftest.py sets ARGOS_LANG=zh) never exercises.
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest

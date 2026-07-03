@@ -346,21 +346,21 @@ class TestStatusBarHints:
 
     def test_hints_include_ctrl_b(self) -> None:
         from argos.tui.widgets.status_bar import _hints
-        _HINTS = _hints()  # i18n:hints 改为运行时函数(随 ARGOS_LANG 切语言),不再是模块常量
+        _HINTS = _hints()
         assert "^B" in _HINTS or "Ctrl+B" in _HINTS or "ctrl+b" in _HINTS.lower(), (
             f"StatusBar hint must mention Ctrl+B (后台), got: {_HINTS!r}"
         )
 
     def test_hints_include_ctrl_o(self) -> None:
         from argos.tui.widgets.status_bar import _hints
-        _HINTS = _hints()  # i18n:hints 改为运行时函数(随 ARGOS_LANG 切语言),不再是模块常量
+        _HINTS = _hints()
         assert "^O" in _HINTS or "Ctrl+O" in _HINTS or "ctrl+o" in _HINTS.lower(), (
             f"StatusBar hint must mention Ctrl+O (右栏), got: {_HINTS!r}"
         )
 
     def test_hints_include_ctrl_v(self) -> None:
         from argos.tui.widgets.status_bar import _hints
-        _HINTS = _hints()  # i18n:hints 改为运行时函数(随 ARGOS_LANG 切语言),不再是模块常量
+        _HINTS = _hints()
         assert "^V" in _HINTS or "Ctrl+V" in _HINTS or "ctrl+v" in _HINTS.lower(), (
             f"StatusBar hint must mention Ctrl+V (贴图), got: {_HINTS!r}"
         )
@@ -460,7 +460,14 @@ class TestCtrlCBinding:
     def _get_bindings_map(self) -> dict[str, str]:
         """Extract {key: action} from ArgosApp.BINDINGS."""
         from argos.tui.app import ArgosApp
-        return {key: action for key, action, *_ in ArgosApp.BINDINGS}
+        out: dict[str, str] = {}
+        for binding in ArgosApp.BINDINGS:
+            if hasattr(binding, "key") and hasattr(binding, "action"):
+                out[binding.key] = binding.action
+                continue
+            key, action, *_ = binding
+            out[key] = action
+        return out
 
     def test_ctrl_c_maps_to_ctrl_c_action(self) -> None:
         b = self._get_bindings_map()

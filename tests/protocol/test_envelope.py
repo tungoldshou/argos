@@ -1,7 +1,4 @@
-"""EventEnvelope 测试:黄金字段验证 + round-trip。
-
-P0 只定义格式不接 server。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -15,10 +12,9 @@ from argos.protocol.events import (
 )
 
 
-# ── wrap_event 基础 ────────────────────────────────────────────────────────────
 
 def test_wrap_event_fields():
-    """wrap_event 必须填充所有帧字段,v 固定为 1。"""
+    """Internal documentation."""
     ev = TokenDelta(text="hi")
     frame = wrap_event(ev, seq=0, session="sess-1", run="run-abc")
     assert frame.v == 1
@@ -32,14 +28,14 @@ def test_wrap_event_fields():
 
 
 def test_wrap_event_default_run_empty():
-    """run 省略时默认空串。"""
+    """Internal documentation."""
     ev = TokenDelta(text="x")
     frame = wrap_event(ev, seq=0, session="s")
     assert frame.run == ""
 
 
 def test_wrap_event_custom_id_and_ts():
-    """可显式指定 id 和 ts。"""
+    """Internal documentation."""
     ev = PhaseChange(phase="act", actions=1)
     frame = wrap_event(ev, seq=5, session="s", run="r",
                        ts=1234567890.0, id="deadbeef0123456789ab")
@@ -48,7 +44,7 @@ def test_wrap_event_custom_id_and_ts():
 
 
 def test_wrap_event_data_matches_serialize():
-    """frame.data 应与 serialize_event payload 一致。"""
+    """Internal documentation."""
     ev = CostUpdate(tokens_in=10, tokens_out=5, cost_usd=0.001, elapsed_s=1.0)
     frame = wrap_event(ev, seq=1, session="s")
     expected_data = json.loads(serialize_event(ev))["data"]
@@ -56,7 +52,7 @@ def test_wrap_event_data_matches_serialize():
 
 
 def test_wrap_event_frozen():
-    """EventEnvelope 是 frozen dataclass,赋值必须报错。"""
+    """Internal documentation."""
     ev = TokenDelta(text="x")
     frame = wrap_event(ev, seq=0, session="s")
     with pytest.raises((AttributeError, TypeError)):
@@ -82,7 +78,7 @@ def test_envelope_to_json_from_json_roundtrip():
 
 
 def test_envelope_to_json_keys():
-    """to_json 必须包含所有协议规定字段。"""
+    """Internal documentation."""
     ev = Error(message="boom")
     frame = wrap_event(ev, seq=0, session="s")
     obj = json.loads(frame.to_json())
@@ -91,16 +87,15 @@ def test_envelope_to_json_keys():
 
 
 def test_envelope_from_json_missing_field():
-    """from_json 遇到缺字段应 KeyError(fail-loud)。"""
+    """Internal documentation."""
     incomplete = json.dumps({"v": 1, "seq": 0, "kind": "token_delta"})
     with pytest.raises(KeyError):
         EventEnvelope.from_json(incomplete)
 
 
-# ── 黄金快照:字段值写死 ────────────────────────────────────────────────────────
 
 def test_envelope_golden_snapshot():
-    """黄金字段值:to_json 输出的每个字段必须符合预期(ABI 冻结)。"""
+    """Internal documentation."""
     ev = TokenDelta(text="黄金")
     frame = wrap_event(
         ev, seq=42, session="session-golden", run="run-golden",
@@ -118,14 +113,13 @@ def test_envelope_golden_snapshot():
 
 
 def test_envelope_seq_monotonic():
-    """多帧 seq 单调递增(由调用方维护,此测试验证 wrap_event 不自动递增)。"""
+    """Internal documentation."""
     ev = TokenDelta(text="x")
     frames = [wrap_event(ev, seq=i, session="s") for i in range(5)]
     seqs = [f.seq for f in frames]
     assert seqs == list(range(5))
 
 
-# ── 各种 Event 类型都能 wrap ───────────────────────────────────────────────────
 
 @pytest.mark.parametrize("ev", [
     TokenDelta(text="t"),

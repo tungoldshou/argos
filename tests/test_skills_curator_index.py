@@ -1,7 +1,4 @@
-"""#10 T1 Index schema + 本地 cache + refresh CLI 测试。
-
-沿用 #7/#9 风格:RED 写 → 跑挂 → 写 impl → 跑绿。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import io
@@ -29,7 +26,7 @@ from argos.skills_curator.index import (
 
 
 class _FakeResp(io.BytesIO):
-    """最小 urllib 响应,带 .read() / context manager。"""
+    """Internal documentation."""
 
     def __enter__(self):
         return self
@@ -143,12 +140,12 @@ def test_fetch_remote_unknown_fields_ignored(monkeypatch):
 
 
 def test_fetch_remote_corrupt_line_skipped(monkeypatch):
-    """坏行(无 name)→ 跳过,好行保留(D4 宽松)."""
+    """Internal documentation."""
     payload = {
         "version": 1,
         "generated_at": 0.0,
         "skills": [
-            {"version": "0.1.0", "sha256": "c" * 64},  # 无 name → 跳
+            {"version": "0.1.0", "sha256": "c" * 64},
             _make_entry_dict(name="good-one"),
         ],
     }
@@ -190,7 +187,7 @@ def test_fetch_remote_timeout_raises(monkeypatch):
 
 
 def test_save_cache_atomic_write(tmp_path, monkeypatch):
-    """tmp file rename,不是 partial write."""
+    """Internal documentation."""
     monkeypatch.setattr(
         "argos.skills_curator.index._skills_root", lambda: tmp_path
     )
@@ -264,7 +261,6 @@ def test_cache_age_days_returns_positive(tmp_path, monkeypatch):
     )
     e = _parse_entry(_make_entry_dict())
     save_cache(IndexCache(version=1, generated_at=0.0, skills=(e,)))
-    # 1 秒后再读
     time.sleep(0.01)
     age = cache_age_days()
     assert age is not None

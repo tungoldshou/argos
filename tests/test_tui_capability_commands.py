@@ -1,5 +1,4 @@
-"""能力可见命令(/help /tools /skills /mcp)的分发铁证 —— 经真 ArgosApp + Pilot 走通,
-断言 transcript 里出现真实能力信息(诚实:数量/内容来自真实注册表/技能库)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -30,30 +29,28 @@ async def test_tools_lists_real_29_tools_grouped():
     async with app.run_test() as pilot:
         await pilot.pause()
         txt = await _dispatch(app, "/tools")
-        assert "31 个工具" in txt                 # 诚实数量(= ALL_TOOL_NAMES 实长；+propose_gui_verify)
-        assert "browser_navigate" in txt          # 计算机控制分组真出现(浏览器)
-        assert "mcp_call" in txt                   # 外部工具分组真出现
-        assert "lsp_definition" in txt             # LSP 工具分组真出现
-        assert "computer_screenshot" in txt        # OS 级控制分组真出现(可调用名=下划线)
+        assert "31 个工具" in txt
+        assert "browser_navigate" in txt
+        assert "mcp_call" in txt
+        assert "lsp_definition" in txt
+        assert "computer_screenshot" in txt
 
 
 @pytest.mark.asyncio
 async def test_skills_lists_builtin_library(tmp_path, monkeypatch):
-    """#10 T6:/skills 重写为 curator 视图,列 installed + available + Recommended."""
+    """Internal documentation."""
     import argos.skills_curator.index as _idx
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
         txt = await _dispatch(app, "/skills")
-        # 新实现:列 installed + available + Recommended
         assert "Installed skills" in txt
         assert "(no skills installed" in txt or "Recommended" in txt
 
 
 @pytest.mark.asyncio
 async def test_mcp_honest_when_unconfigured(monkeypatch):
-    # conftest 已把 MCP 单例指向不存在的 config(零预配)→ /mcp 应诚实报未配置/无工具。
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()

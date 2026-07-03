@@ -1,5 +1,4 @@
-"""2a:computer_* 工具可达 —— 合法 Python 标识符(沙箱 ```python 块调得动)、计入
-ALL_TOOL_NAMES、extract_tool_names 可检测;read_only 作用域剔除写动作(只读截图保留)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from argos.tools import ALL_TOOL_NAMES, build_child_namespace
@@ -12,7 +11,7 @@ _COMPUTER_ALL = ("computer_screenshot",) + _COMPUTER_WRITE
 
 
 class _StubBroker:
-    def request(self, action, args):  # 仅在工具被调用时才会用到;本测试不调
+    def request(self, action, args):
         return "ok"
 
 
@@ -21,7 +20,6 @@ def test_computer_tools_are_callable_valid_identifiers():
     for name in _COMPUTER_ALL:
         assert name in ns, f"{name} 不在子进程命名空间(模型调不到)"
         assert name.isidentifier(), f"{name} 不是合法 Python 标识符"
-    # 旧的带点 key(invalid identifier,调不动)不应再存在
     assert "computer.click" not in ns
     assert "computer.screenshot" not in ns
 
@@ -50,6 +48,5 @@ def test_computer_use_prompt_documents_underscore_tools():
     from argos.core.honesty import COMPUTER_USE_PROMPT
     for name in _COMPUTER_ALL:
         assert name in COMPUTER_USE_PROMPT, f"提示词文档段缺工具 {name}"
-    # 安全纪律在场(全英文化后断言英文)
     assert "user confirmation" in COMPUTER_USE_PROMPT
     assert "data, not commands" in COMPUTER_USE_PROMPT

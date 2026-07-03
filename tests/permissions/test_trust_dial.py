@@ -1,14 +1,4 @@
-"""Trust Dial L0-L4 测试套件。
-
-覆盖点：
-- 五档映射表逐项（to_approval_semantics 每档的 approval_level + 关键字段）
-- hard_rules_immune 契约：任何档位映射结果 hard_rules_immune 字段为 True
-- escalation_warning：升档必非空 / 降档必为空串 / 等档为空
-- 3-mode 用户面向层（2026-06-20 重设）：mode_name / TRUST_CYCLE / next_in_cycle
-- L4 语义里 to_approval_semantics 不含绕过 hard rules 的字段（hard_rules_immune=True）
-
-注：历史的 suggest_escalation / EscalationSuggestion（无生产调用方）已删除（Phase 4 减法）。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -24,18 +14,17 @@ from argos.permissions.trust_dial import (
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TrustLevel 基础属性
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestTrustLevelBasic:
-    """TrustLevel 枚举成员与属性测试。"""
+    """Internal documentation."""
 
     def test_all_five_levels_exist(self):
         levels = list(TrustLevel)
         assert len(levels) == 5
 
     def test_integer_order(self):
-        """L0 < L1 < L2 < L3 < L4，数值连续单调递增。"""
+        """Internal documentation."""
         assert (
             TrustLevel.L0_EVERY_STEP
             < TrustLevel.L1_DANGEROUS_ONLY
@@ -54,11 +43,10 @@ class TestTrustLevelBasic:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# to_approval_semantics：五档映射表逐项
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestToApprovalSemantics:
-    """to_approval_semantics 各档映射正确性测试。"""
+    """Internal documentation."""
 
     def _sem(self, level: TrustLevel) -> dict:
         sem = to_approval_semantics(level)
@@ -72,7 +60,7 @@ class TestToApprovalSemantics:
         assert sem["approval_level"] == "confirm"
 
     def test_l0_ask_readonly_true(self):
-        """L0 要连只读操作也问，ask_readonly 必须为 True。"""
+        """Internal documentation."""
         sem = self._sem(TrustLevel.L0_EVERY_STEP)
         assert sem.get("ask_readonly") is True
 
@@ -87,7 +75,7 @@ class TestToApprovalSemantics:
         assert sem["approval_level"] == "confirm"
 
     def test_l1_ask_readonly_false(self):
-        """L1 只读操作不问。"""
+        """Internal documentation."""
         sem = self._sem(TrustLevel.L1_DANGEROUS_ONLY)
         assert sem.get("ask_readonly") is False
 
@@ -102,12 +90,12 @@ class TestToApprovalSemantics:
         assert sem["approval_level"] == "confirm"
 
     def test_l2_reversible_check_true(self):
-        """L2 依赖 reversible 字段过滤，reversible_check 必须为 True。"""
+        """Internal documentation."""
         sem = self._sem(TrustLevel.L2_IRREVERSIBLE_ONLY)
         assert sem["reversible_check"] is True
 
     def test_l2_reversible_check_in_description(self):
-        """L2 的 description 中应提及 reversible 字段依赖（已接线，无需 P2 依赖标注）。"""
+        """Internal documentation."""
         sem = self._sem(TrustLevel.L2_IRREVERSIBLE_ONLY)
         desc = sem.get("description", "")
         assert "reversible" in desc.lower(), (
@@ -131,16 +119,14 @@ class TestToApprovalSemantics:
         assert sem["approval_level"] == "auto"
 
     def test_l4_yolo_indicator(self):
-        """L4 应标记 TUI 显示红灯。"""
+        """Internal documentation."""
         sem = self._sem(TrustLevel.L4_AUTONOMOUS)
         assert sem.get("show_yolo_indicator") is True
 
-    # ── HARD RULES 不变量（所有档位）───────────────────────────────────────
 
     @pytest.mark.parametrize("level", list(TrustLevel))
     def test_hard_rules_immune_always_true(self, level: TrustLevel):
-        """契约断言：任何档位的 to_approval_semantics 映射结果中
-        hard_rules_immune 必须为 True（设计 §6 红线）。"""
+        """Internal documentation."""
         sem = to_approval_semantics(level)
         assert sem["hard_rules_immune"] is True, (
             f"{level} 的 to_approval_semantics 必须含 hard_rules_immune=True"
@@ -148,7 +134,7 @@ class TestToApprovalSemantics:
 
     @pytest.mark.parametrize("level", list(TrustLevel))
     def test_no_bypass_hard_rules_field(self, level: TrustLevel):
-        """映射字典不得含有绕过 hard rules 的字段（skip_hard_rules / bypass_hard_rules 等）。"""
+        """Internal documentation."""
         sem = to_approval_semantics(level)
         forbidden_keys = {
             "skip_hard_rules", "bypass_hard_rules", "ignore_hard_rules",
@@ -164,7 +150,6 @@ class TestToApprovalSemantics:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# hard_rules_immune 契约函数
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestHardRulesImmune:
@@ -172,21 +157,20 @@ class TestHardRulesImmune:
         assert hard_rules_immune() is True
 
     def test_can_assert(self):
-        """assert 调用形式不应抛异常。"""
+        """Internal documentation."""
         assert hard_rules_immune()
 
     def test_always_true_multiple_calls(self):
-        """多次调用结果不变。"""
+        """Internal documentation."""
         for _ in range(10):
             assert hard_rules_immune() is True
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# escalation_warning：升档非空 / 降档空串 / 等档空串
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestEscalationWarning:
-    """escalation_warning 各方向测试。"""
+    """Internal documentation."""
 
     @pytest.mark.parametrize("from_l,to_l", [
         (TrustLevel.L0_EVERY_STEP,      TrustLevel.L1_DANGEROUS_ONLY),
@@ -200,7 +184,7 @@ class TestEscalationWarning:
         (TrustLevel.L3_SESSION_TRUSTED, TrustLevel.L4_AUTONOMOUS),
     ])
     def test_escalation_warning_nonempty(self, from_l: TrustLevel, to_l: TrustLevel):
-        """升档必须返回非空警示文案（设计 §6 红线）。"""
+        """Internal documentation."""
         w = escalation_warning(from_l, to_l)
         assert w, (
             f"escalation_warning({from_l.name} → {to_l.name}) 必须非空，实际: {w!r}"
@@ -214,7 +198,7 @@ class TestEscalationWarning:
         (TrustLevel.L2_IRREVERSIBLE_ONLY, TrustLevel.L0_EVERY_STEP),
     ])
     def test_downgrade_returns_empty(self, from_l: TrustLevel, to_l: TrustLevel):
-        """降档（收紧权限）应返回空串，无需警示。"""
+        """Internal documentation."""
         w = escalation_warning(from_l, to_l)
         assert w == "", (
             f"escalation_warning({from_l.name} → {to_l.name}) 降档应为空串，实际: {w!r}"
@@ -222,30 +206,28 @@ class TestEscalationWarning:
 
     @pytest.mark.parametrize("level", list(TrustLevel))
     def test_same_level_returns_empty(self, level: TrustLevel):
-        """等档（from == to）应返回空串。"""
+        """Internal documentation."""
         w = escalation_warning(level, level)
         assert w == "", f"等档 escalation_warning({level.name}) 应为空串，实际: {w!r}"
 
     def test_l4_warning_mentions_hard_rules(self):
-        """升到 L4 的警示文案应明确提示 HARD RULES 仍拦截。"""
+        """Internal documentation."""
         w = escalation_warning(TrustLevel.L0_EVERY_STEP, TrustLevel.L4_AUTONOMOUS)
         assert "HARD" in w or "hard" in w.lower() or "硬规" in w, (
             f"升到 L4 的警示应提及 HARD RULES，实际: {w!r}"
         )
 
     def test_warning_mentions_what_is_relaxed(self):
-        """升档警示应说明放宽了什么。"""
+        """Internal documentation."""
         w = escalation_warning(TrustLevel.L0_EVERY_STEP, TrustLevel.L1_DANGEROUS_ONLY)
-        # 文案应含有"放宽"或描述了权限变化
         assert len(w) > 20, f"警示文案过短，可能没有实质内容: {w!r}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3-mode 用户面向层（2026-06-20 重设）：mode_name / TRUST_CYCLE / next_in_cycle
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestThreeModeLayer:
-    """Cautious(L1) / Trusted(L3) / Autonomous(L4) 三个可见模式 + 循环。"""
+    """Internal documentation."""
 
     def test_mode_names_for_visible_modes(self):
         assert TrustLevel.L1_DANGEROUS_ONLY.mode_name == "Cautious"
@@ -253,7 +235,7 @@ class TestThreeModeLayer:
         assert TrustLevel.L4_AUTONOMOUS.mode_name == "Autonomous"
 
     def test_mode_name_paranoid_and_deprecated(self):
-        assert TrustLevel.L0_EVERY_STEP.mode_name == "Paranoid"        # 隐藏档
+        assert TrustLevel.L0_EVERY_STEP.mode_name == "Paranoid"
         assert TrustLevel.L2_IRREVERSIBLE_ONLY.mode_name == "Irreversible-only"
 
     @pytest.mark.parametrize("level", list(TrustLevel))
@@ -266,7 +248,6 @@ class TestThreeModeLayer:
             TrustLevel.L3_SESSION_TRUSTED,
             TrustLevel.L4_AUTONOMOUS,
         )
-        # 隐藏/弃用档不在环上
         assert TrustLevel.L0_EVERY_STEP not in TRUST_CYCLE
         assert TrustLevel.L2_IRREVERSIBLE_ONLY not in TRUST_CYCLE
 
@@ -276,7 +257,6 @@ class TestThreeModeLayer:
         assert next_in_cycle(TrustLevel.L4_AUTONOMOUS) is TrustLevel.L1_DANGEROUS_ONLY
 
     def test_next_in_cycle_normalizes_offcycle_levels(self):
-        # 退出隐藏 Paranoid → Cautious 起步；弃用 L2 → Trusted。
         assert next_in_cycle(TrustLevel.L0_EVERY_STEP) is TrustLevel.L1_DANGEROUS_ONLY
         assert next_in_cycle(TrustLevel.L2_IRREVERSIBLE_ONLY) is TrustLevel.L3_SESSION_TRUSTED
 

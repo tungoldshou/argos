@@ -1,6 +1,4 @@
-"""#12 Context 可视化:T2 analyzer 4 桶分桶(契约 §12;spec §6)。
-
-10 测试覆盖 4 桶独立 / 失败降级 / window fallback / health 计算。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import sys
@@ -42,7 +40,7 @@ class _FakeStore:
 
 @dataclass
 class _FakeLoop:
-    """最小可注入的 AgentLoop 替身,4 桶方法都 mock(spec §6 1-4 步)。"""
+    """Internal documentation."""
     _build_system_text: str = "sys"
     _tool_sigs_text: str = "tools"
     _model: _FakeModel = None  # type: ignore[assignment]
@@ -67,7 +65,7 @@ def _loop(*, sys_text="hello world", tool_text="abc", window=200_000,
 
 
 def test_analyze_four_buckets_independent(monkeypatch):
-    """_build_system 抛 → 其它 3 桶仍正常;system 桶走 unavailable 降级(spec §6.1 降级)。"""
+    """Internal documentation."""
     loop = _loop(sys_text="will explode")
 
     def boom(_g):
@@ -76,28 +74,26 @@ def test_analyze_four_buckets_independent(monkeypatch):
     b = analyze(loop, store=loop.store, workspace=Path("."))
     assert b.system.tokens == 0
     assert b.system.method == "estimate:unavailable"
-    # 其它 3 桶不受影响
     assert b.tools.tokens > 0 or b.tools.method == "estimate:unavailable"
 
 
 def test_analyze_system_uses_build_system(monkeypatch):
-    """system 桶走 _build_system + token_estimate;source 标 core/loop.py:471。
-    隔离 tiktoken(现锁进 uv.lock 默认在场)→ 测确定的 chars4 数值(这测 wiring,非 tokenizer 精度)。"""
+    """Internal documentation."""
     monkeypatch.setitem(sys.modules, "tiktoken", None)
     loop = _loop(sys_text="x" * 80)
     b = analyze(loop, store=loop.store, workspace=Path("."))
-    assert b.system.tokens == 20  # 80 // 4(chars4 兜底)
+    assert b.system.tokens == 20
     assert b.system.source == "core/loop.py:471"
     assert b.system.method == "estimate:chars4"
 
 
 def test_analyze_memory_loads_four_scopes(monkeypatch):
-    """memory 桶 details 4 项:user/project/skill/session,source 标 memory/auto.py:82。"""
+    """Internal documentation."""
     # mock argos.memory.auto.load
     fake_auto = types.ModuleType("argos.memory.auto")
 
     def _fake_load(*, scope=None):
-        return []  # 0 entries,但调用 4 次
+        return []
     fake_auto.load = _fake_load
     monkeypatch.setitem(sys.modules, "argos.memory.auto", fake_auto)
 
@@ -110,7 +106,7 @@ def test_analyze_memory_loads_four_scopes(monkeypatch):
 
 
 def test_analyze_tools_uses_signatures_block():
-    """tools 桶走 _tool_signatures_block + entries=22(spec §6.1 估数)。"""
+    """Internal documentation."""
     loop = _loop(tool_text="read_file x y\nedit_file a b")
     b = analyze(loop, store=loop.store, workspace=Path("."))
     assert b.tools.tokens > 0
@@ -119,7 +115,7 @@ def test_analyze_tools_uses_signatures_block():
 
 
 def test_analyze_messages_uses_api_usage():
-    """messages 桶 tokens = input+cache_read+cache_creation(API 真值,method=api)。"""
+    """Internal documentation."""
     loop = _loop(input_tokens=2000, cache_read=500, cache_creation=300,
                   msgs=[{"role": "user", "content": "x"}] * 5)
     b = analyze(loop, store=loop.store, workspace=Path("."))
@@ -137,21 +133,18 @@ def test_analyze_window_fallback():
 
 
 def test_analyze_window_from_model():
-    """正常 window 透传。"""
+    """Internal documentation."""
     loop = _loop(window=8192)
     b = analyze(loop, store=loop.store, workspace=Path("."))
     assert b.window == 8192
 
 
 def test_analyze_pct_calculation():
-    """pct = total / window;0-1 之间。"""
+    """Internal documentation."""
     loop = _loop(sys_text="x" * 4000, tool_text="y" * 1000, window=200_000)
     b = analyze(loop, store=loop.store, workspace=Path("."))
     assert 0.0 <= b.pct <= 1.0
-    # 守公式:pct 就是 total / window(memory 桶细节随 auto/store 实现漂,
-    # 硬编码 1254 在 4-tier 各 min 1 那版贴切,后续 tier 名 / entry 计数变了就废;
-    # 改守【关系】而非【绝对数】,把硬编码路径挪到 test_analyze_health_property 风格)。
-    assert abs(b.pct - b.total / b.window) < 1e-9, \
+    assert abs(b.pct - b.total / b.window) < 1e-9,\
         f"pct={b.pct} 应等于 total/window={b.total}/{b.window}"
 
 
@@ -183,7 +176,7 @@ def test_analyze_health_property():
 
 
 def test_analyze_never_raises():
-    """完全坏的 loop(无 model / 无 store)→ 不崩,返全空桶 Breakdown。"""
+    """Internal documentation."""
     class _BadLoop:
         @property
         def _model(self):
@@ -202,7 +195,6 @@ def test_analyze_never_raises():
     b = analyze(_BadLoop(), store=_BadStore(), workspace=Path("."))  # type: ignore[arg-type]
     assert b.total >= 0
     assert b.window >= 0
-    # system/tools/messages 都降级
     assert b.system.method == "estimate:unavailable"
     assert b.tools.method == "estimate:unavailable"
     assert b.messages.method == "api:unavailable"

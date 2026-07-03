@@ -1,8 +1,4 @@
-"""#2 排查修复:沙箱后端经 select_backend() 按平台选,不再写死 SeatbeltExecutor。
-
-Linux/Windows 用户(README 邀请)此前第一个任务就撞 raw FileNotFoundError(/usr/bin/sandbox-exec
-不存在),而 linux.py 的 bwrap/unshare 后端现成却没接线。本测试证 build 路径走 select_backend()。
-macOS 上 select_backend() 仍返回 SeatbeltExecutor,故 darwin 行为零变更(此测试用 fake 后端验证接线)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import argos.app_factory as af
@@ -32,8 +28,7 @@ def test_make_gate_broker_sandbox_uses_select_backend(monkeypatch, tmp_path):
 
 
 def test_select_backend_returns_seatbelt_on_darwin(monkeypatch):
-    """select_backend() 在 macOS 返回 SeatbeltExecutor(darwin 行为不变);
-    非 darwin 委托 linux.select_backend()(此处只验 darwin 分支,Linux 真后端需真机)。"""
+    """Internal documentation."""
     import argos.sandbox.executor as ex
     monkeypatch.setattr(ex.sys, "platform", "darwin")
     assert ex.select_backend() is ex.SeatbeltExecutor

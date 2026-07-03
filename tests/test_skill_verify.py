@@ -1,4 +1,4 @@
-"""`/verify` 单元测试(spec §2.3 / D9 / D13:用户显式调 Verifier.verify,不绕 propose_verify)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -37,7 +37,7 @@ def test_read_verify_cmd_honors_argos_config_dir(tmp_path, monkeypatch):
 
 
 def test_verify_calls_verifier_verify_directly(tmp_path):
-    """`/verify` 走 `Verifier.verify(...)` 入口,不动 `propose_verify`(D9/D13 关键澄清)。"""
+    """Internal documentation."""
     fake_verifier = MagicMock()
     fake_verifier.verify.return_value = Verdict.passed(detail="ok", verify_cmd="pytest -q", attempts=1)
 
@@ -61,7 +61,7 @@ def test_verify_passing_verdict_translates_to_passed(tmp_path):
 
 
 def test_verify_failing_verdict_translates_to_failed_with_finding(tmp_path):
-    """Verifier.failed → verdict=failed, 1 条 error finding。"""
+    """Internal documentation."""
     fake_verifier = MagicMock()
     fake_verifier.verify.return_value = Verdict.failed(
         detail="exit=1, test_bar failed", verify_cmd="pytest -q", attempts=1,
@@ -77,7 +77,7 @@ def test_verify_failing_verdict_translates_to_failed_with_finding(tmp_path):
 
 
 def test_verify_unverifiable_translates_to_partial(tmp_path):
-    """Verifier.unverifiable → verdict=partial, errors 透传, findings 空(spec §2.3)。"""
+    """Internal documentation."""
     fake_verifier = MagicMock()
     fake_verifier.verify.return_value = Verdict.unverifiable(
         detail="(无 verify_cmd,未做机检验证)", tampered=[], attempts=1,
@@ -91,7 +91,7 @@ def test_verify_unverifiable_translates_to_partial(tmp_path):
 
 
 def test_verify_does_not_call_propose_verify(tmp_path):
-    """D9/D13 关键:`/verify` **不**走 `propose_verify` 路径(独立路径不混)。"""
+    """Internal documentation."""
     fake_verifier = MagicMock()
     fake_verifier.verify.return_value = Verdict.passed(detail="ok", verify_cmd="pytest -q", attempts=1)
 
@@ -102,13 +102,13 @@ def test_verify_does_not_call_propose_verify(tmp_path):
 
 
 def test_verify_no_verify_cmd_yields_partial_or_na(tmp_path):
-    """无 verify_cmd 配置 → verdict=partial / n_a 之一(spec §2.3)。"""
+    """Internal documentation."""
     fake_verifier = MagicMock()
     fake_verifier.verify.return_value = Verdict.unverifiable(
         detail="(无 verify_cmd,未做机检验证)", tampered=[], attempts=1,
     )
 
-    with patch("argos.skills_runtime.builtin.verify.Verifier", return_value=fake_verifier), \
+    with patch("argos.skills_runtime.builtin.verify.Verifier", return_value=fake_verifier),\
          patch("argos.skills_runtime.builtin.verify._read_verify_cmd", return_value=None):
         result = asyncio.run(verify_run({"path": None}, _ctx(tmp_path)))
 
