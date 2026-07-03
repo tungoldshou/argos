@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -19,7 +18,6 @@ class TestResolveWorkspace:
         assert resolve_workspace(None) == str(tmp_path.resolve())
 
     def test_home_dir_falls_back_to_none(self, monkeypatch):
-        """Internal documentation."""
         monkeypatch.chdir(Path.home())
         assert resolve_workspace(None) is None
 
@@ -31,7 +29,6 @@ class TestResolveWorkspace:
 
 @pytest.mark.asyncio
 async def test_sse_chinese_no_mojibake(tmp_path):
-    """Internal documentation."""
     from argos.daemon.manager import RunManager
     from argos.daemon.server import DaemonHTTPServer
     from argos.daemon.client import DaemonClient
@@ -63,7 +60,6 @@ async def test_sse_chinese_no_mojibake(tmp_path):
 
 @pytest.mark.asyncio
 async def test_observer_promoted_after_owner_expiry_on_next_request(tmp_path):
-    """Internal documentation."""
     import asyncio
     from argos.daemon.manager import RunManager
     from argos.daemon.server import DaemonHTTPServer

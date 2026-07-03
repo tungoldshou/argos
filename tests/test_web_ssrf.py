@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.tools.web import extract_url_blocked
@@ -6,7 +5,6 @@ from argos.web import _is_blocked_host, extract
 
 
 def test_extract_url_blocked_allows_public_denies_internal():
-    """Internal documentation."""
     for ok in ("https://news.example.com/a?x=1", "http://example.com", "example.com/page",
                "https://93.184.216.34/"):
         assert extract_url_blocked(ok) is False, ok

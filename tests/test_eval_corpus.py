@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -10,7 +9,6 @@ from tests.eval._seed_corpus import write_seed_corpus
 
 @pytest.fixture
 def seed_corpus(tmp_path, monkeypatch):
-    """Internal documentation."""
     root = tmp_path / "corpus"
     write_seed_corpus(root)
     monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", str(root))
@@ -104,7 +102,6 @@ def test_load_task_missing_goal_md_raises(tmp_path, monkeypatch):
 
 
 def test_load_task_with_setup_sh(tmp_path, monkeypatch):
-    """Internal documentation."""
     from tests.eval._seed_corpus import write_seed_corpus
     p = tmp_path / "corpus"
     write_seed_corpus(p)
@@ -162,7 +159,6 @@ def test_load_task_notes_md_first_line_becomes_title(tmp_path, monkeypatch):
 
 
 def test_corpus_env_var_overrides_root(monkeypatch, tmp_path):
-    """Internal documentation."""
     other = tmp_path / "other"
     write_seed_corpus(other, version=3)
     monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", str(other))
@@ -171,7 +167,6 @@ def test_corpus_env_var_overrides_root(monkeypatch, tmp_path):
 
 
 def test_corpus_env_var_expands_user_home(monkeypatch, tmp_path):
-    """Internal documentation."""
     fake_home = tmp_path / "home"
     root = fake_home / "eval-corpus"
     write_seed_corpus(root, version=5)
@@ -183,7 +178,6 @@ def test_corpus_env_var_expands_user_home(monkeypatch, tmp_path):
 
 
 def test_corpus_default_root_follows_argos_config_dir(monkeypatch, tmp_path):
-    """Internal documentation."""
     monkeypatch.delenv("ARGOS_EVAL_CORPUS_DIR", raising=False)
     cfg_dir = tmp_path / "cfg"
     root = cfg_dir / "eval" / "corpus"

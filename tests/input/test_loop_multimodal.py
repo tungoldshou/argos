@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -16,21 +15,18 @@ def _att(data: bytes = b"\x89PNG\x00", media_type: str = "image/png",
 
 
 def _plain_tier():
-    """Internal documentation."""
     from argos.core.models import ModelTier
     return ModelTier(name="default", model="text-model", base_url="https://x",
                      max_tokens=64, multimodal=False)
 
 
 def _mm_tier():
-    """Internal documentation."""
     from argos.core.models import ModelTier
     return ModelTier(name="default", model="vision-model", base_url="https://x",
                      max_tokens=64, multimodal=True)
 
 
 def _make_minimal_loop(tier):
-    """Internal documentation."""
     from argos.core.loop import AgentLoop, LoopConfig
     from argos.approval import ApprovalLevel
 
@@ -65,7 +61,6 @@ def _make_minimal_loop(tier):
 
 
 def test_run_signature_accepts_attachments():
-    """Internal documentation."""
     from argos.core.loop import AgentLoop
     import inspect
     sig = inspect.signature(AgentLoop.run)
@@ -73,7 +68,6 @@ def test_run_signature_accepts_attachments():
 
 
 def test_run_attachments_default_is_none():
-    """Internal documentation."""
     from argos.core.loop import AgentLoop
     import inspect
     sig = inspect.signature(AgentLoop.run)
@@ -83,7 +77,6 @@ def test_run_attachments_default_is_none():
 
 @pytest.mark.asyncio
 async def test_plain_tier_with_attachments_raises_honest_error():
-    """Internal documentation."""
     from argos.core.loop import AgentLoop
     att = _att()
 
@@ -106,7 +99,6 @@ async def test_plain_tier_with_attachments_raises_honest_error():
 
 @pytest.mark.asyncio
 async def test_no_attachments_run_accepts_without_error():
-    """Internal documentation."""
     from argos.core.loop import AgentLoop
     loop = _make_minimal_loop(_plain_tier())
 
@@ -121,7 +113,6 @@ async def test_no_attachments_run_accepts_without_error():
 
 
 def _unknown_tier():
-    """Internal documentation."""
     from argos.core.models import ModelTier
     return ModelTier(name="default", model="agnes-flash", base_url="https://x",
                      max_tokens=64, multimodal=None)
@@ -129,7 +120,6 @@ def _unknown_tier():
 
 @pytest.mark.asyncio
 async def test_unknown_tier_blocks_when_resolve_false(monkeypatch):
-    """Internal documentation."""
     import argos.core.vision_capability as vc
 
     async def _fake_resolve(tier, model_client, cache, **kw):
@@ -150,7 +140,6 @@ async def test_unknown_tier_blocks_when_resolve_false(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_unknown_tier_passes_gate_when_resolve_true(monkeypatch):
-    """Internal documentation."""
     import argos.core.vision_capability as vc
 
     async def _fake_resolve(tier, model_client, cache, **kw):

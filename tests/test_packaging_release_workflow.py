@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,21 +9,18 @@ RELEASE_YML = ROOT / ".github" / "workflows" / "release.yml"
 
 
 def test_release_workflow_pins_setup_python_v4():
-    """Internal documentation."""
     txt = RELEASE_YML.read_text()
     assert "actions/setup-python@v5" not in txt, "release.yml 仍用 @v5(0 jobs bug 没修)"
     assert "actions/setup-python@v4" in txt, "release.yml 缺 actions/setup-python@v4 pin"
 
 
 def test_release_workflow_has_three_os_jobs():
-    """Internal documentation."""
     txt = RELEASE_YML.read_text()
     for job in ("build-macos:", "build-linux:", "build-windows:"):
         assert job in txt, f"release.yml 缺 {job}"
 
 
 def test_release_workflow_uses_gh_release_create():
-    """Internal documentation."""
     txt = RELEASE_YML.read_text()
     assert "gh release create" in txt, "release.yml 缺 gh release create(仍用 softprops?)"
     for line in txt.splitlines():
@@ -35,7 +31,6 @@ def test_release_workflow_uses_gh_release_create():
 
 
 def test_release_workflow_no_softprops_action_uses():
-    """Internal documentation."""
     txt = RELEASE_YML.read_text()
     for line in txt.splitlines():
         s = line.lstrip()
@@ -44,13 +39,11 @@ def test_release_workflow_no_softprops_action_uses():
 
 
 def test_release_workflow_uses_setup_uv_v4():
-    """Internal documentation."""
     txt = RELEASE_YML.read_text()
     assert "astral-sh/setup-uv@v4" in txt
 
 
 def test_release_workflow_is_manual_for_binary_assets():
-    """Internal documentation."""
     txt = RELEASE_YML.read_text()
     assert "workflow_dispatch:" in txt
     assert "tags:" not in txt
@@ -58,7 +51,6 @@ def test_release_workflow_is_manual_for_binary_assets():
 
 
 def test_release_workflow_hashes_downloaded_artifact_files_recursively():
-    """Internal documentation."""
     txt = RELEASE_YML.read_text()
     assert "sha256sum -- * > SHA256SUMS" not in txt
     assert "while IFS= read -r asset" in txt
@@ -66,7 +58,6 @@ def test_release_workflow_hashes_downloaded_artifact_files_recursively():
 
 
 def test_release_workflow_uses_exact_release_asset_manifest():
-    """Internal documentation."""
     txt = RELEASE_YML.read_text()
     assert "release-assets.txt" in txt
     for expected in (
@@ -90,21 +81,18 @@ def test_release_workflow_uses_exact_release_asset_manifest():
 
 
 def test_release_workflow_fails_when_no_downloaded_artifacts_exist():
-    """Internal documentation."""
     txt = RELEASE_YML.read_text()
     assert "ERROR: required release asset missing" in txt
     assert "[ \"$missing\" -eq 0 ] || exit 1" in txt
 
 
 def test_release_workflow_fails_when_only_checksum_assets_are_releasable():
-    """Internal documentation."""
     txt = RELEASE_YML.read_text()
     assert "ERROR: no releasable assets found" in txt
     assert "grep -Ev '(^|/)SHA256SUMS$'" in txt
 
 
 def test_release_workflow_upload_artifacts_fail_when_dist_is_empty():
-    """Internal documentation."""
     txt = RELEASE_YML.read_text()
     assert txt.count("actions/upload-artifact@v4") == 3
     assert txt.count("if-no-files-found: error") >= 3

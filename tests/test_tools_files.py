@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -34,6 +33,26 @@ def test_edit_exact_unique(ws):
     assert "x = 99" in files.read_file("b.py")
 
 
+def test_edit_file_read_error_returns_tool_error(ws):
+    (ws / "bad.txt").write_bytes(b"\xff\xfe\x00")
+    out = files.edit_file("bad.txt", "x", "y")
+    assert "编辑失败" in out or "edit failed" in out
+
+
+def test_edit_file_write_error_returns_tool_error(ws, monkeypatch):
+    files.write_file("b.py", "x = 1\n")
+    original = Path.write_text
+
+    def boom(self, *args, **kwargs):
+        if self.name == "b.py":
+            raise OSError("disk full")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", boom)
+    out = files.edit_file("b.py", "x = 1", "x = 2")
+    assert "编辑失败" in out or "edit failed" in out
+
+
 def test_edit_ambiguous(ws):
     files.write_file("c.txt", "dup\ndup\n")
     assert "多次匹配" in files.edit_file("c.txt", "dup", "x")
@@ -46,7 +65,6 @@ def test_search_files_content(ws):
 
 
 def test_search_files_by_name_glob_and_skips_heavy_dirs(ws):
-    """Internal documentation."""
     (ws / "app.py").write_text("needle = 1\n")
     (ws / "readme.md").write_text("hi\n")
     (ws / ".git").mkdir()
@@ -60,7 +78,6 @@ def test_search_files_by_name_glob_and_skips_heavy_dirs(ws):
 
 
 def test_search_files_skips_binary(ws):
-    """Internal documentation."""
     (ws / "code.py").write_text("target_token\n")
     (ws / "blob.bin").write_bytes(b"\x00\x01target_token\xff\xfe")
     out = files.search_files("target_token", target="content")

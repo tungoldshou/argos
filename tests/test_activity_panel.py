@@ -6,10 +6,8 @@ from argos.core.types import ModelTierName  # noqa
 
 
 class _H(App):
-    """Internal documentation."""
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
-        """Internal documentation."""
         defaults = super().get_theme_variable_defaults()
         if ARGOS_NIGHT.variables:
             defaults.update(ARGOS_NIGHT.variables)
@@ -84,7 +82,6 @@ async def test_cost_dollar_removed_tokens_kept():
 
 @pytest.mark.asyncio
 async def test_cost_line_token_flow_has_unit():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -97,7 +94,6 @@ async def test_cost_line_token_flow_has_unit():
 
 @pytest.mark.asyncio
 async def test_cache_lines_use_token_unit_and_abbrev():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -112,7 +108,6 @@ async def test_cache_lines_use_token_unit_and_abbrev():
 
 @pytest.mark.asyncio
 async def test_context_section_no_redundant_model_or_window():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -128,7 +123,6 @@ async def test_context_section_no_redundant_model_or_window():
 
 @pytest.mark.asyncio
 async def test_cache_idle_line_has_elapsed_label():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -155,7 +149,6 @@ async def test_context_section_shows_usage_bar():
 
 @pytest.mark.asyncio
 async def test_panel_is_scrollable():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -166,7 +159,6 @@ async def test_panel_is_scrollable():
 
 @pytest.mark.asyncio
 async def test_section_title_not_transparent():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -191,7 +183,6 @@ async def test_in_progress_phase_shows_ellipsis_not_zero():
 
 @pytest.mark.asyncio
 async def test_phase_glyphs_v3():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -211,7 +202,6 @@ async def test_phase_glyphs_v3():
 
 @pytest.mark.asyncio
 async def test_empty_state_uses_lenticular_glyph():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -224,7 +214,6 @@ async def test_empty_state_uses_lenticular_glyph():
 
 @pytest.mark.asyncio
 async def test_width_is_34():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -235,7 +224,6 @@ async def test_width_is_34():
 
 @pytest.mark.asyncio
 async def test_no_border_left_uses_background_for_separation():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -246,7 +234,6 @@ async def test_no_border_left_uses_background_for_separation():
 
 @pytest.mark.asyncio
 async def test_cache_sparkline_in_cost_section():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -263,7 +250,6 @@ async def test_cache_sparkline_in_cost_section():
 
 @pytest.mark.asyncio
 async def test_compacted_event_new_method():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -278,7 +264,6 @@ async def test_compacted_event_new_method():
 
 @pytest.mark.asyncio
 async def test_pruned_event_new_method():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -292,7 +277,6 @@ async def test_pruned_event_new_method():
 
 @pytest.mark.asyncio
 async def test_memory_recall_new_method():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -306,7 +290,6 @@ async def test_memory_recall_new_method():
 
 @pytest.mark.asyncio
 async def test_receipt_no_emoji():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -320,7 +303,6 @@ async def test_receipt_no_emoji():
 
 @pytest.mark.asyncio
 async def test_verdict_empty_state_uses_lenticular():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -333,7 +315,6 @@ async def test_verdict_empty_state_uses_lenticular():
 
 @pytest.mark.asyncio
 async def test_activity_panel_has_hook_section():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -344,7 +325,6 @@ async def test_activity_panel_has_hook_section():
 
 @pytest.mark.asyncio
 async def test_activity_panel_on_hook_fired_ok():
-    """Internal documentation."""
     from argos.hooks.events import HookFired
     app = _H()
     async with app.run_test() as pilot:
@@ -361,7 +341,6 @@ async def test_activity_panel_on_hook_fired_ok():
 
 @pytest.mark.asyncio
 async def test_activity_panel_on_hook_fired_fail_red():
-    """Internal documentation."""
     from argos.hooks.events import HookFired
     app = _H()
     async with app.run_test() as pilot:
@@ -376,7 +355,6 @@ async def test_activity_panel_on_hook_fired_fail_red():
 
 @pytest.mark.asyncio
 async def test_activity_panel_on_hook_fired_timeout():
-    """Internal documentation."""
     from argos.hooks.events import HookFired
     app = _H()
     async with app.run_test() as pilot:
@@ -391,7 +369,6 @@ async def test_activity_panel_on_hook_fired_timeout():
 
 @pytest.mark.asyncio
 async def test_activity_panel_hook_deque_caps_at_50():
-    """Internal documentation."""
     from argos.hooks.events import HookFired
     app = _H()
     async with app.run_test() as pilot:
@@ -408,7 +385,6 @@ async def test_activity_panel_hook_deque_caps_at_50():
 
 @pytest.mark.asyncio
 async def test_activity_panel_reset_run_clears_hook_log():
-    """Internal documentation."""
     from argos.hooks.events import HookFired
     app = _H()
     async with app.run_test() as pilot:
@@ -425,7 +401,6 @@ async def test_activity_panel_reset_run_clears_hook_log():
 # ── LSP(spec 2026-06-06 §2.7)────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_activity_panel_has_lsp_section():
-    """Internal documentation."""
     from argos.lsp.events import LspServerEvent
     app = _H()
     async with app.run_test() as pilot:
@@ -437,7 +412,6 @@ async def test_activity_panel_has_lsp_section():
 
 @pytest.mark.asyncio
 async def test_activity_panel_on_lsp_server_event_ready():
-    """Internal documentation."""
     from argos.lsp.events import LspServerEvent
     app = _H()
     async with app.run_test() as pilot:
@@ -455,7 +429,6 @@ async def test_activity_panel_on_lsp_server_event_ready():
 
 @pytest.mark.asyncio
 async def test_activity_panel_on_lsp_server_event_disabled():
-    """Internal documentation."""
     from argos.lsp.events import LspServerEvent
     app = _H()
     async with app.run_test() as pilot:
@@ -471,7 +444,6 @@ async def test_activity_panel_on_lsp_server_event_disabled():
 
 @pytest.mark.asyncio
 async def test_activity_panel_on_lsp_server_event_crash():
-    """Internal documentation."""
     from argos.lsp.events import LspServerEvent
     app = _H()
     async with app.run_test() as pilot:
@@ -488,7 +460,6 @@ async def test_activity_panel_on_lsp_server_event_crash():
 
 @pytest.mark.asyncio
 async def test_activity_panel_lsp_diag_change_detection():
-    """Internal documentation."""
     from argos.lsp.events import LspDiagnosticEvent
     app = _H()
     async with app.run_test() as pilot:
@@ -510,7 +481,6 @@ async def test_activity_panel_lsp_diag_change_detection():
 
 @pytest.mark.asyncio
 async def test_activity_panel_lsp_diag_dedup_no_cache_growth():
-    """Internal documentation."""
     from argos.lsp.events import LspDiagnosticEvent
     app = _H()
     async with app.run_test() as pilot:
@@ -527,7 +497,6 @@ async def test_activity_panel_lsp_diag_dedup_no_cache_growth():
 
 @pytest.mark.asyncio
 async def test_activity_panel_reset_run_clears_lsp_log():
-    """Internal documentation."""
     from argos.lsp.events import LspDiagnosticEvent
     app = _H()
     async with app.run_test() as pilot:
@@ -544,7 +513,6 @@ async def test_activity_panel_reset_run_clears_lsp_log():
 
 @pytest.mark.asyncio
 async def test_run_section_shows_active_run_not_none():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         ap = app.query_one("#ap", ActivityPanel)
@@ -569,7 +537,6 @@ async def test_run_active_label_truncated():
 
 @pytest.mark.asyncio
 async def test_verdict_no_check_fallback_for_conversational_run():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         ap = app.query_one("#ap", ActivityPanel)
@@ -583,7 +550,6 @@ async def test_verdict_no_check_fallback_for_conversational_run():
 
 @pytest.mark.asyncio
 async def test_verdict_kept_when_run_was_verified():
-    """Internal documentation."""
     class _V:
         status = "passed"; verify_cmd = "pytest"; detail = ""; self_verified = False; no_test = False
     app = _H()
@@ -600,7 +566,6 @@ async def test_verdict_kept_when_run_was_verified():
 
 @pytest.mark.asyncio
 async def test_cost_hides_cache_hit_zero_until_cache_seen():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         ap = app.query_one("#ap", ActivityPanel)

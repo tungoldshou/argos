@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -11,7 +10,6 @@ from argos.memory import auto as mem_auto
 
 @pytest.fixture
 def cwd_tree(monkeypatch, tmp_path):
-    """Internal documentation."""
     ws = tmp_path / "ws"
     ws.mkdir()
     yield ws
@@ -25,7 +23,6 @@ def test_walk_finds_own_dir(cwd_tree, monkeypatch):
 
 
 def test_walk_finds_parent_chain(cwd_tree, monkeypatch):
-    """Internal documentation."""
     (cwd_tree / "CLAUDE.md").write_text("parent", encoding="utf-8")
     sub = cwd_tree / "sub"
     sub.mkdir()
@@ -50,7 +47,6 @@ def test_walk_skips_nonexistent(cwd_tree, monkeypatch):
 
 
 def test_walk_handles_dot_git_like_dirs(cwd_tree, monkeypatch):
-    """Internal documentation."""
     (cwd_tree / "CLAUDE.md").write_text("x", encoding="utf-8")
     out = mem_auto.walk_claude_md_files(cwd_tree)
     assert len(out) >= 1

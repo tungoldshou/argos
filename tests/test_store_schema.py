@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import sqlite3
 
 import pytest
@@ -50,7 +49,6 @@ def test_env_path_override(tmp_path, monkeypatch):
 
 
 def test_env_path_override_expands_user_home(tmp_path, monkeypatch):
-    """Internal documentation."""
     fake_home = tmp_path / "home"
     fake_home.mkdir()
     monkeypatch.setenv("HOME", str(fake_home))

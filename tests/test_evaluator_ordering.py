@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -17,7 +16,6 @@ def _cfg(**kw) -> PermissionsConfig:
 
 
 def test_hard_rule_beats_soft_allow():
-    """Internal documentation."""
     cfg = _cfg(allow=(RuleEntry(tool="run_command", matcher=r"^rm "),))
     meta = evaluate("run_command", {"cmd": "rm -rf /"}, gate_level=ApprovalLevel.AUTO, config=cfg)
     assert meta.decision == "deny"
@@ -68,7 +66,6 @@ def test_falls_back_to_gate_level_confirm():
 
 
 def test_secret_beats_soft_allow():
-    """Internal documentation."""
     cfg = _cfg(allow=(RuleEntry(tool="write_file", matcher=r"^\.env$"),))
     meta = evaluate(
         "write_file",
@@ -82,7 +79,6 @@ def test_secret_beats_soft_allow():
 
 
 def test_no_hard_rule_falls_through():
-    """Internal documentation."""
     cfg = _cfg(allow=(RuleEntry(tool="run_command", matcher=r"^ls "),))
     meta = evaluate("run_command", {"cmd": "ls -la"}, gate_level=ApprovalLevel.AUTO, config=cfg)
     assert meta.decision == "approve"
@@ -90,7 +86,6 @@ def test_no_hard_rule_falls_through():
 
 
 def test_system_path_write_denied():
-    """Internal documentation."""
     cfg = _cfg(allow=(RuleEntry(tool="write_file", matcher=r".*"),))
     meta = evaluate(
         "write_file", {"path": "/etc/passwd", "content": "x"},
@@ -122,7 +117,6 @@ def test_env_outside_workspace_denied():
 
 
 def test_workspace_env_soft_allow_approves():
-    """Internal documentation."""
     cfg = _cfg(allow=(RuleEntry(tool="write_file", matcher=r"^/workspace/\.env$"),))
     meta = evaluate(
         "write_file",

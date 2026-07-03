@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -37,7 +36,6 @@ def test_read_verify_cmd_honors_argos_config_dir(tmp_path, monkeypatch):
 
 
 def test_verify_calls_verifier_verify_directly(tmp_path):
-    """Internal documentation."""
     fake_verifier = MagicMock()
     fake_verifier.verify.return_value = Verdict.passed(detail="ok", verify_cmd="pytest -q", attempts=1)
 
@@ -61,7 +59,6 @@ def test_verify_passing_verdict_translates_to_passed(tmp_path):
 
 
 def test_verify_failing_verdict_translates_to_failed_with_finding(tmp_path):
-    """Internal documentation."""
     fake_verifier = MagicMock()
     fake_verifier.verify.return_value = Verdict.failed(
         detail="exit=1, test_bar failed", verify_cmd="pytest -q", attempts=1,
@@ -77,7 +74,6 @@ def test_verify_failing_verdict_translates_to_failed_with_finding(tmp_path):
 
 
 def test_verify_unverifiable_translates_to_partial(tmp_path):
-    """Internal documentation."""
     fake_verifier = MagicMock()
     fake_verifier.verify.return_value = Verdict.unverifiable(
         detail="(无 verify_cmd,未做机检验证)", tampered=[], attempts=1,
@@ -91,7 +87,6 @@ def test_verify_unverifiable_translates_to_partial(tmp_path):
 
 
 def test_verify_does_not_call_propose_verify(tmp_path):
-    """Internal documentation."""
     fake_verifier = MagicMock()
     fake_verifier.verify.return_value = Verdict.passed(detail="ok", verify_cmd="pytest -q", attempts=1)
 
@@ -102,7 +97,6 @@ def test_verify_does_not_call_propose_verify(tmp_path):
 
 
 def test_verify_no_verify_cmd_yields_partial_or_na(tmp_path):
-    """Internal documentation."""
     fake_verifier = MagicMock()
     fake_verifier.verify.return_value = Verdict.unverifiable(
         detail="(无 verify_cmd,未做机检验证)", tampered=[], attempts=1,

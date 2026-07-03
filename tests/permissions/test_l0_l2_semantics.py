@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -13,7 +12,6 @@ from argos.permissions.trust_dial import TrustLevel
 # ────────────────────────────────────────────────────────────────────
 
 def _empty_config() -> PermissionsConfig:
-    """Internal documentation."""
     return PermissionsConfig()
 
 
@@ -21,10 +19,8 @@ def _empty_config() -> PermissionsConfig:
 # ────────────────────────────────────────────────────────────────────
 
 class TestEvaluatorL0AskReadonly:
-    """Internal documentation."""
 
     def test_auto_level_action_becomes_ask_under_l0(self):
-        """Internal documentation."""
         meta = evaluate(
             "read_file", {"path": "foo.txt"},
             gate_level=ApprovalLevel.AUTO,
@@ -35,7 +31,6 @@ class TestEvaluatorL0AskReadonly:
         assert meta.trigger == "trust:L0 每步确认"
 
     def test_soft_allow_action_becomes_ask_under_l0(self):
-        """Internal documentation."""
         cfg = PermissionsConfig(allow=(RuleEntry(tool="read_file", matcher=".*"),))
         meta = evaluate(
             "read_file", {"path": "foo.txt"},
@@ -47,7 +42,6 @@ class TestEvaluatorL0AskReadonly:
         assert meta.trigger == "trust:L0 每步确认"
 
     def test_confirm_level_already_asks_no_change(self):
-        """Internal documentation."""
         meta = evaluate(
             "read_file", {"path": "foo.txt"},
             gate_level=ApprovalLevel.CONFIRM,
@@ -57,7 +51,6 @@ class TestEvaluatorL0AskReadonly:
         assert meta.decision == "ask"
 
     def test_l0_does_not_affect_hard_deny(self):
-        """Internal documentation."""
         meta = evaluate(
             "run_command", {"cmd": "rm -rf /"},
             gate_level=ApprovalLevel.CONFIRM,
@@ -68,7 +61,6 @@ class TestEvaluatorL0AskReadonly:
         assert meta.trigger.startswith("hard_rule:")
 
     def test_l0_does_not_affect_soft_deny(self):
-        """Internal documentation."""
         cfg = PermissionsConfig(deny=(RuleEntry(tool="run_command", matcher="forbidden_cmd"),))
         meta = evaluate(
             "run_command", {"cmd": "forbidden_cmd"},
@@ -80,7 +72,6 @@ class TestEvaluatorL0AskReadonly:
         assert meta.trigger.startswith("soft_deny:")
 
     def test_l0_soft_allow_becomes_ask(self):
-        """Internal documentation."""
         cfg = PermissionsConfig(allow=(RuleEntry(tool="web_search", matcher=".*"),))
         meta = evaluate(
             "web_search", {"query": "hello"},
@@ -92,7 +83,6 @@ class TestEvaluatorL0AskReadonly:
         assert meta.trigger == "trust:L0 每步确认"
 
     def test_l0_false_no_change(self):
-        """Internal documentation."""
         cfg = PermissionsConfig(allow=(RuleEntry(tool="read_file", matcher=".*"),))
         meta = evaluate(
             "read_file", {"path": "a.txt"},
@@ -103,7 +93,6 @@ class TestEvaluatorL0AskReadonly:
         assert meta.decision == "approve"
 
     def test_l0_preserves_existing_ask(self):
-        """Internal documentation."""
         cfg = PermissionsConfig(ask=(RuleEntry(tool="edit_file", matcher=".*"),))
         meta = evaluate(
             "edit_file", {"path": "b.py"},
@@ -118,7 +107,6 @@ class TestEvaluatorL0AskReadonly:
 # ────────────────────────────────────────────────────────────────────
 
 class TestGateL0Wiring:
-    """Internal documentation."""
 
     def test_gate_l0_sets_ask_readonly_flag(self):
         gate = ApprovalGate()
@@ -126,7 +114,6 @@ class TestGateL0Wiring:
         assert gate._ask_readonly is True
 
     def test_gate_l0_evaluate_returns_ask_for_auto_level(self):
-        """Internal documentation."""
         from argos.permissions.config import PermissionsConfig, RuleEntry
         gate = ApprovalGate()
         gate.set_trust_level(TrustLevel.L0_EVERY_STEP)
@@ -139,7 +126,6 @@ class TestGateL0Wiring:
         assert meta.trigger == "trust:L0 每步确认"
 
     def test_gate_l0_hard_rule_still_deny(self):
-        """Internal documentation."""
         gate = ApprovalGate()
         gate.set_trust_level(TrustLevel.L0_EVERY_STEP)
         meta = gate._evaluate("run_command", {"cmd": "rm -rf /"})
@@ -151,11 +137,9 @@ class TestGateL0Wiring:
 # ────────────────────────────────────────────────────────────────────
 
 class TestEvaluatorL2ReversibleLookup:
-    """Internal documentation."""
 
     def _eval_l2(self, action: str, reversible: "bool | None",
                  gate_level: ApprovalLevel = ApprovalLevel.AUTO) -> DecisionMeta:
-        """Internal documentation."""
         def _lookup(a: str) -> "bool | None":
             return reversible
         return evaluate(
@@ -166,25 +150,21 @@ class TestEvaluatorL2ReversibleLookup:
         )
 
     def test_reversible_true_approves(self):
-        """Internal documentation."""
         meta = self._eval_l2("read_file", True)
         assert meta.decision == "approve", f"可逆动作应 approve，实际={meta.decision}"
         assert meta.trigger == "trust:L2 可逆放行"
 
     def test_reversible_false_asks(self):
-        """Internal documentation."""
         meta = self._eval_l2("write_file", False)
         assert meta.decision == "ask", f"不可逆动作应 ask，实际={meta.decision}"
         assert "L2" in meta.reason
 
     def test_reversible_none_asks(self):
-        """Internal documentation."""
         meta = self._eval_l2("mcp_call", None)
         assert meta.decision == "ask"
         assert "L2" in meta.reason
 
     def test_reversible_lookup_exception_asks(self):
-        """Internal documentation."""
         def _bad_lookup(a: str) -> "bool | None":
             raise RuntimeError("DB 故障")
         meta = evaluate(
@@ -196,7 +176,6 @@ class TestEvaluatorL2ReversibleLookup:
         assert meta.decision == "ask"
 
     def test_reversible_lookup_unknown_action_asks(self):
-        """Internal documentation."""
         def _lookup(a: str) -> "bool | None":
             return None
         meta = evaluate(
@@ -208,7 +187,6 @@ class TestEvaluatorL2ReversibleLookup:
         assert meta.decision == "ask"
 
     def test_l2_hard_deny_not_affected(self):
-        """Internal documentation."""
         def _lookup(a: str) -> "bool | None":
             return True
         meta = evaluate(
@@ -221,7 +199,6 @@ class TestEvaluatorL2ReversibleLookup:
         assert meta.trigger.startswith("hard_rule:")
 
     def test_no_reversible_lookup_no_change(self):
-        """Internal documentation."""
         meta = evaluate(
             "read_file", {},
             gate_level=ApprovalLevel.CONFIRM,
@@ -235,7 +212,6 @@ class TestEvaluatorL2ReversibleLookup:
 # ────────────────────────────────────────────────────────────────────
 
 class TestGateL2Wiring:
-    """Internal documentation."""
 
     def _gate_l2(self, reversible: "bool | None") -> ApprovalGate:
         gate = ApprovalGate()
@@ -249,7 +225,6 @@ class TestGateL2Wiring:
         assert gate._reversible_check is True
 
     def test_l2_reversible_true_approves(self):
-        """Internal documentation."""
         gate = self._gate_l2(True)
         meta = gate._evaluate("read_file", {"path": "x.txt"})
         assert meta is not None
@@ -257,21 +232,18 @@ class TestGateL2Wiring:
         assert meta.trigger == "trust:L2 可逆放行"
 
     def test_l2_reversible_false_asks(self):
-        """Internal documentation."""
         gate = self._gate_l2(False)
         meta = gate._evaluate("write_file", {"path": "x.txt"})
         assert meta is not None
         assert meta.decision == "ask"
 
     def test_l2_reversible_none_asks(self):
-        """Internal documentation."""
         gate = self._gate_l2(None)
         meta = gate._evaluate("mcp_call", {})
         assert meta is not None
         assert meta.decision == "ask"
 
     def test_l2_no_lookup_injected_asks(self):
-        """Internal documentation."""
         gate = ApprovalGate()
         gate.set_trust_level(TrustLevel.L2_IRREVERSIBLE_ONLY)
         meta = gate._evaluate("read_file", {"path": "x.txt"})
@@ -279,7 +251,6 @@ class TestGateL2Wiring:
         assert meta.decision == "ask"
 
     def test_l2_audit_trigger_label(self):
-        """Internal documentation."""
         gate = self._gate_l2(True)
         meta = gate._evaluate("read_file", {})
         assert meta is not None
@@ -290,7 +261,6 @@ class TestGateL2Wiring:
 # ────────────────────────────────────────────────────────────────────
 
 class TestL2HardRuleImmune:
-    """Internal documentation."""
 
     @pytest.mark.parametrize("cmd,action", [
         ("rm -rf /", "run_command"),
@@ -308,7 +278,6 @@ class TestL2HardRuleImmune:
 # ────────────────────────────────────────────────────────────────────
 
 class TestL4Unchanged:
-    """Internal documentation."""
 
     def test_l4_ask_readonly_false(self):
         gate = ApprovalGate()
@@ -330,24 +299,20 @@ class TestL4Unchanged:
 # ────────────────────────────────────────────────────────────────────
 
 class TestTrustStatusAnnotation:
-    """Internal documentation."""
 
     def test_app_py_no_wiring_annotation(self):
-        """Internal documentation."""
         from pathlib import Path
         src = Path(__file__).parents[2] / "argos" / "tui" / "app.py"
         text = src.read_text(encoding="utf-8")
         assert "接线中" not in text, "tui/app.py 仍含接线中注解，应已摘除"
 
     def test_trust_dial_no_wiring_annotation(self):
-        """Internal documentation."""
         from pathlib import Path
         src = Path(__file__).parents[2] / "argos" / "permissions" / "trust_dial.py"
         text = src.read_text(encoding="utf-8")
         assert "P2 未完成前退化 L1" not in text
 
     def test_approval_py_no_wiring_annotation(self):
-        """Internal documentation."""
         from pathlib import Path
         src = Path(__file__).parents[2] / "argos" / "approval.py"
         text = src.read_text(encoding="utf-8")
@@ -358,7 +323,6 @@ class TestTrustStatusAnnotation:
 # ────────────────────────────────────────────────────────────────────
 
 class TestApplyTrustSemantics:
-    """Internal documentation."""
 
     def _meta(self, decision: str, trigger: str = "level:auto") -> DecisionMeta:
         return DecisionMeta(decision=decision, trigger=trigger)  # type: ignore[arg-type]
@@ -417,7 +381,6 @@ class TestApplyTrustSemantics:
         assert meta.decision == "ask"
 
     def test_l2_existing_ask_not_promoted(self):
-        """Internal documentation."""
         meta = _apply_trust_semantics(
             self._meta("ask", "soft_ask:dangerous"),
             action="run_command", ask_readonly=False, reversible_lookup=lambda _: True
@@ -425,7 +388,6 @@ class TestApplyTrustSemantics:
         assert meta.decision == "ask"
 
     def test_no_flags_passthrough(self):
-        """Internal documentation."""
         orig = self._meta("approve", "soft_allow:x")
         meta = _apply_trust_semantics(
             orig, action="read_file", ask_readonly=False, reversible_lookup=None

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -99,7 +98,6 @@ async def test_add_cost_accumulates_tokens():
 
 @pytest.mark.asyncio
 async def test_add_cost_with_none_keeps_none():
-    """Internal documentation."""
     reg = RunRegistry()
     await reg.register(run_id="a" * 12, goal="x", workspace="")
     reg.add_cost(run_id="a" * 12, tokens_in_delta=100, tokens_out_delta=50, cost_usd_delta=None)
@@ -165,7 +163,6 @@ async def test_cleanup_marks_terminal_and_releases_slot():
 
 @pytest.mark.asyncio
 async def test_max_history_trims_oldest_terminal_runs():
-    """Internal documentation."""
     reg = RunRegistry(max_concurrent=200, max_history=3)
     for i in range(5):
         rid = f"{i:012x}"
@@ -186,7 +183,6 @@ async def test_cleanup_unknown_run_is_noop():
 
 @pytest.mark.asyncio
 async def test_release_slot_does_not_error_when_not_held():
-    """Internal documentation."""
     reg = RunRegistry(max_concurrent=2)
     reg.release_slot()
     await reg.acquire_slot()

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 
 from argos.approval import ApprovalGate, ApprovalLevel
@@ -43,7 +42,6 @@ async def test_workflow_proposed_pushes_modal_under_confirm():
 
 @pytest.mark.asyncio
 async def test_workflow_panel_marks_error_phase_honestly():
-    """Internal documentation."""
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop(), gate=ApprovalGate(ApprovalLevel.AUTO))
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
@@ -62,7 +60,6 @@ async def test_workflow_panel_marks_error_phase_honestly():
 
 @pytest.mark.asyncio
 async def test_workflow_confirm_callback_responds_on_shared_gate():
-    """Internal documentation."""
     gate = ApprovalGate(ApprovalLevel.CONFIRM)
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop(), gate=gate)
     async with app.run_test(size=(120, 40)) as pilot:

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -109,7 +108,6 @@ async def test_audit_log_written_on_approve():
 
 @pytest.mark.asyncio
 async def test_workspace_file_allowed_in_loop():
-    """Internal documentation."""
     from pathlib import Path as P
     workspace = P("/tmp/argos_test_workspace")
     workspace.mkdir(exist_ok=True)

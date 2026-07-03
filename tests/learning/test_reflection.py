@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -40,7 +39,6 @@ def _make_unverifiable_events() -> list[dict]:
 
 
 def test_failed_run_writes_reflection_only(tmp_path, monkeypatch):
-    """Internal documentation."""
     captured: list[dict] = []
     from argos.memory import auto as _mem_auto
     monkeypatch.setattr(
@@ -68,7 +66,6 @@ def test_failed_run_writes_reflection_only(tmp_path, monkeypatch):
 
 
 def test_unverifiable_run_writes_reflection_only(tmp_path, monkeypatch):
-    """Internal documentation."""
     captured: list[dict] = []
     from argos.memory import auto as _mem_auto
     monkeypatch.setattr(
@@ -96,7 +93,6 @@ def test_unverifiable_run_writes_reflection_only(tmp_path, monkeypatch):
 
 
 def test_reflection_swallows_memory_exceptions(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.memory import auto as _mem_auto
     def _boom(*a, **kw):
         raise RuntimeError("memory write failed")

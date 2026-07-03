@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -21,7 +20,6 @@ from argos.verify.strategy import (
 # ═══════════════════════════════════════════════════════
 
 class TestVerifyStrategyInvariants:
-    """Internal documentation."""
 
     def test_valid_strategy_ok(self) -> None:
         s = VerifyStrategy(
@@ -72,7 +70,6 @@ class TestVerifyStrategyInvariants:
 # ═══════════════════════════════════════════════════════
 
 class TestFallbackAlwaysPresent:
-    """Internal documentation."""
 
     def _has_l5(self, strategies: tuple[VerifyStrategy, ...]) -> bool:
         return any(s.level == "L5" and s.kind == "evidence_trail" for s in strategies)
@@ -98,7 +95,6 @@ class TestFallbackAlwaysPresent:
         assert self._last_is_l5(strats)
 
     def test_result_never_empty(self) -> None:
-        """Internal documentation."""
         strats = generate("", workspace_facts=WorkspaceFacts())
         assert len(strats) >= 1
 
@@ -107,7 +103,6 @@ class TestFallbackAlwaysPresent:
 # ═══════════════════════════════════════════════════════
 
 class TestSendTaskRedLine:
-    """Internal documentation."""
 
     SEND_GOALS = [
         "send an email to alice@example.com",
@@ -155,7 +150,6 @@ class TestSendTaskRedLine:
         self._assert_send_red_line(goal)
 
     def test_send_with_workspace_facts_still_l5_only(self) -> None:
-        """Internal documentation."""
         facts = WorkspaceFacts(has_pytest=True, has_cargo=True)
         strats = generate(
             "send email report to manager",
@@ -165,7 +159,6 @@ class TestSendTaskRedLine:
         assert strats[0].level == "L5"
 
     def test_send_with_capability_hints_still_l5_only(self) -> None:
-        """Internal documentation."""
         strats = generate(
             "notify all users via push notification",
             workspace_facts=WorkspaceFacts(),
@@ -179,7 +172,6 @@ class TestSendTaskRedLine:
 # ═══════════════════════════════════════════════════════
 
 class TestCodeTaskStrategies:
-    """Internal documentation."""
 
     def test_pytest_workspace_yields_l1(self) -> None:
         facts = WorkspaceFacts(has_pytest=True)
@@ -209,21 +201,18 @@ class TestCodeTaskStrategies:
         assert any(c and "npm test" in c for c in l1_cmds)
 
     def test_no_framework_no_l1(self) -> None:
-        """Internal documentation."""
         facts = WorkspaceFacts()
         strats = generate("write a report about the market", workspace_facts=facts)
         l1 = [s for s in strats if s.level == "L1"]
         assert len(l1) == 0, f"无框架写作任务不应有 L1: {l1}"
 
     def test_strategies_ordered_l1_before_l5(self) -> None:
-        """Internal documentation."""
         facts = WorkspaceFacts(has_pytest=True)
         strats = generate("implement sorting", workspace_facts=facts)
         levels = [s.level for s in strats]
         assert levels.index("L1") < levels.index("L5")
 
     def test_capability_hint_pytest_cmd_consumed(self) -> None:
-        """Internal documentation."""
         facts = WorkspaceFacts(has_pytest=True)
         strats = generate(
             "implement feature",
@@ -240,7 +229,6 @@ class TestCodeTaskStrategies:
 # ═══════════════════════════════════════════════════════
 
 class TestArtifactStrategies:
-    """Internal documentation."""
 
     def test_declared_file_yields_l2(self) -> None:
         facts = WorkspaceFacts(declared_files=("output.json",))
@@ -251,7 +239,6 @@ class TestArtifactStrategies:
         assert any("output.json" in (t or "") for t in targets)
 
     def test_json_file_in_goal_yields_schema_check(self) -> None:
-        """Internal documentation."""
         strats = generate(
             "write the analysis to report.json",
             workspace_facts=WorkspaceFacts(),
@@ -269,7 +256,6 @@ class TestArtifactStrategies:
         assert content_strats, "CSV 文件目标应有 content_assert 策略"
 
     def test_artifact_target_in_rationale_or_target(self) -> None:
-        """Internal documentation."""
         strats = generate(
             "create output",
             workspace_facts=WorkspaceFacts(),
@@ -292,7 +278,6 @@ class TestArtifactStrategies:
 # ═══════════════════════════════════════════════════════
 
 class TestWebStrategies:
-    """Internal documentation."""
 
     def test_web_goal_with_hints_yields_l3(self) -> None:
         strats = generate(
@@ -308,7 +293,6 @@ class TestWebStrategies:
         assert any("h1.headline" in (s.target or "") for s in l3)
 
     def test_web_goal_without_hints_no_l3(self) -> None:
-        """Internal documentation."""
         strats = generate(
             "update the webpage layout",
             workspace_facts=WorkspaceFacts(),
@@ -331,7 +315,6 @@ class TestWebStrategies:
 # ═══════════════════════════════════════════════════════
 
 class TestProbeWorkspace:
-    """Internal documentation."""
 
     def test_empty_dir_returns_all_false(self, tmp_path: Path) -> None:
         facts = probe_workspace(tmp_path)
@@ -348,7 +331,6 @@ class TestProbeWorkspace:
         assert facts == WorkspaceFacts()
 
     def test_does_not_create_files(self, tmp_path: Path) -> None:
-        """Internal documentation."""
         before = set(tmp_path.iterdir())
         probe_workspace(tmp_path)
         after = set(tmp_path.iterdir())
@@ -360,19 +342,16 @@ class TestProbeWorkspace:
         assert facts.has_pytest
 
     def test_pyproject_only_no_pytest(self, tmp_path: Path) -> None:
-        """Internal documentation."""
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n')
         assert probe_workspace(tmp_path).has_pytest is False
 
     def test_pyproject_plus_test_files_is_pytest(self, tmp_path: Path) -> None:
-        """Internal documentation."""
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n')
         (tmp_path / "tests").mkdir()
         (tmp_path / "tests" / "test_thing.py").write_text("def test_a():\n    assert True\n")
         assert probe_workspace(tmp_path).has_pytest is True
 
     def test_top_level_test_file_is_pytest(self, tmp_path: Path) -> None:
-        """Internal documentation."""
         (tmp_path / "test_top.py").write_text("def test_a():\n    assert True\n")
         assert probe_workspace(tmp_path).has_pytest is True
 
@@ -407,7 +386,6 @@ class TestProbeWorkspace:
         assert facts.csv_output
 
     def test_does_not_recurse_subdirs(self, tmp_path: Path) -> None:
-        """Internal documentation."""
         sub = tmp_path / "subdir"
         sub.mkdir()
         (sub / "data.json").write_text("{}")
@@ -425,7 +403,6 @@ class TestProbeWorkspace:
 # ═══════════════════════════════════════════════════════
 
 class TestCapabilityHintsConsumed:
-    """Internal documentation."""
 
     def test_verify_file_hint_in_target(self) -> None:
         strats = generate(
@@ -452,13 +429,11 @@ class TestCapabilityHintsConsumed:
         assert ".hero-title" in t or "localhost:8080" in t
 
     def test_none_hints_treated_as_empty(self) -> None:
-        """Internal documentation."""
         strats_none = generate("implement feature", workspace_facts=WorkspaceFacts(), capability_hints=None)
         strats_empty = generate("implement feature", workspace_facts=WorkspaceFacts(), capability_hints={})
         assert strats_none == strats_empty
 
     def test_unknown_hints_ignored(self) -> None:
-        """Internal documentation."""
         strats = generate(
             "implement feature",
             workspace_facts=WorkspaceFacts(has_pytest=True),
@@ -471,12 +446,10 @@ class TestCapabilityHintsConsumed:
 # ═══════════════════════════════════════════════════════
 
 class TestLadderOrdering:
-    """Internal documentation."""
 
     LEVEL_ORDER = {"L1": 1, "L2": 2, "L3": 3, "L5": 5}
 
     def _is_non_decreasing(self, strategies: tuple[VerifyStrategy, ...]) -> bool:
-        """Internal documentation."""
         prev = 0
         for s in strategies:
             cur = self.LEVEL_ORDER[s.level]
@@ -513,7 +486,6 @@ class TestLadderOrdering:
 # ═══════════════════════════════════════════════════════
 
 class TestDeduplication:
-    """Internal documentation."""
 
     def test_no_duplicate_strategies(self) -> None:
         facts = WorkspaceFacts(has_pytest=True, declared_files=("output.json",))
@@ -525,7 +497,6 @@ class TestDeduplication:
         assert len(keys) == len(set(keys)), f"策略出现重复: {keys}"
 
     def test_only_one_l5(self) -> None:
-        """Internal documentation."""
         facts = WorkspaceFacts(has_pytest=True, has_cargo=True, has_package_json=True)
         strats = generate(
             "implement multi-framework project",
@@ -539,7 +510,6 @@ class TestDeduplication:
 # ═══════════════════════════════════════════════════════
 
 class TestL5Content:
-    """Internal documentation."""
 
     def test_l5_cmd_is_none(self) -> None:
         strats = generate("", workspace_facts=WorkspaceFacts())
@@ -557,7 +527,6 @@ class TestL5Content:
         assert all(len(s.rationale_human.strip()) > 0 for s in l5)
 
     def test_send_l5_rationale_explains_why(self) -> None:
-        """Internal documentation."""
         strats = generate("send email to boss", workspace_facts=WorkspaceFacts())
         l5 = strats[0]
         assert "传输层" in l5.rationale_human or "200" in l5.rationale_human or "发送" in l5.rationale_human
@@ -567,7 +536,6 @@ class TestL5Content:
 # ═══════════════════════════════════════════════════════
 
 class TestCodeTaskNotHijackedBySendWords:
-    """Internal documentation."""
 
     CODE_GOALS_WITH_TRICKY_WORDS = [
         "implement a sort function and commit it",
@@ -592,7 +560,6 @@ class TestCodeTaskNotHijackedBySendWords:
         assert not bad, f"出现传输探活型策略(假绿红线): {goal!r}\n{bad}"
 
     def test_pure_send_still_red_lined(self) -> None:
-        """Internal documentation."""
         strats = generate("send an email to bob", workspace_facts=WorkspaceFacts(has_pytest=True))
         assert len(strats) == 1 and strats[0].level == "L5"
 
@@ -601,7 +568,6 @@ class TestCodeTaskNotHijackedBySendWords:
 # ═══════════════════════════════════════════════════════
 
 class TestVlmScreenshotRedline:
-    """Internal documentation."""
 
     _SCREENSHOT_CMD_PATTERNS = (
         "screencapture",
@@ -612,7 +578,6 @@ class TestVlmScreenshotRedline:
     )
 
     def _has_screenshot_only_cmd(self, strategy: VerifyStrategy) -> bool:
-        """Internal documentation."""
         cmd = strategy.cmd
         if cmd is None:
             return False
@@ -638,7 +603,6 @@ class TestVlmScreenshotRedline:
         "random gibberish xyz 123",
     ])
     def test_no_screenshot_only_cmd_in_any_goal(self, goal: str) -> None:
-        """Internal documentation."""
         facts = WorkspaceFacts(
             has_pytest=True,
             has_cargo=False,
@@ -654,7 +618,6 @@ class TestVlmScreenshotRedline:
         )
 
     def test_no_screenshot_only_cmd_with_screenshot_hints(self) -> None:
-        """Internal documentation."""
         facts = WorkspaceFacts()
         hints = {
             "screenshot_path": "/tmp/test.png",
@@ -672,7 +635,6 @@ class TestVlmScreenshotRedline:
         )
 
     def test_l5_is_always_last_and_cmd_is_none(self) -> None:
-        """Internal documentation."""
         for goal in ("take a screenshot", "capture screen", "verify UI visually"):
             facts = WorkspaceFacts()
             strats = generate(goal, workspace_facts=facts)

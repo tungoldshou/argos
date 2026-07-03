@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -19,7 +18,6 @@ from argos.daemon.server import DaemonHTTPServer
 
 @pytest_asyncio.fixture
 async def server(tmp_path: Path):
-    """Internal documentation."""
     runs_dir = tmp_path / "runs"
     index_path = tmp_path / "index.json"
     socket_path = tmp_path / "daemon.sock"
@@ -36,7 +34,6 @@ async def server(tmp_path: Path):
 async def _req(socket_path: Path, method: str, path: str, *,
                session_id: str | None = None, body: dict | None = None,
                timeout: float = 5.0):
-    """Internal documentation."""
     from argos.daemon.client import DaemonClient
     cli = DaemonClient(socket_path, timeout=timeout)
     return await cli._request(method, path, session_id=session_id, body=body)
@@ -193,7 +190,6 @@ async def test_get_run_meta(server):
 
 @pytest.mark.asyncio
 async def test_pause_request_returns_202(server):
-    """Internal documentation."""
     srv, mgr = server
     sid = await _create_session(srv.socket_path)
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",
@@ -206,7 +202,6 @@ async def test_pause_request_returns_202(server):
 
 @pytest.mark.asyncio
 async def test_pause_request_succeeds_on_running(server):
-    """Internal documentation."""
     srv, mgr = server
     sid = await _create_session(srv.socket_path)
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",
@@ -222,7 +217,6 @@ async def test_pause_request_succeeds_on_running(server):
 
 @pytest.mark.asyncio
 async def test_cancel_returns_202_or_409(server):
-    """Internal documentation."""
     srv, mgr = server
     sid = await _create_session(srv.socket_path)
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",
@@ -237,7 +231,6 @@ async def test_cancel_returns_202_or_409(server):
 
 @pytest.mark.asyncio
 async def test_sse_event_format(server):
-    """Internal documentation."""
     srv, mgr = server
     sid = await _create_session(srv.socket_path)
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",
@@ -287,7 +280,6 @@ async def test_create_run_with_verify_cmd_accepted(server):
 
 @pytest.mark.asyncio
 async def test_approval_endpoint_no_worker_returns_404(server):
-    """Internal documentation."""
     srv, mgr = server
     sid = await _create_session(srv.socket_path)
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",
@@ -303,7 +295,6 @@ async def test_approval_endpoint_no_worker_returns_404(server):
 
 @pytest.mark.asyncio
 async def test_approval_endpoint_invalid_decision(server):
-    """Internal documentation."""
     srv, mgr = server
     sid = await _create_session(srv.socket_path)
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 from pathlib import Path
 from argos.tui.app import ArgosApp
@@ -8,7 +7,6 @@ from argos.tui.widgets.transcript import Transcript as TranscriptLog
 
 @pytest.mark.asyncio
 async def test_undo_restores_modified_files(tmp_path: Path):
-    """Internal documentation."""
     ws = tmp_path / "ws"
     ws.mkdir()
     (ws / "a.py").write_text("original")
@@ -40,7 +38,6 @@ async def test_undo_does_not_delete_new_files(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_undo_no_snapshot(tmp_path: Path):
-    """Internal documentation."""
     app = ArgosApp.__new__(ArgosApp)
     app._snapshot = None
     app._workspace = tmp_path

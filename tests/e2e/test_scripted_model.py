@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 
 from tests.e2e.scripted_model import ScriptedModelClient

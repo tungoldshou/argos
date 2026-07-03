@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 
 pytestmark = pytest.mark.skip(reason="真 LLM 烟测,运行时手动跑(连真 MiniMax)")

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -31,7 +30,6 @@ def _resolve_lsp_server(
     file: "str | None",
     manager: "Any",
 ) -> "str | None":
-    """Internal documentation."""
     try:
         cfg = manager.config
     except AttributeError:
@@ -96,7 +94,6 @@ class CapabilityBroker:
         self.last_computer_artifact: tuple[str, tuple | None] | None = None
 
     def _egress_deny_reason(self, action: str, args: dict[str, Any]) -> str | None:
-        """Internal documentation."""
         host = _web.host_for(action, args)
         if action in {"web_extract", "browser_navigate"}:
             url = args.get("url", "")
@@ -109,7 +106,6 @@ class CapabilityBroker:
 
     def _preflight(self, action: str, args: dict[str, Any]
                    ) -> "tuple[tuple[Any, int | None] | None, dict[str, str]]":
-        """Internal documentation."""
         _reg = getattr(self, "_registry", None)
         registry_risk = _reg.risk_table() if _reg is not None else {}
         if action not in registry_risk and action not in _RISK:
@@ -137,7 +133,6 @@ class CapabilityBroker:
         return None, registry_risk
 
     async def request(self, action: str, args: dict[str, Any]) -> Any:
-        """Internal documentation."""
         terminal, _registry_risk = self._preflight(action, args)
         if terminal is not None:
             return terminal[0]
@@ -155,7 +150,6 @@ class CapabilityBroker:
         return value
 
     def execute_sync(self, action: str, args: dict[str, Any]) -> tuple[Any, int | None]:
-        """Internal documentation."""
         terminal, _registry_risk = self._preflight(action, args)
         if terminal is not None:
             return terminal
@@ -177,11 +171,9 @@ class CapabilityBroker:
         return value, exit_code
 
     def set_host_loop(self, loop: Any) -> None:
-        """Internal documentation."""
         self._host_loop = loop
 
     def request_blocking(self, action: str, args: dict[str, Any]) -> Any:
-        """Internal documentation."""
         loop = self._host_loop
         if loop is None:
             value, _exit = self.execute_sync(action, args)
@@ -193,7 +185,6 @@ class CapabilityBroker:
             return t("sandbox.broker.bridge_exception", exc_type=type(exc).__name__)
 
     def _derive_network_actions(self) -> set[str]:
-        """Internal documentation."""
         _reg = getattr(self, "_registry", None)
         if _reg is None:
             return set(_NETWORK_ACTIONS)
@@ -209,7 +200,6 @@ class CapabilityBroker:
 
     async def _request_decision(self, action: str, args: dict[str, Any],
                                 registry_risk: "dict[str, str] | None" = None):
-        """Internal documentation."""
         _merged = {**_RISK, **(registry_risk or {})}
         risk_val = _merged.get(action, "medium")
         return await self._gate.request(
@@ -219,28 +209,23 @@ class CapabilityBroker:
 
     @property
     def gate(self) -> ApprovalGate:
-        """Internal documentation."""
         return self._gate
 
     @property
     def signer(self) -> ReceiptSigner:
-        """Internal documentation."""
         return self._signer
 
     def take_receipt(self) -> Receipt | None:
-        """Internal documentation."""
         rec = self.last_receipt
         self.last_receipt = None
         return rec
 
     def take_computer_artifact(self) -> "tuple[str, tuple | None] | None":
-        """Internal documentation."""
         art = self.last_computer_artifact
         self.last_computer_artifact = None
         return art
 
     def _gate_only_write(self, action: str, args: dict[str, Any]) -> Any:
-        """Internal documentation."""
         meta = self._gate.evaluate_sync(action, args)
         if meta is not None:
             if meta.decision == "deny":
@@ -256,7 +241,6 @@ class CapabilityBroker:
     def _execute(self, action: str, args: dict[str, Any],
                  run_ctx: Any = None, *, _gated: bool = False,
                  allow_network: bool = False) -> tuple[Any, int | None]:
-        """Internal documentation."""
         _registry = getattr(self, "_registry", None)
         if _registry is not None:
             try:

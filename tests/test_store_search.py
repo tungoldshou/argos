@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 
 from argos.memory.store import ArgosStore, MessageRow

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -37,7 +36,6 @@ class Credential:
 
 
 class CredentialPool:
-    """Internal documentation."""
 
     def __init__(self, keys: list[str]) -> None:
         if not keys:
@@ -68,19 +66,16 @@ class CredentialPool:
             self._state[key]["last_used"] = time.time()
 
     def mark_exhausted(self, key: str, ttl_s: float) -> None:
-        """Internal documentation."""
         if key in self._state:
             self._state[key]["exhausted_until"] = time.time() + ttl_s
 
     def mark_terminal(self, key: str) -> None:
-        """Internal documentation."""
         self._state.pop(key, None)
         if not self._state:
             raise RuntimeError(t("core2.models.all_terminal"))
 
     @staticmethod
     def is_terminal_401(status: int, body: str) -> bool:
-        """Internal documentation."""
         if status != 401:
             return False
         b = (body or "").lower()
@@ -97,7 +92,6 @@ class CredentialPool:
 # ── ModelClient ───────────────────────────────────────────────────────────────
 
 class ModelClient:
-    """Internal documentation."""
 
     def __init__(self, *, tier: ModelTier, pool: CredentialPool,
                  transport: httpx.BaseTransport | None = None) -> None:
@@ -110,7 +104,6 @@ class ModelClient:
         self._http_client: httpx.AsyncClient | None = None
 
     def _get_http_client(self) -> httpx.AsyncClient:
-        """Internal documentation."""
         if self._http_client is None or self._http_client.is_closed:
             self._http_client = httpx.AsyncClient(
                 transport=self._transport, timeout=300.0,
@@ -118,7 +111,6 @@ class ModelClient:
         return self._http_client
 
     async def aclose(self) -> None:
-        """Internal documentation."""
         if self._http_client is not None and not self._http_client.is_closed:
             await self._http_client.aclose()
         self._http_client = None
@@ -134,7 +126,6 @@ class ModelClient:
 
     async def stream(self, messages: list[dict], *, system: str,
                      system_dynamic: str | None = None) -> AsyncIterator[str]:
-        """Internal documentation."""
         from argos.core import recovery
         max_attempts = 3
         for attempt in range(max_attempts):
@@ -185,7 +176,6 @@ class ModelClient:
         self, cred: Credential, messages: list[dict], system: str,
         system_dynamic: str | None,
     ) -> AsyncIterator[str]:
-        """Internal documentation."""
         headers = self._proto.headers(cred.key)
         url = self._proto.endpoint(self.tier.base_url)
         client = self._get_http_client()
@@ -213,7 +203,6 @@ class ModelClient:
                         yield text
 
     def _retry_after_ttl(self, response: httpx.Response) -> float | None:
-        """Internal documentation."""
         ra = response.headers.get("retry-after")
         if not ra:
             return None

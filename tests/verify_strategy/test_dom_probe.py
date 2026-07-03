@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +13,6 @@ from argos.verify.strategy import generate, WorkspaceFacts
 # ═══════════════════════════════════════════════════════
 
 class TestDomProbeResultInvariants:
-    """Internal documentation."""
 
     def test_default_is_not_found_no_error(self) -> None:
         r = DomProbeResult()
@@ -28,7 +26,6 @@ class TestDomProbeResultInvariants:
         assert r.error == ""
 
     def test_error_not_found(self) -> None:
-        """Internal documentation."""
         r = DomProbeResult(found=False, text_excerpt="", error="浏览器不可用")
         assert r.found is False
         assert r.error != ""
@@ -43,7 +40,6 @@ class TestDomProbeResultInvariants:
 # ═══════════════════════════════════════════════════════
 
 class TestDomProberNoBrowser:
-    """Internal documentation."""
 
     def setup_method(self) -> None:
         self.prober = DomProber(browser=None)
@@ -64,7 +60,6 @@ class TestDomProberNoBrowser:
         assert result.found is False
 
     def test_never_passed_when_none(self) -> None:
-        """Internal documentation."""
         for selector in ("body", "h1", "#id", ".class", "div > span"):
             r = self.prober.probe("http://localhost:3000", selector)
             assert r.found is False, f"browser=None probe(selector={selector!r}) found 不应为 True"
@@ -75,7 +70,6 @@ class TestDomProberNoBrowser:
 # ═══════════════════════════════════════════════════════
 
 def _make_mock_browser(*, nav_result: str = "已打开 http://localhost", snapshot_result: str = "") -> MagicMock:
-    """Internal documentation."""
     bc = MagicMock()
     bc.navigate.return_value = nav_result
     bc.snapshot.return_value = snapshot_result
@@ -83,10 +77,8 @@ def _make_mock_browser(*, nav_result: str = "已打开 http://localhost", snapsh
 
 
 class TestDomProberFoundTrue:
-    """Internal documentation."""
 
     def test_found_with_expected_text_match(self) -> None:
-        """Internal documentation."""
         snapshot = "[页面] Test\n[URL] http://localhost\n\nWelcome hero-title new content"
         bc = _make_mock_browser(snapshot_result=snapshot)
         prober = DomProber(bc)
@@ -95,7 +87,6 @@ class TestDomProberFoundTrue:
         assert result.error == ""
 
     def test_expected_text_found_has_excerpt(self) -> None:
-        """Internal documentation."""
         snapshot = "[页面] Test\n[URL] http://localhost\n\nhello world visible content here"
         bc = _make_mock_browser(snapshot_result=snapshot)
         prober = DomProber(bc)
@@ -104,7 +95,6 @@ class TestDomProberFoundTrue:
         assert result.text_excerpt != "", "found=True 时 text_excerpt 不能空"
 
     def test_no_url_skips_navigate(self) -> None:
-        """Internal documentation."""
         snapshot = "[页面] Test\n[URL] http://localhost\n\nmsg element present target"
         bc = _make_mock_browser(snapshot_result=snapshot)
         prober = DomProber(bc)
@@ -114,10 +104,8 @@ class TestDomProberFoundTrue:
 
 
 class TestDomProberWeakEvidence:
-    """Internal documentation."""
 
     def test_no_expected_text_never_passed(self) -> None:
-        """Internal documentation."""
         snapshot = "[页面] Test\n[URL] http://localhost\n\nWelcome headline here"
         bc = _make_mock_browser(snapshot_result=snapshot)
         prober = DomProber(bc)
@@ -127,7 +115,6 @@ class TestDomProberWeakEvidence:
         )
 
     def test_no_expected_text_returns_unverifiable(self) -> None:
-        """Internal documentation."""
         snapshot = "[页面] Test\n[URL] http://localhost\n\nheadline present"
         bc = _make_mock_browser(snapshot_result=snapshot)
         prober = DomProber(bc)
@@ -138,7 +125,6 @@ class TestDomProberWeakEvidence:
         assert result.found is False
 
     def test_no_expected_text_hint_not_in_body_still_unverifiable(self) -> None:
-        """Internal documentation."""
         snapshot = "[页面] Test\n[URL] http://localhost\n\nno matching content at all"
         bc = _make_mock_browser(snapshot_result=snapshot)
         prober = DomProber(bc)
@@ -147,7 +133,6 @@ class TestDomProberWeakEvidence:
         assert result.found is False
 
     def test_all_selectors_without_expected_text_never_passed(self) -> None:
-        """Internal documentation."""
         snapshot = "[页面] Test\n[URL] http://localhost\n\nbody h1 headline notification-badge hero-title msg"
         bc = _make_mock_browser(snapshot_result=snapshot)
         prober = DomProber(bc)
@@ -159,10 +144,8 @@ class TestDomProberWeakEvidence:
 
 
 class TestDomProberFoundFalse:
-    """Internal documentation."""
 
     def test_expected_text_mismatch_not_found(self) -> None:
-        """Internal documentation."""
         snapshot = "[页面] Test\n[URL] http://localhost\n\nhero-title present but wrong"
         bc = _make_mock_browser(snapshot_result=snapshot)
         prober = DomProber(bc)
@@ -171,7 +154,6 @@ class TestDomProberFoundFalse:
         assert result.error == "", "expected_text 不匹配是验证失败（failed），不是 error（unverifiable）"
 
     def test_expected_text_absent_is_failed_not_unverifiable(self) -> None:
-        """Internal documentation."""
         snapshot = "[页面] Test\n[URL] http://localhost\n\nsome content without target"
         bc = _make_mock_browser(snapshot_result=snapshot)
         prober = DomProber(bc)
@@ -181,7 +163,6 @@ class TestDomProberFoundFalse:
 
 
 class TestDomProberError:
-    """Internal documentation."""
 
     def test_navigate_error_returns_error(self) -> None:
         bc = _make_mock_browser(nav_result="错误:浏览器启动失败(可能未安装 chromium)")
@@ -198,7 +179,6 @@ class TestDomProberError:
         assert result.found is False
 
     def test_navigate_exception_returns_error(self) -> None:
-        """Internal documentation."""
         bc = MagicMock()
         bc.navigate.side_effect = RuntimeError("playwright crash")
         bc.snapshot.return_value = ""
@@ -208,7 +188,6 @@ class TestDomProberError:
         assert result.found is False
 
     def test_error_never_found_true(self) -> None:
-        """Internal documentation."""
         bc = _make_mock_browser(nav_result="错误:timeout")
         prober = DomProber(bc)
         for selector in ("body", "h1", "#id", ".class"):
@@ -223,7 +202,6 @@ class TestDomProberError:
 # ═══════════════════════════════════════════════════════
 
 class TestSelectorToTextHint:
-    """Internal documentation."""
 
     @pytest.mark.parametrize("selector,expected_contains", [
         ("h1.headline", "headline"),
@@ -248,7 +226,6 @@ class TestSelectorToTextHint:
 # ═══════════════════════════════════════════════════════
 
 class TestStrategyL3WithUrl:
-    """Internal documentation."""
 
     def test_dom_selector_hint_and_dom_url_hint_generates_l3(self) -> None:
         strats = generate(
@@ -262,7 +239,6 @@ class TestStrategyL3WithUrl:
         assert "localhost:3000" in (l3[0].target or "")
 
     def test_dom_selector_hint_with_explicit_url_in_goal_generates_l3(self) -> None:
-        """Internal documentation."""
         strats = generate(
             "update the webpage at http://localhost:8080 to show the new headline",
             workspace_facts=WorkspaceFacts(),
@@ -273,7 +249,6 @@ class TestStrategyL3WithUrl:
         assert "localhost:8080" in (l3[0].target or "")
 
     def test_dom_selector_hint_no_url_anywhere_no_l3(self) -> None:
-        """Internal documentation."""
         strats = generate(
             "update the webpage to show the new headline",
             workspace_facts=WorkspaceFacts(),
@@ -283,7 +258,6 @@ class TestStrategyL3WithUrl:
         assert len(l3) == 0, f"无 URL 时不应生成 L3（诚实降级）: {l3}"
 
     def test_web_signal_without_dom_selector_no_l3(self) -> None:
-        """Internal documentation."""
         strats = generate(
             "render the frontend page at http://localhost:3000",
             workspace_facts=WorkspaceFacts(),
@@ -293,7 +267,6 @@ class TestStrategyL3WithUrl:
         assert len(l3) == 0, f"无 dom_selector 不应生成 L3: {l3}"
 
     def test_l3_cmd_is_none(self) -> None:
-        """Internal documentation."""
         strats = generate(
             "update the webpage",
             workspace_facts=WorkspaceFacts(),
@@ -314,7 +287,6 @@ class TestStrategyL3WithUrl:
             assert levels.index("L3") < levels.index("L5")
 
     def test_send_task_no_l3_even_with_hints(self) -> None:
-        """Internal documentation."""
         strats = generate(
             "send a notification to users",
             workspace_facts=WorkspaceFacts(),
@@ -376,10 +348,8 @@ def _make_loop(*, dom_prober=None, verify_cmd=None, capability_hints=None):
 
 
 class TestLoopL3Wiring:
-    """Internal documentation."""
 
     def test_no_dom_prober_l3_skipped(self, tmp_path: Path) -> None:
-        """Internal documentation."""
         loop = _make_loop(
             dom_prober=None,
             capability_hints={"dom_selector": "h1", "dom_url": "http://localhost"},
@@ -389,7 +359,6 @@ class TestLoopL3Wiring:
         assert loop._pending_l3_strategy is None, "DomProber=None 时不应挂起 L3 策略"
 
     def test_with_dom_prober_l3_pending(self, tmp_path: Path) -> None:
-        """Internal documentation."""
         fake_prober = DomProber(browser=None)
         loop = _make_loop(
             dom_prober=fake_prober,
@@ -405,7 +374,6 @@ class TestLoopL3Wiring:
         assert loop._pending_l3_strategy.kind == "dom_assert"
 
     def test_explicit_verify_cmd_takes_priority(self, tmp_path: Path) -> None:
-        """Internal documentation."""
         fake_prober = DomProber(browser=None)
         loop = _make_loop(
             dom_prober=fake_prober,
@@ -417,7 +385,6 @@ class TestLoopL3Wiring:
         assert loop._pending_l3_strategy is None
 
     def test_pending_l3_cleared_on_reset(self, tmp_path: Path) -> None:
-        """Internal documentation."""
         fake_prober = DomProber(browser=None)
         loop = _make_loop(dom_prober=fake_prober)
         loop._workspace = tmp_path
@@ -430,10 +397,8 @@ class TestLoopL3Wiring:
 # ═══════════════════════════════════════════════════════
 
 class TestRunDomProbeVerdict:
-    """Internal documentation."""
 
     def _make_strategy(self, url: str = "http://localhost", selector: str = "h1") -> object:
-        """Internal documentation."""
         from argos.verify.strategy import VerifyStrategy
         return VerifyStrategy(
             level="L3", kind="dom_assert",
@@ -461,7 +426,6 @@ class TestRunDomProbeVerdict:
         selector: str = "h1",
         expected_text: str = "h1",
     ) -> object:
-        """Internal documentation."""
         from argos.verify.strategy import _l3_dom_assert
         hints: dict[str, str] = {
             "dom_url": url,
@@ -471,7 +435,6 @@ class TestRunDomProbeVerdict:
         return _l3_dom_assert(hints)
 
     def test_found_true_yields_passed_with_expected_text(self) -> None:
-        """Internal documentation."""
         bc = _make_mock_browser(
             snapshot_result="[页面] T\n[URL] http://localhost\n\nh1 element here"
         )
@@ -481,7 +444,6 @@ class TestRunDomProbeVerdict:
         assert verdict.status == "passed", f"有 expected_text 命中时 verdict 应为 passed，实际: {verdict}"
 
     def test_no_expected_text_yields_unverifiable(self) -> None:
-        """Internal documentation."""
         bc = _make_mock_browser(
             snapshot_result="[页面] T\n[URL] http://localhost\n\nh1 element here"
         )
@@ -493,7 +455,6 @@ class TestRunDomProbeVerdict:
         )
 
     def test_found_false_with_expected_text_yields_failed(self) -> None:
-        """Internal documentation."""
         bc = _make_mock_browser(
             snapshot_result="[页面] T\n[URL] http://localhost\n\nno matching content at all"
         )
@@ -507,7 +468,6 @@ class TestRunDomProbeVerdict:
         )
 
     def test_error_yields_unverifiable(self) -> None:
-        """Internal documentation."""
         bc = _make_mock_browser(nav_result="错误:浏览器启动失败(chromium 未安装)")
         prober = DomProber(bc)
         strategy = self._make_strategy()
@@ -517,7 +477,6 @@ class TestRunDomProbeVerdict:
         )
 
     def test_error_never_passed(self) -> None:
-        """Internal documentation."""
         error_scenarios = [
             _make_mock_browser(nav_result="错误:timeout"),
             _make_mock_browser(snapshot_result="错误:snapshot 失败"),
@@ -531,7 +490,6 @@ class TestRunDomProbeVerdict:
             )
 
     def test_none_browser_yields_unverifiable(self) -> None:
-        """Internal documentation."""
         prober = DomProber(browser=None)
         strategy = self._make_strategy()
         verdict = self._run_verdict(prober, strategy)
@@ -539,7 +497,6 @@ class TestRunDomProbeVerdict:
         assert verdict.status != "passed"
 
     def test_verify_cmd_label_in_verdict(self) -> None:
-        """Internal documentation."""
         bc = _make_mock_browser(
             snapshot_result="[页面] T\n[URL] http://localhost\n\nhero content visible"
         )
@@ -550,7 +507,6 @@ class TestRunDomProbeVerdict:
         assert "hero" in verdict.verify_cmd or "dom_assert" in verdict.verify_cmd
 
     def test_detail_contains_rationale(self) -> None:
-        """Internal documentation."""
         bc = _make_mock_browser(
             snapshot_result="[页面] T\n[URL] http://localhost\n\ncontent"
         )
@@ -566,14 +522,12 @@ class TestRunDomProbeVerdict:
 # ═══════════════════════════════════════════════════════
 
 class TestProposeDomVerifyParsing:
-    """Internal documentation."""
 
     def _make_loop_with_prober(self, browser=None):
         prober = DomProber(browser=browser)
         return _make_loop(dom_prober=prober)
 
     def test_valid_url_registers_l3_strategy(self) -> None:
-        """Internal documentation."""
         loop = self._make_loop_with_prober()
         ok = loop._on_propose_dom_verify(
             "url='http://localhost:3000', selector='h1', expected_text='Hello'"
@@ -583,7 +537,6 @@ class TestProposeDomVerifyParsing:
         assert loop._pending_l3_strategy.level == "L3"
 
     def test_valid_https_url_accepted(self) -> None:
-        """Internal documentation."""
         loop = self._make_loop_with_prober()
         ok = loop._on_propose_dom_verify(
             "url='https://example.com', selector='.hero', expected_text='Welcome'"
@@ -592,21 +545,18 @@ class TestProposeDomVerifyParsing:
         assert loop._pending_l3_strategy is not None
 
     def test_file_url_rejected(self) -> None:
-        """Internal documentation."""
         loop = self._make_loop_with_prober()
         ok = loop._on_propose_dom_verify("url='file:///etc/passwd', selector='body'")
         assert ok is False
         assert loop._pending_l3_strategy is None
 
     def test_no_url_rejected(self) -> None:
-        """Internal documentation."""
         loop = self._make_loop_with_prober()
         ok = loop._on_propose_dom_verify("selector='h1', expected_text='hello'")
         assert ok is False
         assert loop._pending_l3_strategy is None
 
     def test_oversized_selector_rejected(self) -> None:
-        """Internal documentation."""
         loop = self._make_loop_with_prober()
         big_sel = "." + "x" * 501
         ok = loop._on_propose_dom_verify(
@@ -616,7 +566,6 @@ class TestProposeDomVerifyParsing:
         assert loop._pending_l3_strategy is None
 
     def test_oversized_expected_text_rejected(self) -> None:
-        """Internal documentation."""
         loop = self._make_loop_with_prober()
         big_text = "x" * 501
         ok = loop._on_propose_dom_verify(
@@ -625,7 +574,6 @@ class TestProposeDomVerifyParsing:
         assert ok is False
 
     def test_no_dom_prober_returns_false(self) -> None:
-        """Internal documentation."""
         loop = _make_loop(dom_prober=None)
         ok = loop._on_propose_dom_verify(
             "url='http://localhost', selector='h1', expected_text='Hello'"
@@ -634,7 +582,6 @@ class TestProposeDomVerifyParsing:
         assert loop._pending_l3_strategy is None
 
     def test_explicit_verify_cmd_not_overridden(self) -> None:
-        """Internal documentation."""
         loop = _make_loop(dom_prober=DomProber(browser=None), verify_cmd="pytest")
         ok = loop._on_propose_dom_verify(
             "url='http://localhost', selector='h1', expected_text='Hello'"
@@ -643,7 +590,6 @@ class TestProposeDomVerifyParsing:
         assert loop._pending_l3_strategy is None
 
     def test_pending_dom_expected_text_stored(self) -> None:
-        """Internal documentation."""
         loop = self._make_loop_with_prober()
         loop._on_propose_dom_verify(
             "url='http://localhost', selector='h1', expected_text='My expected text'"
@@ -651,13 +597,11 @@ class TestProposeDomVerifyParsing:
         assert loop._pending_dom_expected_text == "My expected text"
 
     def test_no_expected_text_pending_field_empty(self) -> None:
-        """Internal documentation."""
         loop = self._make_loop_with_prober()
         loop._on_propose_dom_verify("url='http://localhost', selector='h1'")
         assert loop._pending_dom_expected_text == ""
 
     def test_reset_clears_pending_fields(self) -> None:
-        """Internal documentation."""
         loop = self._make_loop_with_prober()
         loop._pending_l3_strategy = object()
         loop._pending_dom_expected_text = "some text"
@@ -666,7 +610,6 @@ class TestProposeDomVerifyParsing:
         assert loop._pending_dom_expected_text == ""
 
     def test_sandbox_stub_returns_receipt(self) -> None:
-        """Internal documentation."""
         from argos.tools import _propose_dom_verify_pure
         result = _propose_dom_verify_pure(
             url="http://localhost:3000",
@@ -678,19 +621,16 @@ class TestProposeDomVerifyParsing:
         assert "localhost:3000" in result
 
     def test_sandbox_stub_with_defaults(self) -> None:
-        """Internal documentation."""
         from argos.tools import _propose_dom_verify_pure
         result = _propose_dom_verify_pure(url="http://example.com")
         assert isinstance(result, str)
         assert "example.com" in result
 
     def test_propose_dom_verify_in_all_tool_names(self) -> None:
-        """Internal documentation."""
         from argos.tools import ALL_TOOL_NAMES
         assert "propose_dom_verify" in ALL_TOOL_NAMES
 
     def test_propose_dom_verify_in_namespace(self) -> None:
-        """Internal documentation."""
         from argos.tools import _propose_dom_verify_pure
         import argos.tools as _t
         ns = _t._pure()

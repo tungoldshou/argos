@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import dataclasses
 
 import pytest
@@ -33,13 +32,11 @@ def test_approval_level_name_values():
 # ── CONTRACT A §5:Verdict.no_test + Verdict.no_check() ─────────────────────
 
 def test_verdict_no_test_field_defaults_false():
-    """Internal documentation."""
     v = T.Verdict(status="passed", detail="ok", verify_cmd="pytest", attempts=1)
     assert v.no_test is False
 
 
 def test_verdict_no_check_factory():
-    """Internal documentation."""
     v = T.Verdict.no_check("无 verify_cmd,未做机检验证", attempts=1)
     assert v.status == "unverifiable"
     assert v.no_test is True
@@ -49,7 +46,6 @@ def test_verdict_no_check_factory():
 
 
 def test_verdict_no_check_is_distinct_from_unverifiable():
-    """Internal documentation."""
     v = T.Verdict.unverifiable("篡改了受保护文件", tampered=["tests/t.py"], attempts=2)
     assert v.status == "unverifiable"
     assert v.no_test is False
@@ -57,13 +53,11 @@ def test_verdict_no_check_is_distinct_from_unverifiable():
 
 
 def test_verdict_no_check_is_frozen():
-    """Internal documentation."""
     v = T.Verdict.no_check("test", attempts=1)
     with pytest.raises((dataclasses.FrozenInstanceError, AttributeError, TypeError)):
         v.no_test = True  # type: ignore[misc]
 
 
 def test_verdict_no_test_immutability_via_dataclass():
-    """Internal documentation."""
     field_names = {f.name for f in dataclasses.fields(T.Verdict)}
     assert "no_test" in field_names

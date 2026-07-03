@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import subprocess
 from pathlib import Path
 
@@ -92,7 +91,6 @@ def test_acquire_worktree_raises_on_non_git(reroot, tmp_path):
 
 
 def test_acquire_worktree_reusable_after_release(reroot, tmp_path):
-    """Internal documentation."""
     proj = tmp_path / "proj2"
     proj.mkdir()
     _git("init", cwd=proj)
@@ -106,7 +104,6 @@ def test_acquire_worktree_reusable_after_release(reroot, tmp_path):
 
 
 def test_path_traversal_session_id_rejected(reroot):
-    """Internal documentation."""
     with pytest.raises(isolation.IsolationError):
         isolation.acquire_sandbox("../../etc/evil")
     with pytest.raises(isolation.IsolationError):
@@ -114,7 +111,6 @@ def test_path_traversal_session_id_rejected(reroot):
 
 
 def test_release_sandbox_removes_dir(reroot):
-    """Internal documentation."""
     ws, _ = isolation.acquire_sandbox("delme")
     assert ws.exists()
     isolation.release_sandbox("delme")

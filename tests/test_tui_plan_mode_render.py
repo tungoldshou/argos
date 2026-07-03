@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
@@ -17,7 +16,6 @@ from argos.tui.widgets.inline_choice import InlineChoice
 
 
 class _PlanRenderedLoop:
-    """Internal documentation."""
 
     def __init__(self) -> None:
         self._mode = "plan"
@@ -43,9 +41,16 @@ class _PlanRenderedLoop:
         yield CostUpdate(tokens_in=10, tokens_out=5, cost_usd=0.0, elapsed_s=0.1)
 
 
+def test_plan_renderer_omits_empty_tool_call_preview():
+    from argos.core.plan_mode import PlanRenderer
+
+    plan_md = PlanRenderer.render(goal="读 a.py", todos=[], tool_calls=[])
+    assert "tool_calls" not in plan_md
+    assert "工具调用" not in plan_md
+
+
 @pytest.mark.asyncio
 async def test_plan_rendered_event_pushes_plan_modal():
-    """Internal documentation."""
     loop = _PlanRenderedLoop()
     app = ArgosApp(loop_factory=lambda **kw: loop,
                    gate=ApprovalGate(ApprovalLevel.CONFIRM))
@@ -67,7 +72,6 @@ async def test_plan_rendered_event_pushes_plan_modal():
 
 @pytest.mark.asyncio
 async def test_modal_decision_calls_exit_plan_mode_with_approve_start():
-    """Internal documentation."""
     loop = _PlanRenderedLoop()
     app = ArgosApp(loop_factory=lambda **kw: loop,
                    gate=ApprovalGate(ApprovalLevel.CONFIRM))
@@ -90,7 +94,6 @@ async def test_modal_decision_calls_exit_plan_mode_with_approve_start():
 
 @pytest.mark.asyncio
 async def test_modal_decision_keep_planning_wakes_loop_for_another_round():
-    """Internal documentation."""
     loop = _PlanRenderedLoop()
     app = ArgosApp(loop_factory=lambda **kw: loop,
                    gate=ApprovalGate(ApprovalLevel.CONFIRM))

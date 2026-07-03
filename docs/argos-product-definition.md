@@ -23,6 +23,10 @@
 > **v6 变更(2026-06-12)**:形态升级为 **daemon 内核 + 可插拔客户端**。`argosd` 常驻后台
 > (Unix socket `daemon.sock` under the Argos config directory),TUI 作为主要客户端以协议方式接入;daemon 不可用时
 > 透明降级为单进程 inline 模式(`ARGOS_NO_DAEMON=1` 强制 inline)。
+>
+> **产品重构口径(2026-07-04)**:默认产品面收敛为 setup/TUI chat/approval/verify/daemon fallback。
+> Dynamic Workflows、Dream、eval、routing、schedule/watch、computer-use 仍保留,但按高级/实验能力处理,
+> 不再作为默认首屏承诺。
 
 ---
 
@@ -102,7 +106,7 @@ argosd  ←──────────────────── daemon �
   │    ├─ 工具(注入沙箱命名空间,具体数量见 /tools 命令):
   │    │    · 文件:read/write/edit/search_files       · 计划:update_plan(真 TODO 拆解)
   │    │    · shell:run_command(白名单+Seatbelt+路径牢笼)· 验证:propose_verify / propose_dom_verify
-  │    │    · 联网:web_search / web_extract            · 计算机控制:browser_*(×5) + computer.*(×7)
+  │    │    · 联网:web_search / web_extract            · 计算机控制:browser_*(×5) + computer.*(×7,实验/显式开启)
   │    │    · LSP:lsp_definition/references/…        · 外部工具:mcp_call(原生 MCP,stdio JSON-RPC)
   │    ├─ verify 硬门禁 + escalation(harness)
   │    ├─ 审批闸(CapabilityBroker:egress policy + ApprovalGate + HMAC 回执)
@@ -113,11 +117,11 @@ argosd  ←──────────────────── daemon �
   │    · 记忆(memory/):4 层 JSONL,向量(sqlite-vec) + FTS5 召回 + consolidate 合并去重
   │    · 行为账本(ledger/):签名回执 JSONL,三态撤销(Reversible)
   │    · 意图层:NL→IntentCard/echo 确认仍是规划项(当前仓库尚无 argos/intent/)
-  │    · 按任务路由(routing/):请求分类 → 模型 + effort 档位选择
-  │    · Conductor(conductor/):自主调度,常设订单 + cron 触发,**始终需用户确认**
-  │    · Dream 夜间整合(03:00 cron):验证门控的跨 run 自进化 — 候选聚类→合成→A/B 晋升→
+  │    · 按任务路由(routing/):请求分类 → 模型 + effort 档位选择(高级)
+  │    · Conductor(conductor/):自主调度,常设订单 + cron 触发(高级/daemon-only,建议需用户确认)
+  │    · Dream 夜间整合(高级/daemon-only):验证门控的跨 run 自进化 — 候选聚类→合成→A/B 晋升→
   │      记忆整合;仅促进通过 verify 的 run 晋升技能
-  │    · Dynamic Workflows(workflow/):声明式 fan-out 编排,per-agent 模型无关,worktree 隔离
+  │    · Dynamic Workflows(workflow/):声明式 fan-out 编排,per-agent 模型无关,worktree 隔离(实验,ARGOS_WORKFLOWS=1)
   │    · 上下文分析(context/):token 计数 + compaction 阈值压缩
   │
   └─ 客户端(协议接入,可插拔)

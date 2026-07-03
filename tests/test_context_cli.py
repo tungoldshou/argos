@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -55,14 +54,12 @@ class _FakeRuntime:
 
 
 def _install_fake_runtime(monkeypatch):
-    """Internal documentation."""
     import argos.app_factory as _af
     fake = _FakeRuntime()
     monkeypatch.setattr(_af, "_active_run", fake, raising=False)
 
 
 def test_cli_context_show_text(monkeypatch, capsys):
-    """Internal documentation."""
     _install_fake_runtime(monkeypatch)
     args = _cli_ctx.argparse.Namespace(json=False, session=None)
     rc = _cli_ctx.cmd_show(args)
@@ -73,7 +70,6 @@ def test_cli_context_show_text(monkeypatch, capsys):
 
 
 def test_cli_context_show_json(monkeypatch, capsys):
-    """Internal documentation."""
     _install_fake_runtime(monkeypatch)
     args = _cli_ctx.argparse.Namespace(json=True, session=None)
     rc = _cli_ctx.cmd_show(args)
@@ -85,7 +81,6 @@ def test_cli_context_show_json(monkeypatch, capsys):
 
 
 def test_cli_context_show_with_session(monkeypatch, capsys):
-    """Internal documentation."""
     _install_fake_runtime(monkeypatch)
     args = _cli_ctx.argparse.Namespace(json=False, session="abc")
     rc = _cli_ctx.cmd_show(args)
@@ -94,7 +89,6 @@ def test_cli_context_show_with_session(monkeypatch, capsys):
 
 
 def test_cli_context_show_no_runtime(monkeypatch, capsys):
-    """Internal documentation."""
     import argos.app_factory as _af
     monkeypatch.setattr(_af, "_active_run", None, raising=False)
     args = _cli_ctx.argparse.Namespace(json=False, session=None)

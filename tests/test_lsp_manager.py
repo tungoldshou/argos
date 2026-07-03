@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +21,6 @@ from argos.lsp.manager import (
 # ── in-process fake proc / server ──────────────────────────────────
 
 class _FakeStream:
-    """Internal documentation."""
 
     def __init__(self) -> None:
         self._in_q: asyncio.Queue[bytes] = asyncio.Queue()
@@ -64,7 +62,6 @@ class _FakeStream:
 
 
 class _FakeProc:
-    """Internal documentation."""
 
     def __init__(self) -> None:
         self.stream = _FakeStream()
@@ -81,7 +78,6 @@ class _FakeProc:
 
 async def _fake_serve(stream: _FakeStream, *, init_response=None,
                       route_handler=None, crash_after: int | None = None) -> None:
-    """Internal documentation."""
     try:
         first = await _read_one_frame(stream)
         if first.get("method") == "initialize":
@@ -127,7 +123,6 @@ async def _fake_serve(stream: _FakeStream, *, init_response=None,
 
 
 async def _read_one_frame(stream: _FakeStream) -> dict | None:
-    """Internal documentation."""
     header_bytes = b""
     while b"\r\n\r\n" not in header_bytes:
         chunk = await stream.read_chunk()
@@ -154,7 +149,6 @@ async def _read_one_frame(stream: _FakeStream) -> dict | None:
 
 @pytest.fixture
 def fake_proc_factory(monkeypatch):
-    """Internal documentation."""
     tasks: list[asyncio.Task] = []
 
     async def _spawn(mgr, name, sc, env, cwd):
@@ -202,7 +196,6 @@ async def test_start_server_transitions_to_ready(fake_proc_factory):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_list_servers_reports_status(fake_proc_factory):
-    """Internal documentation."""
     mgr = LspManager(_config_with_python())
     await mgr.start_server("python")
     info = mgr.list_servers()
@@ -216,7 +209,6 @@ async def test_list_servers_reports_status(fake_proc_factory):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_disabled_server_returns_error_json(fake_proc_factory):
-    """Internal documentation."""
     cfg = LspConfig(servers={
         "x": LspServerConfig(command=("y",), filetypes=(".py",), disabled=True),
     })
@@ -229,7 +221,6 @@ async def test_disabled_server_returns_error_json(fake_proc_factory):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_unknown_server_returns_error_json(fake_proc_factory):
-    """Internal documentation."""
     mgr = LspManager(_config_with_python())
     r = await mgr.request("nonexistent", "textDocument/definition", {})
     assert "error" in r
@@ -239,7 +230,6 @@ async def test_unknown_server_returns_error_json(fake_proc_factory):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_request_routes_to_correct_server(fake_proc_factory):
-    """Internal documentation."""
     mgr = LspManager(_config_with_python())
     await mgr.start_server("python")
     r = await mgr.request("python", "textDocument/definition", {"pos": 1})
@@ -251,7 +241,6 @@ async def test_request_routes_to_correct_server(fake_proc_factory):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_concurrent_requests_dont_cross_talk(fake_proc_factory):
-    """Internal documentation."""
     mgr = LspManager(_config_with_python())
     await mgr.start_server("python")
 
@@ -269,7 +258,6 @@ async def test_concurrent_requests_dont_cross_talk(fake_proc_factory):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_5s_request_timeout(fake_proc_factory, monkeypatch):
-    """Internal documentation."""
     tasks: list[asyncio.Task] = []
 
     async def _spawn_silent(mgr, name, sc, env, cwd):
@@ -305,7 +293,6 @@ async def test_5s_request_timeout(fake_proc_factory, monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_crash_marks_crashed_and_schedules_retry(fake_proc_factory, monkeypatch):
-    """Internal documentation."""
     sleeps: list[float] = []
 
     async def fake_sleep(s):
@@ -341,7 +328,6 @@ async def test_crash_marks_crashed_and_schedules_retry(fake_proc_factory, monkey
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_shutdown_sets_status_shutdown(fake_proc_factory):
-    """Internal documentation."""
     mgr = LspManager(_config_with_python())
     await mgr.start_server("python")
     await mgr.shutdown()
@@ -351,7 +337,6 @@ async def test_shutdown_sets_status_shutdown(fake_proc_factory):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_diag_cache_receives_publish_diagnostics(fake_proc_factory):
-    """Internal documentation."""
     tasks: list[asyncio.Task] = []
     diag_sent = asyncio.Event()
     manager_ref: list = []
@@ -410,7 +395,6 @@ async def test_diag_cache_receives_publish_diagnostics(fake_proc_factory):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_request_queueing_when_not_ready(fake_proc_factory, monkeypatch):
-    """Internal documentation."""
     async def fake_sleep(s):
         return None
     monkeypatch.setattr("argos.lsp.manager.asyncio.sleep", fake_sleep)
@@ -428,7 +412,6 @@ async def test_request_queueing_when_not_ready(fake_proc_factory, monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_sync_file_didopen_then_didchange_incremental(fake_proc_factory, tmp_path):
-    """Internal documentation."""
     from urllib.parse import quote
     mgr = LspManager(_config_with_python())
     await mgr.start_server("python")

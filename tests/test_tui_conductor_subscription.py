@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +12,6 @@ import pytest
 # ── helpers ────────────────────────────────────────────────────────────────
 
 def _make_app():
-    """Internal documentation."""
     from argos.tui.app import ArgosApp
     app = ArgosApp()
     app.run_worker = MagicMock()
@@ -33,7 +31,6 @@ def _fake_suggestion_event():
 
 
 def test_conductor_subscription_idempotent():
-    """Internal documentation."""
     from argos.tui.daemon_source import DaemonEventSource
 
     app = _make_app()
@@ -49,7 +46,6 @@ def test_conductor_subscription_idempotent():
 
 @pytest.mark.asyncio
 async def test_setup_daemon_mode_starts_conductor_subscription(monkeypatch):
-    """Internal documentation."""
     from argos.tui.app import ArgosApp
     from argos.daemon.client import DaemonClient
 
@@ -86,7 +82,6 @@ async def test_setup_daemon_mode_starts_conductor_subscription(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_conductor_event_reaches_apply_event():
-    """Internal documentation."""
     from argos.tui.daemon_source import DaemonEventSource
     from argos.protocol.events import ProactiveSuggestionEvent
 
@@ -150,7 +145,6 @@ async def test_conductor_event_reaches_apply_event():
 
 @pytest.mark.asyncio
 async def test_no_conductor_subscription_in_inline_mode():
-    """Internal documentation."""
     app = _make_app()
     called = []
     app._start_conductor_subscription = lambda *a: called.append(a)

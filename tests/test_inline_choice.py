@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -20,7 +19,6 @@ _PLAN_OPTIONS = [
 
 
 class _Host(App):
-    """Internal documentation."""
 
     def __init__(self, **kw) -> None:
         super().__init__()
@@ -28,7 +26,6 @@ class _Host(App):
         self.decisions: list[tuple[str, str]] = []
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
-        """Internal documentation."""
         defaults = super().get_theme_variable_defaults()
         if ARGOS_NIGHT.variables:
             defaults.update(ARGOS_NIGHT.variables)
@@ -79,7 +76,6 @@ async def test_arrow_navigation_wraps_and_enter_confirms():
 
 @pytest.mark.asyncio
 async def test_refine_expands_input_and_submits_feedback():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -115,7 +111,6 @@ async def test_refine_input_escape_returns_to_options():
 
 @pytest.mark.asyncio
 async def test_escape_ignored_without_escape_value():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -140,7 +135,6 @@ async def test_decision_is_idempotent_and_removes_widget():
 
 @pytest.mark.asyncio
 async def test_bell_rings_on_mount(monkeypatch):
-    """Internal documentation."""
     rang: list[bool] = []
     app = _Host()
     monkeypatch.setattr(type(app), "bell", lambda self: rang.append(True))
@@ -151,7 +145,6 @@ async def test_bell_rings_on_mount(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_app_queue_serializes_two_approvals():
-    """Internal documentation."""
     gate = ApprovalGate(ApprovalLevel.CONFIRM)
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop(), gate=gate)
     r1 = ApprovalRequest(call_id="c1", action="run_command", args={"command": "a"},
@@ -176,7 +169,6 @@ async def test_app_queue_serializes_two_approvals():
 
 @pytest.mark.asyncio
 async def test_focus_returns_to_prompt_after_decision():
-    """Internal documentation."""
     gate = ApprovalGate(ApprovalLevel.CONFIRM)
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop(), gate=gate)
     req = ApprovalRequest(call_id="c1", action="run_command", args={"command": "a"},
@@ -194,14 +186,12 @@ async def test_focus_returns_to_prompt_after_decision():
 
 
 def test_format_approval_title_medium_has_eye_prefix():
-    """Internal documentation."""
     title = format_approval_title(risk="medium", trigger="soft_ask:git push")
     assert title.startswith("◓"), f"标题应以 ◓ 开头,实际: {title!r}"
     assert "medium" in title
 
 
 def test_format_approval_title_high_risk():
-    """Internal documentation."""
     title = format_approval_title(risk="high", trigger="hard_rule:shell")
     assert title.startswith("◓"), f"标题应以 ◓ 开头,实际: {title!r}"
     assert "high" in title
@@ -209,21 +199,18 @@ def test_format_approval_title_high_risk():
 
 
 def test_format_approval_title_low_risk():
-    """Internal documentation."""
     title = format_approval_title(risk="low", trigger="")
     assert title.startswith("◓"), f"标题应以 ◓ 开头,实际: {title!r}"
     assert "low" in title
 
 
 def test_format_approval_title_secret_contains_warning():
-    """Internal documentation."""
     title = format_approval_title(risk="high", trigger="secret:AWS_KEY")
     assert "⚠︎" in title, f"secret trigger 应含 ⚠︎(VS15),实际: {title!r}"
     assert "AWS_KEY" in title
 
 
 def test_format_approval_title_no_forbidden_glyphs():
-    """Internal documentation."""
     forbidden = set("◎⊙●○◐◑◇◆▶•")
     for risk in ("low", "medium", "high"):
         for trigger in ("", "hard_rule:x", "secret:K"):
@@ -234,7 +221,6 @@ def test_format_approval_title_no_forbidden_glyphs():
 
 @pytest.mark.asyncio
 async def test_risk_classes_applied():
-    """Internal documentation."""
     for risk, expected_class in (("low", "risk-low"), ("medium", "risk-medium"), ("high", "risk-high")):
         app = _Host(risk=risk)
         async with app.run_test() as pilot:
@@ -245,7 +231,6 @@ async def test_risk_classes_applied():
 
 @pytest.mark.asyncio
 async def test_options_use_arrow_prefix():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -256,7 +241,6 @@ async def test_options_use_arrow_prefix():
 
 @pytest.mark.asyncio
 async def test_self_destruct_line_has_done_eye(monkeypatch):
-    """Internal documentation."""
     done_texts: list[str] = []
     original_finish = InlineChoice._finish
 

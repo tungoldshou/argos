@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import io
@@ -26,7 +25,6 @@ from argos.skills_curator.index import (
 
 
 class _FakeResp(io.BytesIO):
-    """Internal documentation."""
 
     def __enter__(self):
         return self
@@ -140,7 +138,6 @@ def test_fetch_remote_unknown_fields_ignored(monkeypatch):
 
 
 def test_fetch_remote_corrupt_line_skipped(monkeypatch):
-    """Internal documentation."""
     payload = {
         "version": 1,
         "generated_at": 0.0,
@@ -187,7 +184,6 @@ def test_fetch_remote_timeout_raises(monkeypatch):
 
 
 def test_save_cache_atomic_write(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(
         "argos.skills_curator.index._skills_root", lambda: tmp_path
     )

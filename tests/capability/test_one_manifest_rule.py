@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import ast
@@ -32,7 +31,6 @@ def _make_broker(
 
 @pytest.mark.asyncio
 async def test_new_capability_broker_end_to_end():
-    """Internal documentation."""
     reg = CapabilityRegistry()
     dispatch_calls: list[dict] = []
 
@@ -67,7 +65,6 @@ async def test_new_capability_broker_end_to_end():
 
 
 def _assert_no_forbidden_writes(fn) -> None:
-    """Internal documentation."""
     forbidden = {"ALL_TOOL_NAMES", "_RISK", "_execute", "build_namespace"}
     src = textwrap.dedent(inspect.getsource(fn))
     tree = ast.parse(src)
@@ -98,7 +95,6 @@ def _assert_no_forbidden_writes(fn) -> None:
 
 
 def test_register_missing_risk_raises_value_error():
-    """Internal documentation."""
     reg = CapabilityRegistry()
     cap_no_risk = Capability(
         name="test_no_risk_cap",
@@ -112,7 +108,6 @@ def test_register_missing_risk_raises_value_error():
 
 
 def test_register_missing_risk_name_in_error():
-    """Internal documentation."""
     reg = CapabilityRegistry()
     with pytest.raises(ValueError, match="bad_capability"):
         reg.register(Capability(name="bad_capability", kind="tool", risk=None))
@@ -120,7 +115,6 @@ def test_register_missing_risk_name_in_error():
 
 
 def test_builtin_risk_table_matches_broker_RISK():
-    """Internal documentation."""
     reg = CapabilityRegistry()
     register_builtins(reg)
     table = reg.risk_table()
@@ -137,7 +131,6 @@ def test_builtin_risk_table_matches_broker_RISK():
 
 
 def test_broker_RISK_subset_of_registry():
-    """Internal documentation."""
     reg = CapabilityRegistry()
     register_builtins(reg)
     missing = [a for a in _RISK if a not in reg]
@@ -149,13 +142,11 @@ def test_broker_RISK_subset_of_registry():
 
 
 def test_get_tool_names_without_registry_returns_static():
-    """Internal documentation."""
     result = get_tool_names(None)
     assert result == list(ALL_TOOL_NAMES)
 
 
 def test_get_tool_names_with_registry_returns_callable_names():
-    """Internal documentation."""
     reg = CapabilityRegistry()
     register_builtins(reg)
     result = get_tool_names(reg)
@@ -165,7 +156,6 @@ def test_get_tool_names_with_registry_returns_callable_names():
 
 
 def test_get_tool_names_registry_includes_new_cap():
-    """Internal documentation."""
     reg = CapabilityRegistry()
     register_builtins(reg)
     reg.register(Capability(name="dynamic_new_tool", kind="tool", risk="low"))
@@ -175,7 +165,6 @@ def test_get_tool_names_registry_includes_new_cap():
 
 
 def test_get_tool_names_count_matches_all_tool_names():
-    """Internal documentation."""
     _HOST_ONLY_CAPS: set[str] = set()
     reg = CapabilityRegistry()
     register_builtins(reg)

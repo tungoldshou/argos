@@ -372,3 +372,28 @@ Last updated: 2026-07-04
 - `UserPromptSubmit` remains a lifecycle notification hook, not a policy gate.
 - Failed or timed-out prompt hooks emit `HookFired` rows into ActivityPanel before the run continues.
 - `PreToolUse` remains the fail-closed hook path for blocking unsafe tool execution.
+
+## 2026-07-04: Product Reset Defaults Are Core-First
+
+- Keep every existing slash command parseable, but expose only the stable core command set in the default slash menu and plain `/help`.
+- Advanced surfaces (`voice`, skills, MCP, hooks, LSP, conductor, Dream, eval, routing, loop/goal/schedule/watch, ledger/journal, `/yolo`) stay available through exact commands and `/help advanced`.
+- This preserves compatibility while making the first-run product surface smaller and less experimental.
+
+## 2026-07-04: Workflow Orchestration Is Opt-In
+
+- `ARGOS_WORKFLOWS=1` is now required before `WORKFLOW_PROMPT` is injected or `propose_workflow` dispatches to the workflow engine.
+- If a model proposes a workflow while workflows are disabled, Argos returns an honest correction and asks it to continue directly in one thread.
+- Workflow tooling remains in the namespace for compatibility, but it is not part of the default prompt path.
+
+## 2026-07-04: Persistent Always Rules Must Be Narrowable
+
+- Persistent allow rules are saved only when Argos can derive a scoped matcher: command plus first non-flag argument, exact normalized file path, exact web origin, or exact MCP server/tool.
+- For `run_command`, include any exact leading flag tokens before that first non-flag argument, so `git -C repo status` cannot turn into a persistent wildcard for all `git` commands.
+- Unsupported actions, including `computer_*`, may be approved for the current request/session but do not write wildcard persistent allow rules.
+- This keeps "Always allow" useful without turning one approval into broad future privilege.
+
+## 2026-07-04: Contract Prompts Are Domain-Specific
+
+- Structured contract prompts are limited to clearly structured engineering domains: REST/API, database schema, state machine/workflow domain, and config/settings work.
+- Ordinary mentions of functions, classes, JSON, models, fields, or enums no longer trigger the generic contract prompt.
+- This keeps the contract layer focused on tasks where formal conventions reduce real ambiguity.

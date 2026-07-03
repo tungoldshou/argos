@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -39,7 +38,6 @@ class InstalledSkill:
 
 
 def parse_frontmatter(text: str) -> dict:
-    """Internal documentation."""
     m = _FRONTMATTER.match(text)
     if not m:
         raise ValueError("missing --- YAML --- frontmatter")
@@ -53,7 +51,6 @@ def parse_frontmatter(text: str) -> dict:
 
 
 def validate_skill_meta(meta: dict, *, name: str) -> list[str]:
-    """Internal documentation."""
     errors: list[str] = []
     if not meta.get("name"):
         errors.append("frontmatter: missing 'name'")
@@ -80,7 +77,6 @@ def validate_skill_meta(meta: dict, *, name: str) -> list[str]:
 
 
 def read_installed_skill(path: Path) -> InstalledSkill | None:
-    """Internal documentation."""
     try:
         text = path.read_text("utf-8")
         meta = parse_frontmatter(text)
@@ -100,7 +96,6 @@ def read_installed_skill(path: Path) -> InstalledSkill | None:
 
 
 def list_installed(*, base_dir: Path | None = None) -> list[InstalledSkill]:
-    """Internal documentation."""
     root = base_dir or _index_mod._skills_root()
     if not root.exists():
         return []

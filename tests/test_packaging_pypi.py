@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -22,7 +21,6 @@ def _project_version() -> str:
 
 
 def test_pyproject_has_license_mit():
-    """Internal documentation."""
     txt = PYPROJECT.read_text()
     assert re.search(r'license\s*=\s*\{\s*text\s*=\s*"MIT"\s*\}', txt), (
         f"pyproject 缺 license = {{text = 'MIT'}};got:\n{txt[txt.find('license'):txt.find('license')+80]}"
@@ -30,7 +28,6 @@ def test_pyproject_has_license_mit():
 
 
 def test_pyproject_has_authors_with_email():
-    """Internal documentation."""
     txt = PYPROJECT.read_text()
     m = re.search(r'authors\s*=\s*\[(.*?)\]', txt, flags=re.DOTALL)
     assert m, "pyproject 缺 [project.authors] 段"
@@ -40,7 +37,6 @@ def test_pyproject_has_authors_with_email():
 
 
 def test_pyproject_has_classifiers_list():
-    """Internal documentation."""
     txt = PYPROJECT.read_text()
     m = re.search(r'classifiers\s*=\s*\[(.*?)\]', txt, flags=re.DOTALL)
     assert m, "pyproject 缺 [project.classifiers] 段"
@@ -52,7 +48,6 @@ def test_pyproject_has_classifiers_list():
 
 
 def test_pyproject_has_urls_section():
-    """Internal documentation."""
     txt = PYPROJECT.read_text()
     m = re.search(r'\[project\.urls\](.*?)(?=\n\[|\Z)', txt, flags=re.DOTALL)
     assert m, "pyproject 缺 [project.urls] 段"
@@ -62,7 +57,6 @@ def test_pyproject_has_urls_section():
 
 
 def test_pyproject_scripts_contains_argos_and_argospkg():
-    """Internal documentation."""
     txt = PYPROJECT.read_text()
     m = re.search(r'\[project\.scripts\](.*?)(?=\n\[|\Z)', txt, flags=re.DOTALL)
     assert m, "pyproject 缺 [project.scripts] 段"
@@ -74,7 +68,6 @@ def test_pyproject_scripts_contains_argos_and_argospkg():
 
 
 def test_pyproject_sdist_includes_critical_files():
-    """Internal documentation."""
     txt = PYPROJECT.read_text()
     m = re.search(r'\[tool\.hatch\.build\.targets\.sdist\](.*?)(?=\n\[|\Z)', txt, flags=re.DOTALL)
     assert m, "pyproject 缺 [tool.hatch.build.targets.sdist] 段"
@@ -97,7 +90,6 @@ def test_argospkg_pkg_file_exists():
 
 
 def test_argospkg_info_prints_metadata():
-    """Internal documentation."""
     r = subprocess.run(
         [sys.executable, "-m", "argos.cli.pkg", "info"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
@@ -110,7 +102,6 @@ def test_argospkg_info_prints_metadata():
 
 
 def test_argospkg_info_does_not_read_cwd_packaging_version(tmp_path, monkeypatch, capsys):
-    """Internal documentation."""
     from argos.cli.pkg import cmd_info
 
     fake = tmp_path / "packaging"
@@ -125,7 +116,6 @@ def test_argospkg_info_does_not_read_cwd_packaging_version(tmp_path, monkeypatch
 
 
 def test_argospkg_check_imports_cleanly():
-    """Internal documentation."""
     r = subprocess.run(
         [sys.executable, "-m", "argos.cli.pkg", "check"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
@@ -135,7 +125,6 @@ def test_argospkg_check_imports_cleanly():
 
 
 def test_argospkg_unknown_subcommand_exits_nonzero():
-    """Internal documentation."""
     r = subprocess.run(
         [sys.executable, "-m", "argos.cli.pkg", "foo"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
@@ -145,7 +134,6 @@ def test_argospkg_unknown_subcommand_exits_nonzero():
 
 
 def test_argospkg_manifest_lists_winget_dir():
-    """Internal documentation."""
     r = subprocess.run(
         [sys.executable, "-m", "argos.cli.pkg", "manifest"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
@@ -159,7 +147,6 @@ def test_argospkg_manifest_lists_winget_dir():
 
 
 def test_argospkg_manifest_fails_on_placeholder_winget_digest():
-    """Internal documentation."""
     r = subprocess.run(
         [sys.executable, "-m", "argos.cli.pkg", "manifest"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
@@ -171,7 +158,6 @@ def test_argospkg_manifest_fails_on_placeholder_winget_digest():
 
 
 def test_argospkg_manifest_fails_on_invalid_winget_digest(tmp_path, monkeypatch, capsys):
-    """Internal documentation."""
     from argos.cli.pkg import cmd_manifest
 
     src = ROOT / "packaging" / "winget"
@@ -189,7 +175,6 @@ def test_argospkg_manifest_fails_on_invalid_winget_digest(tmp_path, monkeypatch,
 
 
 def test_argospkg_manifest_fails_without_winget_dir(tmp_path, monkeypatch, capsys):
-    """Internal documentation."""
     from argos.cli.pkg import cmd_manifest
 
     monkeypatch.chdir(tmp_path)
@@ -199,7 +184,6 @@ def test_argospkg_manifest_fails_without_winget_dir(tmp_path, monkeypatch, capsy
 
 
 def test_argospkg_manifest_fails_when_required_winget_file_missing(tmp_path, monkeypatch, capsys):
-    """Internal documentation."""
     from argos.cli.pkg import cmd_manifest
 
     dst = tmp_path / "packaging" / "winget"
@@ -216,7 +200,6 @@ def test_argospkg_manifest_fails_when_required_winget_file_missing(tmp_path, mon
 
 
 def test_argospkg_help_prints_usage():
-    """Internal documentation."""
     r = subprocess.run(
         [sys.executable, "-m", "argos.cli.pkg", "--help"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
@@ -234,7 +217,6 @@ def test_argospkg_help_prints_usage():
 
 
 def test_publish_workflow_exists_and_uses_pypa_action():
-    """Internal documentation."""
     if not PUBLISH_YML.exists():
         pytest.skip("publish.yml 尚未创建(plan T10 任务) — skip 早期 commit")
     txt = PUBLISH_YML.read_text()
@@ -244,7 +226,6 @@ def test_publish_workflow_exists_and_uses_pypa_action():
 
 
 def test_publish_workflow_does_not_ignore_twine_check_failure():
-    """Internal documentation."""
     txt = PUBLISH_YML.read_text()
     assert "twine check dist/*" in txt
     assert "twine check dist/*  ||" not in txt
@@ -252,28 +233,24 @@ def test_publish_workflow_does_not_ignore_twine_check_failure():
 
 
 def test_publish_workflow_cleans_dist_before_build():
-    """Internal documentation."""
     txt = PUBLISH_YML.read_text()
     assert "run: rm -rf dist" in txt
     assert txt.index("run: rm -rf dist") < txt.index("run: uv build")
 
 
 def test_publish_workflow_upload_artifact_fails_when_dist_is_empty():
-    """Internal documentation."""
     txt = PUBLISH_YML.read_text()
     assert "actions/upload-artifact@v4" in txt
     assert "if-no-files-found: error" in txt
 
 
 def test_publish_workflow_manual_dispatch_does_not_publish_to_pypi():
-    """Internal documentation."""
     txt = PUBLISH_YML.read_text()
     assert "workflow_dispatch:" in txt
     assert "if: startsWith(github.ref, 'refs/tags/v')" in txt
 
 
 def test_publish_workflow_manual_dispatch_publishes_to_testpypi_only():
-    """Internal documentation."""
     txt = PUBLISH_YML.read_text()
     assert "  testpypi:" in txt
     testpypi_job = txt.split("  testpypi:", 1)[1].split("\n  pypi:", 1)[0]
@@ -285,7 +262,6 @@ def test_publish_workflow_manual_dispatch_publishes_to_testpypi_only():
 
 
 def test_publish_workflow_pypi_job_keeps_release_gates():
-    """Internal documentation."""
     txt = PUBLISH_YML.read_text()
     pypi_job = txt.split("  pypi:", 1)[1]
     assert "needs: [test, build]" in pypi_job
@@ -294,7 +270,6 @@ def test_publish_workflow_pypi_job_keeps_release_gates():
 
 
 def test_publish_workflow_smokes_built_wheel_before_upload():
-    """Internal documentation."""
     txt = PUBLISH_YML.read_text()
     smoke = (
         "uv run pytest tests/test_packaging_pypi.py::"
@@ -306,7 +281,6 @@ def test_publish_workflow_smokes_built_wheel_before_upload():
 
 
 def test_uv_build_dry_run_succeeds():
-    """Internal documentation."""
     r = subprocess.run(
         ["uv", "build"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=300,
@@ -324,7 +298,6 @@ def test_uv_build_dry_run_succeeds():
 
 @pytest.mark.slow
 def test_pip_install_wheel_and_run_argos_version():
-    """Internal documentation."""
     whl = list((ROOT / "dist").glob("*.whl"))
     if not whl:
         pytest.skip("无 wheel 可测(先跑 test_uv_build_dry_run_succeeds)")

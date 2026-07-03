@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -17,7 +16,6 @@ from argos.sandbox.linux import _AVAILABLE_BACKEND as _LINUX_BACKEND
 
 
 def current_sandbox_backend() -> str | None:
-    """Internal documentation."""
     if sys.platform == "darwin":
         if shutil.which("sandbox-exec") or _executor_mod.SeatbeltExecutor is not None:
             return "seatbelt"
@@ -28,7 +26,6 @@ def current_sandbox_backend() -> str | None:
 
 
 def require_sandbox_backend() -> str:
-    """Internal documentation."""
     backend = current_sandbox_backend()
     if backend is None:
         platform = sys.platform
@@ -47,13 +44,11 @@ def require_sandbox_backend() -> str:
 
 @pytest.fixture
 def requires_sandbox() -> str:
-    """Internal documentation."""
     return require_sandbox_backend()
 
 
 @pytest.fixture(autouse=True)
 def _shorten_unix_socket_paths(monkeypatch):
-    """Internal documentation."""
     import asyncio
     import hashlib
     import os
@@ -98,19 +93,16 @@ def _shorten_unix_socket_paths(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _isolate_argos_config_dir(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / ".argos"))
 
 
 @pytest.fixture(autouse=True)
 def _force_numbered_setup_menu(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_NO_ARROW_SELECT", "1")
 
 
 @pytest.fixture(autouse=True)
 def _reset_skills_registry():
-    """Internal documentation."""
     try:
         from argos.skills_runtime import _reset_registry as _rr
         _rr()
@@ -122,7 +114,6 @@ def _reset_skills_registry():
 
 @pytest.fixture(autouse=True)
 def _reset_permissions_config(tmp_path, monkeypatch):
-    """Internal documentation."""
     try:
         from argos.permissions import config as _pcfg
         monkeypatch.setattr(_pcfg, "CONFIG_PATH", tmp_path / "permissions.json", raising=False)
@@ -135,7 +126,6 @@ def _reset_permissions_config(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _neutralize_mcp_singleton(monkeypatch):
-    """Internal documentation."""
     from pathlib import Path
 
     from argos import mcp_native
@@ -147,6 +137,5 @@ def _neutralize_mcp_singleton(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _no_real_daemon(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_NO_DAEMON", "1")
     monkeypatch.setenv("ARGOS_DAEMON_SOCKET", "/nonexistent/argos-test/daemon.sock")

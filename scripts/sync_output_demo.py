@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -18,7 +17,6 @@ def stream_demo(
     delay_ms: int,
     use_sync: bool | None,
 ) -> None:
-    """Internal documentation."""
     mode_label = {True: "SYNC ON", False: "SYNC OFF", None: "AUTO(probe)"}[use_sync]
     header = f"─── {mode_label} · {chunks} chunks × {chunk_size} chars · {delay_ms}ms delay ───\n"
     sys.stdout.write(header)

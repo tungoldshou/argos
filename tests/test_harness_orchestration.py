@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 
 from argos.tui.events import EventBus, PhaseChange, VerifyVerdict, Escalation
@@ -83,7 +82,6 @@ async def test_verify_gate_escalates_after_max_rounds(in_project):
 
 @pytest.mark.asyncio
 async def test_verify_gate_no_cmd_completes_honestly_no_escalation(in_project):
-    """Internal documentation."""
     bus = _RecordingBus()
     h = _harness(bus)
     verdict = await h.run_verify_gate(None, attempt=99)
@@ -96,7 +94,6 @@ async def test_verify_gate_no_cmd_completes_honestly_no_escalation(in_project):
 
 @pytest.mark.asyncio
 async def test_verify_gate_configured_cmd_unverifiable_is_not_honest_completion(in_project):
-    """Internal documentation."""
     bus = _RecordingBus()
     h = _harness(bus)
     tampered_verdict = Verdict.unverifiable(
@@ -123,7 +120,6 @@ def test_phase_order_constant():
 
 @pytest.mark.asyncio
 async def test_enter_phase_backward_raises():
-    """Internal documentation."""
     bus = _RecordingBus()
     h = _harness(bus)
     await h.enter_phase("plan", actions=0)
@@ -134,7 +130,6 @@ async def test_enter_phase_backward_raises():
 
 @pytest.mark.asyncio
 async def test_enter_phase_first_must_be_plan():
-    """Internal documentation."""
     bus = _RecordingBus()
     h = _harness(bus)
     with pytest.raises(ValueError, match="plan"):
@@ -143,7 +138,6 @@ async def test_enter_phase_first_must_be_plan():
 
 @pytest.mark.asyncio
 async def test_full_plan_act_verify_report_still_works(in_project):
-    """Internal documentation."""
     (in_project / "test_ok.py").write_text("def test_ok():\n    assert True\n")
     bus = _RecordingBus()
     h = _harness(bus)

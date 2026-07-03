@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -16,7 +15,6 @@ from argos.hooks.runner import fire, HookFireResult
 
 @pytest.fixture(autouse=True)
 def _isolated_singleton(monkeypatch):
-    """Internal documentation."""
     from argos.hooks import _reset_config
     _reset_config()
     yield
@@ -24,7 +22,6 @@ def _isolated_singleton(monkeypatch):
 
 
 def _set_config(*entries_for_pre):
-    """Internal documentation."""
     cfg = HooksConfig(entries={"PreToolUse": list(entries_for_pre)})
     from argos.hooks import _config
     import argos.hooks as h
@@ -60,7 +57,6 @@ async def test_fire_exit_nonzero_fail():
 
 @pytest.mark.asyncio
 async def test_fire_timeout_kills_process():
-    """Internal documentation."""
     h = HookHandler(type="command", command="sleep 5", timeout=200)
     _set_config(HookMatcherEntry(matcher="*", hooks=(h,)))
     payload = build_pre_payload(session_id="s", cwd="/tmp", code="x", tool_names=[])
@@ -74,7 +70,6 @@ async def test_fire_timeout_kills_process():
 
 @pytest.mark.asyncio
 async def test_fire_passes_stdin_json():
-    """Internal documentation."""
     h = HookHandler(type="command", command="cat", timeout=5000)
     _set_config(HookMatcherEntry(matcher="*", hooks=(h,)))
     payload = build_pre_payload(
@@ -87,7 +82,6 @@ async def test_fire_passes_stdin_json():
 
 @pytest.mark.asyncio
 async def test_fire_parallel_3_hooks_faster_than_serial():
-    """Internal documentation."""
     h1 = HookHandler(type="command", command="sleep 0.5 && echo a", timeout=10000)
     h2 = HookHandler(type="command", command="sleep 0.5 && echo b", timeout=10000)
     h3 = HookHandler(type="command", command="sleep 0.5 && echo c", timeout=10000)
@@ -102,7 +96,6 @@ async def test_fire_parallel_3_hooks_faster_than_serial():
 
 @pytest.mark.asyncio
 async def test_fire_stdout_invalid_json_ignored():
-    """Internal documentation."""
     h = HookHandler(type="command", command="echo 'not json'", timeout=5000)
     _set_config(HookMatcherEntry(matcher="*", hooks=(h,)))
     payload = build_pre_payload(session_id="s", cwd="/tmp", code="x", tool_names=[])
@@ -113,7 +106,6 @@ async def test_fire_stdout_invalid_json_ignored():
 
 @pytest.mark.asyncio
 async def test_fire_stdout_json_stop_reason():
-    """Internal documentation."""
     h = HookHandler(
         type="command", command="printf %s '{\"stopReason\":\"blocked by audit\"}'",
         timeout=5000,
@@ -126,7 +118,6 @@ async def test_fire_stdout_json_stop_reason():
 
 @pytest.mark.asyncio
 async def test_fire_command_not_found():
-    """Internal documentation."""
     h = HookHandler(
         type="command", command="nonexistent-bin-xyz-12345", timeout=5000,
     )
@@ -139,7 +130,6 @@ async def test_fire_command_not_found():
 
 @pytest.mark.asyncio
 async def test_fire_env_argos_hook_event_injected():
-    """Internal documentation."""
     h = HookHandler(
         type="command", command="bash -c 'echo $ARGOS_HOOK_EVENT'", timeout=5000,
     )
@@ -151,7 +141,6 @@ async def test_fire_env_argos_hook_event_injected():
 
 @pytest.mark.asyncio
 async def test_fire_template_replacement_cwd(tmp_path):
-    """Internal documentation."""
     h = HookHandler(
         type="command", command="echo cwd={cwd} tools={tool_names}",
         timeout=5000,
@@ -167,7 +156,6 @@ async def test_fire_template_replacement_cwd(tmp_path):
 
 @pytest.mark.asyncio
 async def test_fire_event_with_no_handlers_noop():
-    """Internal documentation."""
     payload = build_pre_payload(session_id="s", cwd="/tmp", code="x", tool_names=[])
     r = await fire("PostToolUse", payload, cwd="/tmp", session_id="s")
     assert r.success is True
@@ -177,7 +165,6 @@ async def test_fire_event_with_no_handlers_noop():
 
 @pytest.mark.asyncio
 async def test_fire_pre_blocking_sets_success_false_for_any_nonzero():
-    """Internal documentation."""
     h_ok = HookHandler(type="command", command="true", timeout=5000)
     h_fail = HookHandler(type="command", command="false", timeout=5000)
     _set_config(HookMatcherEntry(matcher="*", hooks=(h_ok, h_fail)))

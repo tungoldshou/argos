@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import shlex
@@ -26,7 +25,6 @@ _GIT_NETWORK_SUBCMDS: set[str] = {
 
 
 def _linux_available_backend() -> str | None:
-    """Internal documentation."""
     import shutil
     if shutil.which("bwrap"):
         return "bwrap"
@@ -36,7 +34,6 @@ def _linux_available_backend() -> str | None:
 
 
 def command_needs_network(command: str) -> bool:
-    """Internal documentation."""
     try:
         parts = shlex.split(command)
     except ValueError:
@@ -55,7 +52,6 @@ def command_needs_network(command: str) -> bool:
 
 def run_command(command: str, *, workspace: Path | None = None,
                 allow_network: bool = False) -> tuple[str, int | None]:
-    """Internal documentation."""
     try:
         parts = shlex.split(command)
     except ValueError as e:

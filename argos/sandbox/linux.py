@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -13,7 +12,6 @@ from .backend import ExecResult
 
 
 def _probe_backend() -> str | None:
-    """Internal documentation."""
     if shutil.which("bwrap"):
         return "bwrap"
     if shutil.which("unshare"):
@@ -26,7 +24,6 @@ _AVAILABLE_BACKEND: str | None = _probe_backend()
 
 def _bwrap_argv(workspace: Path, child_argv: list[str], *,
                 allow_network: bool = False) -> list[str]:
-    """Internal documentation."""
     ws = workspace.resolve()
     argv = [
         "bwrap",
@@ -64,7 +61,6 @@ def _bwrap_argv(workspace: Path, child_argv: list[str], *,
 
 
 def _credential_mask_args() -> list[str]:
-    """Internal documentation."""
     from .seatbelt import _ARGOS_CONFIG_DENY_FILES, _CRED_DENY_DIRS, _CRED_DENY_FILES
     home = Path.home()
     args: list[str] = []
@@ -99,7 +95,6 @@ def _credential_mask_args() -> list[str]:
 
 def _unshare_argv(workspace: Path, child_argv: list[str], *,
                   allow_network: bool = False) -> list[str]:
-    """Internal documentation."""
     ws = workspace.resolve()
     argv = [
         "unshare",
@@ -120,7 +115,6 @@ def _unshare_argv(workspace: Path, child_argv: list[str], *,
 
 def _linux_spawn(*, backend: str, workspace: Path, child_argv: list[str],
                  env: dict[str, str] | None = None, sandbox: bool = True) -> subprocess.Popen:
-    """Internal documentation."""
     workspace = Path(workspace)
     workspace.mkdir(parents=True, exist_ok=True)
     if not sandbox:
@@ -141,7 +135,6 @@ def _linux_spawn(*, backend: str, workspace: Path, child_argv: list[str],
 
 
 class _BaseLinuxExecutor:
-    """Internal documentation."""
 
     backend: str = ""
 
@@ -247,17 +240,14 @@ class _BaseLinuxExecutor:
 
 
 class BwrapExecutor(_BaseLinuxExecutor):
-    """Internal documentation."""
     backend = "bwrap"
 
 
 class UnshareExecutor(_BaseLinuxExecutor):
-    """Internal documentation."""
     backend = "unshare"
 
 
 def sandbox_backend_summary() -> tuple[str, bool]:
-    """Internal documentation."""
     import sys as _sys
     if _sys.platform == "darwin":
         return ("seatbelt", False)
@@ -271,7 +261,6 @@ def sandbox_backend_summary() -> tuple[str, bool]:
 
 
 def select_backend():
-    """Internal documentation."""
     if sys.platform == "darwin":
         from .executor import SeatbeltExecutor
         return SeatbeltExecutor

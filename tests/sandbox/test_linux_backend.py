@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import sys
@@ -14,7 +13,6 @@ from argos.sandbox.linux import BwrapExecutor, UnshareExecutor, select_backend
 
 
 def test_bwrap_executor_implements_sandbox_backend():
-    """Internal documentation."""
     assert isinstance(BwrapExecutor(), SandboxBackend)
     assert isinstance(UnshareExecutor(), SandboxBackend)
 
@@ -24,14 +22,12 @@ def test_unshare_executor_implements_sandbox_backend():
 
 
 def test_select_backend_returns_seatbelt_on_macos():
-    """Internal documentation."""
     with mock.patch.object(sys, "platform", "darwin"):
         cls = select_backend()
     assert cls is SeatbeltExecutor
 
 
 def test_select_backend_returns_linux_on_linux_when_bwrap_available():
-    """Internal documentation."""
     with mock.patch.object(sys, "platform", "linux"),\
          mock.patch.object(linux_mod, "_AVAILABLE_BACKEND", "bwrap", create=True):
         cls = select_backend()
@@ -39,7 +35,6 @@ def test_select_backend_returns_linux_on_linux_when_bwrap_available():
 
 
 def test_select_backend_falls_back_to_unshare_when_bwrap_missing():
-    """Internal documentation."""
     with mock.patch.object(sys, "platform", "linux"),\
          mock.patch.object(linux_mod, "_AVAILABLE_BACKEND", "unshare", create=True):
         cls = select_backend()
@@ -47,7 +42,6 @@ def test_select_backend_falls_back_to_unshare_when_bwrap_missing():
 
 
 def test_select_backend_raises_when_no_sandbox_available_on_linux():
-    """Internal documentation."""
     with mock.patch.object(sys, "platform", "linux"),\
          mock.patch.object(linux_mod, "_AVAILABLE_BACKEND", None, create=True):
         with pytest.raises(RuntimeError, match="无可用 Linux 沙箱后端"):
@@ -55,7 +49,6 @@ def test_select_backend_raises_when_no_sandbox_available_on_linux():
 
 
 def test_bwrap_masks_active_argos_config_dir_secret_files(tmp_path, monkeypatch):
-    """Internal documentation."""
     cfg = tmp_path / "cfg"
     cfg.mkdir()
     for name in (".env", "config.json", "mcp.json"):
@@ -75,7 +68,6 @@ def test_bwrap_masks_active_argos_config_dir_secret_files(tmp_path, monkeypatch)
 
 
 def test_bwrap_masks_resolved_active_argos_config_dir_secret_files(tmp_path, monkeypatch):
-    """Internal documentation."""
     real_cfg = tmp_path / "real-cfg"
     real_cfg.mkdir()
     for name in (".env", "config.json", "mcp.json"):
@@ -102,7 +94,6 @@ linux_only = pytest.mark.skipif(
 
 @linux_only
 def test_bwrap_blocks_network(tmp_path):
-    """Internal documentation."""
     cls = select_backend()
     if cls is not BwrapExecutor:
         pytest.skip(f"bwrap 不可用,跳过(用 {cls.__name__})")
@@ -124,7 +115,6 @@ def test_bwrap_blocks_network(tmp_path):
 
 @linux_only
 def test_bwrap_blocks_write_outside_workspace(tmp_path):
-    """Internal documentation."""
     cls = select_backend()
     if cls is not BwrapExecutor:
         pytest.skip(f"bwrap 不可用,跳过(用 {cls.__name__})")
@@ -148,7 +138,6 @@ def test_bwrap_blocks_write_outside_workspace(tmp_path):
 
 @linux_only
 def test_bwrap_allows_write_inside_workspace(tmp_path):
-    """Internal documentation."""
     cls = select_backend()
     if cls is not BwrapExecutor:
         pytest.skip(f"bwrap 不可用,跳过(用 {cls.__name__})")
@@ -168,7 +157,6 @@ def test_bwrap_allows_write_inside_workspace(tmp_path):
 
 @linux_only
 def test_bwrap_masks_credential_dirs(tmp_path, monkeypatch):
-    """Internal documentation."""
     cls = select_backend()
     if cls is not BwrapExecutor:
         pytest.skip(f"非 bwrap 后端,跳过(用 {cls.__name__})")

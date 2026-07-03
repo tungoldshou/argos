@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from argos.routing.categorizer import TaskCategory
 from argos.routing.config import RoutingConfig
 from argos.routing.resolver import resolve

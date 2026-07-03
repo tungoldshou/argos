@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -27,7 +26,6 @@ def _meta(run_id: str = "abc123def456") -> RunMeta:
 # ── RunStore:JSONL append / replay / corruption recovery ───────────────────
 
 def test_runstore_append_then_replay(tmp_path: Path):
-    """Internal documentation."""
     store = RunStore(tmp_path)
     run_id = "abc123def456"
     store.append(run_id, _meta(run_id).to_dict())
@@ -38,7 +36,6 @@ def test_runstore_append_then_replay(tmp_path: Path):
 
 
 def test_runstore_replay_skips_corrupt_lines(tmp_path: Path):
-    """Internal documentation."""
     store = RunStore(tmp_path)
     run_id = "abc123def456"
     store.append(run_id, _meta(run_id).to_dict())
@@ -53,14 +50,12 @@ def test_runstore_replay_skips_corrupt_lines(tmp_path: Path):
 
 
 def test_runstore_empty_file_yields_nothing(tmp_path: Path):
-    """Internal documentation."""
     store = RunStore(tmp_path)
     rows = list(store.replay("nonexistent"))
     assert rows == []
 
 
 def test_runstore_replay_since_seq(tmp_path: Path):
-    """Internal documentation."""
     store = RunStore(tmp_path)
     run_id = "abc123def456"
     store.append(run_id, _meta(run_id).to_dict())
@@ -71,7 +66,6 @@ def test_runstore_replay_since_seq(tmp_path: Path):
 
 
 def test_runstore_concurrent_appends(tmp_path: Path):
-    """Internal documentation."""
     async def _go():
         store = RunStore(tmp_path)
         run_id = "abc123def456"
@@ -87,7 +81,6 @@ def test_runstore_concurrent_appends(tmp_path: Path):
 
 
 def test_runstore_creates_runs_dir(tmp_path: Path):
-    """Internal documentation."""
     runs = tmp_path / "fresh" / "runs"
     store = RunStore(runs)
     run_id = "abc123def456"
@@ -96,7 +89,6 @@ def test_runstore_creates_runs_dir(tmp_path: Path):
 
 
 def test_runstore_corruption_first_line_not_meta(tmp_path: Path):
-    """Internal documentation."""
     store = RunStore(tmp_path)
     run_id = "abc123def456"
     (store._path_for(run_id)).write_text(
@@ -108,7 +100,6 @@ def test_runstore_corruption_first_line_not_meta(tmp_path: Path):
 
 
 def test_runstore_rejects_virtual_underscore_streams(tmp_path: Path):
-    """Internal documentation."""
     store = RunStore(tmp_path)
     with pytest.raises(ValueError, match="virtual"):
         store.append("_conductor", {"kind": "proactive_suggestion", "goal": "x"})
@@ -116,7 +107,6 @@ def test_runstore_rejects_virtual_underscore_streams(tmp_path: Path):
 
 
 def test_runstore_list_runs(tmp_path: Path):
-    """Internal documentation."""
     store = RunStore(tmp_path)
     store.append("aaa111bbb222", _meta("aaa111bbb222").to_dict())
     store.append("ccc333ddd444", _meta("ccc333ddd444").to_dict())
@@ -125,7 +115,6 @@ def test_runstore_list_runs(tmp_path: Path):
 
 
 def test_runstore_last_state(tmp_path: Path):
-    """Internal documentation."""
     store = RunStore(tmp_path)
     run_id = "abc123def456"
     store.append(run_id, _meta(run_id).to_dict())
@@ -138,7 +127,6 @@ def test_runstore_last_state(tmp_path: Path):
 
 
 def test_stateindex_upsert_roundtrip(tmp_path: Path):
-    """Internal documentation."""
     index = StateIndex(tmp_path / "index.json")
     index.upsert("abc", state="running", goal="x", workspace="/x", created_at=1.0,
                  updated_at=1.0, last_event_seq=0)
@@ -150,7 +138,6 @@ def test_stateindex_upsert_roundtrip(tmp_path: Path):
 
 
 def test_stateindex_atomic_write_no_partial(tmp_path: Path):
-    """Internal documentation."""
     index = StateIndex(tmp_path / "index.json")
     index.upsert("abc", state="running", goal="x", workspace="/x", created_at=1.0,
                  updated_at=1.0, last_event_seq=0)
@@ -174,7 +161,6 @@ def test_stateindex_atomic_write_no_partial(tmp_path: Path):
 
 
 def test_stateindex_missing_file_empty(tmp_path: Path):
-    """Internal documentation."""
     index = StateIndex(tmp_path / "missing.json")
     index.load()
     assert index.get("abc") is None
@@ -182,7 +168,6 @@ def test_stateindex_missing_file_empty(tmp_path: Path):
 
 
 def test_stateindex_corrupt_json_handled(tmp_path: Path):
-    """Internal documentation."""
     p = tmp_path / "index.json"
     p.write_text("{not valid json", encoding="utf-8")
     index = StateIndex(p)
@@ -191,7 +176,6 @@ def test_stateindex_corrupt_json_handled(tmp_path: Path):
 
 
 def test_stateindex_remove(tmp_path: Path):
-    """Internal documentation."""
     index = StateIndex(tmp_path / "index.json")
     index.upsert("a", state="running", goal="", workspace="", created_at=1.0)
     index.upsert("b", state="pending", goal="", workspace="", created_at=1.0)
@@ -201,7 +185,6 @@ def test_stateindex_remove(tmp_path: Path):
 
 
 def test_stateindex_upsert_preserves_unspecified_fields(tmp_path: Path):
-    """Internal documentation."""
     index = StateIndex(tmp_path / "index.json")
     index.upsert("a", state="running", goal="g1", workspace="/w", model="m1",
                  created_at=1.0, updated_at=1.0)
@@ -215,7 +198,6 @@ def test_stateindex_upsert_preserves_unspecified_fields(tmp_path: Path):
 
 
 def test_state_machine_all_states_in_allowed():
-    """Internal documentation."""
     expected = {"pending", "running", "paused", "suspended",
                 "completed", "failed", "cancelled"}
     assert set(ALLOWED.keys()) == expected
@@ -223,19 +205,16 @@ def test_state_machine_all_states_in_allowed():
 
 
 def test_state_machine_terminal_states():
-    """Internal documentation."""
     assert TERMINAL_STATES == frozenset({"completed", "failed", "cancelled"})
     for s in ("completed", "failed", "cancelled"):
         assert ALLOWED[s] == set()
 
 
 def test_state_machine_legal_transition():
-    """Internal documentation."""
     assert "paused" in ALLOWED["running"]
 
 
 def test_state_machine_illegal_transition_raises(tmp_path: Path):
-    """Internal documentation."""
     index = StateIndex(tmp_path / "index.json")
     with pytest.raises(InvalidTransition, match=r"running.*pending"):
         transition(current="running", target="pending", index=index, run_id="abc",
@@ -243,12 +222,10 @@ def test_state_machine_illegal_transition_raises(tmp_path: Path):
 
 
 def _mk_index(path):
-    """Internal documentation."""
     return StateIndex(path / "i.json")
 
 
 def test_state_machine_terminal_write_protected(tmp_path: Path):
-    """Internal documentation."""
     index = StateIndex(tmp_path / "index.json")
     index.upsert("abc", state="completed", goal="x", workspace="/x", created_at=1.0,
                  updated_at=1.0, last_event_seq=0)
@@ -260,7 +237,6 @@ def test_state_machine_terminal_write_protected(tmp_path: Path):
 
 
 def test_state_machine_dynamic_from_state(tmp_path: Path):
-    """Internal documentation."""
     index = StateIndex(tmp_path / "index.json")
     index.upsert("abc", state="paused", goal="x", workspace="/x", created_at=1.0,
                  updated_at=1.0, last_event_seq=0)
@@ -272,7 +248,6 @@ def test_state_machine_dynamic_from_state(tmp_path: Path):
 
 
 def test_read_state_from_index(tmp_path: Path):
-    """Internal documentation."""
     index = StateIndex(tmp_path / "index.json")
     index.upsert("abc", state="running", goal="x", workspace="/x", created_at=1.0,
                  updated_at=1.0, last_event_seq=0)
@@ -282,7 +257,6 @@ def test_read_state_from_index(tmp_path: Path):
 
 
 def test_run_id_regex():
-    """Internal documentation."""
     assert RUN_ID_RE.match("abc123def456")
     assert RUN_ID_RE.match("0123456789ab")
     assert not RUN_ID_RE.match("abc")

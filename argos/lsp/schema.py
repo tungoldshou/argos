@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 SERVER_NAME_PATTERN: str = r"^[A-Za-z0-9_-]+$"

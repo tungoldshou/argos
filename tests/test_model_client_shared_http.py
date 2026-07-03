@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -24,7 +23,6 @@ def _sse_ok(text: str = "ok") -> httpx.Response:
 
 @pytest.mark.asyncio
 async def test_shared_client_reused_across_calls():
-    """Internal documentation."""
     call_clients: list[int] = []
 
     tier = _tier()
@@ -44,7 +42,6 @@ async def test_shared_client_reused_across_calls():
 
 @pytest.mark.asyncio
 async def test_aclose_clears_client():
-    """Internal documentation."""
     tier = _tier()
     pool = CredentialPool(["key-a"])
     client = ModelClient(tier=tier, pool=pool, transport=httpx.MockTransport(lambda r: _sse_ok()))
@@ -59,7 +56,6 @@ async def test_aclose_clears_client():
 
 @pytest.mark.asyncio
 async def test_new_client_after_aclose():
-    """Internal documentation."""
     tier = _tier()
     pool = CredentialPool(["key-a"])
     client = ModelClient(tier=tier, pool=pool, transport=httpx.MockTransport(lambda r: _sse_ok()))

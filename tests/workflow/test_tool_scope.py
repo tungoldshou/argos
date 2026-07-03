@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from argos import tools
 
 
@@ -25,7 +24,6 @@ class _Stub:
 
 
 def test_role_allowlist_is_authority_intersection():
-    """Internal documentation."""
     from argos.workflow.spec import ROLE_PRESETS
     explorer_allow = ROLE_PRESETS["explorer"].tool_allowlist
     ns = tools.build_child_namespace(
@@ -39,7 +37,6 @@ def test_role_allowlist_is_authority_intersection():
 
 
 def test_reviewer_allowlist_keeps_run_command_despite_read_only():
-    """Internal documentation."""
     from argos.workflow.spec import ROLE_PRESETS
     reviewer_allow = ROLE_PRESETS["reviewer"].tool_allowlist
     ns = tools.build_child_namespace(

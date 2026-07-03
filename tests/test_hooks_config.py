@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -19,7 +18,6 @@ from argos.hooks import get_config, reload_config
 
 
 def test_hook_handler_frozen_dataclass():
-    """Internal documentation."""
     h = HookHandler(type="command", command="echo ok", timeout=5000)
     assert h.type == "command"
     assert h.command == "echo ok"
@@ -29,19 +27,16 @@ def test_hook_handler_frozen_dataclass():
 
 
 def test_hook_handler_default_timeout():
-    """Internal documentation."""
     h = HookHandler(type="command", command="echo ok")
     assert h.timeout == 60000
 
 
 def test_hook_handler_invalid_type_raises():
-    """Internal documentation."""
     with pytest.raises(ValueError):
         HookHandler(type="python", command="print(1)")
 
 
 def test_hook_handler_invalid_timeout_raises():
-    """Internal documentation."""
     with pytest.raises(ValueError):
         HookHandler(type="command", command="echo ok", timeout=0)
     with pytest.raises(ValueError):
@@ -49,7 +44,6 @@ def test_hook_handler_invalid_timeout_raises():
 
 
 def test_matcher_entry_construction():
-    """Internal documentation."""
     h1 = HookHandler(type="command", command="echo 1")
     e = HookMatcherEntry(matcher="write_file|edit_file", hooks=(h1,))
     assert e.matcher == "write_file|edit_file"
@@ -57,21 +51,18 @@ def test_matcher_entry_construction():
 
 
 def test_matcher_entry_empty_matcher():
-    """Internal documentation."""
     h = HookHandler(type="command", command="echo")
     e = HookMatcherEntry(matcher=None, hooks=(h,))
     assert e.matcher is None
 
 
 def test_hooks_config_empty():
-    """Internal documentation."""
     cfg = HooksConfig.empty()
     assert cfg.version == 1
     assert cfg.entries == {}   # dict[event_name, list[HookMatcherEntry]]
 
 
 def test_hooks_config_construction_with_entries():
-    """Internal documentation."""
     e = HookMatcherEntry(
         matcher="write_file",
         hooks=(HookHandler(type="command", command="echo a"),),
@@ -82,7 +73,6 @@ def test_hooks_config_construction_with_entries():
 
 
 def test_hooks_config_error_is_exception():
-    """Internal documentation."""
     err = HooksConfigError("bad json")
     assert isinstance(err, Exception)
     assert "bad json" in str(err)
@@ -98,7 +88,6 @@ def _entry(matcher, cmds):
 
 
 def test_match_regex_or():
-    """Internal documentation."""
     cfg = HooksConfig(entries={"PreToolUse": [_entry("write_file|edit_file", ["h1"])]})
     assert len(match("PreToolUse", ["write_file"], cfg)) == 1
     assert len(match("PreToolUse", ["edit_file", "x"], cfg)) == 1
@@ -106,20 +95,17 @@ def test_match_regex_or():
 
 
 def test_match_star_wildcard():
-    """Internal documentation."""
     cfg = HooksConfig(entries={"PreToolUse": [_entry("*", ["h1"])]})
     assert len(match("PreToolUse", ["write_file"], cfg)) == 1
     assert len(match("PreToolUse", [], cfg)) == 1
 
 
 def test_match_empty_matcher_means_star():
-    """Internal documentation."""
     cfg = HooksConfig(entries={"PreToolUse": [_entry(None, ["h1"]), _entry("", ["h2"])]})
     assert len(match("PreToolUse", ["x"], cfg)) == 2
 
 
 def test_match_multi_entry_merge_dedup():
-    """Internal documentation."""
     e1 = _entry("write_file", ["a", "b"])
     e2 = _entry("write_file", ["b", "c"])
     cfg = HooksConfig(entries={"PreToolUse": [e1, e2]})
@@ -129,7 +115,6 @@ def test_match_multi_entry_merge_dedup():
 
 
 def test_match_non_pre_post_event_ignores_matcher():
-    """Internal documentation."""
     cfg = HooksConfig(entries={"Stop": [_entry("write_file", ["a"]), _entry(None, ["b"])]})
     result = match("Stop", [], cfg)
     assert len(result) == 2
@@ -137,13 +122,11 @@ def test_match_non_pre_post_event_ignores_matcher():
 
 
 def test_match_unknown_event_returns_empty():
-    """Internal documentation."""
     cfg = HooksConfig(entries={"PreToolUse": [_entry("*", ["a"])]})
     assert match("UnknownEvent", ["x"], cfg) == []
 
 
 def test_match_invalid_regex_ignored():
-    """Internal documentation."""
     e1 = _entry("[invalid(regex", ["bad"])
     e2 = _entry("write_file", ["good"])
     cfg = HooksConfig(entries={"PreToolUse": [e1, e2]})
@@ -169,7 +152,6 @@ def test_load_default_path_honors_argos_config_dir(tmp_path, monkeypatch):
 
 
 def test_load_missing_file_returns_empty(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(
         "argos.hooks.config.HOOKS_CONFIG_PATH", tmp_path / "hooks.json"
     )
@@ -178,7 +160,6 @@ def test_load_missing_file_returns_empty(tmp_path, monkeypatch):
 
 
 def test_load_valid_minimal(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({"version": 1, "hooks": {}}))
     monkeypatch.setattr("argos.hooks.config.HOOKS_CONFIG_PATH", p)
@@ -188,7 +169,6 @@ def test_load_valid_minimal(tmp_path, monkeypatch):
 
 
 def test_load_valid_with_event_and_matcher(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -213,7 +193,6 @@ def test_load_valid_with_event_and_matcher(tmp_path, monkeypatch):
 
 
 def test_load_invalid_json_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text("{not valid json")
     monkeypatch.setattr("argos.hooks.config.HOOKS_CONFIG_PATH", p)
@@ -222,7 +201,6 @@ def test_load_invalid_json_raises(tmp_path, monkeypatch):
 
 
 def test_get_config_invalid_json_raises_not_empty(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.hooks as hooks
 
     p = tmp_path / "hooks.json"
@@ -235,7 +213,6 @@ def test_get_config_invalid_json_raises_not_empty(tmp_path, monkeypatch):
 
 
 def test_load_missing_version_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({"hooks": {}}))
     monkeypatch.setattr("argos.hooks.config.HOOKS_CONFIG_PATH", p)
@@ -244,7 +221,6 @@ def test_load_missing_version_raises(tmp_path, monkeypatch):
 
 
 def test_load_wrong_version_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({"version": 2, "hooks": {}}))
     monkeypatch.setattr("argos.hooks.config.HOOKS_CONFIG_PATH", p)
@@ -253,7 +229,6 @@ def test_load_wrong_version_raises(tmp_path, monkeypatch):
 
 
 def test_load_unknown_event_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -265,7 +240,6 @@ def test_load_unknown_event_raises(tmp_path, monkeypatch):
 
 
 def test_load_matcher_not_string_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -277,7 +251,6 @@ def test_load_matcher_not_string_raises(tmp_path, monkeypatch):
 
 
 def test_load_hooks_not_array_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({"version": 1, "hooks": {"PreToolUse": "not_array"}}))
     monkeypatch.setattr("argos.hooks.config.HOOKS_CONFIG_PATH", p)
@@ -286,7 +259,6 @@ def test_load_hooks_not_array_raises(tmp_path, monkeypatch):
 
 
 def test_load_handler_invalid_type_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -298,7 +270,6 @@ def test_load_handler_invalid_type_raises(tmp_path, monkeypatch):
 
 
 def test_reload_replaces_singleton(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({"version": 1, "hooks": {}}))
     monkeypatch.setattr("argos.hooks.config.HOOKS_CONFIG_PATH", p)
@@ -314,7 +285,6 @@ def test_reload_replaces_singleton(tmp_path, monkeypatch):
 
 
 def test_reload_invalid_keeps_old(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.hooks import _config
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
@@ -333,7 +303,6 @@ def test_reload_invalid_keeps_old(tmp_path, monkeypatch):
 
 
 def test_validate_matcher_rejects_overlong(tmp_path, monkeypatch):
-    """Internal documentation."""
     long_matcher = "a" * 257
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
@@ -348,7 +317,6 @@ def test_validate_matcher_rejects_overlong(tmp_path, monkeypatch):
 
 
 def test_validate_matcher_accepts_exactly_256(tmp_path, monkeypatch):
-    """Internal documentation."""
     matcher_256 = "a" * 256
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
@@ -363,7 +331,6 @@ def test_validate_matcher_accepts_exactly_256(tmp_path, monkeypatch):
 
 
 def test_validate_matcher_rejects_nested_quantifier_star_star(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -377,7 +344,6 @@ def test_validate_matcher_rejects_nested_quantifier_star_star(tmp_path, monkeypa
 
 
 def test_validate_matcher_rejects_nested_quantifier_plus_plus(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -391,7 +357,6 @@ def test_validate_matcher_rejects_nested_quantifier_plus_plus(tmp_path, monkeypa
 
 
 def test_validate_matcher_rejects_nested_quantifier_star_plus(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -405,7 +370,6 @@ def test_validate_matcher_rejects_nested_quantifier_star_plus(tmp_path, monkeypa
 
 
 def test_validate_matcher_rejects_unclosed_group(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -419,7 +383,6 @@ def test_validate_matcher_rejects_unclosed_group(tmp_path, monkeypatch):
 
 
 def test_validate_matcher_accepts_simple_or(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -434,7 +397,6 @@ def test_validate_matcher_accepts_simple_or(tmp_path, monkeypatch):
 
 
 def test_validate_matcher_accepts_star_wildcard(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -448,7 +410,6 @@ def test_validate_matcher_accepts_star_wildcard(tmp_path, monkeypatch):
 
 
 def test_validate_matcher_accepts_none_omitted(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -462,7 +423,6 @@ def test_validate_matcher_accepts_none_omitted(tmp_path, monkeypatch):
 
 
 def test_validate_matcher_rejects_empty_string(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -476,7 +436,6 @@ def test_validate_matcher_rejects_empty_string(tmp_path, monkeypatch):
 
 
 def test_validate_matcher_rejects_single_quantifier_no_nesting(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -490,7 +449,6 @@ def test_validate_matcher_rejects_single_quantifier_no_nesting(tmp_path, monkeyp
 
 
 def test_validate_matcher_rejects_whole_config_bad_entry_doesnt_load_others(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "hooks.json"
     p.write_text(json.dumps({
         "version": 1,

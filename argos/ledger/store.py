@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -18,7 +17,6 @@ def _default_ledger_root() -> Path:
 
 
 class LedgerStore:
-    """Internal documentation."""
 
     def __init__(self, ledger_dir: Path | None = None) -> None:
         self._root = Path(ledger_dir) if ledger_dir else _default_ledger_root()
@@ -27,7 +25,6 @@ class LedgerStore:
         return self._root / f"{run_id}.jsonl"
 
     def append(self, entry: LedgerEntry) -> None:
-        """Internal documentation."""
         p = self._path(entry.run_id)
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -38,7 +35,6 @@ class LedgerStore:
             log.warning("ledger: append 失败 %s: %s", p, e)
 
     def replay(self, run_id: str) -> list[LedgerEntry]:
-        """Internal documentation."""
         p = self._path(run_id)
         if not p.exists():
             return []
@@ -60,7 +56,6 @@ class LedgerStore:
         return entries
 
     def undo_complete(self, run_id: str) -> bool:
-        """Internal documentation."""
         entries = self.replay(run_id)
         available = [e for e in entries if e.undo_state == "available"]
         if not available:
@@ -96,19 +91,16 @@ class LedgerStore:
         return True
 
     def is_undo_done(self, run_id: str) -> bool:
-        """Internal documentation."""
         entries = self.replay(run_id)
         return any(e.action == "undo_done" for e in entries)
 
     def get_entry(self, run_id: str, seq: int) -> "LedgerEntry | None":
-        """Internal documentation."""
         for e in self.replay(run_id):
             if e.seq == seq:
                 return e
         return None
 
     def mark_entry_done(self, run_id: str, seq: int) -> bool:
-        """Internal documentation."""
         entries = self.replay(run_id)
         target = None
         for e in entries:

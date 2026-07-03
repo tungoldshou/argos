@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import importlib
 from pathlib import Path
 from unittest.mock import patch
@@ -8,7 +7,6 @@ import pytest
 
 @pytest.fixture
 def reload_config(monkeypatch):
-    """Internal documentation."""
     def _reload():
         import argos.config as cfg
         with patch.object(Path, "exists", return_value=False):

@@ -1,5 +1,4 @@
 # argos/tui/widgets/routing_table.py
-"""Internal documentation."""
 from __future__ import annotations
 
 from typing import Sequence
@@ -40,12 +39,10 @@ _CAT_COL_WIDTH = 13
 
 
 def _tier_color(tier: str) -> str:
-    """Internal documentation."""
     return _TIER_COLOR.get(tier, _COL_INK)
 
 
 class RoutingTable(Static):
-    """Internal documentation."""
 
     DEFAULT_CSS = """
     RoutingTable {
@@ -71,16 +68,13 @@ class RoutingTable(Static):
 
     @property
     def routing(self) -> RoutingConfig:
-        """Internal documentation."""
         return self._routing
 
     @property
     def history(self) -> list[RouteDecision]:
-        """Internal documentation."""
         return self._history
 
     def rendered_text(self) -> Text:
-        """Internal documentation."""
         t = Text()
 
         t.append("› /routing", style=_COL_INK_DIM)
@@ -105,7 +99,6 @@ class RoutingTable(Static):
         return t
 
     def _append_category_row(self, t: Text, cat: TaskCategory) -> None:
-        """Internal documentation."""
         tier = self._routing.by_category.get(cat.value, self._routing.default)
 
         cat_label = f"  {cat.value:<{_CAT_COL_WIDTH}}"
@@ -120,7 +113,6 @@ class RoutingTable(Static):
         t.append("\n")
 
     def _append_history_block(self, t: Text) -> None:
-        """Internal documentation."""
         if not self._history:
             t.append(_t("widget.routing_no_history"), style=_COL_INK_FAINT)
             t.append("\n")
@@ -139,5 +131,4 @@ class RoutingTable(Static):
             t.append("\n")
 
     def render(self) -> Text:
-        """Internal documentation."""
         return self.rendered_text()

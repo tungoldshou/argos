@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -7,7 +6,6 @@ from argos import i18n
 
 
 def test_default_lang_is_english(monkeypatch):
-    """Internal documentation."""
     monkeypatch.delenv("ARGOS_LANG", raising=False)
     assert i18n.current_lang() == "en"
     assert i18n.t("common.enabled") == "enabled"
@@ -24,19 +22,16 @@ def test_zh_lang(monkeypatch):
     ("fr", "en"), ("de_DE", "en"), ("  en  ", "en"),
 ])
 def test_lang_normalization(monkeypatch, raw, expect):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_LANG", raw)
     assert i18n.current_lang() == expect
 
 
 def test_missing_key_returns_key_not_crash(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_LANG", "en")
     assert i18n.t("does.not.exist.anywhere") == "does.not.exist.anywhere"
 
 
 def test_missing_in_zh_falls_back_to_en(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_LANG", "zh")
     i18n._catalog.cache_clear()
     from argos.locales import common as _common
@@ -61,7 +56,6 @@ def test_kwargs_formatting(monkeypatch):
 
 
 def test_bad_format_falls_back_to_template(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_LANG", "en")
     i18n._catalog.cache_clear()
     from argos.locales import common as _common
@@ -116,7 +110,6 @@ def test_eval_tb_help_matches_default_smoke_subset(monkeypatch):
 
 
 def test_en_zh_catalogs_have_same_keys():
-    """Internal documentation."""
     import importlib
     import pkgutil
     from argos import locales

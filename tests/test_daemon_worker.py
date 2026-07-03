@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -21,7 +20,6 @@ def _meta(run_id: str = "abc123def456") -> RunMeta:
 
 @pytest.mark.asyncio
 async def test_worker_runs_to_completion(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     worker = RunWorker(
@@ -36,7 +34,6 @@ async def test_worker_runs_to_completion(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_pause_at_step_boundary(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     worker = RunWorker(
@@ -74,7 +71,6 @@ async def test_worker_pause_at_step_boundary(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_suspend_at_step_boundary(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     worker = RunWorker(
@@ -99,7 +95,6 @@ async def test_worker_suspend_at_step_boundary(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_cancel_immediately(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     worker = RunWorker(
@@ -127,7 +122,6 @@ async def test_worker_cancel_immediately(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_sse_fanout(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     q1 = mgr.subscribe(rid)
@@ -141,7 +135,6 @@ async def test_worker_sse_fanout(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_sse_slow_subscriber_drops(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     q = mgr.subscribe(rid, maxsize=2)
@@ -153,7 +146,6 @@ async def test_worker_sse_slow_subscriber_drops(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_exception_marks_failed(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
 
@@ -171,7 +163,6 @@ async def test_worker_exception_marks_failed(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_suspended_keeps_run(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     mgr.mark_running(rid)
@@ -184,7 +175,6 @@ async def test_worker_suspended_keeps_run(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_event_seq_increments(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     worker = RunWorker(
@@ -199,7 +189,6 @@ async def test_worker_event_seq_increments(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_drives_loop_in_project_mode(tmp_path: Path):
-    """Internal documentation."""
     from argos import runtime
 
     captured: dict = {}
@@ -224,7 +213,6 @@ async def test_worker_drives_loop_in_project_mode(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_uses_run_conversation_session(tmp_path: Path):
-    """Internal documentation."""
     captured: dict = {}
 
     class _SpyLoop:
@@ -247,7 +235,6 @@ async def test_worker_uses_run_conversation_session(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_worker_hard_cancel_interrupts_blocked_loop(tmp_path: Path):
-    """Internal documentation."""
     class _BlockingLoop:
         async def run(self, goal, session_id=None, **kwargs):
             yield {"kind": "token_delta", "text": "start"}

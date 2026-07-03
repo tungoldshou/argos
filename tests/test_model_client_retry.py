@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -33,7 +32,6 @@ def _err_response(status: int, body: str, *, retry_after: str | None = None) -> 
 
 @pytest.mark.asyncio
 async def test_stream_429_then_200_rotates_and_succeeds(monkeypatch):
-    """Internal documentation."""
     tier = ModelTier(name="worker", model="m", base_url="https://api.x/anthropic", max_tokens=4096)
     pool = CredentialPool(["key-a", "key-b"])
     call_count = {"n": 0}
@@ -63,7 +61,6 @@ async def test_stream_429_then_200_rotates_and_succeeds(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stream_401_terminal_marks_terminal_and_raises(monkeypatch):
-    """Internal documentation."""
     tier = ModelTier(name="worker", model="m", base_url="https://api.x/anthropic", max_tokens=4096)
     pool = CredentialPool(["key-bad"])
     call_count = {"n": 0}
@@ -86,7 +83,6 @@ async def test_stream_401_terminal_marks_terminal_and_raises(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stream_429_exhausted_key_not_reused_immediately(monkeypatch):
-    """Internal documentation."""
     tier = ModelTier(name="worker", model="m", base_url="https://api.x/anthropic", max_tokens=4096)
     pool = CredentialPool(["key-a", "key-b"])
     keys_seen: list[str] = []
@@ -113,7 +109,6 @@ async def test_stream_429_exhausted_key_not_reused_immediately(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stream_transport_error_then_200_retries(monkeypatch):
-    """Internal documentation."""
     tier = ModelTier(name="worker", model="m", base_url="https://api.x/anthropic", max_tokens=4096)
     pool = CredentialPool(["key-a"])
     call_count = {"n": 0}
@@ -135,7 +130,6 @@ async def test_stream_transport_error_then_200_retries(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stream_transport_error_persistent_raises_after_max_attempts(monkeypatch):
-    """Internal documentation."""
     tier = ModelTier(name="worker", model="m", base_url="https://api.x/anthropic", max_tokens=4096)
     pool = CredentialPool(["key-a"])
     call_count = {"n": 0}
@@ -158,7 +152,6 @@ async def test_stream_transport_error_persistent_raises_after_max_attempts(monke
 
 @pytest.mark.asyncio
 async def test_stream_429_persistent_raises_after_max_attempts(monkeypatch):
-    """Internal documentation."""
     tier = ModelTier(name="worker", model="m", base_url="https://api.x/anthropic", max_tokens=4096)
     pool = CredentialPool(["key-a"])
 

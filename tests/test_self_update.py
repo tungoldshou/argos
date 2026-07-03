@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -93,7 +92,6 @@ def test_check_returns_none_on_network_failure(tmp_path: Path):
 
 
 def test_check_skips_when_no_httpx_call_when_cache_fresh(tmp_path: Path):
-    """Internal documentation."""
     cache = tmp_path / ".last_update_check"
     cache.touch()  # fresh
     with patch("argos.core.updater.httpx.get") as mock_get:

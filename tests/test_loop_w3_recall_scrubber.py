@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -12,7 +11,6 @@ from argos.tui.events import EventBus, TokenDelta
 
 
 class CapturingModel:
-    """Internal documentation."""
     def __init__(self, scripts):
         self._s = scripts
         self._i = 0
@@ -40,14 +38,12 @@ class PassVerifier:
 
 
 class FakeStore:
-    """Internal documentation."""
     def __init__(self): self.events = []
     def append_event(self, sid, ev): self.events.append(ev)
     def append_message(self, sid, **kw): return "m0"
 
 
 class RecallStore(FakeStore):
-    """Internal documentation."""
     def recall(self, goal, *, k=3, sim_min=0.4):
         rec = MemoryRecord(
             id="m1", goal="修过同样的导入错误", verdict="passed",
@@ -79,7 +75,6 @@ async def test_w3_no_store_recall_degrades_to_honesty_only(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_env_context_injected_into_safe_segment(monkeypatch, tmp_path):
-    """Internal documentation."""
     monkeypatch.setattr("argos.skills.recall", lambda *a, **k: [])
     model = CapturingModel(["完成。"])
     loop = AgentLoop(
@@ -100,7 +95,6 @@ async def test_env_context_injected_into_safe_segment(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_project_mode_run_guards_existing_tests(monkeypatch, tmp_path):
-    """Internal documentation."""
     from argos import runtime
     monkeypatch.setattr("argos.skills.recall", lambda *a, **k: [])
     (tmp_path / "test_existing.py").write_text("def test(): assert True\n")
@@ -122,7 +116,6 @@ async def test_project_mode_run_guards_existing_tests(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_skills_recalled_into_untrusted_without_store_recall(monkeypatch):
-    """Internal documentation."""
     from argos import skills as _skills
     fake = _skills.Skill(name="py-test-runner", description="跑 pytest", trust="builtin",
                          enabled=True, body="用 `pytest -q` 跑测试。")
@@ -140,7 +133,6 @@ async def test_skills_recalled_into_untrusted_without_store_recall(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_contract_injected_for_structured_task(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr("argos.skills.recall", lambda *a, **k: [])
     model = CapturingModel(["完成。"])
     loop = _loop(model, FakeStore())
@@ -153,7 +145,6 @@ async def test_contract_injected_for_structured_task(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_no_contract_for_unstructured_task(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr("argos.skills.recall", lambda *a, **k: [])
     model = CapturingModel(["完成。"])
     loop = _loop(model, FakeStore())
@@ -184,7 +175,6 @@ async def test_w3_store_recall_injects_untrusted_after_honesty():
 
 @pytest.mark.asyncio
 async def test_w3_scrubber_strips_echoed_fence_from_token_delta():
-    """Internal documentation."""
     leaked = f"正常前缀{UNTRUSTED_OPEN}偷藏的内部记忆{UNTRUSTED_CLOSE}正常后缀。"
     model = CapturingModel([leaked])
     loop = _loop(model, FakeStore())

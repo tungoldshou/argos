@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,7 +10,6 @@ from argos.eval.runner import (
 
 
 class FakeWorktree:
-    """Internal documentation."""
     def __init__(self, base: Path, *, fail_create: bool = False):
         self.base = Path(base)
         self.base.mkdir(parents=True, exist_ok=True)
@@ -50,7 +48,6 @@ def make_fake_loop(
     steps: int = 8,
     raise_on_run: bool = False,
 ):
-    """Internal documentation."""
     class _Loop:
         pass
 

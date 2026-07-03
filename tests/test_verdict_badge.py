@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 from textual.app import App, ComposeResult
 
@@ -8,10 +7,8 @@ from argos.tui.widgets.verdict_badge import VerdictBadge
 
 
 class _H(App):
-    """Internal documentation."""
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
-        """Internal documentation."""
         defaults = super().get_theme_variable_defaults()
         if ARGOS_NIGHT.variables:
             defaults.update(ARGOS_NIGHT.variables)
@@ -24,7 +21,6 @@ class _H(App):
 
 
 def test_css_class_names_unchanged():
-    """Internal documentation."""
     css = VerdictBadge.DEFAULT_CSS
     assert "verdict-passed" in css
     assert "verdict-failed" in css
@@ -36,7 +32,6 @@ def test_css_class_names_unchanged():
 
 @pytest.mark.asyncio
 async def test_three_states_get_distinct_classes():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -56,7 +51,6 @@ async def test_three_states_get_distinct_classes():
 
 @pytest.mark.asyncio
 async def test_passed_prefix_eye():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -68,7 +62,6 @@ async def test_passed_prefix_eye():
 
 @pytest.mark.asyncio
 async def test_failed_prefix_eye():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -80,7 +73,6 @@ async def test_failed_prefix_eye():
 
 @pytest.mark.asyncio
 async def test_unverifiable_prefix_eye():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -92,7 +84,6 @@ async def test_unverifiable_prefix_eye():
 
 @pytest.mark.asyncio
 async def test_self_verified_prefix_eye():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -106,7 +97,6 @@ async def test_self_verified_prefix_eye():
 
 @pytest.mark.asyncio
 async def test_passed_shows_verify_cmd_and_attempts():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -121,7 +111,6 @@ async def test_passed_shows_verify_cmd_and_attempts():
 
 @pytest.mark.asyncio
 async def test_failed_shows_detail_and_retry():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -136,7 +125,6 @@ async def test_failed_shows_detail_and_retry():
 
 @pytest.mark.asyncio
 async def test_unverifiable_text_contains_wufa():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -148,7 +136,6 @@ async def test_unverifiable_text_contains_wufa():
 
 @pytest.mark.asyncio
 async def test_tampered_归入_unverifiable():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -164,7 +151,6 @@ async def test_tampered_归入_unverifiable():
 
 @pytest.mark.asyncio
 async def test_self_verified_css_class_not_passed():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -177,7 +163,6 @@ async def test_self_verified_css_class_not_passed():
 
 @pytest.mark.asyncio
 async def test_self_verified_render_text_contains_weaker_and_not_promoted():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -190,7 +175,6 @@ async def test_self_verified_render_text_contains_weaker_and_not_promoted():
 
 @pytest.mark.asyncio
 async def test_self_verified_second_line_annotation():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -203,24 +187,20 @@ async def test_self_verified_second_line_annotation():
 
 
 def test_css_passed_uses_pass_token():
-    """Internal documentation."""
     css = VerdictBadge.DEFAULT_CSS
     assert "$pass" in css
 
 
 def test_css_failed_uses_fail_token():
-    """Internal documentation."""
     css = VerdictBadge.DEFAULT_CSS
     assert "$fail" in css
 
 
 def test_css_unverifiable_uses_unverif_token():
-    """Internal documentation."""
     css = VerdictBadge.DEFAULT_CSS
     assert "$unverif" in css
 
 
 def test_css_self_uses_pass_weak_token():
-    """Internal documentation."""
     css = VerdictBadge.DEFAULT_CSS
     assert "$pass-weak" in css

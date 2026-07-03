@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import json
 from pathlib import Path
 

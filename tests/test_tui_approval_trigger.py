@@ -1,9 +1,9 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
 
 from argos.approval import ApprovalGate, ApprovalLevel
+from argos.i18n import t
 from argos.tui.app import ArgosApp
 from argos.tui.events import ApprovalRequest
 from argos.tui.fakeloop import FakeLoop
@@ -37,7 +37,6 @@ def test_title_secret():
 
 
 def test_title_soft_allow_not_shown():
-    """Internal documentation."""
     t = format_approval_title(risk="low", trigger="")
     assert "allow" not in t
 
@@ -49,7 +48,6 @@ def test_title_unknown_prefix_no_tag():
 
 @pytest.mark.asyncio
 async def test_app_renders_inline_choice_with_secret_subtitle():
-    """Internal documentation."""
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop(),
                    gate=ApprovalGate(ApprovalLevel.CONFIRM))
     req = ApprovalRequest(
@@ -66,7 +64,27 @@ async def test_app_renders_inline_choice_with_secret_subtitle():
         c = choices[0]
         title = str(c.query_one("#ic-title").render())
         body = str(c.query_one("#ic-body").render())
+        assert [value for value, _label in c._options] == ["once", "session", "always", "deny"]
         assert "⚠︎" in title and "命中密钥模式" in title and "AWS access key" in title
-        assert "did you mean to commit" in body
+        assert t("tui.approval.secret_warning") in body
         await pilot.press("4")
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_app_hides_always_for_unscoped_action():
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop(),
+                   gate=ApprovalGate(ApprovalLevel.CONFIRM))
+    req = ApprovalRequest(
+        call_id="c1", action="browser_click", args={"selector": "#buy"},
+        description="click", risk="medium",
+    )
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        await app._handle_approval(req)
+        await pilot.pause()
+        choice = app.query_one(InlineChoice)
+        values = [value for value, _label in choice._options]
+        assert values == ["once", "session", "deny"]
+        await pilot.press("3")
         await pilot.pause()

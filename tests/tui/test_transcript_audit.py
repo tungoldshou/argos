@@ -1,5 +1,4 @@
 # tests/tui/test_transcript_audit.py
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -11,14 +10,12 @@ from argos.tui.widgets.transcript import AssistantMessage, Transcript, SystemLin
 
 
 def test_assistant_message_default_css_has_emphasis_rules() -> None:
-    """Internal documentation."""
     css = AssistantMessage.DEFAULT_CSS
     assert "markdown--em" in css, "DEFAULT_CSS 缺少 .markdown--em 选择器"
     assert "strong" in css, "DEFAULT_CSS 缺少 strong 选择器"
 
 
 def test_assistant_message_emphasis_uses_ink_bright() -> None:
-    """Internal documentation."""
     css = AssistantMessage.DEFAULT_CSS
     for selector in ["markdown--em", "strong"]:
         pattern = rf"{selector}\s*\{{\s*[^}}]*color:\s*\$ink-bright"
@@ -27,7 +24,6 @@ def test_assistant_message_emphasis_uses_ink_bright() -> None:
 
 
 def test_assistant_message_css_structure() -> None:
-    """Internal documentation."""
     css = AssistantMessage.DEFAULT_CSS
     assert "background: transparent" in css, "AssistantMessage 主规则缺少 background: transparent"
     assert "margin: 0 0 1 0" in css, "AssistantMessage 主规则缺少 margin"
@@ -35,7 +31,6 @@ def test_assistant_message_css_structure() -> None:
 
 
 def test_assistant_message_instantiation() -> None:
-    """Internal documentation."""
     try:
         widget = AssistantMessage()
         assert widget is not None
@@ -46,7 +41,6 @@ def test_assistant_message_instantiation() -> None:
 
 
 def test_assistant_message_feed_raw_state() -> None:
-    """Internal documentation."""
     widget = AssistantMessage()
     widget._raw = "Hello **world**"
     assert widget._raw == "Hello **world**"
@@ -55,7 +49,6 @@ def test_assistant_message_feed_raw_state() -> None:
 
 
 def test_transcript_rendered_text_property() -> None:
-    """Internal documentation."""
     t = Transcript()
     t._lines.append("User input")
     t._lines.append("System response")
@@ -64,7 +57,6 @@ def test_transcript_rendered_text_property() -> None:
 
 
 def test_system_line_creates_without_error() -> None:
-    """Internal documentation."""
     for kind in ["system", "error", "escalation", "done"]:
         try:
             line = SystemLine("Test text", kind=kind)
@@ -75,7 +67,6 @@ def test_system_line_creates_without_error() -> None:
 
 
 def test_user_message_creates_without_error() -> None:
-    """Internal documentation."""
     try:
         msg = UserMessage("Test query")
         assert msg is not None

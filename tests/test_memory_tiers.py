@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -12,7 +11,6 @@ from argos.memory import auto as mem_auto
 
 @pytest.fixture
 def mem_root(monkeypatch, tmp_path):
-    """Internal documentation."""
     root = tmp_path / "memory"
     monkeypatch.setenv("ARGOS_MEMORY_DIR", str(root))
     if hasattr(mem_auto, "_PROJECT_ID_CACHE"):

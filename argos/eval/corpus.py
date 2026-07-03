@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -13,7 +12,6 @@ Difficulty = Literal["easy", "medium", "hard"]
 
 @dataclass(frozen=True, slots=True)
 class EvalTask:
-    """Internal documentation."""
     id: str
     category: str
     difficulty: str
@@ -27,7 +25,6 @@ class EvalTask:
 
 
 def _corpus_root() -> Path:
-    """Internal documentation."""
     override = os.environ.get("ARGOS_EVAL_CORPUS_DIR")
     if override:
         return Path(override).expanduser()
@@ -36,7 +33,6 @@ def _corpus_root() -> Path:
 
 
 def corpus_version(*, root: Path | None = None) -> int:
-    """Internal documentation."""
     p = (root or _corpus_root()) / "corpus.json"
     if not p.exists():
         return 0
@@ -48,7 +44,6 @@ def corpus_version(*, root: Path | None = None) -> int:
 
 
 def list_tasks(*, root: Path | None = None) -> list[EvalTask]:
-    """Internal documentation."""
     base = root or _corpus_root()
     manifest_p = base / "corpus.json"
     if not manifest_p.exists():
@@ -69,7 +64,6 @@ def list_tasks(*, root: Path | None = None) -> list[EvalTask]:
 
 
 def load_task(task_id: str, *, root: Path | None = None) -> EvalTask:
-    """Internal documentation."""
     base = root or _corpus_root()
     version = corpus_version(root=base)
     manifest_p = base / "corpus.json"
@@ -90,7 +84,6 @@ def load_task(task_id: str, *, root: Path | None = None) -> EvalTask:
 
 
 def _load_one(task_id: str, *, base: Path, version: int, title: str | None = None) -> EvalTask | None:
-    """Internal documentation."""
     d = base / task_id
     if not d.is_dir():
         return None

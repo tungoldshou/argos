@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -13,7 +12,6 @@ _TOOL_NAME_PATTERNS: dict[str, re.Pattern[str]] = {
 
 
 def extract_tool_names(code: str) -> list[str]:
-    """Internal documentation."""
     if not code:
         return []
     seen: set[str] = set()
@@ -26,7 +24,6 @@ def extract_tool_names(code: str) -> list[str]:
 
 
 def render_command(command: str, **kwargs: Any) -> str:
-    """Internal documentation."""
     safe = {k: v for k, v in kwargs.items() if v is not None}
     if "tool_names" in safe and isinstance(safe["tool_names"], list):
         safe["tool_names"] = ",".join(safe["tool_names"])
@@ -44,7 +41,6 @@ def render_command(command: str, **kwargs: Any) -> str:
 def build_pre_payload(
     *, session_id: str, cwd: str, code: str, tool_names: list[str],
 ) -> dict[str, Any]:
-    """Internal documentation."""
     return {
         "hook_event_name": "PreToolUse",
         "session_id": session_id,
@@ -58,7 +54,6 @@ def build_post_payload(
     *, session_id: str, cwd: str, code: str, tool_names: list[str],
     stdout: str, value_repr: str, exc: str, ok: bool,
 ) -> dict[str, Any]:
-    """Internal documentation."""
     return {
         "hook_event_name": "PostToolUse",
         "session_id": session_id,
@@ -76,7 +71,6 @@ def build_stop_payload(
     *, session_id: str, cwd: str, goal: str,
     verdict_status: str, actions: int, elapsed_s: float, escalated: bool,
 ) -> dict[str, Any]:
-    """Internal documentation."""
     return {
         "hook_event_name": "Stop",
         "session_id": session_id,
@@ -92,7 +86,6 @@ def build_stop_payload(
 def build_user_prompt_payload(
     *, session_id: str, cwd: str, goal: str,
 ) -> dict[str, Any]:
-    """Internal documentation."""
     return {
         "hook_event_name": "UserPromptSubmit",
         "session_id": session_id,
@@ -104,7 +97,6 @@ def build_user_prompt_payload(
 def build_session_start_payload(
     *, session_id: str, cwd: str, model_tier: str,
 ) -> dict[str, Any]:
-    """Internal documentation."""
     return {
         "hook_event_name": "SessionStart",
         "session_id": session_id,

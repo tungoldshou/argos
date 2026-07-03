@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import sys
 from pathlib import Path
 
@@ -18,7 +17,6 @@ darwin_only = pytest.mark.skipif(
 
 @darwin_only
 def test_sandbox_cannot_exfiltrate_secret_via_out_of_workspace_write(in_project):
-    """Internal documentation."""
     ex = SeatbeltExecutor()
     ex.spawn(workspace=in_project, namespace={"__authorized_imports__": ["pathlib"]})
     try:
@@ -38,7 +36,6 @@ def test_sandbox_cannot_exfiltrate_secret_via_out_of_workspace_write(in_project)
 
 @darwin_only
 def test_sandbox_allows_workspace_io(in_project):
-    """Internal documentation."""
     ex = SeatbeltExecutor()
     ex.spawn(workspace=in_project, namespace={"__authorized_imports__": ["pathlib"]})
     try:
@@ -56,7 +53,6 @@ def test_sandbox_allows_workspace_io(in_project):
 
 
 def test_egress_policy_denies_non_allowlisted_host():
-    """Internal documentation."""
     pol = EgressPolicy(llm_hosts={"api.minimaxi.com"}, search_hosts=set(), mcp_hosts=set())
     assert pol.allowed("https://api.minimaxi.com/anthropic") is True
     assert pol.allowed("https://evil.example.com/steal") is False
@@ -66,7 +62,6 @@ def test_egress_policy_denies_non_allowlisted_host():
 
 @pytest.mark.asyncio
 async def test_broker_web_extract_blocks_internal_allows_public():
-    """Internal documentation."""
     gate = ApprovalGate(level=ApprovalLevel.AUTO)
     egress = EgressPolicy(llm_hosts={"api.minimaxi.com"}, search_hosts={"duckduckgo.com"}, mcp_hosts=set())
     broker = CapabilityBroker(gate=gate, egress=egress, signer=ReceiptSigner(key=b"k"))

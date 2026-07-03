@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -18,7 +17,6 @@ def _broker(workspace=None):
 
 
 def test_execute_sync_blocks_financial_computer_hard_rule():
-    """Internal documentation."""
     br = _broker()
     val, code = br.execute_sync("computer_open_app", {"app": "支付宝"})
     assert code == 1 and "硬规则" in val and "fail-closed" in val, val
@@ -29,7 +27,6 @@ def test_execute_sync_blocks_financial_computer_hard_rule():
 
 
 def test_execute_sync_denies_interactive_actions_without_host_loop(monkeypatch):
-    """Internal documentation."""
     br = _broker()
     ran = {"v": False}
 
@@ -92,7 +89,6 @@ async def test_browser_screenshot_rejects_path_outside_workspace(tmp_path, monke
 
 
 def test_execute_sync_signs_receipt(monkeypatch):
-    """Internal documentation."""
     def fake_run(command, *, workspace=None, allow_network=False):
         return ("ok", 0)
     monkeypatch.setattr("argos.config.sandbox_enabled", lambda: True)
@@ -105,7 +101,6 @@ def test_execute_sync_signs_receipt(monkeypatch):
 
 
 def test_execute_sync_denies_run_command_without_os_sandbox(monkeypatch):
-    """Internal documentation."""
     ran = {"v": False}
 
     def fake_run(command, *, workspace=None, allow_network=False):
@@ -125,7 +120,6 @@ def test_execute_sync_denies_run_command_without_os_sandbox(monkeypatch):
 
 
 def test_execute_sync_enforces_egress():
-    """Internal documentation."""
     br = _broker()
     value, exit_code = br.execute_sync(
         "web_extract", {"url": "http://169.254.169.254/latest/meta-data/"}
@@ -135,7 +129,6 @@ def test_execute_sync_enforces_egress():
 
 
 def test_execute_sync_rejects_unknown_action():
-    """Internal documentation."""
     br = _broker()
     value, _ = br.execute_sync("frobnicate", {})
     assert "未知" in str(value) or "拒绝" in str(value)
@@ -144,7 +137,6 @@ def test_execute_sync_rejects_unknown_action():
 
 @pytest.mark.asyncio
 async def test_preflight_parity_request_vs_execute_sync():
-    """Internal documentation."""
     import asyncio
 
     async def via_request(br, action, args):
@@ -165,7 +157,6 @@ async def test_preflight_parity_request_vs_execute_sync():
 
 
 def test_execute_sync_blocks_dangerous_run_command(monkeypatch):
-    """Internal documentation."""
     ran = {"v": False}
     def fake_run(command, *, workspace=None, allow_network=False):
         ran["v"] = True

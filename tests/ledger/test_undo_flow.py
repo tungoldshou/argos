@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -18,7 +17,6 @@ class _FakeReceipt:
 
 
 class TestUndoFlowFileRestored:
-    """Internal documentation."""
 
     def test_write_then_undo_restores_file(self, tmp_path: Path):
         ws = tmp_path / "workspace"
@@ -57,7 +55,6 @@ class TestUndoFlowFileRestored:
         assert store.is_undo_done("run_undo_test")
 
     def test_new_files_not_deleted_by_undo(self, tmp_path: Path):
-        """Internal documentation."""
         ws = tmp_path / "ws"
         ws.mkdir()
         (ws / "existing.py").write_text("v1")
@@ -73,7 +70,6 @@ class TestUndoFlowFileRestored:
 
 
 class TestUndoIrreversibleRejected:
-    """Internal documentation."""
 
     def test_irreversible_entry_undo_state_impossible(self):
         receipt = _FakeReceipt("web_fetch")
@@ -97,10 +93,8 @@ class TestUndoIrreversibleRejected:
 
 
 class TestUndoOverApproval:
-    """Internal documentation."""
 
     def test_double_undo_rejected_at_store_level(self, tmp_path: Path):
-        """Internal documentation."""
         store = LedgerStore(tmp_path / "ledger")
         receipt = _FakeReceipt("write_file")
         snap_path = tmp_path / "s.tar"

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -25,7 +24,6 @@ def _plan_mode_loop(scripts: list[str]) -> AgentLoop:
 
 @pytest.mark.asyncio
 async def test_plan_decision_timeout_is_fail_closed():
-    """Internal documentation."""
     loop = _plan_mode_loop(["计划:第一步做 X,第二步做 Y。"])
     loop.PLAN_DECISION_TIMEOUT_S = 0.05
     events = []
@@ -46,7 +44,6 @@ async def test_plan_decision_timeout_is_fail_closed():
 
 @pytest.mark.asyncio
 async def test_plan_decision_none_is_fail_closed():
-    """Internal documentation."""
     loop = _plan_mode_loop(["计划:只有一步。"])
     events = []
 

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -20,7 +19,6 @@ def test_extract_code_block():
 
 
 class FakeModel:
-    """Internal documentation."""
     def __init__(self, scripts: list[str]):
         self._scripts = scripts
         self._i = 0
@@ -46,7 +44,6 @@ class FakeSandbox:
 
 
 class FakeVerifier:
-    """Internal documentation."""
     def verify(self, verify_cmd, *, attempts=1):
         return Verdict.passed(detail="[exit_code=0]", verify_cmd=verify_cmd, attempts=attempts)
 
@@ -131,7 +128,6 @@ async def test_phases_in_order_and_complete():
 
 @pytest.mark.asyncio
 async def test_verify_phase_emitted_before_verdict():
-    """Internal documentation."""
     scripts = ["```python\nx=1\n```", "完成。"]
     loop = _loop(scripts, verify_cmd="echo ok")
     events = []
@@ -154,7 +150,6 @@ async def test_verify_phase_emitted_before_verdict():
 
 @pytest.mark.asyncio
 async def test_conversational_turn_skips_verify_ceremony():
-    """Internal documentation."""
     loop = _loop(["你好！我是 Argos，有什么可以帮你的？"])
     events = []
     async for ev in loop.run("你好", "s"):
@@ -169,7 +164,6 @@ async def test_conversational_turn_skips_verify_ceremony():
 
 @pytest.mark.asyncio
 async def test_engineering_turn_still_runs_verify_gate():
-    """Internal documentation."""
     scripts = ["```python\nwrite_file('a.txt','hi')\n```", "完成了。"]
     loop = _loop(scripts)
     events = []
@@ -180,7 +174,6 @@ async def test_engineering_turn_still_runs_verify_gate():
 
 @pytest.mark.asyncio
 async def test_explicit_verify_cmd_turn_runs_gate_even_without_changes():
-    """Internal documentation."""
     loop = _loop(["我看看就好。"], verify_cmd="echo ok")
     events = []
     async for ev in loop.run("检查一下", "s"):
@@ -191,14 +184,12 @@ async def test_explicit_verify_cmd_turn_runs_gate_even_without_changes():
 
 
 class _FakeModelWithUsage(FakeModel):
-    """Internal documentation."""
     def __init__(self, scripts):
         super().__init__(scripts)
         self.last_usage = {"input_tokens": 100, "output_tokens": 50}
 
 
 class _RealisticVerifier:
-    """Internal documentation."""
     def verify(self, verify_cmd, *, attempts=1):
         if verify_cmd is None:
             return Verdict.unverifiable(detail="(无 verify_cmd,未做机检验证)", tampered=[], attempts=attempts)
@@ -216,7 +207,6 @@ def _loop_with(model, verify_cmd=None, verifier=None):
 
 @pytest.mark.asyncio
 async def test_loop_emits_costupdate_with_real_tokens_and_elapsed():
-    """Internal documentation."""
     from argos.tui.events import CostUpdate
     model = _FakeModelWithUsage(["```python\nx=1\n```", "完成。"])
     loop = _loop_with(model)
@@ -235,7 +225,6 @@ async def test_loop_emits_costupdate_with_real_tokens_and_elapsed():
 
 @pytest.mark.asyncio
 async def test_loop_estimates_context_when_provider_omits_usage():
-    """Internal documentation."""
     from argos.tui.events import CostUpdate
 
     model = FakeModel(["```python\nx=1\n```", "完成。"])
@@ -252,7 +241,6 @@ async def test_loop_estimates_context_when_provider_omits_usage():
 
 
 class _FakeModelWithTier(_FakeModelWithUsage):
-    """Internal documentation."""
     def __init__(self, scripts, model_name):
         super().__init__(scripts)
         self.tier = type("_T", (), {"model": model_name})()
@@ -260,7 +248,6 @@ class _FakeModelWithTier(_FakeModelWithUsage):
 
 @pytest.mark.asyncio
 async def test_cost_computed_for_known_pricing_model():
-    """Internal documentation."""
     from argos.tui.events import CostUpdate
     model = _FakeModelWithTier(["```python\nx=1\n```", "完成。"], "MiniMax-M2")
     loop = _loop_with(model)
@@ -271,7 +258,6 @@ async def test_cost_computed_for_known_pricing_model():
 
 @pytest.mark.asyncio
 async def test_cost_none_for_unknown_model_not_fake_zero():
-    """Internal documentation."""
     from argos.tui.events import CostUpdate
     model = _FakeModelWithTier(["```python\nx=1\n```", "完成。"], "No-Such-Model-9000")
     loop = _loop_with(model)
@@ -282,7 +268,6 @@ async def test_cost_none_for_unknown_model_not_fake_zero():
 
 @pytest.mark.asyncio
 async def test_loop_emits_visible_completion_line_no_test():
-    """Internal documentation."""
     model = FakeModel(["```python\nwrite_file('a.txt','x')\n```", "完成。"])
     loop = _loop_with(model, verify_cmd=None)
     texts = [ev.text for ev in [e async for e in loop.run("g", "s")]
@@ -296,7 +281,6 @@ async def test_loop_emits_visible_completion_line_no_test():
 
 @pytest.mark.asyncio
 async def test_loop_completion_line_says_verified_when_passed():
-    """Internal documentation."""
     model = FakeModel(["```python\nx=1\n```", "完成。"])
     loop = _loop_with(model, verify_cmd="echo ok")
     texts = [ev.text for ev in [e async for e in loop.run("g", "s")]
@@ -306,7 +290,6 @@ async def test_loop_completion_line_says_verified_when_passed():
 
 
 def test_codeact_contract_in_honesty_system():
-    """Internal documentation."""
     from argos.core.honesty import HONESTY_SYSTEM
     assert "```python" in HONESTY_SYSTEM, "必须给出 ```python 围栏示例/要求"
     assert "JSON" in HONESTY_SYSTEM and "never as JSON" in HONESTY_SYSTEM, "必须明确禁止 JSON 工具调用"
@@ -316,7 +299,6 @@ def test_codeact_contract_in_honesty_system():
 
 @pytest.mark.asyncio
 async def test_no_action_bounces_not_completes():
-    """Internal documentation."""
     model = FakeModel(["我来修这几处。", "```python\nwrite_file('a','b')\n```", "完成。"])
     loop = _loop_with(model, verify_cmd=None)
     actions = []
@@ -328,7 +310,6 @@ async def test_no_action_bounces_not_completes():
 
 @pytest.mark.asyncio
 async def test_no_action_nudges_research_promise_not_three_turns():
-    """Internal documentation."""
     model = FakeModel([
         "好，我们看一下今天 trending 列表里那个 Claude Code skill 的详情，定位到仓库读 README。",
         "```python\nprint(web_search('Claude Code skill 65% token reduction trending github'))\n```",
@@ -345,7 +326,6 @@ async def test_no_action_nudges_research_promise_not_three_turns():
 
 @pytest.mark.asyncio
 async def test_conversational_reply_completes_without_nudge():
-    """Internal documentation."""
     from argos.tui.events import EventBus
 
     class _HonestVerifier:
@@ -372,7 +352,6 @@ async def test_conversational_reply_completes_without_nudge():
 
 @pytest.mark.asyncio
 async def test_conversation_does_not_infer_verify_strategy(monkeypatch):
-    """Internal documentation."""
     from argos.tui.events import EventBus
 
     called = {"n": 0}
@@ -404,7 +383,6 @@ async def test_conversation_does_not_infer_verify_strategy(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_max_steps_exhaustion_still_walks_phase_gate():
-    """Internal documentation."""
     model = FakeModel(["```python\nwrite_file('a','b')\n```"])
     from argos.tui.events import EventBus
     loop = AgentLoop(
@@ -427,7 +405,6 @@ async def test_max_steps_exhaustion_still_walks_phase_gate():
 
 @pytest.mark.asyncio
 async def test_max_steps_bailout_runs_verify_not_just_phase_change():
-    """Internal documentation."""
     from argos.tui.events import EventBus
     model = FakeModel(["```python\nwrite_file('a','b')\n```"])
     loop = AgentLoop(
@@ -451,7 +428,6 @@ async def test_max_steps_bailout_runs_verify_not_just_phase_change():
 
 @pytest.mark.asyncio
 async def test_max_steps_bailout_without_verify_cmd_honest_completion():
-    """Internal documentation."""
     from argos.tui.events import EventBus
     model = FakeModel(["```python\nwrite_file('a','b')\n```"])
     loop = AgentLoop(

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import dataclasses
@@ -64,7 +63,6 @@ class TestRequiresConfirmationContract:
         assert s.requires_confirmation is True
 
     def test_construction_with_false_raises(self):
-        """Internal documentation."""
         with pytest.raises(ValueError, match="requires_confirmation"):
             ProactiveSuggestion(
                 id="s1",
@@ -76,7 +74,6 @@ class TestRequiresConfirmationContract:
             )
 
     def test_propose_always_returns_requires_confirmation_true(self):
-        """Internal documentation."""
         order = _make_schedule_order()
         s = propose(order, {"date": "2024-01-01"}, clock=lambda: 1000.0)
         assert s.requires_confirmation is True
@@ -125,14 +122,12 @@ class TestProposeGoalTemplate:
         assert "/repo/requirements.txt" in s.goal
 
     def test_missing_key_kept_as_placeholder(self):
-        """Internal documentation."""
         order = _make_schedule_order(goal_template="整理 {date} 的 {missing} 日志")
         s = propose(order, {"date": "2024-01-01"}, clock=lambda: 1.0)
         assert "{missing}" in s.goal
         assert "2024-01-01" in s.goal
 
     def test_empty_context(self):
-        """Internal documentation."""
         order = _make_schedule_order(goal_template="每日汇报")
         s = propose(order, {}, clock=lambda: 1.0)
         assert s.goal == "每日汇报"

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -10,7 +9,6 @@ pytest_plugins = ["tests.e2e.conftest"]
 
 @pytest.mark.asyncio
 async def test_run_records_snapshot(build_real_loop):
-    """Internal documentation."""
     from argos.core.snapshot import SNAPSHOT_ROOT
 
     scripts = ["完成。无事可做。"]
@@ -24,7 +22,6 @@ async def test_run_records_snapshot(build_real_loop):
 
 @pytest.mark.asyncio
 async def test_run_snapshot_failure_does_not_block_run(build_real_loop, monkeypatch):
-    """Internal documentation."""
     from argos.core import snapshot as snap_mod
 
     def _take_boom(cls, ws, tp):

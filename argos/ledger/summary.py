@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -7,7 +6,6 @@ from argos.i18n import t
 
 
 def summarize(action: str, args: dict) -> str:
-    """Internal documentation."""
     a = action.lower()
 
     if a in ("write_file", "create_file"):
@@ -89,14 +87,12 @@ def summarize(action: str, args: dict) -> str:
 
 
 def _short_path(path: str) -> str:
-    """Internal documentation."""
     if not path:
         return ""
     return os.path.basename(str(path)) or str(path)
 
 
 def _short_url(url: str) -> str:
-    """Internal documentation."""
     url = str(url).strip()
     if not url:
         return ""

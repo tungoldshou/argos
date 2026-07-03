@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from pathlib import Path
 
 from argos.learning.candidates import (
@@ -67,7 +66,6 @@ def test_save_is_idempotent_per_run(tmp_path: Path):
 
 
 def test_save_sanitizes_path_traversal_name(tmp_path: Path):
-    """Internal documentation."""
     p = save_candidate(_cand(name="../evil"), root=tmp_path,
                        source_run="abc123def45678", workspace=None, goal="g")
     assert p is not None
@@ -78,7 +76,6 @@ def test_save_sanitizes_path_traversal_name(tmp_path: Path):
 
 
 def test_save_candidate_redacts_meta(tmp_path: Path):
-    """Internal documentation."""
     import json
     from argos.learning.candidates import save_candidate
     from argos.learning.distiller import SkillCandidate
@@ -108,7 +105,6 @@ def test_save_candidate_redacts_meta(tmp_path: Path):
 
 
 def test_list_drops_self_verified_candidates(tmp_path: Path):
-    """Internal documentation."""
     import json
     p = save_candidate(_cand(), root=tmp_path, source_run="abc123def45678",
                        workspace=None, goal="g")

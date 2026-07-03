@@ -180,7 +180,6 @@ def test_model_with_newline_raises(tmp_path, monkeypatch):
 
 
 def test_malformed_json_raises_configerror(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     (tmp_path / "config.json").write_text("{ not valid json ,, }")
     with pytest.raises(C.ConfigError):
@@ -188,7 +187,6 @@ def test_malformed_json_raises_configerror(tmp_path, monkeypatch):
 
 
 def test_invalid_utf8_config_raises_configerror(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     (tmp_path / "config.json").write_bytes(b"\xff\xfe{")
     with pytest.raises(C.ConfigError):
@@ -196,7 +194,6 @@ def test_invalid_utf8_config_raises_configerror(tmp_path, monkeypatch):
 
 
 def test_non_object_config_raises_configerror(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     (tmp_path / "config.json").write_text("[]")
     with pytest.raises(C.ConfigError):
@@ -204,7 +201,6 @@ def test_non_object_config_raises_configerror(tmp_path, monkeypatch):
 
 
 def test_models_must_be_object(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     _write(tmp_path, {"active": "mm", "models": ["mm"]})
     with pytest.raises(C.ConfigError):
@@ -212,7 +208,6 @@ def test_models_must_be_object(tmp_path, monkeypatch):
 
 
 def test_profile_must_be_object(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     _write(tmp_path, {"active": "mm", "models": {"mm": []}})
     with pytest.raises(C.ConfigError):
@@ -220,7 +215,6 @@ def test_profile_must_be_object(tmp_path, monkeypatch):
 
 
 def test_invalid_utf8_dotenv_raises_configerror(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     _write(tmp_path, {"active": "mm", "models": {"mm": {
         "protocol": "openai", "base_url": "http://x/v1", "model": "m", "api_key_env": "K",
@@ -232,7 +226,6 @@ def test_invalid_utf8_dotenv_raises_configerror(tmp_path, monkeypatch):
 
 
 def test_invalid_protocol_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     _write(tmp_path, {"active": "mm", "models": {"mm": {"protocol": "anthropc",
            "base_url": "http://x/v1", "model": "m", "api_key_env": "K"}}})
@@ -241,7 +234,6 @@ def test_invalid_protocol_raises(tmp_path, monkeypatch):
 
 
 def test_non_numeric_max_tokens_raises_configerror(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     _write(tmp_path, {"active": "mm", "models": {"mm": {"protocol": "openai",
            "base_url": "http://x/v1", "model": "m", "api_key_env": "K", "max_tokens": "abc"}}})
@@ -280,7 +272,6 @@ def test_fractional_token_field_raises_configerror(tmp_path, monkeypatch, field)
 
 
 def test_non_positive_max_tokens_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     _write(tmp_path, {"active": "mm", "models": {"mm": {"protocol": "openai",
            "base_url": "http://x/v1", "model": "m", "api_key_env": "K", "context_window": 0}}})
@@ -289,7 +280,6 @@ def test_non_positive_max_tokens_raises(tmp_path, monkeypatch):
 
 
 def test_non_bool_multimodal_raises_configerror(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     _write(tmp_path, {"active": "mm", "models": {"mm": {"protocol": "openai",
            "base_url": "http://x/v1", "model": "m", "api_key_env": "K",
@@ -354,7 +344,6 @@ def test_bool_price_raises_configerror(tmp_path, monkeypatch, field):
 
 
 def test_legacy_env_fallback_when_no_config(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     monkeypatch.setenv("ARGOS_LLM_KEY", "legacykey")
     monkeypatch.setenv("ARGOS_LLM_MODEL", "MiniMax-M3")
@@ -392,7 +381,6 @@ def test_set_active_name_must_be_string(tmp_path, monkeypatch):
 
 
 def test_key_for_unknown_profile_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     _write(tmp_path, {"active": "a", "models": {
         "a": {"protocol": "openai", "base_url": "http://x/v1", "model": "m1", "api_key_env": "AK"},
@@ -414,7 +402,6 @@ def test_profile_lookup_name_must_be_string(tmp_path, monkeypatch, lookup):
 
 
 def test_key_for_unknown_profile_without_config_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     monkeypatch.setattr(C, "DEFAULT_KEYS", ["legacy"])
 
@@ -423,7 +410,6 @@ def test_key_for_unknown_profile_without_config_raises(tmp_path, monkeypatch):
 
 
 def test_set_active_rejects_malformed_target(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     import json
     (tmp_path / "config.json").write_text(json.dumps({"active": "good", "models": {
@@ -435,7 +421,6 @@ def test_set_active_rejects_malformed_target(tmp_path, monkeypatch):
 
 
 def test_set_active_keeps_existing_config_when_write_is_partial(tmp_path, monkeypatch):
-    """Internal documentation."""
     import pathlib
 
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
@@ -478,7 +463,6 @@ def test_set_active_non_object_config_raises_config_error(tmp_path, monkeypatch)
 
 
 def test_set_active_models_must_be_object(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     _write(tmp_path, {"active": "mm", "models": ["mm"]})
 
@@ -487,7 +471,6 @@ def test_set_active_models_must_be_object(tmp_path, monkeypatch):
 
 
 def test_active_embedder_openai_with_embedding_model(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     _write(tmp_path, {"active": "o", "models": {"o": {"protocol": "openai",
            "base_url": "http://localhost:11434/v1", "model": "qwen", "api_key_env": "OK",
@@ -510,7 +493,6 @@ def test_invalid_embedding_model_raises_configerror(tmp_path, monkeypatch, embed
 
 
 def test_active_embedder_none_without_embedding_model(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     _write(tmp_path, {"active": "o", "models": {"o": {"protocol": "openai",
            "base_url": "http://x/v1", "model": "m", "api_key_env": "OK"}}}, env="OK=k\n")
@@ -518,7 +500,6 @@ def test_active_embedder_none_without_embedding_model(tmp_path, monkeypatch):
 
 
 def test_active_embedder_none_for_anthropic(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     _write(tmp_path, {"active": "a", "models": {"a": {"protocol": "anthropic",
            "base_url": "https://api.anthropic.com", "model": "claude-sonnet-4-6",
@@ -527,6 +508,5 @@ def test_active_embedder_none_for_anthropic(tmp_path, monkeypatch):
 
 
 def test_active_embedder_none_without_config(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "empty"))
     assert C.active_embedder() is None

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from tests.skills_curator.seed_index import (
     SAMPLE_SKILL_MD,
     SAMPLE_SMOKE_MD,

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import hashlib
@@ -38,7 +37,7 @@ class InstallResult:
 
 
 class InstallError(RuntimeError):
-    """Internal documentation."""
+    pass
 
 
 def _is_builtin_protected(name: str) -> bool:
@@ -84,7 +83,6 @@ def check_size_drift(content: bytes, declared: int, *, tol: float = _SIZE_DRIFT_
 
 
 def _ensure_enabled_false(content: bytes) -> bytes:
-    """Internal documentation."""
     text = content.decode("utf-8")
     try:
         meta = parse_frontmatter(text)
@@ -98,12 +96,10 @@ def _ensure_enabled_false(content: bytes) -> bytes:
 
 
 def _network_user_confirmed(name: str) -> bool:
-    """Internal documentation."""
     return os.environ.get("ARGOS_SKILLS_NETWORK_OK") == "1"
 
 
 def backup_to_trash(skill_dir: Path, *, base_dir: Path) -> Path:
-    """Internal documentation."""
     trash_dir = base_dir / ".trash" / f"{skill_dir.name}-{int(time.time())}"
     trash_dir.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(skill_dir), str(trash_dir))
@@ -112,7 +108,6 @@ def backup_to_trash(skill_dir: Path, *, base_dir: Path) -> Path:
 
 def install(name: str, *, base_dir: Path | None = None,
             run_smoke: bool = True) -> InstallResult:
-    """Internal documentation."""
     if _is_builtin_protected(name):
         raise InstallError(
             f"protected_skill: {name!r} is builtin and cannot be overridden"

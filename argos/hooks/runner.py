@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -18,7 +17,6 @@ from argos.hooks.payload import render_command
 
 @dataclass(frozen=True, slots=True)
 class HookFireResult:
-    """Internal documentation."""
     success: bool
     per_hook: tuple[HookFired, ...]
     stop_reason: str | None = None
@@ -36,7 +34,6 @@ async def _run_one(
     cwd: str,
     session_id: str,
 ) -> HookFired:
-    """Internal documentation."""
     try:
         cmd_str = render_command(
             handler.command,
@@ -151,7 +148,6 @@ async def fire(
     cwd: str | Path,
     session_id: str,
 ) -> HookFireResult:
-    """Internal documentation."""
     from argos.hooks import get_config
     cfg = get_config()
     tool_names = payload.get("tool_names", []) or []

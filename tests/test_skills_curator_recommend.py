@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -119,7 +118,6 @@ def test_recommend_skips_already_enabled_skills(tmp_path, monkeypatch):
 
 
 def test_recommend_includes_unreviewed_installed(tmp_path, monkeypatch):
-    """Internal documentation."""
     _install(name="python-lint", enabled=False, tmp_path=tmp_path, monkeypatch=monkeypatch)
     a = SessionActivity(files_edited=("a.py", "b.py", "c.py"))
     recs = recommend(a, installed=set())
@@ -133,7 +131,6 @@ def test_recommend_returns_empty_when_no_match():
 
 
 def test_recommend_combines_scores_for_same_skill():
-    """Internal documentation."""
     a = SessionActivity(
         files_edited=("a.py", "b.py", "c.py", "tests/test_x.py"),
         verify_failures=1,
@@ -161,5 +158,4 @@ def test_build_activity_from_session_returns_empty():
 
 
 def test_default_rules_is_tuple_of_12():
-    """Internal documentation."""
     assert len(DEFAULT_RULES) == 12

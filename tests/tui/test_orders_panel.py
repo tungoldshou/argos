@@ -1,5 +1,4 @@
 # tests/tui/test_orders_panel.py
-"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -79,15 +78,12 @@ def _suggestion_event(
 
 class TestImports:
     def test_orders_panel_importable(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel  # noqa: F401
 
     def test_conductor_suggestion_choice_importable(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import ConductorSuggestionChoice  # noqa: F401
 
     def test_conductor_suggestion_choice_is_inline_choice_subclass(self):
-        """Internal documentation."""
         from argos.tui.widgets.inline_choice import InlineChoice
         from argos.tui.widgets.orders_panel import ConductorSuggestionChoice
         assert issubclass(ConductorSuggestionChoice, InlineChoice)
@@ -97,10 +93,8 @@ class TestImports:
 # ===========================================================================
 
 class TestOrdersPanelRender:
-    """Internal documentation."""
 
     def test_count_line_format_two_orders(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         orders = [_sched_order(), _file_order()]
@@ -109,14 +103,12 @@ class TestOrdersPanelRender:
         assert text == "standing orders (2)"
 
     def test_count_line_format_zero(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         panel = OrdersPanel(orders=[])
         assert panel._count_line() == "standing orders (0)"
 
     def test_schedule_glyph_in_row(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         panel = OrdersPanel(orders=[_sched_order()])
@@ -125,7 +117,6 @@ class TestOrdersPanelRender:
         assert "⏱" in plain, f"schedule 行缺 ⏱ 字形，得: {plain!r}"
 
     def test_file_trigger_glyph_in_row(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         panel = OrdersPanel(orders=[_file_order()])
@@ -134,7 +125,6 @@ class TestOrdersPanelRender:
         assert "⊙" in plain, f"file_trigger 行缺 ⊙ 字形，得: {plain!r}"
 
     def test_utterance_in_row(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         o = _sched_order(utterance="整理昨日 CHANGELOG")
@@ -144,7 +134,6 @@ class TestOrdersPanelRender:
         assert "整理昨日 CHANGELOG" in plain
 
     def test_action_run_in_row(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         o = _sched_order(action="run")
@@ -154,7 +143,6 @@ class TestOrdersPanelRender:
         assert "→ run" in plain
 
     def test_action_dream_in_row(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         o = _sched_order(action="dream")
@@ -165,28 +153,24 @@ class TestOrdersPanelRender:
         assert "→ run" not in plain
 
     def test_footer_left_exact_string(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         panel = OrdersPanel(orders=[])
         assert panel._footer_left() == "cron-lite 调度 · 文件触发监视"
 
     def test_footer_right_exact_string(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         panel = OrdersPanel(orders=[])
         assert panel._footer_right() == "argos/conductor"
 
     def test_empty_state_string(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         panel = OrdersPanel(orders=[])
         assert panel._empty_state_text() == "无常驻指令"
 
     def test_orders_panel_accepts_dict_list(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         dicts = [_sched_order().to_dict(), _file_order().to_dict()]
@@ -199,7 +183,6 @@ class TestOrdersPanelRender:
 
 class TestOrdersPanelHonesty:
     def test_disabled_order_not_hidden(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         disabled_o = _sched_order(uid="dis1", enabled=False)
@@ -208,7 +191,6 @@ class TestOrdersPanelHonesty:
         assert len(panel._orders) == 2
 
     def test_disabled_order_row_has_disabled_marker(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         o_dis = _sched_order(uid="dis1", enabled=False)
@@ -229,14 +211,12 @@ class TestOrdersPanelHonesty:
             )
 
     def test_no_mock_sample_orders_fabricated(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         panel = OrdersPanel(orders=[])
         assert len(panel._orders) == 0, "空输入不得注入虚假样本订单"
 
     def test_schedule_trigger_label_in_row(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         o = _sched_order(schedule="09:00")
@@ -246,7 +226,6 @@ class TestOrdersPanelHonesty:
         assert "09:00" in plain
 
     def test_file_trigger_label_in_row(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import OrdersPanel
 
         o = _file_order(trigger_glob="requirements.txt")
@@ -260,7 +239,6 @@ class TestOrdersPanelHonesty:
 # ===========================================================================
 
 class TestConductorSuggestionChoice:
-    """Internal documentation."""
 
     def _make_choice(self, ev: ProactiveSuggestionEvent | None = None) -> object:
         from argos.tui.widgets.orders_panel import ConductorSuggestionChoice
@@ -277,46 +255,38 @@ class TestConductorSuggestionChoice:
         )
 
     def test_construction_succeeds(self):
-        """Internal documentation."""
         choice = self._make_choice()
         assert choice is not None
 
     def test_escape_value_is_dismiss(self):
-        """Internal documentation."""
         choice = self._make_choice()
         assert choice._escape_value == "dismiss"
 
     def test_title_contains_quarter_eye_glyph(self):
-        """Internal documentation."""
         choice = self._make_choice()
         assert "◔" in choice._title, f"title 缺 ◔ 字形：{choice._title!r}"
 
     def test_title_exact_text(self):
-        """Internal documentation."""
         choice = self._make_choice()
         assert choice._title == "◔ 主动建议 · 待确认"
 
     def test_options_contain_confirm_and_dismiss(self):
-        """Internal documentation."""
         choice = self._make_choice()
         values = [v for v, _label in choice._options]
         assert "confirm" in values, f"缺 'confirm' 选项，选项为 {choice._options}"
         assert "dismiss" in values, f"缺 'dismiss' 选项，选项为 {choice._options}"
 
     def test_options_confirm_before_dismiss(self):
-        """Internal documentation."""
         choice = self._make_choice()
         values = [v for v, _label in choice._options]
         assert values.index("confirm") < values.index("dismiss")
 
     def test_body_contains_reason_human(self):
-        """Internal documentation."""
         ev = _suggestion_event(reason_human="定时触发（每天 09:00）：整理昨日 CHANGELOG")
         choice = self._make_choice(ev)
         assert "定时触发（每天 09:00）：整理昨日 CHANGELOG" in choice._body
 
     def test_body_contains_requires_confirmation_ironlaw(self):
-        """Internal documentation."""
         ev = _suggestion_event()
         choice = self._make_choice(ev)
         assert "requires_confirmation = true · 绝不自动执行" in choice._body, (
@@ -324,14 +294,12 @@ class TestConductorSuggestionChoice:
         )
 
     def test_body_contains_goal_preview(self):
-        """Internal documentation."""
         ev = _suggestion_event(goal="生成 2026-06-13 变更摘要")
         choice = self._make_choice(ev)
         assert "建议执行 → " in choice._body
         assert "生成 2026-06-13 变更摘要" in choice._body
 
     def test_option_labels_contain_sid8(self):
-        """Internal documentation."""
         ev = _suggestion_event(suggestion_id="7f3a1234abcd5678")
         choice = self._make_choice(ev)
         labels = [label for _v, label in choice._options]
@@ -339,18 +307,15 @@ class TestConductorSuggestionChoice:
         assert found, f"sid8 '7f3a1234' 未出现在任何 label 中：{labels}"
 
     def test_action_run_not_mislabeled_dream(self):
-        """Internal documentation."""
         ev = _suggestion_event(action="run")
         choice = self._make_choice(ev)
         assert "→ dream" not in choice._body or "→ run" not in choice._body or True
 
     def test_has_conductor_css_class(self):
-        """Internal documentation."""
         choice = self._make_choice()
         assert choice.has_class("conductor")
 
     def test_hint_text_contains_esc_dismiss(self):
-        """Internal documentation."""
         choice = self._make_choice()
         hint = choice._hint_text()
         assert "Esc 忽略" in hint or "Esc" in hint, f"hint 缺 Esc 字样：{hint!r}"
@@ -360,7 +325,6 @@ class TestConductorSuggestionChoice:
 # ===========================================================================
 
 class TestNoCssHex:
-    """Internal documentation."""
 
     def test_orders_panel_default_css_no_raw_hex(self):
         from argos.tui.widgets.orders_panel import OrdersPanel
@@ -381,7 +345,6 @@ class TestNoCssHex:
         )
 
     def test_conductor_suggestion_choice_border_left_plan(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import ConductorSuggestionChoice
         css = ConductorSuggestionChoice.DEFAULT_CSS
         assert "$plan" in css, "ConductorSuggestionChoice 左边框必须是 $plan"
@@ -390,7 +353,6 @@ class TestNoCssHex:
         )
 
     def test_conductor_suggestion_choice_title_color_plan(self):
-        """Internal documentation."""
         from argos.tui.widgets.orders_panel import ConductorSuggestionChoice
         css = ConductorSuggestionChoice.DEFAULT_CSS
         assert "#ic-title" in css
@@ -407,20 +369,17 @@ class TestNoCssHex:
 
 class TestRichTextHexConstants:
     def test_orders_panel_has_color_constants(self):
-        """Internal documentation."""
         import argos.tui.widgets.orders_panel as mod
         assert hasattr(mod, '_COL_EYE_SOFT') or hasattr(mod, '_COL_INK_DIM'), (
             "缺 _COL_* 颜色常量"
         )
 
     def test_eye_soft_hex_matches_theme(self):
-        """Internal documentation."""
         import argos.tui.widgets.orders_panel as mod
         if hasattr(mod, '_COL_EYE_SOFT'):
             assert mod._COL_EYE_SOFT.upper() == "#A8854A"
 
     def test_ink_ghost_hex_matches_theme(self):
-        """Internal documentation."""
         import argos.tui.widgets.orders_panel as mod
         if hasattr(mod, '_COL_INK_GHOST'):
             assert mod._COL_INK_GHOST.upper() == "#3A4055"

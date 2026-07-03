@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -20,7 +19,6 @@ def test_gate_level_default_and_set():
 
 
 def test_decision_kinds():
-    """Internal documentation."""
     assert Decision(kind="deny").approved is False
     assert Decision(kind="deny").kind == "deny"
     assert Decision(kind="once").approved is True
@@ -58,7 +56,6 @@ _TOOL_OPTIONS = [
 
 
 class _ChoiceHost(App):
-    """Internal documentation."""
 
     def __init__(self, req: ApprovalRequest) -> None:
         super().__init__()
@@ -66,7 +63,6 @@ class _ChoiceHost(App):
         self.result: str | None = None
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
-        """Internal documentation."""
         defaults = super().get_theme_variable_defaults()
         if ARGOS_NIGHT.variables:
             defaults.update(ARGOS_NIGHT.variables)
@@ -128,7 +124,6 @@ async def test_choice_key_3_returns_always():
 
 @pytest.mark.asyncio
 async def test_choice_escape_returns_deny():
-    """Internal documentation."""
     req = ApprovalRequest(
         call_id="abc123", action="git_push", args={}, description="git push", risk="high",
     )
@@ -142,7 +137,6 @@ async def test_choice_escape_returns_deny():
 
 @pytest.mark.asyncio
 async def test_choice_arrow_down_enter_returns_session():
-    """Internal documentation."""
     req = ApprovalRequest(
         call_id="abc123", action="run_command",
         args={"command": "ls"}, description="ls", risk="low",

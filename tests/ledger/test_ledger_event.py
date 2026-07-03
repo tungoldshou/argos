@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -18,7 +17,6 @@ class TestLedgerEntryEventContract:
         assert "__slots__" in LedgerEntryEvent.__dict__, "LedgerEntryEvent 必须 slots"
 
     def test_in_event_union(self):
-        """Internal documentation."""
         ev = LedgerEntryEvent(
             ts=1000.0, run_id="r1", seq=1,
             action="write_file", summary_human="写入了 a.py",
@@ -28,11 +26,9 @@ class TestLedgerEntryEventContract:
         assert isinstance(blob, str)
 
     def test_in_all_event_kinds_literal(self):
-        """Internal documentation."""
         assert "ledger_entry" in E.EventKind.__args__
 
     def test_shim_re_exports(self):
-        """Internal documentation."""
         assert hasattr(E, "LedgerEntryEvent")
         assert E.LedgerEntryEvent is LedgerEntryEvent
 
@@ -79,7 +75,6 @@ class TestLedgerEntryEventSerializeDeserialize:
         assert back.risk == "high"
 
     def test_golden_snapshot(self):
-        """Internal documentation."""
         ev = self._make()
         d = json.loads(E.serialize_event(ev))
         expected_data_keys = {

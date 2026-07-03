@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -21,14 +20,12 @@ async def _req(
     body: dict | None = None,
     timeout: float = 5.0,
 ):
-    """Internal documentation."""
     from argos.daemon.client import DaemonClient
     cli = DaemonClient(socket_path, timeout=timeout)
     return await cli._request(method, path, session_id=session_id, body=body)
 
 
 async def _create_session(socket_path: Path) -> str:
-    """Internal documentation."""
     status, _, raw = await _req(socket_path, "POST", "/sessions")
     assert status == 201
     return json.loads(raw.decode())["session_id"]
@@ -46,7 +43,6 @@ async def _create_run(socket_path: Path, sid: str, workspace: str) -> str:
 
 @pytest_asyncio.fixture
 async def ledger_server(tmp_path: Path):
-    """Internal documentation."""
     runs_dir = tmp_path / "runs"
     socket_path = tmp_path / "daemon.sock"
     manager = RunManager(runs_dir=runs_dir, index_path=tmp_path / "index.json")
@@ -69,7 +65,6 @@ async def ledger_server(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_get_ledger_returns_entries(tmp_path: Path, ledger_server):
-    """Internal documentation."""
     srv, manager, ledger_store = ledger_server
 
     sid = await _create_session(srv.socket_path)
@@ -101,7 +96,6 @@ async def test_get_ledger_returns_entries(tmp_path: Path, ledger_server):
 
 @pytest.mark.asyncio
 async def test_get_ledger_no_ledger_store_returns_empty(tmp_path: Path):
-    """Internal documentation."""
     runs_dir = tmp_path / "runs"
     socket_path = tmp_path / "d.sock"
     manager = RunManager(runs_dir=runs_dir, index_path=tmp_path / "i.json")
@@ -123,7 +117,6 @@ async def test_get_ledger_no_ledger_store_returns_empty(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_undo_restores_workspace_file(tmp_path: Path, ledger_server):
-    """Internal documentation."""
     srv, manager, ledger_store = ledger_server
 
     ws = tmp_path / "ws"
@@ -169,7 +162,6 @@ async def test_undo_restores_workspace_file(tmp_path: Path, ledger_server):
 
 @pytest.mark.asyncio
 async def test_undo_nothing_to_undo_when_no_ledger(tmp_path: Path):
-    """Internal documentation."""
     runs_dir = tmp_path / "runs"
     socket_path = tmp_path / "d2.sock"
     manager = RunManager(runs_dir=runs_dir, index_path=tmp_path / "i2.json")
@@ -190,7 +182,6 @@ async def test_undo_nothing_to_undo_when_no_ledger(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_undo_no_snapshot_returns_409(tmp_path: Path, ledger_server):
-    """Internal documentation."""
     srv, manager, ledger_store = ledger_server
 
     ws = tmp_path / "ws2"
@@ -221,7 +212,6 @@ async def test_undo_no_snapshot_returns_409(tmp_path: Path, ledger_server):
 
 @pytest.mark.asyncio
 async def test_undo_already_undone_returns_409(tmp_path: Path, ledger_server):
-    """Internal documentation."""
     srv, manager, ledger_store = ledger_server
 
     ws = tmp_path / "ws3"
@@ -255,7 +245,6 @@ async def test_undo_already_undone_returns_409(tmp_path: Path, ledger_server):
 
 @pytest.mark.asyncio
 async def test_undo_requires_owner(tmp_path: Path, ledger_server):
-    """Internal documentation."""
     srv, manager, ledger_store = ledger_server
 
     ws = tmp_path / "ws4"
@@ -277,7 +266,6 @@ async def test_undo_requires_owner(tmp_path: Path, ledger_server):
 async def test_undo_file_only_run_finds_snapshot_via_snapshot_root(
     tmp_path: Path, ledger_server
 ):
-    """Internal documentation."""
     from argos.core.snapshot import SNAPSHOT_ROOT
     import tarfile
 
@@ -334,7 +322,6 @@ async def test_undo_file_only_run_finds_snapshot_via_snapshot_root(
 async def test_undo_file_only_run_no_snapshot_root_still_returns_no_snapshot(
     tmp_path: Path, ledger_server
 ):
-    """Internal documentation."""
     from argos.core.snapshot import SNAPSHOT_ROOT
 
     srv, manager, ledger_store = ledger_server

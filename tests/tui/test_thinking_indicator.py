@@ -1,5 +1,4 @@
 # tests/tui/test_thinking_indicator.py
-"""Internal documentation."""
 from __future__ import annotations
 
 import importlib
@@ -16,12 +15,10 @@ from argos.tui.widgets.thinking import ThinkingIndicator, _FRAMES
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _make() -> ThinkingIndicator:
-    """Internal documentation."""
     return ThinkingIndicator(label="思考中…")
 
 
 def _render_at_frame(widget: ThinkingIndicator, frame: int) -> str:
-    """Internal documentation."""
     widget._frame = frame
     return widget.render()
 
@@ -30,35 +27,29 @@ def _render_at_frame(widget: ThinkingIndicator, frame: int) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestBlinkOverlayRemoved:
-    """Internal documentation."""
 
     def test_no_blink_glyphs_constant(self):
-        """Internal documentation."""
         assert not hasattr(_mod, "_BLINK_GLYPHS"), (
             "_BLINK_GLYPHS must be removed; ◓ is reserved for blocked/unverif"
         )
 
     def test_no_blink_interval_ticks_constant(self):
-        """Internal documentation."""
         assert not hasattr(_mod, "_BLINK_INTERVAL_TICKS"), (
             "_BLINK_INTERVAL_TICKS must be removed along with blink overlay"
         )
 
     def test_no_blink_hold_ticks_constant(self):
-        """Internal documentation."""
         assert not hasattr(_mod, "_BLINK_HOLD_TICKS"), (
             "_BLINK_HOLD_TICKS must be removed along with blink overlay"
         )
 
     def test_instance_has_no_blink_ticks_left(self):
-        """Internal documentation."""
         widget = _make()
         assert not hasattr(widget, "_blink_ticks_left"), (
             "_blink_ticks_left must be removed from instance — blink overlay gone"
         )
 
     def test_instance_has_no_tick_count(self):
-        """Internal documentation."""
         widget = _make()
         assert not hasattr(widget, "_tick_count"), (
             "_tick_count must be removed from instance — blink overlay gone"
@@ -69,13 +60,11 @@ class TestBlinkOverlayRemoved:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestGlyphDiscipline:
-    """Internal documentation."""
 
     _BLOCKED_GLYPH = "◓"
 
     @pytest.mark.parametrize("frame", range(len(_FRAMES)))
     def test_no_blocked_glyph_at_any_frame(self, frame):
-        """Internal documentation."""
         widget = _make()
         output = _render_at_frame(widget, frame)
         assert self._BLOCKED_GLYPH not in output, (
@@ -84,7 +73,6 @@ class TestGlyphDiscipline:
 
     @pytest.mark.parametrize("frame", range(len(_FRAMES)))
     def test_braille_glyph_at_every_frame(self, frame):
-        """Internal documentation."""
         widget = _make()
         output = _render_at_frame(widget, frame)
         expected_glyph = _FRAMES[frame]
@@ -93,7 +81,6 @@ class TestGlyphDiscipline:
         )
 
     def test_frames_constant_is_braille_only(self):
-        """Internal documentation."""
         for ch in _FRAMES:
             code = ord(ch)
             assert 0x2800 <= code <= 0x28FF, (
@@ -101,7 +88,6 @@ class TestGlyphDiscipline:
             )
 
     def test_frames_has_ten_glyphs(self):
-        """Internal documentation."""
         assert len(_FRAMES) == 10, (
             f"_FRAMES must have 10 glyphs, got {len(_FRAMES)}: {_FRAMES!r}"
         )
@@ -111,14 +97,12 @@ class TestGlyphDiscipline:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestDocstringProvenance:
-    """Internal documentation."""
 
     _MODULE_DOC: str = _mod.__doc__ or ""
     _CLASS_DOC: str = ThinkingIndicator.__doc__ or ""
 
     @pytest.mark.parametrize("phantom", ["§6.1", "§6.2", "眼慢眨", "慢眨"])
     def test_module_docstring_no_phantom_spec(self, phantom):
-        """Internal documentation."""
         assert phantom not in self._MODULE_DOC, (
             f"Module docstring must not contain phantom spec ref {phantom!r}; "
             f"remove it — §6.1/§6.2 do not exist in the design handoff"
@@ -126,13 +110,11 @@ class TestDocstringProvenance:
 
     @pytest.mark.parametrize("phantom", ["§6.1", "§6.2", "眼慢眨", "慢眨"])
     def test_class_docstring_no_phantom_spec(self, phantom):
-        """Internal documentation."""
         assert phantom not in self._CLASS_DOC, (
             f"Class docstring must not contain phantom spec ref {phantom!r}"
         )
 
     def test_module_docstring_cites_real_source(self):
-        """Internal documentation."""
         real_refs = ["README", "01-act"]
         found = any(ref in self._MODULE_DOC for ref in real_refs)
         assert found, (
@@ -145,43 +127,35 @@ class TestDocstringProvenance:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestPublicAPI:
-    """Internal documentation."""
 
     def test_construct_default_label(self):
-        """Internal documentation."""
         widget = _make()
         assert widget._label == "思考中…"
 
     def test_construct_custom_label(self):
-        """Internal documentation."""
         widget = ThinkingIndicator(label="回归测试中…")
         assert widget._label == "回归测试中…"
 
     def test_set_label_updates_label(self):
-        """Internal documentation."""
         widget = _make()
         widget.set_label("新标签")
         assert widget._label == "新标签"
 
     def test_renderable_property_returns_string(self):
-        """Internal documentation."""
         widget = _make()
         result = widget.renderable
         assert isinstance(result, str)
 
     def test_renderable_equals_render(self):
-        """Internal documentation."""
         widget = _make()
         assert widget.renderable == widget.render()
 
     def test_render_contains_label(self):
-        """Internal documentation."""
         widget = ThinkingIndicator(label="测试标签")
         output = _render_at_frame(widget, 0)
         assert "测试标签" in output, f"render() must contain label; got {output!r}"
 
     def test_render_format_glyph_space_label(self):
-        """Internal documentation."""
         widget = ThinkingIndicator(label="abc")
         # frame=0 → _FRAMES[0] = '⠋'
         output = _render_at_frame(widget, 0)
@@ -190,14 +164,12 @@ class TestPublicAPI:
         assert "abc" in output, f"label must appear in output; got {output!r}"
 
     def test_default_css_uses_eye_token(self):
-        """Internal documentation."""
         css = ThinkingIndicator.DEFAULT_CSS
         assert "$eye" in css, (
             f"DEFAULT_CSS must use $eye token (not hardcoded hex); got: {css!r}"
         )
 
     def test_default_css_no_hardcoded_hex(self):
-        """Internal documentation."""
         import re
         css = ThinkingIndicator.DEFAULT_CSS
         hex_pattern = re.compile(r"#[0-9A-Fa-f]{3,8}\b")
@@ -207,7 +179,6 @@ class TestPublicAPI:
         )
 
     def test_frame_cycles_through_all_frames(self):
-        """Internal documentation."""
         widget = _make()
         widget._frame = 0
         seen = set()

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from textual.app import ComposeResult
@@ -27,7 +26,6 @@ _COL_FAIL = "#F7768E"
 
 
 def _format_cost(usd: float | None) -> str:
-    """Internal documentation."""
     if usd is None:
         return "$N/A"
     if usd < 0.01:
@@ -38,7 +36,6 @@ def _format_cost(usd: float | None) -> str:
 
 
 def _truncate(text: str, n: int) -> str:
-    """Internal documentation."""
     if _cell_len(text) <= n:
         return text
     result: list[str] = []
@@ -53,7 +50,6 @@ def _truncate(text: str, n: int) -> str:
 
 
 class TabActivated(Message):
-    """Internal documentation."""
 
     def __init__(self, run_id: str) -> None:
         super().__init__()
@@ -61,7 +57,6 @@ class TabActivated(Message):
 
 
 class TabStrip(Static):
-    """Internal documentation."""
 
     DEFAULT_CSS = """
     TabStrip {
@@ -96,7 +91,6 @@ class TabStrip(Static):
     # ── public API ──────────────────────────────────────────────────
 
     def update_tabs(self, tabs: list[dict], *, active: str | None = None) -> None:
-        """Internal documentation."""
         rendered = []
         for t in tabs:
             rendered.append({
@@ -116,7 +110,6 @@ class TabStrip(Static):
         self.refresh()
 
     def render(self) -> str:
-        """Internal documentation."""
         if not self._tabs:
             return "(no runs)"
         parts = []
@@ -135,7 +128,6 @@ class TabStrip(Static):
 
 
     def on_click(self, event) -> None:
-        """Internal documentation."""
         x = event.x - 2   # padding 2(v3 spec §4.x)
         if x < 0 or not self._tabs:
             return

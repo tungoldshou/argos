@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -52,7 +51,6 @@ async def test_request_write_system_path_denied():
 
 @pytest.mark.asyncio
 async def test_request_write_workspace_auto_applies_with_receipt(tmp_path):
-    """Internal documentation."""
     br = _broker(level=ApprovalLevel.CONFIRM, workspace=tmp_path)
     v = await br.request("write_file", {"path": "a.py", "content": "print(1)"})
     assert v == files.WRITE_APPROVED_SENTINEL
@@ -81,7 +79,6 @@ def test_execute_sync_write_system_path_denied():
 
 
 def test_execute_sync_write_denied_when_evaluator_fails(monkeypatch):
-    """Internal documentation."""
     import argos.permissions as _perms
 
     monkeypatch.setattr(_perms, "evaluate", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
@@ -96,7 +93,6 @@ def test_execute_sync_write_denied_when_evaluator_fails(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_request_computer_denied_when_evaluator_fails(monkeypatch):
-    """Internal documentation."""
     import argos.permissions as _perms
 
     ran = {"v": False}
@@ -158,7 +154,6 @@ def test_edit_wrapper_passes_new_as_content(tmp_path, monkeypatch):
 
 
 def test_no_broker_namespace_has_no_write_tools():
-    """Internal documentation."""
     ns = build_child_namespace(None)
     assert "write_file" not in ns and "edit_file" not in ns
     assert "read_file" in ns and "search_files" in ns

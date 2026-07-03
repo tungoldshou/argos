@@ -1,5 +1,4 @@
 # argos/tui/widgets/dream_report.py
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import asdict
@@ -35,7 +34,6 @@ _FALLBACK_GLYPH = "·"
 
 
 def _coerce_report(report: Any) -> dict[str, Any]:
-    """Internal documentation."""
     if isinstance(report, dict):
         return report
     # dataclass → dict(frozen=True,slots=True)
@@ -49,7 +47,6 @@ def _coerce_report(report: Any) -> dict[str, Any]:
 
 
 class DreamReportCard(Vertical):
-    """Internal documentation."""
 
     DEFAULT_CSS = """
     DreamReportCard {
@@ -101,7 +98,6 @@ class DreamReportCard(Vertical):
 
 
     def compose(self) -> ComposeResult:
-        """Internal documentation."""
         yield Static(t("widget.dream_echo"), markup=False, classes="dream-echo")
         yield Vertical(id="dream-stages")
         yield Static(
@@ -117,7 +113,6 @@ class DreamReportCard(Vertical):
 
 
     def append_stage(self, stage: str, detail: str) -> None:
-        """Internal documentation."""
         if stage == "done":
             if self._done_appended:
                 return
@@ -130,13 +125,11 @@ class DreamReportCard(Vertical):
         self.call_after_refresh(self._mount_stage_row, stage_static)
 
     def show_report(self, report: Any) -> None:
-        """Internal documentation."""
         d = _coerce_report(report)
         self.call_after_refresh(self._mount_report_box, d)
 
 
     def _build_stage_row(self, stage: str, glyph: str, detail: str) -> Text:
-        """Internal documentation."""
         txt = Text()
         if stage == "done":
             txt.append(glyph, style=_COL_PASS)
@@ -153,7 +146,6 @@ class DreamReportCard(Vertical):
         return txt
 
     def _build_row_b(self, report: Any) -> Text:
-        """Internal documentation."""
         d = _coerce_report(report)
         units   = d.get("units_total", 0)
         promoted = d.get("promoted", 0)
@@ -171,7 +163,6 @@ class DreamReportCard(Vertical):
 
 
     def _mount_stage_row(self, stage_static: Static) -> None:
-        """Internal documentation."""
         try:
             stages = self.query_one("#dream-stages", Vertical)
             stages.mount(stage_static)
@@ -179,7 +170,6 @@ class DreamReportCard(Vertical):
             pass
 
     def _mount_report_box(self, d: dict[str, Any]) -> None:
-        """Internal documentation."""
         memory_merged  = d.get("memory_merged", 0)
         memory_archived = d.get("memory_archived", 0)
         promoted = d.get("promoted", 0)

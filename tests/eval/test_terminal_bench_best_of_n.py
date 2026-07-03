@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -37,7 +36,6 @@ def _patch_run_task(monkeypatch, scripts: dict[str, AgentResult]) -> None:
 
 
 def _build_engine(tmp_path) -> WorkflowEngine:
-    """Internal documentation."""
     from tests.e2e.scripted_model import ScriptedModelClient
 
     def model_factory(_profile=None):
@@ -64,7 +62,6 @@ def _failed(agent_id: str) -> AgentResult:
 
 
 def test_bridge_runs_supported_task_through_best_of_n(tmp_path, monkeypatch):
-    """Internal documentation."""
     seen: list[str] = []
 
     async def _spy(self, task, *, item, agent_id, on_phase):
@@ -91,7 +88,6 @@ def test_bridge_runs_supported_task_through_best_of_n(tmp_path, monkeypatch):
 
 
 def test_bridge_skips_unsupported_without_invoking_engine(tmp_path, monkeypatch):
-    """Internal documentation."""
     invoked: list[str] = []
 
     async def _spy(self, task, *, item, agent_id, on_phase):
@@ -123,7 +119,6 @@ def test_bridge_skips_unsupported_without_invoking_engine(tmp_path, monkeypatch)
 
 
 def test_bridge_n1_and_n3_pass_at_1_calculated_independently(tmp_path, monkeypatch):
-    """Internal documentation."""
     scripts = {
         "tb_echo_hello#c0": _failed("tb_echo_hello#c0"),
         "tb_echo_hello#c1": _passed("tb_echo_hello#c1"),
@@ -144,7 +139,6 @@ def test_bridge_n1_and_n3_pass_at_1_calculated_independently(tmp_path, monkeypat
 
 
 def test_bridge_n1_and_n3_both_count_skipped_in_denom_separately(tmp_path, monkeypatch):
-    """Internal documentation."""
     # 5 unsupported + 1 supported(passed)
     async def _spy(self, task, *, item, agent_id, on_phase):
         return _passed(agent_id)
@@ -166,7 +160,6 @@ def test_bridge_n1_and_n3_both_count_skipped_in_denom_separately(tmp_path, monke
 
 
 def test_bridge_never_marks_skipped_as_passed(tmp_path, monkeypatch):
-    """Internal documentation."""
     async def _spy(self, task, *, item, agent_id, on_phase):
         return _passed(agent_id)
     monkeypatch.setattr(SubAgentFactory, "run_task", _spy)
@@ -189,7 +182,6 @@ def test_bridge_never_marks_skipped_as_passed(tmp_path, monkeypatch):
 
 
 def test_build_spec_for_supported_task_has_best_of_n_stage():
-    """Internal documentation."""
     tb_task = tb.load_tb_task(SMOKE_DIR / "tb_echo_hello")
     assert tb_task is not None
     spec = bridge.build_spec_for_task(tb_task, n=3, model_tier="default")
@@ -211,7 +203,6 @@ def test_build_spec_for_supported_task_has_best_of_n_stage():
 
 
 def test_bridge_n_equals_one_runs_one_candidate(tmp_path, monkeypatch):
-    """Internal documentation."""
     seen: list[str] = []
 
     async def _spy(self, task, *, item, agent_id, on_phase):

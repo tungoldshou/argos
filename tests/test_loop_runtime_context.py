@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,7 +11,6 @@ from tests.test_loop_codeact import FakeModel, FakeStore
 
 
 class _CapturingSandbox:
-    """Internal documentation."""
 
     def __init__(self) -> None:
         self.captured: tuple | None = None
@@ -32,7 +30,6 @@ class _CapturingSandbox:
 
 @pytest.mark.asyncio
 async def test_managed_loop_establishes_project_context_at_spawn(tmp_path):
-    """Internal documentation."""
     ws = tmp_path / "proj"
     ws.mkdir()
     (ws / "test_existing.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
@@ -62,7 +59,6 @@ async def test_managed_loop_establishes_project_context_at_spawn(tmp_path):
 
 @pytest.mark.asyncio
 async def test_unmanaged_loop_leaves_context_untouched(tmp_path):
-    """Internal documentation."""
     ws = tmp_path / "proj"
     ws.mkdir()
 

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -9,7 +8,6 @@ from argos.i18n import t
 
 
 def _active_components():
-    """Internal documentation."""
     try:
         from argos import app_factory
         active = getattr(app_factory, "_active_run", None)
@@ -23,7 +21,6 @@ def _active_components():
 
 
 def cmd_show(args: argparse.Namespace) -> int:
-    """Internal documentation."""
     from argos.context.analyzer import analyze
     from argos.context.render import format_json, format_table_plain
     store, loop, workspace = _active_components()

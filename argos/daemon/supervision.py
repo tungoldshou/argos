@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +8,6 @@ log = logging.getLogger(__name__)
 
 
 def install_signal_handlers(loop: asyncio.AbstractEventLoop, on_signal: callable) -> None:
-    """Internal documentation."""
     for sig in (signal.SIGTERM, signal.SIGINT):
         try:
             loop.add_signal_handler(sig, on_signal)
@@ -18,7 +16,6 @@ def install_signal_handlers(loop: asyncio.AbstractEventLoop, on_signal: callable
 
 
 async def graceful_shutdown(manager, server, socket_path) -> None:
-    """Internal documentation."""
     log.info("daemon: graceful shutdown initiated")
     for rid, entry in list(manager.index.list()):
         if entry.state == "running":

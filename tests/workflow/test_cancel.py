@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import asyncio
 import subprocess
 

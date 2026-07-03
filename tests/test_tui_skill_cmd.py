@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,18 +9,19 @@ from argos.tui.commands import COMMAND_HELP, match_commands, parse_slash
 
 
 def test_command_help_has_three_new_entries():
-    """Internal documentation."""
     assert "verify" in COMMAND_HELP
     assert "security-review" in COMMAND_HELP
     assert "simplify" in COMMAND_HELP
 
 
 def test_match_commands_returns_three_new():
-    """Internal documentation."""
     matches_v = match_commands("/v")
     assert any(n == "verify" for n, _ in matches_v)
     matches_s = match_commands("/s")
-    assert any(n == "security-review" for n, _ in matches_s) or any(n == "simplify" for n, _ in matches_s)
+    assert not any(n == "security-review" for n, _ in matches_s)
+    assert not any(n == "simplify" for n, _ in matches_s)
+    assert parse_slash("/security-review src").known is True
+    assert parse_slash("/simplify src").known is True
 
 
 def test_slash_command_parses_with_path():
@@ -33,14 +33,12 @@ def test_slash_command_parses_with_path():
 
 
 def test_slash_command_parses_no_arg():
-    """Internal documentation."""
     cmd = parse_slash("/verify")
     assert cmd.name == "verify"
     assert cmd.arg == ""
 
 
 def test_path_not_found_chat_message(tmp_path):
-    """Internal documentation."""
     from argos.skills_runtime.analysis import AnalysisSkillResult
     fake_result = AnalysisSkillResult(
         summary="path not found: nope.py",
@@ -109,7 +107,6 @@ async def test_skill_cmd_uses_app_workspace(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_pilot_skill_cmd_dispatch(tmp_path, monkeypatch):
-    """Internal documentation."""
     from textual.app import App
     from argos.tui.app import ArgosApp
     from argos.tui.fakeloop import FakeLoop

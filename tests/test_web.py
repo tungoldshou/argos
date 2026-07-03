@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 
 from argos import web
@@ -41,7 +40,6 @@ def test_ddgs_normalizes_hits(monkeypatch):
 
 
 def test_ddgs_uses_multi_engine_auto_and_timeout(monkeypatch):
-    """Internal documentation."""
     seen: dict = {}
 
     class FakeDDGS:
@@ -60,7 +58,6 @@ def test_ddgs_uses_multi_engine_auto_and_timeout(monkeypatch):
 
 
 def test_ddgs_search_times_out_instead_of_hanging(monkeypatch):
-    """Internal documentation."""
     import threading
     entered = threading.Event()
 
@@ -98,7 +95,6 @@ def test_extract_failure_returns_error(monkeypatch):
 
 
 def test_extract_model_fallback_when_trafilatura_empty(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(web, "_http_get", lambda url: "<html><body>JS app</body></html>")
     monkeypatch.setattr(web, "_trafilatura_extract", lambda html: None)
     monkeypatch.setattr(web, "_model_extract", lambda html: "# Clean Markdown\nbody")
@@ -107,7 +103,6 @@ def test_extract_model_fallback_when_trafilatura_empty(monkeypatch):
 
 
 def test_extract_regex_fallback_when_model_unavailable(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(web, "_http_get", lambda url: "<html><body><p>plain text</p></body></html>")
     monkeypatch.setattr(web, "_trafilatura_extract", lambda html: None)
     monkeypatch.setattr(web, "_model_extract", lambda html: None)
@@ -116,7 +111,6 @@ def test_extract_regex_fallback_when_model_unavailable(monkeypatch):
 
 
 def test_model_extract_returns_none_without_key(monkeypatch):
-    """Internal documentation."""
     import argos.config as C
     monkeypatch.setattr(C, "active_key", lambda: None)
     assert web._model_extract("<html>...</html>") is None
@@ -124,7 +118,6 @@ def test_model_extract_returns_none_without_key(monkeypatch):
 
 
 def test_ddgs_passes_safesearch_on_and_inferred_region(monkeypatch):
-    """Internal documentation."""
     seen: dict = {}
 
     class FakeDDGS:
@@ -150,7 +143,6 @@ def test_infer_region_by_script():
 
 
 def test_filter_results_drops_spam_keeps_lookalike_legit():
-    """Internal documentation."""
     raw = [
         {"title": "Casual Dating Tryhuk", "url": "https://linkedin.com/jobs/frau+sex+casual+dating", "snippet": "porn"},
         {"title": "University of Essex", "url": "https://www.essex.ac.uk/weather", "snippet": "campus"},
@@ -259,7 +251,6 @@ def test_http_get_last_retry_uses_browser_ua(monkeypatch):
 
 
 def test_http_get_does_not_retry_ssrf(monkeypatch):
-    """Internal documentation."""
     calls = {"n": 0}
     def ssrf(url, *, user_agent):
         calls["n"] += 1
@@ -281,7 +272,6 @@ def test_extract_transient_error_gives_actionable_message(monkeypatch):
 
 
 def test_tools_web_extract_no_double_prefix(monkeypatch):
-    """Internal documentation."""
     from argos.tools import web as toolsweb
     monkeypatch.setattr(toolsweb.web, "extract", lambda url: {"success": False, "error": "net down"})
     out = toolsweb.web_extract("http://x")

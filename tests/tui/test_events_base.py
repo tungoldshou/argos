@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import ast
@@ -15,7 +14,6 @@ from argos.tui.events import (
 
 
 def test_only_one_eventbus_class_in_whole_argos():
-    """Internal documentation."""
     import os
     import argos
 
@@ -46,7 +44,6 @@ def test_only_one_eventbus_class_in_whole_argos():
 
 
 def test_eventbus_is_in_tui_events_module():
-    """Internal documentation."""
     assert hasattr(tui_events, "EventBus")
     assert inspect.isclass(EventBus)
     bus = EventBus()
@@ -56,7 +53,6 @@ def test_eventbus_is_in_tui_events_module():
 
 
 def _all_event_classes_in(module):
-    """Internal documentation."""
     import dataclasses as _dc
     out = []
     for name, obj in inspect.getmembers(module, inspect.isclass):
@@ -75,7 +71,6 @@ def _all_event_classes_in(module):
     ("argos.skills_runtime.events", "skills_runtime"),
 ])
 def test_all_domain_event_classes_have_kind_attribute(module_path, module_name):
-    """Internal documentation."""
     import importlib
     mod = importlib.import_module(module_path)
     classes = _all_event_classes_in(mod)
@@ -94,7 +89,6 @@ def test_all_domain_event_classes_have_kind_attribute(module_path, module_name):
     "argos.skills_runtime.events",
 ])
 def test_event_kind_is_snake_case_version_of_class_name(module_path):
-    """Internal documentation."""
     import importlib
     mod = importlib.import_module(module_path)
     for name, cls in _all_event_classes_in(mod):
@@ -106,7 +100,6 @@ def test_event_kind_is_snake_case_version_of_class_name(module_path):
 
 
 def _make_placeholder(cls) -> object:
-    """Internal documentation."""
     import dataclasses as _dc
     kwargs = {}
     for f in _dc.fields(cls):
@@ -140,7 +133,6 @@ def _make_placeholder(cls) -> object:
     "argos.skills_runtime.events",
 ])
 def test_serialize_event_includes_kind_for_all_domain_events(module_path):
-    """Internal documentation."""
     import importlib
     import json as _json
 
@@ -163,7 +155,6 @@ def test_serialize_event_includes_kind_for_all_domain_events(module_path):
     "argos.skills_runtime.events",
 ])
 def test_no_domain_event_module_defines_local_eventbus(module_path):
-    """Internal documentation."""
     import importlib
     mod = importlib.import_module(module_path)
     assert not hasattr(mod, "EventBus"), (

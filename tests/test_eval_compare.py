@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -215,7 +214,6 @@ def test_write_report_json_machine_readable(tmp_path):
 
 
 def test_run_pair_first_crash_still_runs_second(tmp_path):
-    """Internal documentation."""
     base = tmp_path / "eval"
     wt = FakeWorktree(base / "wt")
     loop_crash = make_fake_loop(raise_on_run=True)

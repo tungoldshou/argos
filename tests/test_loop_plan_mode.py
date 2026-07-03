@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -7,14 +6,12 @@ pytest_plugins = ["tests.e2e.conftest"]
 
 
 def test_loop_mode_field_defaults_to_act(build_real_loop):
-    """Internal documentation."""
     loop = build_real_loop(scripts=["完成。无事可做。"], verify_cmd=None)
     assert hasattr(loop, "mode")
     assert loop.mode == "act"
 
 
 def test_loop_enter_plan_mode_changes_mode():
-    """Internal documentation."""
     from argos.core.plan_mode import EnterPlanMode
 
     class _StubLoop:
@@ -34,7 +31,6 @@ def test_loop_enter_plan_mode_changes_mode():
 
 
 def test_loop_enter_then_exit_plan_mode_round_trip():
-    """Internal documentation."""
     from argos.core.plan_mode import EnterPlanMode, ExitPlanMode, PlanExitDecision
 
     class _StubLoop:

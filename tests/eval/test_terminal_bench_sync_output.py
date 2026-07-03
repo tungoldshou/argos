@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -14,7 +13,6 @@ from argos.eval.benchmarks import terminal_bench as tb
 
 
 def _stub_report() -> tb.TBBatchReport:
-    """Internal documentation."""
     return tb.TBBatchReport(
         total_seen=2,
         supported=1,
@@ -46,7 +44,6 @@ def _make_args(**overrides) -> argparse.Namespace:
 
 
 def test_print_tb_report_contains_pass_at_1_line(capsys):
-    """Internal documentation."""
     tb._print_tb_report(_stub_report())
     out = capsys.readouterr().out
     assert "pass@1=100.0%" in out
@@ -54,7 +51,6 @@ def test_print_tb_report_contains_pass_at_1_line(capsys):
 
 
 def test_cmd_tb_output_includes_bsu_esu_when_sync_flag_true(monkeypatch):
-    """Internal documentation."""
     args = _make_args(sync_output=True)
     monkeypatch.setattr(tb, "run_subset", lambda *a, **kw: _stub_report())
 
@@ -69,7 +65,6 @@ def test_cmd_tb_output_includes_bsu_esu_when_sync_flag_true(monkeypatch):
 
 
 def test_cmd_tb_output_omits_brackets_when_sync_flag_false(monkeypatch):
-    """Internal documentation."""
     args = _make_args(sync_output=False)
     monkeypatch.setattr(tb, "run_subset", lambda *a, **kw: _stub_report())
 
@@ -85,7 +80,6 @@ def test_cmd_tb_output_omits_brackets_when_sync_flag_false(monkeypatch):
 
 
 def test_cmd_tb_json_format_outputs_machine_readable_json(monkeypatch):
-    """Internal documentation."""
     args = _make_args(format="json", sync_output=False)
     monkeypatch.setattr(tb, "run_subset", lambda *a, **kw: _stub_report())
 
@@ -101,7 +95,6 @@ def test_cmd_tb_json_format_outputs_machine_readable_json(monkeypatch):
 
 
 def test_cmd_tb_auto_flag_passes_none_to_sync_batch(monkeypatch):
-    """Internal documentation."""
     args = _make_args(sync_output=None)
 
     @contextmanager
@@ -125,7 +118,6 @@ def test_cmd_tb_auto_flag_passes_none_to_sync_batch(monkeypatch):
 
 
 def test_cmd_tb_runner_base_defaults_to_argos_config_dir(monkeypatch, tmp_path):
-    """Internal documentation."""
     args = _make_args(sync_output=False)
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))
     seen: dict[str, Path] = {}
@@ -146,7 +138,6 @@ def test_cmd_tb_runner_base_defaults_to_argos_config_dir(monkeypatch, tmp_path):
 
 
 def test_cmd_tb_true_flag_passes_true_to_sync_batch(monkeypatch):
-    """Internal documentation."""
     args = _make_args(sync_output=True)
 
     @contextmanager
@@ -168,7 +159,6 @@ def test_cmd_tb_true_flag_passes_true_to_sync_batch(monkeypatch):
 
 
 def test_cmd_tb_false_flag_passes_false_to_sync_batch(monkeypatch):
-    """Internal documentation."""
     args = _make_args(sync_output=False)
 
     @contextmanager
@@ -191,7 +181,6 @@ def test_cmd_tb_false_flag_passes_false_to_sync_batch(monkeypatch):
 
 
 def test_tb_subparser_default_sync_output_is_none():
-    """Internal documentation."""
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd")
     tb.add_tb_subparser(sub)
@@ -218,7 +207,6 @@ def test_tb_subparser_no_sync_output_flag_sets_false():
 
 
 def test_tb_subparser_flags_are_mutually_exclusive():
-    """Internal documentation."""
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd")
     tb.add_tb_subparser(sub)

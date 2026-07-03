@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -9,7 +8,6 @@ def _writer():
 
 
 def test_setup_wizard_eof_returns_cleanly_with_friendly_message(tmp_path, monkeypatch):
-    """Internal documentation."""
     import asyncio
     from argos import setup_wizard
 
@@ -37,7 +35,6 @@ def test_setup_wizard_eof_returns_cleanly_with_friendly_message(tmp_path, monkey
 
 
 def test_setup_wizard_eof_mid_loop_also_handled(tmp_path):
-    """Internal documentation."""
     import asyncio
     from argos import setup_wizard
 

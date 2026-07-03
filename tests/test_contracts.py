@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 
 from argos.contracts import classify, contract_for
@@ -32,8 +31,16 @@ def test_non_structured_returns_none(goal):
     assert contract is None
 
 
-def test_generic_for_field_level_engineering():
-    assert classify("实现一个带 id 字段和 status 枚举的数据模型") == "generic"
+@pytest.mark.parametrize("goal", [
+    "实现一个带 id 字段和 status 枚举的数据模型",
+    "write a helper function",
+    "add a JSON file",
+    "create a class with fields",
+])
+def test_plain_code_terms_do_not_trigger_generic_contract(goal):
+    dom, contract = contract_for(goal)
+    assert dom == "none"
+    assert contract is None
 
 
 def test_contract_injected_for_structured():

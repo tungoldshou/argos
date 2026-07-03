@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -69,7 +68,6 @@ def test_remove_recoverable_until_30_days(tmp_path, monkeypatch):
 
 
 def test_smoke_test_generic_probe_passes(tmp_path):
-    """Internal documentation."""
     skill_dir = tmp_path / "no-smoke"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(_make_skill(name="no-smoke"), encoding="utf-8")

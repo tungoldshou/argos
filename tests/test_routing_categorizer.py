@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from argos.routing.categorizer import TaskCategory, categorize
 
 

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -17,7 +16,6 @@ from argos.tui.events import CodeResult, EventBus, PhaseChange
 
 
 class ScriptModel:
-    """Internal documentation."""
     def __init__(self, scripts: list[str]):
         self._s = scripts
         self._i = 0
@@ -30,7 +28,6 @@ class ScriptModel:
 
 
 class PassVerifier:
-    """Internal documentation."""
     def verify(self, verify_cmd, *, attempts=1):
         return Verdict.passed(detail="[exit_code=0]", verify_cmd=verify_cmd, attempts=attempts)
 
@@ -43,7 +40,6 @@ class MemStore:
 
 @pytest.mark.asyncio
 async def test_codeact_writes_file_in_real_sandbox(tmp_path, requires_sandbox):
-    """Internal documentation."""
     os.environ["ARGOS_WORKSPACE"] = str(tmp_path)
 
     gate = ApprovalGate(level=ApprovalLevel.AUTO)

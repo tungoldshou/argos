@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -179,7 +178,6 @@ SEED_TASKS: list[dict[str, Any]] = [
 
 
 def write_seed_corpus(root: Path, *, version: int = 1) -> None:
-    """Internal documentation."""
     root.mkdir(parents=True, exist_ok=True)
     for t in SEED_TASKS:
         d = root / t["id"]

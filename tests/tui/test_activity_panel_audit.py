@@ -1,5 +1,4 @@
 # tests/tui/test_activity_panel.py
-"""Internal documentation."""
 from __future__ import annotations
 
 import types
@@ -71,7 +70,6 @@ def panel() -> ActivityPanel:
 
 
 class TestVerdictColoring:
-    """Internal documentation."""
 
     def _get_verdict_rich(self, panel: ActivityPanel, verdict) -> "str | Text":
         """Call on_verdict and capture what _set receives."""
@@ -374,7 +372,6 @@ class TestTokenKAbbreviation:
 # ── [MEDIUM] Context footer reset — no stale bleed across runs ────────────────
 
 class TestContextReset:
-    """Internal documentation."""
 
     def test_reset_run_clears_context_section(self, panel: ActivityPanel) -> None:
         from argos.i18n import t as t_

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -40,7 +39,6 @@ def test_capture_verify_fail_includes_cmd(mem_root, tmp_path):
 
 
 def test_capture_tool_repeat_fail_requires_3(mem_root, tmp_path):
-    """Internal documentation."""
     pid = mem_auto.project_id_for(tmp_path)
     # 1st fail
     e1 = mem_auto.capture_event("tool_repeat_fail", project_id=pid,
@@ -113,7 +111,6 @@ def test_capture_returns_none_when_unknown_kind(mem_root, tmp_path):
 
 # ── task_reflection ──────────────────────────────────────────────────────────
 def test_capture_task_reflection_persists(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_MEMORY_DIR", str(tmp_path))
     from argos.memory import auto
     entry = auto.capture_event(
@@ -136,7 +133,6 @@ def test_capture_task_reflection_persists(tmp_path, monkeypatch):
 
 
 def test_capture_task_reflection_self_verified_tagged(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_MEMORY_DIR", str(tmp_path))
     from argos.memory import auto
     entry = auto.capture_event(
@@ -148,7 +144,6 @@ def test_capture_task_reflection_self_verified_tagged(tmp_path, monkeypatch):
 
 
 def test_capture_tool_repeat_fail_isolates_by_tool(mem_root, tmp_path):
-    """Internal documentation."""
     pid = mem_auto.project_id_for(tmp_path)
     for i in range(2):
         mem_auto.capture_event("tool_repeat_fail", project_id=pid,

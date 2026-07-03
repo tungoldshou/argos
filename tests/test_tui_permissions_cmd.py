@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -37,7 +36,6 @@ def test_match_commands_permissions():
 
 
 def test_permissions_reload_returns_new_count(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.permissions import config as _cfg
     monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")
     _cfg._reset_config()
@@ -60,7 +58,6 @@ def test_permissions_reload_returns_new_count(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_permissions_unknown_arg_prints_usage(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.permissions import config as _cfg
     from argos.tui.app import ArgosApp
 
@@ -110,7 +107,6 @@ async def test_permissions_reload_arg_is_case_insensitive(tmp_path, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_permissions_reload_updates_current_gate_config(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.permissions import config as _cfg
     from argos.permissions.config import PermissionsConfig
     from argos.tui.app import ArgosApp

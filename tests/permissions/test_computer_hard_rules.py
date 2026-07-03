@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -37,7 +36,6 @@ from argos.approval import ApprovalLevel
     ("付款金额: 1,000.00", "中文付款金额"),
 ])
 def test_type_text_financial_pattern_hit(text: str, desc: str):
-    """Internal documentation."""
     result = check_computer_type_text(text)
     assert result is not None, f"'{desc}' 应命中金融规则,但返回 None。text={text!r}"
     assert result == "computer_type_financial_pattern"
@@ -62,7 +60,6 @@ def test_type_text_financial_pattern_hit(text: str, desc: str):
     ("passcode input placeholder", "passcode 后跟UI描述"),
 ])
 def test_type_text_non_financial_no_hit(text: str, desc: str):
-    """Internal documentation."""
     result = check_computer_type_text(text)
     assert result is None, f"'{desc}' 不应命中金融规则,但返回 {result!r}。text={text!r}"
 
@@ -99,7 +96,6 @@ def test_type_text_non_financial_no_hit(text: str, desc: str):
     ("Fidelity", "Fidelity"),
 ])
 def test_open_app_payment_pattern_hit(app: str, desc: str):
-    """Internal documentation."""
     result = check_computer_open_app(app)
     assert result is not None, f"'{desc}' 应命中支付/银行规则,但返回 None。app={app!r}"
     assert result == "computer_open_payment_app"
@@ -121,14 +117,12 @@ def test_open_app_payment_pattern_hit(app: str, desc: str):
     ("Spotify", "Spotify"),
 ])
 def test_open_app_non_payment_no_hit(app: str, desc: str):
-    """Internal documentation."""
     result = check_computer_open_app(app)
     assert result is None, f"'{desc}' 不应命中支付/银行规则,但返回 {result!r}。app={app!r}"
 
 
 
 def test_check_hard_rules_type_text_routes_correctly():
-    """Internal documentation."""
     rule = check_computer_hard_rules(
         "computer_type_text", {"text": "CVV: 123"}
     )
@@ -136,7 +130,6 @@ def test_check_hard_rules_type_text_routes_correctly():
 
 
 def test_check_hard_rules_open_app_routes_correctly():
-    """Internal documentation."""
     rule = check_computer_hard_rules(
         "computer_open_app", {"app": "支付宝"}
     )
@@ -144,19 +137,16 @@ def test_check_hard_rules_open_app_routes_correctly():
 
 
 def test_check_hard_rules_screenshot_returns_none():
-    """Internal documentation."""
     rule = check_computer_hard_rules("computer_screenshot", {})
     assert rule is None
 
 
 def test_check_hard_rules_click_returns_none():
-    """Internal documentation."""
     rule = check_computer_hard_rules("computer_click", {"x": 100, "y": 200})
     assert rule is None
 
 
 def test_check_hard_rules_non_computer_action_returns_none():
-    """Internal documentation."""
     rule = check_computer_hard_rules("run_command", {"command": "ls"})
     assert rule is None
 
@@ -167,7 +157,6 @@ def _empty_config() -> PermissionsConfig:
 
 
 def test_evaluator_type_text_financial_returns_ask_with_hard_rule_trigger():
-    """Internal documentation."""
     meta = evaluate(
         "computer_type_text",
         {"text": "password: supersecret123"},
@@ -184,7 +173,6 @@ def test_evaluator_type_text_financial_returns_ask_with_hard_rule_trigger():
 
 
 def test_evaluator_open_payment_app_returns_ask_with_hard_rule_trigger():
-    """Internal documentation."""
     meta = evaluate(
         "computer_open_app",
         {"app": "Alipay"},
@@ -197,7 +185,6 @@ def test_evaluator_open_payment_app_returns_ask_with_hard_rule_trigger():
 
 
 def test_evaluator_computer_screenshot_non_financial_auto_approve():
-    """Internal documentation."""
     meta = evaluate(
         "computer_screenshot",
         {},
@@ -208,7 +195,6 @@ def test_evaluator_computer_screenshot_non_financial_auto_approve():
 
 
 def test_evaluator_computer_type_text_normal_auto_approve():
-    """Internal documentation."""
     meta = evaluate(
         "computer_type_text",
         {"text": "hello world"},
@@ -220,7 +206,6 @@ def test_evaluator_computer_type_text_normal_auto_approve():
 
 
 def test_autonomy_classify_computer_financial_not_demotable():
-    """Internal documentation."""
     from argos.permissions.autonomy import classify, AutonomyPolicy
 
     policy = AutonomyPolicy(
@@ -241,7 +226,6 @@ def test_autonomy_classify_computer_financial_not_demotable():
 
 
 def test_autonomy_classify_hard_rule_computer_not_preauth_demotable():
-    """Internal documentation."""
     from argos.permissions.autonomy import classify, AutonomyPolicy
 
     policy = AutonomyPolicy(
@@ -266,28 +250,23 @@ def test_autonomy_classify_hard_rule_computer_not_preauth_demotable():
 
 
 def test_financial_pattern_is_not_none():
-    """Internal documentation."""
     assert _FINANCIAL_TEXT_PATTERN is not None
 
 
 def test_payment_app_pattern_is_not_none():
-    """Internal documentation."""
     assert _PAYMENT_APP_PATTERN is not None
 
 
 def test_check_computer_type_text_is_callable():
-    """Internal documentation."""
     assert callable(check_computer_type_text)
 
 
 def test_check_computer_open_app_is_callable():
-    """Internal documentation."""
     assert callable(check_computer_open_app)
 
 
 
 def test_autonomy_conductor_computer_high_risk_is_red():
-    """Internal documentation."""
     from argos.permissions.autonomy import classify, Zone, AutonomyPolicy
     from argos.permissions.config import PermissionsConfig
 
@@ -320,7 +299,6 @@ def test_autonomy_conductor_computer_high_risk_is_red():
 
 
 def test_autonomy_conductor_computer_type_text_financial_is_red():
-    """Internal documentation."""
     from argos.permissions.autonomy import classify, Zone, AutonomyPolicy
     from argos.permissions.config import PermissionsConfig
 
@@ -343,7 +321,6 @@ def test_autonomy_conductor_computer_type_text_financial_is_red():
 
 
 def test_autonomy_conductor_computer_open_payment_app_is_red():
-    """Internal documentation."""
     from argos.permissions.autonomy import classify, Zone, AutonomyPolicy
     from argos.permissions.config import PermissionsConfig
 

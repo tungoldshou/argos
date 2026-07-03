@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import json
 
 import pytest
@@ -7,7 +6,6 @@ from argos.memory.store import ArgosStore, MemoryRecord
 
 
 class _FakeEmbedder:
-    """Internal documentation."""
     dim = 4
 
     def embed(self, texts):
@@ -60,7 +58,6 @@ def test_recall_misses_unrelated_chinese(cjk_store):
 
 
 def test_fts_search_hits_chinese_message(cjk_store):
-    """Internal documentation."""
     cjk_store.ensure_session("s-cjk", title="t", model="m", system_snapshot="")
     cjk_store.append_message("s-cjk", role="user", content="请修复用户登录失败的问题")
     hits = cjk_store.search("登录失败")

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import statistics
 import time
 
@@ -9,7 +8,6 @@ from argos.core.verify_gate import Verifier
 
 @pytest.mark.slow
 def test_verify_latency_baseline_p50_p99(in_project, capsys):
-    """Internal documentation."""
     (in_project / "test_fast.py").write_text("def test_fast():\n    assert True\n")
     v = Verifier(max_rounds=3)
     samples = []
@@ -27,7 +25,6 @@ def test_verify_latency_baseline_p50_p99(in_project, capsys):
 
 @pytest.mark.slow
 def test_verify_timeout_degrades_not_hangs(in_project):
-    """Internal documentation."""
     (in_project / "test_slow.py").write_text("import time\ndef test_slow():\n    time.sleep(2)\n    assert True\n")
     v = Verifier(max_rounds=3, inline_timeout=0.3)
     t0 = time.perf_counter()

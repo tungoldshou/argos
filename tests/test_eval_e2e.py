@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -26,7 +25,6 @@ def _make_task(root: Path, task_id: str = "bug_fix_001_off_by_one") -> EvalTask:
 
 
 def test_e2e_pair_run_compare_against_fake_model(tmp_path, monkeypatch):
-    """Internal documentation."""
     root = tmp_path / "corpus"
     write_seed_corpus(root)
     monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", str(root))
@@ -107,7 +105,6 @@ def test_e2e_failing_task_recorded_as_failed(tmp_path, monkeypatch):
 
 
 def test_e2e_report_file_created_with_pass_rate(tmp_path, monkeypatch):
-    """Internal documentation."""
     root = tmp_path / "corpus"
     write_seed_corpus(root)
     monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", str(root))
@@ -132,7 +129,6 @@ def test_e2e_report_file_created_with_pass_rate(tmp_path, monkeypatch):
 
 
 def test_e2e_all_14_corpus_tasks_loadable(tmp_path, monkeypatch):
-    """Internal documentation."""
     root = tmp_path / "corpus"
     write_seed_corpus(root)
     monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", str(root))

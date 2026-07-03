@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -23,7 +22,6 @@ def _write_run_store(tmp_path: Path, run_id: str, events: list[dict]) -> None:
 
 
 def _user_passed_events(verify_cmd: str = "pytest -q") -> list[dict]:
-    """Internal documentation."""
     return [
         {"kind": "session_start", "goal": "fix foo", "seq": 0},
         {"kind": "code_action", "code": "x = 1", "step": 0, "seq": 1},
@@ -36,7 +34,6 @@ def _user_passed_events(verify_cmd: str = "pytest -q") -> list[dict]:
 
 
 def _self_passed_events(verify_cmd: str = "pytest -q") -> list[dict]:
-    """Internal documentation."""
     return [
         {"kind": "session_start", "goal": "fix foo", "seq": 0},
         {"kind": "code_action", "code": "x = 1", "step": 0, "seq": 1},
@@ -78,14 +75,12 @@ class TestVerdictIsUserVerified:
         assert v.is_user_verified is False
 
     def test_self_passed_keeps_status_passed(self):
-        """Internal documentation."""
         v = Verdict.passed_self("ok", "pytest -q", 1)
         assert v.status == "passed"
         assert v.self_verified is True
         assert v.is_user_verified is False
 
     def test_user_passed_self_verified_flag_default_false(self):
-        """Internal documentation."""
         v = Verdict.passed("ok", "pytest -q", 1)
         assert v.self_verified is False
 
@@ -94,7 +89,6 @@ class TestVerdictIsUserVerified:
 
 @pytest.mark.asyncio
 async def test_self_verified_passed_does_not_trigger_distill(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.learning import distiller, promotion_gate, reflection
 
     distill_calls: list[dict] = []
@@ -128,7 +122,6 @@ async def test_self_verified_passed_does_not_trigger_distill(tmp_path, monkeypat
 
 @pytest.mark.asyncio
 async def test_self_verified_default_false_is_backward_compatible(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.learning import distiller, promotion_gate
 
     distill_calls: list[dict] = []
@@ -165,7 +158,6 @@ async def test_self_verified_default_false_is_backward_compatible(tmp_path, monk
 
 @pytest.mark.asyncio
 async def test_user_verified_passed_still_triggers_distill_and_promote(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.learning import distiller, promotion_gate
 
     distill_calls: list[dict] = []
@@ -205,7 +197,6 @@ async def test_user_verified_passed_still_triggers_distill_and_promote(tmp_path,
 
 @pytest.mark.asyncio
 async def test_failed_run_path_unchanged(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.learning import distiller, promotion_gate, reflection
 
     distill_calls: list[dict] = []

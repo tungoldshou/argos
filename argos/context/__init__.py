@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from argos.context.analyzer import (
     ContextAnalyzer,
     ContextBreakdown,

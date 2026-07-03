@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -10,7 +9,6 @@ from argos.core.recovery import flatten_exception_chain
 
 @dataclass
 class StreamDiag:
-    """Internal documentation."""
     started_at: float = field(default_factory=time.monotonic)
     ttfb_s: float | None = None
     chunks: int = 0
@@ -18,7 +16,6 @@ class StreamDiag:
 
 
 async def stream_diag(source: AsyncIterator[str], diag: StreamDiag) -> AsyncIterator[str]:
-    """Internal documentation."""
     try:
         async for chunk in source:
             if diag.ttfb_s is None:
@@ -45,7 +42,6 @@ class StepCost:
 
 
 def cost_of(usage: dict[str, Any] | None, *, model: str) -> StepCost:
-    """Internal documentation."""
     u = usage or {}
     tin = int(u.get("input_tokens", 0) or 0)
     tout = int(u.get("output_tokens", 0) or 0)

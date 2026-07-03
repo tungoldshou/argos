@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from argos import tools
 
 

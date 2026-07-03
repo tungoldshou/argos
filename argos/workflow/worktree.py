@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import contextlib
@@ -12,7 +11,6 @@ from argos.i18n import t
 
 @contextlib.contextmanager
 def worktree_for(base: Path, agent_id: str, isolation: str) -> Iterator[tuple[Path, str | None]]:
-    """Internal documentation."""
     if isolation != "worktree":
         yield base, None
         return

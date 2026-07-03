@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -10,14 +9,12 @@ from argos.skills_runtime.events import SkillRunStart, SkillRunEnd
 
 
 def test_skill_catalog_summary_renamed():
-    """Internal documentation."""
     panel = ActivityPanel()
     summary_method = getattr(panel, "_skill_catalog_summary", None)
     assert summary_method is not None, "ActivityPanel 必须有 _skill_catalog_summary 方法"
 
 
 def test_skill_section_present_in_compose():
-    """Internal documentation."""
     panel = ActivityPanel()
     sections = list(panel.compose())
     titles = [s.border_title for s in sections]
@@ -26,7 +23,6 @@ def test_skill_section_present_in_compose():
 
 
 def test_skill_section_after_lsp_section_in_compose():
-    """Internal documentation."""
     panel = ActivityPanel()
     titles = [s.border_title for s in panel.compose()]
     lsp_idx = titles.index("LSP")
@@ -35,7 +31,6 @@ def test_skill_section_after_lsp_section_in_compose():
 
 
 def test_skill_section_renders_start_state():
-    """Internal documentation."""
     panel = ActivityPanel()
     ev = SkillRunStart(skill_name="verify", args={"timeout": 30})
     handler = getattr(panel, "_on_skill_run_start", None)
@@ -47,7 +42,6 @@ def test_skill_section_renders_start_state():
 
 
 def test_skill_section_renders_end_state_after_start():
-    """Internal documentation."""
     panel = ActivityPanel()
     panel._on_skill_run_start(SkillRunStart(skill_name="simplify", args={}))
     panel._on_skill_run_end(SkillRunEnd(
@@ -61,7 +55,6 @@ def test_skill_section_renders_end_state_after_start():
 
 
 def test_mcp_summary_honors_argos_config_dir(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos import mcp_native
 
     home = tmp_path / "home"

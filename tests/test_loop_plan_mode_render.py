@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +13,6 @@ from tests.test_loop_codeact import FakeModel, FakeSandbox, FakeStore, FakeVerif
 
 
 class _RecordingFakeModel(FakeModel):
-    """Internal documentation."""
     def __init__(self, scripts: list[str]):
         super().__init__(scripts)
         self.calls: list[list[dict]] = []
@@ -29,7 +27,6 @@ class _RecordingFakeModel(FakeModel):
 
 def _plan_mode_loop(scripts: list[str], *, verify_cmd=None, level=ApprovalLevel.AUTO,
                     model: FakeModel | None = None):
-    """Internal documentation."""
     from argos.core.plan_mode import EnterPlanMode
     loop = AgentLoop(
         store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(),
@@ -41,12 +38,10 @@ def _plan_mode_loop(scripts: list[str], *, verify_cmd=None, level=ApprovalLevel.
 
 
 async def _drive_until(loop: AgentLoop, goal: str, *, max_events: int = 200) -> list:
-    """Internal documentation."""
     return [ev async for ev in loop.run(goal, "sess-plan")]
 
 
 def _set_decision(loop: AgentLoop, action: str, feedback: str | None = None) -> None:
-    """Internal documentation."""
     loop._plan_decision = PlanExitDecision(action=action, feedback=feedback)
     loop._plan_decision_event.set()
 
@@ -55,7 +50,6 @@ def _set_decision(loop: AgentLoop, action: str, feedback: str | None = None) -> 
 
 @pytest.mark.asyncio
 async def test_plan_mode_emits_PlanRendered_event_with_markdown():
-    """Internal documentation."""
     loop = _plan_mode_loop(["我会按这个目标做事:读 a.py。"])
     async def _decide_later() -> None:
         await asyncio.sleep(0.05)
@@ -73,7 +67,6 @@ async def test_plan_mode_emits_PlanRendered_event_with_markdown():
 
 @pytest.mark.asyncio
 async def test_plan_mode_suspends_until_decision_event_set():
-    """Internal documentation."""
     loop = _plan_mode_loop(["随便"])
     task = asyncio.create_task(_drive_until(loop, "noop"))
     await asyncio.sleep(0.1)
@@ -89,7 +82,6 @@ async def test_plan_mode_suspends_until_decision_event_set():
 
 @pytest.mark.asyncio
 async def test_plan_mode_approve_start_continues_to_act_phase():
-    """Internal documentation."""
     loop = _plan_mode_loop([
         "计划:读 a.py",
         "```python\nwrite_file('x.py','y')\n```",
@@ -113,7 +105,6 @@ async def test_plan_mode_approve_start_continues_to_act_phase():
 
 @pytest.mark.asyncio
 async def test_plan_mode_approve_accept_edits_sets_approval_level():
-    """Internal documentation."""
     loop = _plan_mode_loop([
         "计划:写文件",
         "```python\nwrite_file('x.py','y')\n```",
@@ -135,7 +126,6 @@ async def test_plan_mode_approve_accept_edits_sets_approval_level():
 
 @pytest.mark.asyncio
 async def test_plan_mode_keep_planning_re_enters_plan_phase():
-    """Internal documentation."""
     goal = "build a CLI parser for the user"
     model = _RecordingFakeModel([
         "第一轮 plan",   # 0
@@ -173,7 +163,6 @@ async def test_plan_mode_keep_planning_re_enters_plan_phase():
 
 @pytest.mark.asyncio
 async def test_plan_mode_refine_injects_feedback_as_user_message():
-    """Internal documentation."""
     model = _RecordingFakeModel([
         "第一轮 plan",
         "第二轮(应见到 feedback)plan",

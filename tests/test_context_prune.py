@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -31,7 +30,6 @@ def _thread_with_stale_tools(n_pairs: int = 10) -> list[dict]:
 
 
 def test_core_keep_survives_prune():
-    """Internal documentation."""
     msgs = _thread_with_stale_tools()
     msgs.insert(5, {"role": "user", "content": "请确保 pytest -q 通过"})
     res = prune_messages(msgs, core=CoreKeep(recent_turns=4, verify_cmd="pytest -q"),
@@ -45,7 +43,6 @@ def test_core_keep_survives_prune():
 
 
 def test_core_keep_survives_compaction_via_anchor():
-    """Internal documentation."""
     loop = _mk_loop(ArgosStore(db_path=":memory:"), _DoneModel(used=0), _NoCmdVerifier())
     loop._current_goal = "任务目标:实现 X"
     folded = [{"role": "user", "content": "(早期对话摘要)任务目标 / 第0步 / ..."},
@@ -76,7 +73,6 @@ def test_prune_disabled_when_aggressiveness_zero():
 
 @pytest.mark.asyncio
 async def test_prune_happens_before_compaction_in_loop():
-    """Internal documentation."""
     store = ArgosStore(db_path=":memory:")
     store.ensure_session("s", title="t", model="worker", system_snapshot="")
     for i in range(8):
@@ -102,7 +98,6 @@ def test_safe_compact_threshold_floor():
 
 @pytest.mark.asyncio
 async def test_no_precompact_at_30_40_pct():
-    """Internal documentation."""
     store = ArgosStore(db_path=":memory:")
     store.ensure_session("s", title="t", model="worker", system_snapshot="")
     for i in range(12):
@@ -115,7 +110,6 @@ async def test_no_precompact_at_30_40_pct():
 
 @pytest.mark.asyncio
 async def test_compaction_triggers_at_high_watermark():
-    """Internal documentation."""
     store = ArgosStore(db_path=":memory:")
     store.ensure_session("s", title="t", model="worker", system_snapshot="")
     for i in range(12):
@@ -139,7 +133,6 @@ def test_trust_passed_after_compaction_helper():
 
 @pytest.mark.asyncio
 async def test_no_passed_without_reverify_after_compaction():
-    """Internal documentation."""
     store = ArgosStore(db_path=":memory:")
     store.ensure_session("s", title="t", model="worker", system_snapshot="")
     for i in range(12):
@@ -181,7 +174,6 @@ class _Tier:
 
 
 class _DoneModel:
-    """Internal documentation."""
     def __init__(self, used: int) -> None:
         self.tier = _Tier()
         self.last_usage = {"input_tokens": used, "output_tokens": 0,
@@ -193,7 +185,6 @@ class _DoneModel:
 
 
 class _ImplementingDoneModel(_DoneModel):
-    """Internal documentation."""
     def __init__(self, used: int) -> None:
         super().__init__(used)
         self._i = 0
@@ -213,7 +204,6 @@ class _FakeSandbox:
 
 
 class _NoCmdVerifier:
-    """Internal documentation."""
     def verify(self, verify_cmd, *, attempts=1):
         return Verdict.unverifiable(detail="(无)", tampered=[], attempts=attempts)
 

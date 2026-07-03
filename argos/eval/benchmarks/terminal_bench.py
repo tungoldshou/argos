@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -82,7 +81,6 @@ def _parse_simple_yaml(text: str) -> dict[str, Any]:
 
 @dataclass(frozen=True, slots=True)
 class TBTask:
-    """Internal documentation."""
 
     task_id: str
     source_dir: Path
@@ -111,7 +109,6 @@ _CUSTOM_IMAGE_BASE = re.compile(
 
 
 def _parse_dockerfile_runs(text: str) -> tuple[str, ...]:
-    """Internal documentation."""
     runs: list[str] = []
     buf: list[str] = []
     for raw in text.splitlines():
@@ -139,7 +136,6 @@ def _dockerfile_from_line(text: str) -> str:
 
 
 def load_tb_task(task_dir: str | Path) -> TBTask | None:
-    """Internal documentation."""
     d = Path(task_dir)
     if not d.is_dir():
         return None
@@ -194,7 +190,6 @@ class TBClassification:
 
 
 def classify(tb: TBTask, *, docker_available: bool | None = None) -> TBClassification:
-    """Internal documentation."""
     if tb.has_compose and not tb.has_dockerfile:
         return TBClassification(False, "needs docker-compose orchestration (v1 adapter does not nest TB's harness)", "unsupported_compose")
     from_line = (tb.dockerfile_lines[0] if tb.dockerfile_lines else "").strip()
@@ -215,7 +210,6 @@ def classify(tb: TBTask, *, docker_available: bool | None = None) -> TBClassific
 
 
 def _docker_ok() -> bool:
-    """Internal documentation."""
     import shutil
     import subprocess
     if shutil.which("docker") is None:
@@ -232,7 +226,6 @@ def _docker_ok() -> bool:
 
 
 def to_eval_task(tb: TBTask, *, workdir: Path) -> EvalTask:
-    """Internal documentation."""
     import shutil
 
     task_dir = workdir / tb.task_id
@@ -288,7 +281,6 @@ def _map_category(tb_category: str) -> str:
 
 
 def _build_setup_script(tb: TBTask) -> str:
-    """Internal documentation."""
     if not tb.dockerfile_runs:
         return ""
     lines = ["#!/usr/bin/env bash", "set -e", ""]
@@ -300,7 +292,6 @@ def _build_setup_script(tb: TBTask) -> str:
 
 
 def _build_docker_verify_cmd(tb: TBTask, *, workdir: Path) -> str:
-    """Internal documentation."""
     from .terminal_bench_docker import TBContainerExecutor
 
     py_inner = (
@@ -325,7 +316,6 @@ def _build_docker_verify_cmd(tb: TBTask, *, workdir: Path) -> str:
 
 
 def _build_verify_cmd(tb: TBTask, *, workdir: Path) -> str:
-    """Internal documentation."""
     inner = tb.run_tests_sh.replace("\n", " && ")
     test_dir = str(workdir)
     inner = inner.replace("${TEST_DIR}", test_dir).replace("$TEST_DIR", test_dir)
@@ -340,7 +330,6 @@ def _build_verify_cmd(tb: TBTask, *, workdir: Path) -> str:
 
 @dataclass(frozen=True, slots=True)
 class TBBatchReport:
-    """Internal documentation."""
     total_seen: int
     supported: int
     unsupported: int
@@ -356,7 +345,6 @@ class TBBatchReport:
 
 
 def _classify_tb_dir(task_dir: str | Path) -> TBClassification:
-    """Internal documentation."""
     tb = load_tb_task(task_dir)
     if tb is None:
         return TBClassification(False, "task.yaml/instruction/run-tests.sh missing or unparsable", "unsupported_no_setup")
@@ -372,7 +360,6 @@ def run_subset(
     persist: bool = True,
     docker_available: bool | None = None,
 ) -> TBBatchReport:
-    """Internal documentation."""
     workdir.mkdir(parents=True, exist_ok=True)
     supported_count = 0
     unsupported_count = 0
@@ -446,7 +433,6 @@ def run_subset(
 
 
 def _resolve_subset_arg(arg: str, *, default_subset: str | None = None) -> list[Path]:
-    """Internal documentation."""
     if not arg:
         return []
     if arg == "smoke":
@@ -458,13 +444,11 @@ def _resolve_subset_arg(arg: str, *, default_subset: str | None = None) -> list[
 
 
 def _smoke_subset_dir() -> Path:
-    """Internal documentation."""
     p = Path(__file__).resolve().parent.parent.parent.parent / "tests" / "eval" / "_fixtures" / "tb_smoke"
     return p
 
 
 def cmd_tb(args: argparse.Namespace) -> int:
-    """Internal documentation."""
     from argos.cli.eval import _eval_base, _make_runner
     base = _eval_base()
     runner = _make_runner(base=base, keep_worktree=args.keep_worktree)
@@ -502,7 +486,6 @@ def cmd_tb(args: argparse.Namespace) -> int:
 
 
 def _print_tb_report(report: TBBatchReport) -> None:
-    """Internal documentation."""
     print(f"[eval tb] seen={report.total_seen}  supported={report.supported}  "
           f"skipped={report.skipped}")
     if report.unsupported_reasons:
@@ -519,7 +502,6 @@ def _print_tb_report(report: TBBatchReport) -> None:
 
 
 def add_tb_subparser(sub: Any) -> None:
-    """Internal documentation."""
     p_tb = sub.add_parser("tb", help=t("eval.tb.cmd_help"))
     p_tb.add_argument(
         "--subset", default="smoke",

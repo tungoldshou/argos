@@ -1,5 +1,4 @@
 # tests/test_tui_theme.py
-"""Internal documentation."""
 import pytest
 from argos.tui.app import ArgosApp
 from argos.tui.fakeloop import FakeLoop
@@ -16,7 +15,6 @@ async def test_argos_night_theme_registered_and_applied():
 
 @pytest.mark.asyncio
 async def test_argos_night_tokens():
-    """Internal documentation."""
     from argos.tui.theme import ARGOS_NIGHT
 
     assert ARGOS_NIGHT.dark is True
@@ -55,7 +53,6 @@ async def test_argos_night_tokens():
 
 
 def test_argos_night_variables_background_layers():
-    """Internal documentation."""
     from argos.tui.theme import ARGOS_NIGHT
 
     v = ARGOS_NIGHT.variables
@@ -69,7 +66,6 @@ def test_argos_night_variables_background_layers():
 
 
 def test_argos_night_variables_ink_scale():
-    """Internal documentation."""
     from argos.tui.theme import ARGOS_NIGHT
 
     v = ARGOS_NIGHT.variables
@@ -81,7 +77,6 @@ def test_argos_night_variables_ink_scale():
 
 
 def test_argos_night_variables_eye_system():
-    """Internal documentation."""
     from argos.tui.theme import ARGOS_NIGHT
 
     v = ARGOS_NIGHT.variables
@@ -93,7 +88,6 @@ def test_argos_night_variables_eye_system():
 
 
 def test_argos_night_variables_semantic_colors():
-    """Internal documentation."""
     from argos.tui.theme import ARGOS_NIGHT
 
     v = ARGOS_NIGHT.variables
@@ -110,7 +104,6 @@ def test_argos_night_variables_semantic_colors():
 
 
 def test_argos_night_variables_plan_and_cursor():
-    """Internal documentation."""
     from argos.tui.theme import ARGOS_NIGHT
 
     v = ARGOS_NIGHT.variables
@@ -120,7 +113,6 @@ def test_argos_night_variables_plan_and_cursor():
 
 
 def test_argos_night_variables_scrollbar_and_border():
-    """Internal documentation."""
     from argos.tui.theme import ARGOS_NIGHT
 
     v = ARGOS_NIGHT.variables
@@ -130,7 +122,6 @@ def test_argos_night_variables_scrollbar_and_border():
 
 
 def test_argos_night_variables_text_muted_compat():
-    """Internal documentation."""
     from argos.tui.theme import ARGOS_NIGHT
 
     v = ARGOS_NIGHT.variables
@@ -139,14 +130,12 @@ def test_argos_night_variables_text_muted_compat():
 
 
 def test_argos_night_name_unchanged():
-    """Internal documentation."""
     from argos.tui.theme import ARGOS_NIGHT
 
     assert ARGOS_NIGHT.name == "argos-night"
 
 
 def test_argos_night_variables_count():
-    """Internal documentation."""
     from argos.tui.theme import ARGOS_NIGHT
 
     assert len(ARGOS_NIGHT.variables) >= 28, (

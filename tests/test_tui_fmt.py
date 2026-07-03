@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.tui.widgets._fmt import fmt_cost, fmt_tokens, fmt_token_flow
@@ -10,7 +9,6 @@ def test_fmt_cost_known_keeps_dollar_and_three_decimals():
 
 
 def test_fmt_cost_unknown_uses_dollar_na_not_shell_form():
-    """Internal documentation."""
     assert fmt_cost(None) == "$N/A"
     assert "$(" not in fmt_cost(None)
 
@@ -28,7 +26,6 @@ def test_fmt_tokens_at_and_above_1000_abbreviated():
 
 
 def test_fmt_token_flow_has_arrows_and_unit():
-    """Internal documentation."""
     out = fmt_token_flow(37900, 174)
     assert out == "↑37.9k ↓174 tok"
     assert "tok" in out

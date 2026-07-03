@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import dataclasses
@@ -42,7 +41,6 @@ def test_different_key_cannot_verify():
 
 
 def test_sandbox_child_cannot_forge_receipt():
-    """Internal documentation."""
     host_signer = ReceiptSigner(key=b"host-secret-never-leaves-host-process")
     real_receipt = host_signer.sign(
         action="run_command", args={"command": "echo hi"}, result="hi\n", exit_code=0

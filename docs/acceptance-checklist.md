@@ -103,7 +103,7 @@
 - **验收**:☐
 
 ### C5. 语音 / 图片输入  🔧
-- **怎么测**:图片=Ctrl+V 贴图(macOS 需 `brew install pngpaste`);语音=空输入框按空格或运行 `/voice`。
+- **怎么测**:图片=Ctrl+V 贴图(macOS 需 `brew install pngpaste`);语音=显式运行 `/voice`。
 - **期望**:图片仅在多模态模型下发送;语音当前未启用时给明确提示,不静默无效。
 - **验收**:☐
 
@@ -111,9 +111,9 @@
 
 ## Tier D — 进阶 / 默认关(按需开)
 
-### D1. 动态工作流(子 agent 编排)  ✅ 默认开
-- **怎么测**:给一个适合拆的大任务 `并行探索 3 个实现方案再选最好的` → 模型发 `propose_workflow` → 审批后引擎跑 5 形状之一(fan_out/pipeline/panel/loop_until/best_of_n),每个子 agent 独立 worktree+沙箱。
-- **期望**:子 agent 并行跑,结果综合回来;`ARGOS_WORKFLOWS=0` 可关。
+### D1. 动态工作流(子 agent 编排)  ✅ 高级实验 / 默认关
+- **怎么测**:设置 `ARGOS_WORKFLOWS=1` 后,给一个适合拆的大任务 `并行探索 3 个实现方案再选最好的` → 模型发 `propose_workflow` → 审批后引擎跑 5 形状之一(fan_out/pipeline/panel/loop_until/best_of_n),每个子 agent 独立 worktree+沙箱。
+- **期望**:未设置 `ARGOS_WORKFLOWS=1` 时不注入 workflow prompt,模型误提 `propose_workflow` 会收到诚实纠偏并单线程继续;显式开启后子 agent 并行跑,结果综合回来。
 - **验收**:☐
 
 ### D2. 技能  ✅

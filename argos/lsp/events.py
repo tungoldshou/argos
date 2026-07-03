@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -7,7 +6,6 @@ from typing import Mapping
 
 @dataclass(frozen=True, slots=True)
 class LspServerEvent:
-    """Internal documentation."""
     server_name: str = ""
     status: str = ""
     command: str = ""
@@ -22,7 +20,6 @@ class LspServerEvent:
 
 @dataclass(frozen=True, slots=True)
 class LspDiagnosticEvent:
-    """Internal documentation."""
     server_name: str = ""
     uri: str = ""
     count: int = 0

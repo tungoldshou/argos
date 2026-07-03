@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from textual.reactive import reactive
@@ -9,7 +8,6 @@ from argos.i18n import t
 
 
 class VerdictBadge(Static):
-    """Internal documentation."""
 
     DEFAULT_CSS = """
     VerdictBadge { padding: 0 2; margin: 0 0 1 0; height: auto; }
@@ -32,17 +30,14 @@ class VerdictBadge(Static):
         self.render_text: str = ""
 
     def watch_status(self, value: VerdictStatus | None) -> None:
-        """Internal documentation."""
         for s in ("passed", "failed", "unverifiable"):
             self.set_class(value == s, f"verdict-{s}")
 
     def _clear_all_classes(self) -> None:
-        """Internal documentation."""
         for cls in self._ALL_CLASSES:
             self.set_class(False, cls)
 
     def show(self, verdict: Verdict) -> None:
-        """Internal documentation."""
         cmd = verdict.verify_cmd or "—"
 
         if getattr(verdict, "no_test", False):

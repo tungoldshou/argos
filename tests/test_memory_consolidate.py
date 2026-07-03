@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -68,7 +67,6 @@ def _read_jsonl(path: Path) -> list[dict]:
 
 
 def test_merge_same_key_keeps_newest_sums_use_count(tmp_path):
-    """Internal documentation."""
     now = time.time()
     old_entry = _entry(key="dup", value="old_value", confidence=0.9, ts=now - 100, use_count=2)
     new_entry = _entry(key="dup", value="new_value", confidence=0.85, ts=now, use_count=1)
@@ -90,7 +88,6 @@ def test_merge_same_key_keeps_newest_sums_use_count(tmp_path):
 
 
 def test_archive_decayed_entries_never_hard_delete(tmp_path):
-    """Internal documentation."""
     now = time.time()
     ninety_days_ago = now - 86400 * 90
     stale = _entry(
@@ -130,7 +127,6 @@ def test_archive_decayed_entries_never_hard_delete(tmp_path):
 
 
 def test_consolidate_skips_corrupt_lines_and_archive_file(tmp_path):
-    """Internal documentation."""
     now = time.time()
     good = _entry(key="good_key", confidence=0.9, ts=now, last_used_at=now)
     corrupt_line = "NOT_VALID_JSON{{{broken"
@@ -156,7 +152,6 @@ def test_consolidate_skips_corrupt_lines_and_archive_file(tmp_path):
 
 
 def test_merge_different_value_archives_older_never_hard_delete(tmp_path):
-    """Internal documentation."""
     now = time.time()
     older = _entry(key="cmd", value="old_stderr", confidence=0.9, ts=now - 100, use_count=2)
     newer = _entry(key="cmd", value="new_stderr", confidence=0.85, ts=now, use_count=1)
@@ -185,7 +180,6 @@ def test_merge_different_value_archives_older_never_hard_delete(tmp_path):
 
 
 def test_merge_same_value_no_archive_but_sums_use_count(tmp_path):
-    """Internal documentation."""
     now = time.time()
     older = _entry(key="dup", value="same", confidence=0.9, ts=now - 100, use_count=2)
     newer = _entry(key="dup", value="same", confidence=0.85, ts=now, use_count=1)
@@ -209,7 +203,6 @@ def test_merge_same_value_no_archive_but_sums_use_count(tmp_path):
 
 
 def test_merge_uses_max_last_used_at(tmp_path):
-    """Internal documentation."""
     now = time.time()
     ninety_days_ago = now - 86400 * 90
     older_ts_recent_use = _entry(
@@ -253,7 +246,6 @@ def test_merge_uses_max_last_used_at(tmp_path):
 
 
 def test_archive_stale_entry_not_re_archived_or_deleted(tmp_path):
-    """Internal documentation."""
     now = time.time()
     ninety_days_ago = now - 86400 * 90
     stale_archived = _entry(

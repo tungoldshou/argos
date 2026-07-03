@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -47,14 +46,12 @@ def _make_broker(level: ApprovalLevel = ApprovalLevel.AUTO,
 
 
 def test_all_computer_caps_registered():
-    """Internal documentation."""
     reg = _make_registry_with_builtins()
     for name in _EXPECTED_COMPUTER_CAPS:
         assert name in reg, f"能力 {name!r} 未注册"
 
 
 def test_computer_caps_count():
-    """Internal documentation."""
     reg = _make_registry_with_builtins()
     computer_caps = reg.by_kind("computer")
     assert len(computer_caps) == len(_EXPECTED_COMPUTER_CAPS), (
@@ -66,7 +63,6 @@ def test_computer_caps_count():
 
 @pytest.mark.parametrize("name", _EXPECTED_COMPUTER_CAPS)
 def test_computer_cap_kind_is_computer(name: str):
-    """Internal documentation."""
     reg = _make_registry_with_builtins()
     cap = reg.get(name)
     assert cap.kind == "computer", f"{name}: kind={cap.kind!r},期望 'computer'"
@@ -74,7 +70,6 @@ def test_computer_cap_kind_is_computer(name: str):
 
 @pytest.mark.parametrize("name", _EXPECTED_COMPUTER_CAPS)
 def test_computer_cap_risk_is_high(name: str):
-    """Internal documentation."""
     reg = _make_registry_with_builtins()
     cap = reg.get(name)
     assert cap.risk == "high", f"{name}: risk={cap.risk!r},期望 'high'"
@@ -82,7 +77,6 @@ def test_computer_cap_risk_is_high(name: str):
 
 @pytest.mark.parametrize("name", _EXPECTED_COMPUTER_CAPS)
 def test_computer_cap_reversible_false(name: str):
-    """Internal documentation."""
     reg = _make_registry_with_builtins()
     cap = reg.get(name)
     assert cap.reversible is False, f"{name}: reversible={cap.reversible!r},期望 False"
@@ -90,7 +84,6 @@ def test_computer_cap_reversible_false(name: str):
 
 @pytest.mark.parametrize("name", _EXPECTED_COMPUTER_CAPS)
 def test_computer_cap_has_honest_verify_hint(name: str):
-    """Internal documentation."""
     reg = _make_registry_with_builtins()
     cap = reg.get(name)
     assert "GUI 动作无机检通道" in cap.verify_hint, (
@@ -102,7 +95,6 @@ def test_computer_cap_has_honest_verify_hint(name: str):
 
 
 def test_screenshot_verify_hint_contains_vlm_redline():
-    """Internal documentation."""
     reg = _make_registry_with_builtins()
     cap = reg.get("computer_screenshot")
     assert "screenshot 永不单独产出 passed" in cap.verify_hint, (
@@ -111,7 +103,6 @@ def test_screenshot_verify_hint_contains_vlm_redline():
 
 
 def test_computer_caps_visibility_all():
-    """Internal documentation."""
     reg = _make_registry_with_builtins()
     for name in _EXPECTED_COMPUTER_CAPS:
         cap = reg.get(name)
@@ -120,7 +111,6 @@ def test_computer_caps_visibility_all():
 
 
 def test_computer_caps_in_risk_table():
-    """Internal documentation."""
     reg = _make_registry_with_builtins()
     table = reg.risk_table()
     for name in _EXPECTED_COMPUTER_CAPS:
@@ -131,7 +121,6 @@ def test_computer_caps_in_risk_table():
 
 @pytest.mark.asyncio
 async def test_computer_action_triggers_approval_request():
-    """Internal documentation."""
     reg = _make_registry_with_builtins()
     gate = ApprovalGate(level=ApprovalLevel.CONFIRM)
     egress = EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set())
@@ -161,7 +150,6 @@ async def test_computer_action_triggers_approval_request():
 
 @pytest.mark.asyncio
 async def test_computer_action_hmac_receipt_signed_on_approval():
-    """Internal documentation."""
     import os
     from argos.perception.executor import ComputerExecutor, ComputerActionResult
 
@@ -207,7 +195,6 @@ async def test_computer_action_hmac_receipt_signed_on_approval():
     "computer_open_app",
 ])
 def test_ledger_entry_for_computer_action_reversible_impossible(action: str):
-    """Internal documentation."""
     from argos.ledger.builder import build_entry
 
     signer = ReceiptSigner(key=b"k")
@@ -240,7 +227,6 @@ def test_ledger_entry_for_computer_action_reversible_impossible(action: str):
 
 
 def test_register_builtins_computer_caps_idempotent():
-    """Internal documentation."""
     reg = CapabilityRegistry()
     register_builtins(reg)
     count_before = len(reg.by_kind("computer"))

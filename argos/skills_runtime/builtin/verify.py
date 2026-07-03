@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -24,7 +23,6 @@ def _config_path() -> Path:
 
 
 def _read_verify_cmd() -> str | None:
-    """Internal documentation."""
     try:
         text = _config_path().read_text(encoding="utf-8")
     except (FileNotFoundError, OSError):
@@ -40,7 +38,6 @@ def _read_verify_cmd() -> str | None:
 
 
 async def run(args: dict, ctx: AnalysisSkillContext) -> AnalysisSkillResult:
-    """Internal documentation."""
     start_ms = int(time.monotonic() * 1000)
     verify_cmd = _read_verify_cmd()
     verifier = Verifier()

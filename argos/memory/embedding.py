@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
@@ -12,14 +11,12 @@ _RECALL_ASYNC_TIMEOUT_S: float = 5.0
 
 @runtime_checkable
 class Embedder(Protocol):
-    """Internal documentation."""
     dim: int
 
     def embed(self, texts: list[str]) -> list[list[float]]: ...
 
 
 class EndpointEmbedder:
-    """Internal documentation."""
 
     def __init__(self) -> None:
         self.dim = EMBED_DIM
@@ -29,7 +26,6 @@ class EndpointEmbedder:
 
 
 class OpenAIEmbedder:
-    """Internal documentation."""
 
     def __init__(self, *, base_url: str, api_key: str, model: str, transport=None) -> None:
         self._base = base_url.rstrip("/")
@@ -57,7 +53,6 @@ class OpenAIEmbedder:
         return vecs
 
     async def aembed(self, texts: list[str]) -> list[list[float]]:
-        """Internal documentation."""
         import httpx
         async with httpx.AsyncClient(
             transport=self._transport, timeout=_RECALL_ASYNC_TIMEOUT_S,
@@ -77,12 +72,10 @@ class OpenAIEmbedder:
 
 
 def _build_endpoint_embedder() -> Embedder:
-    """Internal documentation."""
     return EndpointEmbedder()
 
 
 def get_embedder() -> Embedder | None:
-    """Internal documentation."""
     try:
         return _build_endpoint_embedder()
     except Exception:

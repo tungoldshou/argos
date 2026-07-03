@@ -12,7 +12,6 @@ _FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 
 class ThinkingIndicator(Static):
-    """Internal documentation."""
 
     DEFAULT_CSS = """
     ThinkingIndicator { color: $eye; padding: 0 2; }
@@ -30,12 +29,10 @@ class ThinkingIndicator(Static):
         self._timer = self.set_interval(0.12, self._tick)
 
     def _tick(self) -> None:
-        """Internal documentation."""
         self._frame = (self._frame + 1) % len(_FRAMES)
         self.refresh()
 
     def render(self) -> str:
-        """Internal documentation."""
         elapsed = int(time.monotonic() - self._t0)
         suffix = f" {elapsed}s" if elapsed >= 1 else ""
         glyph = _FRAMES[self._frame]
@@ -43,10 +40,8 @@ class ThinkingIndicator(Static):
 
     @property
     def renderable(self) -> str:
-        """Internal documentation."""
         return self.render()
 
     def set_label(self, label: str) -> None:
-        """Internal documentation."""
         self._label = label
         self.refresh()

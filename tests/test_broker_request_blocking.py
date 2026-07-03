@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -30,7 +29,6 @@ async def _respond_first_pending(gate, kind: str) -> bool:
 
 @pytest.mark.asyncio
 async def test_request_blocking_bridges_to_interactive_approval(monkeypatch):
-    """Internal documentation."""
     def fake_run(command, *, workspace=None, allow_network=False):
         return ("ran:" + command, 0)
     monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
@@ -49,7 +47,6 @@ async def test_request_blocking_bridges_to_interactive_approval(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_request_blocking_denied_returns_refusal(monkeypatch):
-    """Internal documentation."""
     def fake_run(command, *, workspace=None, allow_network=False):
         return ("SHOULD-NOT-RUN", 0)
     monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
@@ -69,7 +66,6 @@ async def test_request_blocking_denied_returns_refusal(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_request_blocking_run_command_auto_runs_under_yolo(monkeypatch):
-    """Internal documentation."""
     def fake_run(command, *, workspace=None, allow_network=False):
         return ("ran", 0)
     monkeypatch.setattr("argos.tools.shell.run_command", fake_run)
@@ -84,7 +80,6 @@ async def test_request_blocking_run_command_auto_runs_under_yolo(monkeypatch):
 
 
 def test_request_blocking_fallback_no_host_loop(monkeypatch):
-    """Internal documentation."""
     def fake_run(command, *, workspace=None, allow_network=False):
         return ("ran:" + command, 0)
     monkeypatch.setattr("argos.tools.shell.run_command", fake_run)

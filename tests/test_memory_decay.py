@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -84,7 +83,6 @@ def test_prune_idempotent(mem_root):
 
 
 def test_cap_enforced_on_write(mem_root, tmp_path):
-    """Internal documentation."""
     pid = mem_auto.project_id_for(tmp_path)
     p = mem_auto._project_path(pid)
     p.parent.mkdir(parents=True, exist_ok=True)

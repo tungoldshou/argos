@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import enum
@@ -14,7 +13,6 @@ if TYPE_CHECKING:
 
 
 class Zone(enum.Enum):
-    """Internal documentation."""
 
     GREEN = "green"
     YELLOW = "yellow"
@@ -23,7 +21,6 @@ class Zone(enum.Enum):
 
 @dataclass(frozen=True, slots=True)
 class AutonomyPolicy:
-    """Internal documentation."""
 
     clarification_required: bool = True
     preauth: Mapping[str, bool] = field(default_factory=dict)
@@ -33,7 +30,6 @@ class AutonomyPolicy:
 
     @staticmethod
     def from_permissions_config(config: "PermissionsConfig | None") -> "AutonomyPolicy":
-        """Internal documentation."""
         if config is None:
             return AutonomyPolicy()
         return AutonomyPolicy(preauth=dict(config.preauth or {}))
@@ -49,7 +45,6 @@ def _evaluator_decision(
     args: dict,
     config: "PermissionsConfig",
 ) -> tuple[str, str]:
-    """Internal documentation."""
     try:
         from argos.permissions.evaluator import evaluate
         meta = evaluate(
@@ -74,7 +69,6 @@ def classify(
     slow_action: bool | None = None,
     goal_vague: bool | None = None,
 ) -> tuple[Zone, str]:
-    """Internal documentation."""
     if not reversible:
         return (Zone.RED, t("perm2.zone.irreversible"))
 
@@ -116,7 +110,6 @@ def on_unverifiable_completion(
     verdict: "Verdict | None",
     policy: AutonomyPolicy,  # noqa: ARG001
 ) -> tuple[Zone, str] | None:
-    """Internal documentation."""
     if verdict is None or getattr(verdict, "status", None) != "unverifiable":
         return None
     if not verify_cmd:

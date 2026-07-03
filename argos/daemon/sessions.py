@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -51,7 +50,6 @@ class SessionRegistry:
             return True
 
     def get(self, session_id: str) -> SessionRecord | None:
-        """Internal documentation."""
         return self._sessions.get(session_id)
 
     async def remove(self, session_id: str) -> None:
@@ -59,7 +57,6 @@ class SessionRegistry:
             self._sessions.pop(session_id, None)
 
     async def promote_oldest_observer_after_remove(self, removed_id: str) -> str | None:
-        """Internal documentation."""
         async with self._lock:
             removed = self._sessions.pop(removed_id, None)
             if removed is None:
@@ -74,7 +71,6 @@ class SessionRegistry:
             return oldest.session_id
 
     def is_alive(self, session_id: str, now: float | None = None) -> bool:
-        """Internal documentation."""
         if now is None:
             now = time.time()
         rec = self._sessions.get(session_id)
@@ -95,7 +91,6 @@ class SessionRegistry:
                 if (now - r.last_heartbeat) < self._timeout]
 
     async def reap_expired(self) -> int:
-        """Internal documentation."""
         now = time.time()
         async with self._lock:
             expired = [sid for sid, r in self._sessions.items()
@@ -112,7 +107,6 @@ class SessionRegistry:
             return len(expired)
 
     def other_sessions(self, exclude: str, now: float | None = None) -> list[SessionRecord]:
-        """Internal documentation."""
         if now is None:
             now = time.time()
         return [r for r in self._sessions.values()

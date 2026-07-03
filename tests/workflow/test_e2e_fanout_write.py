@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import subprocess
@@ -13,7 +12,6 @@ pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="çœŸ Seatbelt æ
 
 
 def _writer_factory(filenames):
-    """Internal documentation."""
     from tests.e2e.scripted_model import ScriptedModelClient
 
     state = {"i": 0}

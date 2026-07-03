@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +21,6 @@ _KILL_POLL_S  = 0.05
 
 
 async def _probe(socket_path: Path) -> bool:
-    """Internal documentation."""
     req = b"GET /health HTTP/1.1\r\nHost: daemon\r\nUser-Agent: argos-tui/probe\r\nConnection: close\r\n\r\n"
     try:
         reader, writer = await asyncio.wait_for(
@@ -45,7 +43,6 @@ async def _probe(socket_path: Path) -> bool:
 
 
 async def _daemon_version(socket_path: Path) -> dict | None:
-    """Internal documentation."""
     try:
         from argos.daemon.client import DaemonClient
         cli = DaemonClient(socket_path, timeout=_PROBE_TIMEOUT)
@@ -61,7 +58,6 @@ _MTIME_GRACE_S = 2.0
 
 
 def _argos_code_mtime() -> float:
-    """Internal documentation."""
     try:
         import argos
         root = os.path.dirname(os.path.abspath(argos.__file__))
@@ -81,7 +77,6 @@ def _argos_code_mtime() -> float:
 
 
 def _is_compatible(ver: dict) -> bool:
-    """Internal documentation."""
     if not (isinstance(ver, dict)
             and ver.get("daemon") == _ARGOS_VERSION
             and ver.get("protocol") == PROTOCOL_VERSION):
@@ -94,7 +89,6 @@ def _is_compatible(ver: dict) -> bool:
 
 
 def _pid_alive(pid: int) -> bool:
-    """Internal documentation."""
     from argos.daemon.pidfile import is_alive
     return is_alive(pid)
 
@@ -104,7 +98,6 @@ def _daemon_pid_path(socket_path: Path) -> Path:
 
 
 def _kill_stale_daemon(socket_path: Path) -> None:
-    """Internal documentation."""
     from argos.daemon.pidfile import read_pid, remove
     pid_path = _daemon_pid_path(socket_path)
     pid = read_pid(pid_path)
@@ -131,12 +124,10 @@ def _kill_stale_daemon(socket_path: Path) -> None:
 
 
 def _daemon_log_path(socket_path: Path) -> Path:
-    """Internal documentation."""
     return socket_path.parent / "daemon-boot.log"
 
 
 def _tail(path: Path, n: int = 20) -> str:
-    """Internal documentation."""
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
@@ -146,7 +137,6 @@ def _tail(path: Path, n: int = 20) -> str:
 
 
 async def probe_or_spawn(socket_path: Path) -> bool:
-    """Internal documentation."""
     if await _probe(socket_path):
         ver = await _daemon_version(socket_path)
         if _is_compatible(ver or {}):

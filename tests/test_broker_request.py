@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -21,7 +20,6 @@ def _broker(level=ApprovalLevel.AUTO, search_hosts=None):
 
 
 def test_broker_passes_workspace_to_run_command(monkeypatch, tmp_path):
-    """Internal documentation."""
     captured = {}
 
     def fake_run(command, *, workspace=None, allow_network=False):
@@ -38,7 +36,6 @@ def test_broker_passes_workspace_to_run_command(monkeypatch, tmp_path):
 
 
 def test_broker_workspace_defaults_none_back_compat(monkeypatch):
-    """Internal documentation."""
     captured = {}
 
     def fake_run(command, *, workspace=None, allow_network=False):
@@ -55,7 +52,6 @@ def test_broker_workspace_defaults_none_back_compat(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_command_auto_runs_at_yolo():
-    """Internal documentation."""
     br = _broker(level=ApprovalLevel.AUTO)
     res = await br.request("run_command", {"command": "echo hi"})
     assert isinstance(res, str)
@@ -68,7 +64,6 @@ async def test_run_command_auto_runs_at_yolo():
 
 @pytest.mark.asyncio
 async def test_dangerous_run_command_still_blocked_at_yolo():
-    """Internal documentation."""
     br = _broker(level=ApprovalLevel.AUTO)
     res = await br.request("run_command", {"command": "rm -rf /"})
     assert isinstance(res, str)
@@ -86,7 +81,6 @@ async def test_denied_returns_fail_closed_string_not_raise():
 
 @pytest.mark.asyncio
 async def test_web_extract_allows_public_denies_internal():
-    """Internal documentation."""
     br = _broker(level=ApprovalLevel.AUTO, search_hosts={"duckduckgo.com"})
     assert br._egress_deny_reason("web_extract", {"url": "https://news.example.com/x"}) is None
     for bad in ("http://169.254.169.254/latest/meta-data/", "http://127.0.0.1:8080/admin",
@@ -106,7 +100,6 @@ async def test_unknown_action_rejected():
 
 @pytest.mark.asyncio
 async def test_broker_result_is_frozen_dataclass():
-    """Internal documentation."""
     import dataclasses
     from argos.tools.receipts import Receipt
     signer = ReceiptSigner(key=b"test")
@@ -120,7 +113,6 @@ async def test_broker_result_is_frozen_dataclass():
 
 @pytest.mark.asyncio
 async def test_no_receipt_when_denied():
-    """Internal documentation."""
     br = _broker(level=ApprovalLevel.OBSERVE)
     old_receipt = br.last_receipt
     await br.request("run_command", {"command": "echo hi"})
@@ -129,7 +121,6 @@ async def test_no_receipt_when_denied():
 
 @pytest.mark.asyncio
 async def test_web_search_egress_denied_when_provider_host_not_allowed(monkeypatch, tmp_path):
-    """Internal documentation."""
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)  # → DDGS provider, host=duckduckgo.com
     config_dir = tmp_path / "custom-config"
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(config_dir))
@@ -143,7 +134,6 @@ async def test_web_search_egress_denied_when_provider_host_not_allowed(monkeypat
 
 @pytest.mark.asyncio
 async def test_web_search_egress_allowed_when_provider_host_listed(monkeypatch):
-    """Internal documentation."""
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)  # DDGS → duckduckgo.com
 
     import argos.web as _w
@@ -158,7 +148,6 @@ async def test_web_search_egress_allowed_when_provider_host_listed(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_network_action_denied_at_observe_through_request():
-    """Internal documentation."""
     br = _broker(level=ApprovalLevel.OBSERVE, search_hosts={"duckduckgo.com"})
     res = await br.request("web_search", {"query": "x"})
     assert "拒绝" in res or "denied" in res.lower()
@@ -167,7 +156,6 @@ async def test_network_action_denied_at_observe_through_request():
 
 @pytest.mark.asyncio
 async def test_take_receipt_returns_and_clears():
-    """Internal documentation."""
     br = _broker(level=ApprovalLevel.AUTO)
     await br.request("run_command", {"command": "echo hi"})
     assert br.last_receipt is not None
@@ -179,7 +167,6 @@ async def test_take_receipt_returns_and_clears():
 
 @pytest.mark.asyncio
 async def test_egress_deny_message_does_not_mention_nonexistent_allow_command(monkeypatch):
-    """Internal documentation."""
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
     br = _broker(level=ApprovalLevel.AUTO, search_hosts={"someother.example"})
     res = await br.request("web_search", {"query": "test"})
@@ -192,7 +179,6 @@ async def test_egress_deny_message_does_not_mention_nonexistent_allow_command(mo
 
 @pytest.mark.asyncio
 async def test_egress_deny_reason_message_format(monkeypatch):
-    """Internal documentation."""
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
     br = _broker(level=ApprovalLevel.AUTO, search_hosts={"someother.example"})
     reason = br._egress_deny_reason("web_search", {"query": "test"})
@@ -205,7 +191,6 @@ async def test_egress_deny_reason_message_format(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_command_not_force_confirmed_at_yolo():
-    """Internal documentation."""
     gate = ApprovalGate(level=ApprovalLevel.AUTO)
     egress = EgressPolicy(llm_hosts=set(), search_hosts={"duckduckgo.com"}, mcp_hosts=set())
     signer = ReceiptSigner(key=b"k")

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 
 from argos.workflow.spec import (
@@ -7,7 +6,6 @@ from argos.workflow.spec import (
 
 
 def test_legacy_task_default_role_is_none():
-    """Internal documentation."""
     t = AgentTask(prompt="x")
     assert t.role is None
     assert t.tool_scope == "read"
@@ -17,7 +15,6 @@ def test_legacy_task_default_role_is_none():
 
 
 def test_legacy_spec_without_role_parses_unchanged():
-    """Internal documentation."""
     raw = {
         "name": "x", "description": "",
         "stages": [{
@@ -63,7 +60,6 @@ def test_all_four_roles_have_presets():
 
 
 def test_each_preset_has_required_fields():
-    """Internal documentation."""
     for name in REQUIRED_ROLES:
         p = ROLE_PRESETS[name]
         assert isinstance(p.tool_allowlist, frozenset), f"{name}.tool_allowlist 非 frozenset"
@@ -75,7 +71,6 @@ def test_each_preset_has_required_fields():
 
 
 def test_role_tool_allowlist_semantics():
-    """Internal documentation."""
     mutating = {"write_file", "edit_file"}
     explorer = ROLE_PRESETS["explorer"]
     planner = ROLE_PRESETS["planner"]
@@ -97,7 +92,6 @@ def test_role_read_only_flags():
 
 
 def test_coder_requires_verify_reviewer_requires_verify():
-    """Internal documentation."""
     assert ROLE_PRESETS["coder"].requires_verify is True
     assert ROLE_PRESETS["reviewer"].requires_verify is True
     assert ROLE_PRESETS["explorer"].requires_verify is False
@@ -105,13 +99,11 @@ def test_coder_requires_verify_reviewer_requires_verify():
 
 
 def test_role_max_steps_are_reasonable_caps():
-    """Internal documentation."""
     for r in REQUIRED_ROLES:
         assert ROLE_PRESETS[r].max_steps <= 100
 
 
 def test_role_conflicts_with_explicit_tool_scope_rejected():
-    """Internal documentation."""
     raw = {
         "name": "x", "description": "",
         "stages": [{
@@ -124,7 +116,6 @@ def test_role_conflicts_with_explicit_tool_scope_rejected():
 
 
 def test_role_explicit_tool_scope_read_consistent_passes():
-    """Internal documentation."""
     raw = {
         "name": "x", "description": "",
         "stages": [{

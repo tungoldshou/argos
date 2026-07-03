@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -45,7 +44,6 @@ async def _create_run(socket_path, sid, workspace="") -> str:
 
 @pytest_asyncio.fixture
 async def srv_env(tmp_path):
-    """Internal documentation."""
     runs_dir = tmp_path / "runs"
     socket_path = tmp_path / "daemon.sock"
     manager = RunManager(runs_dir=runs_dir, index_path=tmp_path / "index.json")
@@ -73,7 +71,6 @@ class _FakeReceipt:
 
 
 def _file_entry(run_id, seq, file_path, snap_path, undo_state="available") -> LedgerEntry:
-    """Internal documentation."""
     return LedgerEntry(
         ts=time.time(),
         run_id=run_id,
@@ -89,7 +86,6 @@ def _file_entry(run_id, seq, file_path, snap_path, undo_state="available") -> Le
 
 
 def _run_level_entry(run_id, seq, snap_path) -> LedgerEntry:
-    """Internal documentation."""
     return LedgerEntry(
         ts=time.time(),
         run_id=run_id,
@@ -107,7 +103,6 @@ def _run_level_entry(run_id, seq, snap_path) -> LedgerEntry:
 
 @pytest.mark.asyncio
 async def test_file_undo_restores_file_byte_for_byte(srv_env):
-    """Internal documentation."""
     srv, manager, ledger_store, tmp_path = srv_env
 
     ws = tmp_path / "ws"
@@ -152,7 +147,6 @@ async def test_file_undo_restores_file_byte_for_byte(srv_env):
 
 @pytest.mark.asyncio
 async def test_new_file_undo_deletes_file_with_honest_note(srv_env):
-    """Internal documentation."""
     srv, manager, ledger_store, tmp_path = srv_env
 
     ws = tmp_path / "ws"
@@ -185,7 +179,6 @@ async def test_new_file_undo_deletes_file_with_honest_note(srv_env):
 
 @pytest.mark.asyncio
 async def test_entry_not_found_returns_409(srv_env):
-    """Internal documentation."""
     srv, manager, ledger_store, tmp_path = srv_env
 
     ws = tmp_path / "ws"
@@ -204,7 +197,6 @@ async def test_entry_not_found_returns_409(srv_env):
 
 @pytest.mark.asyncio
 async def test_not_file_entry_returns_409(srv_env):
-    """Internal documentation."""
     srv, manager, ledger_store, tmp_path = srv_env
 
     ws = tmp_path / "ws"
@@ -229,7 +221,6 @@ async def test_not_file_entry_returns_409(srv_env):
 
 @pytest.mark.asyncio
 async def test_not_reversible_returns_409(srv_env):
-    """Internal documentation."""
     srv, manager, ledger_store, tmp_path = srv_env
 
     ws = tmp_path / "ws"
@@ -256,7 +247,6 @@ async def test_not_reversible_returns_409(srv_env):
 
 @pytest.mark.asyncio
 async def test_already_undone_entry_returns_409(srv_env):
-    """Internal documentation."""
     srv, manager, ledger_store, tmp_path = srv_env
 
     ws = tmp_path / "ws"
@@ -288,7 +278,6 @@ async def test_already_undone_entry_returns_409(srv_env):
 
 @pytest.mark.asyncio
 async def test_no_snapshot_returns_409_for_file_undo(srv_env):
-    """Internal documentation."""
     srv, manager, ledger_store, tmp_path = srv_env
 
     ws = tmp_path / "ws"
@@ -319,7 +308,6 @@ async def test_no_snapshot_returns_409_for_file_undo(srv_env):
 
 @pytest.mark.asyncio
 async def test_run_level_undo_still_works_without_entry_seq(srv_env):
-    """Internal documentation."""
     srv, manager, ledger_store, tmp_path = srv_env
 
     ws = tmp_path / "ws"
@@ -354,7 +342,6 @@ async def test_run_level_undo_still_works_without_entry_seq(srv_env):
 
 
 class _FileDiffLoop:
-    """Internal documentation."""
 
     async def run(self, goal: str, session_id: str) -> AsyncIterator[dict]:
         yield {
@@ -374,7 +361,6 @@ class _FileDiffLoop:
 
 @pytest.mark.asyncio
 async def test_file_diff_event_produces_ledger_entry(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace=str(tmp_path / "ws"))
 
@@ -410,7 +396,6 @@ async def test_file_diff_event_produces_ledger_entry(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_file_diff_no_snapshot_gives_unknown_reversible(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace=str(tmp_path / "ws"))
     ledger = LedgerStore(ledger_dir=tmp_path / "ledger")

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import json
 
 import pytest
@@ -70,7 +69,6 @@ def test_migrate_default_path_uses_env(store, tmp_path, monkeypatch):
 
 
 def test_migrate_env_path_expands_user_home(store, tmp_path, monkeypatch):
-    """Internal documentation."""
     fake_home = tmp_path / "home"
     fake_home.mkdir()
     jl = fake_home / "memory.jsonl"
@@ -82,7 +80,6 @@ def test_migrate_env_path_expands_user_home(store, tmp_path, monkeypatch):
 
 
 def test_migrate_bad_ts_does_not_abort_migration(store, tmp_path):
-    """Internal documentation."""
     jl = tmp_path / "memory.jsonl"
     jl.write_text(
         '{"id":"x","goal":"坏ts","verdict":"passed","model":"m","fact":null,"ts":"bad"}\n'

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -14,7 +13,6 @@ from argos.daemon.manager import RunManager
 
 
 def test_snapshot_root_under_argos_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     fake_home = tmp_path / "argos_home"
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(fake_home))
 
@@ -36,7 +34,6 @@ def test_snapshot_root_honors_env_local_config_dir(tmp_path: Path, monkeypatch: 
 
 
 def test_snapshot_survives_reboot_simulation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     fake_home = tmp_path / "persistent_argos"
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(fake_home))
     # Patch the module constant so any code that imports SNAPSHOT_ROOT directly also
@@ -77,7 +74,6 @@ def _make_manager(tmp_path: Path) -> RunManager:
 
 
 def _place_snapshot(snap_root: Path, run_id: str, ws: Path) -> Path:
-    """Internal documentation."""
     snap_root.mkdir(parents=True, exist_ok=True)
     p = snap_root / f"run-{run_id}.tar"
     with tarfile.open(p, "w"):
@@ -87,7 +83,6 @@ def _place_snapshot(snap_root: Path, run_id: str, ws: Path) -> Path:
 
 @pytest.mark.asyncio
 async def test_recover_prunes_terminal_snapshots(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     fake_home = tmp_path / "argos_home"
     # setenv BEFORE _snapshot_root() so the root is computed under the patched env.
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(fake_home))
@@ -136,7 +131,6 @@ async def test_recover_prunes_terminal_snapshots(tmp_path: Path, monkeypatch: py
 
 @pytest.mark.asyncio
 async def test_recover_keeps_suspended_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     fake_home = tmp_path / "argos_home"
     # setenv BEFORE _snapshot_root() so the root is computed under the patched env.
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(fake_home))

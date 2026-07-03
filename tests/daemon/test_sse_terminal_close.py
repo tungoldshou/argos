@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -46,7 +45,6 @@ async def _create_run(socket_path: Path, sid: str, goal: str = "你好") -> str:
 
 
 async def _poll_done(task: asyncio.Task, timeout: float) -> bool:
-    """Internal documentation."""
     waited = 0.0
     while not task.done() and waited < timeout:
         await asyncio.sleep(0.05)
@@ -57,7 +55,6 @@ async def _poll_done(task: asyncio.Task, timeout: float) -> bool:
 
 @pytest.mark.asyncio
 async def test_sse_stream_closes_when_run_completes(server):
-    """Internal documentation."""
     srv, mgr = server
     sid = await _create_session(srv.socket_path)
     rid = await _create_run(srv.socket_path, sid)
@@ -79,7 +76,6 @@ async def test_sse_stream_closes_when_run_completes(server):
 
 @pytest.mark.asyncio
 async def test_sse_stream_closes_when_run_cancelled(server):
-    """Internal documentation."""
     srv, mgr = server
     sid = await _create_session(srv.socket_path)
     rid = await _create_run(srv.socket_path, sid)
@@ -101,7 +97,6 @@ async def test_sse_stream_closes_when_run_cancelled(server):
 
 @pytest.mark.asyncio
 async def test_worker_fans_out_terminal_state_change_on_completion(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="你好", workspace="/tmp")
     q = mgr.subscribe(rid)
@@ -125,7 +120,6 @@ async def test_worker_fans_out_terminal_state_change_on_completion(tmp_path: Pat
 async def test_worker_watchdog_hard_cancels_when_timeout_exceeded(
     tmp_path: Path, monkeypatch
 ):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_RUN_TIMEOUT_S", "0.3")
 
     class _HangLoop:
@@ -148,7 +142,6 @@ async def test_worker_watchdog_hard_cancels_when_timeout_exceeded(
 
 @pytest.mark.asyncio
 async def test_worker_watchdog_disabled_by_default(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     worker = RunWorker(
@@ -161,7 +154,6 @@ async def test_worker_watchdog_disabled_by_default(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_daemon_event_source_stream_ends_on_completion(server):
-    """Internal documentation."""
     from argos.tui.daemon_source import DaemonEventSource
 
     srv, mgr = server
@@ -189,7 +181,6 @@ async def test_daemon_event_source_stream_ends_on_completion(server):
 
 @pytest.mark.asyncio
 async def test_conductor_sse_subscribes_without_404(server):
-    """Internal documentation."""
     from argos.daemon.conductor_supervisor import CONDUCTOR_RUN_ID
 
     srv, mgr = server

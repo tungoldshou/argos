@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +21,6 @@ async def _raw_req(socket_path: Path, method: str, path: str, *,
                    session_id: str | None = None,
                    body: dict | None = None,
                    timeout: float = 10.0):
-    """Internal documentation."""
     from argos.daemon.client import DaemonClient
     cli = DaemonClient(socket_path, timeout=timeout)
     status, _headers, raw = await cli._request(method, path,
@@ -38,7 +36,6 @@ async def _create_session(socket_path: Path) -> str:
 
 
 async def _promote_to_owner(socket_path: Path, sid: str) -> None:
-    """Internal documentation."""
     pass
 
 
@@ -54,7 +51,6 @@ async def _create_run(socket_path: Path, sid: str, goal: str,
 
 async def _wait_run_state(socket_path: Path, sid: str, run_id: str,
                           target: str, timeout: float = 5.0) -> str:
-    """Internal documentation."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         status, raw = await _raw_req(
@@ -71,7 +67,6 @@ async def _wait_run_state(socket_path: Path, sid: str, run_id: str,
 async def _collect_sse_events(socket_path: Path, sid: str, run_id: str,
                                *, stop_state: str = "completed",
                                timeout: float = 8.0) -> list[dict]:
-    """Internal documentation."""
     events: list[dict] = []
     deadline = time.monotonic() + timeout
 
@@ -90,7 +85,6 @@ async def _collect_sse_events(socket_path: Path, sid: str, run_id: str,
 # ── fixtures ─────────────────────────────────────────────────────────────
 
 def _make_fake_loop_factory(steps: int = 5, delay_s: float = 0.0):
-    """Internal documentation."""
     def factory():
         return FakeLoop(steps=steps, delay_s=delay_s)
     return factory
@@ -98,7 +92,6 @@ def _make_fake_loop_factory(steps: int = 5, delay_s: float = 0.0):
 
 @pytest_asyncio.fixture
 async def server_with_fake_loop(tmp_path: Path):
-    """Internal documentation."""
     runs_dir = tmp_path / "runs"
     index_path = tmp_path / "index.json"
     socket_path = tmp_path / "daemon.sock"
@@ -119,7 +112,6 @@ async def server_with_fake_loop(tmp_path: Path):
 
 @pytest_asyncio.fixture
 async def server_no_key(tmp_path: Path):
-    """Internal documentation."""
     from argos.daemon.server import _NO_KEY
     runs_dir = tmp_path / "runs"
     index_path = tmp_path / "index.json"
@@ -143,7 +135,6 @@ async def server_no_key(tmp_path: Path):
 async def test_create_run_fires_worker_events_and_completes(
     server_with_fake_loop: tuple,
 ):
-    """Internal documentation."""
     srv, manager, socket_path = server_with_fake_loop
 
     sid = await _create_session(socket_path)
@@ -172,7 +163,6 @@ async def test_create_run_fires_worker_events_and_completes(
 
 @pytest.mark.asyncio
 async def test_sse_stream_receives_events(server_with_fake_loop: tuple):
-    """Internal documentation."""
     srv, manager, socket_path = server_with_fake_loop
     sid = await _create_session(socket_path)
 
@@ -191,7 +181,6 @@ async def test_sse_stream_receives_events(server_with_fake_loop: tuple):
 
 
 class _WorkspaceCapturingFakeLoop:
-    """Internal documentation."""
 
     def __init__(self, *, steps: int = 5, delay_s: float = 0.0):
         self._steps = steps
@@ -213,7 +202,6 @@ class _WorkspaceCapturingFakeLoop:
 
 @pytest.mark.asyncio
 async def test_two_concurrent_runs_do_not_cross_contaminate(tmp_path: Path):
-    """Internal documentation."""
     ws1 = tmp_path / "ws1"
     ws2 = tmp_path / "ws2"
     ws1.mkdir()
@@ -297,7 +285,6 @@ async def test_two_concurrent_runs_do_not_cross_contaminate(tmp_path: Path):
 
 
 class _IdentityCapturingFakeLoop:
-    """Internal documentation."""
 
     def __init__(self, *, steps: int = 5, delay_s: float = 0.0,
                  captured_ids: "list[dict]", sandbox, broker, gate):
@@ -325,7 +312,6 @@ class _IdentityCapturingFakeLoop:
 
 @pytest.mark.asyncio
 async def test_per_run_components_are_distinct_objects(tmp_path: Path):
-    """Internal documentation."""
     import unittest.mock as mock
     from argos.daemon.server import DaemonHTTPServer
     from argos.daemon.manager import RunManager
@@ -425,7 +411,6 @@ async def test_per_run_components_are_distinct_objects(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_create_run_honest_rejection_when_no_key(server_no_key: tuple):
-    """Internal documentation."""
     srv, manager, socket_path = server_no_key
     sid = await _create_session(socket_path)
 
@@ -445,7 +430,6 @@ async def test_create_run_honest_rejection_when_no_key(server_no_key: tuple):
 
 
 def test_to_event_dict_dict_passthrough():
-    """Internal documentation."""
     from argos.daemon.worker import _to_event_dict
     d = {"kind": "token_delta", "text": "hello", "step": 0}
     result = _to_event_dict(d)
@@ -454,7 +438,6 @@ def test_to_event_dict_dict_passthrough():
 
 
 def test_to_event_dict_dataclass_typed():
-    """Internal documentation."""
     from argos.daemon.worker import _to_event_dict
     from argos.protocol.events import TokenDelta
     ev = TokenDelta(text="hello")
@@ -464,7 +447,6 @@ def test_to_event_dict_dataclass_typed():
 
 
 def test_to_event_dict_code_action():
-    """Internal documentation."""
     from argos.daemon.worker import _to_event_dict
     from argos.protocol.events import CodeAction
     ev = CodeAction(code="print(1)", step=3)
@@ -475,7 +457,6 @@ def test_to_event_dict_code_action():
 
 
 def test_daemon_approval_gate_timeout_denies():
-    """Internal documentation."""
     import asyncio
     from argos.daemon.worker import DaemonApprovalGate
     from argos.approval import ApprovalGate, ApprovalLevel, Decision

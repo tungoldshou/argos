@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -11,7 +10,6 @@ import pytest
 
 @pytest.fixture
 def isolated_hooks_home(monkeypatch):
-    """Internal documentation."""
     tmp = tempfile.mkdtemp()
     monkeypatch.setenv("HOME", tmp)
     yield Path(tmp) / ".argos"
@@ -22,7 +20,6 @@ def isolated_hooks_home(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_hooks_command_lists_3_events_4_hooks(isolated_hooks_home, monkeypatch):
-    """Internal documentation."""
     from argos.hooks import _reset_config
     from argos.hooks import reload_config
     isolated_hooks_home.mkdir(parents=True, exist_ok=True)
@@ -52,7 +49,6 @@ async def test_hooks_command_lists_3_events_4_hooks(isolated_hooks_home, monkeyp
 
 @pytest.mark.asyncio
 async def test_hooks_reload_replaces_singleton(isolated_hooks_home, monkeypatch):
-    """Internal documentation."""
     from argos.hooks import _reset_config, get_config, reload_config
     isolated_hooks_home.mkdir(parents=True, exist_ok=True)
     p = isolated_hooks_home / "hooks.json"
@@ -70,7 +66,6 @@ async def test_hooks_reload_replaces_singleton(isolated_hooks_home, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_hooks_reload_invalid_keeps_old(isolated_hooks_home, monkeypatch):
-    """Internal documentation."""
     from argos.hooks import _reset_config, get_config, reload_config, HooksConfigError
     isolated_hooks_home.mkdir(parents=True, exist_ok=True)
     p = isolated_hooks_home / "hooks.json"
@@ -88,7 +83,6 @@ async def test_hooks_reload_invalid_keeps_old(isolated_hooks_home, monkeypatch):
 
 
 def test_bad_config_splash_banner():
-    """Internal documentation."""
     from argos.tui.widgets.splash import StartupSplash
     sp = StartupSplash(model_label="x", tier="default", live=True)
     sp.set_bad_config("parse error: bad json at line 3")
@@ -98,7 +92,6 @@ def test_bad_config_splash_banner():
 
 
 def test_command_help_includes_hooks():
-    """Internal documentation."""
     from argos.tui.commands import COMMAND_HELP
     assert "hooks" in COMMAND_HELP
     assert "reload" in COMMAND_HELP["hooks"]
@@ -133,7 +126,6 @@ async def test_hooks_empty_mentions_configured_path(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_hooks_unknown_arg_prints_usage(isolated_hooks_home, monkeypatch):
-    """Internal documentation."""
     from argos.hooks import _reset_config
     from argos.tui.app import ArgosApp
 

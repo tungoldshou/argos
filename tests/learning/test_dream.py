@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from pathlib import Path
 
 from argos.learning.candidates import StoredCandidate
@@ -31,7 +30,6 @@ def test_cluster_groups_similar_goals():
 
 
 def test_cluster_cap_limits_units():
-    """Internal documentation."""
     goals = [
         "parse csv ledger", "render svg chart", "deploy docker swarm",
         "train embedding model", "refactor auth middleware", "benchmark redis cache",
@@ -43,7 +41,6 @@ def test_cluster_cap_limits_units():
 
 
 def test_cluster_oversized_truncates_and_holds_over():
-    """Internal documentation."""
     from argos.learning.dream import MAX_UNIT_SOURCES
     cands = [_sc(f"s{i}", f"fix login auth bug attempt {i}",
                  run=f"run{i:013d}") for i in range(7)]
@@ -64,7 +61,6 @@ def test_strip_code_blocks_removes_all_fences():
 
 
 def test_strip_code_blocks_removes_tilde_fences():
-    """Internal documentation."""
     txt = "前文\n~~~python\nevil()\n~~~\n尾"
     out = _strip_code_blocks(txt)
     assert "evil" not in out
@@ -72,7 +68,6 @@ def test_strip_code_blocks_removes_tilde_fences():
 
 
 def test_strip_code_blocks_truncates_unclosed_fence():
-    """Internal documentation."""
     txt = "前文\n```python\nevil_unclosed()"
     out = _strip_code_blocks(txt)
     assert "evil_unclosed" not in out
@@ -80,7 +75,6 @@ def test_strip_code_blocks_truncates_unclosed_fence():
 
 
 def test_synthesize_code_only_from_sources_model_only_narrative():
-    """Internal documentation."""
     a = _sc("a", "fix login bug", run="run1aaaaaaaaaaaa",
             body="# a\n```python\nlogin_fix_alpha()\n```")
     b = _sc("b", "fix login auth bug", run="run2bbbbbbbbbbbb",
@@ -120,7 +114,6 @@ def test_narrative_prompt_contains_goals_and_no_code_request():
 # ── Task 6:HintedRunner + build_eval_tasks ──────────────────────
 
 def test_build_eval_tasks_skips_missing_workspace(tmp_path):
-    """Internal documentation."""
     from argos.learning.dream import build_eval_tasks, DreamUnit
 
     existing_ws = tmp_path / "ws_real"
@@ -148,7 +141,6 @@ def test_build_eval_tasks_skips_missing_workspace(tmp_path):
 
 
 def test_hinted_runner_prepends_hint_to_goal(tmp_path):
-    """Internal documentation."""
     from argos.learning.dream import HintedRunner
     from argos.eval.corpus import EvalTask
 
@@ -181,7 +173,6 @@ def test_hinted_runner_prepends_hint_to_goal(tmp_path):
 
 
 def test_hinted_runner_truncates_long_hint(tmp_path):
-    """Internal documentation."""
     from argos.learning.dream import HintedRunner
     from argos.eval.corpus import EvalTask
 

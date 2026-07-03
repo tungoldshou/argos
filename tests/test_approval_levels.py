@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +21,6 @@ def test_decision_kind_and_approved():
 
 
 def test_l1_low_risk_auto_approve_evaluator():
-    """Internal documentation."""
     from argos.permissions import get_config
     from argos.permissions.evaluator import evaluate
     cfg = get_config()
@@ -38,7 +36,6 @@ def test_l1_low_risk_auto_approve_evaluator():
 
 
 def test_cautious_auto_passes_sandboxed_run_command():
-    """Internal documentation."""
     from argos.permissions import get_config
     from argos.permissions.evaluator import evaluate
     cfg = get_config()
@@ -55,7 +52,6 @@ def test_cautious_auto_passes_sandboxed_run_command():
 
 
 def test_build_components_default_gate_is_cautious(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.app_factory as af
     monkeypatch.setenv("ARGOS_NO_DAEMON", "1")
     monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
@@ -69,7 +65,6 @@ def test_build_components_default_gate_is_cautious(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_gate_l1_auto_approves_low_risk_no_prompt():
-    """Internal documentation."""
     from argos.permissions.trust_dial import TrustLevel
     gate = ApprovalGate()
     gate.set_trust_level(TrustLevel.L1_DANGEROUS_ONLY)
@@ -128,7 +123,6 @@ async def test_session_decision_caches():
 
 
 def test_override_semantics_force_confirm_overrides_cautious_autopass():
-    """Internal documentation."""
     from argos.permissions.trust_dial import TrustLevel
     gate = ApprovalGate()
     gate.set_trust_level(TrustLevel.L1_DANGEROUS_ONLY)  # Cautious
@@ -142,7 +136,6 @@ def test_override_semantics_force_confirm_overrides_cautious_autopass():
 
 
 def test_override_semantics_accept_edits_loosens_to_cage_autopass():
-    """Internal documentation."""
     from argos.permissions.trust_dial import TrustLevel
     gate = ApprovalGate()
     gate.set_trust_level(TrustLevel.L0_EVERY_STEP)
@@ -154,7 +147,6 @@ def test_override_semantics_accept_edits_loosens_to_cage_autopass():
 
 
 def test_loop_applies_override_around_exec_code():
-    """Internal documentation."""
     import inspect
     from argos.core.loop import AgentLoop
     src = inspect.getsource(AgentLoop._drive) if hasattr(AgentLoop, "_drive") else inspect.getsource(AgentLoop.run)

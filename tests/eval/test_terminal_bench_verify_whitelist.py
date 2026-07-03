@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import shlex
@@ -24,7 +23,6 @@ SMOKE_DIR = Path(__file__).parent / "_fixtures" / "tb_smoke"
 
 
 def test_build_verify_cmd_first_token_in_allowed_set():
-    """Internal documentation."""
     for d in ("tb_echo_hello", "tb_write_function", "tb_count_lines", "tb_grade_score"):
         tb_task = tb.load_tb_task(SMOKE_DIR / d)
         assert tb_task is not None, d
@@ -49,7 +47,6 @@ def test_build_verify_cmd_first_token_in_allowed_set():
 
 
 def test_run_eval_passes_when_solution_is_correct(tmp_path):
-    """Internal documentation."""
     wt = FakeWorktree(tmp_path / "wt_base")
     factory = make_fake_loop_factory_for_passed()
     runner = EvalRunner(
@@ -71,7 +68,6 @@ def test_run_eval_passes_when_solution_is_correct(tmp_path):
 
 
 def test_run_eval_fails_when_solution_is_wrong(tmp_path):
-    """Internal documentation."""
     wt = FakeWorktree(tmp_path / "wt_base")
     factory = make_fake_loop_factory_for_failed()
     runner = EvalRunner(
@@ -94,7 +90,6 @@ def test_run_eval_fails_when_solution_is_wrong(tmp_path):
 
 
 def test_to_eval_task_copies_tests_dir_to_worktree(tmp_path):
-    """Internal documentation."""
     src = tmp_path / "src_task"
     (src / "tests").mkdir(parents=True)
     (src / "task.yaml").write_text(
@@ -118,14 +113,12 @@ def test_to_eval_task_copies_tests_dir_to_worktree(tmp_path):
 
 
 def make_fake_loop_factory_for_passed():
-    """Internal documentation."""
     from tests.eval._fakes import make_fake_loop
     loop = make_fake_loop(verdict=PASS_PASSED, detail="1 passed", steps=2)
     return make_fake_loop_factory(loop)
 
 
 def make_fake_loop_factory_for_failed():
-    """Internal documentation."""
     from tests.eval._fakes import make_fake_loop
     loop = make_fake_loop(verdict=PASS_FAILED, detail="1 failed", steps=2)
     return make_fake_loop_factory(loop)

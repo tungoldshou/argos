@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -16,13 +15,11 @@ DEFAULT_ARCHIVE_THRESHOLD = 0.2
 
 
 def _unique_tmp(target: Path) -> Path:
-    """Internal documentation."""
     return target.with_name(f"{target.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
 
 
 @dataclass(frozen=True, slots=True)
 class ConsolidationReport:
-    """Internal documentation."""
     merged: int = 0
     archived: int = 0
     files_touched: int = 0
@@ -30,7 +27,6 @@ class ConsolidationReport:
 
 
 def _score(e: dict, now: float) -> float:
-    """Internal documentation."""
     try:
         from argos.memory.auto import decayed_confidence
         conf = float(e.get("confidence", 0.5))
@@ -46,7 +42,6 @@ def consolidate(
     memory_dir: Path, *, now: float | None = None,
     archive_threshold: float = DEFAULT_ARCHIVE_THRESHOLD,
 ) -> ConsolidationReport:
-    """Internal documentation."""
     now = time.time() if now is None else now
     merged = archived = touched = errors = 0
     archive_path = memory_dir / ARCHIVE_NAME

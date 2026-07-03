@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -15,7 +14,6 @@ _BACKOFF = (0.5, 1.0, 2.0)
 
 
 class DaemonEventSource:
-    """Internal documentation."""
 
     def __init__(
         self,
@@ -35,20 +33,17 @@ class DaemonEventSource:
         self._last_seq: int = since
 
     def stop(self) -> None:
-        """Internal documentation."""
         self._stopped = True
 
     def __aiter__(self) -> "DaemonEventSource":
         return self
 
     async def __anext__(self):
-        """Internal documentation."""
         if self._stopped:
             raise StopAsyncIteration
         raise StopAsyncIteration
 
     async def stream(self) -> AsyncIterator:
-        """Internal documentation."""
         from argos.protocol.events import deserialize_event, Error as ErrorEvent
 
         retries = 0
@@ -92,7 +87,6 @@ class DaemonEventSource:
                 await asyncio.sleep(backoff)
 
     async def _subscribe_once(self, since: int = 0) -> AsyncIterator[dict]:
-        """Internal documentation."""
         import json
 
         req = (
@@ -169,7 +163,6 @@ class DaemonEventSource:
                 pass
 
     def _try_deserialize(self, kind: str, ev_dict: dict):
-        """Internal documentation."""
         import json
         from argos.protocol.events import deserialize_event, _KIND_TO_CLASS
 

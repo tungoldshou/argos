@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -42,7 +41,6 @@ def _failed_events() -> list[dict]:
 
 @pytest.mark.asyncio
 async def test_passed_run_triggers_distill_and_promote(tmp_path, monkeypatch):
-    """Internal documentation."""
     distill_calls: list[dict] = []
     promote_calls: list[dict] = []
 
@@ -83,7 +81,6 @@ async def test_passed_run_triggers_distill_and_promote(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_failed_run_triggers_reflection_only(tmp_path, monkeypatch):
-    """Internal documentation."""
     reflect_calls: list[dict] = []
     distill_calls: list[dict] = []
     promote_calls: list[dict] = []
@@ -120,7 +117,6 @@ async def test_failed_run_triggers_reflection_only(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_hook_swallows_distill_exceptions(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.learning import distiller, promotion_gate
 
     def _boom(**kw):
@@ -142,7 +138,6 @@ async def test_hook_swallows_distill_exceptions(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_hook_does_not_modify_store_events(tmp_path):
-    """Internal documentation."""
     run_id = "r#no-touch"
     _write_run_store(tmp_path, run_id, _passed_events())
     p = tmp_path / "runs" / f"{run_id}.jsonl"
@@ -162,7 +157,6 @@ async def test_hook_does_not_modify_store_events(tmp_path):
 
 @pytest.mark.asyncio
 async def test_hook_is_awaitable_and_returns_none(tmp_path):
-    """Internal documentation."""
     run_id = "r#await"
     _write_run_store(tmp_path, run_id, _passed_events())
     result = await hook.on_run_completed(
@@ -179,7 +173,6 @@ async def test_hook_is_awaitable_and_returns_none(tmp_path):
 
 
 def test_passed_without_runner_persists_candidate(tmp_path, monkeypatch):
-    """Internal documentation."""
     store_dir = tmp_path / "runs"
     store_dir.mkdir()
     run_id = "abc123def456"
@@ -373,7 +366,6 @@ async def test_real_promote_b_wins_skill_written(tmp_path, monkeypatch):
 
 
 def test_self_verified_passed_never_calls_save_candidate(tmp_path, monkeypatch):
-    """Internal documentation."""
     store_dir = tmp_path / "runs"
     store_dir.mkdir()
     run_id = "abc123def456"

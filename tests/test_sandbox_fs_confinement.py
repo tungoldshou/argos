@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -37,7 +36,6 @@ def test_write_outside_workspace_blocked_by_os(ex):
 
 
 def test_read_credentials_now_blocked(ex):
-    """Internal documentation."""
     import sys
     if sys.platform != "darwin":
         pytest.skip("此用例只验证 Seatbelt EPERM 语义;bwrap 凭据遮蔽由 Linux 后端测试覆盖")

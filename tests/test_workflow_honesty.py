@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -20,7 +19,6 @@ def _make_loop(model):
 
 @pytest.mark.asyncio
 async def test_workflow_proposal_when_off_gets_honest_nudge(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_WORKFLOWS", "0")
     model = _RecModel([
         "```python\npropose_workflow({'name': 'audit', 'stages': []})\n```",
@@ -35,8 +33,7 @@ async def test_workflow_proposal_when_off_gets_honest_nudge(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_workflow_proposal_when_on_no_nudge(monkeypatch):
-    """Internal documentation."""
+async def test_workflow_proposal_default_off_gets_honest_nudge(monkeypatch):
     monkeypatch.delenv("ARGOS_WORKFLOWS", raising=False)
     model = _RecModel([
         "```python\npropose_workflow({'name': 'audit', 'stages': []})\n```",
@@ -46,13 +43,12 @@ async def test_workflow_proposal_when_on_no_nudge(monkeypatch):
     async for _ in loop.run("审计代码", "s"):
         pass
     flat = "\n".join(msg for call in model.seen for msg in call)
-    assert "工作流已禁用" not in flat and "disabled" not in flat,\
-        "工作流开启(默认)时不应出现'未启用'纠偏(走 dispatch 路径)"
+    assert "工作流已禁用" in flat or "disabled" in flat,\
+        "工作流默认关闭时应出现'未启用'纠偏"
 
 
 @pytest.mark.asyncio
 async def test_workflow_proposal_explicit_on_no_nudge(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_WORKFLOWS", "1")
     model = _RecModel([
         "```python\npropose_workflow({'name': 'audit', 'stages': []})\n```",
@@ -68,7 +64,6 @@ async def test_workflow_proposal_explicit_on_no_nudge(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_no_nudge_when_no_workflow_proposed(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_WORKFLOWS", "0")
     model = _RecModel([
         "```python\nwrite_file('x.py', 'x=1')\n```",

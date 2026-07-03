@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import os
 import tarfile
 from pathlib import Path
@@ -40,7 +39,6 @@ def test_take_prunes_heavy_dirs(tmp_path: Path):
 
 
 def test_take_skips_new_dirs_after_take(tmp_path: Path):
-    """Internal documentation."""
     ws = tmp_path / "ws"
     ws.mkdir()
     (ws / "a.py").write_text("x")
@@ -104,7 +102,6 @@ def test_restore_idempotent(tmp_path: Path):
 # ── #24 size cap tests ──────────────────────────────────────────────────────
 
 def test_take_skips_files_over_file_size_cap(tmp_path: Path, monkeypatch):
-    """Internal documentation."""
     from argos.core import snapshot as _snap_mod
     monkeypatch.setattr(_snap_mod, "_FILE_SIZE_CAP_BYTES", 10)  # 10 bytes cap
 
@@ -121,7 +118,6 @@ def test_take_skips_files_over_file_size_cap(tmp_path: Path, monkeypatch):
 
 
 def test_take_stops_at_total_size_cap(tmp_path: Path, monkeypatch):
-    """Internal documentation."""
     from argos.core import snapshot as _snap_mod
     monkeypatch.setattr(_snap_mod, "_FILE_SIZE_CAP_BYTES", 1000)
     monkeypatch.setattr(_snap_mod, "_TOTAL_SIZE_CAP_BYTES", 25)  # 25 bytes total

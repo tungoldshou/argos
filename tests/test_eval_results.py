@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -173,7 +172,6 @@ def test_summary_empty_returns_empty_dict(tmp_path):
 
 
 def test_corrupt_jsonl_line_skipped(tmp_path):
-    """Internal documentation."""
     r = _make_result(run_id="good1good1g")
     append(r, base=tmp_path)
     today = time.strftime("%Y-%m-%d", time.localtime(r.finished_at))

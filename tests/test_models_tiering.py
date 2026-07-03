@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import json
 
 import httpx
@@ -16,7 +15,6 @@ def test_model_tier_frozen_and_fields():
 
 
 def _sse_transport(text_pieces: list[str]) -> httpx.MockTransport:
-    """Internal documentation."""
     def handler(request: httpx.Request) -> httpx.Response:
         lines = []
         for piece in text_pieces:
@@ -48,7 +46,6 @@ async def test_model_client_complete_returns_full_text():
 
 @pytest.mark.asyncio
 async def test_stream_rotates_credentials_via_mark_used():
-    """Internal documentation."""
     tier = ModelTier(name="worker", model="m", base_url="https://api.x/anthropic", max_tokens=4096)
     pool = CredentialPool(["key-x", "key-y"])
     keys_used: list[str] = []

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from textual.color import Color
@@ -25,21 +24,18 @@ def verdict_color(status: str) -> Color:
 
 
 def verdict_color_self_aware(status: str, self_verified: bool = False) -> Color:
-    """Internal documentation."""
     if status == "passed" and self_verified:
         return WARNING
     return verdict_color(status)
 
 
 def verdict_border_color(verdict) -> Color:
-    """Internal documentation."""
     if getattr(verdict, "no_test", False):
         return IDLE_BORDER
     return verdict_color_self_aware(verdict.status, getattr(verdict, "self_verified", False))
 
 
 def breathe(color: Color, t: float) -> Color:
-    """Internal documentation."""
     import math
 
     k = 0.55 + 0.45 * (0.5 - 0.5 * math.cos(2 * math.pi * t))  # 0.55↔1.0

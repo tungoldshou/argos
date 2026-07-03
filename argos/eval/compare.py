@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -28,7 +27,6 @@ def run_pair(
     runner: EvalRunner, task: EvalTask, *, model_a: str, model_b: str,
     persist: bool = True,
 ) -> tuple[EvalResult, EvalResult]:
-    """Internal documentation."""
     a = runner.run(task, model_tier=model_a)
     b = runner.run(task, model_tier=model_b)
     if persist:
@@ -54,7 +52,6 @@ def _winner_pass(a: EvalResult, b: EvalResult) -> str:
 
 
 def _winner_cost(a: EvalResult, b: EvalResult) -> str:
-    """Internal documentation."""
     if a.cost_usd is None and b.cost_usd is None:
         return "unknown"
     if a.cost_usd is None:
@@ -69,7 +66,6 @@ def _winner_cost(a: EvalResult, b: EvalResult) -> str:
 
 
 def generate_report(a: EvalResult, b: EvalResult) -> str:
-    """Internal documentation."""
     winner_pass = _winner_pass(a, b)
     winner_cost = _winner_cost(a, b)
     lines: list[str] = [
@@ -117,7 +113,6 @@ def generate_report(a: EvalResult, b: EvalResult) -> str:
 def write_report(
     a: EvalResult, b: EvalResult, *, base: Path | None = None,
 ) -> Path:
-    """Internal documentation."""
     root = _reports_dir(base)
     root.mkdir(parents=True, exist_ok=True)
     date = time.strftime("%Y-%m-%d", time.localtime(a.finished_at))
@@ -129,7 +124,6 @@ def write_report(
 def write_report_json(
     a: EvalResult, b: EvalResult, *, base: Path | None = None,
 ) -> Path:
-    """Internal documentation."""
     root = _reports_dir(base)
     root.mkdir(parents=True, exist_ok=True)
     date = time.strftime("%Y-%m-%d", time.localtime(a.finished_at))

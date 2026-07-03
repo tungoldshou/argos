@@ -1,11 +1,10 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 # ── COMMAND_HELP ─────────────────────────────────────────────────────────────
 
 EN: dict[str, str] = {
     # ── COMMAND_HELP entries ──────────────────────────────────────────────────
-    "cmd.help":             "Show all commands",
+    "cmd.help":             "Show core commands",
     "cmd.setup":            "Show setup status and config wizard entry (argos setup)",
     "cmd.voice":            "Voice input status",
     "cmd.tools":            "List callable tools",
@@ -17,7 +16,7 @@ EN: dict[str, str] = {
     "cmd.resume":           "Resume last session",
     "cmd.clear":            "Start new session (clear)",
     "cmd.yolo":             "Run without approval (legacy; same as /trust autonomous)",
-    "cmd.trust":            "View / switch trust mode (/trust [cautious|trusted|autonomous|paranoid|status]) — replaces /yolo",
+    "cmd.trust":            "View / switch trust mode (/trust [cautious|trusted|autonomous|paranoid|status])",
     "cmd.undo":             "Undo file changes from this round (restore to run start)",
     "cmd.ledger":           "View behavior ledger for current run (plain-language entries + undo status)",
     "cmd.journal":          "Show ledger JSONL path (/journal [run_id])",
@@ -52,7 +51,7 @@ EN: dict[str, str] = {
     "tui.slash_menu.nav_hint": "  ↑↓ select · ↹ complete · ↵ execute",
 
     # ── status_bar.py hints line ──────────────────────────────────────────────
-    "tui.statusbar.hints":        "Esc/^C interrupt · \\↵ newline · Space voice · ^B background · ^O right panel · ^V paste image · ^D quit",
+    "tui.statusbar.hints":        "Esc/^C interrupt · \\↵ newline · ^B background · ^O right panel · ^V paste image · ^D quit",
     "tui.statusbar.blocked_label": "approval pending",
     "tui.statusbar.plan_mode":    "[plan mode]",
     "tui.statusbar.action":       "action {n}",
@@ -61,7 +60,9 @@ EN: dict[str, str] = {
     "tui.daemon.unavailable": "daemon unavailable, switched to single-process mode (background / cross-session resume unavailable).",
 
     # ── /help command response ────────────────────────────────────────────────
-    "tui.help.header":    "Commands (type / to list in-place, Tab to complete):",
+    "tui.help.header":    "Core commands (type / to list in-place, Tab to complete):",
+    "tui.help.advanced_header": "Advanced / experimental commands:",
+    "tui.help.advanced_hint": "Advanced commands are hidden by default; run /help advanced to list them.",
     "tui.help.usage":     "Usage: /help [command] — unknown command '{name}'",
     "tui.help.shortcuts": (
         "Shortcuts:\n"
@@ -71,7 +72,6 @@ EN: dict[str, str] = {
         "  Ctrl+B         background current run (daemon mode)\n"
         "  Ctrl+O         cycle right panel view\n"
         "  Ctrl+V         paste image from clipboard\n"
-        "  Space          voice input status (empty prompt)\n"
         "  \\ + Enter      insert newline (multi-line input)\n"
         "  ↑ / ↓          browse input history"
     ),
@@ -146,6 +146,16 @@ EN: dict[str, str] = {
 
     # ── /setup command ────────────────────────────────────────────────────────
     "tui.setup.usage": "Usage: /setup",
+    "tui.setup.card": (
+        "Setup status: {status}\n"
+        "  active profile: {active}\n"
+        "  model: {model}\n"
+        "  Image input: {image_input}\n"
+        "  key source: {key_source}\n"
+        "  config: {config_path}\n"
+        "  env file: {env_path}\n"
+        "  next: {next_command}"
+    ),
     "tui.setup.hint": (
         "Config Wizard\n"
         "  To inspect this outside TUI:\n"
@@ -203,7 +213,7 @@ EN: dict[str, str] = {
     # ── /tools command ────────────────────────────────────────────────────────
     "tui.tools.usage":      "Usage: /tools",
     "tui.tools.header":      "{n} tools in total:",
-    "tui.tools.wf_off":      "orchestration (workflow, disabled via ARGOS_WORKFLOWS=0)",
+    "tui.tools.wf_off":      "orchestration (workflow, enable with ARGOS_WORKFLOWS=1)",
     "tui.tools.wf_on":       "orchestration (workflow)",
     "tui.tools.group.file":          "File",
     "tui.tools.group.cmd":           "Command/Verify/Plan",
@@ -352,6 +362,7 @@ EN: dict[str, str] = {
     "tui.approval.session":       "Allow for this session",
     "tui.approval.always":        "Always allow",
     "tui.approval.deny":          "Deny",
+    "tui.approval.secret_warning": "⚠︎ Possible secret pattern matched: did you mean to commit this?",
 
     "tui.workflow.approval_title": "Workflow approval — will spawn multiple sub-agents for orchestration",
     "tui.workflow.once":           "Approve once",
@@ -433,7 +444,7 @@ EN: dict[str, str] = {
 
 ZH: dict[str, str] = {
     # ── COMMAND_HELP entries ──────────────────────────────────────────────────
-    "cmd.help":             "显示所有命令",
+    "cmd.help":             "显示核心命令",
     "cmd.setup":            "显示 setup 状态和配置向导入口(argos setup)",
     "cmd.voice":            "语音输入状态",
     "cmd.tools":            "列出可调用的工具",
@@ -445,7 +456,7 @@ ZH: dict[str, str] = {
     "cmd.resume":           "续上一次会话",
     "cmd.clear":            "开新会话(清空)",
     "cmd.yolo":             "放手执行(免审批；旧命令，同 /trust autonomous)",
-    "cmd.trust":            "查看 / 切换信任档位(/trust [cautious|trusted|autonomous|paranoid|status])—替代 /yolo",
+    "cmd.trust":            "查看 / 切换信任档位(/trust [cautious|trusted|autonomous|paranoid|status])",
     "cmd.undo":             "撤销本轮文件改动(还原到 run 起点)",
     "cmd.ledger":           "查看当前 run 的行为账本(人话条目 + 撤销状态)",
     "cmd.journal":          "显示账本 JSONL 路径(/journal [run_id])",
@@ -480,7 +491,7 @@ ZH: dict[str, str] = {
     "tui.slash_menu.nav_hint": "  ↑↓ 选择 · ↹ 补全 · ↵ 执行",
 
     # ── status_bar.py ─────────────────────────────────────────────────────────
-    "tui.statusbar.hints":        "Esc/^C 打断 · \\↵ 换行 · 空格语音 · ^B 后台 · ^O 右栏 · ^V 贴图 · ^D 退出",
+    "tui.statusbar.hints":        "Esc/^C 打断 · \\↵ 换行 · ^B 后台 · ^O 右栏 · ^V 贴图 · ^D 退出",
     "tui.statusbar.blocked_label": "审批挂起",
     "tui.statusbar.plan_mode":    "[plan mode]",
     "tui.statusbar.action":       "动作{n}",
@@ -489,7 +500,9 @@ ZH: dict[str, str] = {
     "tui.daemon.unavailable": "daemon 不可用,已切换到单进程模式(后台化 / 跨会话续跑不可用)。",
 
     # ── /help command response ────────────────────────────────────────────────
-    "tui.help.header":    "命令(打 / 也会就地列出,Tab 补全):",
+    "tui.help.header":    "核心命令(打 / 也会就地列出,Tab 补全):",
+    "tui.help.advanced_header": "高级 / 实验命令:",
+    "tui.help.advanced_hint": "高级命令默认隐藏;运行 /help advanced 查看。",
     "tui.help.usage":     "用法:/help [command] — 未知命令 '{name}'",
     "tui.help.shortcuts": (
         "快捷键:\n"
@@ -499,7 +512,6 @@ ZH: dict[str, str] = {
         "  Ctrl+B         后台化当前 run(daemon 模式)\n"
         "  Ctrl+O         循环切换右栏视图\n"
         "  Ctrl+V         从剪贴板粘贴图片\n"
-        "  空格           语音输入状态(空输入框)\n"
         "  行尾 \\ + 回车  插入换行(多行输入)\n"
         "  ↑ / ↓          浏览输入历史"
     ),
@@ -574,6 +586,16 @@ ZH: dict[str, str] = {
 
     # ── /setup command ────────────────────────────────────────────────────────
     "tui.setup.usage": "用法:/setup",
+    "tui.setup.card": (
+        "Setup 状态:{status}\n"
+        "  active profile: {active}\n"
+        "  model: {model}\n"
+        "  图片输入: {image_input}\n"
+        "  key 来源: {key_source}\n"
+        "  config: {config_path}\n"
+        "  env 文件: {env_path}\n"
+        "  下一步: {next_command}"
+    ),
     "tui.setup.hint": (
         "配置向导\n"
         "  在 TUI 外查看当前配置:\n"
@@ -631,7 +653,7 @@ ZH: dict[str, str] = {
     # ── /tools command ────────────────────────────────────────────────────────
     "tui.tools.usage":      "用法:/tools",
     "tui.tools.header":      "共 {n} 个工具:",
-    "tui.tools.wf_off":      "编排(工作流,已禁用 ARGOS_WORKFLOWS=0)",
+    "tui.tools.wf_off":      "编排(工作流,设置 ARGOS_WORKFLOWS=1 启用)",
     "tui.tools.wf_on":       "编排(工作流)",
     "tui.tools.group.file":          "文件",
     "tui.tools.group.cmd":           "命令/验证/计划",
@@ -780,6 +802,7 @@ ZH: dict[str, str] = {
     "tui.approval.session":       "本会话允许",
     "tui.approval.always":        "总是允许",
     "tui.approval.deny":          "拒绝",
+    "tui.approval.secret_warning": "⚠︎ 命中疑似密钥模式:确认要提交这段内容吗?",
 
     "tui.workflow.approval_title": "工作流审批 — 将起多个子 agent 编排执行",
     "tui.workflow.once":           "本次批准",

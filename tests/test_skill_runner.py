@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -20,7 +19,6 @@ from argos.skills_runtime.runner import run_skill
 
 @pytest.fixture(autouse=True)
 def _clean_registry():
-    """Internal documentation."""
     registry._reset_registry()
     yield
     registry._reset_registry()
@@ -35,7 +33,6 @@ def _make_ctx(approval_level: str = "auto") -> AnalysisSkillContext:
 
 
 def _register_skill(name: str, *, requires_approval: bool = False, run=None):
-    """Internal documentation."""
     async def _default(args, ctx):
         return AnalysisSkillResult(
             summary="ok", findings=(), duration_ms=10, errors=(), verdict="passed",
@@ -50,7 +47,6 @@ def _register_skill(name: str, *, requires_approval: bool = False, run=None):
 
 
 def test_run_skill_unknown_returns_skipped(_clean_registry):
-    """Internal documentation."""
     ctx = _make_ctx()
     result = asyncio.run(run_skill("nonexistent", {}, ctx))
     assert result.verdict == "skipped"
@@ -58,7 +54,6 @@ def test_run_skill_unknown_returns_skipped(_clean_registry):
 
 
 def test_run_skill_invalid_args_returns_skipped():
-    """Internal documentation."""
     async def _echo(args, ctx):
         return AnalysisSkillResult(summary="x", findings=(), duration_ms=0, errors=(), verdict="passed")
     _register_skill("echo", run=_echo)
@@ -70,7 +65,6 @@ def test_run_skill_invalid_args_returns_skipped():
 
 
 def test_run_skill_path_outside_workspace_returns_skipped(tmp_path):
-    """Internal documentation."""
     workspace = tmp_path / "ws"
     workspace.mkdir()
     other = tmp_path / "other"
@@ -87,7 +81,6 @@ def test_run_skill_path_outside_workspace_returns_skipped(tmp_path):
 
 
 def test_run_skill_path_not_found_returns_skipped(tmp_path):
-    """Internal documentation."""
     workspace = tmp_path / "ws"
     workspace.mkdir()
 
@@ -104,7 +97,6 @@ def test_run_skill_path_not_found_returns_skipped(tmp_path):
 # ── timeout ──────────────────────────────────────────────────────
 
 def test_run_skill_timeout_returns_skipped():
-    """Internal documentation."""
     async def _slow(args, ctx):
         await asyncio.sleep(5.0)
         return AnalysisSkillResult(summary="x", findings=(), duration_ms=5000, errors=(), verdict="passed")
@@ -121,7 +113,6 @@ def test_run_skill_timeout_returns_skipped():
 
 
 def test_run_skill_exception_returns_partial():
-    """Internal documentation."""
     async def _boom(args, ctx):
         raise RuntimeError("kapow")
     _register_skill("boom", run=_boom)
@@ -134,7 +125,6 @@ def test_run_skill_exception_returns_partial():
 
 
 def test_run_skill_emits_start_and_end_events():
-    """Internal documentation."""
     bus = MagicMock()
     bus.emit = AsyncMock()
 
@@ -158,7 +148,6 @@ def test_run_skill_emits_start_and_end_events():
 # ── output trunc(1MB) ─────────────────────────────────────────────
 
 def test_run_skill_truncates_over_1mb_findings():
-    """Internal documentation."""
     big = tuple(
         Finding(severity="info", category="secret", message=f"m{i}")
         for i in range(150)

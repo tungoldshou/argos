@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import subprocess
 
 from argos.core.loop import _git_status_snapshot, _env_context

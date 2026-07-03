@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import io
@@ -11,7 +10,6 @@ import pytest
 
 
 def _run_cli(argv: list[str], *, monkeypatch, env_setup=None) -> tuple[int, str, str]:
-    """Internal documentation."""
     from argos.__main__ import main
     out = io.StringIO()
     err = io.StringIO()
@@ -30,7 +28,6 @@ def _run_cli(argv: list[str], *, monkeypatch, env_setup=None) -> tuple[int, str,
 
 
 def test_skills_refresh_writes_index(monkeypatch, tmp_path):
-    """Internal documentation."""
     from argos.skills_curator.index import _skills_root
 
     monkeypatch.setattr(_skills_root.__module__ + "._skills_root", lambda: tmp_path)
@@ -126,7 +123,6 @@ def test_skills_test_not_installed(tmp_path, monkeypatch):
 
 
 def test_skills_help_lists_subcommands(capsys):
-    """Internal documentation."""
     from argos.__main__ import _build_parser
     p = _build_parser()
     try:

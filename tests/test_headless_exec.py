@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -69,7 +68,6 @@ def _cost():
 
 
 def test_self_verified_pass_labeled_distinctly(monkeypatch, capsys):
-    """Internal documentation."""
     events = [TokenDelta(text="done"),
               VerifyVerdict(verdict=Verdict.passed_self("[exit_code=0]", "pytest", 1))]
     _wire(monkeypatch, events)
@@ -82,7 +80,6 @@ def test_self_verified_pass_labeled_distinctly(monkeypatch, capsys):
 
 
 def test_user_verified_pass_is_plain_passed(monkeypatch, capsys):
-    """Internal documentation."""
     events = [VerifyVerdict(verdict=Verdict.passed("[exit_code=0]", "pytest", 1))]
     _wire(monkeypatch, events)
     headless.run_exec(_args(prompt="x", as_json=True))
@@ -91,7 +88,6 @@ def test_user_verified_pass_is_plain_passed(monkeypatch, capsys):
 
 
 def test_effort_threaded_from_args(monkeypatch):
-    """Internal documentation."""
     from argos.routing.effort import EffortLevel
     captured = {}
 
@@ -152,7 +148,6 @@ def test_unverifiable_verdict_exit_1(monkeypatch):
 
 
 def test_no_verdict_completes_exit_0(monkeypatch):
-    """Internal documentation."""
     _wire(monkeypatch, [TokenDelta(text="here is the answer")])
     assert headless.run_exec(_args(prompt="what is 2+2")) == 0
 
@@ -183,7 +178,6 @@ def test_json_envelope(monkeypatch, capsys):
 
 
 def test_non_auto_installs_autodeny_listener(monkeypatch):
-    """Internal documentation."""
     comp, gate, _ = _wire(monkeypatch, [TokenDelta(text="x")])
     headless.run_exec(_args(prompt="x", auto=False))
     assert gate.listener is not None
@@ -192,14 +186,12 @@ def test_non_auto_installs_autodeny_listener(monkeypatch):
 
 
 def test_auto_does_not_install_listener(monkeypatch):
-    """Internal documentation."""
     comp, gate, _ = _wire(monkeypatch, [TokenDelta(text="x")])
     headless.run_exec(_args(prompt="x", auto=True))
     assert gate.listener is None
 
 
 def test_build_components_runtime_error_exit_2(monkeypatch):
-    """Internal documentation."""
     def _boom(**kw):
         raise RuntimeError("未配置 API key")
     monkeypatch.setattr("argos.app_factory.build_components", _boom)
@@ -207,7 +199,6 @@ def test_build_components_runtime_error_exit_2(monkeypatch):
 
 
 def test_build_components_config_error_exit_2(monkeypatch, capsys):
-    """Internal documentation."""
     from argos.config import ConfigError
 
     def _boom(**kw):
@@ -238,7 +229,6 @@ def test_trivial_verify_cmd_exits_2_fast(monkeypatch, capsys):
 
 
 def test_trivial_verify_cmd_true_exits_2(monkeypatch, capsys):
-    """Internal documentation."""
     def _should_not_be_called(**kw):
         raise AssertionError("build_components should not be called for trivial verify cmd")
 
@@ -248,7 +238,6 @@ def test_trivial_verify_cmd_true_exits_2(monkeypatch, capsys):
 
 
 def test_progress_lines_go_to_stderr_not_stdout(monkeypatch, capsys):
-    """Internal documentation."""
     events = [
         PhaseChange(phase="plan", actions=0),
         PhaseChange(phase="act", actions=1),
@@ -265,7 +254,6 @@ def test_progress_lines_go_to_stderr_not_stdout(monkeypatch, capsys):
 
 
 def test_quiet_flag_suppresses_progress(monkeypatch, capsys):
-    """Internal documentation."""
     events = [
         PhaseChange(phase="plan", actions=0),
         PhaseChange(phase="act", actions=1),

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -15,7 +14,6 @@ from argos.routing.categorizer import TaskCategory
 
 @dataclass(frozen=True, slots=True)
 class RoutingConfig:
-    """Internal documentation."""
     default: str = "default"
     by_category: dict[str, str] = field(default_factory=dict)
     by_tool: dict[str, str] = field(default_factory=dict)
@@ -25,7 +23,6 @@ class RoutingConfig:
         return tier in self.tier_force_confirm
 
     def is_active(self) -> bool:
-        """Internal documentation."""
         return bool(self.by_category or self.by_tool or self.tier_force_confirm
                     or self.default != "default")
 
@@ -58,7 +55,6 @@ def _validate_category_keys(by_category: dict[str, str]) -> None:
 
 
 def load_routing(config_dir: Path) -> RoutingConfig:
-    """Internal documentation."""
     config_dir = Path(config_dir).expanduser()
     cfile = config_dir / "config.json"
     try:
@@ -108,7 +104,6 @@ def load_routing(config_dir: Path) -> RoutingConfig:
 
 
 def _validate_tier(tier: str, config_dir: Path) -> None:
-    """Internal documentation."""
     config_dir = Path(config_dir).expanduser()
     cfile = config_dir / "config.json"
     try:
@@ -123,7 +118,6 @@ def _validate_tier(tier: str, config_dir: Path) -> None:
 
 
 def set_category(config_dir: Path, category: TaskCategory, tier: str) -> RoutingConfig:
-    """Internal documentation."""
     _validate_tier(tier, config_dir)
     config_dir = Path(config_dir).expanduser()
     cfile = config_dir / "config.json"

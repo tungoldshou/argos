@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import argparse
 import json
 import subprocess
@@ -46,7 +45,6 @@ def test_startup_update_cache_honors_argos_config_dir(tmp_path, monkeypatch):
 
 
 def test_self_update_subcommand_registered():
-    """Internal documentation."""
     result = subprocess.run(
         ["python", "-m", "argos", "self-update", "--help"],
         capture_output=True, text=True, timeout=10,
@@ -56,7 +54,6 @@ def test_self_update_subcommand_registered():
 
 
 def test_self_update_skips_cache(capsys):
-    """Internal documentation."""
     payload = json.dumps({"tag_name": "v0.99.0"}).encode()
     from argos.__main__ import _cmd_self_update
 
@@ -76,7 +73,6 @@ def test_self_update_skips_cache(capsys):
 
 
 def test_self_update_no_newer_version(capsys):
-    """Internal documentation."""
     payload = json.dumps({"tag_name": "v0.1.0"}).encode()
     from argos.__main__ import _cmd_self_update
 

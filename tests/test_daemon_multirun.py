@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -19,7 +18,6 @@ from argos.daemon.worktree import WorktreeManager
 
 @pytest_asyncio.fixture
 async def mr_server(tmp_path: Path):
-    """Internal documentation."""
     runs_dir = tmp_path / "runs"
     index_path = tmp_path / "index.json"
     socket_path = tmp_path / "daemon.sock"
@@ -67,7 +65,6 @@ async def test_create_run_returns_id(mr_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_concurrent_create_runs_all_register(mr_server, tmp_path: Path):
-    """Internal documentation."""
     srv, _, reg = mr_server
     sid = await _create_session(srv.socket_path)
     rids = []
@@ -84,7 +81,6 @@ async def test_concurrent_create_runs_all_register(mr_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_post_runs_returns_503_when_max_reached(mr_server, tmp_path: Path):
-    """Internal documentation."""
     srv, _, reg = mr_server
     sid = await _create_session(srv.socket_path)
     for _ in range(5):
@@ -100,7 +96,6 @@ async def test_post_runs_returns_503_when_max_reached(mr_server, tmp_path: Path)
 
 @pytest.mark.asyncio
 async def test_post_runs_after_cancel_frees_slot(mr_server, tmp_path: Path):
-    """Internal documentation."""
     srv, mgr, reg = mr_server
     sid = await _create_session(srv.socket_path)
     rids = []
@@ -121,7 +116,6 @@ async def test_post_runs_after_cancel_frees_slot(mr_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_post_runs_with_isolation_creates_worktree(mr_server, tmp_path: Path):
-    """Internal documentation."""
     import subprocess
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -147,7 +141,6 @@ async def test_post_runs_with_isolation_creates_worktree(mr_server, tmp_path: Pa
 
 @pytest.mark.asyncio
 async def test_post_runs_workspace_not_found_returns_400(mr_server, tmp_path: Path):
-    """Internal documentation."""
     srv, _, _ = mr_server
     sid = await _create_session(srv.socket_path)
     status, _, _ = await _req(srv.socket_path, "POST", "/runs",

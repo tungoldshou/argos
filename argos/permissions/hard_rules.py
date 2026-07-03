@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import ipaddress
@@ -22,7 +21,6 @@ _LOCAL_HOSTS: Final[frozenset[str]] = frozenset({"localhost", "127.0.0.1", "::1"
 
 
 def _is_private_host(url: str) -> bool:
-    """Internal documentation."""
     try:
         host = urlparse(url).hostname or ""
     except Exception:
@@ -124,7 +122,6 @@ HARD_SHELL_RULES: Final[tuple[HardShellRule, ...]] = (
 
 
 def check_hard_shell(cmd: str) -> str | None:
-    """Internal documentation."""
     for rule in HARD_SHELL_RULES:
         if rule.pattern.search(cmd):
             if rule.name in ("curl_pipe_sh", "wget_pipe_bash"):
@@ -150,7 +147,6 @@ HARD_PATH_DENYLIST: Final[tuple[str, ...]] = (
 
 
 def _resolve_str(path: str) -> str:
-    """Internal documentation."""
     if not path:
         return ""
     try:
@@ -160,7 +156,6 @@ def _resolve_str(path: str) -> str:
 
 
 def is_system_path(path: str) -> bool:
-    """Internal documentation."""
     p = _resolve_str(path)
     if not p.startswith("/"):
         return False
@@ -168,7 +163,6 @@ def is_system_path(path: str) -> bool:
 
 
 def is_workspace_path(path: str, workspace: str | Path | None) -> bool:
-    """Internal documentation."""
     try:
         pp = Path(path).expanduser().resolve()
     except (OSError, RuntimeError):
@@ -188,7 +182,6 @@ def is_workspace_path(path: str, workspace: str | Path | None) -> bool:
 
 
 def is_env_file(path: str) -> bool:
-    """Internal documentation."""
     name = Path(path).name
     if name == ".env":
         return True
@@ -198,13 +191,11 @@ def is_env_file(path: str) -> bool:
 
 
 def is_env_template(path: str) -> bool:
-    """Internal documentation."""
     name = Path(path).name
     return name in {".env.example", ".env.sample", ".env.template"}
 
 
 def is_argos_own_env(path: str) -> bool:
-    """Internal documentation."""
     name = Path(path).name
     if name != ".env":
         return False
@@ -250,21 +241,18 @@ _PAYMENT_APP_PATTERN: Final[re.Pattern[str]] = re.compile(
 
 
 def check_computer_type_text(text: str) -> str | None:
-    """Internal documentation."""
     if _FINANCIAL_TEXT_PATTERN.search(text):
         return "computer_type_financial_pattern"
     return None
 
 
 def check_computer_open_app(app: str) -> str | None:
-    """Internal documentation."""
     if _PAYMENT_APP_PATTERN.search(app):
         return "computer_open_payment_app"
     return None
 
 
 def check_computer_hard_rules(action: str, args: dict) -> str | None:
-    """Internal documentation."""
     if action == "computer_type_text":
         text = args.get("text", "") or ""
         return check_computer_type_text(str(text))

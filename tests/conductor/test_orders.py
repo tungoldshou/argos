@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import dataclasses
@@ -93,7 +92,6 @@ class TestStandingOrderConstraints:
             )
 
     def test_schedule_empty_string_also_invalid(self):
-        """Internal documentation."""
         with pytest.raises(ValueError):
             StandingOrder(
                 id="x", utterance="u", kind="schedule",
@@ -295,7 +293,6 @@ class TestOrderStoreSortOrder:
 # ---------------------------------------------------------------------------
 
 def test_order_action_default_run_and_roundtrip():
-    """Internal documentation."""
     import time
     o = StandingOrder(
         id="x1", utterance="u", kind="schedule", schedule="03:00",

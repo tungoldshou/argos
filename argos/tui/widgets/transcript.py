@@ -1,5 +1,4 @@
 # argos/tui/widgets/transcript.py
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -14,7 +13,6 @@ _FENCE_BLOCK = re.compile(r"```[^\n]*\n.*?```\n?", re.DOTALL)
 
 
 def strip_code_fences(text: str) -> str:
-    """Internal documentation."""
     text = _FENCE_BLOCK.sub("", text)
     idx = text.rfind("```")
     if idx != -1:
@@ -60,7 +58,6 @@ class AssistantMessage(Markdown):
         self._pending = False
 
     def feed(self, text: str) -> None:
-        """Internal documentation."""
         first_token = not self._raw
         self._raw += text
         self._pending = True
@@ -68,19 +65,16 @@ class AssistantMessage(Markdown):
             self._flush()
 
     def _flush(self) -> None:
-        """Internal documentation."""
         if not self._pending:
             return
         self._pending = False
         self.update(strip_code_fences(self._raw))
 
     def on_mount(self) -> None:
-        """Internal documentation."""
         self.set_interval(self._FLUSH_INTERVAL_MS / 1000.0, self._flush)
 
 
 class Transcript(VerticalScroll):
-    """Internal documentation."""
     DEFAULT_CSS = """
     Transcript { background: $stream; }
     Transcript Rule { color: $hairline-lit; }
@@ -101,7 +95,6 @@ class Transcript(VerticalScroll):
         return "\n".join(p for p in parts if p)
 
     def _ensure_anchored(self) -> None:
-        """Internal documentation."""
         if self.is_attached and not self._anchored_once:
             self._anchored_once = True
             self.anchor()
@@ -134,7 +127,6 @@ class Transcript(VerticalScroll):
         self._ensure_anchored()
 
     def finalize_response(self) -> None:
-        """Internal documentation."""
         if self._current is not None:
             self._lines.append(strip_code_fences(self._current._raw))
             self._current = None

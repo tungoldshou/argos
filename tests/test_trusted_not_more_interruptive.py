@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.approval import ApprovalLevel
@@ -12,7 +11,6 @@ def _d(action, args, *, gate_level, low_risk_auto, risk):
 
 
 def test_trusted_at_least_as_permissive_as_cautious_for_cage_actions():
-    """Internal documentation."""
     cases = [
         ("read_file", {"path": "a"}, "low"),
         ("web_search", {"query": "x"}, "low"),
@@ -26,7 +24,6 @@ def test_trusted_at_least_as_permissive_as_cautious_for_cage_actions():
 
 
 def test_trusted_auto_accepts_edits():
-    """Internal documentation."""
     for action in ("write_file", "edit_file"):
         trusted = _d(action, {"path": "a.py", "content": "x"},
                      gate_level=ApprovalLevel.ACCEPT_EDITS, low_risk_auto=False, risk="medium")
@@ -34,7 +31,6 @@ def test_trusted_auto_accepts_edits():
 
 
 def test_trusted_still_asks_or_denies_dangerous():
-    """Internal documentation."""
     assert _d("browser_click", {}, gate_level=ApprovalLevel.ACCEPT_EDITS,
               low_risk_auto=False, risk="medium") == "ask"
     assert _d("run_command", {"command": "rm -rf /"}, gate_level=ApprovalLevel.ACCEPT_EDITS,
@@ -42,14 +38,12 @@ def test_trusted_still_asks_or_denies_dangerous():
 
 
 def test_cautious_writes_unchanged():
-    """Internal documentation."""
     assert _d("write_file", {"path": "a", "content": "x"},
               gate_level=ApprovalLevel.CONFIRM, low_risk_auto=True, risk="medium") == "ask"
 
 
 
 def test_accept_edits_still_asks_on_secret_write():
-    """Internal documentation."""
     from argos.permissions.evaluator import evaluate
     from argos.permissions import get_config
 
@@ -72,7 +66,6 @@ def test_accept_edits_still_asks_on_secret_write():
 
 
 def test_accept_edits_still_denies_system_path_write():
-    """Internal documentation."""
     from argos.permissions.evaluator import evaluate
     from argos.permissions import get_config
 

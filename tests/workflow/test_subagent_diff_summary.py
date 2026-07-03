@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -13,7 +12,6 @@ from argos.workflow.subagent import SubAgentFactory
 
 def _make_git_worktree_with_changes(tmp_path: Path, *, n_files: int = 1,
                                      additions: int = 10) -> Path:
-    """Internal documentation."""
     import subprocess as _sp
     wt = tmp_path / "wt"
     wt.mkdir()
@@ -32,7 +30,6 @@ def _make_git_worktree_with_changes(tmp_path: Path, *, n_files: int = 1,
 async def test_default_mode_omits_full_diff_from_output(
     tmp_path, scripted_model_factory, requires_sandbox,
 ):
-    """Internal documentation."""
     from argos.workflow.subagent import SubAgentFactory as _SAF
     task = AgentTask(prompt="改 {item}", tool_scope="full", isolation="worktree",
                      verify="true")
@@ -66,7 +63,6 @@ async def test_default_mode_omits_full_diff_from_output(
 
 @pytest.mark.asyncio
 async def test_diff_ref_recovers_full_diff(tmp_path, scripted_model_factory, requires_sandbox):
-    """Internal documentation."""
     import argos.workflow.subagent as _sa_mod
     base = tmp_path / "base2"
     base.mkdir()
@@ -94,7 +90,6 @@ async def test_diff_ref_recovers_full_diff(tmp_path, scripted_model_factory, req
 async def test_parallel_agents_output_bounded_not_linear_in_diff_size(
     tmp_path, scripted_model_factory, requires_sandbox,
 ):
-    """Internal documentation."""
     import argos.workflow.subagent as _sa_mod
     base = tmp_path / "base3"
     base.mkdir()
@@ -124,7 +119,6 @@ async def test_parallel_agents_output_bounded_not_linear_in_diff_size(
 async def test_inline_diff_true_keeps_legacy_behavior(
     tmp_path, scripted_model_factory, requires_sandbox,
 ):
-    """Internal documentation."""
     import argos.workflow.subagent as _sa_mod
     from argos.core.models import CredentialPool
     from argos.core.verify_gate import Verifier
@@ -167,7 +161,6 @@ async def test_inline_diff_true_keeps_legacy_behavior(
 
 @pytest.mark.asyncio
 async def test_no_changes_leaves_diff_fields_empty(tmp_path, scripted_model_factory, requires_sandbox):
-    """Internal documentation."""
     import argos.workflow.subagent as _sa_mod
     base = tmp_path / "base5"
     base.mkdir()
@@ -190,7 +183,6 @@ async def test_no_changes_leaves_diff_fields_empty(tmp_path, scripted_model_fact
 
 
 def test_summarize_diff_extracts_counts():
-    """Internal documentation."""
     from argos.workflow.subagent import SubAgentFactory
     diff = (
         "diff --git a/a.py b/a.py\n@@ -1 +1 @@\n-old\n+new\n"
@@ -202,7 +194,6 @@ def test_summarize_diff_extracts_counts():
 
 
 def test_diff_journal_defaults_to_argos_config_dir(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.workflow.subagent import SubAgentFactory
 
     cfg_dir = tmp_path / "cfg"

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -16,7 +15,6 @@ _WRITE_LOCK = threading.Lock()
 
 
 def _runs_dir(base: Path | None = None) -> Path:
-    """Internal documentation."""
     if base is not None:
         return base / "runs"
     if _RUNS_DIR is not None:
@@ -31,7 +29,6 @@ def _date_str(ts: float) -> str:
 
 
 def append(result: EvalResult, *, base: Path | None = None) -> None:
-    """Internal documentation."""
     d = _runs_dir(base) / _date_str(result.finished_at)
     p = d / f"{result.run_id}.jsonl"
     line = result.to_json() + "\n"
@@ -42,7 +39,6 @@ def append(result: EvalResult, *, base: Path | None = None) -> None:
 def list_runs(
     *, base: Path | None = None, date: str | None = None, limit: int = 50,
 ) -> list[EvalResult]:
-    """Internal documentation."""
     out: list[EvalResult] = []
     root = _runs_dir(base)
     if not root.exists():
@@ -84,7 +80,6 @@ def list_runs(
 
 
 def load_run(run_id: str, *, base: Path | None = None) -> EvalResult | None:
-    """Internal documentation."""
     root = _runs_dir(base)
     if not root.exists():
         return None
@@ -117,7 +112,6 @@ def load_run(run_id: str, *, base: Path | None = None) -> EvalResult | None:
 def summary(
     *, base: Path | None = None, since_days: int = 7,
 ) -> dict[str, dict[str, dict[str, Any]]]:
-    """Internal documentation."""
     cutoff = time.time() - since_days * 86400
     runs = [r for r in list_runs(base=base, limit=10000) if r.finished_at >= cutoff]
     out: dict[str, dict[str, dict[str, Any]]] = {}
@@ -137,7 +131,6 @@ def summary(
 
 
 def _category_of(task_id: str) -> str:
-    """Internal documentation."""
     parts = task_id.split("_")
     cat_parts: list[str] = []
     for p in parts:

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -12,7 +11,6 @@ from argos.lsp.client import encode_frame, parse_frames, LspClient, LspProtocolE
 # ── encode_frame ────────────────────────────────────────────────────
 
 def test_encode_frame_basic():
-    """Internal documentation."""
     msg = {"jsonrpc": "2.0", "id": 1, "result": None}
     encoded = encode_frame(msg)
     assert encoded.startswith(b"Content-Length: ")
@@ -21,7 +19,6 @@ def test_encode_frame_basic():
 
 
 def test_encode_frame_utf8_byte_length():
-    """Internal documentation."""
     msg = {"jsonrpc": "2.0", "id": 1, "method": "foo", "params": {"text": "中文测试"}}
     encoded = encode_frame(msg)
     body = encoded.split(b"\r\n\r\n", 1)[1]
@@ -33,7 +30,6 @@ def test_encode_frame_utf8_byte_length():
 
 
 def test_encode_frame_empty_body():
-    """Internal documentation."""
     encoded = encode_frame({})
     body = encoded.split(b"\r\n\r\n", 1)[1]
     assert body == b"{}"
@@ -44,7 +40,6 @@ def test_encode_frame_empty_body():
 # ── parse_frames ────────────────────────────────────────────────────
 
 def test_parse_frames_single():
-    """Internal documentation."""
     encoded = encode_frame({"jsonrpc": "2.0", "id": 1, "result": 42})
     msgs = list(_collect_sync(parse_frames(_async_iter([encoded]))))
     assert len(msgs) == 1
@@ -52,7 +47,6 @@ def test_parse_frames_single():
 
 
 def test_parse_frames_three_concatenated():
-    """Internal documentation."""
     e1 = encode_frame({"jsonrpc": "2.0", "id": 1, "result": 1})
     e2 = encode_frame({"jsonrpc": "2.0", "id": 2, "result": 2})
     e3 = encode_frame({"jsonrpc": "2.0", "id": 3, "result": 3})
@@ -62,7 +56,6 @@ def test_parse_frames_three_concatenated():
 
 
 def test_parse_frames_split_across_chunks():
-    """Internal documentation."""
     e = encode_frame({"jsonrpc": "2.0", "id": 1, "result": 99})
     chunks = [e[:10], e[10:50], e[50:]]
     msgs = list(_collect_sync(parse_frames(_async_iter(chunks))))
@@ -71,7 +64,6 @@ def test_parse_frames_split_across_chunks():
 
 
 def test_parse_frames_long_body():
-    """Internal documentation."""
     big = "x" * (100 * 1024)
     e = encode_frame({"jsonrpc": "2.0", "id": 1, "method": "big", "params": {"text": big}})
     msgs = list(_collect_sync(parse_frames(_async_iter([e]))))
@@ -80,7 +72,6 @@ def test_parse_frames_long_body():
 
 
 def test_parse_frames_claimed_length_exceeds_eof_raises():
-    """Internal documentation."""
     fake = b"Content-Length: 100\r\n\r\n{short"
     with pytest.raises(LspProtocolError):
         list(_collect_sync(parse_frames(_async_iter([fake]))))
@@ -94,7 +85,6 @@ async def _async_iter(chunks):
 
 
 def _collect_sync(agen):
-    """Internal documentation."""
     out = []
     async def _run():
         async for x in agen:

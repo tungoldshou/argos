@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -126,7 +125,6 @@ class ActivityPanel(Vertical):
         return t_("widget.view_header", view=self._view, pin=pin)
 
     def _apply_view(self) -> None:
-        """Internal documentation."""
         visible = self._VIEW_SECTIONS.get(self._view, frozenset()) | self._FOOTER
         for i, sec in enumerate(self._sections()):
             sec.display = i in visible
@@ -144,7 +142,6 @@ class ActivityPanel(Vertical):
         self._apply_view()
 
     def cycle_view(self) -> str:
-        """Internal documentation."""
         if not self._pinned:
             self._pinned = True
             self.set_view(_VIEWS[0])
@@ -165,14 +162,12 @@ class ActivityPanel(Vertical):
             self.set_view(view)
 
     def on_run_active(self, label: str) -> None:
-        """Internal documentation."""
         text = (label or "").strip().replace("\n", " ")
         if len(text) > 40:
             text = text[:39] + "…"
         self._set(self._RUN_IDX, t_("widget.run_active", label=text))
 
     def on_run_end(self) -> None:
-        """Internal documentation."""
         if not self._verdict_shown:
             self._set(self._VERDICT_IDX, t_("widget.verdict_no_check"))
         if not self._pinned:
@@ -180,12 +175,10 @@ class ActivityPanel(Vertical):
 
     @staticmethod
     def _skills_summary() -> str:
-        """Internal documentation."""
         return ActivityPanel._skill_catalog_summary()
 
     @staticmethod
     def _skill_catalog_summary() -> str:
-        """Internal documentation."""
         try:
             from argos import skills
             enabled = [s for s in skills.load_all() if s.enabled]
@@ -197,7 +190,6 @@ class ActivityPanel(Vertical):
 
     @staticmethod
     def _mcp_summary() -> str:
-        """Internal documentation."""
         try:
             import json
 
@@ -220,7 +212,6 @@ class ActivityPanel(Vertical):
         self._sections()[idx].update(body)
 
     def _render_progress(self) -> None:
-        """Internal documentation."""
         if self._todos:
             self._set(self._PROGRESS_IDX, self._render_todos())
         else:
@@ -269,12 +260,10 @@ class ActivityPanel(Vertical):
         self._auto_view(phase)
 
     def on_plan(self, todos: list[dict]) -> None:
-        """Internal documentation."""
         self._todos = list(todos or [])
         self._render_progress()
 
     def on_receipt(self, action: str, sig: str = "") -> None:
-        """Internal documentation."""
         self._tool_counts[action] = self._tool_counts.get(action, 0) + 1
         tools = "\n".join(f"  {a} ×{n}" for a, n in self._tool_counts.items())
         self._set(self._TOOLS_IDX, t_("widget.tools_this_run", tools=tools) if tools else t_("widget.tools_zero"))
@@ -287,7 +276,6 @@ class ActivityPanel(Vertical):
 
     @staticmethod
     def _build_sparkline(values: list[int]) -> str:
-        """Internal documentation."""
         if not values:
             return ""
         _SPARK = "▁▂▃▄▅▆▇"
@@ -296,7 +284,6 @@ class ActivityPanel(Vertical):
 
     @staticmethod
     def _fmt_tokens(n: int) -> str:
-        """Internal documentation."""
         return fmt_tokens(n)
 
     def on_cost(self, *, tokens_in: int, tokens_out: int, cost_usd: float | None,
@@ -321,7 +308,6 @@ class ActivityPanel(Vertical):
         self._set(self._COST_IDX, t)
 
     def on_context(self, *, used: int, window: int) -> None:
-        """Internal documentation."""
         pct = 0 if not window else round(used * 100 / window)
         filled = min(10, max(0, round(pct / 10)))
         win = f"{window // 1000}k" if window else "?"
@@ -336,7 +322,6 @@ class ActivityPanel(Vertical):
         self._set(self._CTX_IDX, t)
 
     def on_verdict(self, verdict) -> None:
-        """Internal documentation."""
         cmd = getattr(verdict, "verify_cmd", None) or "—"
         detail = getattr(verdict, "detail", "") or ""
         status = getattr(verdict, "status", "?")
@@ -360,7 +345,6 @@ class ActivityPanel(Vertical):
         self._verdict_shown = True
 
     def on_hook_fired(self, ev: HookFired) -> None:
-        """Internal documentation."""
         self._hook_log.append(ev)
         lines = []
         for h in list(self._hook_log)[-5:]:
@@ -377,7 +361,6 @@ class ActivityPanel(Vertical):
         self._set(self._HOOK_IDX, "\n".join(lines) if lines else t_("widget.empty"))
 
     def on_lsp_server_event(self, ev: LspServerEvent) -> None:
-        """Internal documentation."""
         self._lsp_servers[ev.server_name] = ev.status
         lines: list[str] = []
         for name, status in self._lsp_servers.items():
@@ -398,7 +381,6 @@ class ActivityPanel(Vertical):
         self._set(self._LSP_IDX, "\n".join(lines) if lines else t_("widget.empty"))
 
     def on_lsp_diagnostic_event(self, ev: LspDiagnosticEvent) -> None:
-        """Internal documentation."""
         prev = self._lsp_diag_cache.get(ev.uri)
         if prev == ev.count:
             return
@@ -428,7 +410,6 @@ class ActivityPanel(Vertical):
         self._set(self._CTX_IDX, t_("widget.empty"))
 
     def on_run_summary(self, *, active: int, paused: int, suspended: int, history: int) -> None:
-        """Internal documentation."""
         if active == 0 and paused == 0 and suspended == 0 and history == 0:
             self._set(self._RUN_IDX, t_("widget.empty"))
         else:
@@ -455,7 +436,6 @@ class ActivityPanel(Vertical):
                 return
 
     def _skill_summary(self) -> str:
-        """Internal documentation."""
         if not self._skill_runs:
             return t_("widget.empty")
         lines: list[str] = []
@@ -476,7 +456,6 @@ class ActivityPanel(Vertical):
         return "\n".join(lines[-6:])
 
     def on_approval_decision(self, *, action: str, decision: str, trigger: str) -> None:
-        """Internal documentation."""
         bucket = {"approved": "ok", "denied": "deny", "asked": "ask"}.get(decision)
         if bucket is None:
             return
@@ -485,7 +464,6 @@ class ActivityPanel(Vertical):
         self._refresh_approval_section()
 
     def _refresh_approval_section(self) -> None:
-        """Internal documentation."""
         try:
             self._set(self._APPROVAL_IDX, self._approval_summary())
         except (IndexError, Exception):
@@ -507,7 +485,6 @@ class ActivityPanel(Vertical):
         return "\n".join(lines)
 
     def on_compacted(self, before: int, after: int, reduction_pct: float) -> None:
-        """Internal documentation."""
         self._compaction_line = t_("widget.compacted_line", reduction_pct=reduction_pct, before=before, after=after)
         try:
             secs = self._sections()
@@ -520,7 +497,6 @@ class ActivityPanel(Vertical):
             pass
 
     def on_pruned(self, before: int, after: int, removed: int) -> None:
-        """Internal documentation."""
         self._compaction_line = t_("widget.pruned_line", removed=removed, before=before, after=after)
         try:
             secs = self._sections()
@@ -533,7 +509,6 @@ class ActivityPanel(Vertical):
             pass
 
     def on_memory_recall(self, hits: int) -> None:
-        """Internal documentation."""
         if hits > 0:
             self._set(self._RUN_IDX, t_("widget.memory_recall", hits=hits))
         else:

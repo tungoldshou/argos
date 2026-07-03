@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import types
@@ -38,12 +37,10 @@ def test_lsp_tools_constant_lists_all_six():
 
 
 def test_lsp_tools_absent_from_default_prompt():
-    """Internal documentation."""
     assert "lsp_definition" not in HONESTY_SYSTEM
 
 
 def test_lsp_injected_when_server_configured(monkeypatch, tmp_path):
-    """Internal documentation."""
     loop = _loop()
     fake_lsp_json = tmp_path / "lsp.json"
     fake_lsp_json.write_text("{}")
@@ -55,7 +52,6 @@ def test_lsp_injected_when_server_configured(monkeypatch, tmp_path):
 
 
 def test_lsp_injected_from_argos_config_dir(monkeypatch, tmp_path):
-    """Internal documentation."""
     loop = _loop()
     cfg_dir = tmp_path / ".argos"
     cfg_dir.mkdir()
@@ -71,7 +67,6 @@ def test_lsp_injected_from_argos_config_dir(monkeypatch, tmp_path):
 
 
 def test_lsp_not_injected_when_no_server(monkeypatch, tmp_path):
-    """Internal documentation."""
     loop = _loop()
     fake_lsp_json = tmp_path / "lsp.json"
     fake_lsp_json.write_text("{}")
@@ -83,7 +78,6 @@ def test_lsp_not_injected_when_no_server(monkeypatch, tmp_path):
 
 
 def test_lsp_not_injected_when_config_file_absent(monkeypatch, tmp_path):
-    """Internal documentation."""
     loop = _loop()
     absent_path = tmp_path / "nonexistent_lsp.json"
     monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", absent_path)
@@ -96,7 +90,6 @@ def test_lsp_not_injected_when_config_file_absent(monkeypatch, tmp_path):
 
 
 def test_lsp_config_error_degrades_silently(monkeypatch, tmp_path):
-    """Internal documentation."""
     def _boom(path=None):
         raise RuntimeError("lsp.json 坏了")
     loop = _loop()

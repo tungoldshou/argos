@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -68,7 +67,6 @@ def _loop(*, used: int = 0, window: int = 100_000, threshold: float = 0.8,
 
 @pytest.mark.asyncio
 async def test_proactive_compact_triggers_above_threshold():
-    """Internal documentation."""
     loop, store = _loop(used=85_000, window=100_000, threshold=0.8)
     events = [ev async for ev in loop._maybe_proactive_compact("s", 0)]
     compacted = [e for e in events if isinstance(e, CompactedEvent)]
@@ -82,7 +80,6 @@ async def test_proactive_compact_triggers_above_threshold():
 
 @pytest.mark.asyncio
 async def test_proactive_compact_skips_when_compaction_disabled():
-    """Internal documentation."""
     loop, store = _loop(used=85_000, window=100_000, threshold=0.8, compaction=False)
     events = [ev async for ev in loop._maybe_proactive_compact("s", 0)]
     assert events == []
@@ -91,7 +88,6 @@ async def test_proactive_compact_skips_when_compaction_disabled():
 
 @pytest.mark.asyncio
 async def test_proactive_compact_skips_when_recent_verify_failed():
-    """Internal documentation."""
     loop, store = _loop(used=85_000, window=100_000, threshold=0.8, fail_count=1)
     events = [ev async for ev in loop._maybe_proactive_compact("s", 0)]
     assert events == []
@@ -100,7 +96,6 @@ async def test_proactive_compact_skips_when_recent_verify_failed():
 
 @pytest.mark.asyncio
 async def test_proactive_compact_idempotent_5pct_buffer():
-    """Internal documentation."""
     loop, store = _loop(used=85_000, window=100_000, threshold=0.8)
     ev1 = [e async for e in loop._maybe_proactive_compact("s", 0)]
     assert len([e for e in ev1 if isinstance(e, CompactedEvent)]) == 1
@@ -112,7 +107,6 @@ async def test_proactive_compact_idempotent_5pct_buffer():
 
 @pytest.mark.asyncio
 async def test_proactive_compact_messages_override_consumed():
-    """Internal documentation."""
     loop, store = _loop(used=85_000, window=100_000, threshold=0.8)
     ev1 = [e async for e in loop._maybe_proactive_compact("s", 0)]
     assert len([e for e in ev1 if isinstance(e, CompactedEvent)]) == 1
@@ -127,7 +121,6 @@ async def test_proactive_compact_messages_override_consumed():
 
 @pytest.mark.asyncio
 async def test_proactive_compact_old_loopconfig_no_threshold_attr():
-    """Internal documentation."""
     cfg = LoopConfig(max_steps=2)
     model = _FakeModel(_FakeTier(context_window=100_000),
                         last_usage={"input_tokens": 90_000, "output_tokens": 0,

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -32,7 +31,6 @@ def _make_event(**kwargs) -> PE.ComputerActionEvent:
 
 
 def test_computer_action_event_golden_screenshot():
-    """Internal documentation."""
     ev = _make_event()
     obj = json.loads(PE.serialize_event(ev))
     assert obj["kind"] == "computer_action"
@@ -47,7 +45,6 @@ def test_computer_action_event_golden_screenshot():
 
 
 def test_computer_action_event_golden_click():
-    """Internal documentation."""
     ev = _make_event(
         kind_action="click",
         x=100,
@@ -66,7 +63,6 @@ def test_computer_action_event_golden_click():
 
 
 def test_computer_action_event_golden_failure():
-    """Internal documentation."""
     ev = _make_event(
         kind_action="type_text",
         x=None,
@@ -118,7 +114,6 @@ def test_computer_action_event_roundtrip_failure():
 
 
 def test_computer_action_event_roundtrip_all_kinds():
-    """Internal documentation."""
     for kind_action in ("screenshot", "click", "double_click",
                          "type_text", "key", "scroll", "open_app"):
         ev = _make_event(kind_action=kind_action)
@@ -128,31 +123,26 @@ def test_computer_action_event_roundtrip_all_kinds():
 
 
 def test_computer_action_in_kind_to_class():
-    """Internal documentation."""
     assert "computer_action" in PE._KIND_TO_CLASS
     assert PE._KIND_TO_CLASS["computer_action"] is PE.ComputerActionEvent
 
 
 def test_computer_action_in_event_kind_literal():
-    """Internal documentation."""
     assert "computer_action" in PE.EventKind.__args__
 
 
 def test_computer_action_event_is_frozen():
-    """Internal documentation."""
     ev = _make_event()
     with pytest.raises((AttributeError, TypeError)):
         ev.ok = False  # type: ignore[misc]
 
 
 def test_computer_action_event_kind_constant():
-    """Internal documentation."""
     assert PE.ComputerActionEvent.kind == "computer_action"
 
 
 
 def test_text_preview_truncation_convention():
-    """Internal documentation."""
     long_text = "a" * 100
     preview = long_text[:80]
     ev = _make_event(
@@ -169,7 +159,6 @@ def test_text_preview_truncation_convention():
 
 
 def test_tui_events_shim_exports_computer_action_event():
-    """Internal documentation."""
     from argos.tui import events as E  # noqa: PLC0415
     assert hasattr(E, "ComputerActionEvent"), (
         "tui/events.py shim 未导出 ComputerActionEvent —— 需要在 shim 中加入 re-export"

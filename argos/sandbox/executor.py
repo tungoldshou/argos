@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -18,7 +17,6 @@ BrokerHandler = Callable[[str, dict[str, Any]], Any]
 
 
 class SeatbeltExecutor:
-    """Internal documentation."""
 
     def __init__(self, broker_handler: BrokerHandler | None = None) -> None:
         self._broker_handler = broker_handler
@@ -111,12 +109,10 @@ def _get_linux_backend():
 
 
 def LinuxExecutor(broker_handler=None):  # type: ignore[no-redef]
-    """Internal documentation."""
     return _get_linux_backend()(broker_handler=broker_handler)
 
 
 def select_backend():
-    """Internal documentation."""
     from argos.config import sandbox_enabled
     if not sandbox_enabled():
         return SeatbeltExecutor

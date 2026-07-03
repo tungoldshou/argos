@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -48,7 +47,6 @@ def _make_tb_task(
     test_outputs: str = "def test_x(): assert True\n",
     task_id: str | None = None,
 ) -> Path:
-    """Internal documentation."""
     tid = task_id or f"tb_test_{uuid.uuid4().hex[:8]}"
     d = tmp_path / tid
     (d / "tests").mkdir(parents=True)
@@ -73,7 +71,6 @@ def _make_tb_task(
 
 @requires_docker
 def test_classify_marks_ghcr_io_as_supported_when_docker_available(tmp_path):
-    """Internal documentation."""
     d = _make_tb_task(
         tmp_path,
         from_line="FROM ghcr.io/laude-institute/t-bench/python-3-13:20250620",
@@ -88,7 +85,6 @@ def test_classify_marks_ghcr_io_as_supported_when_docker_available(tmp_path):
 
 @requires_docker
 def test_classify_keeps_unsupported_when_docker_unavailable(tmp_path):
-    """Internal documentation."""
     d = _make_tb_task(
         tmp_path,
         from_line="FROM ghcr.io/laude-institute/t-bench/python-3-13:20250620",
@@ -101,7 +97,6 @@ def test_classify_keeps_unsupported_when_docker_unavailable(tmp_path):
 
 
 def test_classify_unchanged_for_local_python_image(tmp_path):
-    """Internal documentation."""
     d = _make_tb_task(
         tmp_path,
         from_line="FROM python:3.12-slim",
@@ -117,7 +112,6 @@ def test_classify_unchanged_for_local_python_image(tmp_path):
 
 @requires_docker
 def test_docker_run_tests_passing_returns_passed(tmp_path):
-    """Internal documentation."""
     from argos.eval.benchmarks.terminal_bench import run_subset, _build_verify_cmd
     from argos.eval.runner import EvalRunner
     from argos.eval.runner import PASS_PASSED
@@ -144,7 +138,6 @@ def test_docker_run_tests_passing_returns_passed(tmp_path):
 
 @requires_docker
 def test_docker_run_tests_failing_returns_failed(tmp_path):
-    """Internal documentation."""
     from argos.eval.benchmarks.terminal_bench import run_subset
     from argos.eval.runner import EvalRunner, PASS_FAILED
     from tests.eval._fakes import FakeWorktree, make_fake_loop_factory, make_fake_loop
@@ -170,7 +163,6 @@ def test_docker_run_tests_failing_returns_failed(tmp_path):
 
 @requires_docker
 def test_docker_unpullable_image_returns_setup_failed(tmp_path):
-    """Internal documentation."""
     from argos.eval.benchmarks.terminal_bench import run_subset
     from argos.eval.runner import EvalRunner, PASS_SETUP_FAILED
     from tests.eval._fakes import FakeWorktree, make_fake_loop_factory, make_fake_loop
@@ -197,7 +189,6 @@ def test_docker_unpullable_image_returns_setup_failed(tmp_path):
 
 @requires_docker
 def test_best_of_n_works_on_docker_path(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.workflow.engine import WorkflowEngine
     from argos.workflow.spec import parse_spec
     from argos.workflow.subagent import SubAgentFactory
@@ -250,7 +241,6 @@ def test_best_of_n_works_on_docker_path(tmp_path, monkeypatch):
 
 @requires_docker
 def test_docker_wrong_solution_still_failed(tmp_path):
-    """Internal documentation."""
     from argos.eval.benchmarks.terminal_bench import run_subset
     from argos.eval.runner import EvalRunner, PASS_FAILED
     from tests.eval._fakes import FakeWorktree, make_fake_loop_factory, make_fake_loop
@@ -278,7 +268,6 @@ def test_docker_wrong_solution_still_failed(tmp_path):
 
 @requires_docker
 def test_container_executor_runs_run_tests_inside_container(tmp_path):
-    """Internal documentation."""
     from argos.eval.benchmarks.terminal_bench_docker import TBContainerExecutor
 
     d = _make_tb_task(
@@ -300,7 +289,6 @@ def test_container_executor_runs_run_tests_inside_container(tmp_path):
 
 @requires_docker
 def test_container_executor_returns_nonzero_on_failing_tests(tmp_path):
-    """Internal documentation."""
     from argos.eval.benchmarks.terminal_bench_docker import TBContainerExecutor
 
     d = _make_tb_task(
@@ -323,7 +311,6 @@ def test_container_executor_returns_nonzero_on_failing_tests(tmp_path):
 
 @requires_docker
 def test_subagent_output_mirror_copies_agent_files(tmp_path, monkeypatch):
-    """Internal documentation."""
     import subprocess
     from argos.workflow.subagent import SubAgentFactory
 
@@ -353,7 +340,6 @@ def test_subagent_output_mirror_copies_agent_files(tmp_path, monkeypatch):
 @pytest.mark.slow
 @requires_docker
 def test_docker_verify_sees_mirror_with_seeded_tests(tmp_path, monkeypatch):
-    """Internal documentation."""
     import subprocess
     import shutil as _sh
     from argos.workflow.subagent import SubAgentFactory

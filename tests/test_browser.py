@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -8,7 +7,6 @@ from argos.browser import BrowserController, _Cmd
 
 
 class FakePage:
-    """Internal documentation."""
     def __init__(self, *, title="Example", url="https://example.com", body="hello world"):
         self._title = title
         self._url = url
@@ -81,7 +79,6 @@ def test_dispatch_page_error_is_honest_string():
 
 
 def test_controller_threaded_call_with_fake_page(monkeypatch):
-    """Internal documentation."""
     ctrl = BrowserController()
     page = FakePage(title="Z")
 
@@ -104,7 +101,6 @@ def test_controller_threaded_call_with_fake_page(monkeypatch):
 
 
 def test_controller_launch_failure_is_honest(monkeypatch):
-    """Internal documentation."""
     ctrl = BrowserController()
 
     def boom_run(self):
@@ -150,7 +146,6 @@ def test_broker_execute_routes_browser_actions(monkeypatch):
 
 
 def test_browser_navigate_is_gated_and_ssrf_checked():
-    """Internal documentation."""
     from argos.sandbox.broker import _NETWORK_ACTIONS, _RISK
     assert "browser_navigate" in _RISK
     assert "browser_navigate" in _NETWORK_ACTIONS

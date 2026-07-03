@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -11,7 +10,6 @@ from argos.learning import distiller
 
 
 def _write_run_store(tmp_path: Path, run_id: str, events: list[dict]) -> Path:
-    """Internal documentation."""
     runs_dir = tmp_path / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
     p = runs_dir / f"{run_id}.jsonl"
@@ -24,7 +22,6 @@ def _write_run_store(tmp_path: Path, run_id: str, events: list[dict]) -> Path:
 def _make_passed_events(*, goal: str = "test goal",
                         verify_cmd: str = "pytest -q",
                         code_snippets: list[str] | None = None) -> list[dict]:
-    """Internal documentation."""
     code_snippets = code_snippets or ["result = 1 + 1\nprint(result)"]
     evs: list[dict] = [
         {"kind": "session_start", "goal": goal, "seq": 0},
@@ -45,7 +42,6 @@ def _make_passed_events(*, goal: str = "test goal",
 
 
 def test_passed_run_produces_candidate(tmp_path):
-    """Internal documentation."""
     from argos.learning.distiller import distill_run_to_skill, SkillCandidate
     from argos.daemon.store import RunStore
 
@@ -66,7 +62,6 @@ def test_passed_run_produces_candidate(tmp_path):
 
 
 def test_distill_writes_skill_md_to_skills_dir(tmp_path):
-    """Internal documentation."""
     from argos.learning.distiller import distill_run_to_skill
     from argos.daemon.store import RunStore
 
@@ -86,7 +81,6 @@ def test_distill_writes_skill_md_to_skills_dir(tmp_path):
 
 
 def test_distill_handles_missing_run_id_gracefully(tmp_path):
-    """Internal documentation."""
     from argos.learning.distiller import distill_run_to_skill
     from argos.daemon.store import RunStore
 
@@ -100,7 +94,6 @@ def test_distill_handles_missing_run_id_gracefully(tmp_path):
 
 
 def test_distill_extracts_code_snippets_into_body(tmp_path):
-    """Internal documentation."""
     from argos.learning.distiller import distill_run_to_skill
     from argos.daemon.store import RunStore
 
@@ -121,7 +114,6 @@ def test_distill_extracts_code_snippets_into_body(tmp_path):
 
 
 def test_distill_redacts_secrets_in_body(tmp_path):
-    """Internal documentation."""
     from argos.learning.distiller import distill_run_to_skill
     from argos.daemon.store import RunStore
 

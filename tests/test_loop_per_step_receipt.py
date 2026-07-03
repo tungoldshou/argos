@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -54,7 +53,6 @@ class FakeStore:
 
 
 class StepBroker:
-    """Internal documentation."""
 
     def __init__(self):
         self._signer = ReceiptSigner(key=b"i2-test")
@@ -108,7 +106,6 @@ async def test_exactly_one_receipt_across_two_code_actions():
 
 @pytest.mark.asyncio
 async def test_no_receipt_when_no_broker_action():
-    """Internal documentation."""
     broker = StepBroker()
     scripts = [
         "```python\na = 1\n```",

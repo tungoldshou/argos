@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -210,7 +209,6 @@ async def test_skills_unknown_subcommand_prints_usage(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_skills_command_includes_builtin_three(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     from argos.tui.app import ArgosApp
     app = ArgosApp()
@@ -223,7 +221,6 @@ async def test_skills_command_includes_builtin_three(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_skills_command_no_args_includes_recommendations(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     from argos.skills_curator import recommend as _rec
     monkeypatch.setattr(

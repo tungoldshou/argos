@@ -1,9 +1,16 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
 
-from argos.tui.commands import SlashCommand, parse_slash, COMMAND_NAMES, COMMAND_HELP, match_commands
+from argos.tui.commands import (
+    ADVANCED_COMMAND_NAMES,
+    COMMAND_HELP,
+    COMMAND_NAMES,
+    DEFAULT_COMMAND_NAMES,
+    SlashCommand,
+    match_commands,
+    parse_slash,
+)
 
 
 def test_known_commands_listed():
@@ -30,15 +37,32 @@ def test_known_commands_listed():
     }
 
 
+def test_default_command_surface_is_small():
+    assert list(DEFAULT_COMMAND_NAMES) == [
+        "help", "setup", "model", "status", "trust", "tools", "plan", "undo",
+        "retry", "context", "permissions", "verify", "runs", "clear",
+        "resume", "cost",
+    ]
+    assert "yolo" not in DEFAULT_COMMAND_NAMES
+    assert "dream" not in DEFAULT_COMMAND_NAMES
+    assert "eval" not in DEFAULT_COMMAND_NAMES
+
+
+def test_advanced_commands_remain_known_but_hidden_by_default():
+    assert "dream" in ADVANCED_COMMAND_NAMES
+    assert parse_slash("/dream").known is True
+    assert parse_slash("/yolo").known is True
+    assert "dream" not in [name for name, _desc in match_commands("/")]
+    assert "yolo" not in [name for name, _desc in match_commands("/")]
+
+
 def test_capability_discovery_commands_known():
-    """Internal documentation."""
     for name in ("help", "tools", "skills", "mcp"):
         cmd = parse_slash(f"/{name}")
         assert cmd is not None and cmd.known is True, f"/{name} 应为已知命令"
 
 
 def test_argos_app_exposes_slash_handler_table():
-    """Internal documentation."""
     from argos.tui.app import ArgosApp
 
     handlers = ArgosApp._slash_handlers()
@@ -154,6 +178,49 @@ def test_help_with_command_arg_is_case_insensitive():
     assert "/model" in text
     assert "Unknown" not in text and "未知" not in text
     assert not any(kind == "error" for _line, kind in log.lines)
+
+
+def test_default_help_hides_advanced_commands():
+    import asyncio
+    from argos.tui.app import ArgosApp
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    log = Log()
+    asyncio.run(ArgosApp()._cmd_help(log, ""))
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert "/help" in text
+    assert "/verify" in text
+    assert "/dream" not in text
+    assert "/yolo" not in text
+    assert "/eval" not in text
+
+
+def test_help_advanced_lists_hidden_commands():
+    import asyncio
+    from argos.tui.app import ArgosApp
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    log = Log()
+    asyncio.run(ArgosApp()._cmd_help(log, "advanced"))
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert "/dream" in text
+    assert "/eval" in text
+    assert "/yolo" in text
+    assert "/help" not in text
 
 
 def test_help_with_unknown_command_arg_reports_error():
@@ -539,6 +606,9 @@ def test_setup_hint_uses_configured_argos_dir(tmp_path, monkeypatch):
     text = "\n".join(line for line, _kind in log.lines)
     assert str(cfg_dir / "config.json") in text
     assert str(cfg_dir / ".env") in text
+    assert "active profile" in text
+    assert "key 来源" in text or "key source" in text
+    assert "下一步" in text or "next:" in text
     assert "~/.argos" not in text
 
 
@@ -1238,14 +1308,12 @@ def test_parse_watch_known():
     assert cmd is not None and cmd.known is True
 
 
-def test_match_commands_schedule_prefix():
-    """match_commands('/sch') includes 'schedule'."""
+def test_match_commands_schedule_prefix_hidden_by_default():
     names = [n for n, _ in match_commands("/sch")]
-    assert "schedule" in names
+    assert "schedule" not in names
 
 
 def test_match_commands_descriptions_follow_current_language(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_LANG", "en")
     desc = dict(match_commands("/set"))["setup"]
 
@@ -1255,14 +1323,14 @@ def test_match_commands_descriptions_follow_current_language(monkeypatch):
 
 def test_match_commands_watch_prefix():
     names = [n for n, _ in match_commands("/wat")]
-    assert "watch" in names
+    assert "watch" not in names
 
 
 def test_match_commands_loop_prefix():
     names = [n for n, _ in match_commands("/lo")]
-    assert "loop" in names
+    assert "loop" not in names
 
 
 def test_match_commands_goal_prefix():
     names = [n for n, _ in match_commands("/go")]
-    assert "goal" in names
+    assert "goal" not in names

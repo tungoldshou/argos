@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -37,7 +36,6 @@ class McpTool:
 
 
 class _StdioServer:
-    """Internal documentation."""
 
     def __init__(self, name: str, cfg: dict[str, Any]) -> None:
         self.name = name
@@ -116,7 +114,6 @@ class _StdioServer:
             self._proc = None
 
     def _reader_loop(self) -> None:
-        """Internal documentation."""
         stdout = self._proc.stdout if self._proc is not None else None
         if stdout is None:
             self._rx.put(None)
@@ -166,7 +163,6 @@ class _StdioServer:
 
 
 def _flatten_content(result: dict[str, Any]) -> str:
-    """Internal documentation."""
     content = result.get("content")
     if not isinstance(content, list):
         return json.dumps(result, ensure_ascii=False)
@@ -185,7 +181,6 @@ def _flatten_content(result: dict[str, Any]) -> str:
 
 
 class McpManager:
-    """Internal documentation."""
 
     def __init__(self, config_path: Path | None = None) -> None:
         self._config_path = resolve_config_path(config_path)
@@ -194,7 +189,6 @@ class McpManager:
         self._lock = threading.Lock()
 
     def ensure_loaded(self) -> None:
-        """Internal documentation."""
         with self._lock:
             if self._loaded:
                 return
@@ -208,7 +202,6 @@ class McpManager:
                 self._servers[name] = srv
 
     def start_warming(self) -> None:
-        """Internal documentation."""
         if self._loaded:
             return
         threading.Thread(target=self.ensure_loaded, name="argos-mcp-warm", daemon=True).start()
@@ -222,19 +215,16 @@ class McpManager:
             return {}
 
     def _collect_tools(self) -> list[McpTool]:
-        """Internal documentation."""
         out: list[McpTool] = []
         for srv in self._servers.values():
             out.extend(srv.tools)
         return out
 
     def list_tools(self) -> list[McpTool]:
-        """Internal documentation."""
         self.ensure_loaded()
         return self._collect_tools()
 
     def tools_summary(self) -> str:
-        """Internal documentation."""
         tools = self._collect_tools()
         if not tools:
             return ""

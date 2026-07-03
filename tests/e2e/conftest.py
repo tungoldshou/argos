@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -27,7 +26,6 @@ def store(tmp_path, monkeypatch):
 
 @pytest.fixture
 def in_project(tmp_path, monkeypatch):
-    """Internal documentation."""
     proj = tmp_path / "proj"
     proj.mkdir()
     monkeypatch.setenv("ARGOS_WORKSPACE", str(proj))
@@ -38,7 +36,6 @@ def in_project(tmp_path, monkeypatch):
 
 @pytest.fixture
 def build_real_loop(store, in_project, requires_sandbox):
-    """Internal documentation."""
     created: list = []
 
     def _make(scripts, *, verify_cmd=None, level=ApprovalLevel.AUTO, max_rounds=3, gated=False):
@@ -74,5 +71,4 @@ def build_real_loop(store, in_project, requires_sandbox):
 
 
 async def drain(loop, goal: str, session_id: str) -> list:
-    """Internal documentation."""
     return [ev async for ev in loop.run(goal, session_id)]

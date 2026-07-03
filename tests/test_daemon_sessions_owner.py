@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -66,7 +65,6 @@ async def test_remove_observer_does_not_promote():
 
 @pytest.mark.asyncio
 async def test_promote_only_observer():
-    """Internal documentation."""
     reg = SessionRegistry()
     a = await reg.create()
     b = await reg.create()
@@ -118,7 +116,6 @@ async def test_owner_can_create_run(owner_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_observer_cannot_create_run(owner_server, tmp_path: Path):
-    """Internal documentation."""
     srv, _, _ = owner_server
     sid1 = await _create_session(srv.socket_path)   # owner
     sid2 = await _create_session(srv.socket_path)   # observer
@@ -174,7 +171,6 @@ async def test_observer_cannot_cancel(owner_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_observer_cannot_focus(owner_server, tmp_path: Path):
-    """Internal documentation."""
     srv, _, reg = owner_server
     sid1 = await _create_session(srv.socket_path)
     sid2 = await _create_session(srv.socket_path)
@@ -188,7 +184,6 @@ async def test_observer_cannot_focus(owner_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_observer_can_read(owner_server, tmp_path: Path):
-    """Internal documentation."""
     srv, _, _ = owner_server
     sid1 = await _create_session(srv.socket_path)
     sid2 = await _create_session(srv.socket_path)
@@ -203,7 +198,6 @@ async def test_observer_can_read(owner_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_owner_delete_session_promotes_observer(owner_server, tmp_path: Path):
-    """Internal documentation."""
     srv, _, _ = owner_server
     sid1 = await _create_session(srv.socket_path)
     sid2 = await _create_session(srv.socket_path)
@@ -216,7 +210,6 @@ async def test_owner_delete_session_promotes_observer(owner_server, tmp_path: Pa
 
 @pytest.mark.asyncio
 async def test_owner_lifecycle_sid_first_call_works(owner_server, tmp_path: Path):
-    """Internal documentation."""
     srv, _, _ = owner_server
     sid = await _create_session(srv.socket_path)
     rec = srv.sessions.get(sid)

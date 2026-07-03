@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 _IDENTITY = r"""<identity>
@@ -162,7 +161,6 @@ RECALL_BUDGET_MEMORY_CHARS = 1500
 
 
 def format_untrusted(skill_bodies: list[str], memory_lines: list[str]) -> str:
-    """Internal documentation."""
     parts = [UNTRUSTED_OPEN]
     s_budget = 0
     for body in skill_bodies:
@@ -189,24 +187,20 @@ def format_untrusted(skill_bodies: list[str], memory_lines: list[str]) -> str:
 
 
 def trust_passed_after_compaction(*, compacted: bool, reverified: bool) -> bool:
-    """Internal documentation."""
     return (not compacted) or reverified
 
 
 def compose_system(safe_system: str, untrusted: str = "") -> str:
-    """Internal documentation."""
     if not untrusted:
         return safe_system
     return safe_system + "\n\n" + untrusted
 
 
 def compose_system_pair(safe_system: str, untrusted: str) -> tuple[str, str]:
-    """Internal documentation."""
     return (safe_system, untrusted)
 
 
 class StreamingContextScrubber:
-    """Internal documentation."""
 
     def __init__(self) -> None:
         self._inside = False
@@ -214,7 +208,6 @@ class StreamingContextScrubber:
 
     @staticmethod
     def _longest_suffix_prefix(text: str, marker: str) -> int:
-        """Internal documentation."""
         max_len = min(len(text), len(marker) - 1)
         for n in range(max_len, 0, -1):
             if marker.startswith(text[-n:]):
@@ -253,7 +246,6 @@ class StreamingContextScrubber:
 
     @staticmethod
     def _decor_prefix_len(marker: str) -> int:
-        """Internal documentation."""
         n = 0
         for ch in marker:
             if ch in ("─", " "):
@@ -263,7 +255,6 @@ class StreamingContextScrubber:
         return n
 
     def flush(self) -> str:
-        """Internal documentation."""
         if self._inside:
             self._buf = ""
             return ""

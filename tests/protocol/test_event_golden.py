@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -13,7 +12,6 @@ import argos.protocol.events as PE
 
 
 def _round(ev):
-    """Internal documentation."""
     blob = PE.serialize_event(ev)
     back = PE.deserialize_event(blob)
     assert type(back) is type(ev), f"类型不匹配:{type(back)} != {type(ev)}"
@@ -21,7 +19,6 @@ def _round(ev):
 
 
 def _golden(ev, expected_data: dict) -> None:
-    """Internal documentation."""
     obj = json.loads(PE.serialize_event(ev))
     assert obj["kind"] == expected_data.get("_kind") or obj["kind"] == type(ev).kind
     actual_data = obj["data"]
@@ -114,7 +111,6 @@ def test_cost_update_golden():
 
 
 def test_cost_update_none_cost_usd_golden():
-    """Internal documentation."""
     ev = PE.CostUpdate(tokens_in=5, tokens_out=3, cost_usd=None, elapsed_s=1.0)
     obj = json.loads(PE.serialize_event(ev))
     assert obj["data"]["cost_usd"] is None
@@ -246,7 +242,6 @@ def test_workflow_done_golden():
 
 
 def test_workflow_done_notes_tuple_roundtrip():
-    """Internal documentation."""
     ev = PE.WorkflowDone(name="x", synthesis="y", notes=("a", "b"))
     back = _round(ev)
     assert isinstance(back.notes, tuple)
@@ -294,7 +289,6 @@ def test_memory_recall_golden():
 
 
 def test_memory_recall_empty_golden():
-    """Internal documentation."""
     ev = PE.MemoryRecallEvent()
     obj = json.loads(PE.serialize_event(ev))
     assert obj["data"]["hits"] == []
@@ -482,7 +476,6 @@ def test_verify_verdict_unverifiable_roundtrip():
 # ── ProactiveSuggestionEvent ─────────────────────────────────────────────────
 
 def test_proactive_suggestion_golden():
-    """Internal documentation."""
     ev = PE.ProactiveSuggestionEvent(
         suggestion_id="abc123def456",
         order_id="order001",
@@ -503,7 +496,6 @@ def test_proactive_suggestion_golden():
 
 
 def test_proactive_suggestion_roundtrip():
-    """Internal documentation."""
     ev = PE.ProactiveSuggestionEvent(
         suggestion_id="deadbeef0011",
         order_id="ord_x",
@@ -520,7 +512,6 @@ def test_proactive_suggestion_roundtrip():
 
 
 def test_proactive_suggestion_action_dream_roundtrip():
-    """Internal documentation."""
     ev = PE.ProactiveSuggestionEvent(
         suggestion_id="deadbeef0022",
         order_id="ord_dream",
@@ -536,7 +527,6 @@ def test_proactive_suggestion_action_dream_roundtrip():
 
 
 def test_proactive_suggestion_requires_confirmation_always_true():
-    """Internal documentation."""
     ev = PE.ProactiveSuggestionEvent(
         suggestion_id="s1",
         order_id="o1",
@@ -552,13 +542,11 @@ def test_proactive_suggestion_requires_confirmation_always_true():
 # ── DreamProgressEvent ────────────────────────────────────────────────────────
 
 def test_dream_progress_golden():
-    """Internal documentation."""
     ev = PE.DreamProgressEvent(stage="cluster", detail="3 units", ts=1700000000.0)
     _golden(ev, {"stage": "cluster", "detail": "3 units", "ts": 1700000000.0})
 
 
 def test_dream_progress_roundtrip():
-    """Internal documentation."""
     ev = PE.DreamProgressEvent(stage="scan", detail="", ts=1700001234.5)
     back = _round(ev)
     assert back.stage == "scan" and back.detail == "" and back.ts == 1700001234.5
@@ -567,7 +555,6 @@ def test_dream_progress_roundtrip():
 # ── DreamReportEvent ──────────────────────────────────────────────────────────
 
 def test_dream_report_golden():
-    """Internal documentation."""
     ev = PE.DreamReportEvent(
         units_total=3, promoted=1, rejected=1, skipped=1,
         memory_merged=2, memory_archived=5,
@@ -581,7 +568,6 @@ def test_dream_report_golden():
 
 
 def test_dream_report_roundtrip():
-    """Internal documentation."""
     ev = PE.DreamReportEvent(
         units_total=0, promoted=0, rejected=0, skipped=0,
         memory_merged=0, memory_archived=0, report_path="", ts=0.0,
@@ -592,7 +578,6 @@ def test_dream_report_roundtrip():
 
 
 def test_all_kinds_in_kind_to_class():
-    """Internal documentation."""
     all_kinds = set(PE.EventKind.__args__)
     registered = set(PE._KIND_TO_CLASS.keys())
     missing = all_kinds - registered
@@ -601,7 +586,6 @@ def test_all_kinds_in_kind_to_class():
 
 
 def _scan_for_tui_events_import(dirpath: str, *, skip_dirs: tuple[str, ...] = ()) -> list[tuple[str, int, str]]:
-    """Internal documentation."""
     hits: list[tuple[str, int, str]] = []
     for root, _dirs, files in os.walk(dirpath):
         if "__pycache__" in root:
@@ -627,7 +611,6 @@ def _scan_for_tui_events_import(dirpath: str, *, skip_dirs: tuple[str, ...] = ()
 
 
 def test_production_no_tui_events_import():
-    """Internal documentation."""
     root = Path(argos.__file__).parent
     hits = _scan_for_tui_events_import(str(root), skip_dirs=("tui",))
     assert not hits, (
@@ -637,7 +620,6 @@ def test_production_no_tui_events_import():
 
 
 def test_protocol_no_tui_events_import():
-    """Internal documentation."""
     root = Path(argos.__file__).parent / "protocol"
     hits = _scan_for_tui_events_import(str(root))
     assert not hits, (

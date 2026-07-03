@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 
 from argos.core.observability import (

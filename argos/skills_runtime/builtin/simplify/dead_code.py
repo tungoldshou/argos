@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -36,13 +35,11 @@ def _is_source_file(p: Path) -> bool:
 
 
 def _has_docstring(text: str, name_offset: int) -> bool:
-    """Internal documentation."""
     after = text[name_offset: name_offset + 200]
     return bool(_DOCSTRING_RE.match(after))
 
 
 def _function_body_length(text: str, name_offset: int) -> int:
-    """Internal documentation."""
     indent_match = re.match(r"^(\s*)", text[name_offset:])
     if not indent_match:
         return 0
@@ -65,7 +62,6 @@ def _function_body_length(text: str, name_offset: int) -> int:
 
 
 def _in_all(all_content: str, name: str) -> bool:
-    """Internal documentation."""
     return bool(re.search(rf"\b{re.escape(name)}\b", all_content))
 
 

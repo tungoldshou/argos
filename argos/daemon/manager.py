@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -19,7 +18,6 @@ log = logging.getLogger(__name__)
 
 
 def _prune_snapshot(run_id: str, snapshot_root: "Path") -> None:
-    """Internal documentation."""
     candidate = snapshot_root / f"run-{run_id}.tar"
     if candidate.exists():
         try:
@@ -30,7 +28,6 @@ def _prune_snapshot(run_id: str, snapshot_root: "Path") -> None:
 
 
 class RunManager:
-    """Internal documentation."""
 
     def __init__(self, *, runs_dir: Path, index_path: Path):
         self._store = RunStore(runs_dir)
@@ -57,7 +54,6 @@ class RunManager:
         return self._store.runs_dir
 
     def close(self) -> None:
-        """Internal documentation."""
         self._index.save()
 
     # ── Run lifecycle ────────────────────────────────────────────────
@@ -72,7 +68,6 @@ class RunManager:
         session_id: str = "",
         max_steps: int = 200,
     ) -> str:
-        """Internal documentation."""
         if not goal or not isinstance(goal, str):
             raise ValueError("goal must be non-empty string")
         run_id = uuid.uuid4().hex[:12]
@@ -117,7 +112,6 @@ class RunManager:
         return out
 
     def events_count(self, run_id: str) -> int:
-        """Internal documentation."""
         n = 0
         for _ in self._store.replay(run_id):
             n += 1
@@ -125,7 +119,6 @@ class RunManager:
 
 
     async def request_pause(self, run_id: str) -> bool:
-        """Internal documentation."""
         async with self._lock:
             current = read_state(run_id, self._index)
             if current != "running":
@@ -157,7 +150,6 @@ class RunManager:
         return self._cancel_requested.get(run_id, False)
 
     async def request_suspend(self, run_id: str) -> bool:
-        """Internal documentation."""
         async with self._lock:
             current = read_state(run_id, self._index)
             if current != "running":
@@ -172,7 +164,6 @@ class RunManager:
         return self._pause_requested.setdefault(run_id, asyncio.Event())
 
     def mark_running(self, run_id: str) -> None:
-        """Internal documentation."""
         transition(
             current=None, target="running", index=self._index, run_id=run_id,
             store=self._store, reason="start",
@@ -180,7 +171,6 @@ class RunManager:
         self._index.save()
 
     def mark_paused(self, run_id: str, last_step: int, msg_count: int, last_event_seq: int) -> None:
-        """Internal documentation."""
         self._store.append(run_id, RunCheckpoint(
             ts=time.time(), last_step=last_step, messages_count=msg_count,
             last_event_seq=last_event_seq,
@@ -225,7 +215,6 @@ class RunManager:
         self._index.save()
 
     def mark_suspended(self, run_id: str, last_step: int, msg_count: int, last_event_seq: int) -> None:
-        """Internal documentation."""
         self._store.append(run_id, RunCheckpoint(
             ts=time.time(), last_step=last_step, messages_count=msg_count,
             last_event_seq=last_event_seq,
@@ -239,7 +228,6 @@ class RunManager:
     # ── SSE fan-out ──────────────────────────────────────────────────
 
     def subscribe(self, run_id: str, maxsize: int = 1024) -> asyncio.Queue:
-        """Internal documentation."""
         q: asyncio.Queue = asyncio.Queue(maxsize=maxsize)
         self._subscribers.setdefault(run_id, set()).add(q)
         return q
@@ -252,7 +240,6 @@ class RunManager:
                 self._subscribers.pop(run_id, None)
 
     async def fanout(self, run_id: str, event: dict[str, Any]) -> None:
-        """Internal documentation."""
         subs = self._subscribers.get(run_id, set())
         for q in list(subs):
             try:
@@ -262,7 +249,6 @@ class RunManager:
 
 
     def recover(self) -> dict[str, str]:
-        """Internal documentation."""
         from argos.core.snapshot import SNAPSHOT_ROOT
 
         recovered: dict[str, str] = {}

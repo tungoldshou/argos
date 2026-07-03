@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -11,7 +10,6 @@ UndoState = Literal["available", "done", "impossible"]
 
 @dataclass(frozen=True, slots=True)
 class LedgerEntry:
-    """Internal documentation."""
     ts: float
     run_id: str
     seq: int
@@ -24,7 +22,6 @@ class LedgerEntry:
     undo_state: UndoState
 
     def to_dict(self) -> dict:
-        """Internal documentation."""
         return {
             "ts": self.ts,
             "run_id": self.run_id,
@@ -40,7 +37,6 @@ class LedgerEntry:
 
     @staticmethod
     def from_dict(d: dict) -> "LedgerEntry":
-        """Internal documentation."""
         return LedgerEntry(
             ts=float(d["ts"]),
             run_id=str(d["run_id"]),
@@ -55,6 +51,5 @@ class LedgerEntry:
         )
 
     def with_undo_state(self, state: UndoState) -> "LedgerEntry":
-        """Internal documentation."""
         import dataclasses
         return dataclasses.replace(self, undo_state=state)

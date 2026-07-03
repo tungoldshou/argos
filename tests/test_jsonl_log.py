@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -14,7 +13,6 @@ from argos import jsonl_log
 
 
 def test_append_line_writes_dict_as_jsonl(tmp_path):
-    """Internal documentation."""
     p = tmp_path / "log.jsonl"
     jsonl_log.append_line(p, {"a": 1, "b": "中文"})
     text = p.read_text(encoding="utf-8")
@@ -24,7 +22,6 @@ def test_append_line_writes_dict_as_jsonl(tmp_path):
 
 
 def test_append_line_writes_str_directly(tmp_path):
-    """Internal documentation."""
     p = tmp_path / "log.jsonl"
     jsonl_log.append_line(p, '{"a": 1}')
     text = p.read_text(encoding="utf-8")
@@ -34,14 +31,12 @@ def test_append_line_writes_str_directly(tmp_path):
 
 
 def test_append_line_creates_parent_dir(tmp_path):
-    """Internal documentation."""
     p = tmp_path / "deep" / "nested" / "log.jsonl"
     jsonl_log.append_line(p, {"x": 1})
     assert p.exists()
 
 
 def test_append_line_multiple_calls_sequential(tmp_path):
-    """Internal documentation."""
     p = tmp_path / "log.jsonl"
     for i in range(5):
         jsonl_log.append_line(p, {"i": i})
@@ -51,7 +46,6 @@ def test_append_line_multiple_calls_sequential(tmp_path):
 
 
 def test_append_line_io_error_swallows_with_warning(tmp_path, caplog):
-    """Internal documentation."""
     p = tmp_path / "not_a_file"
     p.mkdir()
     target = p / "log.jsonl"
@@ -64,7 +58,6 @@ def test_append_line_io_error_swallows_with_warning(tmp_path, caplog):
 
 
 def test_append_line_appends_not_overwrites(tmp_path):
-    """Internal documentation."""
     p = tmp_path / "log.jsonl"
     jsonl_log.append_line(p, {"first": 1})
     jsonl_log.append_line(p, {"second": 2})
@@ -74,7 +67,6 @@ def test_append_line_appends_not_overwrites(tmp_path):
 
 
 def test_cleanup_files_by_name_date_removes_old_files(tmp_path):
-    """Internal documentation."""
     (tmp_path / "approvals-2020-01-01.jsonl").write_text("old")
     (tmp_path / "approvals-2024-12-30.jsonl").write_text("recent")
     now = datetime(2025, 1, 15)
@@ -88,7 +80,6 @@ def test_cleanup_files_by_name_date_removes_old_files(tmp_path):
 
 
 def test_cleanup_files_by_name_date_keeps_recent(tmp_path):
-    """Internal documentation."""
     (tmp_path / "approvals-2025-01-10.jsonl").write_text("r")
     now = datetime(2025, 1, 15)
     removed = jsonl_log.cleanup_files_by_name_date(
@@ -100,7 +91,6 @@ def test_cleanup_files_by_name_date_keeps_recent(tmp_path):
 
 
 def test_cleanup_files_by_name_date_swallows_parse_errors(tmp_path, caplog):
-    """Internal documentation."""
     (tmp_path / "approvals-garbage.jsonl").write_text("x")
     (tmp_path / "approvals-2020-01-01.jsonl").write_text("old")
     now = datetime(2025, 1, 15)
@@ -114,7 +104,6 @@ def test_cleanup_files_by_name_date_swallows_parse_errors(tmp_path, caplog):
 
 
 def test_cleanup_files_by_name_date_missing_dir_is_noop():
-    """Internal documentation."""
     removed = jsonl_log.cleanup_files_by_name_date(
         Path("/nonexistent_dir_xyz"), "x-*.jsonl", prefix="x-",
         days=30, now=datetime.now(),

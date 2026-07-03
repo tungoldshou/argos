@@ -365,13 +365,11 @@ class TestStatusBarHints:
             f"StatusBar hint must mention Ctrl+V (贴图), got: {_HINTS!r}"
         )
 
-    def test_hints_include_space_voice(self) -> None:
+    def test_hints_do_not_advertise_space_voice(self) -> None:
         from argos.tui.widgets.status_bar import _hints
         _HINTS = _hints()
-        assert (
-            ("Space" in _HINTS or "space" in _HINTS.lower() or "空格" in _HINTS)
-            and ("voice" in _HINTS.lower() or "语音" in _HINTS)
-        ), f"StatusBar hint must mention Space voice, got: {_HINTS!r}"
+        assert "Space voice" not in _HINTS
+        assert "空格语音" not in _HINTS
 
     def test_hints_do_not_claim_ctrl_c_quits_immediately(self) -> None:
         from argos.tui.widgets.status_bar import _hints
@@ -385,14 +383,12 @@ class TestStatusBarHints:
 class TestHelpShortcuts:
     """#21: /help shortcuts should match status bar discoverability."""
 
-    def test_help_shortcuts_include_space_voice(self) -> None:
+    def test_help_shortcuts_do_not_advertise_space_voice(self) -> None:
         from argos.i18n import t
 
         shortcuts = t("tui.help.shortcuts")
-        assert (
-            ("Space" in shortcuts or "space" in shortcuts.lower() or "空格" in shortcuts)
-            and ("voice" in shortcuts.lower() or "语音" in shortcuts)
-        ), f"/help shortcuts must mention Space voice, got: {shortcuts!r}"
+        assert "Space voice" not in shortcuts
+        assert "空格语音" not in shortcuts
 
 
 # ── #22 match_commands substring fallback ────────────────────────────────────
@@ -406,25 +402,22 @@ class TestMatchCommandsSubstring:
         assert "help" in names, "prefix match for '/hel' should find 'help'"
 
     def test_substring_fallback_finds_security_review(self) -> None:
-        """'/review' prefix-matches nothing, but 'security-review' contains 'review'."""
+        """Advanced commands stay hidden from the default slash menu."""
         results = match_commands("/review")
         names = [n for n, _ in results]
-        assert "security-review" in names, (
-            "substring fallback for '/review' must find 'security-review'"
-        )
+        assert "security-review" not in names
 
     def test_substring_fallback_for_simplify(self) -> None:
-        """'/mplif' prefix-matches nothing, but 'simplify' contains 'mplif'."""
+        """Advanced commands stay hidden from the default slash menu."""
         results = match_commands("/mplif")
         names = [n for n, _ in results]
-        assert "simplify" in names, (
-            "substring fallback for '/mplif' must find 'simplify'"
-        )
+        assert "simplify" not in names
 
     def test_empty_prefix_returns_all(self) -> None:
         results = match_commands("/")
-        assert len(results) == len(COMMAND_HELP), (
-            "match_commands('/') must return all commands"
+        from argos.tui.commands import DEFAULT_COMMAND_NAMES
+        assert len(results) == len(DEFAULT_COMMAND_NAMES), (
+            "match_commands('/') must return default commands only"
         )
 
     def test_non_slash_returns_empty(self) -> None:

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -19,7 +18,6 @@ import pytest
 
 
 def test_no_exit_plan_mode_direct_call_in_app() -> None:
-    """Internal documentation."""
     app_path = Path(__file__).parent.parent / "argos" / "tui" / "app.py"
     src = app_path.read_text("utf-8")
 
@@ -51,7 +49,6 @@ def test_no_exit_plan_mode_direct_call_in_app() -> None:
 
 @pytest.mark.asyncio
 async def test_daemon_unreachable_inline_fallback(monkeypatch) -> None:
-    """Internal documentation."""
     from argos.tui.app import ArgosApp
 
     app = ArgosApp()
@@ -118,7 +115,6 @@ async def test_daemon_socket_path_honors_env_local_config(tmp_path, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_daemon_socket_path_defaults_to_argos_config_dir(tmp_path, monkeypatch) -> None:
-    """Internal documentation."""
     from unittest.mock import AsyncMock, patch
     from argos import config as C
     from argos.tui.app import ArgosApp
@@ -154,7 +150,6 @@ async def test_daemon_socket_path_defaults_to_argos_config_dir(tmp_path, monkeyp
 
 @pytest.mark.asyncio
 async def test_daemon_available_sets_argosd_mode(monkeypatch) -> None:
-    """Internal documentation."""
     from argos.tui.app import ArgosApp
     from argos.daemon.client import DaemonClient
 
@@ -221,7 +216,6 @@ async def test_daemon_session_create_failure_reports_error_lane(monkeypatch) -> 
 
 @pytest.mark.asyncio
 async def test_daemon_event_source_reconnect_with_since() -> None:
-    """Internal documentation."""
     from argos.tui.daemon_source import DaemonEventSource
     from argos.protocol.events import TokenDelta
 
@@ -259,13 +253,11 @@ async def test_daemon_event_source_reconnect_with_since() -> None:
 
 
 class _GateHolder:
-    """Internal documentation."""
     def __init__(self) -> None:
         self.gate: Any = None
 
 
 class _FakeApprovalLoop:
-    """Internal documentation."""
 
     def __init__(self, *, gate_holder: _GateHolder, call_id: str) -> None:
         self._holder = gate_holder
@@ -301,7 +293,6 @@ class _FakeApprovalLoopFactory:
 
 
 class _GateSetterWorker:
-    """Internal documentation."""
 
     def __init__(
         self,
@@ -343,7 +334,6 @@ class _GateSetterWorker:
 
 @pytest.mark.asyncio
 async def test_protocol_approval_circuit_inline(tmp_path: Path) -> None:
-    """Internal documentation."""
     from argos.approval import ApprovalGate, ApprovalLevel
     from argos.daemon.manager import RunManager
     from argos.daemon.server import DaemonHTTPServer
@@ -455,7 +445,6 @@ async def test_protocol_approval_circuit_inline(tmp_path: Path) -> None:
 
 
 def test_status_bar_kernel_mode_label() -> None:
-    """Internal documentation."""
     from argos.tui.widgets.status_bar import StatusBar
 
     bar = StatusBar()

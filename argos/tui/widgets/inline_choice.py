@@ -1,5 +1,4 @@
 # argos/tui/widgets/inline_choice.py
-"""Internal documentation."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -16,7 +15,6 @@ _WARNING_SIGN = "⚠︎"
 
 
 def format_approval_title(*, risk: str, trigger: str) -> str:
-    """Internal documentation."""
     base = t("widget.approval_title_base", risk=risk)
     if not trigger:
         return base
@@ -48,7 +46,6 @@ def format_approval_title(*, risk: str, trigger: str) -> str:
 
 
 class InlineChoice(Vertical):
-    """Internal documentation."""
 
     DEFAULT_CSS = """
     InlineChoice { height: auto; margin: 0 0 1 0; padding: 1 2; background: $raise; border-left: thick $unverif; }
@@ -110,7 +107,6 @@ class InlineChoice(Vertical):
     _COL_INK_DIM   = "#7E869C"
 
     def _options_text(self) -> Text:
-        """Internal documentation."""
         txt = Text()
         for i, (_, label) in enumerate(self._options):
             cur = i == self._cursor
@@ -186,7 +182,6 @@ class InlineChoice(Vertical):
             self._finish(self._pending_value, event.value.strip())
 
     def _finish(self, value: str, feedback: str) -> None:
-        """Internal documentation."""
         if self._decided:
             return
         self._decided = True

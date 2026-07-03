@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -11,12 +10,10 @@ from argos.permissions.config import PermissionsConfig
 
 
 def _auto_read_file_config() -> PermissionsConfig:
-    """Internal documentation."""
     return PermissionsConfig(version=1, tools={"read_file": "auto"})
 
 
 def test_green_action_does_not_trigger_approval():
-    """Internal documentation."""
     config = _auto_read_file_config()
     policy = AutonomyPolicy()
     zone, reason = classify(
@@ -32,7 +29,6 @@ def test_green_action_does_not_trigger_approval():
 
 
 def test_hard_rule_shell_rm_rf_root_classifies_red():
-    """Internal documentation."""
     config = PermissionsConfig.empty()
     policy = AutonomyPolicy()
     zone, reason = classify(
@@ -48,7 +44,6 @@ def test_hard_rule_shell_rm_rf_root_classifies_red():
 
 
 def test_hard_rule_path_write_classifies_red():
-    """Internal documentation."""
     config = PermissionsConfig.empty()
     policy = AutonomyPolicy()
     zone, reason = classify(
@@ -64,7 +59,6 @@ def test_hard_rule_path_write_classifies_red():
 
 
 def test_irreversible_action_classifies_red():
-    """Internal documentation."""
     config = _auto_read_file_config()
     policy = AutonomyPolicy()
     zone, _ = classify(
@@ -79,7 +73,6 @@ def test_irreversible_action_classifies_red():
 
 
 def test_unverifiable_completion_upgrades_to_red():
-    """Internal documentation."""
     policy = AutonomyPolicy()
     zone, reason = on_unverifiable_completion(
         verify_cmd="pytest -q",
@@ -91,7 +84,6 @@ def test_unverifiable_completion_upgrades_to_red():
 
 
 def test_unverifiable_with_no_verify_cmd_does_not_upgrade():
-    """Internal documentation."""
     policy = AutonomyPolicy()
     result = on_unverifiable_completion(
         verify_cmd=None,
@@ -102,7 +94,6 @@ def test_unverifiable_with_no_verify_cmd_does_not_upgrade():
 
 
 def test_passed_verdict_is_green():
-    """Internal documentation."""
     config = _auto_read_file_config()
     policy = AutonomyPolicy()
     zone, _ = classify(
@@ -117,7 +108,6 @@ def test_passed_verdict_is_green():
 
 
 def test_failed_verdict_classifies_red():
-    """Internal documentation."""
     config = _auto_read_file_config()
     policy = AutonomyPolicy()
     zone, _ = classify(
@@ -132,7 +122,6 @@ def test_failed_verdict_classifies_red():
 
 
 def test_preauth_downgrades_soft_ask_to_green():
-    """Internal documentation."""
     from argos.permissions.config import RuleEntry
     config = PermissionsConfig(
         version=1,
@@ -151,7 +140,6 @@ def test_preauth_downgrades_soft_ask_to_green():
 
 
 def test_preauth_does_NOT_downgrade_hard_rule():
-    """Internal documentation."""
     config = PermissionsConfig.empty()
     policy = AutonomyPolicy(preauth={"hard_rule:rm_rf_root": True})
     zone, _ = classify(
@@ -166,7 +154,6 @@ def test_preauth_does_NOT_downgrade_hard_rule():
 
 
 def test_preauth_does_NOT_downgrade_irreversible():
-    """Internal documentation."""
     config = _auto_read_file_config()
     policy = AutonomyPolicy(preauth={"tool_level:read_file=auto": True})
     zone, _ = classify(
@@ -181,7 +168,6 @@ def test_preauth_does_NOT_downgrade_irreversible():
 
 
 def test_slow_action_classifies_yellow():
-    """Internal documentation."""
     config = _auto_read_file_config()
     policy = AutonomyPolicy()
     zone, reason = classify(
@@ -198,7 +184,6 @@ def test_slow_action_classifies_yellow():
 
 
 def test_vague_goal_classifies_yellow():
-    """Internal documentation."""
     config = _auto_read_file_config()
     policy = AutonomyPolicy()
     zone, _ = classify(
@@ -218,7 +203,6 @@ def test_zone_enum_members():
 
 
 def test_policy_defaults_are_safe():
-    """Internal documentation."""
     p = AutonomyPolicy()
     assert p.clarification_required is True
     assert p.preauth == {} or len(p.preauth) == 0

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -13,13 +12,11 @@ from argos.permissions.config import (
 
 
 def test_permissions_config_empty_has_empty_preauth():
-    """Internal documentation."""
     c = PermissionsConfig.empty()
     assert c.preauth == {}
 
 
 def test_load_preauth_from_json(tmp_path: Path):
-    """Internal documentation."""
     p = tmp_path / "permissions.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -36,7 +33,6 @@ def test_load_preauth_from_json(tmp_path: Path):
 
 
 def test_load_preauth_invalid_value_skipped(tmp_path: Path):
-    """Internal documentation."""
     p = tmp_path / "permissions.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -51,7 +47,6 @@ def test_load_preauth_invalid_value_skipped(tmp_path: Path):
 
 
 def test_load_preauth_missing_defaults_to_empty(tmp_path: Path):
-    """Internal documentation."""
     p = tmp_path / "permissions.json"
     p.write_text(json.dumps({"version": 1}), encoding="utf-8")
     cfg = load(p)
@@ -59,7 +54,6 @@ def test_load_preauth_missing_defaults_to_empty(tmp_path: Path):
 
 
 def test_autonomy_policy_from_permissions_config():
-    """Internal documentation."""
     cfg = PermissionsConfig(
         version=1,
         preauth={"soft_ask:git push": True},
@@ -71,7 +65,6 @@ def test_autonomy_policy_from_permissions_config():
 
 
 def test_autonomy_policy_from_none_config():
-    """Internal documentation."""
     p = AutonomyPolicy.from_permissions_config(None)
     assert p.preauth == {}
     assert p.clarification_required is True

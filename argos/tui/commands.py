@@ -1,22 +1,28 @@
-"""Internal documentation."""
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from argos.i18n import t
 
-_COMMAND_KEYS: list[str] = [
-    "help", "setup", "voice", "tools", "skills", "mcp", "model", "status", "cost",
-    "resume", "clear", "yolo", "trust", "undo", "ledger", "journal", "retry",
-    "plan", "hooks", "lsp", "permissions", "runs", "orders", "confirm", "dismiss",
-    "dream", "verify", "security-review", "simplify", "eval", "routing", "context",
-    "loop", "goal", "schedule", "watch",
-]
+DEFAULT_COMMAND_NAMES: tuple[str, ...] = (
+    "help", "setup", "model", "status", "trust", "tools", "plan", "undo",
+    "retry", "context", "permissions", "verify", "runs", "clear", "resume",
+    "cost",
+)
+
+ADVANCED_COMMAND_NAMES: tuple[str, ...] = (
+    "voice", "skills", "mcp", "hooks", "lsp", "orders", "confirm", "dismiss",
+    "dream", "security-review", "simplify", "eval", "routing", "loop", "goal",
+    "schedule", "watch", "ledger", "journal", "yolo",
+)
+
+_COMMAND_KEYS: tuple[str, ...] = DEFAULT_COMMAND_NAMES + ADVANCED_COMMAND_NAMES
 
 
-def _build_command_help() -> dict[str, str]:
-    """Internal documentation."""
-    return {name: t(f"cmd.{name}") for name in _COMMAND_KEYS}
+def _build_command_help(names: Iterable[str] | None = None) -> dict[str, str]:
+    keys = _COMMAND_KEYS if names is None else names
+    return {name: t(f"cmd.{name}") for name in keys}
 
 
 COMMAND_HELP: dict[str, str] = _build_command_help()
@@ -27,7 +33,6 @@ _HIDDEN_KNOWN: frozenset[str] = frozenset({"remember", "forget", "memory"})
 
 
 def match_commands(text: str) -> list[tuple[str, str]]:
-    """Internal documentation."""
     s = text.lstrip()
     if not s.startswith("/"):
         return []
@@ -35,7 +40,7 @@ def match_commands(text: str) -> list[tuple[str, str]]:
     if " " in body:
         return []
     pref = body.lower()
-    command_help = _build_command_help()
+    command_help = _build_command_help(DEFAULT_COMMAND_NAMES)
     prefix_matches = [(n, d) for n, d in command_help.items() if n.startswith(pref)]
     if prefix_matches or not pref:
         return prefix_matches
@@ -50,7 +55,6 @@ class SlashCommand:
 
 
 def parse_slash(text: str) -> SlashCommand | None:
-    """Internal documentation."""
     s = text.strip()
     if not s.startswith("/"):
         return None

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import json
 import os
 from pathlib import Path
@@ -18,7 +17,6 @@ def _write_config(dir_: Path, *, models: dict, routing: dict | None = None) -> N
 
 
 def test_load_routing_no_file_returns_builtin_default(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.chdir(tmp_path)
     from argos.routing.config import _DEFAULT_BY_CATEGORY
     cfg = load_routing(tmp_path)
@@ -30,7 +28,6 @@ def test_load_routing_no_file_returns_builtin_default(tmp_path, monkeypatch):
 
 
 def test_load_routing_no_routing_section_returns_builtin_default(tmp_path):
-    """Internal documentation."""
     _write_config(tmp_path, models={"default": {"protocol": "anthropic", "base_url": "x", "model": "m"}})
     from argos.routing.config import _DEFAULT_BY_CATEGORY
     cfg = load_routing(tmp_path)
@@ -215,12 +212,10 @@ def test_routing_config_is_active_default_false():
     RoutingConfig(default="strong"),
 ])
 def test_routing_config_is_active_when_configured(cfg):
-    """Internal documentation."""
     assert cfg.is_active() is True
 
 
 def test_load_routing_active_by_default(tmp_path):
-    """Internal documentation."""
     cfg = load_routing(tmp_path)
     assert cfg.is_active() is True, "内置默认映射出厂激活,is_active() 应为 True"
     from argos.routing.resolver import resolve

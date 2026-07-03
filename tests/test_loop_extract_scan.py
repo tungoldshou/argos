@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.core.loop import extract_plan_todos, extract_workflow_spec

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -21,7 +20,6 @@ def test_homebrew_tap_directory_exists():
 
 
 def test_homebrew_tap_readme_marks_channel_unpublished():
-    """Internal documentation."""
     txt = (TAP_DIR / "README.md").read_text()
     assert "not published yet" in txt.lower()
     assert "draft" in txt.lower()
@@ -29,7 +27,6 @@ def test_homebrew_tap_readme_marks_channel_unpublished():
 
 
 def test_homebrew_formula_argos_contains_required_fields():
-    """Internal documentation."""
     assert FORMULA.exists(), f"缺 {FORMULA}"
     txt = FORMULA.read_text()
     for field in ("desc ", "homepage ", "url ", "sha256 ", 'license "MIT"',
@@ -38,7 +35,6 @@ def test_homebrew_formula_argos_contains_required_fields():
 
 
 def test_homebrew_cask_argos_contains_app_directive():
-    """Internal documentation."""
     assert CASK.exists(), f"缺 {CASK}"
     txt = CASK.read_text()
     assert 'app "Argos.app"' in txt, "Cask 缺 app \"Argos.app\""
@@ -46,7 +42,6 @@ def test_homebrew_cask_argos_contains_app_directive():
 
 
 def test_legacy_homebrew_cask_is_marked_template_only():
-    """Internal documentation."""
     txt = LEGACY_CASK.read_text()
     assert "template-only" in txt.lower()
     assert "not published" in txt.lower()
@@ -55,7 +50,6 @@ def test_legacy_homebrew_cask_is_marked_template_only():
 # --- T7 part 2:bump workflow ---
 
 def test_bump_homebrew_workflow_triggers_on_release():
-    """Internal documentation."""
     if not BUMP_YML.exists():
         pytest.skip(f"缺 {BUMP_YML} — plan T7 任务")
     txt = BUMP_YML.read_text()
@@ -66,20 +60,17 @@ def test_bump_homebrew_workflow_triggers_on_release():
 
 
 def test_bump_homebrew_workflow_uses_secrets_for_token():
-    """Internal documentation."""
     txt = BUMP_YML.read_text()
     assert "HOMEBREW_TAP_TOKEN" in txt, "bump 缺 HOMEBREW_TAP_TOKEN 引用"
 
 
 def test_bump_homebrew_workflow_sets_token_gate_env():
-    """Internal documentation."""
     txt = BUMP_YML.read_text()
     assert "HAS_TOKEN:" in txt
     assert "secrets.HOMEBREW_TAP_TOKEN" in txt
 
 
 def test_bump_homebrew_workflow_dispatch_requires_tag_input():
-    """Internal documentation."""
     txt = BUMP_YML.read_text()
     assert "workflow_dispatch:" in txt
     assert "tag:" in txt
@@ -88,7 +79,6 @@ def test_bump_homebrew_workflow_dispatch_requires_tag_input():
 
 
 def test_bump_homebrew_workflow_fails_when_release_digests_missing():
-    """Internal documentation."""
     txt = BUMP_YML.read_text()
     assert "[ -n \"${SHA256_APPIMAGE:-}\" ]" in txt
     assert "[ -n \"${SHA256_ARM64:-}\" ]" in txt
@@ -98,14 +88,12 @@ def test_bump_homebrew_workflow_fails_when_release_digests_missing():
 
 
 def test_bump_homebrew_workflow_replaces_existing_sha_values():
-    """Internal documentation."""
     txt = BUMP_YML.read_text()
     assert 's/sha256 \\".*\\"/sha256' in txt
     assert 's/sha256 \\"PLACEHOLDER_FROM_BUMP\\"' not in txt
 
 
 def test_bump_winget_manifest_workflow_exists():
-    """Internal documentation."""
     if not BUMP_WINGET_YML.exists():
         pytest.skip(f"缺 {BUMP_WINGET_YML} — plan T7 任务")
     txt = BUMP_WINGET_YML.read_text()

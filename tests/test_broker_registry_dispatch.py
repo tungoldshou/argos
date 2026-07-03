@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -33,7 +32,6 @@ def _make_broker(
 
 @pytest.mark.asyncio
 async def test_registry_none_unknown_action_rejected():
-    """Internal documentation."""
     br = _make_broker(registry=None)
     res = await br.request("totally_unknown", {})
     assert "未知" in res or "不支持" in res
@@ -41,7 +39,6 @@ async def test_registry_none_unknown_action_rejected():
 
 @pytest.mark.asyncio
 async def test_registry_none_web_search_passes_egress():
-    """Internal documentation."""
     import argos.web as _w
 
     br = _make_broker(registry=None)
@@ -54,7 +51,6 @@ async def test_registry_none_web_search_passes_egress():
 
 
 def test_registry_risk_table_overrides_builtin():
-    """Internal documentation."""
     reg = CapabilityRegistry()
     cap = Capability(name="web_search", kind="tool", risk="high", dispatch=None)
     reg.register(cap)
@@ -64,7 +60,6 @@ def test_registry_risk_table_overrides_builtin():
 
 
 def test_execute_calls_dispatch_when_set():
-    """Internal documentation."""
     called_with: dict = {}
 
     def my_dispatch(args: dict, run_ctx) -> str:
@@ -89,7 +84,6 @@ def test_execute_calls_dispatch_when_set():
 
 
 def test_execute_fallthrough_when_dispatch_none(monkeypatch):
-    """Internal documentation."""
     captured: dict = {}
 
     def fake_run(command, *, workspace=None, allow_network=False):
@@ -112,7 +106,6 @@ def test_execute_fallthrough_when_dispatch_none(monkeypatch):
 
 
 def test_execute_fallthrough_when_not_in_registry(monkeypatch):
-    """Internal documentation."""
     captured: dict = {}
 
     def fake_run(command, *, workspace=None, allow_network=False):
@@ -135,7 +128,6 @@ def test_execute_fallthrough_when_not_in_registry(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_lsp_action_allowed_via_registry(monkeypatch):
-    """Internal documentation."""
     reg = CapabilityRegistry()
     egress = EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set())
     register_builtins(reg, egress=egress)
@@ -161,7 +153,6 @@ async def test_lsp_action_allowed_via_registry(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_lsp_action_rejected_without_registry():
-    """Internal documentation."""
     br = _make_broker(registry=None)
     res = await br.request("lsp_definition", {"file": "a.py", "line": 1, "col": 1})
     assert "未知" in res or "不支持" in res
@@ -170,7 +161,6 @@ async def test_lsp_action_rejected_without_registry():
 # ── 7. EgressPolicy.add_hosts ─────────────────────────────────────────────
 
 def test_egress_add_hosts_allows_new_host():
-    """Internal documentation."""
     egress = EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set())
     assert not egress.allowed("new.example.com")
     egress.add_hosts({"new.example.com"})
@@ -178,7 +168,6 @@ def test_egress_add_hosts_allows_new_host():
 
 
 def test_egress_add_hosts_idempotent():
-    """Internal documentation."""
     egress = EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set())
     egress.add_hosts({"a.example.com"})
     egress.add_hosts({"a.example.com"})
@@ -186,21 +175,18 @@ def test_egress_add_hosts_idempotent():
 
 
 def test_egress_add_hosts_fail_closed_other_hosts():
-    """Internal documentation."""
     egress = EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set())
     egress.add_hosts({"allowed.com"})
     assert not egress.allowed("blocked.com")
 
 
 def test_egress_add_hosts_with_url():
-    """Internal documentation."""
     egress = EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set())
     egress.add_hosts({"https://api.example.com/v1"})
     assert egress.allowed("api.example.com")
 
 
 def test_egress_add_hosts_ignores_empty():
-    """Internal documentation."""
     egress = EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set())
     egress.add_hosts({"", "  "})
     assert not egress.allowed("")
@@ -208,7 +194,6 @@ def test_egress_add_hosts_ignores_empty():
 
 
 def test_register_builtins_updates_egress_for_search():
-    """Internal documentation."""
     reg = CapabilityRegistry()
     egress = EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set())
     assert not egress.allowed("duckduckgo.com")
@@ -218,7 +203,6 @@ def test_register_builtins_updates_egress_for_search():
 
 
 def test_register_builtins_lsp_actions_in_registry():
-    """Internal documentation."""
     reg = CapabilityRegistry()
     register_builtins(reg)
     lsp_actions = [
@@ -234,7 +218,6 @@ def test_register_builtins_lsp_actions_in_registry():
 
 
 def test_register_builtins_idempotent():
-    """Internal documentation."""
     reg = CapabilityRegistry()
     register_builtins(reg)
     register_builtins(reg)
@@ -245,7 +228,6 @@ def test_register_builtins_idempotent():
 
 
 def test_app_factory_components_has_registry(monkeypatch, tmp_path):
-    """Internal documentation."""
     import argos.config as _cfg
     from argos.core.models import ModelTier
     fake_tier = ModelTier(
@@ -268,7 +250,6 @@ def test_app_factory_components_has_registry(monkeypatch, tmp_path):
 
 
 def test_build_run_stack_shares_registry(monkeypatch, tmp_path):
-    """Internal documentation."""
     import argos.config as _cfg
     from argos.core.models import ModelTier
     fake_tier = ModelTier(
@@ -293,7 +274,6 @@ def test_build_run_stack_shares_registry(monkeypatch, tmp_path):
 
 
 def test_dispatch_capability_blocked_via_direct_execute():
-    """Internal documentation."""
     def my_dispatch(args: dict, run_ctx) -> str:
         return "dispatched!"
 
@@ -311,7 +291,6 @@ def test_dispatch_capability_blocked_via_direct_execute():
 
 @pytest.mark.asyncio
 async def test_dispatch_capability_allowed_via_request():
-    """Internal documentation."""
     def my_dispatch(args: dict, run_ctx) -> str:
         return f"dispatched:{args.get('x')}"
 
@@ -329,7 +308,6 @@ async def test_dispatch_capability_allowed_via_request():
 
 
 def test_build_run_stack_egress_includes_registry_hosts(monkeypatch, tmp_path):
-    """Internal documentation."""
     import argos.config as _cfg
     from argos.core.models import ModelTier
     fake_tier = ModelTier(
@@ -366,7 +344,6 @@ def test_build_run_stack_egress_includes_registry_hosts(monkeypatch, tmp_path):
 
 
 def test_build_run_stack_egress_excludes_wildcard(monkeypatch, tmp_path):
-    """Internal documentation."""
     import argos.config as _cfg
     from argos.core.models import ModelTier
     fake_tier = ModelTier(
@@ -401,10 +378,8 @@ def test_build_run_stack_egress_excludes_wildcard(monkeypatch, tmp_path):
 
 
 class TestEgressManifestDriven:
-    """Internal documentation."""
 
     def test_no_registry_returns_builtin_set(self):
-        """Internal documentation."""
         from argos.sandbox.broker import _NETWORK_ACTIONS
         broker = _make_broker(registry=None)
         derived = broker._derive_network_actions()
@@ -413,7 +388,6 @@ class TestEgressManifestDriven:
         )
 
     def test_builtin_registry_derives_superset_of_original(self):
-        """Internal documentation."""
         from argos.sandbox.broker import _NETWORK_ACTIONS
         reg = CapabilityRegistry()
         register_builtins(reg)
@@ -426,7 +400,6 @@ class TestEgressManifestDriven:
         )
 
     def test_custom_egress_cap_enters_derived_set(self):
-        """Internal documentation."""
         reg = CapabilityRegistry()
         reg.register(Capability(
             name="my_api_call",
@@ -441,7 +414,6 @@ class TestEgressManifestDriven:
         )
 
     def test_no_egress_cap_not_in_derived_set(self):
-        """Internal documentation."""
         from argos.sandbox.broker import _NETWORK_ACTIONS
         reg = CapabilityRegistry()
         reg.register(Capability(
@@ -456,7 +428,6 @@ class TestEgressManifestDriven:
         assert set(_NETWORK_ACTIONS).issubset(derived)
 
     def test_wildcard_egress_enters_derived_set(self):
-        """Internal documentation."""
         reg = CapabilityRegistry()
         reg.register(Capability(
             name="dynamic_web_call",

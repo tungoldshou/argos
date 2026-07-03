@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -28,7 +27,6 @@ PASS_ERROR = "error"
 
 @dataclass(frozen=True, slots=True)
 class EvalResult:
-    """Internal documentation."""
     task_id: str
     run_id: str
     model_tier: str
@@ -97,7 +95,6 @@ class EvalResult:
 
 @dataclass
 class LoopOutcome:
-    """Internal documentation."""
     verdict_status: str           # passed/failed/unverifiable
     verify_detail: str = ""
     tampered: tuple[str, ...] = field(default_factory=tuple)
@@ -108,7 +105,6 @@ class LoopOutcome:
 
 
 class WorktreeError_(Exception):
-    """Internal documentation."""
     pass
 
 
@@ -116,7 +112,6 @@ LoopFactory = Callable[[str], Any]
 
 
 class EvalRunner:
-    """Internal documentation."""
 
     def __init__(
         self,
@@ -149,7 +144,6 @@ class EvalRunner:
         return self._budget_cost_usd
 
     def run(self, task: EvalTask, *, model_tier: str) -> EvalResult:
-        """Internal documentation."""
         run_id = uuid.uuid4().hex[:12]
         started = time.time()
         wt_path = ""
@@ -237,7 +231,6 @@ class EvalRunner:
         )
 
     def _drive(self, loop: Any, task: EvalTask, wt_path: str) -> LoopOutcome:
-        """Internal documentation."""
         if hasattr(loop, "run_sync"):
             # ponytail: thread timer for sync wall-clock timeout; asyncio.wait_for
             # won't help here since _drive is sync. Upgrade to async when real
@@ -437,7 +430,6 @@ class EvalRunner:
         )
 
     def cleanup_worktree(self, run_id: str) -> None:
-        """Internal documentation."""
         try:
             self._worktree.cleanup(run_id)
         except Exception as e:  # noqa: BLE001

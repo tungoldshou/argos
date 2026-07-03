@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import threading
 
 import pytest
@@ -37,11 +36,9 @@ def test_concurrent_writes_all_persist(tmp_path):
 
 
 def test_checkpoint_triggers_every_50_writes(tmp_path):
-    """Internal documentation."""
     checkpoint_hits: list[int] = []
 
     class TrackingStore(ArgosStore):
-        """Internal documentation."""
         def _write(self, sql: str, params: tuple = ()):
             before = self._writes
             cur = super()._write(sql, params)

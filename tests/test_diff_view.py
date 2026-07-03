@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 from textual.app import App, ComposeResult
 
@@ -9,10 +8,8 @@ _UNIFIED = "@@ -15 +15 @@\n-    range(0, len(xs)-n, n)\n+    range(0, len(xs), n
 
 
 class _H(App):
-    """Internal documentation."""
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
-        """Internal documentation."""
         defaults = super().get_theme_variable_defaults()
         if ARGOS_NIGHT.variables:
             defaults.update(ARGOS_NIGHT.variables)
@@ -30,7 +27,6 @@ class _H(App):
 
 
 def test_public_attrs_preserved():
-    """Internal documentation."""
     dv = DiffView(path="auth.py", added=3, removed=1, unified=_UNIFIED)
     assert dv.path == "auth.py"
     assert dv.added == 3
@@ -41,7 +37,6 @@ def test_public_attrs_preserved():
 
 
 def test_border_title_contains_path_no_glyph_prefix():
-    """Internal documentation."""
     dv = DiffView(path="auth.py", added=3, removed=1, unified=_UNIFIED)
     title = str(dv.border_title)
     assert "auth.py" in title
@@ -50,7 +45,6 @@ def test_border_title_contains_path_no_glyph_prefix():
 
 
 def test_border_subtitle_uses_unicode_minus():
-    """Internal documentation."""
     dv = DiffView(path="auth.py", added=3, removed=1, unified=_UNIFIED)
     sub = str(dv.border_subtitle)
     assert "+3" in sub
@@ -59,7 +53,6 @@ def test_border_subtitle_uses_unicode_minus():
 
 
 def test_border_subtitle_values():
-    """Internal documentation."""
     dv = DiffView(path="x.py", added=5, removed=2, unified=_UNIFIED)
     sub = str(dv.border_subtitle)
     assert "5" in sub
@@ -68,7 +61,6 @@ def test_border_subtitle_values():
 
 @pytest.mark.asyncio
 async def test_border_left_only_no_round():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -81,7 +73,6 @@ async def test_border_left_only_no_round():
 
 @pytest.mark.asyncio
 async def test_background_is_raise_token():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -91,7 +82,6 @@ async def test_background_is_raise_token():
 
 @pytest.mark.asyncio
 async def test_diff_path_in_title():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -19,7 +18,6 @@ TRIVIAL_VERIFY_BINS: frozenset[str] = frozenset({
 
 @dataclass(frozen=True, slots=True)
 class Verdict:
-    """Internal documentation."""
     status: VerdictStatus
     detail: str
     verify_cmd: str | None
@@ -34,7 +32,6 @@ class Verdict:
 
     @staticmethod
     def passed_self(detail: str, verify_cmd: str | None, attempts: int) -> "Verdict":
-        """Internal documentation."""
         return Verdict(
             status="passed", detail=detail, verify_cmd=verify_cmd,
             attempts=attempts, self_verified=True,
@@ -42,7 +39,6 @@ class Verdict:
 
     @property
     def is_user_verified(self) -> bool:
-        """Internal documentation."""
         return self.status == "passed" and not self.self_verified
 
     @staticmethod
@@ -58,7 +54,6 @@ class Verdict:
 
     @staticmethod
     def no_check(detail: str, attempts: int) -> "Verdict":
-        """Internal documentation."""
         return Verdict(
             status="unverifiable", detail=detail, verify_cmd=None,
             attempts=attempts, tampered=[], no_test=True,

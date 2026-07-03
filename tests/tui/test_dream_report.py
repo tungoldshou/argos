@@ -1,5 +1,4 @@
 # tests/tui/test_dream_report.py
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -24,13 +23,11 @@ _COL_INK_BRIGHT = "#ECEEF5"  # $ink-bright
 
 
 def test_module_importable():
-    """Internal documentation."""
     mod = importlib.import_module("argos.tui.widgets.dream_report")
     assert hasattr(mod, "DreamReportCard")
 
 
 def test_class_is_widget():
-    """Internal documentation."""
     from argos.tui.widgets.dream_report import DreamReportCard
     from textual.widget import Widget
     assert issubclass(DreamReportCard, Widget)
@@ -38,7 +35,6 @@ def test_class_is_widget():
 
 
 class _Host(App):
-    """Internal documentation."""
     CSS = ""
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
@@ -52,7 +48,6 @@ class _Host(App):
 
 @pytest.mark.asyncio
 async def test_card_mounts_without_crash():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         from argos.tui.widgets.dream_report import DreamReportCard
@@ -61,7 +56,6 @@ async def test_card_mounts_without_crash():
 
 
 def _all_text(widgets) -> str:
-    """Internal documentation."""
     parts = []
     for w in widgets:
         c = w.content
@@ -71,7 +65,6 @@ def _all_text(widgets) -> str:
 
 @pytest.mark.asyncio
 async def test_echo_line_present():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -82,7 +75,6 @@ async def test_echo_line_present():
 
 @pytest.mark.asyncio
 async def test_append_stage_scan():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         from argos.tui.widgets.dream_report import DreamReportCard
@@ -97,7 +89,6 @@ async def test_append_stage_scan():
 
 @pytest.mark.asyncio
 async def test_append_stage_cluster():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         from argos.tui.widgets.dream_report import DreamReportCard
@@ -111,7 +102,6 @@ async def test_append_stage_cluster():
 
 @pytest.mark.asyncio
 async def test_append_stage_synthesize():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         from argos.tui.widgets.dream_report import DreamReportCard
@@ -125,7 +115,6 @@ async def test_append_stage_synthesize():
 
 @pytest.mark.asyncio
 async def test_append_stage_promote():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         from argos.tui.widgets.dream_report import DreamReportCard
@@ -139,7 +128,6 @@ async def test_append_stage_promote():
 
 @pytest.mark.asyncio
 async def test_append_stage_memory():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         from argos.tui.widgets.dream_report import DreamReportCard
@@ -153,7 +141,6 @@ async def test_append_stage_memory():
 
 @pytest.mark.asyncio
 async def test_append_stage_done_is_only_pass():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         from argos.tui.widgets.dream_report import DreamReportCard
@@ -168,7 +155,6 @@ async def test_append_stage_done_is_only_pass():
 
 
 def test_stage_glyph_map_complete():
-    """Internal documentation."""
     from argos.tui.widgets.dream_report import _STAGE_GLYPH
     assert _STAGE_GLYPH["scan"]      == "◔"
     assert _STAGE_GLYPH["cluster"]   == "◉"
@@ -179,7 +165,6 @@ def test_stage_glyph_map_complete():
 
 
 def test_stage_glyph_fallback_exists():
-    """Internal documentation."""
     from argos.tui.widgets.dream_report import _STAGE_GLYPH
     # get with default — implementation should handle unknown gracefully
     glyph = _STAGE_GLYPH.get("unknown_stage", "·")
@@ -189,7 +174,6 @@ def test_stage_glyph_fallback_exists():
 
 @pytest.mark.asyncio
 async def test_show_report_counts_rendered():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         from argos.tui.widgets.dream_report import DreamReportCard
@@ -214,7 +198,6 @@ async def test_show_report_counts_rendered():
 
 @pytest.mark.asyncio
 async def test_show_report_row_b_three_color_contract():
-    """Internal documentation."""
     from rich.text import Text
     from argos.tui.widgets.dream_report import DreamReportCard
 
@@ -244,7 +227,6 @@ async def test_show_report_row_b_three_color_contract():
 
 
 def test_row_b_zero_counts():
-    """Internal documentation."""
     from rich.text import Text
     from argos.tui.widgets.dream_report import DreamReportCard
     card = DreamReportCard()
@@ -265,7 +247,6 @@ def test_row_b_zero_counts():
 
 @pytest.mark.asyncio
 async def test_row_d_absent_when_promoted_zero():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         from argos.tui.widgets.dream_report import DreamReportCard
@@ -287,7 +268,6 @@ async def test_row_d_absent_when_promoted_zero():
 
 @pytest.mark.asyncio
 async def test_row_d_absent_without_promoted_name():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         from argos.tui.widgets.dream_report import DreamReportCard
@@ -310,7 +290,6 @@ async def test_row_d_absent_without_promoted_name():
 
 @pytest.mark.asyncio
 async def test_caption_always_present():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -323,7 +302,6 @@ async def test_caption_always_present():
 
 @pytest.mark.asyncio
 async def test_markup_safety_in_stage_detail():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         from argos.tui.widgets.dream_report import DreamReportCard
@@ -337,7 +315,6 @@ async def test_markup_safety_in_stage_detail():
 
 @pytest.mark.asyncio
 async def test_markup_safety_in_report_path():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         from argos.tui.widgets.dream_report import DreamReportCard
@@ -356,7 +333,6 @@ async def test_markup_safety_in_report_path():
 
 
 def test_default_css_no_raw_hex():
-    """Internal documentation."""
     from argos.tui.widgets.dream_report import DreamReportCard
     css = DreamReportCard.DEFAULT_CSS
     hex_colors = re.findall(r"#[0-9A-Fa-f]{3,8}", css)
@@ -367,7 +343,6 @@ def test_default_css_no_raw_hex():
 
 
 def test_append_stage_signature():
-    """Internal documentation."""
     from argos.tui.widgets.dream_report import DreamReportCard
     import inspect
     sig = inspect.signature(DreamReportCard.append_stage)
@@ -377,7 +352,6 @@ def test_append_stage_signature():
 
 
 def test_show_report_signature():
-    """Internal documentation."""
     from argos.tui.widgets.dream_report import DreamReportCard
     import inspect
     sig = inspect.signature(DreamReportCard.show_report)
@@ -386,7 +360,6 @@ def test_show_report_signature():
 
 
 def test_build_row_b_method_exists():
-    """Internal documentation."""
     from argos.tui.widgets.dream_report import DreamReportCard
     assert hasattr(DreamReportCard, "_build_row_b")
     assert callable(DreamReportCard._build_row_b)
@@ -394,7 +367,6 @@ def test_build_row_b_method_exists():
 
 
 def test_show_report_accepts_dream_report_dataclass():
-    """Internal documentation."""
     from argos.learning.dream import DreamReport
     from argos.tui.widgets.dream_report import DreamReportCard
     report = DreamReport(
@@ -412,7 +384,6 @@ def test_show_report_accepts_dream_report_dataclass():
 
 @pytest.mark.asyncio
 async def test_report_box_title_row_a():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         from argos.tui.widgets.dream_report import DreamReportCard
@@ -435,7 +406,6 @@ async def test_report_box_title_row_a():
 
 @pytest.mark.asyncio
 async def test_report_row_c_memory_counts():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         from argos.tui.widgets.dream_report import DreamReportCard
@@ -461,7 +431,6 @@ async def test_report_row_c_memory_counts():
 
 @pytest.mark.asyncio
 async def test_footer_present():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -473,7 +442,6 @@ async def test_footer_present():
 
 @pytest.mark.asyncio
 async def test_done_stage_idempotent():
-    """Internal documentation."""
     app = _Host()
     async with app.run_test() as pilot:
         from argos.tui.widgets.dream_report import DreamReportCard

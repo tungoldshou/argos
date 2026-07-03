@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -16,7 +15,6 @@ except ImportError:
 
 
 def add_subparser(sub) -> None:
-    """Internal documentation."""
     p = sub.add_parser(
         "exec",
         help=t("cli.exec.help"),
@@ -46,7 +44,6 @@ def _read_prompt(args) -> str:
 
 
 def run_exec(args) -> int:
-    """Internal documentation."""
     prompt = _read_prompt(args)
     if not prompt:
         print(t("cli.exec.missing_prompt"), file=sys.stderr)
@@ -79,7 +76,6 @@ def run_exec(args) -> int:
     quiet = bool(getattr(args, "quiet", False))
 
     def _progress(msg: str) -> None:
-        """Internal documentation."""
         if not quiet:
             print(msg, file=sys.stderr, flush=True)
 

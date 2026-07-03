@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.verify import gui_probe
@@ -13,7 +12,6 @@ class _Shot:
 
 
 class _Exec:
-    """Internal documentation."""
     def __init__(self, shot):
         self._shot = shot
     def dispatch(self, ca):

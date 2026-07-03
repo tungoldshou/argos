@@ -43,7 +43,6 @@ async def test_border_idle_then_runs_then_resets():
 
 @pytest.mark.asyncio
 async def test_terminal_verdict_glow_survives_report_phase():
-    """Internal documentation."""
     from argos.core.verify_gate import Verdict
     from argos.tui.events import PhaseChange, VerifyVerdict
 
@@ -61,7 +60,6 @@ async def test_terminal_verdict_glow_survives_report_phase():
 
 @pytest.mark.asyncio
 async def test_passed_verdict_glow_does_not_lock():
-    """Internal documentation."""
     from argos.core.verify_gate import Verdict
     from argos.tui.events import PhaseChange, VerifyVerdict
 

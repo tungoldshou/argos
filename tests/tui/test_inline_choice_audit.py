@@ -1,5 +1,4 @@
 # tests/tui/test_inline_choice_audit.py
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -17,7 +16,6 @@ def _noop(value: str, feedback: str) -> None:
 
 
 def _make_widget(risk: str = "medium", **kwargs) -> InlineChoice:
-    """Internal documentation."""
     defaults = dict(
         title="◓ 审批请求 [medium]",
         options=[("once", "单次允许"), ("deny", "拒绝")],
@@ -30,14 +28,12 @@ def _make_widget(risk: str = "medium", **kwargs) -> InlineChoice:
 
 
 def test_risk_plan_adds_risk_plan_class() -> None:
-    """Internal documentation."""
     w = _make_widget(risk="plan")
     assert w.has_class("risk-plan"), "risk='plan' 应添加 class 'risk-plan'"
     assert not w.has_class("risk-medium"), "risk='plan' 不应添加 'risk-medium'"
 
 
 def test_risk_plan_does_not_add_risk_medium() -> None:
-    """Internal documentation."""
     w = _make_widget(risk="plan")
     classes = set(w.classes)
     assert "risk-medium" not in classes
@@ -46,7 +42,6 @@ def test_risk_plan_does_not_add_risk_medium() -> None:
 
 
 def test_default_css_contains_risk_plan_border() -> None:
-    """Internal documentation."""
     css = InlineChoice.DEFAULT_CSS
     assert "risk-plan" in css, "DEFAULT_CSS 缺少 .risk-plan 选择器"
     assert "$plan" in css, "DEFAULT_CSS 缺少 $plan token 引用"
@@ -60,7 +55,6 @@ def test_default_css_contains_risk_plan_border() -> None:
 
 
 def test_default_css_contains_risk_plan_title_color() -> None:
-    """Internal documentation."""
     css = InlineChoice.DEFAULT_CSS
     assert re.search(r"risk-plan\b[^}]*#ic-title[^}]*color[^}]*\$plan", css, re.S) or\
            re.search(r"risk-plan.*?#ic-title", css, re.S),\
@@ -74,7 +68,6 @@ def test_default_css_contains_risk_plan_title_color() -> None:
 
 
 def test_default_css_contains_ic_summary_ink_faint() -> None:
-    """Internal documentation."""
     css = InlineChoice.DEFAULT_CSS
     assert "ic-summary" in css, "DEFAULT_CSS 缺少 .ic-summary 选择器"
     assert re.search(r"ic-summary[^}]*\$ink-faint", css, re.S),\
@@ -89,21 +82,18 @@ def test_default_css_contains_ic_summary_ink_faint() -> None:
     ("plan",   "risk-plan"),
 ])
 def test_risk_class_mapping(risk: str, expected_class: str) -> None:
-    """Internal documentation."""
     w = _make_widget(risk=risk)
     assert w.has_class(expected_class),\
         f"risk='{risk}' 应产生 CSS 类 '{expected_class}'"
 
 
 def test_risk_unknown_falls_to_medium() -> None:
-    """Internal documentation."""
     w = _make_widget(risk="unknown_value")
     assert w.has_class("risk-medium")
 
 
 
 def test_default_css_no_raw_hex() -> None:
-    """Internal documentation."""
     css = InlineChoice.DEFAULT_CSS
     hex_colors = re.findall(r'(?<![a-zA-Z])#[0-9A-Fa-f]{3,6}\b', css)
     assert not hex_colors,\
@@ -112,20 +102,17 @@ def test_default_css_no_raw_hex() -> None:
 
 
 def test_format_approval_title_blocked_glyph() -> None:
-    """Internal documentation."""
     title = format_approval_title(risk="medium", trigger="")
     assert title.startswith("◓"), f"标题应以 ◓ 开头,得到: {title!r}"
 
 
 def test_format_approval_title_secret_uses_warning_sign() -> None:
-    """Internal documentation."""
     title = format_approval_title(risk="high", trigger="secret:OPENAI_KEY")
     # ⚠︎ = U+26A0 + U+FE0E
     assert "⚠︎" in title, f"secret 命中必须含 ⚠︎(U+26A0+U+FE0E),得到: {title!r}"
 
 
 def test_finish_summary_uses_done_eye_glyph() -> None:
-    """Internal documentation."""
     calls: list[tuple[str, str]] = []
 
     def _capture(value: str, feedback: str) -> None:
@@ -147,7 +134,6 @@ def test_finish_summary_uses_done_eye_glyph() -> None:
 
 
 def test_finish_idempotent() -> None:
-    """Internal documentation."""
     count = [0]
 
     def _counter(v: str, fb: str) -> None:
@@ -164,7 +150,6 @@ def test_finish_idempotent() -> None:
 
 
 def test_options_text_cursor_glyph() -> None:
-    """Internal documentation."""
     w = _make_widget(options=[("once", "单次允许"), ("deny", "拒绝")])
     t = w._options_text()
     plain = t.plain
@@ -172,7 +157,6 @@ def test_options_text_cursor_glyph() -> None:
 
 
 def test_options_text_non_cursor_indent() -> None:
-    """Internal documentation."""
     w = _make_widget(options=[("once", "单次允许"), ("deny", "拒绝")])
     t = w._options_text()
     lines = t.plain.split("\n")
@@ -185,7 +169,6 @@ def test_options_text_non_cursor_indent() -> None:
 
 
 def test_options_text_returns_rich_text() -> None:
-    """Internal documentation."""
     w = _make_widget()
     result = w._options_text()
     assert isinstance(result, Text),\
@@ -194,7 +177,6 @@ def test_options_text_returns_rich_text() -> None:
 
 
 def test_color_constants_match_theme_tokens() -> None:
-    """Internal documentation."""
     from argos.tui.theme import ARGOS_NIGHT
     tokens = ARGOS_NIGHT.variables  # dict[str, str]
 
@@ -208,7 +190,6 @@ def test_color_constants_match_theme_tokens() -> None:
 
 
 def test_plan_token_in_css_matches_theme() -> None:
-    """Internal documentation."""
     from argos.tui.theme import ARGOS_NIGHT
     tokens = ARGOS_NIGHT.variables
     assert "plan" in tokens, "theme.py ARGOS_NIGHT.variables 缺少 'plan' key"
@@ -220,7 +201,6 @@ def test_plan_token_in_css_matches_theme() -> None:
 
 
 def test_options_text_no_blocked_glyph() -> None:
-    """Internal documentation."""
     w = _make_widget(options=[("once", "单次允许"), ("deny", "拒绝")])
     plain = w._options_text().plain
     assert "◓" not in plain,\

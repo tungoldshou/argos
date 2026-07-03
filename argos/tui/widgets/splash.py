@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from textual.reactive import reactive
@@ -35,7 +34,6 @@ _PLAN_PREFIX = "plan · "
 
 
 def _eye_for_state(*, live: bool, has_key: bool, _eye_stage: str) -> str:
-    """Internal documentation."""
     if not has_key:
         return "◌"
     return _EYE_STAGES.get(_eye_stage, "◌")
@@ -43,7 +41,6 @@ def _eye_for_state(*, live: bool, has_key: bool, _eye_stage: str) -> str:
 
 def _compose_text(*, model_label: str, live: bool, plan_mode: bool,
                    has_key: bool = True, eye_stage: str = "init") -> str:
-    """Internal documentation."""
     eye = _eye_for_state(live=live, has_key=has_key, _eye_stage=eye_stage)
 
     if not has_key:
@@ -63,7 +60,6 @@ def _compose_text(*, model_label: str, live: bool, plan_mode: bool,
 
 
 def _plan_prefix_str(plan_mode: bool) -> str:
-    """Internal documentation."""
     return _PLAN_PREFIX if plan_mode else ""
 
 
@@ -87,18 +83,15 @@ class StartupSplash(Static):
         super().__init__(self._text, markup=True)
 
     def advance_eye(self, stage: str) -> None:
-        """Internal documentation."""
         if not self._has_key:
             return
         self._eye_stage = stage
         self._refresh()
 
     def set_plan_mode(self, active: bool) -> None:
-        """Internal documentation."""
         self.plan_mode = bool(active)
 
     def set_bad_config(self, reason: str, *, source: str | None = None) -> None:
-        """Internal documentation."""
         self._bad_config = reason
         self._bad_config_source = source
         self._refresh()

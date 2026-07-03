@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -11,7 +10,6 @@ import pytest
 
 
 def test_command_help_includes_lsp():
-    """Internal documentation."""
     from argos.tui.commands import COMMAND_HELP
     assert "lsp" in COMMAND_HELP
     assert "reload" in COMMAND_HELP["lsp"]
@@ -21,7 +19,6 @@ def test_command_help_includes_lsp():
 
 @pytest.fixture
 def isolated_lsp_home(monkeypatch):
-    """Internal documentation."""
     tmp = tempfile.mkdtemp()
     monkeypatch.setenv("HOME", tmp)
     yield Path(tmp) / ".argos"
@@ -30,7 +27,6 @@ def isolated_lsp_home(monkeypatch):
 
 
 def test_lsp_reload_invalid_keeps_old(isolated_lsp_home, monkeypatch):
-    """Internal documentation."""
     from argos.lsp import _reset_config, get_config, reload_config, LspConfigError
     from argos.lsp import config as _lsp_config
     isolated_lsp_home.mkdir(parents=True, exist_ok=True)
@@ -53,7 +49,6 @@ def test_lsp_reload_invalid_keeps_old(isolated_lsp_home, monkeypatch):
 
 
 def test_bad_config_splash_banner_lsp_message():
-    """Internal documentation."""
     from argos.tui.widgets.splash import StartupSplash
     sp = StartupSplash(model_label="x", tier="default", live=True)
     sp.set_bad_config("LSP parse error: bad json at line 3")
@@ -66,7 +61,6 @@ def test_bad_config_splash_banner_lsp_message():
 
 
 def test_lsp_cmd_lists_servers(isolated_lsp_home, monkeypatch):
-    """Internal documentation."""
     from argos.lsp import _reset_config, reload_config
     from argos.lsp import config as _lsp_config
     isolated_lsp_home.mkdir(parents=True, exist_ok=True)
@@ -127,7 +121,6 @@ async def test_lsp_empty_mentions_configured_path(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_lsp_unknown_arg_prints_usage(isolated_lsp_home, monkeypatch):
-    """Internal documentation."""
     from argos.lsp import _reset_config
     from argos.lsp import config as _lsp_config
     from argos.tui.app import ArgosApp

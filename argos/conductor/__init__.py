@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from argos.conductor.orders import StandingOrder, OrderStore
 from argos.conductor.cronlite import next_due
 from argos.conductor.triggers import FileTriggerWatcher, FileTriggerFact

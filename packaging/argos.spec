@@ -1,5 +1,4 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""Internal documentation."""
 import sqlite_vec
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files, copy_metadata

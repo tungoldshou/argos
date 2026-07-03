@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -35,7 +34,6 @@ _ENV_FLAG = "ARGOS_COMPUTER_USE"
 
 @dataclass(frozen=True, slots=True)
 class ComputerActionResult:
-    """Internal documentation."""
     ok: bool
     detail: str
     artifact_path: str | None = None
@@ -44,13 +42,11 @@ class ComputerActionResult:
 
 
 def _is_access_denied(stderr: str, stdout: str) -> bool:
-    """Internal documentation."""
     combined = (stderr + stdout).lower()
     return any(m in combined for m in _ACCESS_DENIED_MARKERS)
 
 
 def _screen_capture_allowed() -> bool:
-    """Internal documentation."""
     if sys.platform != "darwin":
         return True
     try:
@@ -68,14 +64,12 @@ def detect_scale_factor(
     screenshot_width: int,
     logical_width: int,
 ) -> float:
-    """Internal documentation."""
     if logical_width <= 0:
         return 1.0
     return float(screenshot_width) / float(logical_width)
 
 
 def _png_width(path: str) -> int | None:
-    """Internal documentation."""
     try:
         with open(path, "rb") as f:
             head = f.read(24)
@@ -90,7 +84,6 @@ _SCALE_CACHE: dict[str, float] = {}
 
 
 def detect_display_scale() -> float:
-    """Internal documentation."""
     if "scale" in _SCALE_CACHE:
         return _SCALE_CACHE["scale"]
     scale = 1.0
@@ -125,18 +118,15 @@ def detect_display_scale() -> float:
 
 
 class ComputerExecutor:
-    """Internal documentation."""
 
     def __init__(self, *, timeout: int = _DEFAULT_TIMEOUT, scale_factor: float = 1.0,
                  auto_detect_scale: bool = False) -> None:
-        """Internal documentation."""
         self._timeout = timeout
         self._scale_factor = scale_factor
         self._auto_detect_scale = auto_detect_scale
         self._scale_resolved = False
 
     def _effective_scale(self) -> float:
-        """Internal documentation."""
         if (self._auto_detect_scale and not self._scale_resolved
                 and os.environ.get("ARGOS_COMPUTER_USE")):
             self._scale_factor = detect_display_scale()
@@ -145,7 +135,6 @@ class ComputerExecutor:
 
 
     def dispatch(self, action: "ComputerAction") -> ComputerActionResult:
-        """Internal documentation."""
         if os.environ.get(_ENV_FLAG, "") != "1":
             return ComputerActionResult(ok=False, detail=_t("perception.executor.disabled"))
 
@@ -182,7 +171,6 @@ class ComputerExecutor:
         timeout: int | None = None,
         input_text: str | None = None,
     ) -> tuple[int, str, str]:
-        """Internal documentation."""
         t = timeout if timeout is not None else self._timeout
         try:
             result = subprocess.run(
@@ -199,7 +187,6 @@ class ComputerExecutor:
             return -1, "", _t("perception.executor.cmd_not_found", cmd=cmd[0])
 
     def _screenshot(self) -> ComputerActionResult:
-        """Internal documentation."""
         if not _screen_capture_allowed():
             return ComputerActionResult(
                 ok=False,
@@ -243,7 +230,6 @@ class ComputerExecutor:
         )
 
     def _click(self, x: int | None, y: int | None, *, double: bool) -> ComputerActionResult:
-        """Internal documentation."""
         action_word = "double click" if double else "click"
         _scale = self._effective_scale()
         lx = round(x / _scale) if x is not None else x
@@ -270,7 +256,6 @@ class ComputerExecutor:
         )
 
     def _type_text(self, text: str) -> ComputerActionResult:
-        """Internal documentation."""
         escaped = text.replace("\\", "\\\\").replace('"', '\\"')
         script = (
             f'tell application "System Events"\n'
@@ -290,7 +275,6 @@ class ComputerExecutor:
         return ComputerActionResult(ok=True, detail=_t("perception.executor.type_text_ok", preview=preview))
 
     def _key(self, key_combo: str) -> ComputerActionResult:
-        """Internal documentation."""
         parts = [p.strip().lower() for p in key_combo.split("+")]
         main_key = parts[-1]
         modifiers = parts[:-1]
@@ -329,7 +313,6 @@ class ComputerExecutor:
         return ComputerActionResult(ok=True, detail=_t("perception.executor.key_ok", combo=key_combo))
 
     def _scroll(self, x: int | None, y: int | None, dy: int) -> ComputerActionResult:
-        """Internal documentation."""
         _scale = self._effective_scale()
         lx = round(x / _scale) if x is not None else x
         ly = round(y / _scale) if y is not None else y
@@ -350,7 +333,6 @@ class ComputerExecutor:
         return ComputerActionResult(ok=True, detail=_t("perception.executor.scroll_ok", lx=lx, ly=ly, dy=dy))
 
     def _open_app(self, app: str) -> ComputerActionResult:
-        """Internal documentation."""
         rc, _out, err = self._run(["open", "-a", app])
         if rc != 0:
             return ComputerActionResult(

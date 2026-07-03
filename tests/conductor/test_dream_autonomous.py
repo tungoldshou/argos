@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +21,6 @@ def _make_supervisor(
     *,
     dream_starter=None,
 ) -> tuple[ConductorSupervisor, list[dict]]:
-    """Internal documentation."""
     events: list[dict] = []
 
     async def _bcast(ev: dict) -> None:
@@ -65,7 +63,6 @@ def _run_suggestion(order_id: str = "ord-run") -> ProactiveSuggestion:
 
 @pytest.mark.asyncio
 async def test_dream_starter_called_directly_when_guards_pass(tmp_path: Path, monkeypatch):
-    """Internal documentation."""
     from argos.learning import candidates as cand_mod
 
     cand_root = tmp_path / "candidates"
@@ -111,7 +108,6 @@ async def test_dream_starter_called_directly_when_guards_pass(tmp_path: Path, mo
 
 @pytest.mark.asyncio
 async def test_no_material_dream_starter_not_called(tmp_path: Path, monkeypatch):
-    """Internal documentation."""
     from argos.learning import candidates as cand_mod
 
     cand_root = tmp_path / "empty_candidates"
@@ -135,7 +131,6 @@ async def test_no_material_dream_starter_not_called(tmp_path: Path, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_dream_starter_returns_false_not_in_pending(tmp_path: Path, monkeypatch):
-    """Internal documentation."""
     from argos.learning import candidates as cand_mod
 
     cand_root = tmp_path / "candidates"
@@ -169,7 +164,6 @@ async def test_dream_starter_returns_false_not_in_pending(tmp_path: Path, monkey
 
 @pytest.mark.asyncio
 async def test_dream_starter_exception_silent(tmp_path: Path, monkeypatch):
-    """Internal documentation."""
     from argos.learning import candidates as cand_mod
 
     cand_root = tmp_path / "candidates"
@@ -202,7 +196,6 @@ async def test_dream_starter_exception_silent(tmp_path: Path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_no_dream_starter_falls_back_to_pending(tmp_path: Path, monkeypatch):
-    """Internal documentation."""
     from argos.learning import candidates as cand_mod
 
     cand_root = tmp_path / "candidates"
@@ -239,7 +232,6 @@ async def test_no_dream_starter_falls_back_to_pending(tmp_path: Path, monkeypatc
 
 @pytest.mark.asyncio
 async def test_run_suggestion_always_goes_to_pending(tmp_path: Path):
-    """Internal documentation."""
     starter_calls: list = []
 
     async def _starter(s: ProactiveSuggestion) -> bool:

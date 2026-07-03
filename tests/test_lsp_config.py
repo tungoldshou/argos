@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -19,7 +18,6 @@ from argos.lsp import get_config, reload_config, _reset_config
 
 
 def test_lsp_server_config_frozen():
-    """Internal documentation."""
     s = LspServerConfig(
         command=("pyright-langserver", "--stdio"),
         filetypes=(".py", ".pyi"),
@@ -34,7 +32,6 @@ def test_lsp_server_config_frozen():
 
 
 def test_lsp_server_config_with_init_options():
-    """Internal documentation."""
     s = LspServerConfig(
         command=("rust-analyzer",),
         filetypes=(".rs",),
@@ -48,25 +45,21 @@ def test_lsp_server_config_with_init_options():
 
 
 def test_lsp_server_config_empty_command_raises():
-    """Internal documentation."""
     with pytest.raises(ValueError, match="command"):
         LspServerConfig(command=(), filetypes=(".py",))
 
 
 def test_lsp_server_config_empty_filetypes_raises():
-    """Internal documentation."""
     with pytest.raises(ValueError, match="filetypes"):
         LspServerConfig(command=("x",), filetypes=())
 
 
 def test_lsp_server_config_filetype_no_dot_raises():
-    """Internal documentation."""
     with pytest.raises(ValueError, match=r"\."):
         LspServerConfig(command=("x",), filetypes=("py",))
 
 
 def test_lsp_config_construction():
-    """Internal documentation."""
     s = LspServerConfig(command=("pyright-langserver", "--stdio"), filetypes=(".py",))
     cfg = LspConfig(version=1, servers={"python": s})
     assert cfg.version == 1
@@ -75,21 +68,18 @@ def test_lsp_config_construction():
 
 
 def test_lsp_config_server_name_special_chars_raises():
-    """Internal documentation."""
     s = LspServerConfig(command=("x",), filetypes=(".py",))
     with pytest.raises(ValueError, match="name"):
         LspConfig(version=1, servers={"py thon": s})
 
 
 def test_lsp_config_empty():
-    """Internal documentation."""
     cfg = LspConfig.empty()
     assert cfg.version == 1
     assert cfg.servers == {}
 
 
 def test_builtin_default_has_python_only():
-    """Internal documentation."""
     assert "python" in BUILTIN_DEFAULT_CONFIG.servers
     assert BUILTIN_DEFAULT_CONFIG.servers["python"].command == ("pyright-langserver", "--stdio")
     assert "rust" not in BUILTIN_DEFAULT_CONFIG.servers
@@ -97,7 +87,6 @@ def test_builtin_default_has_python_only():
 
 
 def test_lsp_config_error_is_exception():
-    """Internal documentation."""
     err = LspConfigError("bad json")
     assert isinstance(err, Exception)
     assert "bad json" in str(err)
@@ -120,7 +109,6 @@ def test_load_default_path_honors_argos_config_dir(tmp_path, monkeypatch):
 
 
 def test_load_missing_file_returns_builtin(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", tmp_path / "nope.json")
     cfg = load()
     assert "python" in cfg.servers
@@ -128,7 +116,6 @@ def test_load_missing_file_returns_builtin(tmp_path, monkeypatch):
 
 
 def test_load_valid_minimal(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -143,7 +130,6 @@ def test_load_valid_minimal(tmp_path, monkeypatch):
 
 
 def test_load_valid_multi_server(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -171,7 +157,6 @@ def test_load_valid_multi_server(tmp_path, monkeypatch):
 
 
 def test_load_invalid_json_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text("{not valid json")
     monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
@@ -180,7 +165,6 @@ def test_load_invalid_json_raises(tmp_path, monkeypatch):
 
 
 def test_load_missing_version_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({"servers": {}}))
     monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
@@ -189,7 +173,6 @@ def test_load_missing_version_raises(tmp_path, monkeypatch):
 
 
 def test_load_wrong_version_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({"version": 2, "servers": {}}))
     monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", p)
@@ -198,7 +181,6 @@ def test_load_wrong_version_raises(tmp_path, monkeypatch):
 
 
 def test_load_command_not_array_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -210,7 +192,6 @@ def test_load_command_not_array_raises(tmp_path, monkeypatch):
 
 
 def test_load_filetypes_empty_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -222,7 +203,6 @@ def test_load_filetypes_empty_raises(tmp_path, monkeypatch):
 
 
 def test_load_server_name_with_space_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -234,7 +214,6 @@ def test_load_server_name_with_space_raises(tmp_path, monkeypatch):
 
 
 def test_load_unreadable_file_treated_as_missing(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({"version": 1, "servers": {}}))
     p.chmod(0o000)
@@ -247,7 +226,6 @@ def test_load_unreadable_file_treated_as_missing(tmp_path, monkeypatch):
 
 
 def test_reload_replaces_singleton(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({
         "version": 1,
@@ -269,7 +247,6 @@ def test_reload_replaces_singleton(tmp_path, monkeypatch):
 
 
 def test_reload_invalid_keeps_old(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "lsp.json"
     p.write_text(json.dumps({
         "version": 1,

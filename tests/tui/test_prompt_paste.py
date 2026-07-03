@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from argos.tui.widgets.prompt import PromptArea
 from argos.input.attachments import ImageAttachment
 
@@ -50,7 +49,6 @@ def test_expand_collects_file_path(tmp_path):
 
 
 def test_expand_skips_bad_image_path(tmp_path):
-    """Internal documentation."""
     pa = _fresh()
     p = tmp_path / "notes.png"
     p.write_text("not an image")
@@ -76,7 +74,6 @@ from argos.tui.theme import ARGOS_NIGHT
 
 
 class _ThemeHost(App):
-    """Internal documentation."""
     def get_theme_variable_defaults(self) -> dict[str, str]:
         return ARGOS_NIGHT.variables
 
@@ -107,7 +104,7 @@ async def test_on_paste_short_text_inlines():
 
 
 @pytest.mark.asyncio
-async def test_empty_space_submits_voice_command():
+async def test_empty_space_stays_in_prompt():
     captured = []
 
     class _H(_ThemeHost):
@@ -120,9 +117,8 @@ async def test_empty_space_submits_voice_command():
         pa.focus()
         await pilot.press("space")
         await pilot.pause()
-        assert len(captured) == 1
-        assert captured[0].text == "/voice"
-        assert pa.text == ""
+        assert captured == []
+        assert pa.text == " "
 
 
 @pytest.mark.asyncio

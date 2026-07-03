@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -12,7 +11,6 @@ from argos.tui.widgets.verdict_badge import VerdictBadge
 
 
 class _Host(App):
-    """Internal documentation."""
 
     def __init__(self, widget) -> None:
         super().__init__()

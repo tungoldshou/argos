@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import asyncio
 import pytest
 
@@ -27,7 +26,6 @@ async def test_request_approval_blocks_then_resolves():
 
 @pytest.mark.asyncio
 async def test_always_persists_pattern_allow_rule(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.permissions.config as pcfg
     pj = tmp_path / "permissions.json"
     monkeypatch.setattr(pcfg, "CONFIG_PATH", pj)
@@ -60,9 +58,58 @@ async def test_always_persists_pattern_allow_rule(tmp_path, monkeypatch):
                     gate_level="confirm", config=cfg2, risk="medium").decision == "deny"
 
 
+def test_persistent_allow_rule_scopes_supported_actions(tmp_path):
+    from argos.approval import derive_persistent_allow_rule
+    from argos.permissions.config import PermissionsConfig, RuleEntry
+    from argos.permissions.evaluator import evaluate
+
+    file_path = "tmp/a.txt"
+    other_path = "tmp/b.txt"
+    cases = [
+        ("write_file", {"path": file_path}, {"path": file_path}, {"path": other_path}),
+        ("edit_file", {"path": file_path}, {"path": file_path}, {"path": other_path}),
+        ("browser_navigate", {"url": "https://example.com/a"}, {"url": "https://example.com/b"}, {"url": "https://other.example/a"}),
+        ("web_extract", {"url": "https://example.com/a"}, {"url": "https://example.com/b"}, {"url": "https://other.example/a"}),
+        ("mcp_call", {"server": "s", "tool": "t"}, {"server": "s", "tool": "t"}, {"server": "s", "tool": "other"}),
+    ]
+    for action, original_args, allowed_args, denied_args in cases:
+        rule = derive_persistent_allow_rule(action, original_args)
+        assert rule is not None
+        cfg = PermissionsConfig(allow=[RuleEntry(tool=rule[0], matcher=rule[1])])
+        assert evaluate(action, allowed_args, gate_level="confirm", config=cfg).decision == "approve"
+        assert evaluate(action, denied_args, gate_level="confirm", config=cfg).decision == "ask"
+
+
+def test_persistent_allow_rule_rejects_unscoped_actions():
+    from argos.approval import derive_persistent_allow_rule
+
+    assert derive_persistent_allow_rule("computer_click", {"x": 1, "y": 2}) is None
+    assert derive_persistent_allow_rule("browser_click", {"selector": "#buy"}) is None
+    assert derive_persistent_allow_rule("run_command", {"command": ""}) is None
+
+
+@pytest.mark.asyncio
+async def test_always_for_unscoped_action_does_not_write_wildcard(tmp_path, monkeypatch):
+    import argos.permissions.config as pcfg
+    pj = tmp_path / "permissions.json"
+    monkeypatch.setattr(pcfg, "CONFIG_PATH", pj)
+    monkeypatch.setattr(pcfg, "_config", None, raising=False)
+
+    gate = approval.ApprovalGate()
+    task = asyncio.create_task(
+        gate.request("browser_click", {"selector": "#buy"},
+                     description="click", risk="medium", timeout=0.5)
+    )
+    await asyncio.sleep(0)
+    cid = gate.pending()[0].call_id
+    assert gate.respond(cid, "always") is True
+    await task
+
+    assert not pj.exists()
+
+
 @pytest.mark.asyncio
 async def test_ask_listener_fires_for_tool_ask_only():
-    """Internal documentation."""
     gate = approval.ApprovalGate()
     seen: list = []
     gate.set_ask_listener(lambda cid, payload: seen.append((cid, payload)))
@@ -131,7 +178,6 @@ async def test_session_scope_caches_approval():
 def test_requires_approval_decorator_marks_metadata():
     @approval.requires_approval(description="写入文件 {path}", risk="low")
     def write_file(path: str, content: str) -> str:
-        """Internal documentation."""
         return f"wrote {path}"
 
     assert write_file._approval_required is True
@@ -141,10 +187,8 @@ def test_requires_approval_decorator_marks_metadata():
 
 
 def test_decorator_runs_original_when_gate_approves():
-    """Internal documentation."""
     @approval.requires_approval(description="写入文件 {path}", risk="low")
     def write_file(path: str, content: str) -> str:
-        """Internal documentation."""
         return f"wrote {path}"
 
     gate = approval.ApprovalGate()
@@ -249,7 +293,6 @@ async def test_guarded_call_returns_refusal_when_denied():
 
 @pytest.mark.asyncio
 async def test_gate_pending_respond_same_loop_wakeup():
-    """Internal documentation."""
     gate = approval.ApprovalGate()
     token = approval.set_current_gate(gate)
     try:

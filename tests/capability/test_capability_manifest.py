@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import dataclasses
@@ -11,7 +10,6 @@ from argos.capability.manifest import Capability
 # ------------------------------------------------------------------
 
 def _cap(**kwargs) -> Capability:
-    """Internal documentation."""
     defaults = dict(
         name="web_search",
         kind="tool",
@@ -25,7 +23,6 @@ def _cap(**kwargs) -> Capability:
 # ------------------------------------------------------------------
 
 def test_basic_construction():
-    """Internal documentation."""
     cap = _cap()
     assert cap.name == "web_search"
     assert cap.kind == "tool"
@@ -39,7 +36,6 @@ def test_basic_construction():
 
 
 def test_full_construction():
-    """Internal documentation."""
     def _exec(**kw):
         return "result"
 
@@ -65,13 +61,11 @@ def test_full_construction():
 
 
 def test_risk_none_allowed_in_manifest():
-    """Internal documentation."""
     cap = _cap(risk=None)
     assert cap.risk is None
 
 
 def test_reversible_can_be_true_false_or_none():
-    """Internal documentation."""
     assert _cap(reversible=True).reversible is True
     assert _cap(reversible=False).reversible is False
     assert _cap(reversible=None).reversible is None
@@ -81,14 +75,12 @@ def test_reversible_can_be_true_false_or_none():
 # ------------------------------------------------------------------
 
 def test_frozen_immutable():
-    """Internal documentation."""
     cap = _cap()
     with pytest.raises(dataclasses.FrozenInstanceError):
         cap.name = "other"  # type: ignore[misc]
 
 
 def test_frozen_egress_hosts_tuple():
-    """Internal documentation."""
     cap = _cap(egress_hosts=("api.openai.com", "duckduckgo.com"))
     assert isinstance(cap.egress_hosts, tuple)
 
@@ -97,25 +89,21 @@ def test_frozen_egress_hosts_tuple():
 # ------------------------------------------------------------------
 
 def test_empty_name_rejected():
-    """Internal documentation."""
     with pytest.raises(ValueError, match="name"):
         _cap(name="")
 
 
 def test_whitespace_only_name_rejected():
-    """Internal documentation."""
     with pytest.raises(ValueError, match="name"):
         _cap(name="   ")
 
 
 def test_invalid_kind_rejected():
-    """Internal documentation."""
     with pytest.raises(ValueError, match="kind"):
         _cap(kind="unknown_kind")  # type: ignore[arg-type]
 
 
 def test_invalid_visibility_rejected():
-    """Internal documentation."""
     with pytest.raises(ValueError, match="visibility"):
         _cap(visibility="admin")  # type: ignore[arg-type]
 
@@ -127,14 +115,12 @@ def test_invalid_visibility_rejected():
     "tool", "mcp", "computer", "browser", "hook", "skill", "lsp", "plugin",
 ])
 def test_all_valid_kinds(kind):
-    """Internal documentation."""
     cap = _cap(kind=kind)
     assert cap.kind == kind
 
 
 @pytest.mark.parametrize("vis", ["all", "developer"])
 def test_all_valid_visibility(vis):
-    """Internal documentation."""
     cap = _cap(visibility=vis)
     assert cap.visibility == vis
 
@@ -144,7 +130,6 @@ def test_all_valid_visibility(vis):
 # ------------------------------------------------------------------
 
 def test_dispatch_callable():
-    """Internal documentation."""
     called = []
 
     def handler(**kw):
@@ -158,6 +143,5 @@ def test_dispatch_callable():
 
 
 def test_dispatch_none_is_default():
-    """Internal documentation."""
     cap = _cap()
     assert cap.dispatch is None

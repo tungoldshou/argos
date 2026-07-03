@@ -1,5 +1,4 @@
 # argos/tui/widgets/hard_confirm_card.py
-"""Internal documentation."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -32,14 +31,12 @@ def _body_line(
     text: str | None,
     app: str | None,
 ) -> str:
-    """Internal documentation."""
     if x is not None and y is not None:
         return f"{action} ({x}, {y}) — {description}"
     return f"{action} — {description}"
 
 
 class HardConfirmCard(InlineChoice):
-    """Internal documentation."""
 
     @property
     def _GOVERNANCE_TEXT(self) -> str:  # type: ignore[override]
@@ -66,7 +63,6 @@ class HardConfirmCard(InlineChoice):
         app: str | None = None,
         **kwargs,
     ) -> None:
-        """Internal documentation."""
         body = _body_line(action, x=x, y=y, description=description, text=text, app=app)
         super().__init__(
             title=t("hardconfirm.title"),
@@ -83,7 +79,6 @@ class HardConfirmCard(InlineChoice):
         )
 
     def _options_text(self) -> Text:
-        """Internal documentation."""
         t = Text()
         for i, (value, label) in enumerate(self._options):
             cur = i == self._cursor
@@ -98,12 +93,10 @@ class HardConfirmCard(InlineChoice):
         return t
 
     def _digit_to_option_index(self, digit: str) -> int | None:
-        """Internal documentation."""
         mapping = {"1": 0, "4": 1}
         return mapping.get(digit)
 
     async def _on_key(self, event) -> None:  # type: ignore[override]
-        """Internal documentation."""
         if self._decided:
             return
         key = event.key
@@ -118,7 +111,6 @@ class HardConfirmCard(InlineChoice):
         await super()._on_key(event)
 
     def _finish(self, value: str, feedback: str) -> None:
-        """Internal documentation."""
         if self._decided:
             return
         self._decided = True
@@ -143,7 +135,6 @@ class HardConfirmCard(InlineChoice):
                 pass
 
     def compose(self) -> ComposeResult:
-        """Internal documentation."""
         from textual.widgets import Input
         from textual.widgets import Static as _Static
 

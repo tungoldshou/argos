@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -29,7 +28,6 @@ def _cap(
 
 
 def _reg(*caps: Capability) -> CapabilityRegistry:
-    """Internal documentation."""
     r = CapabilityRegistry()
     for cap in caps:
         r.register(cap)
@@ -40,7 +38,6 @@ def _reg(*caps: Capability) -> CapabilityRegistry:
 # ------------------------------------------------------------------
 
 def test_register_single():
-    """Internal documentation."""
     r = CapabilityRegistry()
     cap = _cap()
     r.register(cap)
@@ -49,7 +46,6 @@ def test_register_single():
 
 
 def test_register_multiple_in_order():
-    """Internal documentation."""
     r = CapabilityRegistry()
     r.register(_cap("a", "tool", "low"))
     r.register(_cap("b", "mcp", "medium"))
@@ -61,7 +57,6 @@ def test_register_multiple_in_order():
 # ------------------------------------------------------------------
 
 def test_register_duplicate_name_raises():
-    """Internal documentation."""
     r = CapabilityRegistry()
     r.register(_cap("web_search"))
     with pytest.raises(ValueError, match="web_search"):
@@ -69,7 +64,6 @@ def test_register_duplicate_name_raises():
 
 
 def test_register_none_risk_raises():
-    """Internal documentation."""
     r = CapabilityRegistry()
     cap = _cap(risk=None)
     with pytest.raises(ValueError, match="risk"):
@@ -77,7 +71,6 @@ def test_register_none_risk_raises():
 
 
 def test_register_none_risk_message_mentions_name():
-    """Internal documentation."""
     r = CapabilityRegistry()
     cap = _cap(name="mystery_tool", risk=None)
     with pytest.raises(ValueError, match="mystery_tool"):
@@ -89,7 +82,6 @@ def test_register_none_risk_message_mentions_name():
 # ------------------------------------------------------------------
 
 def test_get_existing():
-    """Internal documentation."""
     cap = _cap("run_command", "tool", "high")
     r = _reg(cap)
     result = r.get("run_command")
@@ -97,7 +89,6 @@ def test_get_existing():
 
 
 def test_get_missing_raises_key_error():
-    """Internal documentation."""
     r = CapabilityRegistry()
     with pytest.raises(KeyError, match="not_here"):
         r.get("not_here")
@@ -108,13 +99,11 @@ def test_get_missing_raises_key_error():
 # ------------------------------------------------------------------
 
 def test_names_empty():
-    """Internal documentation."""
     r = CapabilityRegistry()
     assert r.names() == ()
 
 
 def test_names_order_preserved():
-    """Internal documentation."""
     r = _reg(
         _cap("z", "tool", "low"),
         _cap("a", "mcp", "medium"),
@@ -128,7 +117,6 @@ def test_names_order_preserved():
 # ------------------------------------------------------------------
 
 def test_by_kind_returns_matching():
-    """Internal documentation."""
     r = _reg(
         _cap("tool_a", "tool", "low"),
         _cap("mcp_b", "mcp", "medium"),
@@ -141,7 +129,6 @@ def test_by_kind_returns_matching():
 
 
 def test_by_kind_empty_when_none_match():
-    """Internal documentation."""
     r = _reg(_cap("web_search", "tool", "low"))
     assert r.by_kind("browser") == ()
 
@@ -150,7 +137,6 @@ def test_by_kind_empty_when_none_match():
     "tool", "mcp", "computer", "browser", "hook", "skill", "lsp", "plugin",
 ])
 def test_by_kind_all_valid_kinds(kind):
-    """Internal documentation."""
     r = _reg(_cap(f"cap_{kind}", kind, "low"))
     result = r.by_kind(kind)  # type: ignore[arg-type]
     assert len(result) == 1
@@ -162,7 +148,6 @@ def test_by_kind_all_valid_kinds(kind):
 # ------------------------------------------------------------------
 
 def test_risk_table_correct_mapping():
-    """Internal documentation."""
     r = _reg(
         _cap("web_search", "tool", "low"),
         _cap("run_command", "tool", "high"),
@@ -177,7 +162,6 @@ def test_risk_table_correct_mapping():
 
 
 def test_risk_table_is_snapshot():
-    """Internal documentation."""
     r = _reg(_cap("web_search", "tool", "low"))
     table = r.risk_table()
     table["web_search"] = "high"
@@ -185,7 +169,6 @@ def test_risk_table_is_snapshot():
 
 
 def test_risk_table_empty():
-    """Internal documentation."""
     r = CapabilityRegistry()
     assert r.risk_table() == {}
 
@@ -195,20 +178,17 @@ def test_risk_table_empty():
 # ------------------------------------------------------------------
 
 def test_egress_hosts_empty_when_no_caps():
-    """Internal documentation."""
     r = CapabilityRegistry()
     assert r.egress_hosts() == frozenset()
 
 
 def test_egress_hosts_single_cap():
-    """Internal documentation."""
     cap = _cap("web_search", "tool", "low", egress_hosts=("duckduckgo.com",))
     r = _reg(cap)
     assert r.egress_hosts() == frozenset({"duckduckgo.com"})
 
 
 def test_egress_hosts_multiple_caps_union():
-    """Internal documentation."""
     r = _reg(
         _cap("web_search", "tool", "low", egress_hosts=("duckduckgo.com",)),
         _cap("web_extract", "tool", "low", egress_hosts=("example.com",)),
@@ -217,7 +197,6 @@ def test_egress_hosts_multiple_caps_union():
 
 
 def test_egress_hosts_deduplication():
-    """Internal documentation."""
     r = _reg(
         _cap("cap_a", "tool", "low", egress_hosts=("shared.com",)),
         _cap("cap_b", "mcp", "medium", egress_hosts=("shared.com",)),
@@ -228,7 +207,6 @@ def test_egress_hosts_deduplication():
 
 
 def test_egress_hosts_cap_with_no_egress():
-    """Internal documentation."""
     r = _reg(
         _cap("local_tool", "tool", "low"),
         _cap("web_tool", "tool", "low", egress_hosts=("api.example.com",)),
@@ -237,7 +215,6 @@ def test_egress_hosts_cap_with_no_egress():
 
 
 def test_egress_hosts_returns_frozenset():
-    """Internal documentation."""
     r = _reg(_cap("a", "tool", "low", egress_hosts=("x.com",)))
     result = r.egress_hosts()
     assert isinstance(result, frozenset)
@@ -248,7 +225,6 @@ def test_egress_hosts_returns_frozenset():
 # ------------------------------------------------------------------
 
 def test_visible_names_all_role_sees_only_all():
-    """Internal documentation."""
     r = _reg(
         _cap("public_tool", "tool", "low", visibility="all"),
         _cap("lsp_action", "lsp", "low", visibility="developer"),
@@ -259,7 +235,6 @@ def test_visible_names_all_role_sees_only_all():
 
 
 def test_visible_names_developer_sees_all():
-    """Internal documentation."""
     r = _reg(
         _cap("public_tool", "tool", "low", visibility="all"),
         _cap("lsp_action", "lsp", "low", visibility="developer"),
@@ -269,7 +244,6 @@ def test_visible_names_developer_sees_all():
 
 
 def test_visible_names_preserves_registration_order():
-    """Internal documentation."""
     r = _reg(
         _cap("first", "tool", "low", visibility="all"),
         _cap("second", "tool", "low", visibility="all"),
@@ -279,7 +253,6 @@ def test_visible_names_preserves_registration_order():
 
 
 def test_visible_names_empty_registry():
-    """Internal documentation."""
     r = CapabilityRegistry()
     assert r.visible_names("all") == ()
     assert r.visible_names("developer") == ()
@@ -314,21 +287,18 @@ def test_not_contains_unregistered():
 # ------------------------------------------------------------------
 
 def test_registry_holds_same_object():
-    """Internal documentation."""
     cap = _cap("run_command", "tool", "high")
     r = _reg(cap)
     assert r.get("run_command") is cap
 
 
 def test_names_returns_tuple_not_list():
-    """Internal documentation."""
     r = _reg(_cap())
     result = r.names()
     assert isinstance(result, tuple)
 
 
 def test_by_kind_returns_tuple_not_list():
-    """Internal documentation."""
     r = _reg(_cap("t", "tool", "low"))
     result = r.by_kind("tool")
     assert isinstance(result, tuple)

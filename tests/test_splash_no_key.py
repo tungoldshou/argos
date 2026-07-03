@@ -1,9 +1,7 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 
 def test_splash_live_with_key_shows_live_badge():
-    """Internal documentation."""
     from argos.tui.widgets.splash import StartupSplash
     sp = StartupSplash(model_label="M3", tier="sonnet", live=True, has_key=True)
     text = sp.renderable_text
@@ -13,7 +11,6 @@ def test_splash_live_with_key_shows_live_badge():
 
 
 def test_splash_live_without_key_downgrades_and_warns():
-    """Internal documentation."""
     from argos.tui.widgets.splash import StartupSplash
     sp = StartupSplash(model_label="M3", tier="sonnet", live=True, has_key=False)
     text = sp.renderable_text
@@ -27,7 +24,6 @@ def test_splash_live_without_key_downgrades_and_warns():
 
 
 def test_splash_default_has_key_true_preserves_existing_callers():
-    """Internal documentation."""
     from argos.tui.widgets.splash import StartupSplash
     sp = StartupSplash(model_label="M3", tier="sonnet", live=True)
     text = sp.renderable_text

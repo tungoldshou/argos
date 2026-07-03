@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -16,12 +15,10 @@ from argos.eval.runner import EvalResult, PASS_PASSED, PASS_FAILED
 
 
 def test_eval_command_in_commands_dict():
-    """Internal documentation."""
     assert "eval" in tui_cmd.COMMAND_HELP
 
 
 def test_eval_command_parsed_as_known():
-    """Internal documentation."""
     sc = tui_cmd.parse_slash("/eval")
     assert sc is not None
     assert sc.name == "eval"
@@ -46,7 +43,6 @@ def test_eval_compare_subcommand_parsed():
 
 
 class _FakeApp:
-    """Internal documentation."""
     def __init__(self):
         from argos.tui.app import ArgosApp
         self._session_id = "test-session"
@@ -65,7 +61,6 @@ class _FakeApp:
 
 
 class _FakeLog:
-    """Internal documentation."""
     def __init__(self):
         self.lines: list[tuple[str, str]] = []
 
@@ -80,7 +75,6 @@ class _FakeLog:
 
 @pytest.mark.asyncio
 async def test_eval_no_args_no_runs_prints_message(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from argos.eval import results as _results
     monkeypatch.setattr(_results, "_RUNS_DIR", tmp_path / "eval" / "runs")
@@ -93,7 +87,6 @@ async def test_eval_no_args_no_runs_prints_message(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_eval_no_args_lists_runs(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from argos.eval import results as _results
     monkeypatch.setattr(_results, "_RUNS_DIR", tmp_path / "eval" / "runs")
@@ -171,7 +164,6 @@ async def test_eval_run_unknown_task_errors(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_eval_run_happy_path_appends_and_prints(tmp_path, monkeypatch):
-    """Internal documentation."""
     from tests.eval._seed_corpus import write_seed_corpus
     from tests.eval._fakes import FakeWorktree, make_fake_loop, make_fake_loop_factory
     from argos.eval.runner import EvalRunner
@@ -213,7 +205,6 @@ async def test_eval_run_happy_path_appends_and_prints(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_eval_compare_requires_colon_or_matches_ids(tmp_path, monkeypatch):
-    """Internal documentation."""
     from tests.eval._seed_corpus import write_seed_corpus
     from argos.eval.runner import EvalRunner
     from argos.cli import eval as _eval_cli

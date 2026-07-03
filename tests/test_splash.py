@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -11,7 +10,6 @@ from argos.tui.widgets.splash import StartupSplash
 
 @pytest.mark.asyncio
 async def test_splash_shown_on_mount_with_mode_badge():
-    """Internal documentation."""
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -23,7 +21,6 @@ async def test_splash_shown_on_mount_with_mode_badge():
 
 @pytest.mark.asyncio
 async def test_splash_bad_model_config_does_not_crash(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
     (tmp_path / "config.json").write_text(json.dumps({
         "active": "bad",
@@ -47,7 +44,6 @@ async def test_splash_bad_model_config_does_not_crash(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_splash_cleared_on_first_run():
-    """Internal documentation."""
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -58,7 +54,6 @@ async def test_splash_cleared_on_first_run():
 
 
 def test_splash_no_ascii_giant_eye():
-    """Internal documentation."""
     sp = StartupSplash(model_label="M3", tier="sonnet", live=True, has_key=True)
     text = sp.renderable_text
     assert "╔" not in text and "╗" not in text and "╚" not in text and "╝" not in text, (
@@ -67,7 +62,6 @@ def test_splash_no_ascii_giant_eye():
 
 
 def test_splash_has_key_live_shows_live_badge():
-    """Internal documentation."""
     sp = StartupSplash(model_label="M3", tier="sonnet", live=True, has_key=True)
     text = sp.renderable_text
     assert "LIVE" in text, f"有 key + live=True 应含 LIVE,实际: {text!r}"
@@ -75,7 +69,6 @@ def test_splash_has_key_live_shows_live_badge():
 
 
 def test_splash_has_key_false_no_live():
-    """Internal documentation."""
     sp = StartupSplash(model_label="M3", tier="sonnet", live=True, has_key=False)
     text = sp.renderable_text
     assert "LIVE" not in text, f"无 key 时绝不含 LIVE,实际: {text!r}"
@@ -83,7 +76,6 @@ def test_splash_has_key_false_no_live():
 
 
 def test_splash_no_key_shows_eye_not_live():
-    """Internal documentation."""
     sp = StartupSplash(model_label="M3", tier="sonnet", live=True, has_key=False)
     text = sp.renderable_text
     assert "◌" in text, f"无 key 应显 ◌ 空态眼,实际: {text!r}"
@@ -91,7 +83,6 @@ def test_splash_no_key_shows_eye_not_live():
 
 
 def test_splash_advance_eye_api_exists():
-    """Internal documentation."""
     sp = StartupSplash(model_label="M3", tier="sonnet", live=True, has_key=True)
     sp.advance_eye("scan")
     sp.advance_eye("half")
