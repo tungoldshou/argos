@@ -1,19 +1,11 @@
-"""协议适配层(spec §5):把"怎么拼请求 / 怎么解析 SSE / 怎么抓 usage"按协议封装,
-ModelClient 协议无关。AnthropicProtocol=现有逻辑抽出;OpenAIProtocol=新增(Task 3)。
-
-不在运行时 import models(避免与 models.py 循环):tier 以鸭子类型用(.model/.max_tokens)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from typing import Any, Protocol as _TypingProtocol, runtime_checkable
 
 
 def _coalesce_consecutive_roles(messages: list[dict]) -> list[dict]:
-    """合并连续同 role 的消息,保证 user/assistant 交替(Anthropic 兼容端要求,否则 400)。
-    多轮/压缩会产生连续同 role;在发请求前把相邻同 role content 用换行并起来(I1 修复,已有逻辑)。
-
-    方案 C 扩展(spec §5):带 attachments 边车字段的消息合并时,attachments 列表一并 concat;
-    content 仍是字符串 → store/压缩/诚实检查全部不动。
-    """
+    """Internal documentation."""
     out: list[dict] = []
     for m in messages:
         role = m.get("role")
@@ -21,11 +13,9 @@ def _coalesce_consecutive_roles(messages: list[dict]) -> list[dict]:
         atts = m.get("attachments")  # list[ImageAttachment] | None
         if out and out[-1]["role"] == role:
             out[-1]["content"] = f"{out[-1]['content']}\n{content}"
-            # attachments concat:任意一侧有附件就合并
             if atts:
                 existing = out[-1].get("attachments") or []
                 out[-1]["attachments"] = existing + list(atts)
-            # 若当前消息无 attachments,out[-1] 的 attachments 保持原样
         else:
             entry: dict = {"role": role, "content": content}
             if atts:
@@ -35,11 +25,7 @@ def _coalesce_consecutive_roles(messages: list[dict]) -> list[dict]:
 
 
 def _anthropic_wire_message(m: dict) -> dict:
-    """把内部消息 dict 物化成 Anthropic wire 格式。
-
-    无 attachments → content 保持裸字符串(零回归)。
-    有 attachments → content 展开为 [text_block, image_block, ...] list。
-    """
+    """Internal documentation."""
     atts = m.get("attachments")
     if not atts:
         return {"role": m["role"], "content": m.get("content", "")}
@@ -58,11 +44,7 @@ def _anthropic_wire_message(m: dict) -> dict:
 
 
 def _openai_wire_message(m: dict) -> dict:
-    """把内部消息 dict 物化成 OpenAI wire 格式。
-
-    无 attachments → content 保持裸字符串(零回归)。
-    有 attachments → content 展开为 [text_block, image_url_block, ...] list。
-    """
+    """Internal documentation."""
     atts = m.get("attachments")
     if not atts:
         return {"role": m["role"], "content": m.get("content", "")}
@@ -93,7 +75,6 @@ class AnthropicProtocol:
     name = "anthropic"
 
     def endpoint(self, base_url: str) -> str:
-        # 幂等:用户已粘贴完整 .../v1/messages 时不重复追加(防双拼)。
         b = base_url.rstrip("/")
         return b if b.endswith("/v1/messages") else b + "/v1/messages"
 
@@ -103,15 +84,7 @@ class AnthropicProtocol:
 
     def payload(self, messages: list[dict], *, system: str, tier: Any,
                 system_dynamic: str | None = None) -> dict[str, Any]:
-        # prompt caching(显式 opt-in):system 作带 cache_control 的内容块。系统提示是最大、
-        # 最稳、且每个 CodeAct 步都原样重发的前缀 → 缓存它,同一 run 内第二步起全命中,
-        # 这才是多步 run 真正的省钱点(对齐"让便宜模型可及")。低于端点最小可缓存长度时
-        # Anthropic 静默忽略 cache_control(无害);不支持的兼容代理至多忽略该字段。
         #
-        # 拆分语义(任务:并行子 agent 共用稳定前缀):当 caller 把"稳定段"与"动态段"分开
-        # 传来(system / system_dynamic),把 system 拆成 2 个 text block —— 第一块含
-        # cache_control 断点(只缓存稳定段),第二块不带(动态段每步变化,不污染前缀)。
-        # system_dynamic 为空 / None → 走原单 block 路径(向后兼容,既有 caller 不破)。
         if system_dynamic:
             system_blocks: list[dict[str, Any]] = [
                 {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}},
@@ -122,7 +95,6 @@ class AnthropicProtocol:
                 {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}},
             ]
         coalesced = _coalesce_consecutive_roles(messages)
-        # 方案 C(spec §5):图片只在此处物化成 wire 格式；无附件消息行为与现状逐字节一致。
         wire_messages = [_anthropic_wire_message(m) for m in coalesced]
         return {
             "model": tier.model,
@@ -144,16 +116,12 @@ class AnthropicProtocol:
         if t == "message_start":
             u = (obj.get("message") or {}).get("usage") or {}
             last_usage["input_tokens"] = int(u.get("input_tokens") or 0)
-            # 保真:output_tokens 也从 message_start 抓(规范该帧含此字段)。标准流里这是初值,
-            # 最终累积值随后由 message_delta 覆盖;但第三方 Anthropic 兼容端点若 message_delta
-            # 形态不标准/缺字段,至少这里抓到的不为 0 —— 最大化诚实提取,避免输出 token 静默低估。
             if u.get("output_tokens") is not None:
                 last_usage["output_tokens"] = int(u.get("output_tokens") or 0)
             if u.get("cache_read_input_tokens") is not None:
                 last_usage["cache_read"] = int(u.get("cache_read_input_tokens") or 0)
             if u.get("cache_creation_input_tokens") is not None:
                 last_usage["cache_creation"] = int(u.get("cache_creation_input_tokens") or 0)
-            # context_total = 真实满 prompt 大小。Anthropic 口径:input_tokens 不含缓存,故三者相加。
             last_usage["context_total"] = (
                 int(u.get("input_tokens") or 0)
                 + int(u.get("cache_read_input_tokens") or 0)
@@ -173,13 +141,10 @@ class AnthropicProtocol:
 
 
 class OpenAIProtocol:
-    """OpenAI Chat Completions(覆盖 OpenRouter / Ollama / LM Studio / vLLM / DeepSeek 等)。
-    与 Anthropic 的差异:system 作首条消息(无顶层 system);Bearer 认证;
-    流式 usage 需 stream_options.include_usage;SSE 走 choices[].delta.content。"""
+    """Internal documentation."""
     name = "openai"
 
     def endpoint(self, base_url: str) -> str:
-        # 幂等:用户已粘贴完整 .../chat/completions 时不重复追加(防双拼)。
         b = base_url.rstrip("/")
         return b if b.endswith("/chat/completions") else b + "/chat/completions"
 
@@ -188,15 +153,11 @@ class OpenAIProtocol:
 
     def payload(self, messages: list[dict], *, system: str, tier: Any,
                 system_dynamic: str | None = None) -> dict[str, Any]:
-        # OpenAI / OpenRouter / Ollama / LM Studio / vLLM / DeepSeek 走【自动前缀缓存】,
-        # 无显式 cache_control 字段。把 stable + dynamic 合并为单条 system 消息,让自动
-        # 缓存命中稳定前缀部分(若后端支持)。无 system_dynamic 时,行为与改造前一致。
         if system_dynamic:
             system_content = f"{system}\n\n{system_dynamic}"
         else:
             system_content = system
         coalesced = _coalesce_consecutive_roles(messages)
-        # 方案 C(spec §5):图片只在此处物化成 wire 格式；无附件消息行为与现状逐字节一致。
         wire_msgs: list[dict] = [{"role": "system", "content": system_content}]
         wire_msgs.extend(_openai_wire_message(m) for m in coalesced)
         return {
@@ -219,8 +180,6 @@ class OpenAIProtocol:
             return
         if u.get("prompt_tokens") is not None:
             last_usage["input_tokens"] = int(u.get("prompt_tokens") or 0)
-            # context_total = 真实满 prompt 大小。OpenAI 口径:prompt_tokens 【已含】 cached_tokens,
-            # 故 prompt_tokens 本身即满 prompt —— 不能再加 cache_read,否则缓存部分被重复计(上下文 % 高估)。
             last_usage["context_total"] = int(u.get("prompt_tokens") or 0)
         if u.get("completion_tokens") is not None:
             last_usage["output_tokens"] = int(u.get("completion_tokens") or 0)

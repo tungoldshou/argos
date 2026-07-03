@@ -1,9 +1,4 @@
-"""verify/* + skills_runtime/builtin/verify 用户可见文案 (Wave 3).
-
-key 命名空间: verify.*
-ZH 值 = 重构前的原始串 verbatim (一字不差)。
-EN 值 = 语义对等的自然英文,以 "Error:" 开头对应 ZH "错误:" 开头。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 EN: dict[str, str] = {

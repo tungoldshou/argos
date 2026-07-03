@@ -1,10 +1,4 @@
-"""eval/benchmarks / eval/runner / learning 用户可见串目录。
-
-key 命名空间:eval.* / learn.*。
-
-ZH 值与重构前的**原始中文串逐字一致**,确保 ARGOS_LANG=zh 下旧测试断言不破。
-EN 值是面向英文漏斗用户的默认文案(README/品牌基调:calm, precise)。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 EN: dict[str, str] = {

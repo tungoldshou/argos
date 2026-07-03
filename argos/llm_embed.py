@@ -1,13 +1,4 @@
-"""MiniMax `embo-01` 嵌入客户端 + 本地缓存。
-
-URL/协议/响应 shape 全部由 Task 1 探针确认:
-  - URL https://api.minimaxi.com/v1/embeddings(走主域,**不**走 /anthropic 路径)
-  - Auth: Authorization: Bearer <KEY>(OpenAI-style)
-  - Body: {"model": "embo-01", "type": "db", "texts": [...]}
-  - Response: {"vectors": [[...1536 floats...]], "base_resp": {...}}
-  - EMBED_DIM = 1536
-失败 → 抛 EmbedError,让上层(记忆召回 ArgosStore)决定降级到「FTS5 关键词召回」,不崩主进程。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import hashlib
@@ -21,39 +12,50 @@ import httpx
 EMBED_DIM = 1536
 EMBED_URL = "https://api.minimaxi.com/v1/embeddings"
 EMBED_MODEL = "embo-01"
-EMBED_TYPE = "db"  # 「库」侧:技能/记忆都视同被索引的"文档"
-CACHE_PATH = Path(os.environ.get("ARGOS_EMB_CACHE", Path.home() / ".argos" / "embeddings.json"))
+EMBED_TYPE = "db"
+CACHE_PATH: Path | None = None
 
 
 class EmbedError(RuntimeError):
-    """嵌入调用失败(网络/非200/JSON 坏)。上层必须降级,绝不掀翻 run。"""
+    """Internal documentation."""
 
 
 def _cache_key(text: str) -> str:
     return hashlib.sha1(f"{EMBED_MODEL}:{EMBED_TYPE}:{text}".encode("utf-8")).hexdigest()[:16]
 
 
+def _cache_path() -> Path:
+    if CACHE_PATH is not None:
+        return CACHE_PATH
+    if override := os.environ.get("ARGOS_EMB_CACHE"):
+        return Path(override).expanduser()
+    from argos import config
+    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "embeddings.json"
+
+
 def _load_cache() -> dict[str, list[float]]:
-    if not CACHE_PATH.exists():
+    path = _cache_path()
+    if not path.exists():
         return {}
     try:
-        return json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
-        return {}  # 坏文件当空,别因为本地 cache 把 sidecar 炸了
+        return {}
 
 
 def _save_cache(cache: dict[str, list[float]]) -> None:
     try:
-        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        tmp = CACHE_PATH.with_suffix(".tmp")
+        path = _cache_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(cache), encoding="utf-8")
-        tmp.replace(CACHE_PATH)  # 原子 rename
+        tmp.replace(path)
     except Exception:
-        pass  # 写不进去下次重算,本机能写就下次再写
+        pass
 
 
 def embed_text(texts: list[str]) -> list[list[float]]:
-    """调嵌入;命中本地缓存直接返,未命中批量补;任何失败 → EmbedError。"""
+    """Internal documentation."""
     key = os.environ.get("VITE_LLM_KEY") or os.environ.get("VITE_MINIMAX_KEY") or os.environ.get("MINIMAX_KEY")
     if not key:
         raise EmbedError("no LLM key configured")
@@ -94,5 +96,5 @@ def embed_text(texts: list[str]) -> list[list[float]]:
             out[pi] = v
             cache[_cache_key(pending_texts[j])] = v
         _save_cache(cache)
-    # type: ignore[list-item] — out 已填满
+    # type: ignore[list-item]
     return out  # type: ignore[return-value]

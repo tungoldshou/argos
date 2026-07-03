@@ -1,4 +1,4 @@
-"""PermissionsConfig dataclass + JSON 加载/校验/单例(spec §2.5, D3 / D19 / D20)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -15,7 +15,6 @@ from argos.permissions.schema import VALID_LEVELS
 
 _log = logging.getLogger("argos.permissions")
 
-# 默认路径；None 时运行时跟随 ARGOS_CONFIG_DIR。
 CONFIG_PATH: Path | None = None
 
 
@@ -28,7 +27,6 @@ def _config_path(path: Path | None = None) -> Path:
     )
 
 
-# ReDoS 危险模式(同 hooks D14 防 ReDoS)
 _REDOS_PATTERNS: Final[tuple[str, ...]] = (
     r"\(\.\*\)\*",  # (.*)*
     r"\(\.\+\)\+",  # (.+)+
@@ -38,15 +36,11 @@ _REDOS_PATTERNS: Final[tuple[str, ...]] = (
 
 
 class PermissionsConfigError(Exception):
-    """permissions.json 加载 / 校验失败。"""
+    """Internal documentation."""
 
 
 def _is_safe_regex(matcher: str) -> bool:
-    """防 ReDoS:长度 > 256 / ReDoS 模式 → False。
-
-    "*" 与 "" 是 _matcher_match 的【全匹配哨兵】(整工具放行),不是正则 —— 直接放行,
-    不送 re.compile(否则 re.compile("*") 抛 'nothing to repeat',导致"总是允许"对非 run_command
-    工具持久化的 matcher='*' 规则在加载时被静默丢弃 = Phase 1 的假"always"对这些工具复发)。"""
+    """Internal documentation."""
     if not isinstance(matcher, str):
         return False
     if matcher in ("", "*"):
@@ -65,14 +59,14 @@ def _is_safe_regex(matcher: str) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class RuleEntry:
-    """单条软规则 entry。matcher 走 re.search 语义。"""
+    """Internal documentation."""
     tool: str
     matcher: str
 
 
 @dataclass(frozen=True, slots=True)
 class ToolLevelOverride:
-    """per-tool 档位覆盖(D4 锁)。"""
+    """Internal documentation."""
     tool: str
     level: str  # observe / propose / confirm / auto / accept_edits
 
@@ -80,13 +74,11 @@ class ToolLevelOverride:
 @dataclass(frozen=True, slots=True)
 class PermissionsConfig:
     version: int = 1
-    default_level: str | None = None   # None = 沿用 ApprovalGate.level
+    default_level: str | None = None
     tools: Mapping[str, str] = field(default_factory=dict)
     allow: tuple[RuleEntry, ...] = ()
     deny: tuple[RuleEntry, ...] = ()
     ask: tuple[RuleEntry, ...] = ()
-    # 预授权 map(rule_name → bool):autonomy 用它把 soft_ask 等"次危险"规则降级到 GREEN。
-    # 硬规则 deny 不可被预授权降级(产品护城河,见 autonomy.classify)。
     preauth: Mapping[str, bool] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -102,7 +94,7 @@ class PermissionsConfig:
 
     @staticmethod
     def empty() -> "PermissionsConfig":
-        """D20 锁:无 permissions.json 时用 empty(沿用 ApprovalGate.level)。"""
+        """Internal documentation."""
         return PermissionsConfig(version=1)
 
     def match_allow(self, tool: str, arg_str: str) -> RuleEntry | None:
@@ -125,7 +117,7 @@ class PermissionsConfig:
 
 
 def _matcher_match(matcher: str, arg_str: str) -> bool:
-    """re.search 语义(空 / "*" = 全匹配)。"""
+    """Internal documentation."""
     if not matcher or matcher == "*":
         return True
     try:
@@ -135,7 +127,7 @@ def _matcher_match(matcher: str, arg_str: str) -> bool:
 
 
 def _safe_rule_entries(arr: Sequence[dict]) -> tuple[RuleEntry, ...]:
-    """逐条校验;坏 entry 跳过 + log warning(不整体禁用)。"""
+    """Internal documentation."""
     out: list[RuleEntry] = []
     for ent in arr:
         if not isinstance(ent, dict):
@@ -154,20 +146,12 @@ def _safe_rule_entries(arr: Sequence[dict]) -> tuple[RuleEntry, ...]:
 
 
 def load(path: Path | None = None) -> PermissionsConfig:
-    """加载 permissions.json。
-    缺文件 → empty()(D20);JSON 坏 / 校验失败 → PermissionsConfigError(spec D11 不部分加载)。
-
-    任务:JSON 读 + 解析走 config_base.read_json_file(OSError 行为保持"显式抛");
-    permissions 专属的 default_level / tools / preauth 校验留在本函数。
-    """
+    """Internal documentation."""
     p = _config_path(path)
     data = config_base.read_json_file(p, ErrorCls=PermissionsConfigError)
     if data is None:
         return PermissionsConfig.empty()
     raw = data
-    # 注:历史 permissions 错误消息带 "permissions.json" 前缀(如 "JSON 解析失败: ...");
-    # 助手生成的 "不是合法 JSON: ..." 消息未带前缀 —— 测试断言 match="JSON" 是 substring,
-    # 两条消息都过。读者若想保持原消息,可在 wrapper 里重抛。
     version = raw.get("version")
     if version != 1:
         raise PermissionsConfigError(
@@ -192,7 +176,6 @@ def load(path: Path | None = None) -> PermissionsConfig:
     allow = _safe_rule_entries(raw.get("allow") or [])
     deny = _safe_rule_entries(raw.get("deny") or [])
     ask = _safe_rule_entries(raw.get("ask") or [])
-    # preauth:rule_name → bool。坏值(非 bool / 非 str key)→ log warning 跳过(不破整体加载)。
     preauth_raw = raw.get("preauth") or {}
     preauth_clean: dict[str, bool] = {}
     if isinstance(preauth_raw, dict):
@@ -214,7 +197,6 @@ def load(path: Path | None = None) -> PermissionsConfig:
     )
 
 
-# 模块级单例(同 hooks._config,spec §2.5)
 _config: PermissionsConfig | None = None
 
 
@@ -224,44 +206,38 @@ def _reset_config() -> None:
 
 
 def get_config() -> PermissionsConfig:
-    """惰性加载 + 返回当前配置。无文件 → empty()(D20)。"""
+    """Internal documentation."""
     global _config
     if _config is None:
         try:
             _config = load()
         except PermissionsConfigError as e:
-            _log.warning("permissions: 加载失败,使用 empty():%s", e)
-            _config = PermissionsConfig.empty()
+            _log.warning("permissions: 加载失败,使用 observe fail-closed:%s", e)
+            _config = PermissionsConfig(version=1, default_level="observe")
     return _config
 
 
 def reload_config(path: Path | None = None) -> PermissionsConfig:
-    """重读 permissions.json。坏配置 → 保旧 + 抛 PermissionsConfigError。"""
+    """Internal documentation."""
     global _config
     try:
         new_cfg = load(path)
     except PermissionsConfigError:
         if _config is None:
-            _config = PermissionsConfig.empty()
+            _config = PermissionsConfig(version=1, default_level="observe")
         raise
     _config = new_cfg
     return _config
 
 
 def save_allow_rule(tool: str, matcher: str, path: Path | None = None) -> bool:
-    """把一条 allow 规则 {tool, matcher} 追加进 permissions.json 并落盘 + 热更新模块单例。
-    「总是允许」的真持久化:批一次该 (tool, matcher) pattern,以后(跨 session)再不问。
-    幂等(同规则不重复加);缺文件 → 新建 version=1 骨架;坏 JSON → 不 clobber(返回 False,
-    避免丢用户其它配置)。返回是否已使该规则生效。
-
-    安全:allow 规则【不能】越过 hard rule —— 评估器先跑 hard(rm -rf/系统路径/密钥)再 soft_allow,
-    所以即便 matcher 较宽(如 run_command 匹配二进制名),危险命令仍被 hard rule 兜底拦。"""
+    """Internal documentation."""
     p = _config_path(path)
     raw: dict = {}
     if p.exists():
         try:
             loaded = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001 — 坏 JSON:不覆盖
+        except Exception:  # noqa: BLE001
             return False
         if not isinstance(loaded, dict):
             return False
@@ -282,7 +258,6 @@ def save_allow_rule(tool: str, matcher: str, path: Path | None = None) -> bool:
             tmp.replace(p)
         except OSError:
             return False
-    # 热更新模块单例,让规则本 session 立即生效(否则要重启才生效)。
     try:
         reload_config(p)
     except PermissionsConfigError:

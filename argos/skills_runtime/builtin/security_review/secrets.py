@@ -1,11 +1,4 @@
-"""Pass 1 — secret 扫描(9 条 regex + 跳过/降级白名单,spec §2.4 / D4)。
-
-- 9 条 regex:手写覆盖 AWS / GitHub / OpenAI / **Anthropic (sk-ant-*, D4 新增)** /
-  private key / .env committed / hardcoded password。
-- **跳过白名单**(D4):`SKIP_BASENAMES` 命中 → 完全跳过不扫,避免 user-controlled
-  秘密存储(`.env.local` / `secrets.toml` / `*.pem` / `*.key`)误报。
-- **降级白名单**:`DOWNGRADE_PATH_PATTERNS` 命中 → severity 降为 info(仍扫)。
-- 二进制 / 1MB+ 文件 → 静默跳过。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -16,13 +9,12 @@ from typing import Iterable
 from argos.skills_runtime.analysis import Finding
 
 
-# 9 条 regex(spec §2.4 / D4)
 @dataclass(frozen=True)
 class _SecretPattern:
-    name: str            # finding.message 用
+    name: str
     regex: re.Pattern
     severity: str         # "error" / "warning"
-    description: str     # suggestion 字段用
+    description: str
 
 
 SECRET_PATTERNS: tuple[_SecretPattern, ...] = (
@@ -53,17 +45,13 @@ SECRET_PATTERNS: tuple[_SecretPattern, ...] = (
         description="rotate token + use env var",
     ),
     _SecretPattern(
-        name="Anthropic API key",   # D4 新增(必须排在 OpenAI 之前:sk-ant- 也满足
-        # 扩展后的 OpenAI regex `sk-[A-Za-z0-9-_]{20,}` —— OpenAI 在前会把 Anthropic
-        # key 误报为 OpenAI,触发"假阳性转移",反令用户怀疑 Anthropic 报点错。)
+        name="Anthropic API key",
         regex=re.compile(r"sk-ant-[A-Za-z0-9-_]{20,}"),
         severity="error",
         description="rotate key + use env var",
     ),
     _SecretPattern(
         name="OpenAI API key",
-        # 含 sk-proj-<id>-<secret> 现代项目 key 格式:body 允许 -_/字母数字
-        # (与 sk-ant- 同档字符集,保 D4 收尾). 历史 sk-... 旧 key 仍命中。
         regex=re.compile(r"sk-[A-Za-z0-9-_]{20,}"),
         severity="error",
         description="rotate key + use env var",
@@ -91,18 +79,14 @@ SECRET_PATTERNS: tuple[_SecretPattern, ...] = (
 )
 
 
-# 跳过白名单(完全跳过不扫,D4 / spec §2.4)
-# 注意:.env(裸)不跳过(只发一条 committed warning,内容不扫);.env.X 才跳过。
 SKIP_BASENAMES: frozenset[str] = frozenset({
-    ".env.example",   # 模板 — 不算 committed
+    ".env.example",
     "secrets.toml",
 })
-# 注:.env / .env.local / .env.* 用 fnmatch 后缀
 SKIP_SUFFIXES: tuple[str, ...] = (".pem", ".key")
 SKIP_BASENAME_PATTERNS: tuple[str, ...] = (".env*", "secrets.toml", "*.pem", "*.key")
 
 
-# 降级白名单(降 severity 到 info,spec §2.4)
 DOWNGRADE_PATH_PATTERNS: tuple[str, ...] = (
     "tests/fixtures/**",
     "docs/**",
@@ -111,7 +95,6 @@ DOWNGRADE_PATH_PATTERNS: tuple[str, ...] = (
 )
 
 
-# 文件大小 / 二进制 上限
 _MAX_FILE_BYTES: int = 1_000_000   # 1MB
 _SNIPPET_MAX: int = 120
 _BINARY_EXTS: frozenset[str] = frozenset({
@@ -121,15 +104,10 @@ _BINARY_EXTS: frozenset[str] = frozenset({
 
 
 def _should_skip(path: Path, relpath: str) -> bool:
-    """D4 跳过白名单命中 → True(完全不扫)。
-
-    重要:裸 .env **不**跳过(只发 committed warning,内容不扫)。
-    """
+    """Internal documentation."""
     name = path.name
-    # 精确 basename 匹配
     if name in SKIP_BASENAMES:
         return True
-    # .env.local / .env.production / .env.* 前缀 + 任意后缀(裸 .env 除外)
     if name.startswith(".env.") or name == ".env.local":
         return True
     # secrets.toml
@@ -142,7 +120,7 @@ def _should_skip(path: Path, relpath: str) -> bool:
 
 
 def _is_downgrade(relpath: str) -> bool:
-    """降级白名单 → severity = info。"""
+    """Internal documentation."""
     import fnmatch
     for pat in DOWNGRADE_PATH_PATTERNS:
         if fnmatch.fnmatch(relpath, pat):
@@ -151,7 +129,7 @@ def _is_downgrade(relpath: str) -> bool:
 
 
 def _is_binary(path: Path) -> bool:
-    """extension 黑名单(spec §2.4)。"""
+    """Internal documentation."""
     return path.suffix.lower() in _BINARY_EXTS
 
 
@@ -165,33 +143,18 @@ def scan_file_for_secrets(
     relpath: str,
     workspace: Path,
 ) -> tuple[Finding, ...]:
-    """单文件扫 secret → 0..N 条 Finding。
-
-    Args:
-        file: 绝对路径。
-        relpath: workspace-relative 路径(给 Finding.file 用)。
-        workspace: workspace 根(给降级白名单判定用)。
-
-    Returns:
-        tuple[Finding, ...](空 = 无 finding;元组不可变)。
-    """
-    # 跳过白名单(D4)
+    """Internal documentation."""
     if _should_skip(file, relpath):
         return ()
-    # 二进制文件
     if _is_binary(file):
         return ()
-    # 1MB+ 文件
     try:
         if file.stat().st_size > _MAX_FILE_BYTES:
             return ()
     except OSError:
         return ()
-    # 扫
     findings: list[Finding] = []
     downgrade = _is_downgrade(relpath)
-    # 路径基础检查:裸 .env 文件 → 1 条 warning(committed)+ **不扫内容**
-    # (.env 是 user-controlled secret 存储,不应当做泄漏源 — D4)
     if file.name == ".env":
         findings.append(Finding(
             severity="info" if downgrade else "warning",
@@ -203,13 +166,11 @@ def scan_file_for_secrets(
             suggestion="add to .gitignore + use .env.example template",
         ))
         return tuple(findings)
-    # 读
     try:
         text = file.read_text(encoding="utf-8")
     except (UnicodeDecodeError, OSError):
         return ()
     for pat in SECRET_PATTERNS:
-        # .env file committed 模式按文件名判断,不走内容匹配
         if pat.name == ".env file committed":
             continue
         for m in pat.regex.finditer(text):

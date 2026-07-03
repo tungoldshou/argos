@@ -1,15 +1,4 @@
-"""#7 T1 corpus schema + 任务解析。
-
-读 `~/.argos/eval/corpus/<task_id>/{goal.md,verify_cmd,category,difficulty,...}` 落盘结构,
-返 `EvalTask` dataclass(供 runner / CLI / TUI 用)。
-
-- 路径:缺省 = `~/.argos/eval/corpus/`,可被 `ARGOS_EVAL_CORPUS_DIR` 覆盖(测试用)
-- 缺文件 → raise FileNotFoundError(spec §10)
-- 14 种子由 `tests/eval/_seed_corpus.py` 在 conftest 按需落(不 git 跟踪)
-
-D1:corpus 人工维护(LLM 不生任务,防"我测我多聪明"循环)
-D2:JSONL 走结果;corpus 用 manifest.json + 文件系统(spec §4.1)
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -24,17 +13,7 @@ Difficulty = Literal["easy", "medium", "hard"]
 
 @dataclass(frozen=True, slots=True)
 class EvalTask:
-    """单个 eval 任务(spec §5.1)。
-
-    字段:
-      id / category / difficulty / title:corpus 标识
-      goal:LLM 拿这一段当 user message
-      verify_cmd:单行 shell 命令,退出码 0 = pass(spec §4.1)
-      setup_cmd:可选(准备环境,exit 非 0 → setup_failed)
-      expected_files:可选(glob 列表,任务完成后应出现的文件)
-      working_dir:实际跑的工作目录(默认 = task_dir)
-      corpus_version:corpus.json 的 version 字段
-    """
+    """Internal documentation."""
     id: str
     category: str
     difficulty: str
@@ -48,13 +27,16 @@ class EvalTask:
 
 
 def _corpus_root() -> Path:
-    """corpus 根目录:env var 优先(测试用),否则 ~/.argos/eval/corpus/。"""
+    """Internal documentation."""
     override = os.environ.get("ARGOS_EVAL_CORPUS_DIR")
-    return Path(override) if override else (Path.home() / ".argos" / "eval" / "corpus")
+    if override:
+        return Path(override).expanduser()
+    from argos import config
+    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "eval" / "corpus"
 
 
 def corpus_version(*, root: Path | None = None) -> int:
-    """读 corpus.json 的 version 字段;文件不存在返 0(诚实空态)。"""
+    """Internal documentation."""
     p = (root or _corpus_root()) / "corpus.json"
     if not p.exists():
         return 0
@@ -66,10 +48,7 @@ def corpus_version(*, root: Path | None = None) -> int:
 
 
 def list_tasks(*, root: Path | None = None) -> list[EvalTask]:
-    """读 corpus.json + 各 <id>/ 目录,返 EvalTask 列表(按 id 升序)。
-
-    缺目录的条目静默跳过(测试 fixture 不全时不爆)。
-    """
+    """Internal documentation."""
     base = root or _corpus_root()
     manifest_p = base / "corpus.json"
     if not manifest_p.exists():
@@ -90,7 +69,7 @@ def list_tasks(*, root: Path | None = None) -> list[EvalTask]:
 
 
 def load_task(task_id: str, *, root: Path | None = None) -> EvalTask:
-    """按 id 加载单个 task;目录或 goal.md 缺失 → raise FileNotFoundError(spec §10)。"""
+    """Internal documentation."""
     base = root or _corpus_root()
     version = corpus_version(root=base)
     manifest_p = base / "corpus.json"
@@ -111,7 +90,7 @@ def load_task(task_id: str, *, root: Path | None = None) -> EvalTask:
 
 
 def _load_one(task_id: str, *, base: Path, version: int, title: str | None = None) -> EvalTask | None:
-    """读 <base>/<task_id>/ 内的所有文件。任一必需文件缺失 → 返 None(供 list_tasks 跳过)。"""
+    """Internal documentation."""
     d = base / task_id
     if not d.is_dir():
         return None

@@ -1,14 +1,4 @@
-"""promotion_gate:A/B 评估 → 仅当候选技能实测提升通过率才晋升。
-
-设计要点(任务护城河):
-- 同 model_tier 跑两次(A=无技能 hint, B=有技能 hint);loop_factory 是 caller 注入的,
-  本函数只负责"用同一语料各跑一次 + 比较"。
-- 判定:B 通过任务数严格 > A 通过任务数(平手 / 退化 → 不晋升)。
-- builtin 名字硬拒(reuse skills_curator.index.BUILTIN_NAMES,产品铁律)。
-- 落盘:promoted=True 才写 skills_root/<name>/SKILL.md(enabled: false 沿用 install 约定)。
-- 任何异常(loop 炸 / runner 抛)→ 不晋升,不抛(失败诚实降级)。
-- 不调真 worktree(测试桩,真集成留 v1.1)。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,7 +10,7 @@ from argos.skills_curator.index import BUILTIN_NAMES
 
 @dataclass(frozen=True, slots=True)
 class PromotionResult:
-    """A/B 评估结果。"""
+    """Internal documentation."""
 
     promoted: bool
     reason: str
@@ -31,7 +21,7 @@ class PromotionResult:
 
 
 def _is_pass(pass_status: str | None) -> bool:
-    """走 runner.PASS_PASSED 常量避免硬编码字符串(解耦)。"""
+    """Internal documentation."""
     try:
         from argos.eval.runner import PASS_PASSED
         return pass_status == PASS_PASSED
@@ -44,11 +34,7 @@ def _skill_md_path_for(skills_root: Path, name: str) -> Path:
 
 
 def _atomic_write_skill(skill_md: Path, content: str) -> None:
-    """原子写(同 install 约定:写 .tmp 后 rename,失败时旧文件完整)。
-
-    tmp 名带 pid+uuid(review#4):CLI 与 daemon 并发晋升同名技能时,确定性
-    .tmp 后缀会互相覆盖 → 撕裂写。replace 仍原子(同目录 rename)。
-    """
+    """Internal documentation."""
     import os
     import uuid
 
@@ -60,11 +46,7 @@ def _atomic_write_skill(skill_md: Path, content: str) -> None:
 
 
 def _rebuild_index(skills_root: Path) -> None:
-    """重新扫描本地 skills 目录,刷新 in-memory index(让 daemon 后续能发现)。
-
-    不调 skills_curator.index.fetch_remote(避免网络);仅触发一次 load_cache 让 index
-    反映本地落盘。失败静默 —— 落盘已成功,index 刷新是 best-effort。
-    """
+    """Internal documentation."""
     try:
         from argos.skills_curator import index as _idx
         # ponytail: load_cache is best-effort — failure doesn't block promotion
@@ -108,15 +90,11 @@ def promote(
     *,
     candidate: Any,      # SkillCandidate
     tasks: list,         # list[EvalTask]
-    runner: Any,         # A 侧 runner;必有 .run(task, *, model_tier) -> EvalResult
-    runner_b: Any = None,  # B 侧 runner(None → 与 A 侧共用同一 runner)
+    runner: Any,
+    runner_b: Any = None,
     skills_root: Path,
 ) -> PromotionResult:
-    """A/B 评估 + 晋升。绝不抛(失败静默 → promoted=False)。
-
-    runner_b 为 None 时 B 侧与 A 侧共用 runner(向后兼容)。
-    落盘前检查同名覆盖:非学习产物(无 source_run 标记)→ 拒绝,学习产物 → 允许覆盖。
-    """
+    """Internal documentation."""
     import logging as _log
     log = _log.getLogger(__name__)
 
@@ -125,22 +103,16 @@ def promote(
     if not name or not body:
         return PromotionResult(promoted=False, reason="candidate_empty")
 
-    # 1. builtin 硬拒(产品铁律)
     if name in BUILTIN_NAMES:
         return PromotionResult(
             promoted=False, reason=f"builtin_protected:{name}",
         )
 
-    # 2. 同名覆盖防护(A/B 之前检查,避免无意义计算)
     skill_md = _skill_md_path_for(skills_root, name)
     if skill_md.exists():
         try:
             existing = skill_md.read_text(encoding="utf-8")
-            # 只检查 YAML frontmatter 块(首尾 "---" 之间)避免正文示例代码误判。
-            # 提取:按行分割,收集第一个 "---" 到第二个 "---" 之间的行,join 后检查。
             lines = existing.splitlines()
-            # B2 修复:文件首行不是 "---" → 无 YAML frontmatter,直接视为非学习产物。
-            # 不以首行为准会被 Markdown 水平分割线(---) + 正文 source_run: 内容欺骗。
             if not lines or lines[0].strip() != "---":
                 is_learned = False
             else:
@@ -165,14 +137,11 @@ def promote(
                 promoted=False, reason="name_collision_unreadable",
             )
         if not is_learned:
-            # 用户/社区技能,保守拒绝,原文件不动
             return PromotionResult(
                 promoted=False, reason=f"name_collision:{name}",
             )
-        # 学习产物(含 source_run 标记)→ 允许覆盖(整合更新)
         log.info("promote: overwriting existing learned skill %r", name)
 
-    # 3. A/B 跑(同 model_tier,本函数不感知 hint —— 那是 runner/loop_factory 的事)
     a_passed = 0
     b_passed = 0
     a_total = 0
@@ -199,7 +168,6 @@ def promote(
             promoted=False, reason=f"runner_error:{type(e).__name__}",
         )
 
-    # 3b. 严格提升才晋升
     if b_passed <= a_passed:
         return PromotionResult(
             promoted=False,
@@ -208,7 +176,6 @@ def promote(
             a_total=a_total, b_total=b_total,
         )
 
-    # 4. 落盘(auto-enable: A/B gate is the quality bar; no extra human step needed)
     enabled_body = _enable_in_body(body)
     try:
         _atomic_write_skill(skill_md, enabled_body)
@@ -219,7 +186,6 @@ def promote(
             a_total=a_total, b_total=b_total,
         )
 
-    # 5. best-effort 刷 index(失败不阻断)
     _rebuild_index(skills_root)
 
     log.info(

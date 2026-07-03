@@ -1,11 +1,4 @@
-"""Pass 3 — permission check(Python + JS/TS 危险 API,spec §2.4 Pass 3)。
-
-- regex 扫 `os.system` / `subprocess.Popen(shell=True)` / `eval` / `exec` / `pickle.loads` /
-  `__import__`(Python);`child_process.exec` / `eval` / `new Function` / `innerHTML` /
-  `dangerouslySetInnerHTML`(JS/TS)。
-- **whitelist 降级**:`tests/**` / `**/test_*.py` / `**/*_test.py` / `**/*.test.ts` /
-  `**/conftest.py` → severity 降 info(测试代码里 `eval` 多是合理 fixture)。
-- 不支持语言(Go / Java / C++)→ 1 条 info 提示"language not supported"(spec D15)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -105,7 +98,6 @@ JS_TS_PATTERNS: tuple[_PermissionPattern, ...] = (
 )
 
 
-# 扩展名 → (patterns, 标记)
 _EXT_TABLE: Mapping[str, tuple[Sequence[_PermissionPattern], str]] = {
     ".py": (PYTHON_PATTERNS, "python"),
     ".pyi": (PYTHON_PATTERNS, "python"),
@@ -117,7 +109,6 @@ _EXT_TABLE: Mapping[str, tuple[Sequence[_PermissionPattern], str]] = {
     ".cjs": (JS_TS_PATTERNS, "javascript"),
 }
 
-# whitelist 降级(测试代码)
 _TEST_PATH_PATTERNS: tuple[str, ...] = (
     "tests/**",
     "**/test_*.py",
@@ -153,10 +144,10 @@ def scan_file_for_permission_issues(
     relpath: str,
     workspace: Path,
 ) -> tuple[Finding, ...]:
-    """单文件扫危险 API → 0..N 条 Finding。"""
+    """Internal documentation."""
     ext = file.suffix.lower()
     if ext in _BINARY_EXTS:
-        return ()  # 二进制静默跳
+        return ()
     entry = _EXT_TABLE.get(ext)
     if entry is None:
         if ext:

@@ -1,11 +1,4 @@
-"""#10 T5 smoke test runner.
-
-两种路径:
-1. skill 自带 tests/smoke.md -> 抽 python code block 跑
-2. 通用探针:tmp python 跑 "ARGOS_SMOKE_PASS"
-
-D12:smoke test 失败仅警告(spec §6.4)
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -19,7 +12,7 @@ _PY_BLOCK = re.compile(r"```python\n(.*?)```", re.DOTALL)
 
 
 def run_smoke_test(name: str, skill_dir: Path) -> str:
-    """返 'pass: ...' / 'fail: ...'. 异常 -> 由 caller 包裹."""
+    """Internal documentation."""
     custom = skill_dir / "tests" / "smoke.md"
     if custom.exists():
         return _run_custom_smoke(name, custom)
@@ -32,7 +25,7 @@ def _extract_python_block(text: str) -> str:
 
 
 def _run_custom_smoke(name: str, smoke_md: Path) -> str:
-    """本期 v1 简化:从 smoke.md 抽 python code block 跑;无 block -> fail."""
+    """Internal documentation."""
     text = smoke_md.read_text("utf-8")
     code = _extract_python_block(text)
     if not code:

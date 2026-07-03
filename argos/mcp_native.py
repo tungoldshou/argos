@@ -1,18 +1,4 @@
-"""原生 MCP 客户端(stdio,newline-delimited JSON-RPC)—— 不依赖 langchain。
-
-为什么自己写:旧 `mcp_client.py`(已随死栈删)绑死 langchain-mcp-adapters,而活引擎 framework-free。
-MCP 的 stdio 传输就是**按行分隔的 JSON-RPC**(不是 LSP 的 Content-Length 框),同步实现很轻。
-
-架构契合:broker `_execute` 是同步 host 侧执行;MCP 的 request/response 也同步(写一行、读一行),
-故 `mcp_call` 作为一个 broker action 直接落地,无 async-from-sync 难题。
-
-诚实(灵魂):
-  · **默认零预配** —— 没有 `~/.argos/mcp.json` / 没有 servers → `list_tools()` 返空、
-    系统提示不注入任何 MCP 段、`mcp_call` 诚实报"未配置 MCP"。绝不预装第三方 server。
-  · 单个 server 连接/握手失败 → 标记不可用、其余照常,绝不崩 run。
-  · 每次调用包真错误返回可读串(模型据此换路),不假装调用成功。
-配置(`~/.argos/mcp.json`):{"servers": {"<name>": {"command": "...", "args": [...], "env": {...}}}}
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -51,7 +37,7 @@ class McpTool:
 
 
 class _StdioServer:
-    """一个 stdio MCP server 的持久连接 + 同步 JSON-RPC。线程安全(一把锁串行化请求/响应)。"""
+    """Internal documentation."""
 
     def __init__(self, name: str, cfg: dict[str, Any]) -> None:
         self.name = name
@@ -61,13 +47,9 @@ class _StdioServer:
         self._lock = threading.Lock()
         self.tools: list[McpTool] = []
         self.error: str | None = None
-        # 后台读线程把 server stdout 逐行喂进队列;_rpc 用 queue.get(timeout) 兜底。
-        # 否则 readline() 是无界阻塞:server"活着但不吭声"时(常见 MCP 挂法),按行 deadline
-        # 检查永不触发,整个 run(daemon 路径连 host loop)冻死(2026-06-18 排查 #3)。
         self._rx: "queue.Queue[str | None]" = queue.Queue()
         self._reader: threading.Thread | None = None
 
-    # ── 连接 + 握手(initialize → initialized → tools/list)──────────────────────
     def connect(self) -> bool:
         cmd = self._cfg.get("command")
         if not cmd:
@@ -83,7 +65,6 @@ class _StdioServer:
         except Exception as e:  # noqa: BLE001
             self.error = t("mcp.server.start_failed", exc_type=type(e).__name__, exc=e)
             return False
-        # 启动后台读线程(daemon):阻塞 readline 留在线程里,主路径只 queue.get(timeout)。
         self._reader = threading.Thread(target=self._reader_loop, daemon=True)
         self._reader.start()
         try:
@@ -135,28 +116,24 @@ class _StdioServer:
             self._proc = None
 
     def _reader_loop(self) -> None:
-        """后台:逐行读 server stdout 喂进队列;EOF/异常 → 投 None 哨兵。
-        阻塞 readline 关在本线程,_rpc 永不直接 readline(避免无界挂起)。"""
+        """Internal documentation."""
         stdout = self._proc.stdout if self._proc is not None else None
         if stdout is None:
             self._rx.put(None)
             return
         try:
-            for line in stdout:   # 阻塞按行读,直到 EOF(server 退出)
+            for line in stdout:
                 self._rx.put(line)
-        except Exception:  # noqa: BLE001 — 进程被杀/管道断 → 当 EOF 处理
+        except Exception:  # noqa: BLE001
             pass
         finally:
-            self._rx.put(None)   # EOF 哨兵,叫醒等待中的 _rpc
+            self._rx.put(None)
 
-    # ── 同步 JSON-RPC 帧(newline-delimited)──────────────────────────────────────
     def _rpc(self, method: str, params: dict[str, Any], *, timeout: float) -> dict[str, Any]:
         with self._lock:
             self._id += 1
             rid = self._id
             self._send({"jsonrpc": "2.0", "id": rid, "method": method, "params": params})
-            # 从队列读匹配 id 的响应(跳过通知/不相关行)。queue.get(timeout=remaining) 保证
-            # server"活着但不吭声"时也按 timeout 兜底,而非无界 readline(2026-06-18 排查 #3)。
             deadline = time.time() + timeout
             while True:
                 remaining = deadline - time.time()
@@ -174,7 +151,7 @@ class _StdioServer:
                 try:
                     msg = json.loads(line)
                 except json.JSONDecodeError:
-                    continue  # 非 JSON 行(server 噪声)跳过
+                    continue
                 if msg.get("id") == rid:
                     return msg
 
@@ -189,7 +166,7 @@ class _StdioServer:
 
 
 def _flatten_content(result: dict[str, Any]) -> str:
-    """MCP tools/call 结果的 content 数组 → 可读文本(取 text 片段;其余类型标注类型)。"""
+    """Internal documentation."""
     content = result.get("content")
     if not isinstance(content, list):
         return json.dumps(result, ensure_ascii=False)
@@ -208,7 +185,7 @@ def _flatten_content(result: dict[str, Any]) -> str:
 
 
 class McpManager:
-    """进程内 MCP 连接管理器(单例)。懒加载 ~/.argos/mcp.json;连接失败优雅降级。"""
+    """Internal documentation."""
 
     def __init__(self, config_path: Path | None = None) -> None:
         self._config_path = resolve_config_path(config_path)
@@ -217,8 +194,7 @@ class McpManager:
         self._lock = threading.Lock()
 
     def ensure_loaded(self) -> None:
-        """同步连接所有 server(整段在锁内 → 后到的 call()/ensure_loaded 阻塞等连接完成,
-        见到 _loaded=True 时 self._servers 已就绪,无半连接竞态)。"""
+        """Internal documentation."""
         with self._lock:
             if self._loaded:
                 return
@@ -228,12 +204,11 @@ class McpManager:
                 if not isinstance(scfg, dict) or not (scfg.get("enabled", True)):
                     continue
                 srv = _StdioServer(name, scfg)
-                srv.connect()   # 失败时 srv.error 记原因、tools 为空(降级,不抛)
+                srv.connect()
                 self._servers[name] = srv
 
     def start_warming(self) -> None:
-        """后台线程预热连接 —— 不在 agent 主循环(事件循环线程)上阻塞着连 npx server。
-        默认零预配时 ensure_loaded 秒回(无 server),此调用基本免费。"""
+        """Internal documentation."""
         if self._loaded:
             return
         threading.Thread(target=self.ensure_loaded, name="argos-mcp-warm", daemon=True).start()
@@ -243,25 +218,23 @@ class McpManager:
             if not self._config_path.exists():
                 return {}
             return json.loads(self._config_path.read_text(encoding="utf-8")) or {}
-        except Exception:  # noqa: BLE001 — 畸形 config 诚实退空(等于零 MCP),不崩
+        except Exception:  # noqa: BLE001
             return {}
 
     def _collect_tools(self) -> list[McpTool]:
-        """读当前【已连接】server 的工具(不触发连接,非阻塞)。"""
+        """Internal documentation."""
         out: list[McpTool] = []
         for srv in self._servers.values():
             out.extend(srv.tools)
         return out
 
     def list_tools(self) -> list[McpTool]:
-        """阻塞:确保连接完成后返回全部工具(直接调用 / 测试用)。"""
+        """Internal documentation."""
         self.ensure_loaded()
         return self._collect_tools()
 
     def tools_summary(self) -> str:
-        """给系统提示用的可用 MCP 工具清单 ——【非阻塞】:只读当前已连接的工具,
-        预热没完成就先返回已就绪的(或空),绝不在 agent 主循环上阻塞等 npx 起 server。
-        无则空串 → 调用方不注入 MCP 段。"""
+        """Internal documentation."""
         tools = self._collect_tools()
         if not tools:
             return ""
@@ -279,7 +252,7 @@ class McpManager:
         srv = self._servers.get(server)
         if srv is None:
             if not self._servers:
-                return t("mcp.manager.no_servers")
+                return t("mcp.manager.no_servers", path=self._config_path)
             return t("mcp.manager.unknown_server", server=server, available=", ".join(self._servers))
         if srv.error and not srv.tools:
             return t("mcp.manager.server_unavailable", server=server, error=srv.error)
@@ -293,7 +266,6 @@ class McpManager:
             self._loaded = False
 
 
-# ── 进程内单例 ────────────────────────────────────────────────────────────────
 _MANAGER: McpManager | None = None
 _MANAGER_LOCK = threading.Lock()
 

@@ -1,14 +1,12 @@
-"""permissions.json JSON Schema 字面常量 + 合法 ApprovalLevel 集合(spec §2.5)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from typing import Final
 
-# 合法 ApprovalLevel 字符串(对应 argos.approval.ApprovalLevel value)
 VALID_LEVELS: Final[frozenset[str]] = frozenset({
     "observe", "propose", "confirm", "auto", "accept_edits",
 })
 
-# JSON Schema 字面常量(draft-07,纯数据;本期不调 jsonschema 库)
 SCHEMA_V1: Final[dict] = {
     "type": "object",
     "required": ["version"],

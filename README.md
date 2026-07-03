@@ -1,10 +1,10 @@
 # Argos — The hundred-eyed agent
 
-> **Current version: v0.1.0.** Argos runs as a background kernel with
+> **Current version: v0.1.1.** Argos runs as a background kernel with
 > pluggable clients — the terminal TUI today, with a single-process fallback
 > when the daemon is unavailable.
-> Binary packages are not yet published; see [Install](#install) for the
-> build-from-source path that works today.
+> Install channels are staged separately; see [Install](#install) for the
+> Python package, source checkout, and binary installer status.
 
 Argos is a **coding agent you run in your terminal** — the same lineage as
 Claude Code and Codex: a CodeAct loop that reads your code, writes and edits
@@ -19,23 +19,27 @@ What makes it distinct:
   check (`pytest`, `cargo test`, `tsc`, …) and reads the result — three-state
   `passed` / `failed` / `unverifiable`, never a fake-green. Completion is the
   gate's reading of the exit code, never the model's word for it.
-- **Every side effect crosses a governance layer.** The broker is the *only*
-  path to side effects: it checks an egress allowlist, asks the approval gate,
-  signs an HMAC receipt, and the model's code runs under smolagents' AST
-  limits. Every privileged action leaves a signed receipt; every event is
-  persisted to a replayable JSONL journal.
+- **Declared privileged tools cross a governance layer.** Declared privileged
+  tools cross the broker: it checks an egress allowlist, asks the approval
+  gate, signs an HMAC receipt, and the model's code runs under smolagents' AST
+  limits. Every brokered privileged action leaves a signed receipt; every event
+  is persisted to a replayable JSONL journal. Raw model-authored Python gets a
+  kernel backstop only when `--sandbox` is on.
 - **An OS sandbox when you want it.** Run with `--sandbox` (or
   `ARGOS_SANDBOX=1`) and macOS Seatbelt / Linux bwrap confines the agent at the
-  kernel boundary — no network, writes caged to your workspace, credential
-  files (`~/.ssh`, `~/.aws`, …) unreadable. Opt-in, like Claude Code's sandbox;
-  **off by default**. The TUI shows an `unsandboxed` badge whenever it's off, so
-  the state is never hidden — and the governance layer above still gates every
-  side effect either way.
+  kernel boundary — the CodeAct child has no direct network, writes are caged
+  to your workspace, and credential files (`~/.ssh`, `~/.aws`, …) are
+  unreadable. Host-side broker tools such as `web_search` / `web_extract` still
+  use governed network access. Opt-in, like Claude Code's sandbox; **off by
+  default**. The TUI shows an `unsandboxed` badge whenever it's off, so the
+  state is never hidden — and the governance layer above still gates every side
+  effect either way.
 - **A permission model that gets out of the way.** Three modes — **Cautious**
   (default), **Trusted**, **Autonomous** — cycle with `/trust`. Cautious
   auto-approves low-risk actions and pauses on the rest; a small set of HARD
   rules (`rm -rf`, system paths, secret writes, financial computer-use) never
-  bypasses, even in Autonomous. No five-level dial, no per-command allowlist.
+  bypasses, even in Autonomous. A hidden `/trust paranoid` mode confirms every
+  step; there is no per-command allowlist.
 - **Model-agnostic.** Bring any Anthropic-Messages or OpenAI-compatible
   endpoint — both first-class. `argos setup` probes the connection and the
   CodeAct format for you.
@@ -51,12 +55,13 @@ single-process fallback when the daemon is unavailable.
 A coding agent should get out of your way when it's safe to, and stop you when
 it isn't. Argos is built around four choices that make that real:
 
-1. **Governance every side effect crosses.** The broker is the only path to
-   side effects — egress allowlist, approval gate, signed receipt, smolagents
-   AST limits — applied to every privileged action, whether or not the OS
-   sandbox is on. Add `--sandbox` for a kernel-level cage (Seatbelt/bwrap: no
-   network, writes caged to your workspace) on top; it's opt-in and off by
-   default, the same posture as Claude Code's OS sandbox.
+1. **Governance every declared tool crosses.** Declared privileged tools cross
+   the broker — egress allowlist, approval gate, signed receipt, smolagents AST
+   limits — whether or not the OS sandbox is on. Add `--sandbox` for a
+   kernel-level cage (Seatbelt/bwrap: CodeAct child has no direct network,
+   writes caged to your workspace) on top; broker web tools still use governed
+   host-side network access. It's opt-in and off by default, the same posture
+   as Claude Code's OS sandbox.
 2. **Permissions are three modes, not a maze.** Cautious / Trusted /
    Autonomous, cycled with `/trust`. A handful of HARD rules (`rm -rf`, system
    paths, secret writes, financial computer-use) never bypass, even in
@@ -99,11 +104,9 @@ Without an API key, `argos` exits with a clear message telling you to run
 
 ## Install
 
-> **Current status: build from source only.** v0.1.0 is tagged but the
-> release has no binary assets yet — the one-line installer, Homebrew cask,
-> PyPI, and platform packages are **infrastructure in progress (stage #13)**
-> and will 404 until those artifacts are published. The only path that works
-> today is cloning and running via `uv`.
+> **Launch install surface:** use PyPI / `uv tool` when the package is
+> published, or use a source checkout today. Binary and package-manager
+> channels are deferred until the Python package path is stable.
 
 ### Platform support
 
@@ -125,9 +128,30 @@ still gates side effects.
 > `/proc` or bind mounts. Use `bwrap` (`sudo apt install bubblewrap`) for
 > a stronger guarantee.
 
-### From source (the path that works today)
+### PyPI / uv tool
 
-Needs Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+Needs Python 3.12+. The installer bootstraps [uv](https://docs.astral.sh/uv/)
+if it is not already available.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/v0.1.1/install.sh | bash
+```
+
+The script uses `uv tool` under the hood. Equivalent manual install:
+
+```bash
+uv tool install argos-agent    # or: pip install argos-agent
+argos setup
+argos
+```
+
+If `argos` is not found after `uv tool install`, run `uv tool update-shell`
+and reopen the shell.
+
+If the package has not propagated for the current release yet, use the source
+checkout below.
+
+### From source
 
 ```bash
 git clone https://github.com/tungoldshou/argos
@@ -137,35 +161,13 @@ uv run argos setup   # pick a provider + key source, run a connection probe
 uv run argos         # launch the TUI
 ```
 
-### Planned channels (not yet published — stage #13)
+### Deferred binary/package-manager channels
 
-The packaging scaffolding exists in `packaging/` for all of the channels
-below. None are live until binary assets are uploaded to a GitHub release.
-
-**One-line installer (macOS arm64)**
-```bash
-# Will work once arm64 binary assets land in a GitHub release:
-curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash
-```
-
-**Homebrew cask (macOS arm64)** — draft formula at
-`packaging/homebrew/argos.rb`; the checksum is filled only after a binary
-release asset exists, and the tap is not published yet.
-
-**pip / uv (any platform)** — `argos-agent` is not on PyPI yet.
-```bash
-# Planned:
-pip install argos-agent        # or: uv tool install argos-agent
-```
-
-**Linux** (AppImage / .deb / .rpm), **Windows** (WinGet / .exe zip), and
-**Homebrew tap** (Linux CLI) — manifests exist in `packaging/` but no
-artifacts have been built or uploaded yet.
-
-**Nix** — flake planned; not yet published.
-
-See [`docs/packaging-c.md`](docs/packaging-c.md) for the full per-channel
-install matrix and upgrade commands once these channels land.
+Binary installers and package-manager integrations are not part of the public
+launch surface. Draft scaffolding stays under `packaging/` and is tracked in
+[`docs/packaging-c.md`](docs/packaging-c.md), but those channels should not be
+advertised as install paths until their assets, checksums, and update flow are
+published.
 
 ---
 
@@ -206,9 +208,12 @@ The agent cannot self-certify. Three rules enforce this:
 
 Run with `--sandbox` (or `ARGOS_SANDBOX=1`) and the agent's code executes
 inside a macOS Seatbelt profile (Linux: `bwrap`, with an `unshare` fallback):
-no outbound network unless explicitly approved, writes confined to the declared
-workspace. Reads are deliberately broad — the agent has to import libraries and
-read your code — but credential paths (`~/.ssh`, `~/.aws`, …) are denied.
+the CodeAct child has no direct outbound network unless a `run_command` network
+valve is explicitly approved, and writes are confined to the declared
+workspace. The host-side broker tools such as `web_search` / `web_extract` still
+use governed network access. Reads are deliberately broad — the agent has to
+import libraries and read your code — but credential paths (`~/.ssh`, `~/.aws`,
+…) are denied.
 
 The OS sandbox is **off by default** (opt-in, the same posture as Claude
 Code's). On or off, the capability broker is the boundary every side effect
@@ -303,7 +308,7 @@ Tools span the breadth of an engineer's day:
   `lsp_document_symbols`, `lsp_workspace_symbols`, `lsp_diagnostics`
   (real language-server protocol against user-configured servers)
 - **MCP** — `mcp_call(server, tool, args)` (native stdio JSON-RPC,
-  zero pre-configuration; `~/.argos/mcp.json` is read on demand)
+  zero pre-configuration; `mcp.json` in the Argos config directory is read on demand)
 - **Workflow** — `propose_workflow({name, description, stages})` to
   request a Dynamic Workflow (see below)
 - **Computer use** — `computer.screenshot`, `computer.click`,
@@ -418,8 +423,8 @@ promote", narrative generation failures → template fallback. By default the
 nightly run is autonomous, and a synthesized skill is **auto-enabled** only
 when it strictly beats the baseline in a real A/B verify comparison — the
 verify gate is the quality bar, so there is no separate confirmation step
-(disable `builtin-dream-nightly` in `~/.argos/conductor/orders.jsonl` to turn
-it off). Integrates
+(disable `builtin-dream-nightly` in `conductor/orders.jsonl` under the Argos
+config directory to turn it off). Integrates
 with memory consolidation to merge reflections, decay low-confidence entries,
 and archive old experiences (never hard-delete). See `docs/dream.md`.
 
@@ -449,9 +454,9 @@ Slash commands live in the TUI. Tab completion is built in.
 | `/journal` | Show the ledger JSONL path for the current run or a specified run ID. |
 | `/retry` | Resend the last user message. |
 | `/plan` | Enter "look at the plan, then act" mode. The agent writes a markdown plan; the host presents an inline approval modal. Plan-mode tool dispatch blocks `write_file` / `edit_file` / `run_command` until you exit. |
-| `/hooks` | List the active `~/.argos/hooks.json` lifecycle hooks. `/hooks reload` re-reads the config without restarting. |
-| `/lsp` | List the language servers currently in scope. `/lsp reload` re-reads `~/.argos/lsp.json`. |
-| `/permissions` | Inspect permissions config. `/permissions reload` re-reads `~/.argos/permissions.json`; use `/trust` for the current approval level. Hard rules are always shown. |
+| `/hooks` | List the active `hooks.json` lifecycle hooks from the Argos config directory. `/hooks reload` re-reads the config without restarting. |
+| `/lsp` | List the language servers currently in scope. `/lsp reload` re-reads `lsp.json` from the Argos config directory. |
+| `/permissions` | Inspect permissions config. `/permissions reload` re-reads `permissions.json` from the Argos config directory; use `/trust` for the current approval level. Hard rules are always shown. |
 | `/runs` | List persisted runs (daemon mode). `/runs {id} resume\|cancel` acts on one. |
 | `/orders` | List standing conductor orders (autonomous scheduled / file-triggered instructions). |
 | `/confirm` | Confirm a conductor proactive suggestion by ID. |
@@ -474,20 +479,20 @@ Slash commands live in the TUI. Tab completion is built in.
 ## Memory & state
 
 **Task history** (the original 4-tier): per-run records persisted to
-`~/.argos/runs/<id>.jsonl` — append-only, fsync on meta, replayable
-byte-for-byte. The same event stream drives the live UI, the on-disk
-journal, and `/resume`. Recall is hybrid: vector recall when an
+`runs/<id>.jsonl` under the Argos config directory — append-only, fsync on
+meta, replayable byte-for-byte. The same event stream drives the live UI,
+the on-disk journal, and `/resume`. Recall is hybrid: vector recall when an
 embedder is available (reusing the active provider's embeddings
 endpoint), FTS5 keyword fallback otherwise. Argos will never call a
 model it isn't configured to call.
 
 **Auto memory** (#9, this release): a second 4-tier layer for
 **cross-session** recall. Project / User / Skill / Session scopes,
-JSONL at `~/.argos/memory/{user,projects/<hash>,skills/<name>,sessions/<sid>}.jsonl`.
+JSONL under `memory/` in the Argos config directory.
 5 implicit triggers (escalation / verify fail / repeat tool fail /
 run success / undo) + 3 explicit slash commands (`/remember`,
 `/forget`, `/memory`). Auto-loads `CLAUDE.md` / `AGENTS.md` (project
-walk-up + `~/.argos/CLAUDE.md` global) into the system prompt's
+walk-up + global files in the Argos config directory) into the system prompt's
 `<memory_context>` segment. Secret redaction on write. Decay
 `0.01/day` with use-count recovery `+0.02`. Capacity caps enforced
 on write. `ARGOS_NO_MEMORY=1` to opt out. See
@@ -513,7 +518,9 @@ uv run argos --effort=low|medium|high  # task effort tier (default: medium)
 
 ## Per-task model routing (#11)
 
-Different tasks → different models. Configure in `~/.argos/config.json`:
+Different tasks → different models. Configure the `routing` section in
+`config.json` under the Argos config directory (default `~/.argos`, or
+`ARGOS_CONFIG_DIR` if set):
 
 ```json
 {
@@ -598,6 +605,7 @@ Stop the daemon if it is running, then remove all Argos state:
 pkill -f argosd || true
 
 # Remove all Argos state: config, runs, memory, ledger, conductor orders
+# Default config directory; remove "$ARGOS_CONFIG_DIR" instead if you moved it.
 rm -rf ~/.argos
 
 # If installed from source via uv, remove the checkout:
@@ -607,9 +615,9 @@ rm -rf ~/.argos
 # uv tool uninstall argos-agent
 ```
 
-After `rm -rf ~/.argos` the next `uv run argos` will start with a clean
-state. The `~/.argos/.env` file (holding your API key) is removed as part
-of `~/.argos`; remove it separately if you stored it elsewhere.
+After removing the Argos config directory, the next `uv run argos` will start
+with a clean state. The `.env` file in that directory (holding your API key)
+is removed with it; remove it separately if you stored it elsewhere.
 
 ---
 

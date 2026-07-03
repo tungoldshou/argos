@@ -1,11 +1,4 @@
-"""#10 T3 install 流程:refresh → index → builtin 拒 → download → sha256 → 原子写。
-
-D6:同名前置 → 备份 .trash/ 后写新
-D7:builtin 3 名硬拒
-D8:装后强制 enabled=false(user review gate)
-D12:smoke test 装时跑(quick path),失败仅警告
-D14:skill 大小上限 100KB
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import hashlib
@@ -30,7 +23,7 @@ from argos.skills_curator.index import (
     load_cache,
 )
 
-MAX_SKILL_BYTES = 100 * 1024  # 100KB 上限
+MAX_SKILL_BYTES = 100 * 1024
 _SIZE_DRIFT_TOL = 0.2  # 20%
 
 
@@ -40,12 +33,12 @@ class InstallResult:
     path: Path
     sha256: str
     capabilities: tuple[str, ...]
-    smoke: str | None  # "pass: ..." | "fail: ..." | None(没跑)
+    smoke: str | None
     warnings: tuple[str, ...] = ()
 
 
 class InstallError(RuntimeError):
-    """install 失败(供 CLI / TUI 友好提示)。"""
+    """Internal documentation."""
 
 
 def _is_builtin_protected(name: str) -> bool:
@@ -91,14 +84,13 @@ def check_size_drift(content: bytes, declared: int, *, tol: float = _SIZE_DRIFT_
 
 
 def _ensure_enabled_false(content: bytes) -> bytes:
-    """装时强制 frontmatter enabled: false(spec D8:user review gate)."""
+    """Internal documentation."""
     text = content.decode("utf-8")
     try:
         meta = parse_frontmatter(text)
     except ValueError:
-        return content  # 装流程会再 raise,这里不强写
+        return content
     meta["enabled"] = False
-    # 保留原 body(在第二个 --- 之后)
     parts = text.split("---", 2)
     body = parts[2].lstrip("\n") if len(parts) >= 3 else ""
     new = "---\n" + yaml.safe_dump(meta, allow_unicode=True, sort_keys=False) + "---\n" + body
@@ -106,12 +98,12 @@ def _ensure_enabled_false(content: bytes) -> bytes:
 
 
 def _network_user_confirmed(name: str) -> bool:
-    """CLI 在调 install 前问 user;函数层默认 False(防 silent 装 network skill)。"""
+    """Internal documentation."""
     return os.environ.get("ARGOS_SKILLS_NETWORK_OK") == "1"
 
 
 def backup_to_trash(skill_dir: Path, *, base_dir: Path) -> Path:
-    """D6:同名前置 / 主动 remove → .trash/<n>-<ts>/ 备份,可恢复 30d."""
+    """Internal documentation."""
     trash_dir = base_dir / ".trash" / f"{skill_dir.name}-{int(time.time())}"
     trash_dir.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(skill_dir), str(trash_dir))
@@ -120,7 +112,7 @@ def backup_to_trash(skill_dir: Path, *, base_dir: Path) -> Path:
 
 def install(name: str, *, base_dir: Path | None = None,
             run_smoke: bool = True) -> InstallResult:
-    """完整 install 流程;返回 InstallResult;失败 → raise InstallError."""
+    """Internal documentation."""
     if _is_builtin_protected(name):
         raise InstallError(
             f"protected_skill: {name!r} is builtin and cannot be overridden"
@@ -128,7 +120,6 @@ def install(name: str, *, base_dir: Path | None = None,
 
     cache = load_cache(base_dir=base_dir)
     if cache is None:
-        # 自动 refresh 兜底
         try:
             cache = fetch_remote()
         except IndexFetchError as e:
@@ -144,7 +135,6 @@ def install(name: str, *, base_dir: Path | None = None,
     if drift:
         warnings.append(drift)
 
-    # 校验 frontmatter
     try:
         meta = parse_frontmatter(content.decode("utf-8"))
     except ValueError as e:
@@ -153,16 +143,13 @@ def install(name: str, *, base_dir: Path | None = None,
     if errs:
         raise InstallError(f"frontmatter_invalid: {'; '.join(errs)}")
 
-    # 网络 capability 二次确认(spec §6.1 防线 3)
     if "network" in entry.capabilities and not _network_user_confirmed(name):
         raise InstallError(t("skill.install_network_confirm_required", name=name))
 
-    # 落盘
     root = base_dir or _index_mod._skills_root()
     target_dir = root / name
     target_file = target_dir / "SKILL.md"
 
-    # D6:同名前置 → 备份
     if target_dir.exists():
         backup_to_trash(target_dir, base_dir=root)
 
@@ -172,7 +159,6 @@ def install(name: str, *, base_dir: Path | None = None,
     tmp.write_bytes(final_content)
     tmp.replace(target_file)  # atomic
 
-    # smoke test 跑(quick path;失败仅警告,spec §6.4)
     smoke: str | None = None
     if run_smoke:
         try:

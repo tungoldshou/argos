@@ -1,12 +1,4 @@
-"""Tool Receipts (HMAC, 契约 §6.2 + spec §6.5/§12.3).
-
-每次 broker 动作产 HMAC 签名回执:干了什么 · args 哈希 · 结果哈希 · 退出码 · 时间 · nonce。
-签名 key 只在 host 进程构造 —— 沙箱内代码碰不到,故 agent 伪造不了"我做了 X"。
-本阶段为可用占位(可签可验);Phase 4 可扩字段/接 harness 核验,签名算法不变。
-
-签名格式(§6.2 逐字匹配):
-  HMAC-SHA256(key, "{action}|{args_hash}|{result_hash}|{exit_code}|{ts}|{nonce}")
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import hashlib
@@ -38,7 +30,7 @@ class Receipt:
 
 
 class ReceiptSigner:
-    """HMAC 签名器。key 仅在 host(spec §12.3),绝不进沙箱子进程。"""
+    """Internal documentation."""
 
     def __init__(self, key: bytes) -> None:
         self._key = key
