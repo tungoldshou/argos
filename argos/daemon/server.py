@@ -1,23 +1,4 @@
-"""HTTP/SSE server(stdlib asyncio.start_server + 手写 HTTP/1.1)spec §2.5。
-
-5 端点(本期 #5a):
-  GET  /health
-  GET  /version
-  POST /sessions
-  POST /sessions/{id}/heartbeat
-  DELETE /sessions/{id}
-  GET  /runs
-  POST /runs
-  GET  /runs/{id}
-  GET  /runs/{id}/events?since=N  (SSE)
-  POST /runs/{id}/pause
-  POST /runs/{id}/resume
-  POST /runs/{id}/cancel
-  POST /runs/{id}/approval/{call_id}
-  POST /runs/{id}/plan_decision
-
-注:#5a 单 TUI 限定 → 所有 session 都 write-capable(无 read-only 降级)。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -48,8 +29,6 @@ _HTTP_REASONS = {
 }
 
 
-# 哨兵常量:__main__.py 在无 key 时传此值 → create_run 明确拒绝(诚实语义)。
-# loop_factory=None(老测试路径/向后兼容)= 只创建元数据不 spawn worker,不拒绝。
 _NO_KEY = object()
 
 
@@ -62,21 +41,10 @@ class DaemonHTTPServer:
                  loop_factory=None, gate=None,
                  components=None, ledger_store=None,
                  conductor_supervisor=None):
-        """loop_factory / components 二选一(components 优先走 per-run stack 路径)。
-
-        None(默认) = 向后兼容:create_run 创建元数据但不 spawn worker(测试/无 loop 场景)。
-        _NO_KEY 哨兵 = 无 key 诚实模式:create_run 明确拒绝并说明原因(不假装能跑)。
-                      由 daemon/__main__.py 在装配失败时显式传入。
-        callable   = 向后兼容:create_run 创建元数据 + spawn RunWorker(共享 sandbox/gate/broker)。
-        components = AppComponents 实例:create_run 走 build_run_stack,每 run 独享一套
-                     sandbox/gate/broker(并发不串台)。loop_factory 参数在此路径下被忽略。
-        gate       = 向后兼容:仅当 loop_factory=callable(无 components)时有意义;
-                     RunWorker 包 DaemonApprovalGate 实现 timeout fail-closed。
-        """
+        """Internal documentation."""
         self._manager = manager
         self._socket_path = Path(socket_path)
         self._sessions = SessionRegistry(heartbeat_timeout_s=session_timeout_s)
-        # #5b 扩展(向后兼容,缺省时建空):注册表 + worktree manager
         if registry is None:
             from argos.daemon.registry import RunRegistry
             registry = RunRegistry()
@@ -85,34 +53,16 @@ class DaemonHTTPServer:
             worktree = WorktreeManager()
         self._registry = registry
         self._worktree = worktree
-        # per-run 栈路径:components 存在时优先(并发安全)
         self._components = components
-        # 向后兼容:loop_factory 路径(共享 sandbox/gate/broker — 单 run 场景/测试)
-        # components 存在时 loop_factory 忽略,但保留以不破坏老测试构造签名。
         self._loop_factory = loop_factory
-        # 真 ApprovalGate(向后兼容 loop_factory 路径);components 路径下每 run 有自己的 gate。
         self._gate = gate
         self._server: asyncio.base_events.Server | None = None
         self._started_at: float = 0.0
-        # P3 跨进程审批路由表:run_id → RunWorker
-        # server 通过此表把 POST /runs/{id}/approval 路由到该 run 的 DaemonApprovalGate。
         self._workers: dict[str, "RunWorker"] = {}
-        # P3b §6 行为账本存储(可选,None = 无账本功能)
         self._ledger_store = ledger_store
-        # P5b §9 自治面:conductor supervisor(可选,None = 无自治功能)
         self._conductor = conductor_supervisor
-        # Dream(T9):DreamPipeline 单例(懒初始化)。关键:单飞锁在**实例**上,每次
-        # 新建 pipeline 锁就失效 —— 必须复用同一实例(_get_dream_pipeline 缓存)。
-        # 无 components/model → _get_dream_pipeline 返 None(诚实无 key 模式)。
         self._dream_pipeline = None
-        # TOCTOU 守卫:pipeline.is_running 只反映 run() 已持锁(锁在 create_task 派生
-        # 的协程体内部惰性获取)。两个并发请求都可能在 run() 协程被调度前读到
-        # is_running=False,各自 create_task 并返 202——违反"202=已启动"诚实铁律。
-        # _dream_starting 在 is_running 检查通过后、create_task 之前同步置 True
-        # (此处无 await,无法被抢占),done_callback 复位。
         self._dream_starting: bool = False
-        # 5a.3 自主模式：把 dream_starter 注入 supervisor（有 supervisor 才接线）。
-        # 使用 lambda 延迟绑定，确保引用 self._autonomous_dream_starter 而不是旧值。
         if conductor_supervisor is not None:
             conductor_supervisor._dream_starter = self._autonomous_dream_starter
 
@@ -139,7 +89,6 @@ class DaemonHTTPServer:
         self._server = await asyncio.start_unix_server(
             self._handle_connection, path=str(self._socket_path),
         )
-        # 0600 权限
         try:
             self._socket_path.chmod(0o600)
         except OSError:
@@ -174,7 +123,6 @@ class DaemonHTTPServer:
             except ValueError:
                 await self._send_error(writer, 400, CODE_BAD_REQUEST, "bad request line")
                 return
-            # 读 headers
             headers: dict[str, str] = {}
             while True:
                 line = await reader.readline()
@@ -185,7 +133,6 @@ class DaemonHTTPServer:
                     headers[k.strip().lower()] = v.strip()
                 except ValueError:
                     continue
-            # 读 body(Content-Length)
             body = b""
             cl = headers.get("content-length")
             if cl:
@@ -194,7 +141,6 @@ class DaemonHTTPServer:
                     body = await reader.readexactly(n)
                 except (ValueError, asyncio.IncompleteReadError):
                     pass
-            # 拆 path + query
             parts = urlsplit(target)
             path = parts.path
             query = parse_qs(parts.query)
@@ -214,14 +160,11 @@ class DaemonHTTPServer:
             if method == "GET" and path == "/health":
                 return await self._handle_health(writer, headers)
             if method == "GET" and path == "/version":
-                # 动态上报本进程实际加载的 argos 版本 + 协议号(单一真源),供 TUI 握手识别陈旧 daemon。
                 from argos import __version__ as _argos_version
                 from argos.protocol import PROTOCOL_VERSION
                 return await self._send_json(
                     writer, 200, {
                         "daemon": _argos_version, "protocol": PROTOCOL_VERSION,
-                        # started_at:daemon 进程启动时刻。TUI 握手据此 + 本地代码 mtime 判
-                        # "daemon 启动后代码是否改过"(dev 改码后旧 daemon 仍跑旧码 → 需重启)。
                         "started_at": self._started_at,
                     }
                 )
@@ -273,7 +216,6 @@ class DaemonHTTPServer:
                     return await self._handle_get_run(writer, headers, rest)
                 return await self._send_error(writer, 404, CODE_NOT_FOUND,
                                               f"no route for {method} {path}")
-            # P5b §9 自治面:Orders CRUD
             if method == "POST" and path == "/orders":
                 return await self._handle_create_order(writer, headers, body)
             if method == "GET" and path == "/orders":
@@ -281,7 +223,6 @@ class DaemonHTTPServer:
             if method == "DELETE" and path.startswith("/orders/"):
                 order_id = path[len("/orders/"):]
                 return await self._handle_delete_order(writer, headers, order_id)
-            # P5b §9 自治面:Suggestions 确认 / 忽略
             if path.startswith("/suggestions/"):
                 rest = path[len("/suggestions/"):]
                 if method == "POST" and rest.endswith("/confirm"):
@@ -290,10 +231,8 @@ class DaemonHTTPServer:
                 if method == "POST" and rest.endswith("/dismiss"):
                     sid_part = rest[:-len("/dismiss")]
                     return await self._handle_dismiss_suggestion(writer, headers, sid_part)
-            # GET /suggestions（列出当前 pending）
             if method == "GET" and path == "/suggestions":
                 return await self._handle_list_suggestions(writer, headers)
-            # Dream(T9):手动触发 + 报告查询
             if method == "POST" and path == "/dream/run":
                 return await self._handle_dream_run(writer, headers)
             if method == "GET" and path == "/dream/report":
@@ -307,13 +246,9 @@ class DaemonHTTPServer:
     # ── Session helpers ──────────────────────────────────────────────
 
     async def _require_session(self, writer, headers) -> str | None:
-        # 按需 reap(实测 bug 修复):reap_expired 此前零调用 = owner 永不过期、
-        # observer 永不晋升 —— 重启 TUI 后新 session 永远 403 readonly。
-        # 在鉴权前回收过期 session:过期 owner 让位 → promote 最旧 observer,
-        # 本次请求即可以新身份通过 _require_owner(无需客户端重试)。
         try:
             await self._sessions.reap_expired()
-        except Exception as _re:  # noqa: BLE001 — reap 失败不挡鉴权主路
+        except Exception as _re:  # noqa: BLE001
             log.warning("session reap 失败(忽略): %s", _re)
         sid = headers.get(HEADER_SESSION.lower())
         if not sid:
@@ -322,12 +257,11 @@ class DaemonHTTPServer:
         if not self._sessions.is_alive(sid):
             await self._send_error(writer, 401, CODE_MISSING_SESSION, "session expired or unknown")
             return None
-        # 续命
         await self._sessions.heartbeat(sid)
         return sid
 
     async def _require_owner(self, writer, headers) -> str | None:
-        """#5b §7.2:owner 才放行写端点;observer / unknown → 403 session_readonly。"""
+        """Internal documentation."""
         sid = await self._require_session(writer, headers)
         if sid is None:
             return None
@@ -367,9 +301,6 @@ class DaemonHTTPServer:
         })
 
     async def _handle_delete_session(self, writer, sid):
-        # #5b §7.2 DELETE /sessions/{id} 也要 owner(防 observer 主动退出 hijack role);
-        # 但 spec 同时允许 owner 退出触发 promote。最直觉:任何人能删自己 sid;上层调用
-        # 用 sid 鉴权(不带 session header)。这里用 sid 直接鉴权,owner 退出自动 promote。
         new_owner = await self._sessions.promote_oldest_observer_after_remove(sid)
         await self._send_json(writer, 204, {"ok": True, "promoted_to": new_owner})
 
@@ -380,7 +311,6 @@ class DaemonHTTPServer:
         if "state" in query and query["state"]:
             state_filter = query["state"][0]
         runs = self._manager.list_runs(state=state_filter)
-        # #5b 合并 registry 的 cost/worktree/focus 字段
         for r in runs:
             entry = self._registry.get(r["run_id"])
             if entry is not None:
@@ -401,15 +331,12 @@ class DaemonHTTPServer:
         goal = data.get("goal")
         if not goal or not isinstance(goal, str):
             return await self._send_error(writer, 400, CODE_BAD_REQUEST, "missing goal")
-        # P1 通电:无 key 诚实拒绝(在分配 slot/run 之前检查,不留垃圾元数据)
-        # _NO_KEY 哨兵:daemon 启动时明确检测到无 key → 拒绝并说明原因
         if self._loop_factory is _NO_KEY:
             return await self._send_error(
                 writer, 503, "no_worker_key",
                 t("daemon.srv.no_key_run"),
             )
 
-        # #5b 并发满 → 503(spec §5.2)
         if not self._registry.has_capacity():
             return await self._send_error(
                 writer, 503, CODE_BUSY,
@@ -417,7 +344,6 @@ class DaemonHTTPServer:
                 f"(max={self._registry.max_concurrent}, "
                 f"active={self._registry.active_count})",
             )
-        # 抢 slot(同步路径,has_capacity 已 check,不该阻塞)
         try:
             await asyncio.wait_for(self._registry.acquire_slot(), timeout=0.01)
         except asyncio.TimeoutError:
@@ -433,11 +359,11 @@ class DaemonHTTPServer:
                 workspace=data.get("workspace", ""),
                 model=data.get("model", ""),
                 approval_level=data.get("approval_level", "confirm"),
+                session_id=sid,
             )
         except Exception:
             self._registry.release_slot()
             raise
-        # #5b worktree(若请求 isolation=worktree)
         wt_path = None
         workspace = data.get("workspace", "")
         if data.get("isolation") == "worktree" and workspace:
@@ -448,24 +374,16 @@ class DaemonHTTPServer:
                 return await self._send_error(
                     writer, 503, "worktree_failed", str(e),
                 )
-        # 注册到 registry
         await self._registry.register(
             run_id=run_id, goal=goal, workspace=workspace, worktree_path=wt_path,
         )
 
-        # P1 通电:spawn RunWorker 协程
-        # components 路径(优先):per-run 独享 sandbox/gate/broker — 并发安全
-        # loop_factory 路径(向后兼容):共享组件,仅适合单 run 场景
         effective_ws_str = wt_path or (workspace if workspace else None)
         from argos.daemon.worker import RunWorker
-        # P3:approval_timeout_s 可由 create_run body 携带(默认 60s)。
         approval_timeout_s = float(data.get("approval_timeout_s", 60.0))
-        # 图片附件(base64 over wire)→ ImageAttachment;只在内存随 worker 传,不落 index。
         from argos.daemon.attachments_wire import decode_attachments
         run_attachments = decode_attachments(data.get("attachments"))
 
-        # P3b §6:run 起点快照(undo_token 来源)。
-        # workspace 存在时拍快照;失败 fail-soft(snapshot=None → undo 诚实报 no_snapshot)。
         run_snapshot = None
         if effective_ws_str:
             try:
@@ -477,28 +395,17 @@ class DaemonHTTPServer:
             except Exception as _snap_err:  # noqa: BLE001
                 log.warning("server: run 起点快照失败(undo 将不可用): %s", _snap_err)
 
-        # per-run verify_cmd(可选):用户在 /goal | verify: <cmd> 中声明的验证命令。
-        # 透传到 build_run_stack → LoopConfig.verify_cmd,让验证门禁用正确退出码。
         _verify_cmd: str | None = data.get("verify_cmd") or None
 
-        # P4 Trust Dial:per-run trust_level 参数(可选,默认沿用现有 approval_level 语义)。
-        # trust_level 取枚举名字符串(如 "L1_DANGEROUS_ONLY")或 None(不传 → 不覆盖 approval_level)。
-        # 传入时通过 gate.set_trust_level(TrustLevel[name]) 写入;枚举名非法 → 诚实降级(警告+忽略)。
         _trust_level_str = data.get("trust_level")
 
         def _apply_trust_to_gate(gate: "Any") -> None:
-            """将 trust_level 字符串写入 gate;非法值静默降级(fail-safe)。
-
-            components 路径:gate 由 build_run_stack 构造,reversible_lookup 已由
-            app_factory 从 CapabilityRegistry 注入;此处只需写 trust_level。
-            legacy loop_factory 路径:共享 gate 无 reversible_lookup 注入,L2 时
-            evaluator 退化保守 ask(fail-closed 方向)。
-            """
+            """Internal documentation."""
             if not _trust_level_str:
                 return
             try:
                 from argos.permissions.trust_dial import TrustLevel
-                tl = TrustLevel[_trust_level_str]  # KeyError = 枚举名非法
+                tl = TrustLevel[_trust_level_str]
                 gate.set_trust_level(tl)
             except KeyError:
                 log.warning(
@@ -510,7 +417,6 @@ class DaemonHTTPServer:
                 log.warning("server: trust_level 应用失败,诚实降级: %s", _te)
 
         if self._components is not None:
-            # per-run 隔离栈:并发 run 各自独立 sandbox/gate/broker
             effective_ws_path = (
                 Path(effective_ws_str).expanduser().resolve()
                 if effective_ws_str else None
@@ -535,12 +441,9 @@ class DaemonHTTPServer:
                 snapshot=run_snapshot,
                 attachments=run_attachments,
             )
-            # P3:注册 worker 到路由表(供审批路由)+ 终态自动摘除(#12 防泄漏)
             self._spawn_worker(worker, run_id, name=f"run-{run_id}")
         elif callable(self._loop_factory):
-            # 向后兼容路径:共享 sandbox/gate/broker(loop_factory 注入)
             run_loop_factory = self._make_run_loop_factory(effective_ws_str)
-            # 向后兼容路径的 gate 是全局共享 gate;trust_level 写入全局 gate(告警)
             if self._gate is not None:
                 if _trust_level_str:
                     log.warning(
@@ -562,36 +465,26 @@ class DaemonHTTPServer:
                 snapshot=run_snapshot,
                 attachments=run_attachments,
             )
-            # P3:注册 worker 到路由表 + 终态自动摘除(#12 防泄漏)
             self._spawn_worker(worker, run_id, name=f"run-{run_id}")
         else:
-            # 元数据模式(components/loop_factory 均无):没有 worker 跑终态清理,
-            # 槽位必须当场归还,否则 max_concurrent 次后 daemon 永久 503(槽位泄漏)。
             self._registry.release_slot()
 
         await self._send_json(writer, 201, {"run_id": run_id})
 
     def _spawn_worker(self, worker: "RunWorker", run_id: str, *, name: str) -> "asyncio.Task":
-        """启动 worker task + 注册路由表;终态(完成/失败/取消)自动从 _workers 摘除,防止常驻
-        daemon 路由表只增不减(每 run 泄漏 RunWorker 及其 gate/snapshot/attachments → 内存膨胀)。
-        worker.run() 自抓 current_task 供 request_hard_cancel,与此处的 task 同一个。"""
+        """Internal documentation."""
         self._workers[run_id] = worker
         task = asyncio.create_task(worker.run(), name=name)
         task.add_done_callback(lambda _t, rid=run_id: self._workers.pop(rid, None))
         return task
 
     def _make_run_loop_factory(self, workspace: str | None):
-        """返回 per-run loop_factory:在 base loop_factory 基础上用指定 workspace 覆盖。
-
-        base loop_factory 已通过 app_factory.build_loop_factory() 装配好所有共享组件;
-        per-run workspace 参数化让多 run 并发不共享 workspace 状态。
-        """
+        """Internal documentation."""
         from pathlib import Path
 
         base_factory = self._loop_factory
 
         if not workspace:
-            # 无指定 workspace:直接用 base factory(workspace 用 AppComponents 默认值)
             return base_factory
 
         ws_path = Path(workspace).expanduser().resolve()
@@ -599,7 +492,6 @@ class DaemonHTTPServer:
 
         def _run_specific_factory():
             loop = base_factory()
-            # 覆盖 per-run workspace(AgentLoop._workspace / _verify_dir 是实例属性)
             loop._workspace = ws_path
             loop._verify_dir = ws_path
             return loop
@@ -612,7 +504,6 @@ class DaemonHTTPServer:
         entry = self._manager.get_run(run_id)
         if entry is None:
             return await self._send_error(writer, 404, CODE_NOT_FOUND, "run not found")
-        # #5b 优先从 registry 读(可能更精确)
         reg_entry = self._registry.get(run_id)
         body = {
             "run_id": run_id,
@@ -640,7 +531,7 @@ class DaemonHTTPServer:
         await self._send_json(writer, 202, {"state": "pause_requested"})
 
     async def _handle_suspend(self, writer, headers, run_id):
-        """POST /runs/{id}/suspend — Ctrl+B 后台化:running → suspended(下个 step 边界)。"""
+        """Internal documentation."""
         if (sid := await self._require_owner(writer, headers)) is None:
             return
         ok = await self._manager.request_suspend(run_id)
@@ -757,17 +648,13 @@ class DaemonHTTPServer:
         if not ok:
             return await self._send_error(writer, 409, CODE_INVALID_TRANSITION,
                                           "run is in terminal state (cannot cancel)")
-        # #13 硬中断:set-flag(request_cancel)只在事件边界轮询生效,卡在 model stream 时无法
-        # 中断(用户取消后可继续跑 ~5min)。直接 cancel worker task → await 点抛 CancelledError。
         worker = self._workers.get(run_id)
         if worker is not None:
             worker.request_hard_cancel()
         await self._send_json(writer, 202, {"state": "cancel_requested"})
 
     async def _handle_focus(self, writer, headers, run_id):
-        """#5b POST /runs/{id}/focus:TUI 告诉 daemon "此 run 是我的 active 焦点"。
-
-        owner-only(spec §7.2 权限矩阵)。"""
+        """Internal documentation."""
         if (sid := await self._require_owner(writer, headers)) is None:
             return
         if self._registry.get(run_id) is None:
@@ -779,20 +666,7 @@ class DaemonHTTPServer:
         })
 
     async def _handle_approval(self, writer, headers, run_id, call_id, body):
-        """P3 跨进程审批响应入口。
-
-        decision 接受 DecisionKind: deny|once|session|always。
-        路由语义:
-          1. 查路由表找 run_id 对应的 RunWorker。
-          2. 通过 worker.gate.respond(call_id, decision) 立即 resolve 挂起的 Future。
-          3. fanout approval_response 事件到 SSE(审计可见性:多客户端同步看到谁批了什么)。
-
-        错误语义(fail-closed):
-          · run_id 未知 → 404
-          · call_id 不在该 run gate 的 pending 集合 → 409
-          · decision 不合法 → 400
-          · 任何路径都不自动放行
-        """
+        """Internal documentation."""
         if (sid := await self._require_owner(writer, headers)) is None:
             return
         try:
@@ -808,10 +682,8 @@ class DaemonHTTPServer:
                 f"decision must be one of {valid_decisions}",
             )
 
-        # 查路由表
         worker = self._workers.get(run_id)
         if worker is None:
-            # run 存在但不在 worker 表(已结束/无法跑):特殊 404
             if self._manager.get_run(run_id) is None:
                 return await self._send_error(writer, 404, CODE_NOT_FOUND,
                                               f"run {run_id!r} not found")
@@ -819,7 +691,6 @@ class DaemonHTTPServer:
                                           f"run {run_id!r} has no active worker "
                                           "(already completed or never started)")
 
-        # 路由到 gate
         gate = worker.gate
         if gate is None:
             return await self._send_error(
@@ -827,7 +698,6 @@ class DaemonHTTPServer:
                 f"run {run_id!r} has no approval gate (FakeLoop / no-gate path)",
             )
 
-        # call_id 必须在该 run gate 的 pending 集合中
         from argos.daemon.worker import DaemonApprovalGate
         if isinstance(gate, DaemonApprovalGate) and not gate.has_pending_call(call_id):
             return await self._send_error(
@@ -836,16 +706,13 @@ class DaemonHTTPServer:
                 "(already resolved, timed out, or wrong run)",
             )
 
-        # resolve 挂起 Future(立即唤醒 run)
         resolved = gate.respond(call_id, decision)
         if not resolved:
-            # respond 返 False = pending 中途被清除(超时 race),诚实报 409
             return await self._send_error(
                 writer, 409, "call_id_already_resolved",
                 f"call_id {call_id!r} was already resolved (timeout race) in run {run_id!r}",
             )
 
-        # fanout + 持久化 approval_response 事件(审计可见性 + 可回放)
         approval_ev = {
             "kind": "approval_response",
             "call_id": call_id,
@@ -853,9 +720,7 @@ class DaemonHTTPServer:
             "run_id": run_id,
             "ts": time.time(),
         }
-        # 持久化到 JSONL store(供 replay 和审计)
         self._manager.store.append(run_id, approval_ev)
-        # SSE 扇出(多客户端同步看到谁批了什么)
         await self._manager.fanout(run_id, approval_ev)
 
         await self._send_json(writer, 200, {
@@ -865,28 +730,11 @@ class DaemonHTTPServer:
         })
 
     async def _handle_plan_decision(self, writer, headers, run_id, body):
-        """POST /runs/{id}/plan_decision — daemon 路径回传 plan 决策。
-
-        v6 §4 ACP PlanDecisionRequest:与 /approval/{call_id} 同构,但服务 plan 决策
-        而非工具审批。调用方提供 JSON body:
-          {"call_id": "12hex", "action": "approve_start", "feedback": "..."}
-        action 必须是 PlanExitDecision._VALID_ACTIONS 之一。
-
-        fail-closed(铁律):
-          · run 不存在 → 404
-          · call_id 不在注册表(超时 race / 非法 id) → 409
-          · action 非法 / refine 无 feedback → 400
-          · respond_plan_decision 校验失败 → 400
-          · 一切异常 → 500(不静默;让调用方知道)
-        """
-        # plan_decision 是等价于审批的控制变更(approve_start 会让 run 越过 plan 闸继续),
-        # 与 approval/resume/cancel/focus 等控制端点一致,必须 owner-only。
+        """Internal documentation."""
         if (sid := await self._require_owner(writer, headers)) is None:
             return
-        # 用 _workers 表找 RunWorker(而非 manager.get_run 的 RunEntry)
         worker = self._workers.get(run_id)
         if worker is None:
-            # run 存在于 manager 但无 active worker(已完成/从未启动)
             if self._manager.get_run(run_id) is None:
                 return await self._send_error(
                     writer, 404, CODE_NOT_FOUND, f"run {run_id!r} not found",
@@ -896,7 +744,6 @@ class DaemonHTTPServer:
                 f"run {run_id!r} has no active worker (already completed or never started)",
             )
 
-        # 解析 body
         try:
             payload = json.loads(body) if body else {}
         except Exception:
@@ -911,7 +758,6 @@ class DaemonHTTPServer:
         if not action:
             return await self._send_error(writer, 400, CODE_BAD_REQUEST, "missing action")
 
-        # 取 loop(per-run RunWorker 持有)
         loop = getattr(worker, "_loop", None) or getattr(worker, "loop", None)
         if loop is None or not hasattr(loop, "respond_plan_decision"):
             return await self._send_error(
@@ -919,7 +765,6 @@ class DaemonHTTPServer:
                 f"loop for run {run_id!r} is not available or not running",
             )
 
-        # call_id 必须在 _plan_call_registry 中
         if call_id not in getattr(loop, "_plan_call_registry", {}):
             return await self._send_error(
                 writer, 409, "unknown_call_id",
@@ -927,14 +772,8 @@ class DaemonHTTPServer:
                 "(may have timed out or already resolved)",
             )
 
-        # 路由决策到 loop(等价于 ExitPlanMode;fail-closed 校验在 respond_plan_decision 内)。
-        # respond_plan_decision 返回 False 有两类原因:
-        #   a. 动作非法 / refine 无 feedback → 400(客户端输入错误)
-        #   b. loop.mode 已翻回 act(本轮已解决/竞态) → 409(状态冲突,非输入错误)
-        # 区分方式:直接调 ExitPlanMode 检查 loop.mode 来判断(respond_plan_decision 内已调)。
         ok = loop.respond_plan_decision(call_id, action, feedback)
         if not ok:
-            # 检查是否竞态(loop 已退出 plan mode)
             current_mode = getattr(loop, "mode", "act")
             if current_mode != "plan":
                 return await self._send_error(
@@ -947,7 +786,6 @@ class DaemonHTTPServer:
                 f"plan_decision rejected: invalid action {action!r} or missing feedback for refine",
             )
 
-        # fanout plan_decision 事件(审计可见性)
         plan_ev = {
             "kind": "plan_decision_response",
             "call_id": call_id,
@@ -967,11 +805,7 @@ class DaemonHTTPServer:
     # ── P3b Ledger endpoints ─────────────────────────────────────────
 
     async def _handle_get_ledger(self, writer, headers, run_id):
-        """GET /runs/{id}/ledger — 回放账本(人话条目列表)。
-
-        权限:session(只读观察者也能看账本)。
-        返回:{"run_id": ..., "entries": [{...LedgerEntry.to_dict()...}, ...]}
-        """
+        """Internal documentation."""
         if await self._require_session(writer, headers) is None:
             return
         if self._manager.get_run(run_id) is None:
@@ -979,7 +813,6 @@ class DaemonHTTPServer:
 
         ledger_store = getattr(self, "_ledger_store", None)
         if ledger_store is None:
-            # 无账本存储:返空列表(向后兼容,无账本不报错)
             return await self._send_json(writer, 200, {"run_id": run_id, "entries": []})
 
         try:
@@ -993,30 +826,7 @@ class DaemonHTTPServer:
             await self._send_error(writer, 500, CODE_INTERNAL, str(e))
 
     async def _handle_undo(self, writer, headers, run_id, body):
-        """POST /runs/{id}/undo — run 级还原(快照还原 + 账本标记)。
-
-        A3 扩展:body 可携带 entry_seq 字段 → 文件粒度还原(单条账本条目对应的文件)。
-        无 entry_seq → 既有 run 级行为不变(整个 run 快照还原)。
-
-        语义(诚实四分):
-          · run 不存在                               → 404
-          · 无账本                                   → 409 "nothing_to_undo"
-          · entry_seq 指定:
-            - 条目不存在                             → 409 "entry_not_found"
-            - undo_token 不是 "file:" 前缀(非文件条目)→ 409 "not_file_entry"
-            - reversible != yes                      → 409 "not_reversible"
-            - undo_state 已为 done                   → 409 "already_undone"
-            - 无快照 / 快照不存在                    → 409 "no_snapshot"
-            - 还原成功                               → 200
-          · 无 entry_seq(run 级):
-            - 账本已有 undo_done 标记                → 409 "already_undone"
-            - 无 reversible=yes 条目                 → 409 "nothing_to_undo"
-            - 无快照 / 快照不存在                    → 409 "no_snapshot"
-            - 还原成功                               → 200
-          · 不可逆动作的条目不受影响(诚实)
-
-        权限:owner-only(_require_owner 鉴权;交互审批门未接,与 run 级既有语义一致)。
-        """
+        """Internal documentation."""
         if await self._require_owner(writer, headers) is None:
             return
 
@@ -1030,7 +840,6 @@ class DaemonHTTPServer:
                 t("daemon.srv.undo_no_ledger"),
             )
 
-        # 解析 body(entry_seq 可选)
         try:
             body_data = json.loads(body.decode("utf-8") or "{}") if body else {}
         except json.JSONDecodeError:
@@ -1045,20 +854,16 @@ class DaemonHTTPServer:
                     t("daemon.srv.undo_entry_seq_must_be_int"),
                 )
 
-        # ── A3 分支:文件粒度还原 ─────────────────────────────────────────
         if entry_seq is not None:
             return await self._handle_undo_entry(writer, run_id, ledger_store, entry_seq)
 
-        # ── 既有 run 级还原路径(无 entry_seq)────────────────────────────
 
-        # 已撤销检查
         if ledger_store.is_undo_done(run_id):
             return await self._send_error(
                 writer, 409, "already_undone",
                 t("daemon.srv.undo_already_done"),
             )
 
-        # 有无 reversible=yes 条目
         entries = ledger_store.replay(run_id)
         available = [e for e in entries if e.undo_state == "available"]
         if not available:
@@ -1067,22 +872,19 @@ class DaemonHTTPServer:
                 t("daemon.srv.undo_nothing_available"),
             )
 
-        # 找 undo_token(run 级快照路径:不含 "file:" 前缀的条目)
         undo_token: str | None = None
         for e in available:
             if e.undo_token and not e.undo_token.startswith("file:"):
                 undo_token = e.undo_token
                 break
 
-        # Minor-1 修正:纯文件编辑 run 账本条目全是 "file:" 前缀,扫不到非 file: 的 token。
-        # fallback:按约定路径 SNAPSHOT_ROOT/run-{run_id}.tar 探测快照文件是否存在。
         if not undo_token:
             try:
                 from argos.core.snapshot import SNAPSHOT_ROOT as _SNAP_ROOT
                 _snap_candidate = _SNAP_ROOT / f"run-{run_id}.tar"
                 if _snap_candidate.exists():
                     undo_token = str(_snap_candidate)
-            except Exception:  # noqa: BLE001 — 兜底探测失败不崩，继续走 no_snapshot 路径
+            except Exception:  # noqa: BLE001
                 pass
 
         if not undo_token:
@@ -1099,7 +901,6 @@ class DaemonHTTPServer:
                 t("daemon.srv.undo_snap_missing", snap_path=snap_path),
             )
 
-        # 找 workspace(从 run meta 拿)
         run_meta = self._manager.get_run(run_id)
         workspace_str = getattr(run_meta, "workspace", "") or ""
         if not workspace_str:
@@ -1115,13 +916,11 @@ class DaemonHTTPServer:
                 t("daemon.srv.undo_workspace_missing", workspace=workspace),
             )
 
-        # 执行快照还原
         from argos.core.snapshot import RunSnapshot
         snapshot = RunSnapshot(tar_path=snap_path)
         result = snapshot.restore(workspace)
 
         if result.errors:
-            # 部分失败:标记账本 + 诚实报告(不假装全成功)
             ledger_store.undo_complete(run_id)
             error_detail = "; ".join(f"{p}: {e}" for p, e in result.errors[:3])
             return await self._send_json(writer, 200, {
@@ -1133,10 +932,8 @@ class DaemonHTTPServer:
                 "note": t("daemon.srv.undo_partial_note"),
             })
 
-        # 全量成功
         ledger_store.undo_complete(run_id)
 
-        # 广播 undo_done 事件(审计可见性)
         undo_ev = {
             "kind": "undo_done",
             "run_id": run_id,
@@ -1154,23 +951,10 @@ class DaemonHTTPServer:
         })
 
     async def _handle_undo_entry(self, writer, run_id: str, ledger_store, entry_seq: int):
-        """A3:文件粒度 undo — 按 entry_seq 还原单个文件。
-
-        诚实四分(409 语义):
-          · 条目不存在                → 409 entry_not_found
-          · undo_token 非 file: 前缀 → 409 not_file_entry
-          · reversible != yes        → 409 not_reversible
-          · undo_state 已 done       → 409 already_undone
-          · 快照不可用               → 409 no_snapshot
-          · 还原成功                 → 200(entry undo_state → done)
-
-        新建文件 undo = 删除(人话文案明说)。
-        undo 仍走审批面(调用方已经过 _require_owner)。
-        """
+        """Internal documentation."""
         from pathlib import Path as _Path
         from argos.core.snapshot import RunSnapshot
 
-        # 查条目
         ledger_entry = ledger_store.get_entry(run_id, entry_seq)
         if ledger_entry is None:
             return await self._send_error(
@@ -1178,14 +962,12 @@ class DaemonHTTPServer:
                 t("daemon.srv.undo_entry_not_found", entry_seq=entry_seq),
             )
 
-        # undo_token 必须是 file: 前缀(文件粒度条目)
         if not ledger_entry.undo_token or not ledger_entry.undo_token.startswith("file:"):
             return await self._send_error(
                 writer, 409, "not_file_entry",
                 t("daemon.srv.undo_entry_not_file", entry_seq=entry_seq),
             )
 
-        # reversible 检查
         if ledger_entry.reversible != "yes":
             return await self._send_error(
                 writer, 409, "not_reversible",
@@ -1193,24 +975,20 @@ class DaemonHTTPServer:
                   entry_seq=entry_seq, reversible=ledger_entry.reversible),
             )
 
-        # 已撤销检查
         if ledger_entry.undo_state == "done":
             return await self._send_error(
                 writer, 409, "already_undone",
                 t("daemon.srv.undo_entry_already_done", entry_seq=entry_seq),
             )
 
-        # 从 undo_token 提取文件路径("file:{abs_path}")
         file_path_str = ledger_entry.undo_token[len("file:"):]
 
-        # 找 run 级 undo_token(快照路径:不带 file: 前缀的 available 条目)
         all_entries = ledger_store.replay(run_id)
         snap_token: str | None = None
         for e in all_entries:
             if e.undo_token and not e.undo_token.startswith("file:") and e.undo_state == "available":
                 snap_token = e.undo_token
                 break
-        # 也查 done 条目里有无快照(run 级 undo 已完成但单文件 undo 仍需快照)
         if snap_token is None:
             for e in all_entries:
                 if e.undo_token and not e.undo_token.startswith("file:"):
@@ -1230,7 +1008,6 @@ class DaemonHTTPServer:
                 t("daemon.srv.undo_entry_snap_missing", snap_path=snap_path),
             )
 
-        # 找 workspace
         run_meta = self._manager.get_run(run_id)
         workspace_str = getattr(run_meta, "workspace", "") or ""
         if not workspace_str:
@@ -1245,15 +1022,12 @@ class DaemonHTTPServer:
                 t("daemon.srv.undo_entry_workspace_missing", workspace=workspace),
             )
 
-        # 计算相对路径(文件路径相对于 workspace)
         try:
             file_abs = _Path(file_path_str).resolve()
             rel_path = str(file_abs.relative_to(workspace))
         except (ValueError, OSError):
-            # 绝对路径不在 workspace 内或无效:尝试直接用 file_path_str 作相对路径
             rel_path = file_path_str.lstrip("/")
 
-        # 执行单文件还原
         snapshot = RunSnapshot(tar_path=snap_path)
         result = snapshot.restore_file(workspace, rel_path)
 
@@ -1264,17 +1038,14 @@ class DaemonHTTPServer:
                 t("daemon.srv.undo_entry_restore_failed", error_detail=error_detail),
             )
 
-        # 标记该条目 undo_state → done
         ledger_store.mark_entry_done(run_id, entry_seq)
 
-        # 判断结果类型:missing = run 中新建(撤销=删除),restored = 已还原
         was_new_file = bool(result.missing)
         if was_new_file:
             note = t("daemon.srv.undo_entry_new_file_note", file_path=file_path_str)
         else:
             note = t("daemon.srv.undo_entry_restored_note", file_path=file_path_str)
 
-        # 广播 undo_entry_done 事件(审计可见性)
         undo_ev = {
             "kind": "undo_entry_done",
             "run_id": run_id,
@@ -1295,27 +1066,16 @@ class DaemonHTTPServer:
             "note": note,
         })
 
-    # ── P5b §9 自治面：Orders CRUD ───────────────────────────────────
 
     def _conductor_orders_dir(self):
-        """conductor OrderStore 目录（与 conductor_supervisor 一致）。"""
+        """Internal documentation."""
         if self._conductor is not None:
             return self._conductor._orders_dir
         from argos.daemon.__main__ import _default_conductor_dir
         return _default_conductor_dir()
 
     async def _handle_create_order(self, writer, headers, body):
-        """POST /orders — 创建 StandingOrder。
-
-        body JSON 字段：
-          utterance     必填：人话描述
-          kind          必填："schedule" 或 "file_trigger"
-          schedule      kind=schedule 时必填：cron-lite 表达式
-          trigger_glob  kind=file_trigger 时必填：文件 glob
-          goal_template 必填：goal 模板
-          enabled       可选：bool，默认 True
-        返回 201 {id: "..."}；非法 body → 400。
-        """
+        """Internal documentation."""
         if await self._require_owner(writer, headers) is None:
             return
         try:
@@ -1358,7 +1118,7 @@ class DaemonHTTPServer:
         await self._send_json(writer, 201, order.to_dict())
 
     async def _handle_list_orders(self, writer, headers):
-        """GET /orders — 列出所有 StandingOrder。"""
+        """Internal documentation."""
         if await self._require_session(writer, headers) is None:
             return
         from argos.conductor.orders import OrderStore
@@ -1367,7 +1127,7 @@ class DaemonHTTPServer:
         await self._send_json(writer, 200, [o.to_dict() for o in orders])
 
     async def _handle_delete_order(self, writer, headers, order_id):
-        """DELETE /orders/{id} — 删除 StandingOrder。"""
+        """Internal documentation."""
         if await self._require_owner(writer, headers) is None:
             return
         if not order_id:
@@ -1380,10 +1140,9 @@ class DaemonHTTPServer:
                                           f"order {order_id!r} not found")
         await self._send_json(writer, 204, {"ok": True})
 
-    # ── P5b §9 自治面：Suggestions ──────────────────────────────────
 
     async def _handle_list_suggestions(self, writer, headers):
-        """GET /suggestions — 列出当前 pending 建议（内存）。"""
+        """Internal documentation."""
         if await self._require_session(writer, headers) is None:
             return
         if self._conductor is None:
@@ -1403,13 +1162,7 @@ class DaemonHTTPServer:
         await self._send_json(writer, 200, result)
 
     async def _handle_confirm_suggestion(self, writer, headers, suggestion_id):
-        """POST /suggestions/{id}/confirm — 用户确认 → create_run（worktree 隔离 + L1 信任）。
-
-        安全铁律（不可降级）：
-          · isolation = "worktree"（写死）
-          · trust_level = "L1_DANGEROUS_ONLY"（写死，不读全局 TrustDial）
-        返回 {run_id: "..."}；未知 id → 404；已 dismiss → 409。
-        """
+        """Internal documentation."""
         if await self._require_owner(writer, headers) is None:
             return
         if not suggestion_id:
@@ -1422,19 +1175,15 @@ class DaemonHTTPServer:
         if s is None:
             return await self._send_error(writer, 404, CODE_NOT_FOUND,
                                           f"suggestion {suggestion_id!r} not found or already dismissed")
-        # Dream(T9):action=="dream" → 路由 DreamPipeline，而非 create_run（spec §5）。
-        # 已通过 _require_owner 鉴权 + suggestion 存在性检查,直接交给 _confirm_dream。
         if getattr(s, "action", "run") == "dream":
             return await self._confirm_dream(writer, suggestion_id, s)
 
-        # 检查 loop_factory 可用（_NO_KEY 哨兵 = 无 key）
         if self._loop_factory is _NO_KEY:
             return await self._send_error(
                 writer, 503, "no_worker_key",
                 t("daemon.srv.no_key_run_confirm"),
             )
 
-        # 并发槽位检查
         if not self._registry.has_capacity():
             return await self._send_error(
                 writer, 503, CODE_BUSY,
@@ -1451,11 +1200,10 @@ class DaemonHTTPServer:
                   max_concurrent=self._registry.max_concurrent),
             )
 
-        # 铁律：isolation=worktree，trust_level=L1_DANGEROUS_ONLY
         try:
             run_id = await self._manager.create_run(
                 goal=s.goal,
-                workspace="",         # worktree 从 base_dir 隔离，不需要用户 workspace
+                workspace="",
                 model="",
                 approval_level="confirm",
             )
@@ -1463,7 +1211,6 @@ class DaemonHTTPServer:
             self._registry.release_slot()
             raise
 
-        # 创建 worktree（即使无 workspace 也在 WorktreeManager.base_dir 建 temp 目录）
         wt_path = None
         try:
             wt_path = self._worktree.create(run_id=run_id, workspace="")
@@ -1485,7 +1232,6 @@ class DaemonHTTPServer:
                 workspace=effective_ws_path,
                 session_id=f"run-{run_id}",
             )
-            # 写死 L1_DANGEROUS_ONLY（铁律：自治 run 最高 L1，不读全局 TrustDial）
             try:
                 from argos.permissions.trust_dial import TrustLevel
                 run_stack.gate.set_trust_level(TrustLevel["L1_DANGEROUS_ONLY"])
@@ -1523,13 +1269,10 @@ class DaemonHTTPServer:
                     log.warning("conductor confirm: set_trust_level(shared gate) 失败: %s", _te)
             self._spawn_worker(worker, run_id, name=f"conductor-run-{run_id}")
         else:
-            # 元数据模式:没有 worker 跑终态清理,槽位当场归还(终审 major:槽位泄漏)。
             self._registry.release_slot()
 
-        # 从 pending 移除（已确认，不再是 pending）
         self._conductor.pop_suggestion(suggestion_id)
 
-        # 广播 confirm 事件（审计可见性）
         confirm_ev = {
             "kind": "suggestion_confirmed",
             "suggestion_id": suggestion_id,
@@ -1550,7 +1293,7 @@ class DaemonHTTPServer:
         })
 
     async def _handle_dismiss_suggestion(self, writer, headers, suggestion_id):
-        """POST /suggestions/{id}/dismiss — 用户忽略建议。"""
+        """Internal documentation."""
         if await self._require_owner(writer, headers) is None:
             return
         if not suggestion_id:
@@ -1564,29 +1307,20 @@ class DaemonHTTPServer:
                                           f"suggestion {suggestion_id!r} not found or already dismissed")
         await self._send_json(writer, 200, {"suggestion_id": suggestion_id, "state": "dismissed"})
 
-    # ── Dream(T9):夜间整合接线 ───────────────────────────────────────────
 
     def _dreams_dir(self) -> Path:
-        """Dream 报告目录。默认 ~/.argos/dreams；ARGOS_DREAMS_DIR 可覆盖（测试注入用）。
-
-        与 _get_dream_pipeline 装配的 dreams_dir 同口径；GET /dream/report 也读这里。
-        """
+        """Internal documentation."""
         import os
         override = os.environ.get("ARGOS_DREAMS_DIR")
         if override:
-            return Path(override)
+            return Path(override).expanduser()
         from argos.daemon.__main__ import _default_argos_dir
         return _default_argos_dir() / "dreams"
 
     def _get_dream_pipeline(self):
-        """懒初始化并缓存 DreamPipeline 单例（单飞锁在实例上，必须复用同一实例）。
-
-        无 components / 无 model（_NO_KEY 等价语义）→ 返 None（诚实无 key 模式，
-        caller 回 503 no_worker_key）。已注入 _dream_pipeline（测试 fake）→ 直接返。
-        """
+        """Internal documentation."""
         if self._dream_pipeline is not None:
             return self._dream_pipeline
-        # 无 components → 无法 build_run_stack / 拿 model → 诚实返 None
         if self._components is None:
             return None
         client = getattr(self._components, "model", None)
@@ -1605,8 +1339,6 @@ class DaemonHTTPServer:
         memory_dir = argos_dir / "memory"
         eval_base = dreams_dir / "eval"
 
-        # per-run 隔离栈的 loop_factory（() -> AgentLoop）；EvalRunner 期望
-        # loop_factory(model_tier) → loop，故包一层吞掉 tier（Dream 内不分档）。
         run_stack = build_run_stack(
             self._components, workspace=None, session_id="dream-eval",
         )
@@ -1633,8 +1365,6 @@ class DaemonHTTPServer:
             )
 
         async def _dream_bcast(ev: dict) -> None:
-            # T8 已留契约注释：caller 必须注入 run_id。Dream 事件走 _conductor 虚拟通道
-            # (纯实时 fanout,不落盘 —— 虚拟总线,见 RunStore.append 守卫)。
             payload = {**ev, "run_id": CONDUCTOR_RUN_ID}
             await self._manager.fanout(CONDUCTOR_RUN_ID, payload)
 
@@ -1650,13 +1380,7 @@ class DaemonHTTPServer:
         return self._dream_pipeline
 
     async def _autonomous_dream_starter(self, s) -> bool:
-        """conductor tick 的自主 dream 启动回调（5a.3）。
-
-        与 _start_dream 共用相同三重守卫（is_running / _dream_starting / cross_process_busy），
-        但无 HTTP writer — 结果只记日志，不发 HTTP 响应。
-
-        返回 True = pipeline 任务已派生；False = 守卫拦截（busy / no key），静默跳过。
-        """
+        """Internal documentation."""
         pipeline = self._get_dream_pipeline()
         if pipeline is None:
             log.debug("conductor autonomous dream: 无 pipeline(no key)，本次跳过")
@@ -1664,7 +1388,6 @@ class DaemonHTTPServer:
         if pipeline.is_running or self._dream_starting or pipeline.cross_process_busy():
             log.debug("conductor autonomous dream: pipeline busy，本次跳过")
             return False
-        # 与 _start_dream 相同的原子窗口（无 await）
         self._dream_starting = True
 
         def _reset_starting(_fut):
@@ -1681,17 +1404,7 @@ class DaemonHTTPServer:
         return True
 
     async def _start_dream(self, writer):
-        """启动一次 Dream（confirm 与 POST /dream/run 共用）。
-
-        返回 False 表示已发送错误响应（503/409），caller 不再追加任何响应。
-        返回 True 表示 pipeline 任务已被派生（诚实：create_task 已调用）。
-
-        TOCTOU 守卫：pipeline.is_running 只在 run() 协程体持锁后才为 True，
-        而 create_task 派生的协程要到事件循环下一拍才执行。两个并发请求都可能
-        在协程被调度前读到 is_running=False → 都发 202。为此在"检查通过"和
-        "create_task"之间（无 await，原子窗口）同步设置 self._dream_starting=True，
-        第二个请求看到 _dream_starting=True 就直接 409。done_callback 复位标志。
-        """
+        """Internal documentation."""
         pipeline = self._get_dream_pipeline()
         if pipeline is None:
             await self._send_error(
@@ -1699,17 +1412,11 @@ class DaemonHTTPServer:
                 t("daemon.srv.no_key_dream"),
             )
             return False
-        # 三重守卫：
-        #   pipeline.is_running   —— 本进程锁已持有(daemon 自己在跑)
-        #   self._dream_starting  —— 本进程任务已派生但协程尚未持锁(TOCTOU 窗口)
-        #   cross_process_busy()  —— 另一进程(CLI)正持跨进程文件锁(review#4):
-        #     否则 pipeline.run() 因跨进程锁返 None 是异步发生,daemon 已回 202 却没真跑。
         if pipeline.is_running or self._dream_starting or pipeline.cross_process_busy():
             await self._send_error(
                 writer, 409, "dream_busy", t("daemon.srv.dream_busy"),
             )
             return False
-        # 从检查通过到 create_task 之间无 await —— 单线程事件循环不可被抢占，原子。
         self._dream_starting = True
 
         def _reset_starting(_fut):
@@ -1726,17 +1433,11 @@ class DaemonHTTPServer:
         return True
 
     async def _confirm_dream(self, writer, suggestion_id, s):
-        """confirm 一个 action=dream 的 suggestion → 路由 DreamPipeline（而非 create_run）。
-
-        503 no_worker_key / 409 dream_busy / 202 dream_started。202 时 pop suggestion +
-        广播 suggestion_confirmed（dream=True，走 _conductor 通道）。
-        """
+        """Internal documentation."""
         started = await self._start_dream(writer)
         if not started:
-            return  # 503 / 409 已发送，suggestion 不消费（可稍后重试）
-        # 已启动：从 pending 移除（confirm 后不再 pending）
+            return
         self._conductor.pop_suggestion(suggestion_id)
-        # 广播 confirm 事件（审计可见性，走 _conductor 虚拟通道）
         confirm_ev = {
             "kind": "suggestion_confirmed",
             "suggestion_id": suggestion_id,
@@ -1744,7 +1445,6 @@ class DaemonHTTPServer:
             "dream": True,
             "ts": time.time(),
         }
-        # 纯实时 fanout,不落盘(_conductor 是虚拟广播总线;审计留痕由 ledger 负责)
         await self._manager.fanout(CONDUCTOR_RUN_ID, confirm_ev)
         await self._send_json(writer, 202, {
             "state": "dream_started",
@@ -1752,26 +1452,23 @@ class DaemonHTTPServer:
         })
 
     async def _handle_dream_run(self, writer, headers):
-        """POST /dream/run — owner 手动触发一次 Dream（无 suggestion）。"""
+        """Internal documentation."""
         if await self._require_owner(writer, headers) is None:
             return
         started = await self._start_dream(writer)
         if not started:
-            return  # 503 / 409 已发送
+            return
         await self._send_json(writer, 202, {"state": "dream_started"})
 
     async def _handle_dream_report(self, writer, headers):
-        """GET /dream/report — 读最新 Dream 报告（dreams 目录最新 .jsonl 的最后一行）。
-
-        目录空 / 无文件 / 无有效行 → 200 {"report": null}（诚实空态，不假装有报告）。
-        """
+        """Internal documentation."""
         if await self._require_owner(writer, headers) is None:
             return
         report = self._read_latest_dream_report()
         await self._send_json(writer, 200, {"report": report})
 
     def _read_latest_dream_report(self) -> dict | None:
-        """读 dreams 目录最新 .jsonl 文件的最后一行 JSON。无 → None（诚实空态）。"""
+        """Internal documentation."""
         dreams_dir = self._dreams_dir()
         try:
             if not dreams_dir.exists():
@@ -1779,7 +1476,6 @@ class DaemonHTTPServer:
             files = sorted(dreams_dir.glob("*.jsonl"))
             if not files:
                 return None
-            # 文件名是 YYYY-MM-DD.jsonl → 字典序即时间序，取最新
             latest = files[-1]
             last_obj: dict | None = None
             for line in latest.read_text(encoding="utf-8").splitlines():
@@ -1789,9 +1485,9 @@ class DaemonHTTPServer:
                 try:
                     last_obj = json.loads(line)
                 except json.JSONDecodeError:
-                    continue  # 跳过坏行，不让一行毁掉整份报告
+                    continue
             return last_obj
-        except Exception as e:  # noqa: BLE001 — 读报告失败诚实降级为空态
+        except Exception as e:  # noqa: BLE001
             log.warning("dream report 读取失败(降级空态): %s", e)
             return None
 
@@ -1800,11 +1496,8 @@ class DaemonHTTPServer:
     async def _handle_sse(self, writer, headers, run_id, query):
         if (sid := await self._require_session(writer, headers)) is None:
             return
-        # 虚拟 `_` 流(如 _conductor)是实时广播总线:无 index 条目、无持久化 —— 允许订阅,
-        # 只推实时 fanout(见 RunStore.append / replay 守卫)。非虚拟 run 仍需存在,否则 404。
         if not run_id.startswith("_") and not self._manager.get_run(run_id):
             return await self._send_error(writer, 404, CODE_NOT_FOUND, "run not found")
-        # 解析 ?since=N
         since = 0
         if "since" in query and query["since"]:
             try:
@@ -1819,28 +1512,20 @@ class DaemonHTTPServer:
             b"X-Accel-Buffering: no\r\n\r\n"
         )
         await writer.drain()
-        # replay 起始(虚拟 `_` 流是实时广播总线,无持久化,不回放 —— 见 RunStore.append 守卫)
         if not run_id.startswith("_"):
             try:
                 for ev in self._manager.store.replay(run_id, since_seq=since):
                     await self._send_sse_event(writer, ev)
             except Exception as e:  # noqa: BLE001
                 log.warning("SSE replay error for %s: %s", run_id, e)
-        # 订阅新事件。keepalive 周期 2s:断连只能在【下一次写】时被发现
-        # (BrokenPipe),15s 周期意味着客户端断开后 server 端最多挂 15s 才感知
-        # —— 每个 SSE 测试 teardown 白等 15s,daemon 资源也多挂 15s。2s 是
-        # 感知延迟与空转写之间的平衡(本地 socket,写开销可忽略)。
         q = self._manager.subscribe(run_id)
         try:
-            # run 在订阅建立时已是终态(快对话:replay 已发完全部事件)→ 立即收尾关流。
-            # client(DaemonClient / DaemonEventSource)靠 EOF 判 run 完成,server 必须关流。
             if self._run_is_terminal(run_id):
                 return
             while True:
                 try:
                     ev = await asyncio.wait_for(q.get(), timeout=2.0)
                 except asyncio.TimeoutError:
-                    # 队列空闲:run 已终态 → 关流(让 client EOF)。否则发 keepalive 续命。
                     if self._run_is_terminal(run_id):
                         break
                     try:
@@ -1853,7 +1538,6 @@ class DaemonHTTPServer:
                     await self._send_sse_event(writer, ev)
                 except (ConnectionResetError, BrokenPipeError):
                     break
-                # 终态事件已发出且队列排空 → 关流,让 client 立即 EOF(免等下个 keepalive tick)。
                 if q.empty() and self._run_is_terminal(run_id):
                     break
         except (ConnectionResetError, BrokenPipeError, asyncio.CancelledError):
@@ -1866,7 +1550,7 @@ class DaemonHTTPServer:
                 pass
 
     def _run_is_terminal(self, run_id: str) -> bool:
-        """run 是否已进入终态(completed/failed/cancelled)—— SSE 关流判据。"""
+        """Internal documentation."""
         run = self._manager.get_run(run_id)
         return run is not None and run.state in TERMINAL_STATES
 

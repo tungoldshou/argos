@@ -1,11 +1,4 @@
-"""Pass 2 — complexity counter(regex, not real McCabe AST,spec §2.5 Pass 2 / D6)。
-
-- 粒度 = 函数级(找 `def name(` / `function name(` / `pub fn name(` / `async fn name(` 起始行)。
-- 函数体范围 = 起始到下一个 def/function/pub fn 同缩进行(或 EOF)。
-- 计数:`if` / `elif`(Python)/ `for` / `while` / `try` / `except` / `case` / `&&` / `||` / `?:` /
-  `match`(Python 3.10+)/ Rust `match` arms。
-- 函数 sum > 15 = complexity finding(severity=warning)。
-- 白名单:`tests/**` 跳过。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -36,7 +29,7 @@ def _is_source_file(p: Path) -> bool:
 
 
 def _detect_functions(text: str) -> list[tuple[str, int, int]]:
-    """返 [(name, line_start, line_end), ...]。"""
+    """Internal documentation."""
     fns: list[tuple[str, int, int]] = []
     starts: list[tuple[int, int, str, int]] = []
     for m in _FN_START_RE.finditer(text):

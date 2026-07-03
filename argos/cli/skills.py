@@ -1,11 +1,4 @@
-"""#10 T1+T6 `argos skills` CLI 子命令(refresh/list/install/remove/test)。
-
-沿用 cli/eval.py 风格:__main__.py 加 subparser,具体 handler 在这里。
-
-D7:builtin 3 名硬拒(install/remove)
-D8:user 装后 enabled=false,需手动改 frontmatter
-D10:TUI 不直接 install(沿 transcript 提示)
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -79,7 +72,6 @@ def cmd_install(args: argparse.Namespace) -> int:
     from argos.skills_curator.install import InstallError, install
 
     name = args.name
-    # 网络 skill 二次确认(spec §6.1 防线 3)
     cache = load_cache()
     if cache:
         entry = cache.find(name)

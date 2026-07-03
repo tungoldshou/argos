@@ -1,10 +1,4 @@
-"""类型基石(SHARED INTERFACE CONTRACT §0)——Phase 2-6 共用。
-
-不变量:
-1. 不可变:所有值对象用 @dataclass(frozen=True, slots=True)。
-2. 三态 fail-closed:VerdictStatus 含 "unverifiable",绝不当 passed(spec §12.5)。
-3. 回执不可伪造 / 一份事件三用——见 §1 events.py / §6 Verdict/Receipt(Phase 3)。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -15,14 +9,8 @@ Phase = Literal["plan", "act", "verify", "report"]
 ApprovalLevelName = Literal["observe", "propose", "confirm", "auto"]
 DecisionKind = Literal["deny", "once", "session", "always"]
 RiskLevel = Literal["low", "medium", "high"]
-# 模型 profile 名:自由字符串(已无 worker/premium 档位之分;就是 config.json 里的 profile 名)。
 ModelTierName = str
 
-# P0 防假绿:这些命令【永远通过、什么都不验证】,弱模型或用户可声明它们(如 `echo ok`)骗过
-# verify 门报"已验证通过"。canonical 归属 types.py —— Verifier(verify_gate)的 canonical 门、
-# loop 的 propose_verify 门、workflow stage 的 verify 校验共用同一份,杜绝多入口门不一致。
-# 关键:echo/cat/ls/pwd 既在 ALLOWED_CMDS(白名单)又是 trivial,只有共用此集、且在 canonical
-# Verifier 上设门,才能堵住"绕开 propose_verify 直接设 verify_cmd='echo ok'"这条假绿路径。
 TRIVIAL_VERIFY_BINS: frozenset[str] = frozenset({
     "echo", "true", "false", ":", "ls", "pwd", "cat", "printf", "head", "tail",
     "yes", "whoami", "date", "env", "sleep", "test", "[", "dirname", "basename",
@@ -31,27 +19,14 @@ TRIVIAL_VERIFY_BINS: frozenset[str] = frozenset({
 
 @dataclass(frozen=True, slots=True)
 class Verdict:
-    """三态 verify 裁决(契约 §6.1;spec §12.5)。'unverifiable' 绝不当 passed。
-
-    canonical 归属:types.py(契约 §6.1 指定)。
-    verify_gate.py 重新导出此类以保持旧 import 路径(from argos.core.verify_gate import Verdict)。
-
-    self_verified 字段(任务:为无 verify_cmd 任务自动造测试):
-      False (默认) = 用户级 verify;passed 等同于"强验证通过"
-      True         = "自验证(较弱)":由系统按 reviewer 角色 + canary 守卫
-                     生成的测试通过。verdict 仍是 'passed',但调用方(UI/report/统计)
-                     必须读 self_verified 区分"强 / 弱",绝不让 self_verified=True 的 passed
-                     与用户 verify 的 passed 混为一谈。
-    """
+    """Internal documentation."""
     status: VerdictStatus
     detail: str
     verify_cmd: str | None
     attempts: int
     tampered: list[str] = field(default_factory=list)
     self_verified: bool = False
-    no_test: bool = False  # CONTRACT A §5:True = 用户没配 verify_cmd 的诚实无测标记。
-    # 注意:no_test=True 时 status 仍是 'unverifiable',升级/报告路径不变;
-    # 仅供 UI(verdict_badge/glow)区分「真无法验证」与「用户本就无测」,渲染中性色而非橙警。
+    no_test: bool = False
 
     @staticmethod
     def passed(detail: str, verify_cmd: str | None, attempts: int) -> "Verdict":
@@ -59,8 +34,7 @@ class Verdict:
 
     @staticmethod
     def passed_self(detail: str, verify_cmd: str | None, attempts: int) -> "Verdict":
-        """自验证通过(canary 守卫 + 白名单 + 真跑都过了)。调用方必须看 self_verified=True
-        来区别于用户级 passed,绝不在 UI/汇报里冒充强验证。"""
+        """Internal documentation."""
         return Verdict(
             status="passed", detail=detail, verify_cmd=verify_cmd,
             attempts=attempts, self_verified=True,
@@ -68,12 +42,7 @@ class Verdict:
 
     @property
     def is_user_verified(self) -> bool:
-        """用户级 verify 通过 = status==passed 且 self_verified==False。
-
-        防火墙单一信源:任何"用户级 passed / 可晋升 / 可对外宣称"判断,必须走本属性,
-        **绝不**直接判 status==passed。self_verified=True 的 passed 是系统按 reviewer
-        角色 + canary 守卫自造的"较弱通过",绝不能与用户级 verify 混为一谈。
-        """
+        """Internal documentation."""
         return self.status == "passed" and not self.self_verified
 
     @staticmethod
@@ -82,7 +51,6 @@ class Verdict:
 
     @staticmethod
     def unverifiable(detail: str, tampered: list[str], attempts: int) -> "Verdict":
-        # 篡改 → 强制 unverifiable；verify_cmd 可能根本没跑，设 None。
         return Verdict(
             status="unverifiable", detail=detail, verify_cmd=None,
             attempts=attempts, tampered=list(tampered),
@@ -90,13 +58,7 @@ class Verdict:
 
     @staticmethod
     def no_check(detail: str, attempts: int) -> "Verdict":
-        """无 verify_cmd 的诚实完成标记(CONTRACT A §5)。
-
-        status='unverifiable'(升级/诚实链路不变),但 no_test=True 让 UI 侧
-        渲染为中性/暗淡态(○ 未机检 · 无 verify),而非真实无法验证时的橙色警告。
-        仅用于「用户本就没配 verify_cmd、任务主动无测」路径,不得用于篡改/超时/
-        命令声明但验证失败等有意义的 unverifiable 情形。
-        """
+        """Internal documentation."""
         return Verdict(
             status="unverifiable", detail=detail, verify_cmd=None,
             attempts=attempts, tampered=[], no_test=True,

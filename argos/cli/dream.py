@@ -1,10 +1,4 @@
-"""T10 argos dream CLI 子命令。
-
-- 无参数:跑一轮完整 DreamPipeline(有 key)或仅做记忆整理盘点(无 key)。
-- --report:只读最新报告文件最后一行,打印摘要;无报告则诚实输出"暂无 Dream 报告"。
-
-退出码:成功 0,异常 1。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -18,26 +12,25 @@ from argos.i18n import t
 
 log = logging.getLogger(__name__)
 
-# ARGOS_DREAMS_DIR / ARGOS_MEMORY_DIR 显式覆盖;否则跟随 ARGOS_CONFIG_DIR。
 _DEFAULT_CANDIDATES_DIR: Path | None = None
 _DEFAULT_SKILLS_DIR: Path | None = None
 
 
 def _argos_dir() -> Path:
-    """返回 Argos 配置根目录(ARGOS_CONFIG_DIR 覆盖,否则 ~/.argos)。"""
+    """Internal documentation."""
     from argos import config
 
     return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
 
 
 def _dreams_dir() -> Path:
-    """返回 dreams 报告目录(ARGOS_DREAMS_DIR 覆盖,测试友好)。"""
+    """Internal documentation."""
     env = os.environ.get("ARGOS_DREAMS_DIR")
     return Path(env).expanduser() if env else _argos_dir() / "dreams"
 
 
 def _memory_dir() -> Path:
-    """返回 memory 目录(ARGOS_MEMORY_DIR 覆盖,测试友好)。"""
+    """Internal documentation."""
     env = os.environ.get("ARGOS_MEMORY_DIR")
     return Path(env).expanduser() if env else _argos_dir() / "memory"
 
@@ -55,10 +48,7 @@ def _skills_root() -> Path:
 
 
 def _latest_report() -> dict | None:
-    """读最新 dreams JSONL 文件的最后一行(dict);无文件 → None。
-
-    最新 = 按文件名 sorted 最大(文件名格式 YYYY-MM-DD.jsonl,字典序=时间序)。
-    """
+    """Internal documentation."""
     d = _dreams_dir()
     if not d.exists():
         return None
@@ -66,7 +56,6 @@ def _latest_report() -> dict | None:
     if not files:
         return None
     latest = files[-1]
-    # 读最后一行(非空)
     last_line = None
     try:
         for line in latest.read_text(encoding="utf-8").splitlines():
@@ -86,7 +75,7 @@ def _latest_report() -> dict | None:
 
 
 def _fmt_report(r: dict) -> str:
-    """把报告 dict 格式化成一行摘要。"""
+    """Internal documentation."""
     return t(
         "cli.dream.report_fmt",
         units_total=r.get("units_total", 0),
@@ -99,8 +88,7 @@ def _fmt_report(r: dict) -> str:
 
 
 def run_dream(args: Any) -> int:
-    """argos dream 主入口。args.report=True → 只读报告;否则跑一轮。"""
-    # ── --report 路径 ──────────────────────────────────────────────────
+    """Internal documentation."""
     if getattr(args, "report", False):
         report = _latest_report()
         if report is None:
@@ -112,8 +100,6 @@ def run_dream(args: Any) -> int:
         print(_fmt_report(report))
         return 0
 
-    # ── 跑一轮 ────────────────────────────────────────────────────────
-    # 尝试构建 components(有 key 才能跑 A/B 晋升)
     has_key = True
     comps = None
     try:
@@ -130,7 +116,6 @@ def run_dream(args: Any) -> int:
         return 1
 
     if not has_key:
-        # 无 key:仅做记忆整理 + 候选区盘点,诚实告知晋升需要模型
         print(t("cli.dream.no_key_notice"))
         print(t("cli.dream.no_key_setup_hint"))
         mem_dir = _memory_dir()
@@ -141,7 +126,6 @@ def run_dream(args: Any) -> int:
         except Exception as e:  # noqa: BLE001
             log.warning("dream CLI: 记忆整理失败: %s", e)
             print(t("cli.dream.memory_tidy_failed", err=e))
-        # 候选区盘点
         try:
             from argos.learning.candidates import list_unconsumed
             cands = list_unconsumed(_candidates_root())
@@ -150,7 +134,6 @@ def run_dream(args: Any) -> int:
             log.warning("dream CLI: 候选区盘点失败: %s", e)
         return 0
 
-    # 有 key:跑完整 DreamPipeline
     import asyncio
 
     dreams_dir = _dreams_dir()
@@ -158,22 +141,18 @@ def run_dream(args: Any) -> int:
     mem_dir = _memory_dir()
     mem_dir.mkdir(parents=True, exist_ok=True)
 
-    # Blocking-2 修复：skills_root 用单一来源 USER_DIR（~/.argos/skills），
-    # 与技能加载器（skills.py _load_dir）扫的目录一致；原 learning/skills 是死目录。
     candidates_root = _candidates_root()
     skills_root = _skills_root()
 
-    # 构建 components（一次，narrate + runner_factory 共享）
     from argos.app_factory import build_run_stack
 
-    # 构建 narrate fn(调 model.complete)
     _narrate = None
     if comps is not None:
         try:
             _model = comps.model
 
             async def _narrate(prompt: str) -> str:
-                """异步叙述调用(pipeline 在 async 上下文里 await 调用)。"""
+                """Internal documentation."""
                 return await _model.complete(
                     [{"role": "user", "content": prompt}],
                     system="你是知识提炼助手,只输出纯文字摘要,不输出代码。",
@@ -181,9 +160,6 @@ def run_dream(args: Any) -> int:
         except Exception:  # noqa: BLE001
             _narrate = None
 
-    # 构建 runner_factory(用于 A/B 晋升)
-    # Review High #1 修复：EvalRunner 必须传入 loop_factory，否则 runner.run() 直接返回
-    # PASS_ERROR，A/B 两侧恒等，晋升永不发生。照 daemon server.py:1551-1565 范本。
     _runner_factory = None
     if comps is not None:
         try:
@@ -192,7 +168,6 @@ def run_dream(args: Any) -> int:
             from argos.learning.dream import HintedRunner
             eval_base = dreams_dir / "eval"
             wm = WorktreeManager(base_dir=eval_base / "worktrees")
-            # per-run 隔离栈：提供真实 loop_factory（吞掉 model_tier，Dream 内不分档）
             run_stack = build_run_stack(comps, workspace=None, session_id="dream-eval")
 
             def _eval_loop_factory(model_tier: str):
@@ -202,7 +177,6 @@ def run_dream(args: Any) -> int:
                                      loop_factory=_eval_loop_factory)
 
             def _runner_factory(hint: str | None):
-                # hint 非空 → B 侧带经验；hint=None → A 侧裸跑（与 daemon 范本一致）
                 return HintedRunner(inner=base_runner, hint=hint) if hint else base_runner
         except Exception:  # noqa: BLE001
             _runner_factory = None
@@ -248,7 +222,7 @@ def run_dream(args: Any) -> int:
 
 
 def add_subparser(sub: Any) -> None:
-    """注册 dream 子命令到 argparse subparsers。"""
+    """Internal documentation."""
     p = sub.add_parser(
         "dream",
         help=t("cli.dream.help"),

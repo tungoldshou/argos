@@ -1,11 +1,4 @@
-"""Skills runtime(spec 2026-06-06):3 个 on-demand 自检原语(/verify / /security-review / /simplify)。
-
-模块入口:
-- `register(skill)` / `get(name)` / `list_all()` —— registry 单例
-- `run_skill(name, args, ctx)` —— runner 编排(Task 2 实现)
-- `register_builtin_skills()` —— 注册 3 个内置 skill(Task 8/9/10 实现)
-
-builtin/ 子模块分离:本模块纯数据契约 + 编排;builtin/ 是具体 skill 实现。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from argos.i18n import t
@@ -36,13 +29,13 @@ __all__ = [
 
 
 async def run_skill(name, args, ctx, *, timeout_s=60.0, event_bus=None):  # type: ignore[no-untyped-def]
-    """统一 skill 入口(Task 2 实现)。"""
+    """Internal documentation."""
     from argos.skills_runtime.runner import run_skill as _impl
     return await _impl(name, args, ctx, timeout_s=timeout_s, event_bus=event_bus)
 
 
 def register_builtin_skills() -> None:
-    """注册 3 个内置 skill(verify / security-review / simplify);幂等。"""
+    """Internal documentation."""
     from argos.skills_runtime.analysis import AnalysisSkill
     from argos.skills_runtime.builtin import security_review, simplify
     from argos.skills_runtime.builtin.verify import run as _verify_run

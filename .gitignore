@@ -9,7 +9,8 @@
 # local env (dev keys — never commit)
 .env.local
 .env*.local
-# CLAUDE.md is tracked (dev guide for Claude Code working on Argos) — not ignored.
+# CLAUDE.md was intentionally removed; keep local copies out of commits.
+CLAUDE.md
 # Root AGENTS.md is tracked as the Codex project guide. Keep other AGENTS.md files
 # ignored so user-project fixtures or copied dev clones do not slip into commits.
 AGENTS.md
@@ -17,6 +18,9 @@ AGENTS.md
 
 # codegraph index
 .codegraph
+
+# local agent learning notes
+.learnings/
 
 # ignore local .claude state (settings, locks) but DO track shared project skills
 .claude/*

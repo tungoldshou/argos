@@ -1,8 +1,4 @@
-"""模型客户端(契约 §7;spec §3.4)。模型不绑定、无 worker/premium 档位:协议/模型由 config.json
-的 active profile / 环境变量决定,经 ProtocolAdapter(protocols.py)支持 Anthropic 与 OpenAI 两类端点。
-ModelClient 经协议适配器直连端点(httpx),stream() 出 text 增量(剥 thinking)。
-不变量(spec §12.2):若用户配了 escalation profile,切换决策只看外部判据(反复 verify 失败),
-绝不靠模型自报 confidence —— 该决策在 recovery/harness,ModelClient 本身不做切换判断。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +9,7 @@ from typing import Any, AsyncIterator
 
 import httpx
 
-from argos.core.protocols import (  # re-export 保旧导入路径
+from argos.core.protocols import (
     get_protocol, _coalesce_consecutive_roles,
 )
 from argos.core.types import ModelTierName
@@ -25,12 +21,10 @@ class ModelTier:
     name: ModelTierName
     model: str
     base_url: str
-    max_tokens: int  # 可配(spec §3.4:按模型选上限,解锁产出 ×4),不再硬编码 2048
-    # 模型上下文窗口上限(Task 10:ActivityPanel"上下文"区按此算占用百分比)。
-    # 给默认值(200k)以不破坏既有按 max_tokens 收尾的构造点;config 按模型填真值。
+    max_tokens: int
     context_window: int = 200_000
-    protocol: str = "anthropic"   # "anthropic" | "openai";默认值保旧构造点/旧 env 回退零破坏
-    multimodal: bool | None = None  # 视觉能力 override:None=未知(走懒探针检测);True/False=用户显式声明(跳探针)
+    protocol: str = "anthropic"
+    multimodal: bool | None = None
 
 
 # ── Credential + CredentialPool ──────────────────────────────────────────────
@@ -39,12 +33,11 @@ class ModelTier:
 class Credential:
     key: str
     last_used: float
-    exhausted_until: float | None  # 限流后的 TTL 到期时间戳;到点自动复活
+    exhausted_until: float | None
 
 
 class CredentialPool:
-    """key 轮换(契约 §7;spec §3.4):least_used + exhausted-TTL + terminal vs transient 401。
-    内部用可变 dict 持每个 key 的 last_used/exhausted_until;对外只暴露不可变 Credential 快照。"""
+    """Internal documentation."""
 
     def __init__(self, keys: list[str]) -> None:
         if not keys:
@@ -67,7 +60,6 @@ class CredentialPool:
         if avail:
             pick = min(avail, key=lambda k: float(self._state[k]["last_used"] or 0.0))
         else:
-            # 全 exhausted → fail-open 取最早 expire 的(上层据 backoff 退避)。
             pick = min(self._state, key=lambda k: float(self._state[k]["exhausted_until"] or 0.0))
         return self._snapshot(pick)
 
@@ -76,20 +68,19 @@ class CredentialPool:
             self._state[key]["last_used"] = time.time()
 
     def mark_exhausted(self, key: str, ttl_s: float) -> None:
-        """transient 限流 → 设 TTL,到点自动复活。"""
+        """Internal documentation."""
         if key in self._state:
             self._state[key]["exhausted_until"] = time.time() + ttl_s
 
     def mark_terminal(self, key: str) -> None:
-        """terminal 401(key 无效)→ 永久剔除。"""
+        """Internal documentation."""
         self._state.pop(key, None)
         if not self._state:
             raise RuntimeError(t("core2.models.all_terminal"))
 
     @staticmethod
     def is_terminal_401(status: int, body: str) -> bool:
-        """区分 terminal(无效 key,永久剔除)vs transient(限流/配额,设 TTL 复活)。
-        只有 401 + 认证语义 才是 terminal;429 或带 rate/quota 语义一律 transient。"""
+        """Internal documentation."""
         if status != 401:
             return False
         b = (body or "").lower()
@@ -98,7 +89,6 @@ class CredentialPool:
             return False
         terminal_markers = ("authentication_error", "invalid x-api-key", "invalid api key",
                             "permission_error", "unauthorized",
-                            # OpenAI / OpenRouter 无效 key 措辞(否则 401 被当 transient 死重试)
                             "invalid_api_key", "incorrect api key", "no auth credentials",
                             "invalid_request_error")
         return any(m in b for m in terminal_markers) or b == ""
@@ -107,25 +97,20 @@ class CredentialPool:
 # ── ModelClient ───────────────────────────────────────────────────────────────
 
 class ModelClient:
-    """协议无关的模型客户端:stream/complete 委托给 Protocol 适配器。
-    Anthropic-Messages / OpenAI-Chat-Completions 均走同一代码路径,行为由 tier.protocol 选定。"""
+    """Internal documentation."""
 
     def __init__(self, *, tier: ModelTier, pool: CredentialPool,
                  transport: httpx.BaseTransport | None = None) -> None:
         self.tier = tier
         self.pool = pool
-        self._transport = transport  # 测试注入 MockTransport;生产为 None(真网络)
-        self._proto = get_protocol(tier.protocol)   # 按协议选适配器
-        # 最近一次 stream 的真实 token 用量(从 SSE 的 message_start/message_delta usage 帧抓)。
-        # loop 据此发 CostUpdate 让状态栏 token/计时走起来 —— 真数据,不伪造。
+        self._transport = transport
+        self._proto = get_protocol(tier.protocol)
         self.last_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0,
                                            "cache_read": 0, "cache_creation": 0}
-        # #25:per-instance 共享 AsyncClient(连接池复用 TCP+TLS,避免每步重建)。
-        # 惰性初始化(首次 stream 时建),在 aclose 里显式关闭。
         self._http_client: httpx.AsyncClient | None = None
 
     def _get_http_client(self) -> httpx.AsyncClient:
-        """#25:惰性获取共享 AsyncClient。首次调用时构造并缓存;之后复用同一实例。"""
+        """Internal documentation."""
         if self._http_client is None or self._http_client.is_closed:
             self._http_client = httpx.AsyncClient(
                 transport=self._transport, timeout=300.0,
@@ -133,52 +118,39 @@ class ModelClient:
         return self._http_client
 
     async def aclose(self) -> None:
-        """显式关闭共享 HTTP 客户端(run 结束或对象析构时调用)。安全:未建则无操作。"""
+        """Internal documentation."""
         if self._http_client is not None and not self._http_client.is_closed:
             await self._http_client.aclose()
         self._http_client = None
 
     def _payload(self, messages: list[dict], system: str,
                  system_dynamic: str | None = None) -> dict[str, Any]:
-        # 委托协议(保留方法名:test_payload_normalizes_messages 仍调它)。
         return self._proto.payload(
             messages, system=system, tier=self.tier, system_dynamic=system_dynamic,
         )
 
     def _capture_usage(self, obj: dict[str, Any]) -> None:
-        # 委托协议(保留方法名:test_capture_usage_reads_cache_tokens 仍调它)。
         self._proto.capture_usage(obj, self.last_usage)
 
     async def stream(self, messages: list[dict], *, system: str,
                      system_dynamic: str | None = None) -> AsyncIterator[str]:
-        """每个 attempt 重新选 key + 重新发请求(M3 / agnes-flash 限流真用户必踩)。
-        429 / 401-transient → mark_exhausted + 退避 + 重新 least_used + 重试。
-        401 + is_terminal_401 → mark_terminal + 抛(同 key 必再 401,无意义重试)。
-        5xx → 退避 + 重试(不污染 key)。
-        max_attempts=3 后抛最后一次(不撒谎、不死循环、不假装成功)。"""
-        from argos.core import recovery  # 局部 import,避免循环 + 测试 monkeypatch 路径稳定
+        """Internal documentation."""
+        from argos.core import recovery
         max_attempts = 3
         for attempt in range(max_attempts):
             cred = self.pool.least_used()
-            self.pool.mark_used(cred.key)  # 立即更新 last_used,确保 least_used 轮换(Phase 4 #1)
-            # 本次 stream 的 usage 清零;边流边抓 usage 帧。
+            self.pool.mark_used(cred.key)
             self.last_usage = {"input_tokens": 0, "output_tokens": 0,
                                "cache_read": 0, "cache_creation": 0}
-            yielded_any = False  # 本次尝试是否已吐过 delta(决定传输断连能否安全重试)
+            yielded_any = False
             try:
                 async for delta in self._stream_one_attempt(
                     cred, messages, system, system_dynamic,
                 ):
                     yielded_any = True
                     yield delta
-                return  # 成功,不再 retry
+                return
             except httpx.TransportError:
-                # 传输层错误(RemoteProtocolError「Server disconnected without sending a
-                # response」/ ConnectError / ReadTimeout 等)= transient 网络抖动,不是 HTTP 状态码
-                # 错误,不会被下面的 HTTPStatusError 捕获 → 此前直接裸抛,把丑陋链式 traceback 甩给
-                # 用户、run 当场死(2026-06-16 真机 bug:agnes-flash 断连)。像 5xx 一样退避重试。
-                # 安全:仅在本次尝试【尚未 yield 过任何 delta】时重试 —— 否则重发会重复已输出文本。
-                # 最后一次仍失败 / 已部分输出 → 抛(不撒谎、不死循环、不重复)。
                 if yielded_any or attempt >= max_attempts - 1:
                     raise
                 await asyncio.sleep(recovery.jittered_backoff(attempt))
@@ -186,25 +158,19 @@ class ModelClient:
             except httpx.HTTPStatusError as e:
                 status = e.response.status_code
                 body = e.response.text or ""
-                # 401 + is_terminal_401 → 永久剔除同 key,直接抛(同 key 必再 401,无意义重试;
-                # 其它 key 也会 401,只是浪费 QPS)
                 if status == 401 and CredentialPool.is_terminal_401(401, body):
                     try:
                         self.pool.mark_terminal(cred.key)
                     except RuntimeError as rexc:
-                        # mark_terminal 删完最后 key 主动抛 RuntimeError("无可用 key");
-                        # 链回 401 + body 让 probe/UI 仍能看到 status code,而不是只剩空池告警
                         raise RuntimeError(
                             f"HTTP 401 (terminal): {body[:100]} | {rexc}"
                         ) from e
                     raise
-                # 5xx → 重试(不 mark_exhausted:服务端问题,污染 key 无用)
                 if status in (500, 502, 503, 504):
                     if attempt < max_attempts - 1:
                         await asyncio.sleep(recovery.jittered_backoff(attempt))
                         continue
                     raise
-                # 429 / 401-transient → mark_exhausted + 重新 least_used
                 if status == 429 or (status == 401
                                       and not CredentialPool.is_terminal_401(401, body)):
                     ttl = self._retry_after_ttl(e.response) or 5.0
@@ -213,23 +179,19 @@ class ModelClient:
                         await asyncio.sleep(recovery.jittered_backoff(attempt))
                         continue
                     raise
-                # 其它 4xx(400/403/404)→ 原行为,直接抛(语义性错误,重试无用)
                 raise
 
     async def _stream_one_attempt(
         self, cred: Credential, messages: list[dict], system: str,
         system_dynamic: str | None,
     ) -> AsyncIterator[str]:
-        """单次 stream 尝试:2xx → yield deltas;非 2xx → raise_for_status 抛 HTTPStatusError。
-        错误响应先把 body aread 满(让 e.response.text 在重试决策时可读)。"""
+        """Internal documentation."""
         headers = self._proto.headers(cred.key)
         url = self._proto.endpoint(self.tier.base_url)
-        # #25:复用 per-instance 共享 AsyncClient(连接池,避免每步新 TCP+TLS 握手)。
         client = self._get_http_client()
         async with client.stream("POST", url, headers=headers,
                                  json=self._payload(messages, system, system_dynamic)) as resp:
                 if resp.status_code >= 400:
-                    # 错误响应 body 较小,先 aread 满,raise_for_status 抛后 e.response.text 可读
                     await resp.aread()
                 resp.raise_for_status()
                 async for line in resp.aiter_lines():
@@ -244,11 +206,6 @@ class ModelClient:
                     except json.JSONDecodeError:
                         continue
                     self._capture_usage(obj)
-                    # 不在 is_done 处提前 break:OpenAI 的 include_usage 把 usage 放在
-                    # finish_reason 之后的【单独一帧】(choices:[]),提前 break 会读不到 →
-                    # OpenAI 系模型 token/成本恒 0(诚实成本展示被架空)。继续读到流自然结束
-                    # (aiter_lines 耗尽 / [DONE]),让尾部 usage-only 帧被 _capture_usage 抓到。
-                    # 完成帧及其后的 usage 帧 text_delta 均为空,不会多吐文本。
                     if self._proto.is_done(obj):
                         continue
                     text = self._proto.text_delta(obj)
@@ -256,7 +213,7 @@ class ModelClient:
                         yield text
 
     def _retry_after_ttl(self, response: httpx.Response) -> float | None:
-        """HTTP Retry-After 头(数字秒格式)→ TTL 秒。缺/解析失败 → None(调用方用默认 5s)。"""
+        """Internal documentation."""
         ra = response.headers.get("retry-after")
         if not ra:
             return None

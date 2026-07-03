@@ -1,9 +1,4 @@
-"""#12 Context 可视化 CLI:argos context show [--json] [--session=<id>]
-(契约 §12;spec §11)。
-
-单一 `ContextAnalyzer.analyze(...)` + format_table/format_json 渲染,跟 TUI /context
-走同一路径(spec §12.5 锁:CLI/TUI 数字一致)。
-子命令极简:只 `show`(本期无 `clear` / `set` / `drop` 等动作)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -14,11 +9,9 @@ from argos.i18n import t
 
 
 def _active_components():
-    """从 app_factory 拿当前 active run 的 store / loop / workspace(若有);无则全 None。
-    走 contextvars / 模块状态(同一进程 active run),测试可 monkeypatch。"""
+    """Internal documentation."""
     try:
         from argos import app_factory
-        # app_factory 没有显式 active 容器;我们走 _active_run 全局(本期新增,后续 TUI 用同一)
         active = getattr(app_factory, "_active_run", None)
         if active is None:
             return None, None, Path.cwd()
@@ -30,8 +23,7 @@ def _active_components():
 
 
 def cmd_show(args: argparse.Namespace) -> int:
-    """`argos context show [--json] [--session=<id>]` — 走 ContextAnalyzer 出文本/JSON。
-    无 active run 也能跑(空分析返全空桶,不崩;spec §13 错误处理)。"""
+    """Internal documentation."""
     from argos.context.analyzer import analyze
     from argos.context.render import format_json, format_table_plain
     store, loop, workspace = _active_components()
@@ -43,7 +35,6 @@ def cmd_show(args: argparse.Namespace) -> int:
     if args.json:
         print(format_json(b))
     else:
-        # format_table_plain 已剥 Rich/Textual markup → 不会向终端泄漏裸 [green]…[/green] 标签
         print(format_table_plain(b))
     return 0
 

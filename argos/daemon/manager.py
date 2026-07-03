@@ -1,17 +1,4 @@
-"""RunManager:7 状态机 + in-memory dict + index.json + fan-out(spec §2.11)。
-
-公开 API:
-  create_run(*, goal, workspace, model, approval_level) -> run_id
-  get_run(run_id) -> IndexEntry | None
-  list_runs(state=None) -> list[dict]
-  pause(run_id) -> 2 阶段:设 _pause_requested,worker 在 step 边界转 paused
-  resume(run_id) -> 2 阶段:从 paused 续 / suspended 重建 loop
-  cancel(run_id) -> 直接 cancel worker 协程
-  subscribe(run_id) -> asyncio.Queue
-  fanout(run_id, event) -> 投到所有 subscriber
-
-threading:asyncio 单进程,asyncio.Lock 保护 _runs / _subscribers。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -32,7 +19,7 @@ log = logging.getLogger(__name__)
 
 
 def _prune_snapshot(run_id: str, snapshot_root: "Path") -> None:
-    """删除终态 run 的快照文件(如有)。失败静默,不阻断 recover。"""
+    """Internal documentation."""
     candidate = snapshot_root / f"run-{run_id}.tar"
     if candidate.exists():
         try:
@@ -43,7 +30,7 @@ def _prune_snapshot(run_id: str, snapshot_root: "Path") -> None:
 
 
 class RunManager:
-    """单例;RunManager(runs_dir, index_path) 即可。"""
+    """Internal documentation."""
 
     def __init__(self, *, runs_dir: Path, index_path: Path):
         self._store = RunStore(runs_dir)
@@ -70,7 +57,7 @@ class RunManager:
         return self._store.runs_dir
 
     def close(self) -> None:
-        """清理:index 落盘。"""
+        """Internal documentation."""
         self._index.save()
 
     # ── Run lifecycle ────────────────────────────────────────────────
@@ -82,9 +69,10 @@ class RunManager:
         workspace: str = "",
         model: str = "",
         approval_level: str = "confirm",
+        session_id: str = "",
         max_steps: int = 200,
     ) -> str:
-        """新建 run,写 run_meta,起始状态 pending(daemon 后续可 promote running)。"""
+        """Internal documentation."""
         if not goal or not isinstance(goal, str):
             raise ValueError("goal must be non-empty string")
         run_id = uuid.uuid4().hex[:12]
@@ -92,6 +80,7 @@ class RunManager:
         meta = RunMeta(
             run_id=run_id, goal=goal, workspace=workspace, model=model,
             created_at=now, approval_level=approval_level, max_steps=max_steps,
+            session_id=session_id,
         )
         async with self._lock:
             self._store.append(run_id, meta.to_dict())
@@ -99,11 +88,11 @@ class RunManager:
                 run_id, state="pending", goal=goal, workspace=workspace,
                 created_at=now, updated_at=now, last_event_seq=0,
                 model=model, approval_level=approval_level,
+                session_id=session_id,
             )
             self._index.save()
-            # 初始化 pause/cancel/suspend flag
             self._pause_requested[run_id] = asyncio.Event()
-            self._pause_requested[run_id].set()   # 默认 set(不阻塞)
+            self._pause_requested[run_id].set()
             self._cancel_requested[run_id] = False
             self._suspend_requested[run_id] = False
         return run_id
@@ -128,24 +117,23 @@ class RunManager:
         return out
 
     def events_count(self, run_id: str) -> int:
-        """统计 JSONL 行数(meta 算 1)。"""
+        """Internal documentation."""
         n = 0
         for _ in self._store.replay(run_id):
             n += 1
         return n
 
-    # ── pause / resume / cancel(2 阶段契约)────────────────────────
 
     async def request_pause(self, run_id: str) -> bool:
-        """请求 pause:clear pause_event(下个 step 边界会真阻塞),返 True/False(状态机拦截)。"""
+        """Internal documentation."""
         async with self._lock:
             current = read_state(run_id, self._index)
             if current != "running":
-                return False   # 状态机拦
+                return False
             ev = self._pause_requested.get(run_id)
             if ev is None:
                 return False
-            ev.clear()   # 让 loop 在下个 step 边界 await 阻塞
+            ev.clear()
         return True
 
     async def request_resume(self, run_id: str) -> bool:
@@ -154,7 +142,7 @@ class RunManager:
             if current not in ("paused", "suspended"):
                 return False
             ev = self._pause_requested.setdefault(run_id, asyncio.Event())
-            ev.set()   # 解除阻塞
+            ev.set()
         return True
 
     async def request_cancel(self, run_id: str) -> bool:
@@ -169,12 +157,11 @@ class RunManager:
         return self._cancel_requested.get(run_id, False)
 
     async def request_suspend(self, run_id: str) -> bool:
-        """请求 suspend(Ctrl+B 后台化):仅 running 可挂起。worker 在下个 step 边界写
-        checkpoint + mark_suspended + 脱离协程;resume 由 _spawn_suspended_resume 重建。"""
+        """Internal documentation."""
         async with self._lock:
             current = read_state(run_id, self._index)
             if current != "running":
-                return False   # 状态机拦(只有 running 能后台化)
+                return False
             self._suspend_requested[run_id] = True
         return True
 
@@ -185,7 +172,7 @@ class RunManager:
         return self._pause_requested.setdefault(run_id, asyncio.Event())
 
     def mark_running(self, run_id: str) -> None:
-        """worker 起始:transition pending → running(动态 from-state 内部读)。"""
+        """Internal documentation."""
         transition(
             current=None, target="running", index=self._index, run_id=run_id,
             store=self._store, reason="start",
@@ -193,8 +180,7 @@ class RunManager:
         self._index.save()
 
     def mark_paused(self, run_id: str, last_step: int, msg_count: int, last_event_seq: int) -> None:
-        """worker 在 step 边界真阻塞时:写 checkpoint + transition running → paused。"""
-        # 1) checkpoint 行
+        """Internal documentation."""
         self._store.append(run_id, RunCheckpoint(
             ts=time.time(), last_step=last_step, messages_count=msg_count,
             last_event_seq=last_event_seq,
@@ -239,7 +225,7 @@ class RunManager:
         self._index.save()
 
     def mark_suspended(self, run_id: str, last_step: int, msg_count: int, last_event_seq: int) -> None:
-        """Ctrl+B 后台化 / TUI 退出 / daemon 优雅退出:running → suspended。"""
+        """Internal documentation."""
         self._store.append(run_id, RunCheckpoint(
             ts=time.time(), last_step=last_step, messages_count=msg_count,
             last_event_seq=last_event_seq,
@@ -253,7 +239,7 @@ class RunManager:
     # ── SSE fan-out ──────────────────────────────────────────────────
 
     def subscribe(self, run_id: str, maxsize: int = 1024) -> asyncio.Queue:
-        """注册 SSE 订阅;返 Queue(daemon 端 fanout 投这里)。"""
+        """Internal documentation."""
         q: asyncio.Queue = asyncio.Queue(maxsize=maxsize)
         self._subscribers.setdefault(run_id, set()).add(q)
         return q
@@ -266,7 +252,7 @@ class RunManager:
                 self._subscribers.pop(run_id, None)
 
     async def fanout(self, run_id: str, event: dict[str, Any]) -> None:
-        """投事件到所有 subscriber;慢 client 丢事件(走 log 警告,replay 时 since_seq 补)。"""
+        """Internal documentation."""
         subs = self._subscribers.get(run_id, set())
         for q in list(subs):
             try:
@@ -274,36 +260,25 @@ class RunManager:
             except asyncio.QueueFull:
                 log.warning("fanout: subscriber queue full for run %s, dropping event", run_id)
 
-    # ── 持久化恢复 ────────────────────────────────────────────────────
 
     def recover(self) -> dict[str, str]:
-        """启动恢复:扫 runs/*.jsonl,对每个 'running' run 改 'suspended'(SIGKILL 中断);
-        同时剪枝终态 run 的快照(completed/failed/cancelled 不再需要 /undo)。
-
-        Returns:
-            dict[run_id, new_state] 改过的 run;空 dict 表示没改。
-        """
+        """Internal documentation."""
         from argos.core.snapshot import SNAPSHOT_ROOT
 
         recovered: dict[str, str] = {}
         for rid in self._store.list_runs():
             if rid.startswith("_"):
-                # 虚拟事件总线(如 _conductor):非状态机 run,无恢复态,跳过。
                 continue
-            # 找最后 state_change(JSONL 真相源)。单个损坏文件不该崩整个 daemon
-            # 启动 —— 否则 auto-spawn 每次都退回 inline,后台/跨 session 永久失效。
             try:
                 last = self._store.last_state(rid)
             except CorruptionError as exc:
                 log.warning("recover: skipping corrupt run file %s: %s", rid, exc)
                 continue
             cur = read_state(rid, self._index)
-            # 终态写保护:completed/failed/cancelled 不动;但剪枝其快照
             if cur in TERMINAL_STATES:
                 _prune_snapshot(rid, SNAPSHOT_ROOT)
                 continue
             if cur is None or cur == "pending":
-                # 还没 state_change → 视为 pending 中断 → cancelled
                 if last is None or last == "pending":
                     transition(
                         current=None, target="cancelled", index=self._index, run_id=rid,
@@ -311,10 +286,8 @@ class RunManager:
                     )
                     recovered[rid] = "cancelled"
                     _prune_snapshot(rid, SNAPSHOT_ROOT)
-                # 若 last 是 suspended / completed 等,不再动
                 continue
             if cur == "running":
-                # running 中断 → suspended(JSONL 胜,默认 SIGKILL 中断,需显式 resume 才续)
                 transition(
                     current=None, target="suspended", index=self._index, run_id=rid,
                     store=self._store, reason="recover_sigkill",

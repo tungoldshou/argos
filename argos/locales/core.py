@@ -1,15 +1,6 @@
-"""Core loop / harness 用户可见文案。
-
-key 命名空间:loop.* / verdict_detail.*。
-仅覆盖 loop.py 和 harness.py 中渲染给用户的串;内部日志/注释/系统提示词不走此目录。
-
-ZH 值 = 当前代码里的原始串(verbatim,一字不差)。
-EN 值 = 语义对等的自然英文,口吻与 README 一致(冷静、精准)。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
-# ── 429 / 网络错误 ────────────────────────────────────────────────────────────
-# loop.py run() 顶层兜底:友好可操作提示(原始错误截 120/200 字拼入)。
 
 EN: dict[str, str] = {
     # ── todos summary header ─────────────────────────────────────────────────
@@ -208,7 +199,6 @@ ZH: dict[str, str] = {
     # ── todos summary header ─────────────────────────────────────────────────
     "loop.todos.header": "[Argos 任务清单 {done}/{total}]",
 
-    # ── DOM 探针 ─────────────────────────────────────────────────────────────
     "loop.dom_probe.thread_error": "DOM 探针线程异常：{result_type}: {exc}",
     "loop.dom_probe.error_detail": "[L3 DOM 探针] {rationale}\n探针错误（unverifiable）：{error}",
     "loop.dom_probe.no_excerpt": "（无文本摘录）",
@@ -219,7 +209,6 @@ ZH: dict[str, str] = {
         "请检查网页改动是否已生效，或检查选择器是否正确。"
     ),
 
-    # ── GUI 探针 ─────────────────────────────────────────────────────────────
     "loop.gui_probe.thread_error": "GUI 探针线程异常:{exc_type}: {exc}",
     "loop.gui_probe.unverifiable_detail": "[GUI 探针] 屏上文本断言无法机检(unverifiable):{error}",
     "loop.gui_probe.no_excerpt": "(无摘录)",
@@ -229,18 +218,15 @@ ZH: dict[str, str] = {
         "请检查 GUI 操作是否已生效。"
     ),
 
-    # ── 视觉能力不支持 ────────────────────────────────────────────────────────
     "loop.vision.unsupported": (
         "当前模型 {model_name!r} 看不了图。请换一个支持视觉的模型,"
         "或在 config 给该 profile 设 multimodal override。"
     ),
 
-    # ── 截图像素注记 ──────────────────────────────────────────────────────────
     "loop.screenshot.pixel_note": (
         "\n[截图 {w}x{h} 像素;点击坐标请用这张图的像素坐标]"
     ),
 
-    # ── 验证门拒绝回灌 ────────────────────────────────────────────────────────
     "loop.verify_gate.fstring_rejected": (
         "[Argos 验证门] `{cmd}` 像是 f-string(含 {{}} 占位)。host 侧"
         "独立跑验证、拿不到你沙箱里的变量,无法求值 f-string。请改用普通字符串字面量、"
@@ -257,7 +243,6 @@ ZH: dict[str, str] = {
         "ruff、mypy、tsc)。若此项目确实无可机检验证,就别声明、直接说明情况。"
     ),
 
-    # ── hook 拒绝 ─────────────────────────────────────────────────────────────
     "loop.hook.no_reason": "(无理由)",
     "loop.hook.pretooluse_rejected": (
         "[Argos Hook] PreToolUse 工具调用被 hook 拒绝:\n"
@@ -265,44 +250,37 @@ ZH: dict[str, str] = {
         "请调整方案后再试,或与用户沟通。"
     ),
 
-    # ── 工作流注记 ────────────────────────────────────────────────────────────
     "loop.workflow.not_enabled": (
         "[note] 工作流已禁用(ARGOS_WORKFLOWS=0),你的 propose_workflow 不会被执行;"
         "请直接单线程完成任务,不要等待它运行。"
     ),
 
-    # ── 无代码块催促 ──────────────────────────────────────────────────────────
     "loop.nudge.no_code_action": (
         "你还没有产出任何 ```python 代码动作就停了。如果要做事,请输出代码块真正执行;"
         "如果确认无需任何动作即可回答,请直接给出最终答复(我会据此收尾)。"
     ),
 
-    # ── 验证催促 ──────────────────────────────────────────────────────────────
     "loop.nudge.verify_missing": (
         "你改动了代码但没有声明验证命令。请用 `propose_verify('<测试/编译/lint 命令>')` "
         "声明如何机检本次改动(如 pytest、cargo test、ruff、mypy、tsc),我会独立运行它以退出码为准。"
         "若此项目确实无可机检验证,直接说明即可(我会如实标'未机检验证'收尾)。"
     ),
 
-    # ── 不可信自主门 ──────────────────────────────────────────────────────────
     "loop.verify_gate.unverifiable_needs_confirmation": (
         "verify 不可信,需人确认:{reason}"
     ),
 
-    # ── 用户拒绝不可信验证 ────────────────────────────────────────────────────
     "loop.verify_gate.user_rejected_bounce": (
         "[Argos 验证门] 验证 `{verify_cmd}` 不可信,"
         "用户拒绝继续: {detail}。请修复后再试。"
     ),
 
-    # ── 验证门 bounce（failed / 配了 cmd 却 unverifiable）────────────────────
     "loop.verify_gate.bounce": (
         "[Argos 验证门] 你声称完成,但验证 `{verify_cmd}` 未通过/不可信:\n"
         "{detail}\n"
         "请用工具定位并修复,改完再说完成。"
     ),
 
-    # ── 工作流引擎 / 规格 / 结果 ──────────────────────────────────────────────
     "loop.workflow.no_engine": "[工作流引擎未接入,无法编排;请单线程继续。]",
     "loop.workflow.spec_invalid": "[工作流被拒:规格非法 — {error}。请修正或单线程继续。]",
     "loop.workflow.rejected": "[工作流被拒,单线程继续。]",
@@ -310,7 +288,6 @@ ZH: dict[str, str] = {
     "loop.workflow.result_summary": "[工作流「{name}」结果]\n{synthesis}",
     "loop.workflow.result_notes": "\n注记:{notes}",
 
-    # ── plan 决策超时 / None ──────────────────────────────────────────────────
     "loop.plan.timeout": (
         "plan 决策超时({timeout:.0f}s):客户端断连或无响应,"
         " run 已取消(fail-closed)。"
@@ -319,7 +296,6 @@ ZH: dict[str, str] = {
         "plan 决策异常:_plan_decision 为 None(内部错误),run 已取消(fail-closed)。"
     ),
 
-    # ── exec 反馈 ─────────────────────────────────────────────────────────────
     "loop.exec.exception": "[执行异常]\n{exc}",
     "loop.exec.value_repr": "\n[返回值] {value_repr}",
     "loop.exec.result": "[执行结果]\n{out}",
@@ -338,7 +314,6 @@ ZH: dict[str, str] = {
         "原始:{raw_msg}"
     ),
 
-    # ── report_note 值 ───────────────────────────────────────────────────────
     # verbatim from loop.py line 1818
     "loop.report_note.no_test": "未机检验证 (no test command)",
     # verbatim from loop.py lines 1818+1820 (concatenated)
@@ -357,7 +332,6 @@ ZH: dict[str, str] = {
         "verify 不可信({verdict_status}),用户已确认继续;上下文经过压缩(有损)"
     ),
 
-    # ── persisted 占位 ────────────────────────────────────────────────────────
     # verbatim from loop.py line 1906
     "loop.persisted.escalated": "(本轮结束:未通过验证,已上报)",
     # verbatim from loop.py line 1908 (note: {report_note} is the placeholder)
@@ -365,7 +339,6 @@ ZH: dict[str, str] = {
     # verbatim from loop.py line 1910
     "loop.persisted.done": "(本轮完成)",
 
-    # ── 可见完成行 ─────────────────────────────────────────────────────────────
     # verbatim from loop.py line 1926
     "loop.done.escalated": "⚠️ 未能在限定轮内通过验证,已如实上报(见上方升级提示)。\n",
     # verbatim from loop.py line 1928

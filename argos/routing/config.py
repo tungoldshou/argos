@@ -1,12 +1,4 @@
-"""Routing 配置(契约 §11;spec §6,§14)。
-
-从 ~/.argos/config.json 的 routing 段读/写。tier 名 fail-closed:拼写错 / 不在
-config.models 里 → ConfigError 拒绝(spec D17 防假绿)。
-
-任务:routing 模式跟 lsp/hooks/permissions 不同(无单例缓存 + 无 empty + set_category 后
-重读),不强行套单例助手;仅抽 JSON 读取样板(走 config_base.read_json_file,失败返 None
-让 caller 决定"routing 段缺则 safe default")。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -23,7 +15,7 @@ from argos.routing.categorizer import TaskCategory
 
 @dataclass(frozen=True, slots=True)
 class RoutingConfig:
-    """路由配置(spec §4.4):default + by_category + by_tool + tier_force_confirm。"""
+    """Internal documentation."""
     default: str = "default"
     by_category: dict[str, str] = field(default_factory=dict)
     by_tool: dict[str, str] = field(default_factory=dict)
@@ -33,26 +25,16 @@ class RoutingConfig:
         return tier in self.tier_force_confirm
 
     def is_active(self) -> bool:
-        """路由表是否有实际路由行为(非空 by_category/by_tool/tier_force_confirm 或非默认 default
-        tier)。内置默认映射已填充 by_category,故出厂即 True。保留此谓词供测试与 app_factory
-        判断——仍需构造 router(不再跳过)。"""
+        """Internal documentation."""
         return bool(self.by_category or self.by_tool or self.tier_force_confirm
                     or self.default != "default")
 
 
-# 内置默认路由映射(自主性 flip:出厂激活,无需用户手写 config.json routing 段)。
-# cheap tier → 快速/只读任务(SIMPLE_READ / PLAN / VERIFY / AUTO_CAPTURE);
-# strong tier → 重量级任务(LONG_RUN / REFACTOR / TEST_WRITE / FILE_EDIT)。
-# 若用户只配了一个 tier,_router_client_factory 在 tier_for(name) 失败时回退到 active tier,
-# 路由退化为 no-op 但绝不报错(单 tier 安全)。用户在 config.json 写了 routing 段则覆盖此默认。
-# ponytail: 两个 tier 名 "cheap"/"strong" 是 argos setup 向导约定的标准名;单 tier 安全靠 app_factory fallback。
 _DEFAULT_BY_CATEGORY: dict[str, str] = {
-    # 轻量 → cheap
     "simple_read":   "cheap",
     "plan":          "cheap",
     "verify":        "cheap",
     "auto_capture":  "cheap",
-    # 重量 → strong
     "file_edit":     "strong",
     "refactor":      "strong",
     "test_write":    "strong",
@@ -76,17 +58,13 @@ def _validate_category_keys(by_category: dict[str, str]) -> None:
 
 
 def load_routing(config_dir: Path) -> RoutingConfig:
-    """从 config_dir/config.json 读 routing 段;缺则返内置默认映射(出厂激活)。"""
+    """Internal documentation."""
     config_dir = Path(config_dir).expanduser()
     cfile = config_dir / "config.json"
-    # 任务:JSON 读取走 config_base.read_json_file(OSError 走 silent —— routing 段
-    # 不存在就 safe default,与原行为一致)。抛 ConfigError 时带原 "config.json 解析失败"
-    # 前缀(历史消息格式,测试断言 match="config.json 解析失败" 不破)。
     try:
         raw = config_base.read_json_file(cfile, ErrorCls=ConfigError, on_os_error="silent")
     except ConfigError as e:
-        # 重抛带原消息前缀(测试/用户文案不变)
-        if isinstance(e.__cause__, json.JSONDecodeError):  # locale 无关:按异常 cause 判,不匹配本地化文案
+        if isinstance(e.__cause__, json.JSONDecodeError):
             raise ConfigError(t("route.config_parse_fail", detail=str(e).split(':', 1)[-1].strip())) from None
         raise
     if raw is None:
@@ -118,7 +96,6 @@ def load_routing(config_dir: Path) -> RoutingConfig:
     for v in tier_force_confirm:
         if not isinstance(v, str):
             raise ConfigError(t("route.tier_force_confirm_must_be_str"))
-    # 校验 category 键必须在 8 枚举内(spec D11 严格 schema)
     _validate_category_keys(by_category)
     _validate_routing_tiers(
         [default, *by_category.values(), *by_tool.values(), *tier_force_confirm],
@@ -131,13 +108,13 @@ def load_routing(config_dir: Path) -> RoutingConfig:
 
 
 def _validate_tier(tier: str, config_dir: Path) -> None:
-    """tier 名必须在 config.models 里(fail-closed spec D17 防拼写退化)。"""
+    """Internal documentation."""
     config_dir = Path(config_dir).expanduser()
     cfile = config_dir / "config.json"
     try:
         raw = config_base.read_json_file(cfile, ErrorCls=ConfigError, on_os_error="silent")
     except ConfigError as e:
-        if isinstance(e.__cause__, json.JSONDecodeError):  # locale 无关:按异常 cause 判,不匹配本地化文案
+        if isinstance(e.__cause__, json.JSONDecodeError):
             raise ConfigError(t("route.config_parse_fail", detail=str(e).split(':', 1)[-1].strip())) from None
         raise
     if raw is None:
@@ -146,14 +123,12 @@ def _validate_tier(tier: str, config_dir: Path) -> None:
 
 
 def set_category(config_dir: Path, category: TaskCategory, tier: str) -> RoutingConfig:
-    """原子改写 config.json 的 routing.by_category[category] = tier;返回新 config。"""
+    """Internal documentation."""
     _validate_tier(tier, config_dir)
     config_dir = Path(config_dir).expanduser()
     cfile = config_dir / "config.json"
     if not cfile.exists():
         raise ConfigError(t("route.no_config_set_category", path=cfile))
-    # set_category 必须读到完整 raw(要保留其他段),不走 read_json_file 助手(助手只返顶层 dict,
-    # set_category 需要 raw 全段保留 + 原子写),但 parse error 处理复用助手模式。
     try:
         raw = json.loads(cfile.read_text())
     except json.JSONDecodeError as e:
@@ -188,7 +163,6 @@ def set_category(config_dir: Path, category: TaskCategory, tier: str) -> Routing
         raw.get("models") or {},
     )
     raw["routing"] = routing
-    # 原子写:.tmp + os.replace(spec D12)
     tmp_fd, tmp_path = tempfile.mkstemp(dir=str(config_dir), suffix=".tmp")
     try:
         with os.fdopen(tmp_fd, "w") as f:

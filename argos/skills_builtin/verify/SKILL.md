@@ -25,4 +25,4 @@ enabled: true
 
 ## 不做什么
 - 不**自动 fix**(本 skill 只跑 verify,不写文件)
-- 不**改 verify_cmd**(改 ~/.argos/config.json 走外部)
+- 不**改 verify_cmd**(改 ARGOS_CONFIG_DIR/config.json 走外部)

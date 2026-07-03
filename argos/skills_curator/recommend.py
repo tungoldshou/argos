@@ -1,10 +1,4 @@
-"""#10 T7 推荐引擎 (13 规则,纯启发式,无学习).
-
-D19:无 LLM 反馈学习(留 v1.1)
-R1-R13 见 spec 2026-06-07-skills-curator-design.md §8.3
-
-不接 skills_runtime.AnalysisSkill;recommend 是元层(对 skill 选择),不是 skill 本身。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -39,7 +33,6 @@ class Recommendation:
     description: str = ""
 
 
-# ── 13 规则 ───────────────────────────────────────────────
 
 
 def _r1_py_files(activity: SessionActivity) -> Recommendation | None:
@@ -139,7 +132,6 @@ def _r12_long_session(activity: SessionActivity) -> Recommendation | None:
     return None
 
 
-# R13 memory 接入留 v1.1
 
 
 DEFAULT_RULES: tuple = (
@@ -157,10 +149,7 @@ def recommend(
     cache: IndexCache | None = None,
     rules: Iterable = DEFAULT_RULES,
 ) -> list[Recommendation]:
-    """跑 13 规则 → 按 score 倒序返 Recommendation list.
-
-    跳过已 enabled 安装的 skill(spec §8.4);in_index 字段标 false 若不在 cache.
-    """
+    """Internal documentation."""
     from argos.skills_curator.capabilities import list_installed
 
     enabled = {s.name for s in list_installed() if s.enabled}
@@ -195,7 +184,7 @@ def recommend(
 
 
 def build_activity_from_session() -> SessionActivity:
-    """v1: 简化为空 dataclass;v1.1 接 session_event_log."""
+    """Internal documentation."""
     return SessionActivity()
 
 

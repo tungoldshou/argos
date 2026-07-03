@@ -1,11 +1,4 @@
-"""RunRegistry:daemon 内存注册表(spec #5b §4)。
-
-- run_id → RunEntry(状态/累计 cost/focus/worktree_path)
-- max_concurrent:5(可由 ARGOS_MAX_CONCURRENT 覆盖;本期硬编 5,D1)
-- max_history:100(终态保留 N 条,超出按 created_at 升序删)
-
-不在 RunStore JSONL 里 —— RunStore 仍是事件流真相源;registry 是 daemon 内存快查层。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -19,21 +12,7 @@ from argos.daemon.state_machine import TERMINAL_STATES
 
 @dataclass
 class RunEntry:
-    """内存注册表条目(spec #5b §4.1)。
-
-    字段:
-      run_id:12 hex(沿用 RunStore)
-      state:7 状态之一
-      goal:用户目标
-      workspace:工作目录
-      worktree_path:~/.argos/worktrees/<run_id> 或 temp
-      created_at / updated_at:float epoch
-      tokens_in / tokens_out:本 run 累计(由 CostUpdate 累加)
-      cost_usd:累计(API 返 None 时为 None,不编造)
-      focus_session_id:哪个 TUI session 把它当 active(None = 无)
-      task:asyncio.Task(worker 句柄,内部用,repr=False)
-      pause_event:asyncio.Event(默认 set = 不阻塞)
-    """
+    """Internal documentation."""
     run_id: str
     state: str
     goal: str
@@ -56,12 +35,7 @@ class RunEntry:
 
 
 class RunRegistry:
-    """并发安全(run_id → RunEntry)内存注册表。
-
-    asyncio.Lock 保护 _entries 写(read 不持锁,dict 原子)。
-    asyncio.Semaphore 控制最大并发(create_run 前 acquire,worker 终态时 release)。
-    max_history 兜底终态条目数(超过按 created_at 升序删最旧)。
-    """
+    """Internal documentation."""
 
     def __init__(self, *, max_concurrent: int = 5, max_history: int = 100):
         self._entries: dict[str, RunEntry] = {}
@@ -69,8 +43,7 @@ class RunRegistry:
         self._max_history = max_history
         self._lock = asyncio.Lock()
         self._sem = asyncio.Semaphore(max_concurrent)
-        # 防 release_slot 滥用:记录已 acquire 的次数
-        self._acquired_count: dict[str, int] = {}   # run_id → 已经 acquire 的次数(防御性)
+        self._acquired_count: dict[str, int] = {}
 
     @property
     def max_concurrent(self) -> int:
@@ -82,12 +55,12 @@ class RunRegistry:
 
     @property
     def active_count(self) -> int:
-        """当前非终态 run 数。"""
+        """Internal documentation."""
         return sum(1 for e in self._entries.values() if e.state not in TERMINAL_STATES)
 
     @property
     def sem(self) -> asyncio.Semaphore:
-        """暴露给上层(并发满判断)。"""
+        """Internal documentation."""
         return self._sem
 
     @property
@@ -98,7 +71,7 @@ class RunRegistry:
         self, *, run_id: str, goal: str, workspace: str,
         worktree_path: str | None = None,
     ) -> RunEntry:
-        """注册新 run;返回 RunEntry(供调用方进一步配置)。"""
+        """Internal documentation."""
         now = time.time()
         entry = RunEntry(
             run_id=run_id, state="pending", goal=goal, workspace=workspace,
@@ -118,7 +91,7 @@ class RunRegistry:
         return [e for e in self._entries.values() if e.state == state]
 
     def mark(self, *, run_id: str, state: str) -> None:
-        """改状态(worker / server 调);不在锁里(只改一字段,读 snapshot 容忍)。"""
+        """Internal documentation."""
         e = self._entries.get(run_id)
         if e is None:
             return
@@ -129,7 +102,7 @@ class RunRegistry:
         self, *, run_id: str, tokens_in_delta: int = 0,
         tokens_out_delta: int = 0, cost_usd_delta: float | None = None,
     ) -> None:
-        """累加 cost(cost_usd_delta=None 不累加,保 None 语义)。"""
+        """Internal documentation."""
         e = self._entries.get(run_id)
         if e is None:
             return
@@ -153,54 +126,46 @@ class RunRegistry:
     # ── semaphore ────────────────────────────────────────────────────
 
     async def acquire_slot(self) -> None:
-        """抢一个并发槽(阻塞到有空位)。"""
+        """Internal documentation."""
         await self._sem.acquire()
 
     def release_slot(self) -> None:
-        """还一个并发槽(worker 终态时调);多 release 防御性不抛。"""
+        """Internal documentation."""
         try:
             self._sem.release()
         except ValueError:
-            # semaphore 已 full(>= initial value),吞掉
             pass
 
     def has_capacity(self) -> bool:
-        """非阻塞:看是否有空槽。"""
+        """Internal documentation."""
         return not self._sem.locked() and self._sem._value > 0  # type: ignore[attr-defined]
 
     # ── cleanup / max_history ───────────────────────────────────────
 
     async def cleanup(self, *, run_id: str, terminal_state: str) -> None:
-        """worker 终态时调:
-          1. 标状态
-          2. 释放 semaphore 槽位
-          3. 缩 max_history(超 cap 删最旧终态)
-        """
+        """Internal documentation."""
         async with self._lock:
             e = self._entries.get(run_id)
             if e is None:
                 return
             e.state = terminal_state
             e.updated_at = time.time()
-        # 释放槽位(即便 entry 不存在,防御性 release)
         self.release_slot()
-        # 缩 cap
         await self._enforce_max_history()
 
     async def _enforce_max_history(self) -> None:
-        """超 max_history → 删最旧终态(按 created_at 升序)。"""
+        """Internal documentation."""
         async with self._lock:
             terminal = [e for e in self._entries.values() if e.state in TERMINAL_STATES]
             if len(terminal) <= self._max_history:
                 return
-            # 排序:最旧在前
             terminal.sort(key=lambda e: e.created_at)
             to_remove = terminal[: len(terminal) - self._max_history]
             for e in to_remove:
                 self._entries.pop(e.run_id, None)
 
     def snapshot(self) -> list[dict[str, Any]]:
-        """返所有 entry 的字典列表(供调试 / health)。"""
+        """Internal documentation."""
         out = []
         for e in self._entries.values():
             out.append({
@@ -217,5 +182,5 @@ class RunRegistry:
 
 
 def new_run_id() -> str:
-    """12 hex run_id(沿用 #5a RunManager.create_run)。"""
+    """Internal documentation."""
     return uuid.uuid4().hex[:12]

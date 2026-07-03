@@ -1,7 +1,4 @@
-"""共享文案 —— 跨多个 cluster 复用的通用词 / 短语。
-
-key 命名空间:common.*。各 cluster 专属串放各自的目录文件。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 EN: dict[str, str] = {

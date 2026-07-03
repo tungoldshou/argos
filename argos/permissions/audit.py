@@ -1,9 +1,4 @@
-"""AuditLog:append-only JSONL,30 天滚动清理,IO 失败 continue(spec §2.7)。
-
-任务:抽 jsonl_log 共享 best-effort 写入样板 —— `log()` 调 `jsonl_log.append_line`,
-`cleanup_old_logs` 调 `jsonl_log.cleanup_files_by_name_date`。audit 专属的字段构造
-(row schema) + `AuditLog` dataclass + 单例(get_audit_log) 留在本文件。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import logging
@@ -62,19 +57,16 @@ class AuditLog:
             "secret_pattern": secret_pattern,
             "risk": risk,
         }
-        # 任务:抽 jsonl_log 助手 —— IO 失败 best-effort log warning 不抛,
-        # 行为与原 _ensure_dir + try/except 等价。
         jsonl_log.append_line(_file_for_date(datetime.now()), row, logger=_log)
 
     def cleanup_old_logs(self, *, days: int = RETAIN_DAYS) -> int:
-        """启动时跑一次;超过 days 天的 jsonl 文件删除(D7 锁)。"""
+        """Internal documentation."""
         return jsonl_log.cleanup_files_by_name_date(
             audit_dir(), "approvals-*.jsonl",
             prefix="approvals-", days=days, logger=_log,
         )
 
 
-# 模块级单例
 _audit: AuditLog | None = None
 
 

@@ -1,4 +1,4 @@
-"""`/security-review` skill 编排(3 pass 顺序跑,任一 pass 失败不阻断,spec §2.4)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -48,7 +48,6 @@ def _run_pass_permission(target: Path, ctx: AnalysisSkillContext) -> tuple[Findi
     return tuple(findings)
 
 
-# 可被测试 monkeypatch 替换
 _PASSES: list[tuple[str, Callable[[Path, AnalysisSkillContext], tuple[Finding, ...]]]] = [
     ("secrets", _run_pass_secrets),
     ("audit", _run_pass_audit),
@@ -59,7 +58,7 @@ _SEVERITY_ORDER = {"error": 0, "warning": 1, "info": 2}
 
 
 def _walk_files(root: Path) -> list[Path]:
-    """列 root 下所有文件(限深 8 层防 FS 暴)。"""
+    """Internal documentation."""
     if root.is_file():
         return [root]
     skip_dirs = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".argos"}
@@ -82,7 +81,7 @@ def _walk_files(root: Path) -> list[Path]:
 
 
 def _dedup(findings: list[Finding]) -> list[Finding]:
-    """同 (file, line, category, message) 四元组去重(spec D12)。"""
+    """Internal documentation."""
     seen: set[tuple] = set()
     out: list[Finding] = []
     for f in findings:
@@ -95,7 +94,7 @@ def _dedup(findings: list[Finding]) -> list[Finding]:
 
 
 def _sort_findings(findings: list[Finding]) -> list[Finding]:
-    """error > warning > info;同 severity 按 file:line 排序(spec §2.4 排序)。"""
+    """Internal documentation."""
     return sorted(findings, key=lambda f: (
         _SEVERITY_ORDER.get(f.severity, 9),
         f.file or "",
@@ -120,7 +119,7 @@ def _summarize(verdict: str, findings: list[Finding], errors: list[str], duratio
 
 
 async def run(args: dict, ctx: AnalysisSkillContext) -> AnalysisSkillResult:
-    """`/security-review` 入口 — 3 pass 顺序跑(spec §2.4 / D5 / D12)。"""
+    """Internal documentation."""
     start_ms = int(time.monotonic() * 1000)
     path_arg = args.get("path")
     workspace = ctx.workspace
@@ -140,7 +139,6 @@ async def run(args: dict, ctx: AnalysisSkillContext) -> AnalysisSkillResult:
             errors.append(f"{pass_name}: {type(e).__name__}: {e}")
     # dedup + sort
     findings = _sort_findings(_dedup(all_findings))
-    # verdict(spec D5 防假绿):任何 error finding → failed;errors 非空 + 0 finding → partial
     has_error = any(f.severity == "error" for f in findings)
     if has_error:
         verdict = "failed"

@@ -1,21 +1,4 @@
-"""#7 T2/T3 EvalRunner:接 task + model_tier + budget,跑 worktree + 真 loop + 真 verify。
-
-不依赖真 LLM(测试用 fake_loop 桩,真 LLM 跑在 e2e + 真测)。
-
-数据流(spec §5.3):
-  1. WorktreeManager.create()   → 隔离 workspace
-  2. setup.sh (optional)        → 准备环境
-  3. loop_factory(model_tier)   → 装 AgentLoop
-  4. loop.run(goal)             → CodeAct 跑,产 cost_update 事件
-  5. Verifier.verify(verify_cmd)→ 退出码 0 = passed
-  6. EvalResult.append_jsonl
-  7. WorktreeManager.cleanup()  → finally 块,失败也清
-
-D7:budget 超时 → cancel + 标 failed
-D12:verify_cmd 走 host(不嵌套 sandbox,eval 是 dogfooding)
-D16:keep_worktree=True 跳过 cleanup(调试用)
-D20:报告存 ~/.argos/eval/ 同用户态数据
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -36,7 +19,6 @@ from argos.i18n import t
 
 log = logging.getLogger(__name__)
 
-# Pass status 5 类(spec §5.4 + §9.1)
 PASS_PASSED = "passed"
 PASS_FAILED = "failed"
 PASS_UNVERIFIABLE = "unverifiable"
@@ -46,16 +28,7 @@ PASS_ERROR = "error"
 
 @dataclass(frozen=True, slots=True)
 class EvalResult:
-    """单次 eval 跑结果(spec §5.1)。
-
-    pass_status 推导图(§9.1):
-      setup.sh 失败       → setup_failed
-      LLM/crash/IO 异常   → error
-      verify 退出 0       → passed
-      verify 退出非 0     → failed
-      verify 超时         → failed
-      篡改检测触发        → unverifiable
-    """
+    """Internal documentation."""
     task_id: str
     run_id: str
     model_tier: str
@@ -112,7 +85,6 @@ class EvalResult:
         )
 
 
-# Loop factory contract(测试桩可注入):
 #   loop = loop_factory(model_tier: str, wt_path: str)
 #       The factory MUST cage the returned loop to wt_path (set workspace=wt_path).
 #       Backward-compat: single-arg factories (model_tier only) are still accepted
@@ -125,7 +97,7 @@ class EvalResult:
 
 @dataclass
 class LoopOutcome:
-    """loop.run() 的简版结果(测试桩用)。"""
+    """Internal documentation."""
     verdict_status: str           # passed/failed/unverifiable
     verify_detail: str = ""
     tampered: tuple[str, ...] = field(default_factory=tuple)
@@ -136,28 +108,20 @@ class LoopOutcome:
 
 
 class WorktreeError_(Exception):
-    """worktree 失败的占位异常(避免引 daemon.worktree 在单测里循环导入)。"""
+    """Internal documentation."""
     pass
 
 
-# loop_factory 协议类型
 LoopFactory = Callable[[str], Any]
 
 
 class EvalRunner:
-    """Eval 跑主控(spec §5)。
-
-    - worktree:从 #5b 注入(测试可换 fake)
-    - base_dir:~/.argos/eval/(可 env var 覆盖 ARGOS_EVAL_DIR,测试用)
-    - budget_s / budget_cost_usd:D3 默认 $1 / 600s
-    - loop_factory:测试桩;真模式 v1.1 接 app_factory.build_loop_factory
-    - keep_worktree:调试 flag,D16
-    """
+    """Internal documentation."""
 
     def __init__(
         self,
         *,
-        worktree: Any,  # WorktreeManager 实例(避免硬引);protocol duck-typed
+        worktree: Any,
         base_dir: Path,
         budget_s: int | None = 600,
         budget_cost_usd: float | None = 1.0,
@@ -185,7 +149,7 @@ class EvalRunner:
         return self._budget_cost_usd
 
     def run(self, task: EvalTask, *, model_tier: str) -> EvalResult:
-        """跑单个 task。失败模式见 §5.4;最终返 EvalResult(必返,不抛)。"""
+        """Internal documentation."""
         run_id = uuid.uuid4().hex[:12]
         started = time.time()
         wt_path = ""
@@ -193,10 +157,9 @@ class EvalRunner:
         # 1. worktree
         try:
             wt_path = self._worktree.create(run_id=run_id, workspace=str(task.working_dir))
-        except Exception as e:  # noqa: BLE001 — worktree 失败兜底成 error
+        except Exception as e:  # noqa: BLE001
             return self._mk_error(task, run_id, model_tier, started, "",
                                   f"worktree_failed: {e}", None)
-        # finally 兜底:任何路径结束都尝试 cleanup(spec D16 keep_worktree=True 跳过)
         try:
             return self._do_run(task, run_id, model_tier, started, wt_path, fallback)
         finally:
@@ -210,7 +173,6 @@ class EvalRunner:
         self, task: EvalTask, run_id: str, model_tier: str, started: float,
         wt_path: str, fallback: str | None,
     ) -> EvalResult:
-        # fallback 判定(worktree 内部若是 git worktree → 无 fallback;temp dir → "temp")
         try:
             is_git = bool(getattr(self._worktree, "is_git_repo", lambda _: True)(str(task.working_dir)))
         except Exception:  # noqa: BLE001
@@ -274,18 +236,8 @@ class EvalRunner:
             outcome.steps, wt_path, fallback,
         )
 
-    # ── 内部 ────────────────────────────────────────────────────────────
     def _drive(self, loop: Any, task: EvalTask, wt_path: str) -> LoopOutcome:
-        """跑 loop → 拿 LoopOutcome。
-
-        loop 协议(单测桩必备):
-          loop.run_sync(goal, workspace) -> LoopOutcome | raises
-
-        Budget 强制(--budget 真实执行):
-          - budget_s:挂线程计时器,超时 → timed_out
-          - budget_cost_usd:跑完后检查 outcome.cost_usd,超限 → over_budget
-        """
-        # 桩模式:loop.run_sync 直接返 LoopOutcome
+        """Internal documentation."""
         if hasattr(loop, "run_sync"):
             # ponytail: thread timer for sync wall-clock timeout; asyncio.wait_for
             # won't help here since _drive is sync. Upgrade to async when real
@@ -316,7 +268,6 @@ class EvalRunner:
                 )
 
             if not isinstance(outcome, LoopOutcome):
-                # 兜底:把任意对象转成 LoopOutcome
                 outcome = LoopOutcome(
                     verdict_status=getattr(outcome, "verdict_status", "error"),
                     verify_detail=getattr(outcome, "verify_detail", ""),
@@ -486,7 +437,7 @@ class EvalRunner:
         )
 
     def cleanup_worktree(self, run_id: str) -> None:
-        """手动清理(keep_worktree 模式下 caller 用)。"""
+        """Internal documentation."""
         try:
             self._worktree.cleanup(run_id)
         except Exception as e:  # noqa: BLE001

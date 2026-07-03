@@ -1,8 +1,4 @@
-"""#12 Context 可视化:4 桶分桶(契约 §12;spec §6)。
-
-输入:loop 实例 + store + workspace + (可选)goal
-输出:ContextBreakdown(4 桶 + total + window + pct + method + health)
-任一桶失败降级(返 entries=0 tokens=0 + method=unavailable),不崩 run。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,18 +13,18 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ContextBucket:
-    """4 桶的通用形态(spec §4.1):name + tokens + entries + source + method + details。"""
+    """Internal documentation."""
     name: str
     tokens: int
     entries: int
-    source: str           # 文件:行号,debug 用
+    source: str
     method: str           # "api" | "estimate:chars4" | "estimate:tiktoken" | "unavailable"
     details: tuple[tuple[str, int], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class ContextBreakdown:
-    """聚合 4 桶 + 总 + 窗口 + 比例 + 健康色(spec §4.2)。"""
+    """Internal documentation."""
     system: ContextBucket
     memory: ContextBucket
     tools: ContextBucket
@@ -36,11 +32,11 @@ class ContextBreakdown:
     total: int
     window: int
     pct: float
-    method: str           # 总体口径 "api+estimate"
+    method: str
 
     @property
     def health(self) -> str:
-        """绿(<50%)/ 黄(50-80%)/ 红(>=80%)(spec §7.1)。"""
+        """Internal documentation."""
         if self.pct < 0.5:
             return "green"
         if self.pct < 0.8:
@@ -49,7 +45,7 @@ class ContextBreakdown:
 
 
 class ContextAnalyzer:
-    """4 桶分析门面:实例化不绑 loop(便于测试 mock);调用 analyze() 时注入。"""
+    """Internal documentation."""
 
     @staticmethod
     def analyze(loop: "AgentLoop", *, store: Any, workspace: Path,
@@ -58,7 +54,7 @@ class ContextAnalyzer:
 
 
 def _safe_system(loop: Any) -> ContextBucket:
-    """system 桶(spec §6.1 step 1):走 _build_system。"""
+    """Internal documentation."""
     try:
         text = loop._build_system(goal_for_system(loop))  # type: ignore[attr-defined]
         tok, method = token_estimate(text)
@@ -68,12 +64,12 @@ def _safe_system(loop: Any) -> ContextBucket:
 
 
 def goal_for_system(_loop: Any) -> str:
-    """统一目标串(避免对 loop 实例做强假设;无 goal 即空串,不影响分桶)。"""
+    """Internal documentation."""
     return ""
 
 
 def _safe_memory() -> ContextBucket:
-    """memory 桶(spec §6.1 step 2 + D5):4 tier 各自 load → details。"""
+    """Internal documentation."""
     try:
         from argos.memory import auto as _auto  # type: ignore[import-not-found]
         scopes: tuple[tuple[str, str], ...] = (
@@ -101,7 +97,7 @@ def _safe_memory() -> ContextBucket:
 
 
 def _safe_tools(loop: Any) -> ContextBucket:
-    """tools 桶(spec §6.1 step 3):走 _tool_signatures_block;entries 估 22。"""
+    """Internal documentation."""
     try:
         text = loop._tool_signatures_block()  # type: ignore[attr-defined]
         tok, method = token_estimate(text)
@@ -111,7 +107,7 @@ def _safe_tools(loop: Any) -> ContextBucket:
 
 
 def _safe_messages(loop: Any, store: Any) -> ContextBucket:
-    """messages 桶(spec §6.1 step 4):entries=len, tokens=API 真值。"""
+    """Internal documentation."""
     try:
         msgs = store.get_messages("") if hasattr(store, "get_messages") else []  # type: ignore[attr-defined]
     except Exception:  # noqa: BLE001
@@ -128,7 +124,7 @@ def _safe_messages(loop: Any, store: Any) -> ContextBucket:
 
 
 def _safe_window(loop: Any) -> int:
-    """window 来自 model.tier.context_window;fallback 200_000。"""
+    """Internal documentation."""
     try:
         cw = loop._model.tier.context_window  # type: ignore[attr-defined]
         return int(cw) if cw and cw > 0 else 200_000
@@ -138,7 +134,7 @@ def _safe_window(loop: Any) -> int:
 
 def analyze(loop: "AgentLoop", *, store: Any, workspace: Path,
             goal: str | None = None) -> ContextBreakdown:
-    """4 桶独立;任一失败降级(spec §6.1 + §13)。"""
+    """Internal documentation."""
     system = _safe_system(loop)
     memory = _safe_memory()
     tools = _safe_tools(loop)

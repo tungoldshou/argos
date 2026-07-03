@@ -1,4 +1,4 @@
-"""Evaluator 串联 hard → soft → level,带 trigger 标签(spec §2.5, D15 锁)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -47,7 +47,7 @@ class DecisionMeta:
 
 
 def _arg_str(args: dict[str, Any]) -> str:
-    """工具参数 → 串(供 matcher 比对);cmd 优先 / command 次之 / path 次之 / 全 args repr 兜底。"""
+    """Internal documentation."""
     if not isinstance(args, dict):
         return str(args)
     for key in ("cmd", "command"):
@@ -70,35 +70,29 @@ def _gate_level_str(level: ApprovalLevel | str | None) -> str:
 
 
 def _run_command_needs_net(args: dict[str, Any]) -> bool:
-    """run_command 是否需要联网(pip/npm/git push/curl…)。Cautious 下这类命令不走"牢笼内自动
-    放行"短路 —— 开网是越牢笼墙的升级,须在审批层弹"出网阀"卡问用户。延迟 import 避免
-    permissions ↔ tools 形成 import 环(命中后 sys.modules 缓存,后续为 dict 查找)。"""
+    """Internal documentation."""
     if not isinstance(args, dict):
         return False
-    cmd = args.get("command") or args.get("cmd")  # broker 用 command;部分调用用 cmd(与 _arg_str 一致)
+    cmd = args.get("command") or args.get("cmd")
     if not isinstance(cmd, str):
         return False
     try:
         from argos.tools.shell import command_needs_network
         return command_needs_network(cmd)
-    except Exception:  # noqa: BLE001 — 探测失败保守按"不需网络"(不误升级为 ask)
+    except Exception:  # noqa: BLE001
         return False
 
 
 def _check_hard_path_write(args: dict[str, Any], *, workspace: str | Path | None) -> DecisionMeta | None:
-    """write_file / edit_file 的目标路径系统前缀命中 → deny。"""
+    """Internal documentation."""
     path = args.get("path") or args.get("file") or args.get("filepath")
     if not isinstance(path, str):
         return None
-    # .env.example 永 allow
     if is_env_template(path):
         return None
-    # ~/.argos/.env 是 Argos 自己的 config
     if is_argos_own_env(path):
         return None
-    # 系统路径前缀命中 → deny
     if is_system_path(path):
-        # 找命中的 denylist prefix 作 trigger 显式度
         for prefix in HARD_PATH_DENYLIST:
             p_resolved = str(Path(path).expanduser().resolve())
             if p_resolved.startswith(prefix):
@@ -122,19 +116,9 @@ def evaluate(
     low_risk_auto: bool = False,
     risk: str = "medium",
 ) -> DecisionMeta:
-    """串联 hard → soft deny → soft allow → soft ask → per-tool → default(spec D15 锁)。
-
-    - secret 命中不走 soft allow 短路(D8 锁):即便 allow 列表命中具体内容仍 ask。
-    - hard rule 命中即返,不被任何软规则覆盖(D5 锁)。
-    - ask_readonly=True(L0 语义):跳过"auto 放行"短路,即便低风险动作也升格为 ask。
-      仅对评估路径末端的"approve"结果改为 ask;hard/soft deny/secret 路径不受影响。
-    - reversible_lookup(L2 语义):Callable[[action], bool|None];True=可逆→放行(audit
-      trigger="trust:L2 可逆放行");False/None=不可逆/未知→ ask(保守)。
-      仅在评估末端无其他 hard/soft 规则命中时才作用;HARD RULES/secret 路径不受影响。
-    """
+    """Internal documentation."""
     arg_str = _arg_str(args)
 
-    # 1. Hard rules:shell 危险命令
     if action == "run_command":
         rule = check_hard_shell(arg_str)
         if rule is not None:
@@ -145,17 +129,11 @@ def evaluate(
                 reason=t("perm2.eval.hard_shell_deny", rule=rule),
             )
 
-    # 1b. Hard rules:系统路径 / workspace 边界(写操作)
     if action in ("write_file", "edit_file"):
         meta = _check_hard_path_write(args, workspace=workspace)
         if meta is not None:
             return meta
 
-    # 1e. Hard rules:computer.* 非开发者域(P6a §10)
-    # type_text 文本命中金融/验证码模式 → 强制 ask(CONFIRM);
-    # open_app  命中支付/银行词表     → 强制 ask(CONFIRM)。
-    # 注意:这里返回 "ask"(而非 "deny")——目的是强制人工确认,不是彻底拒绝。
-    # autonomy 层 + broker 层需把 trigger.startswith("hard_rule:computer_") 视为不可降级。
     if action.startswith("computer_"):
         computer_rule = check_computer_hard_rules(action, args)
         if computer_rule is not None:
@@ -166,15 +144,12 @@ def evaluate(
                 reason=t("perm2.eval.computer_hard_ask", rule=computer_rule),
             )
 
-    # 1c. Hard rules:.env 教学样例(永远 allow)→ 无动作,继续
-    # 1d. Hard rules:secret pattern(D8 锁 flag-and-ask):write_file/edit_file 看新内容
     secret_name: str | None = None
     if action in ("write_file", "edit_file"):
         content = args.get("content")
         if isinstance(content, str):
             secret_name = find_secret_in_content(content)
         elif isinstance(content, dict):
-            # edit_file 的 new_string 字段
             new_s = content.get("new_string") or content.get("content")
             if isinstance(new_s, str):
                 secret_name = find_secret_in_content(new_s)
@@ -189,7 +164,6 @@ def evaluate(
             reason=t("perm2.eval.soft_deny_reason", matcher=deny_entry.matcher),
         )
 
-    # 3. Soft allow(secret 命中时不短路,D8 锁)
     if secret_name is None:
         allow_entry = config.match_allow(action, arg_str)
         if allow_entry is not None:
@@ -203,7 +177,6 @@ def evaluate(
                                           ask_readonly=ask_readonly,
                                           reversible_lookup=reversible_lookup)
 
-    # 3b. Secret 命中 → ask(D8 锁:在 soft ask 之前,即便 allow 命中也 ask)
     if secret_name is not None:
         return DecisionMeta(
             decision="ask",
@@ -247,7 +220,6 @@ def evaluate(
                 reason=f"per-tool {action} = observe",
             )
         else:
-            # propose 走 plan gate(本期同 confirm,SPEC §2.5 fallback)
             return DecisionMeta(
                 decision="ask",
                 trigger=f"tool_level:{action}={lvl}",
@@ -264,24 +236,13 @@ def evaluate(
     if lvl == "auto":
         base = DecisionMeta(decision="approve", trigger=f"level:{lvl}", reason=f"default {lvl}")
     elif lvl in ("confirm", "propose", "accept_edits"):
-        # Cautious(L1「只有危险操作才问」,默认档):自动放行【牢笼内】的动作 —— 低危只读
-        # (web_search/web_extract/read_file/search_files)+ run_command(沙箱命令:Seatbelt 关在
-        # 牢笼里、网络 OFF、写caged、凭据读拒;危险命令 rm -rf 等已在前面 hard_rule 步 deny)。
-        # 只在【牢笼墙】问:出网越界(egress)、越界写、hard-rule/金融。这就是"牢笼内自动跑、只在墙问"
-        # (Codex/Claude Code 的丝滑来源,2026-06-20 重设)。中/高危且非沙箱命令(浏览器写/mcp 等)仍 ask。
-        # 出网阀(2026-06-20):需联网的 run_command(pip install / git push / curl…)不走"牢笼内
-        # 自动放行"——开网是越牢笼墙的升级,Cautious 下须弹卡问用户(approve 后 broker 临时开网)。
-        # 持久化的 always 规则在前面 soft_allow 段已先放行,不受此排除影响。
         #
-        # P0 反转修复(2026-06-21):accept_edits(Trusted 档 / plan-mode「接受编辑」)此前两头落空——
-        # 既不置 low_risk_auto、lvl 又非 "confirm" → 牢笼内动作全部 ask,Trusted 反比 Cautious 更烦人。
-        # 现 accept_edits 独立于 low_risk_auto 拿到与 Cautious 同样的牢笼放行,并额外自动批 write_file/
-        # edit_file(名副其实"接受编辑";它们是 broker gate-only 写,host 仍跑 hard-path/密钥治理)→
-        # Trusted 严格 ≥ Cautious。裸 CONFIRM(测试,low_risk_auto=False)不受影响 → 行为不变。
         _is_accept_edits = (lvl == "accept_edits")
+        from argos import config as _argos_config
+        _sandbox_on = _argos_config.sandbox_enabled()
         _cautious_cage_ok = (
             risk == "low"
-            or (action == "run_command" and not _run_command_needs_net(args))
+            or (action == "run_command" and _sandbox_on and not _run_command_needs_net(args))
             or (_is_accept_edits and action in ("write_file", "edit_file"))
         )
         _cage_auto = _is_accept_edits or (low_risk_auto and lvl == "confirm")
@@ -295,7 +256,6 @@ def evaluate(
     else:
         base = DecisionMeta(decision="ask", trigger=f"level:{lvl}", reason=f"default {lvl}")
 
-    # 仅对"approve"结果应用 L0/L2 后处理(deny 结果绝不被升格/降级)。
     return _apply_trust_semantics(base, action=action,
                                   ask_readonly=ask_readonly,
                                   reversible_lookup=reversible_lookup)
@@ -308,27 +268,11 @@ def _apply_trust_semantics(
     ask_readonly: bool,
     reversible_lookup: "Callable[[str], bool | None] | None",
 ) -> DecisionMeta:
-    """L0/L2 后处理:仅作用于评估链末端"approve"结果。
-
-    L0(ask_readonly=True):
-      - "approve" → "ask"(trigger="trust:L0 每步确认")。
-      - "ask"/"deny" 不变。
-
-    L2(reversible_lookup 非 None):
-      - 先查 reversible_lookup(action):
-          True   → "approve"(trigger="trust:L2 可逆放行")
-          False/None → "ask"(保守,trigger 保持原值)
-      - 若原结果已是"ask"/"deny"则不降级(L2 只能放行可逆,不强制拦截)。
-      - L2 不升格 deny。
-
-    L0 与 L2 互斥(gate 每次只处于一个语义档位),代码按 ask_readonly 优先。
-    """
+    """Internal documentation."""
     if meta.decision == "deny":
-        # deny 来自 hard/soft deny;Trust Dial 任何档位都不降级 deny。
         return meta
 
     if ask_readonly:
-        # L0:把所有 approve 升格为 ask
         if meta.decision == "approve":
             return DecisionMeta(
                 decision="ask",
@@ -338,19 +282,12 @@ def _apply_trust_semantics(
         return meta
 
     if reversible_lookup is not None:
-        # L2:仅作用于"级别默认"产生的 ask 或 approve(trigger 以 level: 开头)。
-        # soft_ask/soft_allow/tool_level 命中的决策保持原样(这些是显式配置的规则,L2 不覆盖)。
-        # 规则:
-        #   trigger=level:* + reversible=True  → approve(trigger="trust:L2 可逆放行")
-        #   trigger=level:* + reversible=False/None → ask(保守,维持原 trigger)
-        #   trigger 非 level:*(已被软规则命中) → 保持原结果不变
         is_level_default = meta.trigger.startswith("level:")
         if not is_level_default:
-            # 软规则/tool_level 命中:L2 不干预
             return meta
         try:
             rev = reversible_lookup(action)
-        except Exception:  # noqa: BLE001 — lookup 出错保守处理
+        except Exception:  # noqa: BLE001
             rev = None
         if rev is True:
             return DecisionMeta(
@@ -358,7 +295,6 @@ def _apply_trust_semantics(
                 trigger=t("perm2.eval.l2_approve_trigger"),
                 reason=t("perm2.eval.l2_approve_reason", action=action),
             )
-        # False/None → 保守:已有 ask 维持;如果是 approve(level:auto)则升格为 ask
         if meta.decision == "approve":
             return DecisionMeta(
                 decision="ask",
