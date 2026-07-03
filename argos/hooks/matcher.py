@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -22,7 +21,6 @@ _NESTED_QUANTIFIER_RE: re.Pattern[str] = re.compile(
 
 
 def validate_matcher(matcher: str) -> None:
-    """Internal documentation."""
     if len(matcher) > MAX_MATCHER_LENGTH:
         raise HooksConfigError(
             t("hooks.matcher.too_long", length=len(matcher), limit=MAX_MATCHER_LENGTH)
@@ -40,7 +38,6 @@ def validate_matcher(matcher: str) -> None:
 
 
 def _matcher_hits(matcher: str | None, tool_names: Iterable[str]) -> bool:
-    """Internal documentation."""
     if matcher is None or matcher == "" or matcher == "*":
         return True
     try:
@@ -55,7 +52,6 @@ def match(
     tool_names: Iterable[str],
     config: HooksConfig,
 ) -> list[HookHandler]:
-    """Internal documentation."""
     entries = config.entries.get(event_name, ())
     use_matcher = event_name in _MATCHER_USED_EVENTS
     seen_commands: set[str] = set()

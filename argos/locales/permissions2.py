@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 EN: dict[str, str] = {
@@ -19,6 +18,9 @@ EN: dict[str, str] = {
     "perm2.eval.soft_deny_reason": "soft rule deny matched: {matcher}",
     "perm2.eval.soft_allow_reason": "soft rule allow matched: {matcher}",
     "perm2.eval.soft_ask_reason": "soft rule ask matched: {matcher}",
+    "perm2.eval.secret_ask_reason": (
+        "⚠ Possible secret pattern matched: {name} — did you mean to commit this?"
+    ),
 
     # ── evaluator.py: cage auto-approve reasons ──────────────────────────────
 
@@ -97,6 +99,7 @@ ZH: dict[str, str] = {
     "perm2.eval.soft_deny_reason": "软规则 deny 命中: {matcher}",
     "perm2.eval.soft_allow_reason": "软规则 allow 命中: {matcher}",
     "perm2.eval.soft_ask_reason": "软规则 ask 命中: {matcher}",
+    "perm2.eval.secret_ask_reason": "⚠ 命中疑似密钥模式:{name}。确认要提交这段内容吗?",
 
     # ── evaluator.py: cage auto-approve reasons ──────────────────────────────
 

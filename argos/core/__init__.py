@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from typing import Any
@@ -7,7 +6,6 @@ from argos.core.honesty import HONESTY_SYSTEM  # noqa: F401
 
 
 def final_text(message: Any) -> str:
-    """Internal documentation."""
     c = getattr(message, "content", message)
     if isinstance(c, str):
         return c
@@ -18,7 +16,6 @@ def final_text(message: Any) -> str:
 
 
 def text_delta(chunk: Any) -> str:
-    """Internal documentation."""
     c = getattr(chunk, "content", "")
     if isinstance(c, str):
         return c

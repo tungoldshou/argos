@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import fnmatch
@@ -12,7 +11,6 @@ log = logging.getLogger("argos.conductor.triggers")
 
 @dataclass(frozen=True, slots=True)
 class FileTriggerFact:
-    """Internal documentation."""
     path: str
     mtime: float
     glob: str
@@ -20,7 +18,6 @@ class FileTriggerFact:
 
 
 class FileTriggerWatcher:
-    """Internal documentation."""
 
     def __init__(
         self,
@@ -44,7 +41,6 @@ class FileTriggerWatcher:
     # ------------------------------------------------------------------
 
     def poll(self) -> list[FileTriggerFact]:
-        """Internal documentation."""
         now = self._clock()
         facts: list[FileTriggerFact] = []
         matched_paths = self._match_glob()
@@ -76,7 +72,6 @@ class FileTriggerWatcher:
     # ------------------------------------------------------------------
 
     def _match_glob(self) -> list[str]:
-        """Internal documentation."""
         try:
             base_resolved = self._base.resolve()
             matched = list(self._base.rglob(

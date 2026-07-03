@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -22,7 +21,6 @@ _RUN_LOG_BACKUPS = 3
 
 
 def _build_log_handlers(socket_path) -> list[logging.Handler]:
-    """Internal documentation."""
     run_log = Path(socket_path).expanduser().parent / "daemon.log"
     try:
         from logging.handlers import RotatingFileHandler
@@ -110,7 +108,6 @@ async def _serve(args: argparse.Namespace) -> int:
     conductor_orders_dir = _default_conductor_dir()
 
     async def _conductor_broadcast(ev_dict: dict) -> None:
-        """Internal documentation."""
         await manager.fanout(CONDUCTOR_RUN_ID, ev_dict)
 
     conductor_supervisor = ConductorSupervisor(
@@ -168,7 +165,6 @@ async def _serve(args: argparse.Namespace) -> int:
 
 
 def _socket_alive(socket_path: Path) -> bool:
-    """Internal documentation."""
     if not socket_path.exists():
         return False
     s = _stdlib_socket.socket(_stdlib_socket.AF_UNIX, _stdlib_socket.SOCK_STREAM)
@@ -191,7 +187,6 @@ def _cmd_stop(
     *,
     timeout: float = 10.0,
 ) -> int:
-    """Internal documentation."""
     from argos.daemon.pidfile import read_pid, is_alive
 
     pid = read_pid(pid_path)
@@ -240,7 +235,6 @@ def _cmd_status(
     pid_path: Path,
     socket_path: Path,
 ) -> int:
-    """Internal documentation."""
     from argos.daemon.pidfile import read_pid, is_alive
 
     pid = read_pid(pid_path)
@@ -284,7 +278,6 @@ def _cmd_status(
 
 
 def _query_version_sync(socket_path: Path) -> str | None:
-    """Internal documentation."""
     try:
         s = _stdlib_socket.socket(_stdlib_socket.AF_UNIX, _stdlib_socket.SOCK_STREAM)
         s.settimeout(1.0)
@@ -309,7 +302,6 @@ def _query_version_sync(socket_path: Path) -> str | None:
 
 
 def _cmd_restart(args: argparse.Namespace) -> int:
-    """Internal documentation."""
     pid_path = Path(args.pid_path).expanduser()
     socket_path = Path(args.socket_path).expanduser()
 
@@ -326,7 +318,6 @@ def _cmd_restart(args: argparse.Namespace) -> int:
 
 
 def _spawn_detached(args: argparse.Namespace) -> None:
-    """Internal documentation."""
     cmd = [
         sys.executable, "-m", "argos.daemon",
         "--runs-dir", args.runs_dir,

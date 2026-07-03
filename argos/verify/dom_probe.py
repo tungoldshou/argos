@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -15,14 +14,12 @@ _TEXT_EXCERPT_MAX = 200
 
 @dataclass(frozen=True, slots=True)
 class DomProbeResult:
-    """Internal documentation."""
     found: bool = False
     text_excerpt: str = ""
     error: str = ""
 
 
 class DomProber:
-    """Internal documentation."""
 
     def __init__(self, browser: "BrowserController | None") -> None:
         self._browser = browser
@@ -36,7 +33,6 @@ class DomProber:
         expected_text: str | None = None,
         timeout_s: float = 15.0,
     ) -> DomProbeResult:
-        """Internal documentation."""
         if self._browser is None:
             return DomProbeResult(
                 found=False, text_excerpt="",
@@ -58,7 +54,6 @@ class DomProber:
         *,
         expected_text: str | None,
     ) -> DomProbeResult:
-        """Internal documentation."""
         browser = self._browser
         assert browser is not None
 
@@ -107,7 +102,6 @@ _PSEUDO_RE = re.compile(r':[a-z-]+(\([^)]*\))?', re.I)
 
 
 def _selector_to_text_hint(selector: str) -> str:
-    """Internal documentation."""
     cleaned = _PSEUDO_RE.sub(' ', selector)
     parts = _SELECTOR_CLEAN_RE.split(cleaned)
     meaningful = [p for p in parts if p and len(p) > 1]
@@ -115,7 +109,6 @@ def _selector_to_text_hint(selector: str) -> str:
 
 
 def _extract_body_text(snapshot: str) -> str:
-    """Internal documentation."""
     from argos.i18n import t as _t
     _hdr = _t("browser.snapshot_header").split("\n", 1)[0]
     _page_marker = _hdr.split("{", 1)[0].strip() or "[Page]"
@@ -129,7 +122,6 @@ def _extract_body_text(snapshot: str) -> str:
 
 
 def _excerpt_around(text: str, keyword: str, window: int = _TEXT_EXCERPT_MAX) -> str:
-    """Internal documentation."""
     idx = text.find(keyword)
     if idx < 0:
         return text[:window]

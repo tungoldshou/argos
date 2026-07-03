@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import base64
@@ -7,7 +6,6 @@ from argos.input.attachments import ImageAttachment
 
 
 def encode_attachments(atts) -> list[dict]:
-    """Internal documentation."""
     out: list[dict] = []
     for a in atts or []:
         out.append({
@@ -21,7 +19,6 @@ def encode_attachments(atts) -> list[dict]:
 
 
 def decode_attachments(wire) -> list[ImageAttachment]:
-    """Internal documentation."""
     out: list[ImageAttachment] = []
     for d in wire or []:
         try:

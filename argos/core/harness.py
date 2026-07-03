@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.core.types import Phase, Verdict
@@ -24,7 +23,6 @@ class Harness:
         self._last_failure = ""
 
     async def enter_phase(self, phase: Phase, *, actions: int, max_steps: int | None = None) -> None:
-        """Internal documentation."""
         target = PHASE_ORDER.index(phase)
         if self._phase_idx == -1 and target != 0:
             raise ValueError(
@@ -43,11 +41,9 @@ class Harness:
 
     @staticmethod
     def is_honest_completion(verdict: Verdict, *, verify_cmd: str | None) -> bool:
-        """Internal documentation."""
         return verify_cmd is None and verdict.status == "unverifiable"
 
     async def run_verify_gate(self, verify_cmd: str | None, *, attempt: int) -> Verdict:
-        """Internal documentation."""
         verdict = self.verifier.verify(verify_cmd, attempts=attempt)
         await self.bus.emit(VerifyVerdict(verdict=verdict))
 
@@ -75,5 +71,4 @@ class Harness:
         return verdict
 
     def accept_receipt(self, receipt: Receipt) -> bool:
-        """Internal documentation."""
         return self.signer.verify(receipt)

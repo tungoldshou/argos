@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import logging
@@ -60,7 +59,6 @@ class AuditLog:
         jsonl_log.append_line(_file_for_date(datetime.now()), row, logger=_log)
 
     def cleanup_old_logs(self, *, days: int = RETAIN_DAYS) -> int:
-        """Internal documentation."""
         return jsonl_log.cleanup_files_by_name_date(
             audit_dir(), "approvals-*.jsonl",
             prefix="approvals-", days=days, logger=_log,

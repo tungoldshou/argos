@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.daemon.store import CorruptionError, RunStore  # noqa: F401

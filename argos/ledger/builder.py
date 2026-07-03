@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.ledger.entry import LedgerEntry, Reversible, UndoState
@@ -27,7 +26,6 @@ _IRREVERSIBLE_ACTIONS = frozenset({
 
 
 def _classify_reversible(action: str, undo_token: str | None) -> Reversible:
-    """Internal documentation."""
     a = action.lower()
     if a in _FS_REVERSIBLE_ACTIONS:
         return "yes" if undo_token else "unknown"
@@ -37,7 +35,6 @@ def _classify_reversible(action: str, undo_token: str | None) -> Reversible:
 
 
 def _classify_undo_state(reversible: Reversible) -> UndoState:
-    """Internal documentation."""
     if reversible == "yes":
         return "available"
     return "impossible"
@@ -51,7 +48,6 @@ def build_entry(
     args: dict | None = None,
     undo_token: str | None = None,
 ) -> LedgerEntry:
-    """Internal documentation."""
     if args is None:
         args = {}
 

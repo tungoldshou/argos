@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,7 +5,6 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class RunMeta:
-    """Internal documentation."""
     run_id: str
     goal: str
     workspace: str
@@ -36,7 +34,6 @@ class RunMeta:
 
 @dataclass(frozen=True, slots=True)
 class RunCheckpoint:
-    """Internal documentation."""
     ts: float
     last_step: int
     messages_count: int
@@ -60,7 +57,6 @@ class RunCheckpoint:
 
 @dataclass(frozen=True, slots=True)
 class RunFailure:
-    """Internal documentation."""
     ts: float
     error: str
     error_type: str

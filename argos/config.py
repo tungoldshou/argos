@@ -35,12 +35,10 @@ _ENV = _load_env_local()
 
 
 def get(key: str, default: str | None = None) -> str | None:
-    """Internal documentation."""
     return os.environ.get(key) or _ENV.get(key, default)
 
 
 def _first(*keys: str, default: str | None = None) -> str | None:
-    """Internal documentation."""
     for k in keys:
         v = get(k)
         if v:
@@ -101,7 +99,7 @@ import json as _json
 
 
 class ConfigError(Exception):
-    """Internal documentation."""
+    pass
 
 
 def _write_json_atomic(path: Path, raw: dict) -> None:
@@ -122,7 +120,6 @@ def _config_dir() -> Path:
 
 
 def load_env_file(path: Path) -> dict[str, str]:
-    """Internal documentation."""
     env: dict[str, str] = {}
     if path.exists():
         for line in path.read_text().splitlines():
@@ -144,7 +141,6 @@ _ENV_VAR_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _validate_profile(name: str, m: dict, *, require_key_env: bool = True) -> None:
-    """Internal documentation."""
     if not str(name).strip() or "\n" in str(name) or "\r" in str(name):
         raise ConfigError(t("config.profile.missing_field", name=name, field="profile name"))
     if not isinstance(m, dict):
@@ -209,7 +205,6 @@ class ArgosConfig:
 
 
 def load_config() -> ArgosConfig:
-    """Internal documentation."""
     cdir = _config_dir()
     cfile = cdir / "config.json"
     if not cfile.exists():
@@ -259,17 +254,14 @@ def _has_config_file() -> bool:
 
 
 def sandbox_enabled() -> bool:
-    """Internal documentation."""
     return os.environ.get("ARGOS_SANDBOX", "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def weak_model() -> bool:
-    """Internal documentation."""
     return os.environ.get("ARGOS_WEAK_MODEL", "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def extra_write_dirs() -> list[Path]:
-    """Internal documentation."""
     raw = os.environ.get("ARGOS_ADD_DIRS", "")
     if not raw:
         return []
@@ -291,7 +283,6 @@ def extra_write_dirs() -> list[Path]:
 
 
 def active_tier():
-    """Internal documentation."""
     if _has_config_file():
         cfg = load_config()
         return cfg.tiers[cfg.active]
@@ -299,7 +290,6 @@ def active_tier():
 
 
 def active_key() -> str | None:
-    """Internal documentation."""
     if _has_config_file():
         cfg = load_config()
         env_name = cfg.key_envs.get(cfg.active) or ""
@@ -308,7 +298,6 @@ def active_key() -> str | None:
 
 
 def active_embedder():
-    """Internal documentation."""
     try:
         if not _has_config_file():
             return None
@@ -325,7 +314,6 @@ def active_embedder():
 
 
 def tier_for(name: str):
-    """Internal documentation."""
     if not isinstance(name, str) or not name.strip() or "\n" in name or "\r" in name:
         raise ConfigError(t("config.tier_for.not_found", name=name, available=[]))
     if _has_config_file():
@@ -339,7 +327,6 @@ def tier_for(name: str):
 
 
 def key_for(name: str) -> str | None:
-    """Internal documentation."""
     if not isinstance(name, str) or not name.strip() or "\n" in name or "\r" in name:
         raise ConfigError(t("config.tier_for.not_found", name=name, available=[]))
     if _has_config_file():
@@ -354,14 +341,12 @@ def key_for(name: str) -> str | None:
 
 
 def list_profiles() -> list[str]:
-    """Internal documentation."""
     if not _has_config_file():
         return [DEFAULT_TIER.name]
     return list(load_config().tiers)
 
 
 def set_active(name: str) -> None:
-    """Internal documentation."""
     cfile = _config_dir() / "config.json"
     if not cfile.exists():
         raise ConfigError(t("config.set_active.no_config"))

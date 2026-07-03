@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,7 +9,6 @@ ByType = Literal["rule", "allowlist", "denylist", "asklist", "level", "user", "s
 
 @dataclass(frozen=True, slots=True)
 class ApprovalDecision:
-    """Internal documentation."""
     tool: str
     args: str
     decision: DecisionType        # approved | denied | asked

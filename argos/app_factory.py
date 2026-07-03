@@ -49,14 +49,12 @@ def _host_of(url: str) -> set[str]:
 
 @dataclass
 class RunStack:
-    """Internal documentation."""
     sandbox: SeatbeltExecutor
     gate: ApprovalGate
     broker: CapabilityBroker
     loop_factory: "Callable[[], AgentLoop]"
 
     def close(self) -> None:
-        """Internal documentation."""
         try:
             self.sandbox.close()
         except Exception:  # noqa: BLE001
@@ -110,7 +108,6 @@ def _make_gate_broker_sandbox(
     browser_controller: "Any | None" = None,
     registry: "CapabilityRegistry | None" = None,
 ) -> "tuple[ApprovalGate, CapabilityBroker, SeatbeltExecutor]":
-    """Internal documentation."""
     gate = ApprovalGate(approval_level, permissions_config=perm_config, audit_log=perm_audit)
     try:
         from argos.permissions.trust_dial import TrustLevel
@@ -143,7 +140,6 @@ def build_run_stack(
     session_id: str = "",
     verify_cmd: str | None = None,
 ) -> RunStack:
-    """Internal documentation."""
     ws = workspace if workspace is not None else c.workspace
 
     from argos.permissions.audit import AuditLog
@@ -235,7 +231,6 @@ def build_components(
     max_rounds: int = 3,
     effort: EffortLevel = EffortLevel.MEDIUM,
 ) -> AppComponents:
-    """Internal documentation."""
     default_ws = (
         os.environ.get("ARGOS_WORKSPACE")
         or str(Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "workspace")
@@ -383,7 +378,6 @@ def build_components(
 
 
 def build_loop_factory(c: AppComponents) -> "Callable[[str | None], AgentLoop]":
-    """Internal documentation."""
     def factory(verify_cmd: str | None = None) -> AgentLoop:
         # ponytail: same replace-over-shared-config pattern as build_run_stack ~L265
         run_config = (

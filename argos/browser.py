@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -21,7 +20,6 @@ class _Cmd:
 
 
 class BrowserController:
-    """Internal documentation."""
 
     def __init__(self, *, headless: bool | None = None) -> None:
         if headless is None:
@@ -59,7 +57,6 @@ class BrowserController:
             self._thread = None
 
     def _ensure_started(self) -> str | None:
-        """Internal documentation."""
         with self._lock:
             if self._started:
                 return self._launch_error
@@ -81,7 +78,6 @@ class BrowserController:
         return self._res_q.get()
 
     def _run(self) -> None:
-        """Internal documentation."""
         try:
             from playwright.sync_api import sync_playwright
         except Exception as e:  # noqa: BLE001
@@ -154,7 +150,6 @@ def get_controller() -> BrowserController:
 
 
 def shutdown() -> None:
-    """Internal documentation."""
     global _CONTROLLER
     with _CONTROLLER_LOCK:
         if _CONTROLLER is not None:

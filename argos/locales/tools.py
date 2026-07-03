@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 EN: dict[str, str] = {
@@ -93,6 +92,7 @@ EN: dict[str, str] = {
         "Error: path {path!r} escapes the workspace; edit denied."
     ),
     "tools.files.edit.not_found": "Error: file {path!r} does not exist.",
+    "tools.files.edit.failed": "Error: edit failed {exc}",
     "tools.files.edit.ambiguous": (
         "Error: old string matched {count} times (must be unique);"
         " provide more context."
@@ -253,6 +253,7 @@ ZH: dict[str, str] = {
         "错误:路径 {path!r} 越出 workspace,拒绝编辑。"
     ),
     "tools.files.edit.not_found": "错误:文件 {path!r} 不存在。",
+    "tools.files.edit.failed": "错误:编辑失败 {exc}",
     "tools.files.edit.ambiguous": (
         "错误:old 串多次匹配({count} 次,需唯一),请给更多上下文。"
     ),

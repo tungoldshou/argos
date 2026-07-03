@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -20,7 +19,6 @@ BUILTIN_DREAM_ORDER_ID = "builtin-dream-nightly"
 
 
 def ensure_builtin_dream_order(store: OrderStore) -> None:
-    """Internal documentation."""
     if store.get(BUILTIN_DREAM_ORDER_ID) is not None:
         return
     order = StandingOrder(
@@ -39,7 +37,6 @@ def ensure_builtin_dream_order(store: OrderStore) -> None:
 
 
 class ConductorSupervisor:
-    """Internal documentation."""
 
     def __init__(
         self,
@@ -58,11 +55,9 @@ class ConductorSupervisor:
 
     @property
     def pending_suggestions(self) -> dict[str, ProactiveSuggestion]:
-        """Internal documentation."""
         return self._pending
 
     def start(self) -> None:
-        """Internal documentation."""
         if self._task is not None and not self._task.done():
             log.warning("conductor_supervisor: task 已在运行,跳过重复启动")
             return
@@ -75,7 +70,6 @@ class ConductorSupervisor:
         )
 
     async def stop(self) -> None:
-        """Internal documentation."""
         if self._task is None or self._task.done():
             return
         self._task.cancel()
@@ -86,15 +80,12 @@ class ConductorSupervisor:
         log.info("conductor_supervisor: tick loop 已停止")
 
     def pop_suggestion(self, suggestion_id: str) -> ProactiveSuggestion | None:
-        """Internal documentation."""
         return self._pending.pop(suggestion_id, None)
 
     def get_suggestion(self, suggestion_id: str) -> ProactiveSuggestion | None:
-        """Internal documentation."""
         return self._pending.get(suggestion_id)
 
     def dismiss_suggestion(self, suggestion_id: str) -> bool:
-        """Internal documentation."""
         if suggestion_id in self._pending:
             del self._pending[suggestion_id]
             return True
@@ -102,7 +93,6 @@ class ConductorSupervisor:
 
 
     async def _run_loop(self) -> None:
-        """Internal documentation."""
         store = OrderStore(self._orders_dir)
         try:
             ensure_builtin_dream_order(store)
@@ -129,7 +119,6 @@ class ConductorSupervisor:
             await asyncio.sleep(self._tick_interval)
 
     async def _start_dream_autonomous(self, s: ProactiveSuggestion) -> None:
-        """Internal documentation."""
         assert self._dream_starter is not None
         try:
             started = await self._dream_starter(s)
@@ -149,7 +138,6 @@ class ConductorSupervisor:
             )
 
     def _should_emit_dream(self, s: ProactiveSuggestion) -> bool:
-        """Internal documentation."""
         if getattr(s, "action", "run") != "dream":
             return True
         try:
@@ -161,7 +149,6 @@ class ConductorSupervisor:
             return False
 
     async def _emit_suggestion(self, s: ProactiveSuggestion) -> None:
-        """Internal documentation."""
         from argos.protocol.events import ProactiveSuggestionEvent, serialize_event
         ev = ProactiveSuggestionEvent(
             suggestion_id=s.id,

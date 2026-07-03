@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from argos.ledger.entry import LedgerEntry, UndoState, Reversible
 from argos.ledger.summary import summarize
 from argos.ledger.store import LedgerStore

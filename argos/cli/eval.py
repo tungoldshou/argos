@@ -64,7 +64,6 @@ def _make_runner(*, base: Path, keep_worktree: bool = False) -> EvalRunner:
 
 
 def _eval_base() -> Path:
-    """Internal documentation."""
     from argos import config
 
     return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "eval"
@@ -74,7 +73,6 @@ def _eval_base() -> Path:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    """Internal documentation."""
     runs = list_runs(limit=args.limit)
     if not runs:
         print(t("cli.eval.no_runs"))
@@ -97,7 +95,6 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    """Internal documentation."""
     try:
         task = load_task(args.task_id)
     except FileNotFoundError as e:
@@ -122,7 +119,6 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_compare(args: argparse.Namespace) -> int:
-    """Internal documentation."""
     try:
         task = load_task(args.task_id)
     except FileNotFoundError as e:
@@ -146,7 +142,6 @@ def cmd_compare(args: argparse.Namespace) -> int:
 
 
 def cmd_corpus(args: argparse.Namespace) -> int:
-    """Internal documentation."""
     tasks = list_tasks()
     v = corpus_version()
     print(f"corpus version {v} ({len(tasks)} tasks)")
@@ -164,7 +159,6 @@ def cmd_corpus(args: argparse.Namespace) -> int:
 
 
 def _active_profile() -> str:
-    """Internal documentation."""
     try:
         from argos import config as _cfg
         if _cfg._has_config_file():
@@ -175,7 +169,6 @@ def _active_profile() -> str:
 
 
 def add_subparser(sub: Any) -> None:
-    """Internal documentation."""
     p = sub.add_parser("eval", help=t("cli.eval.help"))
     p.set_defaults(func=lambda _args, parser=p: (parser.print_help(), 2)[1])
     sp = p.add_subparsers(dest="eval_command")

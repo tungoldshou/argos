@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -41,7 +40,6 @@ class DaemonHTTPServer:
                  loop_factory=None, gate=None,
                  components=None, ledger_store=None,
                  conductor_supervisor=None):
-        """Internal documentation."""
         self._manager = manager
         self._socket_path = Path(socket_path)
         self._sessions = SessionRegistry(heartbeat_timeout_s=session_timeout_s)
@@ -261,7 +259,6 @@ class DaemonHTTPServer:
         return sid
 
     async def _require_owner(self, writer, headers) -> str | None:
-        """Internal documentation."""
         sid = await self._require_session(writer, headers)
         if sid is None:
             return None
@@ -400,7 +397,6 @@ class DaemonHTTPServer:
         _trust_level_str = data.get("trust_level")
 
         def _apply_trust_to_gate(gate: "Any") -> None:
-            """Internal documentation."""
             if not _trust_level_str:
                 return
             try:
@@ -472,14 +468,12 @@ class DaemonHTTPServer:
         await self._send_json(writer, 201, {"run_id": run_id})
 
     def _spawn_worker(self, worker: "RunWorker", run_id: str, *, name: str) -> "asyncio.Task":
-        """Internal documentation."""
         self._workers[run_id] = worker
         task = asyncio.create_task(worker.run(), name=name)
         task.add_done_callback(lambda _t, rid=run_id: self._workers.pop(rid, None))
         return task
 
     def _make_run_loop_factory(self, workspace: str | None):
-        """Internal documentation."""
         from pathlib import Path
 
         base_factory = self._loop_factory
@@ -531,7 +525,6 @@ class DaemonHTTPServer:
         await self._send_json(writer, 202, {"state": "pause_requested"})
 
     async def _handle_suspend(self, writer, headers, run_id):
-        """Internal documentation."""
         if (sid := await self._require_owner(writer, headers)) is None:
             return
         ok = await self._manager.request_suspend(run_id)
@@ -654,7 +647,6 @@ class DaemonHTTPServer:
         await self._send_json(writer, 202, {"state": "cancel_requested"})
 
     async def _handle_focus(self, writer, headers, run_id):
-        """Internal documentation."""
         if (sid := await self._require_owner(writer, headers)) is None:
             return
         if self._registry.get(run_id) is None:
@@ -666,7 +658,6 @@ class DaemonHTTPServer:
         })
 
     async def _handle_approval(self, writer, headers, run_id, call_id, body):
-        """Internal documentation."""
         if (sid := await self._require_owner(writer, headers)) is None:
             return
         try:
@@ -730,7 +721,6 @@ class DaemonHTTPServer:
         })
 
     async def _handle_plan_decision(self, writer, headers, run_id, body):
-        """Internal documentation."""
         if (sid := await self._require_owner(writer, headers)) is None:
             return
         worker = self._workers.get(run_id)
@@ -805,7 +795,6 @@ class DaemonHTTPServer:
     # ── P3b Ledger endpoints ─────────────────────────────────────────
 
     async def _handle_get_ledger(self, writer, headers, run_id):
-        """Internal documentation."""
         if await self._require_session(writer, headers) is None:
             return
         if self._manager.get_run(run_id) is None:
@@ -826,7 +815,6 @@ class DaemonHTTPServer:
             await self._send_error(writer, 500, CODE_INTERNAL, str(e))
 
     async def _handle_undo(self, writer, headers, run_id, body):
-        """Internal documentation."""
         if await self._require_owner(writer, headers) is None:
             return
 
@@ -951,7 +939,6 @@ class DaemonHTTPServer:
         })
 
     async def _handle_undo_entry(self, writer, run_id: str, ledger_store, entry_seq: int):
-        """Internal documentation."""
         from pathlib import Path as _Path
         from argos.core.snapshot import RunSnapshot
 
@@ -1068,14 +1055,12 @@ class DaemonHTTPServer:
 
 
     def _conductor_orders_dir(self):
-        """Internal documentation."""
         if self._conductor is not None:
             return self._conductor._orders_dir
         from argos.daemon.__main__ import _default_conductor_dir
         return _default_conductor_dir()
 
     async def _handle_create_order(self, writer, headers, body):
-        """Internal documentation."""
         if await self._require_owner(writer, headers) is None:
             return
         try:
@@ -1118,7 +1103,6 @@ class DaemonHTTPServer:
         await self._send_json(writer, 201, order.to_dict())
 
     async def _handle_list_orders(self, writer, headers):
-        """Internal documentation."""
         if await self._require_session(writer, headers) is None:
             return
         from argos.conductor.orders import OrderStore
@@ -1127,7 +1111,6 @@ class DaemonHTTPServer:
         await self._send_json(writer, 200, [o.to_dict() for o in orders])
 
     async def _handle_delete_order(self, writer, headers, order_id):
-        """Internal documentation."""
         if await self._require_owner(writer, headers) is None:
             return
         if not order_id:
@@ -1142,7 +1125,6 @@ class DaemonHTTPServer:
 
 
     async def _handle_list_suggestions(self, writer, headers):
-        """Internal documentation."""
         if await self._require_session(writer, headers) is None:
             return
         if self._conductor is None:
@@ -1162,7 +1144,6 @@ class DaemonHTTPServer:
         await self._send_json(writer, 200, result)
 
     async def _handle_confirm_suggestion(self, writer, headers, suggestion_id):
-        """Internal documentation."""
         if await self._require_owner(writer, headers) is None:
             return
         if not suggestion_id:
@@ -1293,7 +1274,6 @@ class DaemonHTTPServer:
         })
 
     async def _handle_dismiss_suggestion(self, writer, headers, suggestion_id):
-        """Internal documentation."""
         if await self._require_owner(writer, headers) is None:
             return
         if not suggestion_id:
@@ -1309,7 +1289,6 @@ class DaemonHTTPServer:
 
 
     def _dreams_dir(self) -> Path:
-        """Internal documentation."""
         import os
         override = os.environ.get("ARGOS_DREAMS_DIR")
         if override:
@@ -1318,7 +1297,6 @@ class DaemonHTTPServer:
         return _default_argos_dir() / "dreams"
 
     def _get_dream_pipeline(self):
-        """Internal documentation."""
         if self._dream_pipeline is not None:
             return self._dream_pipeline
         if self._components is None:
@@ -1380,7 +1358,6 @@ class DaemonHTTPServer:
         return self._dream_pipeline
 
     async def _autonomous_dream_starter(self, s) -> bool:
-        """Internal documentation."""
         pipeline = self._get_dream_pipeline()
         if pipeline is None:
             log.debug("conductor autonomous dream: 无 pipeline(no key)，本次跳过")
@@ -1404,7 +1381,6 @@ class DaemonHTTPServer:
         return True
 
     async def _start_dream(self, writer):
-        """Internal documentation."""
         pipeline = self._get_dream_pipeline()
         if pipeline is None:
             await self._send_error(
@@ -1433,7 +1409,6 @@ class DaemonHTTPServer:
         return True
 
     async def _confirm_dream(self, writer, suggestion_id, s):
-        """Internal documentation."""
         started = await self._start_dream(writer)
         if not started:
             return
@@ -1452,7 +1427,6 @@ class DaemonHTTPServer:
         })
 
     async def _handle_dream_run(self, writer, headers):
-        """Internal documentation."""
         if await self._require_owner(writer, headers) is None:
             return
         started = await self._start_dream(writer)
@@ -1461,14 +1435,12 @@ class DaemonHTTPServer:
         await self._send_json(writer, 202, {"state": "dream_started"})
 
     async def _handle_dream_report(self, writer, headers):
-        """Internal documentation."""
         if await self._require_owner(writer, headers) is None:
             return
         report = self._read_latest_dream_report()
         await self._send_json(writer, 200, {"report": report})
 
     def _read_latest_dream_report(self) -> dict | None:
-        """Internal documentation."""
         dreams_dir = self._dreams_dir()
         try:
             if not dreams_dir.exists():
@@ -1550,7 +1522,6 @@ class DaemonHTTPServer:
                 pass
 
     def _run_is_terminal(self, run_id: str) -> bool:
-        """Internal documentation."""
         run = self._manager.get_run(run_id)
         return run is not None and run.state in TERMINAL_STATES
 

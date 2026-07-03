@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import hashlib
@@ -37,7 +36,6 @@ class MemoryEntry:
 
 
 def _root() -> Path:
-    """Internal documentation."""
     override = os.environ.get("ARGOS_MEMORY_DIR")
     if override:
         return Path(override).expanduser()
@@ -65,7 +63,6 @@ def _session_path(session_id: str) -> Path:
 
 
 def project_id_for(cwd: Path | None = None) -> str:
-    """Internal documentation."""
     p = (cwd or Path.cwd()).resolve()
     return hashlib.sha1(str(p).encode("utf-8")).hexdigest()[:16]
 
@@ -75,7 +72,6 @@ _PROJECT_ID_CACHE: dict[str, str] = {}
 
 
 def _read_jsonl(path: Path) -> list[MemoryEntry]:
-    """Internal documentation."""
     if not path.exists():
         return []
     out: list[MemoryEntry] = []
@@ -113,7 +109,6 @@ def _read_jsonl(path: Path) -> list[MemoryEntry]:
 
 
 def _append_jsonl(path: Path, entry: MemoryEntry) -> None:
-    """Internal documentation."""
     with _write_lock:
         d = asdict(entry)
         d["evidence"] = list(entry.evidence)
@@ -127,7 +122,6 @@ _MIN_CONFIDENCE = 0.3
 
 
 def _new_id() -> str:
-    """Internal documentation."""
     return uuid.uuid4().hex[:12]
 
 
@@ -139,7 +133,6 @@ def _score(entry: MemoryEntry) -> float:
 
 
 def _rank(entries: Iterable[MemoryEntry], limit: int) -> list[MemoryEntry]:
-    """Internal documentation."""
     eligible = [e for e in entries if e.confidence >= _MIN_CONFIDENCE]
     eligible.sort(
         key=lambda e: (_TYPE_PRIORITY.get(e.type, 0), _score(e)),
@@ -154,7 +147,6 @@ def load(*, scope: Scope | None = None,
          session_id: str | None = None,
          limit: int = 50,
          cwd: Path | None = None) -> list[MemoryEntry]:
-    """Internal documentation."""
     paths: list[Path] = []
     if scope is None or scope == "user":
         paths.append(_user_path())
@@ -175,7 +167,6 @@ def load(*, scope: Scope | None = None,
 
 
 def touch(entry: MemoryEntry) -> None:
-    """Internal documentation."""
     new_conf = min(1.0, entry.confidence + 0.02)
     new_entry = MemoryEntry(
         id=entry.id, type=entry.type, scope=entry.scope,
@@ -209,7 +200,6 @@ def touch(entry: MemoryEntry) -> None:
 
 
 def _entry_path(entry: MemoryEntry) -> Path | None:
-    """Internal documentation."""
     if entry.scope == "user":
         return _user_path()
     if entry.scope == "project" and entry.project_id:
@@ -223,7 +213,6 @@ def _entry_path(entry: MemoryEntry) -> Path | None:
 
 def _dedup(scope: Scope, key: str, value: str, *,
            path: Path, hours: int = 24) -> bool:
-    """Internal documentation."""
     cutoff = time.time() - hours * 3600
     for e in _read_jsonl(path):
         if e.key == key and e.value == value and e.ts >= cutoff:
@@ -236,7 +225,6 @@ _TOTAL_LIMIT = 30_000
 
 
 def _ARGOS_HOME() -> Path:
-    """Internal documentation."""
     override = os.environ.get("ARGOS_HOME")
     if override:
         return Path(override).expanduser()
@@ -253,7 +241,6 @@ def _global_agents() -> Path:
 
 
 def walk_claude_md_files(start: Path) -> list[Path]:
-    """Internal documentation."""
     out: list[Path] = []
     seen: set[Path] = set()
     try:
@@ -293,7 +280,6 @@ _SECRET_RES: tuple[re.Pattern, ...] = (
 
 
 def _redact_secrets(text: str) -> str:
-    """Internal documentation."""
     out = text
     has_any = False
     for pat in _SECRET_RES:
@@ -313,7 +299,6 @@ def _read_text_safely(path: Path) -> str:
 
 def merge_claude_documents(files: list[Path], *,
                            global_paths: list[Path] = ()) -> str:
-    """Internal documentation."""
     sections: list[str] = []
     for p in global_paths:
         body = _read_text_safely(p)
@@ -353,7 +338,6 @@ def merge_claude_documents(files: list[Path], *,
 
 
 def _format_section(kind: str, path: Path, body: str) -> str:
-    """Internal documentation."""
     if len(body) > _PER_FILE_LIMIT:
         body = body[:_PER_FILE_LIMIT] + "\n<truncated>"
     return f"[{kind}: {path.name}]\n{body}"
@@ -380,7 +364,6 @@ class ForgetCmd:
 
 
 def parse_remember(text: str) -> RememberCmd | None:
-    """Internal documentation."""
     raw = text.strip()
     if not raw:
         return None
@@ -416,7 +399,6 @@ def parse_remember(text: str) -> RememberCmd | None:
 
 
 def parse_forget(text: str) -> ForgetCmd | None:
-    """Internal documentation."""
     q = text.strip()
     if not q:
         return None
@@ -432,7 +414,6 @@ def parse_forget(text: str) -> ForgetCmd | None:
 
 
 def _auto_key(value: str) -> str:
-    """Internal documentation."""
     h = hashlib.sha1(value.encode("utf-8")).hexdigest()[:12]
     return f"remember.{h}"
 
@@ -441,7 +422,6 @@ def remember(text: str, *, scope: Scope | None = None,
              key: str | None = None, type: Type = "preference",
              evidence: tuple[str, ...] = ("user explicit /remember command",),
              project_id: str | None = None) -> MemoryEntry | None:
-    """Internal documentation."""
     cmd = parse_remember(text)
     if cmd is None:
         return None
@@ -472,7 +452,6 @@ def remember(text: str, *, scope: Scope | None = None,
 
 def forget(query: str, *, project_id: str | None = None,
            session_id: str | None = None) -> list[MemoryEntry]:
-    """Internal documentation."""
     cmd = parse_forget(query)
     if cmd is None:
         return []
@@ -512,7 +491,6 @@ def _matches(entry: MemoryEntry, cmd: ForgetCmd) -> bool:
 
 
 def _write_entries(path: Path, entries: list[MemoryEntry]) -> None:
-    """Internal documentation."""
     with _write_lock:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -530,7 +508,6 @@ def _write_entries(path: Path, entries: list[MemoryEntry]) -> None:
 def view_all(*, project_id: str | None = None,
              session_id: str | None = None,
              limit_per_tier: int = 20) -> str:
-    """Internal documentation."""
     lines: list[str] = []
     user = load(scope="user", limit=limit_per_tier)
     lines.append(f"[User memories] ({len(user)})")
@@ -608,21 +585,18 @@ def _tool_fail_counter_key(project_id: str | None, tool: str) -> tuple[str | Non
 
 
 def _tool_fail_count_increment(project_id: str | None, tool: str) -> int:
-    """Internal documentation."""
     k = _tool_fail_counter_key(project_id, tool)
     _tool_fail_count[k] = _tool_fail_count.get(k, 0) + 1
     return _tool_fail_count[k]
 
 
 def _reset_tool_fail_counter(project_id: str | None, tool: str) -> None:
-    """Internal documentation."""
     _tool_fail_count.pop(_tool_fail_counter_key(project_id, tool), None)
 
 
 def capture_event(kind: str, *, project_id: str | None = None,
                   session_id: str | None = None,
                   **payload) -> MemoryEntry | None:
-    """Internal documentation."""
     if kind not in _TYPE_MAP:
         return None
     if kind == "tool_repeat_fail":
@@ -716,7 +690,6 @@ def capture_event(kind: str, *, project_id: str | None = None,
 
 
 def _format_recalled(entries: list[MemoryEntry]) -> list[str]:
-    """Internal documentation."""
     out: list[str] = []
     for e in entries:
         out.append(
@@ -728,7 +701,6 @@ def _format_recalled(entries: list[MemoryEntry]) -> list[str]:
 def _memory_context_block(*, workspace: Path,
                           project_id: str,
                           session_id: str | None = None) -> str:
-    """Internal documentation."""
     if os.environ.get("ARGOS_NO_MEMORY") == "1":
         return ""
     files = walk_claude_md_files(workspace)
@@ -754,12 +726,10 @@ def _memory_context_block(*, workspace: Path,
 
 
 def decayed_confidence(conf: float, days: float) -> float:
-    """Internal documentation."""
     return max(0.0, conf - 0.01 * days)
 
 
 def _decay_confidence(entry: MemoryEntry, *, now: float | None = None) -> MemoryEntry:
-    """Internal documentation."""
     t = now if now is not None else time.time()
     days = max(0.0, (t - entry.last_used_at) / 86400.0)
     new_conf = decayed_confidence(entry.confidence, days)
@@ -774,7 +744,6 @@ def _decay_confidence(entry: MemoryEntry, *, now: float | None = None) -> Memory
 
 
 def decay_pass() -> int:
-    """Internal documentation."""
     n = 0
     for path in _all_tier_paths():
         if not path.exists():
@@ -794,7 +763,6 @@ def decay_pass() -> int:
 
 
 def _all_tier_paths() -> list[Path]:
-    """Internal documentation."""
     paths: list[Path] = []
     root = _root()
     for sub in ("", "projects", "skills", "sessions"):
@@ -808,7 +776,6 @@ def _all_tier_paths() -> list[Path]:
 
 def prune(scope: Scope | None = None, *, project_id: str | None = None,
           skill_name: str | None = None, session_id: str | None = None) -> int:
-    """Internal documentation."""
     n = 0
     paths: list[Path] = []
     if scope is None or scope == "user":
@@ -839,7 +806,6 @@ def prune(scope: Scope | None = None, *, project_id: str | None = None,
 
 
 def _cap_bytes_for_scope(scope: Scope) -> int:
-    """Internal documentation."""
     env = os.environ.get("ARGOS_MEMORY_CAP_MB")
     if env:
         try:
@@ -856,7 +822,6 @@ def _cap_bytes_for_scope(scope: Scope) -> int:
 
 
 def _enforce_cap(path: Path, max_bytes: int | None = None) -> int:
-    """Internal documentation."""
     if not path.exists():
         return 0
     scope: Scope = "user"
@@ -890,7 +855,6 @@ def _enforce_cap(path: Path, max_bytes: int | None = None) -> int:
 
 
 def purge_old_sessions(*, max_age_days: int = 30) -> int:
-    """Internal documentation."""
     n = 0
     sess_dir = _root() / "sessions"
     if not sess_dir.exists():

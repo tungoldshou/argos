@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +12,6 @@ log = logging.getLogger(__name__)
 
 
 class DaemonError(Exception):
-    """Internal documentation."""
 
     def __init__(self, message: str, *, status: int | None = None, code: str = "") -> None:
         super().__init__(message)
@@ -22,7 +20,6 @@ class DaemonError(Exception):
 
 
 class DaemonClient:
-    """Internal documentation."""
 
     def __init__(self, socket_path: Path, *, timeout: float = 30.0):
         self._socket_path = Path(socket_path)
@@ -42,7 +39,6 @@ class DaemonClient:
         session_id: str | None = None,
         body: dict | None = None,
     ) -> tuple[int, dict[str, str], bytes]:
-        """Internal documentation."""
         payload = b""
         if body is not None:
             payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -211,7 +207,6 @@ class DaemonClient:
         return self._check(status, self._parse_json(status, raw), (200,))
 
     async def create_order(self, session_id: str, body: dict) -> tuple[int, dict]:
-        """Internal documentation."""
         status, _, raw = await self._request("POST", "/orders", session_id=session_id, body=body)
         return status, self._parse_json(status, raw)
 
@@ -223,7 +218,6 @@ class DaemonClient:
         *,
         since: int = 0,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Internal documentation."""
         req = (
             f"GET /runs/{run_id}/events?since={since} HTTP/1.1\r\n"
             f"Host: daemon\r\n"

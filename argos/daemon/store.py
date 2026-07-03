@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -11,11 +10,10 @@ log = logging.getLogger(__name__)
 
 
 class CorruptionError(Exception):
-    """Internal documentation."""
+    pass
 
 
 class RunStore:
-    """Internal documentation."""
 
     def __init__(self, runs_dir: Path):
         self._dir = Path(runs_dir)
@@ -33,13 +31,11 @@ class RunStore:
         return self._path_for(run_id).exists()
 
     def list_runs(self) -> list[str]:
-        """Internal documentation."""
         if not self._dir.exists():
             return []
         return sorted(p.stem for p in self._dir.glob("*.jsonl"))
 
     def append(self, run_id: str, event: dict[str, Any]) -> int:
-        """Internal documentation."""
         if run_id.startswith("_"):
             raise ValueError(
                 f"refusing to persist virtual stream {run_id!r} to the run store "
@@ -61,7 +57,6 @@ class RunStore:
         return seq
 
     def _next_seq(self, run_id: str) -> int:
-        """Internal documentation."""
         cur = self._seq.get(run_id)
         if cur is None:
             cur = self._max_seq_in_file(run_id)
@@ -70,7 +65,6 @@ class RunStore:
         return nxt
 
     def _max_seq_in_file(self, run_id: str) -> int:
-        """Internal documentation."""
         path = self._path_for(run_id)
         if not path.exists():
             return 0
@@ -94,7 +88,6 @@ class RunStore:
         run_id: str,
         since_seq: int = 0,
     ) -> Iterator[dict[str, Any]]:
-        """Internal documentation."""
         path = self._path_for(run_id)
         if not path.exists():
             return
@@ -129,7 +122,6 @@ class RunStore:
                     yield ev
 
     def last_state(self, run_id: str) -> str | None:
-        """Internal documentation."""
         last: str | None = None
         for ev in self.replay(run_id):
             if ev.get("kind") == "state_change":
@@ -137,7 +129,6 @@ class RunStore:
         return last
 
     def last_checkpoint(self, run_id: str) -> dict[str, Any] | None:
-        """Internal documentation."""
         last: dict[str, Any] | None = None
         for ev in self.replay(run_id):
             if ev.get("kind") == "run_checkpoint":

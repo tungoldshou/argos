@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -37,7 +36,6 @@ def build_spec_for_task(
     model_tier: str,
     mirror_dir: Path | None = None,
 ) -> WorkflowSpec:
-    """Internal documentation."""
     if n < 1:
         raise ValueError(t("eval.bon.n_must_be_positive", n=n))
     cls = classify(tb_task)
@@ -74,7 +72,6 @@ def build_spec_for_task(
 
 @dataclass(frozen=True, slots=True)
 class BridgePerTask:
-    """Internal documentation."""
     n1_winner: str | None
     n3_winner: str | None
     n1_status: str            # passed | failed | error | setup_failed
@@ -86,7 +83,6 @@ class BridgePerTask:
 
 @dataclass(frozen=True, slots=True)
 class BridgeReport:
-    """Internal documentation."""
     total_seen: int
     supported: int
     skipped: int
@@ -101,7 +97,6 @@ class BridgeReport:
 
 
 async def _drive_engine(engine: WorkflowEngine, spec: WorkflowSpec) -> StageResult:
-    """Internal documentation."""
     async for _ev in engine.run(spec):
         pass
     assert engine.last_result is not None
@@ -109,7 +104,6 @@ async def _drive_engine(engine: WorkflowEngine, spec: WorkflowSpec) -> StageResu
 
 
 def _status_of_winner(winner: AgentResult) -> str:
-    """Internal documentation."""
     if winner.verdict == "passed":
         return "passed"
     if winner.verdict == "unverifiable":
@@ -130,7 +124,6 @@ def run_pass_at_1(
     persist: bool = True,
     docker_available: bool | None = None,
 ) -> BridgeReport:
-    """Internal documentation."""
     if n < 1:
         raise ValueError(t("eval.bon.n_must_be_positive", n=n))
     base_dir = Path(base_dir)

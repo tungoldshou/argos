@@ -12,7 +12,6 @@ from pathlib import Path
 
 
 class VisionCapabilityCache:
-    """Internal documentation."""
 
     def __init__(self, path: Path | None = None) -> None:
         if path is None:
@@ -58,7 +57,6 @@ _COLOR_SYNONYMS: dict[str, tuple[str, ...]] = {
 
 
 def _solid_png(rgb: tuple[int, int, int], w: int = 16, h: int = 16) -> bytes:
-    """Internal documentation."""
     def chunk(typ: bytes, data: bytes) -> bytes:
         c = typ + data
         return struct.pack(">I", len(data)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
@@ -70,7 +68,6 @@ def _solid_png(rgb: tuple[int, int, int], w: int = 16, h: int = 16) -> bytes:
 
 
 class VisionProbe:
-    """Internal documentation."""
 
     def __init__(self, *, color: str | None = None) -> None:
         self._color = color
@@ -94,7 +91,6 @@ class VisionProbe:
 
 
 async def resolve_vision_capability(tier, model_client, cache, *, probe=None) -> bool:
-    """Internal documentation."""
     override = getattr(tier, "multimodal", None)
     if override is not None:
         return bool(override)

@@ -37,13 +37,11 @@ SNAPSHOT_PRUNE_DIRS: frozenset[str] = frozenset({
 
 
 def _sha256(path: Path) -> str:
-    """Internal documentation."""
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 @dataclass
 class RunContext:
-    """Internal documentation."""
     workspace: Path
     verify_dir: Path
     project_mode: bool = False
@@ -58,7 +56,6 @@ _current_var: contextvars.ContextVar[RunContext | None] = contextvars.ContextVar
 
 
 def _make_default_ctx() -> RunContext:
-    """Internal documentation."""
     return RunContext(workspace=_default_ws().resolve(), verify_dir=_default_verify().resolve())
 
 
@@ -71,7 +68,6 @@ def current() -> RunContext:
 
 
 def set_context(ctx: RunContext) -> "contextvars.Token[RunContext | None]":
-    """Internal documentation."""
     return _current_var.set(ctx)
 
 
@@ -80,18 +76,15 @@ def reset(token: contextvars.Token) -> None:
 
 
 def use_sandbox() -> contextvars.Token:
-    """Internal documentation."""
     return set_context(RunContext(workspace=_default_ws().resolve(), verify_dir=_default_verify().resolve()))
 
 
 def use_project(project_dir: str) -> contextvars.Token:
-    """Internal documentation."""
     p = Path(project_dir).expanduser().resolve()
     return set_context(RunContext(workspace=p, verify_dir=p, project_mode=True))
 
 
 def guard_files(paths: list[str]) -> None:
-    """Internal documentation."""
     ctx = current()
     for rel in paths:
         p = ctx.workspace / rel
@@ -105,7 +98,6 @@ def guard_files(paths: list[str]) -> None:
 
 
 def detect_tampering() -> list[str]:
-    """Internal documentation."""
     ctx = current()
     changed: list[str] = []
     for rel, digest in ctx.guarded.items():
@@ -144,7 +136,6 @@ _SKIP_DIRS = frozenset({
 
 
 def guard_project_tests(*, cap: int = 2000) -> int:
-    """Internal documentation."""
     ctx = current()
     if not ctx.project_mode:
         return 0

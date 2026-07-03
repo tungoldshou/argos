@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -31,11 +30,10 @@ RUN_ID_RE = re.compile(r"^[0-9a-f]{12}$")
 
 
 class InvalidTransition(Exception):
-    """Internal documentation."""
+    pass
 
 
 def read_state(run_id: str, index: "StateIndex") -> str:
-    """Internal documentation."""
     entry = index.get(run_id)
     if entry is None:
         return "pending"
@@ -51,7 +49,6 @@ def transition(
     store: "RunStore | None",
     reason: str = "",
 ) -> str:
-    """Internal documentation."""
     if current is None:
         current = read_state(run_id, index)
     if current in TERMINAL_STATES:

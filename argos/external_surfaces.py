@@ -18,7 +18,6 @@ _SURFACE_KEYS: tuple[tuple[str, str], ...] = (
 
 
 def external_surface_warnings(argos_dir: Path | None = None) -> list[str]:
-    """Internal documentation."""
     base = argos_dir if argos_dir is not None else Path(
         config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")
     ).expanduser()

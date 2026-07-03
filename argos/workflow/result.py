@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -39,7 +38,6 @@ class WorkflowResult:
 
 
 def _agent_count(stage: Stage) -> int:
-    """Internal documentation."""
     if stage.op == "panel":
         return stage.voters
     if stage.op == "best_of_n":
@@ -51,13 +49,11 @@ def _agent_count(stage: Stage) -> int:
 
 
 def _model_of(agent: AgentTask | tuple[AgentTask, ...]) -> str:
-    """Internal documentation."""
     a = agent[0] if isinstance(agent, tuple) else agent
     return a.model or "active"
 
 
 def render_preview(spec: WorkflowSpec) -> str:
-    """Internal documentation."""
     lines = [
         t("wf.result.preview_header", name=spec.name, description=spec.description),
         t("wf.result.preview_will_run"),

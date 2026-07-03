@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -24,12 +23,10 @@ _NO_FCNTL_FD = -1
 
 
 def _lock_path_for(candidates_root: "Path") -> "Path":
-    """Internal documentation."""
     return candidates_root.parent / DREAM_LOCK_NAME
 
 
 def _acquire_cross_process_lock(candidates_root: "Path") -> "int | None":
-    """Internal documentation."""
     try:
         import fcntl
     except ImportError:  # pragma: no cover
@@ -54,7 +51,6 @@ def _acquire_cross_process_lock(candidates_root: "Path") -> "int | None":
 
 
 def _release_cross_process_lock(fd: "int | None") -> None:
-    """Internal documentation."""
     if fd is None or fd == _NO_FCNTL_FD:
         return
     import os
@@ -76,7 +72,6 @@ _TOKEN_RE = re.compile(r"[a-z0-9一-鿿]+")
 
 @dataclass(frozen=True, slots=True)
 class DreamUnit:
-    """Internal documentation."""
     sources: tuple[StoredCandidate, ...]
 
 
@@ -85,7 +80,6 @@ def _tokens(text: str) -> set[str]:
 
 
 def _token_sim(a: str, b: str) -> float:
-    """Internal documentation."""
     ta, tb = _tokens(a), _tokens(b)
     if not ta or not tb:
         return 0.0
@@ -111,7 +105,6 @@ def _cost_rank_key(c: StoredCandidate) -> tuple:
 def cluster_candidates(
     cands: list[StoredCandidate], *, max_units: int = DEFAULT_MAX_UNITS,
 ) -> list[DreamUnit]:
-    """Internal documentation."""
     clusters: list[list[StoredCandidate]] = []
     for c in cands:
         for cl in clusters:
@@ -127,7 +120,6 @@ def cluster_candidates(
 
 
 def _strip_code_blocks(text: str) -> str:
-    """Internal documentation."""
     out = _FENCE_RE.sub("", text or "")
     out = _TILDE_FENCE_RE.sub("", out)
     cuts = [p for p in (out.find("```"), out.find("~~~")) if p != -1]
@@ -137,7 +129,6 @@ def _strip_code_blocks(text: str) -> str:
 
 
 def _extract_code(body_markdown: str) -> str:
-    """Internal documentation."""
     return "\n\n".join(m.strip() for m in _CODE_BLOCK_RE.findall(body_markdown or ""))
 
 
@@ -147,7 +138,6 @@ def _merged_name(unit: DreamUnit) -> str:
 
 
 def narrative_prompt(unit: DreamUnit) -> str:
-    """Internal documentation."""
     return (
         t("learn.dream.narrative_prompt")
         + "\n".join(f"- {s.goal}" for s in unit.sources)
@@ -157,7 +147,6 @@ def narrative_prompt(unit: DreamUnit) -> str:
 def synthesize(
     unit: DreamUnit, *, narrative: str | None = None,
 ) -> "SkillCandidate | None":
-    """Internal documentation."""
     from pathlib import Path
 
     from argos.learning.distiller import SkillCandidate
@@ -205,7 +194,6 @@ def synthesize(
 
 @dataclass(frozen=True, slots=True)
 class HintedRunner:
-    """Internal documentation."""
     inner: object
     hint: str
     max_hint_len: int = 4000
@@ -219,7 +207,6 @@ class HintedRunner:
 
 
 def build_eval_tasks(unit: DreamUnit) -> tuple[list, list]:
-    """Internal documentation."""
     from pathlib import Path as _Path
 
     from argos.eval.corpus import EvalTask
@@ -245,7 +232,6 @@ def build_eval_tasks(unit: DreamUnit) -> tuple[list, list]:
 
 @dataclass(frozen=True, slots=True)
 class DreamReport:
-    """Internal documentation."""
     units_total: int = 0
     promoted: int = 0
     rejected: int = 0
@@ -256,13 +242,11 @@ class DreamReport:
 
 
 def has_material(candidates_root: "Path", *, min_units: int = 1) -> bool:
-    """Internal documentation."""
     from argos.learning.candidates import list_unconsumed
     return len(list_unconsumed(candidates_root)) >= min_units
 
 
 class DreamPipeline:
-    """Internal documentation."""
 
     def __init__(
         self, *,
@@ -287,11 +271,9 @@ class DreamPipeline:
 
     @property
     def is_running(self) -> bool:
-        """Internal documentation."""
         return self._lock is not None and self._lock.locked()
 
     def cross_process_busy(self) -> bool:
-        """Internal documentation."""
         fd = _acquire_cross_process_lock(self._candidates_root)
         if fd is None:
             return True
@@ -299,7 +281,6 @@ class DreamPipeline:
         return False
 
     async def run(self) -> "DreamReport | None":
-        """Internal documentation."""
         import asyncio
         if self._lock is None:
             self._lock = asyncio.Lock()
@@ -375,7 +356,6 @@ class DreamPipeline:
         return report
 
     async def _process_unit(self, unit: "DreamUnit") -> tuple[int, int, int]:
-        """Internal documentation."""
         import inspect
 
         from argos.learning.candidates import mark_consumed
@@ -431,7 +411,6 @@ class DreamPipeline:
         return result
 
     def _write_report_line(self, report: "DreamReport", *, ts: float) -> str:
-        """Internal documentation."""
         from datetime import datetime
 
         from argos.jsonl_log import append_line
@@ -453,7 +432,6 @@ class DreamPipeline:
             return ""
 
     def _emit(self, kind: str, **payload) -> None:
-        """Internal documentation."""
         if self._broadcast_fn is None:
             return
         try:

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -7,10 +6,14 @@ import enum
 import functools
 import inspect
 import json
+import re
+import shlex
 import time
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Literal
+from urllib.parse import urlparse
 
 from argos.i18n import t
 
@@ -32,7 +35,6 @@ class ApprovalLevel(enum.Enum):
 
 @dataclass(frozen=True, slots=True)
 class Decision:
-    """Internal documentation."""
     kind: DecisionKind               # deny | once | session | always
     reason: str = ""
 
@@ -51,39 +53,68 @@ class _Pending:
 
 
 def _resolve(fut: asyncio.Future, decision: "Decision") -> None:
-    """Internal documentation."""
     if not fut.done():
         fut.set_result(decision)
 
 
 @dataclass
 class _SessionApproval:
-    """Internal documentation."""
     payload_hash: str
     approved_at: float
 
 
 def _hash_payload(payload: dict[str, Any]) -> str:
-    """Internal documentation."""
     return json.dumps(payload, sort_keys=True, ensure_ascii=False)
 
 
-def _derive_allow_matcher(action: str, args: dict[str, Any]) -> tuple[str, str]:
-    """Internal documentation."""
-    import re as _re
+def _normalized_path(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return str(Path(value).expanduser().resolve(strict=False))
+
+
+def _url_origin(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    parsed = urlparse(value.strip())
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+    if parsed.netloc:
+        return parsed.netloc.lower()
+    return None
+
+
+def derive_persistent_allow_rule(action: str, args: dict[str, Any]) -> tuple[str, str] | None:
     if action == "run_command":
         cmd = str((args or {}).get("command", "")).strip()
-        toks = cmd.split()
+        try:
+            toks = shlex.split(cmd)
+        except ValueError:
+            toks = cmd.split()
         if toks:
-            parts = [_re.escape(toks[0])]
-            if len(toks) > 1 and not toks[1].startswith("-"):
-                parts.append(_re.escape(toks[1]))
+            end = next((i for i, tok in enumerate(toks[1:], start=1) if not tok.startswith("-")), 0)
+            parts = [re.escape(tok) for tok in toks[: end + 1]]
             return action, "^" + r"\s+".join(parts) + r"(\s|$)"
-    return action, "*"
+        return None
+    if action in ("write_file", "edit_file"):
+        path = _normalized_path((args or {}).get("path") or (args or {}).get("file") or (args or {}).get("filepath"))
+        return (action, "^" + re.escape(path) + "$") if path else None
+    if action in ("browser_navigate", "web_extract"):
+        origin = _url_origin((args or {}).get("url"))
+        return (action, "^" + re.escape(origin) + "$") if origin else None
+    if action == "mcp_call":
+        server = str((args or {}).get("server", "")).strip()
+        tool = str((args or {}).get("tool", "")).strip()
+        if server and tool:
+            return action, "^" + re.escape(f"{server}/{tool}") + "$"
+    return None
+
+
+def _derive_allow_matcher(action: str, args: dict[str, Any]) -> tuple[str, str]:
+    return derive_persistent_allow_rule(action, args) or (action, "*")
 
 
 class ApprovalGate:
-    """Internal documentation."""
 
     def __init__(
         self,
@@ -110,7 +141,6 @@ class ApprovalGate:
         self.level = level
 
     def push_override_semantics(self, level: "ApprovalLevel") -> tuple:
-        """Internal documentation."""
         snap = (self.level, self._low_risk_auto, self._ask_readonly, self._reversible_check)
         if level is ApprovalLevel.CONFIRM:
             self.level = ApprovalLevel.CONFIRM
@@ -125,11 +155,9 @@ class ApprovalGate:
         return snap
 
     def pop_override_semantics(self, snap: tuple) -> None:
-        """Internal documentation."""
         self.level, self._low_risk_auto, self._ask_readonly, self._reversible_check = snap
 
     def set_trust_level(self, trust: "Any") -> None:
-        """Internal documentation."""
         from argos.permissions.trust_dial import TrustLevel, to_approval_semantics
         sem = to_approval_semantics(trust)
         al_str = sem["approval_level"]
@@ -140,23 +168,18 @@ class ApprovalGate:
         self._trust_level = trust
 
     def set_workspace(self, workspace: str | None) -> None:
-        """Internal documentation."""
         self._workspace = workspace
 
     def set_reversible_lookup(self, fn: "Callable[[str], bool | None] | None") -> None:
-        """Internal documentation."""
         self._reversible_lookup = fn
 
     def set_session_id(self, session_id: str) -> None:
-        """Internal documentation."""
         self._session_id = session_id or ""
 
     def set_decision_listener(self, fn: Callable[[str, str, str], None] | None) -> None:
-        """Internal documentation."""
         self._decision_listener = fn
 
     def set_ask_listener(self, fn: "Callable[[str, dict[str, Any]], None] | None") -> None:
-        """Internal documentation."""
         self._ask_listener = fn
 
     def pending(self) -> list[_Pending]:
@@ -165,7 +188,6 @@ class ApprovalGate:
     async def request(self, action: str, args: dict[str, Any], *, description: str,
                       risk: RiskLevel, timeout: float = 60.0,
                       call_id: str | None = None) -> Decision:
-        """Internal documentation."""
         eval_meta = self._evaluate(action, args, risk=risk)
         if eval_meta is not None:
             if eval_meta.decision == "approve":
@@ -234,7 +256,6 @@ class ApprovalGate:
 
     def _evaluate(self, action: str, args: dict[str, Any],
                   risk: str = "medium") -> "DecisionMeta | None":
-        """Internal documentation."""
         try:
             from argos.permissions import evaluate, get_config
             from argos.permissions.evaluator import DecisionMeta
@@ -269,14 +290,12 @@ class ApprovalGate:
             return None
 
     def evaluate_sync(self, action: str, args: dict[str, Any]) -> "DecisionMeta | None":
-        """Internal documentation."""
         return self._evaluate(action, args)
 
     def _audit(
         self, *, action: str, args: dict[str, Any], decision: str, trigger: str,
         by: str, risk: str, secret_pattern: str | None = None,
     ) -> None:
-        """Internal documentation."""
         try:
             if self._audit_log is not None:
                 log = self._audit_log
@@ -293,7 +312,6 @@ class ApprovalGate:
             pass
 
     def _notify(self, decision: str, action: str, trigger: str) -> None:
-        """Internal documentation."""
         fn = self._decision_listener
         if fn is None:
             return
@@ -303,7 +321,6 @@ class ApprovalGate:
             pass
 
     def respond(self, call_id: str, decision: DecisionKind) -> bool:
-        """Internal documentation."""
         p = self._pending.pop(call_id, None)
         if p is None:
             return False
@@ -316,10 +333,10 @@ class ApprovalGate:
         if decision == "always":
             try:
                 from argos.permissions import config as _pcfg
-                tool, matcher = _derive_allow_matcher(
+                rule = derive_persistent_allow_rule(
                     str(p.payload.get("action", "")), p.payload.get("args") or {},
                 )
-                if _pcfg.save_allow_rule(tool, matcher):
+                if rule is not None and _pcfg.save_allow_rule(*rule):
                     self._permissions_config = _pcfg.get_config()
             except Exception:  # noqa: BLE001
                 pass
@@ -327,12 +344,10 @@ class ApprovalGate:
         return True
 
     def approve(self, call_id: str, scope: Literal["once", "session"] = "once") -> bool:
-        """Internal documentation."""
         kind: DecisionKind = "session" if scope == "session" else "once"
         return self.respond(call_id, kind)
 
     def deny(self, call_id: str, reason: str = "") -> bool:
-        """Internal documentation."""
         p = self._pending.pop(call_id, None)
         if p is None:
             return False
@@ -340,7 +355,6 @@ class ApprovalGate:
         return True
 
     def cancel_all(self) -> int:
-        """Internal documentation."""
         n = 0
         for p in list(self._pending.values()):
             self._settle(p, Decision(kind="deny", reason=t("approval.reason.session_cancelled")))
@@ -350,7 +364,6 @@ class ApprovalGate:
 
     @staticmethod
     def _settle(p: _Pending, decision: "Decision") -> None:
-        """Internal documentation."""
         try:
             p.loop.call_soon_threadsafe(_resolve, p.future, decision)
         except RuntimeError:
@@ -358,7 +371,6 @@ class ApprovalGate:
 
 
 def requires_approval(description: str, risk: RiskLevel = "medium") -> Callable:
-    """Internal documentation."""
 
     def deco(fn: Callable) -> Callable:
         try:
@@ -480,7 +492,6 @@ async def guarded_call(
     risk: RiskLevel,
     timeout: float = 60.0,
 ) -> Any:
-    """Internal documentation."""
     gate = _current_gate()
     if gate is None:
         return t("approval.err.no_gate")
@@ -494,7 +505,6 @@ async def guarded_call(
 
 
 async def _call_original(fn: Callable, args: tuple, kwargs: dict[str, Any]) -> Any:
-    """Internal documentation."""
     res = fn(*args, **kwargs)
     if asyncio.iscoroutine(res):
         return await res

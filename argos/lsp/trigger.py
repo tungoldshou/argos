@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -14,7 +13,6 @@ _EDIT_FILE_PATH_RE = re.compile(
 
 
 def extract_file_writes(code: str) -> list[tuple[str, str]]:
-    """Internal documentation."""
     if not code:
         return []
     writes: list[tuple[str, str]] = []
@@ -27,7 +25,6 @@ def extract_file_writes(code: str) -> list[tuple[str, str]]:
 
 
 def extract_file_paths(code: str) -> list[str]:
-    """Internal documentation."""
     if not code:
         return []
     paths: list[str] = []

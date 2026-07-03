@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.i18n import t
@@ -19,7 +18,6 @@ def _self_test_enabled() -> bool:
 
 
 def is_trivial_verify(cmd: str) -> bool:
-    """Internal documentation."""
     cmd = (cmd or "").strip()
     if not cmd:
         return False
@@ -31,7 +29,6 @@ def is_trivial_verify(cmd: str) -> bool:
 
 
 class Verifier:
-    """Internal documentation."""
 
     def __init__(
         self, *, max_rounds: int = 3, inline_timeout: float = 60.0,
@@ -47,7 +44,6 @@ class Verifier:
         self._goal = goal
 
     def verify(self, verify_cmd: str | None, *, attempts: int = 1) -> Verdict:
-        """Internal documentation."""
         tampered = runtime.detect_tampering()
         if tampered:
             return Verdict.unverifiable(
@@ -82,7 +78,6 @@ class Verifier:
         return Verdict.failed(detail=detail, verify_cmd=verify_cmd, attempts=attempts)
 
     def _try_self_test(self, *, attempts: int) -> Verdict | None:
-        """Internal documentation."""
         from argos.verify.self_test import TestGenerator
         ctx = runtime.current()
         workspace = ctx.workspace
@@ -110,7 +105,6 @@ class Verifier:
         )
 
     def _run_verify(self, cmd: str) -> tuple[bool, str, bool]:
-        """Internal documentation."""
         try:
             parts = shlex.split(cmd)
         except ValueError as e:

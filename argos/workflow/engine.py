@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +21,6 @@ class WorkflowEngine:
         self._q: asyncio.Queue = asyncio.Queue()
 
     async def run(self, spec: WorkflowSpec) -> AsyncIterator[WorkflowProgress]:
-        """Internal documentation."""
         stage_results: list[StageResult] = []
         notes: list[str] = []
         prior: dict[str, StageResult] = {}
@@ -64,7 +62,6 @@ class WorkflowEngine:
         return await self._run_fan_out(stage, prior, notes)
 
     async def _run_one(self, stage: Stage, task: AgentTask, idx_label, item) -> AgentResult:
-        """Internal documentation."""
         agent_id = f"{stage.id}#{idx_label}"
         self._emit(stage.id, agent_id, "act")
         res = await self._factory.run_task(
@@ -79,7 +76,6 @@ class WorkflowEngine:
         return res
 
     async def _run_fan_out(self, stage: Stage, prior, notes) -> StageResult:
-        """Internal documentation."""
         items = self._items_for(stage, prior)
         sem = asyncio.Semaphore(stage.cap)
         task = stage.agent[0] if isinstance(stage.agent, tuple) else stage.agent
@@ -93,7 +89,6 @@ class WorkflowEngine:
         return StageResult(stage_id=stage.id, results=tuple(results))
 
     async def _run_pipeline(self, stage: Stage, prior, notes) -> StageResult:
-        """Internal documentation."""
         items = self._items_for(stage, prior)
         templates = stage.agent if isinstance(stage.agent, tuple) else (stage.agent,)
         sem = asyncio.Semaphore(stage.cap)
@@ -115,7 +110,6 @@ class WorkflowEngine:
         return StageResult(stage_id=stage.id, results=tuple(results))
 
     async def _run_panel(self, stage: Stage, prior, notes) -> StageResult:
-        """Internal documentation."""
         items = self._items_for(stage, prior)
         item = items[0] if items else None
         task = stage.agent[0] if isinstance(stage.agent, tuple) else stage.agent
@@ -143,7 +137,6 @@ class WorkflowEngine:
         return StageResult(stage_id=stage.id, results=tuple(results))
 
     async def _run_loop_until(self, stage: Stage, prior, notes) -> StageResult:
-        """Internal documentation."""
         items = self._items_for(stage, prior)
         task = stage.agent[0] if isinstance(stage.agent, tuple) else stage.agent
         sem = asyncio.Semaphore(stage.cap)
@@ -191,11 +184,9 @@ class WorkflowEngine:
 
     @staticmethod
     def _is_yes(output: object) -> bool:
-        """Internal documentation."""
         return _VOTE_YES in str(output)
 
     async def _run_best_of_n(self, stage: Stage, prior, notes) -> StageResult:
-        """Internal documentation."""
         n = max(1, stage.n or 3)
         task = stage.agent[0] if isinstance(stage.agent, tuple) else stage.agent
         effective_cap = max(1, min(n, stage.cap))
@@ -250,7 +241,6 @@ class WorkflowEngine:
     def _pick_best_of_n_winner(
         results: tuple[AgentResult, ...],
     ) -> tuple[AgentResult, str, bool]:
-        """Internal documentation."""
         if not results:
             return (
                 AgentResult(agent_id="best_of_n#empty", ok=False, output="",

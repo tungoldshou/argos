@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import shlex
@@ -20,7 +19,7 @@ _BEST_OF_N_MAX = _MAX_CAP
 
 
 class WorkflowSpecError(ValueError):
-    """Internal documentation."""
+    pass
 
 
 
@@ -32,7 +31,6 @@ _ROLE_READ_TOOLS = frozenset({
 
 @dataclass(frozen=True, slots=True)
 class _RolePreset:
-    """Internal documentation."""
 
     name: str
     tool_allowlist: frozenset
@@ -87,7 +85,6 @@ ROLE_PRESETS: dict[str, _RolePreset] = {
 
 @dataclass(frozen=True, slots=True)
 class AgentTask:
-    """Internal documentation."""
 
     prompt: str
     model: str | None = None
@@ -101,7 +98,6 @@ class AgentTask:
 
 @dataclass(frozen=True, slots=True)
 class Stage:
-    """Internal documentation."""
 
     id: str
     op: str
@@ -119,7 +115,6 @@ class Stage:
 
 @dataclass(frozen=True, slots=True)
 class WorkflowSpec:
-    """Internal documentation."""
 
     name: str
     description: str
@@ -127,7 +122,6 @@ class WorkflowSpec:
 
 
 def _parse_agent(raw: dict) -> AgentTask:
-    """Internal documentation."""
     if not isinstance(raw, dict) or "prompt" not in raw:
         raise WorkflowSpecError(t("wf.spec.agent_missing_prompt"))
     scope = raw.get("tool_scope", "read")
@@ -176,7 +170,6 @@ def _parse_agent(raw: dict) -> AgentTask:
 
 
 def parse_spec(raw: dict) -> WorkflowSpec:
-    """Internal documentation."""
     if not isinstance(raw, dict):
         raise WorkflowSpecError(t("wf.spec.not_a_dict"))
     name = str(raw.get("name") or "").strip()

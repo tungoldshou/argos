@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -13,7 +12,6 @@ _SAFE_SID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def _valid_sid(session_id: str) -> bool:
-    """Internal documentation."""
     return bool(_SAFE_SID.fullmatch(session_id or ""))
 
 
@@ -32,11 +30,10 @@ def _worktrees_root() -> Path:
 
 
 class IsolationError(RuntimeError):
-    """Internal documentation."""
+    pass
 
 
 def acquire_sandbox(session_id: str) -> tuple[Path, Path]:
-    """Internal documentation."""
     if not _valid_sid(session_id):
         raise IsolationError(f"invalid session_id: {session_id!r}")
     base = _runs_root() / session_id
@@ -48,7 +45,6 @@ def acquire_sandbox(session_id: str) -> tuple[Path, Path]:
 
 
 def is_git_project(project_dir: str) -> bool:
-    """Internal documentation."""
     p = Path(project_dir).expanduser().resolve()
     r = subprocess.run(
         ["git", "-C", str(p), "rev-parse", "--is-inside-work-tree"],
@@ -58,7 +54,6 @@ def is_git_project(project_dir: str) -> bool:
 
 
 def acquire_worktree(session_id: str, project_dir: str) -> tuple[Path, Path]:
-    """Internal documentation."""
     if not _valid_sid(session_id):
         raise IsolationError(f"invalid session_id: {session_id!r}")
     proj = Path(project_dir).expanduser().resolve()
@@ -85,7 +80,6 @@ def acquire_worktree(session_id: str, project_dir: str) -> tuple[Path, Path]:
 
 
 def release_worktree(session_id: str, project_dir: str) -> None:
-    """Internal documentation."""
     if not _valid_sid(session_id):
         return
     proj = Path(project_dir).expanduser().resolve()

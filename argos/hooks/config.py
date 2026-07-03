@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -12,12 +11,11 @@ from argos.i18n import t
 
 
 class HooksConfigError(Exception):
-    """Internal documentation."""
+    pass
 
 
 @dataclass(frozen=True, slots=True)
 class HookHandler:
-    """Internal documentation."""
     type: str
     command: str
     timeout: int = 60000
@@ -35,20 +33,17 @@ class HookHandler:
 
 @dataclass(frozen=True, slots=True)
 class HookMatcherEntry:
-    """Internal documentation."""
     matcher: str | None
     hooks: tuple[HookHandler, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class HooksConfig:
-    """Internal documentation."""
     version: int = 1
     entries: Mapping[str, tuple[HookMatcherEntry, ...]] = field(default_factory=dict)
 
     @staticmethod
     def empty() -> "HooksConfig":
-        """Internal documentation."""
         return HooksConfig(version=1, entries={})
 
 
@@ -100,7 +95,6 @@ def _parse_entry(raw: dict) -> HookMatcherEntry:
 
 
 def load(path: Path | None = None) -> HooksConfig:
-    """Internal documentation."""
     p = path or HOOKS_CONFIG_PATH or _default_config_path()
     data = config_base.read_json_file(p, ErrorCls=HooksConfigError)
     if data is None:

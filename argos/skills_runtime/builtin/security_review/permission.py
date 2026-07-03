@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -144,7 +143,6 @@ def scan_file_for_permission_issues(
     relpath: str,
     workspace: Path,
 ) -> tuple[Finding, ...]:
-    """Internal documentation."""
     ext = file.suffix.lower()
     if ext in _BINARY_EXTS:
         return ()

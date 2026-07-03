@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -56,7 +55,6 @@ async def on_run_completed(
     runner_factory: Callable[[], Any] | None = None,
     tasks: list | None = None,
 ) -> None:
-    """Internal documentation."""
     is_user_pass = (verdict_status == "passed") and not self_verified
     if is_user_pass:
         await _on_passed(
@@ -86,7 +84,6 @@ async def _on_passed(
     runner_factory: Callable[[], Any] | None,
     tasks: list,
 ) -> None:
-    """Internal documentation."""
     try:
         from argos.learning import distiller, promotion_gate
 
@@ -190,7 +187,6 @@ async def _on_failed(
     self_verified: bool = False,
     skills_root: Path,
 ) -> None:
-    """Internal documentation."""
     try:
         from argos.learning.reflection import reflect_failure
         reflect_failure(

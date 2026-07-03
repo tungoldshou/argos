@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,20 +13,17 @@ _TEXT_EXCERPT_MAX = 200
 
 @dataclass(frozen=True, slots=True)
 class GuiProbeResult:
-    """Internal documentation."""
     found: bool = False
     text_excerpt: str = ""
     error: str = ""
 
 
 class GuiProber:
-    """Internal documentation."""
 
     def __init__(self, executor: "ComputerExecutor | None") -> None:
         self._executor = executor
 
     def probe(self, expected_text: str | None, *, timeout_s: float = 15.0) -> GuiProbeResult:
-        """Internal documentation."""
         if not expected_text:
             return GuiProbeResult(
                 error=t("verify.gui_probe.no_expected_text"),
@@ -59,7 +55,6 @@ class GuiProber:
 
 
 def _ocr(path: str) -> str | None:
-    """Internal documentation."""
     try:
         import pytesseract  # type: ignore[import]
         from PIL import Image  # type: ignore[import]
@@ -70,7 +65,6 @@ def _ocr(path: str) -> str | None:
 
 
 def _excerpt_around(text: str, keyword: str, window: int = _TEXT_EXCERPT_MAX) -> str:
-    """Internal documentation."""
     low = text.lower()
     idx = low.find(keyword.lower())
     if idx < 0:

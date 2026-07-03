@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -12,7 +11,6 @@ _PY_BLOCK = re.compile(r"```python\n(.*?)```", re.DOTALL)
 
 
 def run_smoke_test(name: str, skill_dir: Path) -> str:
-    """Internal documentation."""
     custom = skill_dir / "tests" / "smoke.md"
     if custom.exists():
         return _run_custom_smoke(name, custom)
@@ -25,7 +23,6 @@ def _extract_python_block(text: str) -> str:
 
 
 def _run_custom_smoke(name: str, smoke_md: Path) -> str:
-    """Internal documentation."""
     text = smoke_md.read_text("utf-8")
     code = _extract_python_block(text)
     if not code:

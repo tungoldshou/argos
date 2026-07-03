@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -161,7 +160,6 @@ class WorkflowProposed:
 
 @dataclass(frozen=True, slots=True)
 class CompactedEvent:
-    """Internal documentation."""
     kind = "compacted"
     before: int
     after: int
@@ -172,7 +170,6 @@ class CompactedEvent:
 
 @dataclass(frozen=True, slots=True)
 class LedgerEntryEvent:
-    """Internal documentation."""
     kind = "ledger_entry"
     ts: float
     run_id: str
@@ -186,7 +183,6 @@ class LedgerEntryEvent:
 
 @dataclass(frozen=True, slots=True)
 class PrunedEvent:
-    """Internal documentation."""
     kind = "pruned"
     before: int
     after: int
@@ -206,14 +202,12 @@ class WorkflowDone:
 
 @dataclass(frozen=True, slots=True)
 class PlanRendered:
-    """Internal documentation."""
     kind = "plan_rendered"
     plan_md: str
 
 
 @dataclass(frozen=True, slots=True)
 class ProactiveSuggestionEvent:
-    """Internal documentation."""
     kind = "proactive_suggestion"
     suggestion_id: str      # ProactiveSuggestion.id
     order_id: str
@@ -224,7 +218,6 @@ class ProactiveSuggestionEvent:
     action: Literal["run", "dream"] = "run"
 
     def __post_init__(self) -> None:
-        """Internal documentation."""
         if self.action not in ("run", "dream"):
             raise ValueError(
                 t("core2.events.proactive_action_invalid", action=self.action)
@@ -233,7 +226,6 @@ class ProactiveSuggestionEvent:
 
 @dataclass(frozen=True, slots=True)
 class ComputerActionEvent:
-    """Internal documentation."""
     kind = "computer_action"
     kind_action: str
     x: int | None
@@ -246,7 +238,6 @@ class ComputerActionEvent:
 
 @dataclass(frozen=True, slots=True)
 class DreamProgressEvent:
-    """Internal documentation."""
     kind = "dream_progress"
     stage: str        # scan | cluster | synthesize | promote | memory | done
     detail: str
@@ -255,7 +246,6 @@ class DreamProgressEvent:
 
 @dataclass(frozen=True, slots=True)
 class DreamReportEvent:
-    """Internal documentation."""
     kind = "dream_report"
     units_total: int
     promoted: int
@@ -269,7 +259,6 @@ class DreamReportEvent:
 
 @dataclass(frozen=True, slots=True)
 class PlanDecisionRequest:
-    """Internal documentation."""
     kind = "plan_decision_request"
     call_id: str
     plan_md: str
@@ -277,7 +266,6 @@ class PlanDecisionRequest:
 
 @dataclass(frozen=True, slots=True)
 class MemoryRecallEvent:
-    """Internal documentation."""
     kind = "memory_recall"
     hits: list[str] = field(default_factory=list)  # ["goal → verdict（reason）", ...]
 
@@ -328,30 +316,25 @@ _KIND_TO_CLASS: dict[str, type] = {
 
 
 def event_kind(ev: "Event") -> str:
-    """Internal documentation."""
     return type(ev).kind  # type: ignore[attr-defined]
 
 
 def serialize_event(ev: "Event") -> str:
-    """Internal documentation."""
     payload = asdict(ev)  # type: ignore[arg-type]
     return json.dumps({"kind": event_kind(ev), "data": payload}, ensure_ascii=False)
 
 
 def _decode_receipt(data: dict[str, Any]) -> "Receipt":
-    """Internal documentation."""
     from argos.tools.receipts import Receipt as _Receipt
     return _Receipt(**data)
 
 
 def _decode_verdict(data: dict[str, Any]) -> "Verdict":
-    """Internal documentation."""
     from argos.core.verify_gate import Verdict as _Verdict
     return _Verdict(**data)
 
 
 def deserialize_event(blob: str) -> "Event":
-    """Internal documentation."""
     obj = json.loads(blob)
     kind = obj.get("kind")
     cls = _KIND_TO_CLASS.get(kind)
@@ -369,28 +352,24 @@ def deserialize_event(blob: str) -> "Event":
 
 
 class _Sentinel:
-    """Internal documentation."""
+    pass
 
 
 _END = _Sentinel()
 
 
 class EventBus:
-    """Internal documentation."""
 
     def __init__(self) -> None:
         self._q: "asyncio.Queue[Event | _Sentinel]" = asyncio.Queue()
 
     async def emit(self, ev: Event) -> None:
-        """Internal documentation."""
         await self._q.put(ev)
 
     async def close(self) -> None:
-        """Internal documentation."""
         await self._q.put(_END)
 
     async def __aiter__(self) -> AsyncIterator[Event]:
-        """Internal documentation."""
         while True:
             item = await self._q.get()
             if isinstance(item, _Sentinel):

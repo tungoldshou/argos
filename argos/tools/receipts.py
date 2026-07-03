@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import hashlib
@@ -30,7 +29,6 @@ class Receipt:
 
 
 class ReceiptSigner:
-    """Internal documentation."""
 
     def __init__(self, key: bytes) -> None:
         self._key = key

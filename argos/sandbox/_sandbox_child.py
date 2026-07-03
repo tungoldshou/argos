@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -22,7 +21,6 @@ def _read() -> dict[str, Any] | None:
 
 
 class _BrokerStub:
-    """Internal documentation."""
 
     def request(self, action: str, args: dict[str, Any]) -> Any:
         _emit({"type": "broker_call", "action": action, "args": args})
@@ -40,7 +38,6 @@ def _build_namespace(
     read_only: bool = False,
     tool_allowlist: "list[str] | None" = None,
 ) -> dict[str, Any]:
-    """Internal documentation."""
     from argos.tools import build_child_namespace
     return build_child_namespace(
         broker, allow_workflow=allow_workflow, read_only=read_only,
@@ -67,7 +64,6 @@ _PREINJECT_MODULES = ["os", "sys", "pathlib", "json", "re", "math",
 
 
 def _resolve_authorized_imports(authorized: "list[str] | None") -> list[str]:
-    """Internal documentation."""
     imports = list(authorized) if authorized else list(_DEFAULT_AUTHORIZED_IMPORTS)
     for need in _REQUIRED_AUTHORIZED_IMPORTS:
         if need not in imports:
