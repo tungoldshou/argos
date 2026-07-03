@@ -213,3 +213,70 @@ def test_memory_command_known_in_parse_slash():
     cmd = tui_cmd.parse_slash("/memory")
     assert cmd is not None
     assert cmd.known is True
+
+
+def test_memory_rejects_unexpected_arg_without_rendering(monkeypatch):
+    import asyncio
+    from argos.tui.app import ArgosApp
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    called = False
+
+    async def fake_memory_cmd(log) -> None:
+        nonlocal called
+        called = True
+
+    app = ArgosApp()
+    monkeypatch.setattr(app, "_memory_cmd", fake_memory_cmd)
+    log = Log()
+    asyncio.run(app._cmd_memory(log, "user"))
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert "Usage" in text or "用法" in text
+    assert any(kind == "error" for _line, kind in log.lines)
+    assert not called
+
+
+def test_help_memory_shows_hidden_command_usage():
+    import asyncio
+    from argos.tui.app import ArgosApp
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    log = Log()
+    asyncio.run(ArgosApp()._cmd_help(log, "memory"))
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert "/memory" in text
+    assert not any(kind == "error" for _line, kind in log.lines)
+
+
+def test_help_remember_shows_hidden_command_usage():
+    import asyncio
+    from argos.tui.app import ArgosApp
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    log = Log()
+    asyncio.run(ArgosApp()._cmd_help(log, "remember"))
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert "/remember" in text
+    assert "<content" in text or "内容" in text
+    assert not any(kind == "error" for _line, kind in log.lines)

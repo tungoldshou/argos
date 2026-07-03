@@ -81,14 +81,17 @@ def test_eval_corpus_prints_task_list(capsys, tmp_path, monkeypatch):
 def test_eval_run_invokes_runner(capsys, tmp_path, monkeypatch):
     """cmd_run 调 EvalRunner + 落 JSONL + 打印结果。"""
     from argos.cli import eval as cli
-    from argos.daemon.worktree import WorktreeManager
+    from argos import config as C
     from tests.eval._seed_corpus import write_seed_corpus
     from tests.eval._fakes import FakeWorktree, make_fake_loop_factory, make_fake_loop
     from argos.eval.runner import EvalRunner
 
     root = tmp_path / "corpus"
+    cfg_dir = tmp_path / "cfg"
     write_seed_corpus(root)
     monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", str(root))
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     loop = make_fake_loop()
@@ -97,7 +100,13 @@ def test_eval_run_invokes_runner(capsys, tmp_path, monkeypatch):
         base_dir=tmp_path / "eval",
         loop_factory=make_fake_loop_factory(loop),
     )
-    monkeypatch.setattr(cli, "_make_runner", lambda **kw: runner)
+    captured_base: list[Path] = []
+
+    def _fake_make_runner(**kw):
+        captured_base.append(kw["base"])
+        return runner
+
+    monkeypatch.setattr(cli, "_make_runner", _fake_make_runner)
 
     rc = cli.cmd_run(_ns(task_id="bug_fix_001_off_by_one", model=None, budget=1.0, budget_s=600, keep_worktree=True))
     assert rc == 0
@@ -105,6 +114,8 @@ def test_eval_run_invokes_runner(capsys, tmp_path, monkeypatch):
     assert "[eval] task=bug_fix_001_off_by_one" in out
     assert "passed" in out
     assert "run_id=" in out
+    assert captured_base == [cfg_dir / "eval"]
+    assert (cfg_dir / "eval" / "runs").exists()
 
 
 def test_eval_run_unknown_task_raises(capsys, tmp_path, monkeypatch):
@@ -138,18 +149,33 @@ def test_eval_run_returns_nonzero_on_failure(capsys, tmp_path, monkeypatch):
     assert rc == 1
 
 
+def test_make_runner_wires_real_loop_factory(tmp_path, monkeypatch):
+    """默认 CLI runner 必须接真实 loop_factory,不能再是 loop_factory_required stub。"""
+    from argos.cli import eval as cli
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    runner = cli._make_runner(base=tmp_path / "eval", keep_worktree=True)
+
+    assert runner._loop_factory is not None
+
+
 # ── cmd_compare ───────────────────────────────────────────────────────
 
 
 def test_eval_compare_writes_report(capsys, tmp_path, monkeypatch):
     from argos.cli import eval as cli
+    from argos import config as C
     from tests.eval._seed_corpus import write_seed_corpus
     from tests.eval._fakes import FakeWorktree, make_fake_loop, make_fake_loop_factory
     from argos.eval.runner import EvalRunner
 
     root = tmp_path / "corpus"
+    cfg_dir = tmp_path / "cfg"
     write_seed_corpus(root)
     monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", str(root))
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     loop_cheap = make_fake_loop(verdict="passed", cost_usd=0.013)
@@ -162,15 +188,21 @@ def test_eval_compare_writes_report(capsys, tmp_path, monkeypatch):
         base_dir=tmp_path / "eval",
         loop_factory=factory,
     )
-    monkeypatch.setattr(cli, "_make_runner", lambda **kw: runner)
+    captured_base: list[Path] = []
+
+    def _fake_make_runner(**kw):
+        captured_base.append(kw["base"])
+        return runner
+
+    monkeypatch.setattr(cli, "_make_runner", _fake_make_runner)
     rc = cli.cmd_compare(_ns(task_id="bug_fix_001_off_by_one", model_a="cheap", model_b="strong",
                               budget=1.0, budget_s=600, keep_worktree=True))
     assert rc == 0
     out = capsys.readouterr().out
     assert "A/B" in out
     assert "report:" in out
-    # 报告落盘(base = Path.home() / ".argos" / "eval",home = tmp_path)
-    reports_dir = tmp_path / ".argos" / "eval" / "reports"
+    assert captured_base == [cfg_dir / "eval"]
+    reports_dir = cfg_dir / "eval" / "reports"
     assert reports_dir.exists()
     md_files = list(reports_dir.glob("ab-*.md"))
     assert len(md_files) == 1

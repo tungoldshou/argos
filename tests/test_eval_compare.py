@@ -177,6 +177,27 @@ def test_write_report_filename_format(tmp_path):
     assert name.endswith(".md")
 
 
+def test_default_reports_dir_honors_argos_config_dir(tmp_path, monkeypatch):
+    from argos import config as C
+    from argos.eval import compare as _compare
+
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(_compare, "_REPORTS_DIR", None)
+
+    a = _make_result()
+    b = _make_result()
+    md = write_report(a, b)
+    js = write_report_json(a, b)
+
+    assert md.parent == cfg_dir / "eval" / "reports"
+    assert js.parent == cfg_dir / "eval" / "reports"
+    assert md.exists()
+    assert js.exists()
+
+
 # ── write_report_json ────────────────────────────────────────────────
 
 

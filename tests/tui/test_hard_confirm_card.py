@@ -147,7 +147,7 @@ class TestColorConstants:
         assert _COL_INK_BRIGHT == "#ECEEF5"  # $ink-bright
 
     def test_col_ink_faint(self):
-        assert _COL_INK_FAINT == "#525A73"   # $ink-faint
+        assert _COL_INK_FAINT == "#6B7494"   # $ink-faint
 
     def test_col_ink_dim(self):
         assert _COL_INK_DIM == "#7E869C"     # $ink-dim

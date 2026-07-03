@@ -55,7 +55,7 @@ class _Section(Static):
         height: auto;
         padding: 0 1;
         margin: 0 0 1 0;
-        border-top: solid $hairline;
+        border-top: solid $hairline-lit;
         border-title-color: $eye-soft;
         border-title-style: bold;
         border-title-align: left;
@@ -237,10 +237,11 @@ class ActivityPanel(Vertical):
         try:
             import json
 
-            from argos.mcp_native import CONFIG_PATH
-            if not CONFIG_PATH.exists():
+            from argos.mcp_native import resolve_config_path
+            config_path = resolve_config_path()
+            if not config_path.exists():
                 return t_("widget.mcp_unconfigured")
-            cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8")) or {}
+            cfg = json.loads(config_path.read_text(encoding="utf-8")) or {}
             servers = cfg.get("servers") or {}
             enabled = [n for n, s in servers.items()
                        if isinstance(s, dict) and s.get("enabled", True)]

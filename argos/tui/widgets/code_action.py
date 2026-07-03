@@ -53,7 +53,9 @@ class CodeActionBlock(Vertical):
         if len(lines) > _CODE_MAX:
             shown = "\n".join(lines[:_CODE_HEAD])
             folded = len(lines) - _CODE_HEAD
-        yield Static(Syntax(shown, "python", theme="monokai",
+        # background_color 锁到 $raise(#1B1D29):否则 monokai 自带 #272822 暖底会在冷色 $raise
+        # 卡片里透出一块更亮的暖矩形(观感缝)。值须与 theme.py $raise 一致(Syntax 收 hex 非 CSS token)。
+        yield Static(Syntax(shown, "python", theme="monokai", background_color="#1B1D29",
                             line_numbers=False, word_wrap=True), id="code")
         if folded:
             yield Static(t("widget.code_fold", n=folded), id="code-fold", markup=False)

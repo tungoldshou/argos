@@ -248,12 +248,15 @@ class EvalRunner:
                 t("eval.runner.loop_factory_required"), fallback,
             )
         try:
-            # Pass wt_path so the factory can cage the loop to the eval worktree.
-            # Backward-compat: single-arg factories (test stubs) accepted via TypeError fallback.
+            # Pass wt_path and verify_cmd so real factories can cage the loop and
+            # use the corpus task's verifier. Older test factories stay accepted.
             try:
-                loop = self._loop_factory(model_tier, wt_path)
+                loop = self._loop_factory(model_tier, wt_path, task.verify_cmd)
             except TypeError:
-                loop = self._loop_factory(model_tier)
+                try:
+                    loop = self._loop_factory(model_tier, wt_path)
+                except TypeError:
+                    loop = self._loop_factory(model_tier)
         except Exception as e:  # noqa: BLE001
             return self._mk_error(task, run_id, model_tier, started, wt_path,
                                   f"loop_factory_failed: {type(e).__name__}: {e}", fallback)
@@ -414,51 +417,24 @@ class EvalRunner:
                 steps=steps,
             )
 
-        # Budget: wall-clock timer in a thread (same pattern as run_sync path above).
-        # ponytail: wall-clock budget is post-hoc / non-binding — fut.result(timeout=)
-        # returns early but ThreadPoolExecutor.__exit__ calls shutdown(wait=True), which
-        # blocks until the background thread finishes. The budget cannot pre-emptively
-        # kill the running coroutine; it only prevents reporting a completed result.
-        # Matches the run_sync path's pre-existing limitation. Upgrade path: cooperative
-        # cancellation via asyncio.Task.cancel() injected into the worker's event loop.
-        timed_out: threading.Event | None = None
-        timer: threading.Timer | None = None
-        if self._budget_s is not None:
-            timed_out = threading.Event()
-            timer = threading.Timer(self._budget_s, timed_out.set)
-            timer.daemon = True
-            timer.start()
+        async def _collect_with_budget() -> LoopOutcome:
+            if self._budget_s is None:
+                return await _collect()
+            return await asyncio.wait_for(_collect(), timeout=float(self._budget_s))
 
         # Async/sync bridge: run in a fresh thread with its own event loop so we
         # never nest event loops, whether called from sync or async context.
         # ponytail: one-thread executor, same pattern as self_test.reviewer_llm_proposer
-        try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                fut = pool.submit(asyncio.run, _collect())
-                timeout = float(self._budget_s) if self._budget_s is not None else None
-                try:
-                    outcome = fut.result(timeout=timeout)
-                except concurrent.futures.TimeoutError:
-                    fut.cancel()
-                    if timer is not None:
-                        timer.cancel()
-                    return LoopOutcome(
-                        verdict_status=PASS_FAILED,
-                        verify_detail=f"timed_out: exceeded {self._budget_s}s wall-clock budget",
-                    )
-        finally:
-            if timer is not None:
-                timer.cancel()
-
-        if timed_out is not None and timed_out.is_set():
-            return LoopOutcome(
-                verdict_status=PASS_FAILED,
-                verify_detail=f"timed_out: exceeded {self._budget_s}s wall-clock budget",
-                steps=outcome.steps,
-                tokens_in=outcome.tokens_in,
-                tokens_out=outcome.tokens_out,
-                cost_usd=outcome.cost_usd,
-            )
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(asyncio.run, _collect_with_budget())
+            try:
+                outcome = fut.result()
+            except TimeoutError:
+                fut.cancel()
+                return LoopOutcome(
+                    verdict_status=PASS_FAILED,
+                    verify_detail=f"timed_out: exceeded {self._budget_s}s wall-clock budget",
+                )
 
         # Cost budget check (mirrors run_sync path)
         if (

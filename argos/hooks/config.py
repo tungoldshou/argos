@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
+from argos import config
 from argos import config_base
 from argos.hooks.schema import KNOWN_EVENTS, VALID_HANDLER_TYPES
 from argos.i18n import t
@@ -60,7 +61,11 @@ class HooksConfig:
 
 # ── 加载 / 校验(spec §2.2 / §3 / D11)────────────────────────────────────
 
-HOOKS_CONFIG_PATH: Path = Path.home() / ".argos" / "hooks.json"
+HOOKS_CONFIG_PATH: Path | None = None
+
+
+def _default_config_path() -> Path:
+    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "hooks.json"
 
 
 def _validate_event_name(event_name: str) -> None:
@@ -120,7 +125,7 @@ def load(path: Path | None = None) -> HooksConfig:
     Raises:
         HooksConfigError: JSON 坏字 / 字段类型错 / version 不匹配 / 未知 event。
     """
-    p = path or HOOKS_CONFIG_PATH
+    p = path or HOOKS_CONFIG_PATH or _default_config_path()
     data = config_base.read_json_file(p, ErrorCls=HooksConfigError)
     if data is None:
         # 文件不存在 → 走 empty()(spec §3)

@@ -56,3 +56,53 @@ def test_permissions_reload_returns_new_count(tmp_path, monkeypatch):
     }))
     cfg = _cfg.reload_config()
     assert len(cfg.allow) == 2
+
+
+@pytest.mark.asyncio
+async def test_permissions_unknown_arg_prints_usage(tmp_path, monkeypatch):
+    """/permissions 只接受空参数或 reload,未知参数应报用法。"""
+    from argos.permissions import config as _cfg
+    from argos.tui.app import ArgosApp
+
+    monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")
+    _cfg._reset_config()
+    (tmp_path / "permissions.json").write_text(json.dumps({"version": 1}))
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    log = Log()
+    await ArgosApp()._permissions_cmd(log, "bogus")
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert "Usage" in text or "用法" in text
+    assert any(kind == "error" for _line, kind in log.lines)
+
+
+@pytest.mark.asyncio
+async def test_permissions_reload_arg_is_case_insensitive(tmp_path, monkeypatch):
+    """/permissions RELOAD should behave like /permissions reload."""
+    from argos.permissions import config as _cfg
+    from argos.tui.app import ArgosApp
+
+    monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")
+    _cfg._reset_config()
+    (tmp_path / "permissions.json").write_text(json.dumps({"version": 1}))
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    log = Log()
+    await ArgosApp()._permissions_cmd(log, "RELOAD")
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert "Usage" not in text and "用法" not in text
+    assert any(kind == "system" for _line, kind in log.lines)

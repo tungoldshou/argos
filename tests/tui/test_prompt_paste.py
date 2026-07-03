@@ -108,6 +108,37 @@ async def test_on_paste_short_text_inlines():
 
 
 @pytest.mark.asyncio
+async def test_empty_space_submits_voice_command():
+    captured = []
+
+    class _H(_ThemeHost):
+        def on_prompt_area_submitted(self, event):
+            captured.append(event)
+
+    app = _H()
+    async with app.run_test() as pilot:
+        pa = app.query_one("#p", PromptArea)
+        pa.focus()
+        await pilot.press("space")
+        await pilot.pause()
+        assert len(captured) == 1
+        assert captured[0].text == "/voice"
+        assert pa.text == ""
+
+
+@pytest.mark.asyncio
+async def test_nonempty_space_is_normal_text():
+    app = _ThemeHost()
+    async with app.run_test() as pilot:
+        pa = app.query_one("#p", PromptArea)
+        pa.focus()
+        pa.insert("hello")
+        await pilot.press("space")
+        await pilot.pause()
+        assert pa.text.endswith(" ")
+
+
+@pytest.mark.asyncio
 async def test_enter_submits_expanded_text():
     captured = []
 

@@ -40,6 +40,8 @@ def read_json_file(
         text = p.read_text(encoding="utf-8")
     except FileNotFoundError:
         return None
+    except UnicodeDecodeError as e:
+        raise ErrorCls(t("core2.config_base.invalid_json", path=p, error=e)) from e
     except OSError as e:
         if on_os_error == "silent":
             return None

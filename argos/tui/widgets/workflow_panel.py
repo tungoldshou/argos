@@ -30,8 +30,8 @@ _COL_PASS = "#9ECE6A"
 _COL_FAIL = "#F7768E"
 # $ink-dim (#7E869C)    — 综合结论行(次要元信息)
 _COL_INK_DIM = "#7E869C"
-# $ink-faint (#525A73)  — 诚实注记行(最低层级)
-_COL_INK_FAINT = "#525A73"
+# $ink-faint (#6B7494)  — 诚实注记行(最低层级)
+_COL_INK_FAINT = "#6B7494"
 
 # phase → 简明标签。error/done 标记分明(诚实:告警与完成不可混淆)。
 # _PHASE_KEY:  i18n key map (single source of truth for render and tests).
@@ -145,7 +145,7 @@ class WorkflowPanel(Static):
             # [LOW fix] 综合结论行:$ink-dim (#7E869C)
             result.append(t("widget.workflow_synthesis_label"), style=_COL_INK_DIM)
             result.append(self._synthesis, style=_COL_INK_DIM)
-            # [LOW fix] 诚实注记行:$ink-faint (#525A73)
+            # [LOW fix] 诚实注记行:$ink-faint (#6B7494)
             for n in self._notes:
                 result.append("\n    · ", style=_COL_INK_FAINT)
                 result.append(n, style=_COL_INK_FAINT)

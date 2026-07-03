@@ -29,6 +29,20 @@ def test_cache_isolated_by_base_url(tmp_path):
     assert c.get("https://b/v1", "m") is None
 
 
+def test_cache_default_path_honors_env_local_config_dir(tmp_path, monkeypatch):
+    from argos import config as C
+
+    cfg_dir = tmp_path / "from-env-local"
+    monkeypatch.delenv("ARGOS_CONFIG_DIR", raising=False)
+    monkeypatch.setattr(C, "_ENV", {"ARGOS_CONFIG_DIR": str(cfg_dir)})
+
+    c = VisionCapabilityCache()
+    c.set("https://x/v1", "m", True)
+
+    assert (cfg_dir / "vision_cache.json").exists()
+    assert c.get("https://x/v1", "m") is True
+
+
 import pytest
 from argos.core.vision_capability import VisionProbe, _solid_png
 

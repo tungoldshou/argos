@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -90,6 +91,22 @@ def test_cmd_tb_output_omits_brackets_when_sync_flag_false(monkeypatch):
     assert CSI_ESU not in out
     # 但报告内容照样在
     assert "pass@1=100.0%" in out
+
+
+def test_cmd_tb_json_format_outputs_machine_readable_json(monkeypatch):
+    """`--format json` 应输出可解析 JSON,不是继续打印 text report。"""
+    args = _make_args(format="json", sync_output=False)
+    monkeypatch.setattr(tb, "run_subset", lambda *a, **kw: _stub_report())
+
+    buf = io.StringIO()
+    with patch.object(tb.sys, "stdout", buf):
+        rc = tb.cmd_tb(args)
+
+    assert rc == 0
+    data = json.loads(buf.getvalue())
+    assert data["total_seen"] == 2
+    assert data["pass_at_1"] == 1.0
+    assert data["per_task_status"]["fake_task_1"][0] == "passed"
 
 
 def test_cmd_tb_auto_flag_passes_none_to_sync_batch(monkeypatch):

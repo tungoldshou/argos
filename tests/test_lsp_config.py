@@ -12,7 +12,6 @@ from argos.lsp.config import (
     LspServerConfig,
     LspConfigError,
     BUILTIN_DEFAULT_CONFIG,
-    LSP_CONFIG_PATH,
     load,
 )
 from argos.lsp import get_config, reload_config, _reset_config
@@ -107,9 +106,19 @@ def test_lsp_config_error_is_exception():
 
 # ── Task 2: 加载 / 校验 / 单例 ─────────────────────────────────────
 
-def test_lsp_config_path_is_argos_home():
-    """LSP_CONFIG_PATH = ~/.argos/lsp.json(spec §2.2)。"""
-    assert LSP_CONFIG_PATH == Path.home() / ".argos" / "lsp.json"
+def test_load_default_path_honors_argos_config_dir(tmp_path, monkeypatch):
+    from argos import config as C
+    from argos.lsp import config as LC
+
+    cfg_dir = tmp_path / "cfg"
+    lsp_file = cfg_dir / "lsp.json"
+    lsp_file.parent.mkdir(parents=True)
+    lsp_file.write_text(json.dumps({"version": 1, "servers": {}}))
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
+    monkeypatch.setattr(LC, "LSP_CONFIG_PATH", None)
+
+    assert load().servers == {}
 
 
 def test_load_missing_file_returns_builtin(tmp_path, monkeypatch):

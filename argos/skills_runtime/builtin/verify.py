@@ -27,14 +27,15 @@ from argos.skills_runtime.analysis import (
 propose_verify = None  # type: ignore[assignment]
 
 
-# 简化 v1:全局配置路径(下一 v1.1 接 LoopConfig)
-_CONFIG_PATH = Path.home() / ".argos" / "config.json"
+def _config_path() -> Path:
+    from argos import config as C
+    return Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "config.json"
 
 
 def _read_verify_cmd() -> str | None:
     """从 ~/.argos/config.json 读 verify_cmd;不存在 / 解析失败 → None。"""
     try:
-        text = _CONFIG_PATH.read_text(encoding="utf-8")
+        text = _config_path().read_text(encoding="utf-8")
     except (FileNotFoundError, OSError):
         return None
     try:
@@ -86,7 +87,7 @@ async def run(args: dict, ctx: AnalysisSkillContext) -> AnalysisSkillResult:
         summary = f"/verify · partial\nverify_cmd: {actual_cmd} · {v.detail or ''}"
         if not actual_cmd:
             # 提示加在 summary,不进 findings(spec §2.3 unverifiable 例子)
-            summary += f"\n(hint: configure verify_cmd in {_CONFIG_PATH})"
+            summary += f"\n(hint: configure verify_cmd in {_config_path()})"
 
     duration_ms = int(time.monotonic() * 1000) - start_ms
     return AnalysisSkillResult(

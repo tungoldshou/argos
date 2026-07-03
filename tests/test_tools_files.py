@@ -99,6 +99,14 @@ def test_read_file_offset_out_of_range(ws):
     assert "3" in r  # 总行数
 
 
+def test_read_empty_file_returns_empty_content(ws):
+    (ws / "empty.txt").write_text("")
+    r = files.read_file("empty.txt")
+    assert "empty.txt" in r
+    assert "越界" not in r
+    assert "不存在" not in r
+
+
 def test_read_file_limit_zero(ws):
     (ws / "a.txt").write_text("x")
     r = files.read_file("a.txt", limit=0)

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from argos import config
 # 复用 memory/auto.py 既有脱敏函数(9 条正则覆盖 sk-ant- / ghp_ / AKIA /
 # PRIVATE KEY / password= 等);meta.json 里的 goal / verify_cmd / workspace
 # 不经 distiller,需在此处独立脱敏。
@@ -25,7 +26,17 @@ from argos.memory.auto import _redact_secrets
 
 log = logging.getLogger(__name__)
 
-DEFAULT_ROOT = Path.home() / ".argos" / "learning" / "candidates"
+DEFAULT_ROOT: Path | None = None
+
+
+def default_root(path: Path | None = None) -> Path:
+    return Path(
+        path or DEFAULT_ROOT or (
+            Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+            / "learning"
+            / "candidates"
+        )
+    )
 
 
 def _unique_tmp(target: Path) -> Path:

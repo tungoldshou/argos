@@ -17,7 +17,8 @@ _HEALTH_REQ = (
 
 
 def default_socket_path() -> Path:
-    return Path.home() / ".argos" / "daemon.sock"
+    from argos import config
+    return Path(config.get("ARGOS_DAEMON_SOCKET", "~/.argos/daemon.sock")).expanduser()
 
 
 def ensure_socket_mode(path: Path) -> None:

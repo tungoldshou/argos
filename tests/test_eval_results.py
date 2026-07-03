@@ -56,6 +56,25 @@ def test_append_two_results_two_files(tmp_path):
     assert ids == {"aaa111aaa111", "bbb222bbb222"}
 
 
+def test_default_runs_dir_honors_argos_config_dir(tmp_path, monkeypatch):
+    from argos import config as C
+    from argos.eval import results as _results
+
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(_results, "_RUNS_DIR", None)
+
+    r = _make_result(run_id="cfg111cfg111")
+    append(r)
+
+    today = time.strftime("%Y-%m-%d", time.localtime(r.finished_at))
+    assert (cfg_dir / "eval" / "runs" / today / "cfg111cfg111.jsonl").is_file()
+    assert [item.run_id for item in list_runs(limit=1)] == ["cfg111cfg111"]
+    assert load_run("cfg111cfg111") is not None
+
+
 # ── list_runs ─────────────────────────────────────────────────────────
 
 

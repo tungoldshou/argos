@@ -4,7 +4,9 @@
 > C 阶段把"用啥系统都能装上、升级快、可信源"做成现实,从 macOS arm64 only
 > 扩到 6 个 OS 通道。
 
-> **发布状态**: macOS arm64 已发布（v0.1.0）。Linux / Windows / PyPI / Homebrew tap / Nix 通道均为计划中，尚未正式发布。
+> **发布状态**: GitHub release `v0.1.0` 已存在，但目前没有可安装的二进制资产
+> （只有校验文件）。macOS / Linux / Windows / PyPI / Homebrew tap / Nix 通道均为
+> 计划中，尚未正式发布。
 
 ## 各通道安装命令(按推荐顺序)
 
@@ -17,11 +19,12 @@ argos --version                # 验证
 
 `pip install` 安装两个入口点：`argos`（主命令）和 `argospkg`（打包辅助工具），均自动进 PATH。
 
-### 2. macOS arm64(已发布 v0.1.0)
+### 2. macOS arm64(计划中;尚无可安装 release 资产)
 
 ```bash
+# Planned once Argos-X.Y.Z-arm64-mac.tar.gz is uploaded:
 curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash
-# 或 Homebrew Cask:
+# Planned local cask smoke test:
 brew install --cask -s packaging/homebrew/argos.rb
 ```
 
@@ -138,5 +141,5 @@ nix profile install github:tungoldshou/argos#argos
 
 - Spec:`docs/superpowers/specs/2026-06-07-packaging-c-design.md`
 - Plan:`docs/superpowers/plans/2026-06-07-packaging-c.md`
-- macOS arm64 v0.1.0 用户文档:`packaging/install.sh` + `packaging/argos.spec` + README
+- macOS arm64 安装脚本草案:`packaging/install.sh` + `packaging/argos.spec` + README
 - 上游项目:https://github.com/tungoldshou/argos

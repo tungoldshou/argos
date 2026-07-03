@@ -10,10 +10,10 @@ from dataclasses import dataclass
 from argos.i18n import t
 
 # 命令 → 一句话说明(单一来源:/help 文案、slash 菜单、Tab 补全都从这里取,杜绝漂移)。
-# 顺序 = slash 菜单展示顺序(按常用度排:能力发现在前,会话控制居中,待接线在后)。
+# 顺序 = slash 菜单展示顺序(按常用度排:能力发现在前,会话控制居中,自动化在后)。
 # i18n: 描述通过 t("cmd.<name>") 在运行时取当前语言版本。
 _COMMAND_KEYS: list[str] = [
-    "help", "setup", "tools", "skills", "mcp", "model", "status", "cost",
+    "help", "setup", "voice", "tools", "skills", "mcp", "model", "status", "cost",
     "resume", "clear", "yolo", "trust", "undo", "ledger", "journal", "retry",
     "plan", "hooks", "lsp", "permissions", "runs", "orders", "confirm", "dismiss",
     "dream", "verify", "security-review", "simplify", "eval", "routing", "context",
@@ -57,11 +57,12 @@ def match_commands(text: str) -> list[tuple[str, str]]:
     if " " in body:  # 已在输入参数,不再提示命令
         return []
     pref = body.lower()
-    prefix_matches = [(n, d) for n, d in COMMAND_HELP.items() if n.startswith(pref)]
+    command_help = _build_command_help()
+    prefix_matches = [(n, d) for n, d in command_help.items() if n.startswith(pref)]
     if prefix_matches or not pref:
         return prefix_matches
     # 子串回退:前缀无命中时尝试任意位置包含
-    return [(n, d) for n, d in COMMAND_HELP.items() if pref in n]
+    return [(n, d) for n, d in command_help.items() if pref in n]
 
 
 @dataclass(frozen=True, slots=True)

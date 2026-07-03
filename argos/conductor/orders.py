@@ -26,8 +26,10 @@ OrderKind = Literal["schedule", "file_trigger"]
 # 触发后的执行类型（"run" = confirm 后 create_run；"dream" = confirm 后跑 DreamPipeline）
 OrderAction = Literal["run", "dream"]
 
-# 默认 orders JSONL 路径
-_DEFAULT_ORDERS_DIR = Path.home() / ".argos" / "conductor"
+def _default_orders_dir() -> Path:
+    from argos import config
+
+    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "conductor"
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,7 +133,7 @@ class OrderStore:
     """
 
     def __init__(self, orders_dir: Path | None = None) -> None:
-        self._dir = Path(orders_dir) if orders_dir else _DEFAULT_ORDERS_DIR
+        self._dir = Path(orders_dir).expanduser() if orders_dir else _default_orders_dir()
         self._path = self._dir / "orders.jsonl"
 
     @property

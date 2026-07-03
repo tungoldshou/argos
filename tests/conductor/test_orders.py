@@ -175,6 +175,19 @@ class TestStandingOrderSerialization:
 # OrderStore CRUD
 # ---------------------------------------------------------------------------
 
+
+def test_order_store_default_dir_honors_argos_config_dir(tmp_path: Path, monkeypatch):
+    from argos import config as C
+
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
+
+    store = OrderStore()
+
+    assert store.path == cfg_dir / "conductor" / "orders.jsonl"
+
+
 class TestOrderStoreAdd:
     def test_add_creates_file(self, tmp_path: Path):
         store = OrderStore(tmp_path)

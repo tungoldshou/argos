@@ -40,6 +40,11 @@ def _make_run_result(returncode: int, stdout: str = "", stderr: str = ""):
     return r
 
 
+@pytest.fixture(autouse=True)
+def _allow_screen_capture_preflight(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("argos.perception.executor._screen_capture_allowed", lambda: True)
+
+
 # ── 旗标关闭路径 ──────────────────────────────────────────────────────────────
 
 def test_disabled_when_no_flag(monkeypatch: pytest.MonkeyPatch):
@@ -149,6 +154,24 @@ def test_screenshot_failure_returns_ok_false(monkeypatch: pytest.MonkeyPatch):
     result = executor._screenshot()
     assert result.ok is False
     assert "截图失败" in result.detail
+
+
+def test_screenshot_preflight_denied_skips_screencapture(monkeypatch: pytest.MonkeyPatch):
+    """macOS 屏幕录制权限预检失败 → 不调用 screencapture,避免壁纸截图假成功。"""
+    monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
+    monkeypatch.setattr("argos.perception.executor._screen_capture_allowed", lambda: False)
+    called: list[bool] = []
+
+    def mock_run(cmd, **kw):
+        called.append(True)
+        return _make_run_result(0)
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    result = ComputerExecutor()._screenshot()
+    assert result.ok is False
+    assert not called
+    assert "屏幕录制" in result.detail or "Screen Recording" in result.detail
 
 
 # ── Accessibility 权限失败路径 ────────────────────────────────────────────────

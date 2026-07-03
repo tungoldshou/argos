@@ -34,6 +34,14 @@ def _mock_daemon_client(status: int = 201, data: dict | None = None) -> MagicMoc
     return client
 
 
+class _Log:
+    def __init__(self) -> None:
+        self.lines: list[tuple[str, str | None]] = []
+
+    async def append_line(self, text: str, kind: str | None = None) -> None:
+        self.lines.append((text, kind))
+
+
 # ── T1: /schedule in daemon mode ─────────────────────────────────────────────
 
 
@@ -104,6 +112,16 @@ async def test_schedule_no_daemon_honest_message() -> None:
 
 
 @pytest.mark.asyncio
+async def test_schedule_no_daemon_is_error() -> None:
+    app = _make_app()
+    log = _Log()
+
+    await app._schedule_cmd(log, "every 1h: summarize logs")
+
+    assert log.lines[0][1] == "error"
+
+
+@pytest.mark.asyncio
 async def test_watch_no_daemon_honest_message() -> None:
     """T3b: /watch in inline mode emits daemon-required message, no crash."""
     app = _make_app()
@@ -112,6 +130,40 @@ async def test_watch_no_daemon_honest_message() -> None:
         txt = await _dispatch(app, "/watch *.py run tests")
 
     assert "daemon" in txt.lower() or "argosd" in txt.lower()
+
+
+@pytest.mark.asyncio
+async def test_watch_no_daemon_is_error() -> None:
+    app = _make_app()
+    log = _Log()
+
+    await app._watch_cmd(log, "*.py run tests")
+
+    assert log.lines[0][1] == "error"
+
+
+@pytest.mark.asyncio
+async def test_schedule_malformed_no_colon_inline_prints_usage() -> None:
+    """参数本身 malformed 时,即使 inline 模式也应先给用法。"""
+    app = _make_app()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        txt = await _dispatch(app, "/schedule every 1h summarize logs")
+
+    assert "usage" in txt.lower() or "/schedule" in txt.lower()
+    assert "daemon" not in txt.lower()
+
+
+@pytest.mark.asyncio
+async def test_watch_malformed_no_goal_inline_prints_usage() -> None:
+    """参数本身 malformed 时,即使 inline 模式也应先给用法。"""
+    app = _make_app()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        txt = await _dispatch(app, "/watch *.py")
+
+    assert "watch" in txt.lower()
+    assert "daemon" not in txt.lower()
 
 
 # ── T4: malformed /schedule (missing ':') → usage hint ───────────────────────
@@ -134,6 +186,19 @@ async def test_schedule_malformed_no_colon() -> None:
     assert "usage" in txt.lower() or "/schedule" in txt.lower()
 
 
+@pytest.mark.asyncio
+async def test_schedule_malformed_usage_is_error() -> None:
+    app = _make_app()
+    app._with_daemon = True
+    app._daemon_client = _mock_daemon_client()
+    log = _Log()
+
+    await app._schedule_cmd(log, "every 1h summarize logs")
+
+    assert log.lines[0][1] == "error"
+    app._daemon_client.create_order.assert_not_called()
+
+
 # ── T5: malformed /watch (missing goal) → usage hint ─────────────────────────
 
 
@@ -151,3 +216,16 @@ async def test_watch_malformed_no_goal() -> None:
 
     app._daemon_client.create_order.assert_not_called()
     assert "watch" in txt.lower()
+
+
+@pytest.mark.asyncio
+async def test_watch_malformed_usage_is_error() -> None:
+    app = _make_app()
+    app._with_daemon = True
+    app._daemon_client = _mock_daemon_client()
+    log = _Log()
+
+    await app._watch_cmd(log, "*.py")
+
+    assert log.lines[0][1] == "error"
+    app._daemon_client.create_order.assert_not_called()

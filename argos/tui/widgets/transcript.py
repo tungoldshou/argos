@@ -32,7 +32,7 @@ def strip_code_fences(text: str) -> str:
 
 class UserMessage(Static):
     DEFAULT_CSS = """
-    UserMessage { color: $ink-dim; padding: 0 2; }
+    UserMessage { color: $ink; padding: 0 2; }
     """
     def __init__(self, text: str) -> None:
         # markup=False:用户输入是任意文本,含 `[...]`(列表/正则/类型注解)绝不能被当
@@ -103,6 +103,7 @@ class Transcript(VerticalScroll):
     """
     DEFAULT_CSS = """
     Transcript { background: $stream; }
+    Transcript Rule { color: $hairline-lit; }
     """
 
     def __init__(self, *args, **kwargs) -> None:

@@ -76,7 +76,7 @@ def test_no_exit_plan_mode_direct_call_in_app() -> None:
 
 
 @pytest.mark.asyncio
-async def test_daemon_unreachable_inline_fallback() -> None:
+async def test_daemon_unreachable_inline_fallback(monkeypatch) -> None:
     """T3: daemon socket 不存在 → inline fallback + 状态栏诚实标注。
 
     实现:临时 socket 路径不创建 → probe 失败 → spawn 失败(argosd 不在 PATH) → inline。
@@ -92,13 +92,19 @@ async def test_daemon_unreachable_inline_fallback() -> None:
     status_bar_mock = MagicMock()
     status_bar_mock.set_kernel_mode = MagicMock()
 
+    transcript_mock = MagicMock()
+    transcript_mock.append_line = MagicMock(return_value=object())
+
     def _query_one(selector, cls=None):
         if cls is not None and cls.__name__ == "StatusBar":
             return status_bar_mock
+        if selector == "#transcript":
+            return transcript_mock
         raise Exception(f"not mounted: {selector}")
 
     app.query_one = _query_one
     app.run_worker = MagicMock()  # 不真起 Textual worker
+    monkeypatch.delenv("ARGOS_NO_DAEMON", raising=False)
 
     # patch probe_or_spawn 在 daemon_spawn 模块层面返 False
     with patch("argos.tui.daemon_spawn.probe_or_spawn", new=AsyncMock(return_value=False)):
@@ -110,6 +116,39 @@ async def test_daemon_unreachable_inline_fallback() -> None:
     assert app._with_daemon is False
     assert app._daemon_client is None
     status_bar_mock.set_kernel_mode.assert_called_once_with("inline(单进程)")
+    transcript_mock.append_line.assert_called_once()
+    assert transcript_mock.append_line.call_args.kwargs["kind"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_daemon_socket_path_honors_env_local_config(tmp_path, monkeypatch) -> None:
+    from argos import config as C
+    from argos.tui.app import ArgosApp
+
+    app = ArgosApp()
+    status_bar_mock = MagicMock()
+    transcript_mock = MagicMock()
+    transcript_mock.append_line = MagicMock(return_value=object())
+
+    def _query_one(selector, cls=None):
+        if cls is not None and cls.__name__ == "StatusBar":
+            return status_bar_mock
+        if selector == "#transcript":
+            return transcript_mock
+        raise Exception(f"not mounted: {selector}")
+
+    socket_path = tmp_path / "from-env-local.sock"
+    app.query_one = _query_one
+    app.run_worker = MagicMock()
+    monkeypatch.delenv("ARGOS_NO_DAEMON", raising=False)
+    monkeypatch.delenv("ARGOS_DAEMON_SOCKET", raising=False)
+    monkeypatch.setattr(C, "_ENV", {"ARGOS_DAEMON_SOCKET": str(socket_path)})
+
+    probe = AsyncMock(return_value=False)
+    with patch("argos.tui.daemon_spawn.probe_or_spawn", new=probe):
+        await app._setup_daemon_mode()
+
+    probe.assert_awaited_once_with(socket_path)
 
 
 @pytest.mark.asyncio
@@ -146,6 +185,38 @@ async def test_daemon_available_sets_argosd_mode(monkeypatch) -> None:
     assert app._with_daemon is True
     assert app._daemon_session_id == fake_session_id
     status_bar_mock.set_kernel_mode.assert_called_once_with("argosd")
+
+
+@pytest.mark.asyncio
+async def test_daemon_session_create_failure_reports_error_lane(monkeypatch) -> None:
+    from argos.daemon.client import DaemonClient
+    from argos.tui.app import ArgosApp
+
+    app = ArgosApp()
+    status_bar_mock = MagicMock()
+    transcript_mock = MagicMock()
+    transcript_mock.append_line = MagicMock(return_value=object())
+
+    def _query_one(selector, cls=None):
+        if cls is not None and cls.__name__ == "StatusBar":
+            return status_bar_mock
+        if selector == "#transcript":
+            return transcript_mock
+        raise Exception(f"not mounted: {selector}")
+
+    app.query_one = _query_one
+    app.run_worker = MagicMock()
+    monkeypatch.delenv("ARGOS_NO_DAEMON", raising=False)
+
+    with patch("argos.tui.daemon_spawn.probe_or_spawn", new=AsyncMock(return_value=True)):
+        with patch.object(DaemonClient, "create_session", new=AsyncMock(side_effect=OSError("boom"))):
+            with patch.dict(os.environ, {"ARGOS_DAEMON_SOCKET": "/tmp/_argos_test_daemon.sock"}):
+                await app._setup_daemon_mode()
+
+    assert app._kernel_mode == "inline"
+    assert app._with_daemon is False
+    transcript_mock.append_line.assert_called_once()
+    assert transcript_mock.append_line.call_args.kwargs["kind"] == "error"
 
 
 # ── T2: DaemonEventSource SSE 断线重连续传 ──────────────────────────────

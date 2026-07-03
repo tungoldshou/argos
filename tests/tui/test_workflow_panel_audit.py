@@ -126,7 +126,7 @@ class TestPerGlyphColour:
         assert _COL_FAIL.upper()       == "#F7768E"
         assert _COL_INK_BRIGHT.upper() == "#ECEEF5"
         assert _COL_INK_DIM.upper()    == "#7E869C"
-        assert _COL_INK_FAINT.upper()  == "#525A73"
+        assert _COL_INK_FAINT.upper()  == "#6B7494"
 
 
 # ---------------------------------------------------------------------------

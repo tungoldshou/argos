@@ -38,7 +38,7 @@ _COL_FAIL       = "#F7768E"   # $fail: verdict failed;唯一的红
 _COL_EYE        = "#D9A85C"   # $eye: chrome 主强调(金)
 _COL_INK_BRIGHT = "#ECEEF5"   # $ink-bright: bold 强调
 _COL_INK_DIM    = "#7E869C"   # $ink-dim: 次要/非选中
-_COL_INK_FAINT  = "#525A73"   # $ink-faint: 键提示/空态/页脚
+_COL_INK_FAINT  = "#6B7494"   # $ink-faint: 键提示/空态/页脚
 
 # ── 选项编号映射(spec:deny 显示 '4',非 '2')──────────────────────────────────
 # value → 显示数字标签(不用 i+1 自动编号)

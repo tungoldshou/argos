@@ -7,6 +7,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
+
 from argos.tui.commands import COMMAND_HELP, parse_slash
 from argos.tui.widgets.activity_panel import ActivityPanel
 from argos.tui.widgets.status_bar import StatusBar
@@ -84,3 +86,39 @@ def test_context_cmd_uses_analyzer_and_render():
     assert "format_table" in src
     assert "format_json" in src
     assert "--json" in src  # JSON 旁路
+
+
+@pytest.mark.asyncio
+async def test_context_unknown_arg_prints_usage():
+    """/context 只接受空参数或 --json,未知参数应报用法。"""
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    log = Log()
+    await _app.ArgosApp()._context_cmd(log, "bogus")
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert "Usage" in text or "用法" in text
+    assert any(kind == "error" for _line, kind in log.lines)
+
+
+@pytest.mark.asyncio
+async def test_context_json_flag_is_case_insensitive():
+    """/context --JSON should behave like /context --json."""
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    log = Log()
+    await _app.ArgosApp()._context_cmd(log, "--JSON")
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert "Usage" not in text and "用法" not in text
+    assert text.lstrip().startswith("{")

@@ -37,3 +37,14 @@ def test_all_three_warn(tmp_path: Path):
     assert len(w) == 3
     joined = " ".join(w)
     assert "lsp" in joined and "mcp" in joined and "hooks" in joined
+
+
+def test_default_path_honors_argos_config_dir(tmp_path: Path, monkeypatch):
+    cfg_dir = tmp_path / ".argos"
+    cfg_dir.mkdir()
+    (cfg_dir / "mcp.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+
+    w = external_surface_warnings()
+
+    assert len(w) == 1 and "mcp" in w[0]

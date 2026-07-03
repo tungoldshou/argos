@@ -7,7 +7,7 @@ build_run_stack(c):per-run 隔离栈 —— 每次 daemon 分配一个 run 时�
                    SeatbeltExecutor + ApprovalGate + CapabilityBroker,避免并发 run 共享单例
                    (run2 spawn 顶掉 run1 子进程 / gate.set_workspace 竞态)。
                    RunStack.close() 在 run 终态时清理沙箱子进程,不留孤儿。
-诚实(灵魂):无 worker key → 抛 RuntimeError(入口捕获落 demo 态,不假装能跑)。
+诚实(灵魂):无 API key → 抛 RuntimeError(入口捕获后提示 setup,不假装能跑)。
 
 接线要点(对齐 canonical,非计划正文的过时名):
   · 沙箱 = SeatbeltExecutor(executor.py),不存在 SeatbeltBackend。
@@ -435,16 +435,22 @@ def build_components(
     # #11 per-task routing(契约 §11;spec §7):构造 ModelRouter。routing config 从
     # ~/.argos/config.json 读;client_factory 懒构造每个 tier 的 ModelClient(无 key
     # 的 tier 在 router.select 时才报,不阻断启动)。
-    config_dir = Path(os.environ.get("ARGOS_CONFIG_DIR") or Path.home() / ".argos")
+    config_dir = Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
     routing_cfg = load_routing(config_dir)
 
     def _router_client_factory(name: str) -> ModelClient:
         try:
-            t = config.tier_for(name)
-            k = config.key_for(name) or ""   # key 缺时 tier_for 抛/此处留空让上层错
+            target_tier = config.tier_for(name)
         except Exception:  # noqa: BLE001 — 未知 profile 退当前 active
-            t, k = tier, key
-        return ModelClient(tier=t, pool=CredentialPool([k] or ["_missing_"]))
+            target_tier, target_key = tier, key
+        else:
+            target_key = config.key_for(name)
+            if not target_key:
+                cfg = config.load_config()
+                raise config.ConfigError(
+                    t("route.profile_missing_key", tier=name, env=cfg.key_envs.get(name) or "")
+                )
+        return ModelClient(tier=target_tier, pool=CredentialPool([target_key]))
 
     # per-step routing(spec §4.4):RoutingConfig.is_active() 出厂即 True(_BUILTIN_DEFAULT 已填充
     # by_category),故 router 默认构造。注意:单模型配置下这是**空转**—— _router_client_factory 对

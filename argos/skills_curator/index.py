@@ -23,6 +23,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from argos import config
+
 DEFAULT_INDEX_URL = (
     "https://raw.githubusercontent.com/tungoldshou/argos-skills-index/main/index.json"
 )
@@ -72,7 +74,7 @@ class IndexFetchError(RuntimeError):
 
 
 def _skills_root() -> Path:
-    return Path.home() / ".argos" / "skills"
+    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "skills"
 
 
 def _parse_entry(raw: dict) -> IndexEntry:

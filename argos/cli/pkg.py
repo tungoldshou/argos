@@ -6,7 +6,7 @@
 子命令:
   info      — 打印项目元数据 + packaging/VERSION + git tag
   check     — 校验 self + argos 入口 import 成功
-  manifest  — 预演 winget manifest 生成(v0.2.0 真出;v0.1.0 仅占位)
+  manifest  — 列出当前 winget manifest 文件,供发布前审阅
 
 不破:`__main__.py` 主 `argos` 启动 0 影响(本模块只在 `argospkg` 命令路径 import)。
 """
@@ -104,17 +104,17 @@ def cmd_check(_rest: list[str]) -> int:
 
 
 def cmd_manifest(_rest: list[str]) -> int:
-    """预演生成 winget manifest(v0.1.0 仅占位;v0.2.0 接 wingetcreate)。
+    """列出 winget manifest 文件,供手动 PR 审阅。
 
-    列出 packaging/winget/ 下的 3 件文件路径,供手动 PR 审阅。
+    不自动提交 microsoft/winget-pkgs;发布流程仍走人工审核。
     """
-    print(t("cli.pkg.manifest_placeholder"))
+    print(t("cli.pkg.manifest_ready"))
     manifest_dir = Path("packaging/winget")
-    if manifest_dir.exists():
-        for p in sorted(manifest_dir.glob("tungoldshou.argos.*.yaml")):
-            print(f"  - {p}")
-    else:
-        print("  (no packaging/winget/ directory yet)")
+    if not manifest_dir.exists():
+        print(t("cli.pkg.manifest_missing", path=manifest_dir), file=sys.stderr)
+        return 1
+    for p in sorted(manifest_dir.glob("tungoldshou.argos.*.yaml")):
+        print(f"  - {p}")
     return 0
 
 

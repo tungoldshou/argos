@@ -84,11 +84,12 @@ Needs Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
-uv run argos setup        # interactive wizard: pick a provider, paste a key,
-                          # connection + CodeAct-format probe (real request)
+uv run argos setup        # interactive wizard: pick a provider + key source
+                          # (paste key or use an existing environment variable), then probe
 uv run argos              # launch the Argos TUI
 uv run argos --selftest   # offline full-machine self-check, prints verdicts
-uv run pytest -q          # run the test suite
+uv run pytest -q          # run default tests (excludes slow tests)
+uv run pytest -m slow -q --no-cov  # run slow subprocess / packaging / e2e tests
 ```
 
 Without an API key, `argos` exits with a clear message telling you to run
@@ -132,7 +133,7 @@ Needs Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 git clone https://github.com/tungoldshou/argos
 cd argos
 uv sync
-uv run argos setup   # pick a provider + key, run a connection probe
+uv run argos setup   # pick a provider + key source, run a connection probe
 uv run argos         # launch the TUI
 ```
 
@@ -147,8 +148,9 @@ below. None are live until binary assets are uploaded to a GitHub release.
 curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash
 ```
 
-**Homebrew cask (macOS arm64)** — formula at `packaging/homebrew/argos.rb`,
-sha256 placeholder pending release; tap not yet published.
+**Homebrew cask (macOS arm64)** — draft formula at
+`packaging/homebrew/argos.rb`; the checksum is filled only after a binary
+release asset exists, and the tap is not published yet.
 
 **pip / uv (any platform)** — `argos-agent` is not on PyPI yet.
 ```bash
@@ -251,9 +253,8 @@ process (`argosd`) that Argos auto-detects and auto-spawns at launch
 (e.g. the current packaged build ships only the `argos` binary, or a
 `uv run` checkout where the console script isn't installed) or the
 daemon is otherwise unreachable, the TUI falls back transparently to
-single-process inline mode (shown in the status bar). There is no
-`--with-daemon` flag; daemon mode is the default whenever `argosd`
-is available.
+single-process inline mode (shown in the status bar). No extra flag is
+required; daemon mode is the default whenever `argosd` is available.
 
 Keyboard bindings on the TUI:
 
@@ -265,7 +266,11 @@ Keyboard bindings on the TUI:
   not interrupt-the-LLM-token.
 - **`Esc Esc`** (within 1.5s, daemon mode) — cancel.
 - **`Esc`** (inline mode) — cancel the current run immediately.
-- **`Ctrl+C`** — quit the TUI.
+- **`Space`** (empty prompt) — show voice input status; current build reports it as not enabled.
+- **`Ctrl+O`** — cycle the right panel view.
+- **`Ctrl+V`** — paste an image from the clipboard into the prompt.
+- **`Ctrl+C`** — interrupt the current task; when idle, press twice to quit.
+- **`Ctrl+D`** — quit immediately.
 
 State survives TUI exit, terminal close, machine reboot, and even a
 model upgrade (the worker reattaches from the last checkpoint).
@@ -427,10 +432,12 @@ Slash commands live in the TUI. Tab completion is built in.
 | Command | Purpose |
 |---|---|
 | `/help` | Show all commands. |
+| `/setup` | Show current setup status and how to run the setup wizard. |
+| `/voice` | Show voice input status; current build reports it as not enabled. |
 | `/tools` | List the callable tools (real count from the registry). |
 | `/skills` | Manage the skill ecosystem: list / install / remove / refresh / test. |
 | `/mcp` | List configured MCP external tools. |
-| `/model` | View or switch the active model profile. |
+| `/model` | View or switch the active model profile; restart Argos for a switch to take effect. |
 | `/status` | Current run state. |
 | `/cost` | Per-round cost and cache statistics. |
 | `/resume` | Reattach to the previous session. |
@@ -439,11 +446,12 @@ Slash commands live in the TUI. Tab completion is built in.
 | `/yolo` | Legacy alias for `/trust autonomous`. |
 | `/undo` | Roll back all file changes made in this run to the run start-point snapshot. |
 | `/ledger` | View the behaviour ledger for the current run: human-readable entries and undo state. |
+| `/journal` | Show the ledger JSONL path for the current run or a specified run ID. |
 | `/retry` | Resend the last user message. |
 | `/plan` | Enter "look at the plan, then act" mode. The agent writes a markdown plan; the host presents an inline approval modal. Plan-mode tool dispatch blocks `write_file` / `edit_file` / `run_command` until you exit. |
 | `/hooks` | List the active `~/.argos/hooks.json` lifecycle hooks. `/hooks reload` re-reads the config without restarting. |
 | `/lsp` | List the language servers currently in scope. `/lsp reload` re-reads `~/.argos/lsp.json`. |
-| `/permissions` | Inspect or change the current approval level. Hard rules are always shown. |
+| `/permissions` | Inspect permissions config. `/permissions reload` re-reads `~/.argos/permissions.json`; use `/trust` for the current approval level. Hard rules are always shown. |
 | `/runs` | List persisted runs (daemon mode). `/runs {id} resume\|cancel` acts on one. |
 | `/orders` | List standing conductor orders (autonomous scheduled / file-triggered instructions). |
 | `/confirm` | Confirm a conductor proactive suggestion by ID. |
@@ -451,10 +459,14 @@ Slash commands live in the TUI. Tab completion is built in.
 | `/verify` | Run `Verifier.verify` against the configured `verify_cmd`. Never goes through `propose_verify`. Without a `verify_cmd` configured, verdict is `n_a`. |
 | `/security-review` | Three passes: secrets, dependency vulnerabilities (shells out to `npm` / `pip-audit` / `cargo-audit` — missing tools reported as `error`, never silently skipped), dangerous APIs. Read-only. |
 | `/simplify` | Three passes: token-shingle duplicate detection, function-complexity hotspots, dead-code heuristics. Read-only. |
-| `/eval` | Self-eval harness. `/eval` lists recent runs + 7d pass rate. `/eval run <task_id>` runs a corpus task. `/eval compare <a> <b>` runs an A/B (report into transcript). CLI twin: `argos eval list \| run \| compare \| corpus`. |
+| `/eval` | Self-eval harness. `/eval` lists recent runs + 7d pass rate. `/eval run <task_id>` runs a corpus task. `/eval compare <task_id>[:<model>] <task_id>[:<model>]` runs an A/B (report into transcript). CLI twin: `argos eval list \| run \| compare \| corpus`. |
 | `/dream` | Nightly consolidation. `/dream` runs one round immediately (clusters candidates, synthesizes multi-source skills, A/B promotes, consolidates memory). `/dream status` shows the last report. CLI twin: `argos dream [--report]`. |
 | `/routing` | View last 10 routing decisions. `/routing set <category> <tier>` updates routing. |
 | `/context` | View the current LLM context breakdown by bucket (system / memory / tools / messages). |
+| `/loop` | Submit a task with an `until:` verify command (`/loop <task> until: <cmd>`). |
+| `/goal` | Submit a goal with an optional verify command (`/goal <task> | verify: <cmd>`). |
+| `/schedule` | Create a timed standing order through the daemon (`/schedule <when>: <goal>`). |
+| `/watch` | Create a file-triggered standing order through the daemon (`/watch <glob> <goal>`). |
 | `/remember`, `/forget`, `/memory` | Explicit auto-memory management (hidden from the slash menu; still functional). |
 
 ---
@@ -487,14 +499,15 @@ on write. `ARGOS_NO_MEMORY=1` to opt out. See
 
 ```bash
 uv run argos                       # launch TUI (daemon auto-detected)
-uv run argos setup                 # provider + key + format-probe wizard
+uv run argos setup                 # provider + key source + format-probe wizard
+uv run argos setup status          # show profile, model, key, memory, image input
 uv run argos --selftest            # offline self-check, prints verdicts
 uv run argos --version             # version (single source: importlib.metadata)
 uv run argos self-update           # check GitHub for new version, notify only
 uv run argos --project <path>      # confine to a specific project directory
 uv run argos --model <name>        # use a specific config profile for this run
 uv run argos --effort=low|medium|high  # task effort tier (default: medium)
-uv run argos --resume <session_id> # pass-through to TUI /resume
+# In the TUI: /resume             # reattach to the latest prior session
 # ARGOS_NO_DAEMON=1 uv run argos   # force single-process inline mode
 ```
 

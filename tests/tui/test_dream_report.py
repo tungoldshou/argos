@@ -32,7 +32,7 @@ _COL_UNVERIF = "#FF9E64"  # $unverif
 _COL_EYE    = "#D9A85C"  # $eye
 _COL_INK    = "#C8CCDA"  # $ink
 _COL_INK_DIM  = "#7E869C"  # $ink-dim
-_COL_INK_FAINT = "#525A73"  # $ink-faint
+_COL_INK_FAINT = "#6B7494"  # $ink-faint
 _COL_INK_BRIGHT = "#ECEEF5"  # $ink-bright
 
 

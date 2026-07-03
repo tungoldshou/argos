@@ -249,3 +249,21 @@ def test_run_subset_does_not_persist_for_skipped(tmp_path):
         # 不应有文件
         files = list(runs_dir.rglob("*.jsonl"))
         assert files == []
+
+
+def test_smoke_subset_resolves_to_task_dirs():
+    """`argos eval tb` 默认 smoke 应展开到具体任务目录,不能把 fixture 根当任务。"""
+    subset = tb._resolve_subset_arg("smoke")
+
+    assert subset
+    assert all((p / "task.yaml").is_file() for p in subset)
+    assert any(p.name == "tb_echo_hello" for p in subset)
+    assert all(p.name != "tb_smoke" for p in subset)
+
+
+def test_smoke_subset_missing_fixture_returns_missing_path(tmp_path, monkeypatch):
+    """打包态若 smoke fixture 缺失,交给 cmd_tb 的路径检查报错,解析层不应崩。"""
+    missing = tmp_path / "missing_smoke"
+    monkeypatch.setattr(tb, "_smoke_subset_dir", lambda: missing)
+
+    assert tb._resolve_subset_arg("smoke") == [missing]

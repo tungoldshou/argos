@@ -102,6 +102,20 @@ async def test_skills_install_subcommand_writes_hint(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_skills_install_subcommand_is_case_insensitive(tmp_path, monkeypatch):
+    monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
+    from argos.tui.app import ArgosApp
+    app = ArgosApp()
+    app._last_skills_arg = "INSTALL python-lint"
+    log = _FakeLog()
+    await app._show_skills(log)
+    text, kind = log.lines[0]
+    assert kind == "system"
+    assert "host" in text.lower()
+    assert "install python-lint" in text.lower()
+
+
+@pytest.mark.asyncio
 async def test_skills_remove_subcommand_writes_hint(tmp_path, monkeypatch):
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     from argos.tui.app import ArgosApp
@@ -138,6 +152,59 @@ async def test_skills_test_subcommand_writes_hint(tmp_path, monkeypatch):
     text, _ = log.lines[0]
     assert "host" in text.lower()
     assert "test python-lint" in text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("sub", ["install", "remove", "test"])
+async def test_skills_named_subcommands_require_name(tmp_path, monkeypatch, sub):
+    monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
+    from argos.tui.app import ArgosApp
+    app = ArgosApp()
+    app._last_skills_arg = sub
+    log = _FakeLog()
+    await app._show_skills(log)
+    text, kind = log.lines[0]
+    assert kind == "error"
+    assert f"/skills {sub} <name>" in text
+
+
+@pytest.mark.asyncio
+async def test_skills_named_subcommand_rejects_extra_args(tmp_path, monkeypatch):
+    monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
+    from argos.tui.app import ArgosApp
+    app = ArgosApp()
+    app._last_skills_arg = "install python-lint extra"
+    log = _FakeLog()
+    await app._show_skills(log)
+    text, kind = log.lines[0]
+    assert kind == "error"
+    assert "Usage" in text or "用法" in text
+
+
+@pytest.mark.asyncio
+async def test_skills_refresh_rejects_extra_args(tmp_path, monkeypatch):
+    monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
+    from argos.tui.app import ArgosApp
+    app = ArgosApp()
+    app._last_skills_arg = "refresh now"
+    log = _FakeLog()
+    await app._show_skills(log)
+    text, kind = log.lines[0]
+    assert kind == "error"
+    assert "Usage" in text or "用法" in text
+
+
+@pytest.mark.asyncio
+async def test_skills_unknown_subcommand_prints_usage(tmp_path, monkeypatch):
+    monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
+    from argos.tui.app import ArgosApp
+    app = ArgosApp()
+    app._last_skills_arg = "bogus"
+    log = _FakeLog()
+    await app._show_skills(log)
+    text, kind = log.lines[0]
+    assert kind == "error"
+    assert "Usage" in text or "用法" in text
 
 
 # ── builtin 3 个的 installed 列表里要有 ────────────────────────

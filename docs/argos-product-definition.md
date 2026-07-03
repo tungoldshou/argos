@@ -72,9 +72,10 @@ agent 声称「完成」时,Argos 不信文字,强制跑一条可机检的验证
 **端到端(懂技术用户真实场景)**:在用户自己的项目里,agent 修对一个有 bug 的函数、
 跑用户自己的 pytest 验证通过(独立复核退出码 0)、没篡改测试。
 
-**回归防线**:完整 pytest suite(≈3000 个,运行 `uv run pytest` 查最新数)锁死安全边界与行为
+**回归防线**:默认 pytest suite(运行 `uv run pytest` 查最新数;默认排除 slow)锁死安全边界与行为
 (路径牢笼/命令白名单/退出码/防作弊隔离/篡改检测/契约分类/CodeAct 契约/浏览器与 MCP
-端到端等),覆盖率 ≥80%;`argos --selftest` 不连网整机自检 + 打包 binary smoke 全绿。
+端到端等),覆盖率 ≥80%;`argos --selftest` 不连网整机自检通过。真子进程/打包 smoke
+用 `uv run pytest -m slow -q --no-cov` 显式运行。
 
 ---
 
@@ -99,7 +100,7 @@ argosd  ←──────────────────── daemon �
   │    ├─ 四阶段不可跳:plan → act(抽 ```python 代码块→沙箱执行→回灌)→ verify → report
   │    ├─ 任意模型(Anthropic + OpenAI 双协议;argos setup 接入)
   │    ├─ 工具(注入沙箱命名空间,具体数量见 /tools 命令):
-  │    │    · 文件:read/write/edit/search_file        · 计划:update_plan(真 TODO 拆解)
+  │    │    · 文件:read/write/edit/search_files       · 计划:update_plan(真 TODO 拆解)
   │    │    · shell:run_command(白名单+Seatbelt+路径牢笼)· 验证:propose_verify / propose_dom_verify
   │    │    · 联网:web_search / web_extract            · 计算机控制:browser_*(×5) + computer.*(×7)
   │    │    · LSP:lsp_definition/references/…        · 外部工具:mcp_call(原生 MCP,stdio JSON-RPC)
@@ -111,7 +112,7 @@ argosd  ←──────────────────── daemon �
   ├─ 核心子系统
   │    · 记忆(memory/):4 层 JSONL,向量(sqlite-vec) + FTS5 召回 + consolidate 合并去重
   │    · 行为账本(ledger/):签名回执 JSONL,三态撤销(Reversible)
-  │    · 意图引擎(intent/):NL→IntentCard,echo 确认
+  │    · 意图层:NL→IntentCard/echo 确认仍是规划项(当前仓库尚无 argos/intent/)
   │    · 按任务路由(routing/):请求分类 → 模型 + effort 档位选择
   │    · Conductor(conductor/):自主调度,常设订单 + cron 触发,**始终需用户确认**
   │    · Dream 夜间整合(03:00 cron):验证门控的跨 run 自进化 — 候选聚类→合成→A/B 晋升→
@@ -126,9 +127,9 @@ argosd  ←──────────────────── daemon �
        │    (ARGOS_NO_DAEMON=1 强制 inline,测试隔离用)
 ```
 
-模型是可替换 provider —— **不绑任何单一模型**(`argos setup` 选 provider 填 key 即可)。
-多渠道打包:PyInstaller 单文件 binary + install.sh / Homebrew / WinGet / .deb;
-macOS arm64 已发布;`argos --selftest` 验整机装配。
+模型是可替换 provider —— **不绑任何单一模型**(`argos setup` 选 provider 和 key 来源即可)。
+多渠道打包脚手架:PyInstaller 单文件 binary + install.sh / Homebrew / WinGet / .deb;
+二进制 release 尚未发布;`argos --selftest` 验整机装配。
 
 ---
 

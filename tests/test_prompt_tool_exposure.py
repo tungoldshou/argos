@@ -53,6 +53,22 @@ def test_lsp_injected_when_server_configured(monkeypatch, tmp_path):
     assert "lsp_definition" in stable and "lsp_references" in stable
 
 
+def test_lsp_injected_from_argos_config_dir(monkeypatch, tmp_path):
+    """LSP_CONFIG_PATH 默认 None 时,仍应跟随 ARGOS_CONFIG_DIR/lsp.json。"""
+    loop = _loop()
+    cfg_dir = tmp_path / ".argos"
+    cfg_dir.mkdir()
+    (cfg_dir / "lsp.json").write_text("{}")
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr("argos.lsp.config.LSP_CONFIG_PATH", None)
+    monkeypatch.setattr("argos.lsp.config.load",
+                        lambda path=None: types.SimpleNamespace(servers={"python": 1}))
+
+    stable, _ = loop._build_system_pair("改点代码")
+
+    assert "lsp_definition" in stable and "lsp_references" in stable
+
+
 def test_lsp_not_injected_when_no_server(monkeypatch, tmp_path):
     """lsp.json 存在但 servers 空 → 不注入。"""
     loop = _loop()

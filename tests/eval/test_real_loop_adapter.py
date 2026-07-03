@@ -14,6 +14,7 @@ Tests cover:
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 from typing import Any
 
@@ -201,6 +202,23 @@ def test_cost_over_budget_returns_failed(tmp_path: Path):
     outcome = runner._drive(loop, _task(tmp_path), str(tmp_path))
     assert outcome.verdict_status == PASS_FAILED
     assert "over_budget" in outcome.verify_detail
+
+
+def test_real_loop_timeout_returns_without_waiting_for_completion(tmp_path: Path):
+    """Real-loop timeout should return near the budget, not after loop completion."""
+    class _SlowLoop:
+        async def run(self, goal: str, session_id: str = ""):
+            await asyncio.sleep(1.0)
+            if False:
+                yield None
+
+    runner = _make_runner(tmp_path, budget_s=0.05)
+    started = time.monotonic()
+    outcome = runner._drive(_SlowLoop(), _task(tmp_path), str(tmp_path))
+    elapsed = time.monotonic() - started
+    assert elapsed < 0.5
+    assert outcome.verdict_status == PASS_FAILED
+    assert "timed_out" in outcome.verify_detail
 
 
 # ── caging: loop factory receives wt_path and cages the loop to it ─────────────

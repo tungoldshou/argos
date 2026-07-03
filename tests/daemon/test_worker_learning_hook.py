@@ -152,3 +152,42 @@ async def test_worker_falls_back_to_none_without_loop_factory(tmp_path, monkeypa
     await worker._maybe_run_learning_hook(entry)
 
     assert hook_calls[0]["runner_factory"] is None
+
+
+@pytest.mark.asyncio
+async def test_worker_learning_paths_honor_argos_config_dir(tmp_path, monkeypatch):
+    from argos import config as C
+    from argos.daemon.worker import RunWorker
+
+    cfg_dir = tmp_path / ".argos"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
+
+    hook_calls: list[dict] = []
+    seen: dict[str, Path] = {}
+
+    async def _fake_on_run_completed(**kw):
+        hook_calls.append(kw)
+
+    class FakeEvalRunner:
+        def __init__(self, *, base_dir, **kwargs):  # noqa: ANN003
+            seen["eval_base"] = base_dir
+
+    monkeypatch.setattr("argos.learning.hook.on_run_completed", _fake_on_run_completed)
+    monkeypatch.setattr("argos.eval.runner.EvalRunner", FakeEvalRunner)
+
+    run_id = "test000abc12"
+    manager = _make_fake_manager(tmp_path, run_id)
+    worker = RunWorker(
+        run_id=run_id,
+        manager=manager,
+        loop_factory=lambda: MagicMock(),
+        worktree=MagicMock(),
+    )
+
+    await worker._maybe_run_learning_hook(manager.get_run(run_id))
+
+    kw = hook_calls[0]
+    assert kw["skills_root"] == cfg_dir / "skills"
+    assert kw["candidates_root"] == cfg_dir / "learning" / "candidates"
+    assert seen["eval_base"] == cfg_dir / "eval" / "learning"

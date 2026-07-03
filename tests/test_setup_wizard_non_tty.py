@@ -5,7 +5,7 @@ setup_wizard.run() 没接,asyncio.run 把 traceback 打到 stderr 退出。用�
 是 Python 异常栈,完全不知道"setup 需要真终端"或"可以手工写 config"。
 
 修法:setup_wizard.run 把 while True 包 try/except EOFError,捕到就写一条友好提示
-(指明真终端 / 手工 config.json + .env)然后 return,不抛。
+(指明真终端 / 手工 config.json + key 来源)然后 return,不抛。
 """
 from __future__ import annotations
 
@@ -43,6 +43,7 @@ def test_setup_wizard_eof_returns_cleanly_with_friendly_message(tmp_path, monkey
     assert "config" in msg.lower() or "setup" in msg.lower(), (
         f"应指向手工 config.json/.env 或重新跑 setup,实际 msg={msg!r}"
     )
+    assert "existing environment variable" in msg or "已有环境变量" in msg
 
 
 def test_setup_wizard_eof_mid_loop_also_handled(tmp_path):
@@ -68,3 +69,22 @@ def test_setup_wizard_eof_mid_loop_also_handled(tmp_path):
     assert "终端" in msg or "terminal" in msg.lower(), (
         f"中途 EOF 也应走友好兜底,实际 msg={msg!r}"
     )
+
+
+def test_setup_wizard_keyboard_interrupt_returns_cleanly(tmp_path):
+    """Ctrl+C during setup should not leak a Python traceback."""
+    import asyncio
+    from argos import setup_wizard
+
+    lines: list[str] = []
+
+    def reader(prompt=""):
+        raise KeyboardInterrupt
+
+    def writer(*args, **kwargs):
+        lines.append(" ".join(str(a) for a in args))
+
+    asyncio.run(setup_wizard.run(reader=reader, writer=writer, config_dir=tmp_path))
+
+    msg = "\n".join(lines)
+    assert "cancel" in msg.lower() or "取消" in msg

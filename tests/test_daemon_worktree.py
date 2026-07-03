@@ -130,9 +130,13 @@ def test_cleanup_force_removes_locked_worktree(tmp_path: Path):
 # ── module-level constants ─────────────────────────────────────────────
 
 
-def test_default_base_dir_under_home():
-    """默认 base_dir = ~/.argos/worktrees。"""
-    import os
+def test_default_base_dir_honors_argos_config_dir(tmp_path, monkeypatch):
+    """默认 base_dir 跟随 ARGOS_CONFIG_DIR/worktrees。"""
+    from argos import config as C
+
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
+
     mgr = WorktreeManager()
-    expected = Path(os.path.expanduser("~/.argos/worktrees"))
-    assert str(mgr._base).rstrip("/") == str(expected).rstrip("/")
+    assert mgr._base == cfg_dir / "worktrees"

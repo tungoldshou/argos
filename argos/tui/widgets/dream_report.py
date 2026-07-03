@@ -39,7 +39,7 @@ _COL_UNVERIF    = "#FF9E64"  # $unverif : unverifiable / skipped — 橙
 _COL_EYE        = "#D9A85C"  # $eye     : chrome 主强调 / 阶段字形
 _COL_INK        = "#C8CCDA"  # $ink     : 散文正文
 _COL_INK_DIM    = "#7E869C"  # $ink-dim : 次要信息
-_COL_INK_FAINT  = "#525A73"  # $ink-faint: 键提示/caption
+_COL_INK_FAINT  = "#6B7494"  # $ink-faint: 键提示/caption
 _COL_INK_BRIGHT = "#ECEEF5"  # $ink-bright: bold 标题
 
 # ── 阶段→字形映射(铁律,不可改动)────────────────────────────────────────────

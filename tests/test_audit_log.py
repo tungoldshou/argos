@@ -20,6 +20,18 @@ def test_audit_log_creates_dir(tmp_path, monkeypatch):
     assert len(files) == 1
 
 
+def test_audit_dir_honors_argos_config_dir(tmp_path, monkeypatch):
+    import argos.permissions.audit as audit
+
+    cfg_dir = tmp_path / ".argos"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(audit, "AUDIT_DIR", None)
+    log = AuditLog(session_id="s1")
+    log.log(tool="x", args="y", decision="approved", trigger="level:auto", by="level", risk="low")
+
+    assert list((cfg_dir / "audit").glob("approvals-*.jsonl"))
+
+
 def test_audit_log_appends_jsonl(tmp_path, monkeypatch):
     p = tmp_path / "audit"
     monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)

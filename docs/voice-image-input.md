@@ -19,13 +19,13 @@
 
 | 能力 | 状态 | 说明 |
 |---|---|---|
-| **语音输入（空格录音）** | ✅ 已端到端接 | 输入框为空时按空格 → 录音 → 再按停止 → 转写 → 文本注入输入框（不自动提交）。`tui/widgets/prompt.py` + `tui/app.py._voice_toggle`。 |
+| **语音输入（空格录音）** | ◐ 未启用 | 当前构建没有 recorder/STT 实现；空输入框按空格或运行 `/voice` 只给诚实提示，不静默假装可用。 |
 | **多模态模型管线** | ✅ 已落地并测 | `loop.run(goal, attachments=[ImageAttachment,...])` 端到端可用：`tier.multimodal` 门禁 → 边车注入 → Anthropic/OpenAI 两套 wire 格式物化。单测覆盖。 |
-| **STT provider 抽象** | ✅ 已落地 | 本地默认（faster-whisper，Apple Silicon 走 mlx），云端可选（OpenAI 兼容 `/audio/transcriptions`）。 |
+| **STT provider 抽象** | ✖ 未落地 | 后续接 `sounddevice` + 本地/云端 whisper 时再补。 |
 | **图片输入 TUI 入口** | ✅ 已接线 | 数据层（`ImageAttachment`、路径检测、校验、base64）与协议物化就绪并测过；TUI 提交流汇总 `(goal_text, attachments)` 后喂给 run——`app.py` import `attachments` / `clipboard_image`，`handle_input` 带 `attachments` 一路传到 `start_run` → inline / daemon 两路 `loop.run(..., attachments=...)`。 |
 | **剪贴板贴图 / 统一粘贴管线 / 粘贴 chip** | ✅ 已实现 | spec §6.2 的 `Ctrl+V` 贴图（`clipboard_image.py` → `action_paste_image`）、`[图片 #N]` 占位 chip（`prompt.register_image`）已落地。 |
 
-**一句话**：语音、图片都真能用——「数据 + 协议」地基铺好，TUI 上的提交入口（路径附加 + `Ctrl+V` 贴图 + chip）也已接通。
+**一句话**：图片真能用；语音当前只做诚实不可用提示，避免文档先行造成假功能。
 
 ## `input/` 子包
 
@@ -34,9 +34,9 @@
 | 模块 | 公开 API | 职责 / 诚实边界 |
 |---|---|---|
 | `attachments.py` | `ImageAttachment`（frozen dataclass：`data`/`media_type`/`source_label`/`width`/`height`）；`sniff_media_type`、`validate_attachment`、`to_base64`、`extract_image_paths`、`load_from_path` | 纯逻辑、无网络 I/O。白名单 png/jpeg/webp/gif；单张 ≤5MB；未知格式/超限 → `ValueError`，绝不静默剥除或返回假 MIME。 |
-| `recorder.py` | `Recorder`（`start()` / `stop() -> np.ndarray`）、`RecorderError` | sounddevice 开关式录音 → float32 16kHz 单声道。无后端 / 无麦克风 / 空录音 → `RecorderError`，不静默。Linux 缺 `libportaudio2` 给明确提示。 |
-| `stt.py` | `Transcriber`（Protocol）、`LocalWhisper`、`CloudWhisper`、`make_transcriber`、`is_apple_silicon`、`SttError` | provider-agnostic。本地 `LocalWhisper`：Apple Silicon 试 `mlx-whisper`，失败回退 `faster-whisper`（仍本地），权重首次使用懒下载。云端 `CloudWhisper`：OpenAI 兼容，需 `cloud-stt` extra。失败一律 `SttError`，不伪造转写。 |
-| `stt_config.py` | `SttConfig`（frozen：`provider`/`model`/`base_url`/`api_key`）、`load_stt_config` | 读 `~/.argos/config.json` 的 `stt` 块；无文件/无块 → 全默认（本地 `base`）。`provider="cloud"` 时从 `~/.argos/.env` 解析 `api_key_env` 指向的 key。 |
+| `recorder.py`（计划） | `Recorder`（`start()` / `stop() -> np.ndarray`）、`RecorderError` | sounddevice 开关式录音 → float32 16kHz 单声道。无后端 / 无麦克风 / 空录音 → `RecorderError`，不静默。Linux 缺 `libportaudio2` 给明确提示。 |
+| `stt.py`（计划） | `Transcriber`（Protocol）、`LocalWhisper`、`CloudWhisper`、`make_transcriber`、`is_apple_silicon`、`SttError` | provider-agnostic。本地 `LocalWhisper`：Apple Silicon 试 `mlx-whisper`，失败回退 `faster-whisper`（仍本地），权重首次使用懒下载。云端 `CloudWhisper`：OpenAI 兼容，需 `cloud-stt` extra。失败一律 `SttError`，不伪造转写。 |
+| `stt_config.py`（计划） | `SttConfig`（frozen：`provider`/`model`/`base_url`/`api_key`）、`load_stt_config` | 读 `~/.argos/config.json` 的 `stt` 块；无文件/无块 → 全默认（本地 `base`）。`provider="cloud"` 时从 `~/.argos/.env` 解析 `api_key_env` 指向的 key。 |
 
 平台判定用显式 `platform.system()=='Darwin' and platform.machine()=='arm64'`，
 **不靠 `ImportError`**——Linux 也有 mlx 轮子，靠 import 失败判定会静默跑错路径。
@@ -45,8 +45,8 @@
 
 零回归是硬约束：无附件的消息行为与改动前**逐字节一致**（`content` 仍是裸字符串）。
 
-- **能力位**：`ModelTier.multimodal: bool`（[`core/models.py`](../argos/core/models.py)），来自 config / setup 探针，默认 `False`。
-- **门禁**（[`core/loop.py`](../argos/core/loop.py) `run()`）：存在附件但 `tier.multimodal=False` →
+- **能力位**：`ModelTier.multimodal: bool | None`（[`core/models.py`](../argos/core/models.py)），`None`=首次发图时自动探测，`true`/`false`=config/setup 显式 override。
+- **门禁**（[`core/loop.py`](../argos/core/loop.py) `run()`）：存在附件且视觉能力解析为 false →
   抛诚实错误「当前模型不支持图像输入」，顶层兜底转 `Error` 事件——**绝不静默剥图、绝不假装看到**。
 - **注入**：通过门禁后，附件挂在首条 user 消息的 `attachments` 边车字段（`content` 保持字符串）。
 - **物化**（[`core/protocols.py`](../argos/core/protocols.py) `payload()` 一处）：
@@ -56,11 +56,8 @@
 
 ## TUI 接线（[`tui/app.py`](../argos/tui/app.py) + [`tui/widgets/prompt.py`](../argos/tui/widgets/prompt.py)）
 
-**语音（已接）**：`PromptArea` 在输入框为空时拦截空格，发 `VoiceToggle` 消息；
-`app.on_prompt_area_voice_toggle → _voice_toggle` 开/停录音，转写在 `asyncio.to_thread` 上跑，
-转写文本经 `load_text`/普通插入注入（**不模拟粘贴**，避开无标记注入卡死），**不自动提交**
-——用户瞄一眼再回车，防听岔伪装成功。录音/转写/失败都在活动区给明确状态。
-`/voice` 斜杠命令为可发现兜底入口。
+**语音（未启用）**：当前没有 `recorder.py` / `stt.py` / `VoiceToggle` 链路。
+空输入框按空格会走同一个 `/voice` 入口，只显示当前构建未启用语音。
 
 **图片（已接）**：spec §6.2–6.3 的 `Ctrl+V` 贴图（`clipboard_image.read_clipboard_image` →
 `action_paste_image`）、`[图片 #N]` 占位 chip（`prompt.register_image`）已落地。提交时
@@ -101,21 +98,18 @@ Seatbelt 子进程无网络、文件笼死，本就采不了音、读不了剪�
 
 ## 依赖与打包
 
-- **语音默认开**：`sounddevice` + `faster-whisper` 进**基础依赖**（随 `uv sync` 装），模型权重不进包、首次录音懒下载。
-- **Apple Silicon 加速**：`mlx-whisper` 作条件依赖（`sys_platform=='darwin' and platform_machine=='arm64'`）。
-- **云端 STT 可选**：`pyproject.toml` 的 `cloud-stt = ["openai>=1.0.0"]` extra——`uv sync --extra cloud-stt` 开启。
+- **语音依赖未声明**：`pyproject.toml` 当前没有 `sounddevice` / `faster-whisper` / `mlx-whisper`。
+- **后续接入时**：再决定本地 whisper 是否进基础依赖，云端 STT 是否做 extra。
 - **禁 GPL/AGPL 运行依赖**：底层积木全 MIT/Apache（见 spec §4.1）；GPL 工具仅作只读设计参考，绝不拷码。
 
 ## 测试
 
-- `tests/input/`：`test_attachments`、`test_recorder`、`test_stt`、`test_stt_config`（单元：路径检测/校验/媒体类型嗅探、fake `Transcriber`、mock 后端 + 诚实错误路径）
+- `tests/input/`：图片附件路径检测 / 校验 / 媒体类型嗅探。
 - `tests/input/test_model_tier_multimodal`、`test_protocols_multimodal`、`test_loop_multimodal`（能力位、image block 形状、门禁阻断不发请求、零回归）
-- `tests/tui/test_voice.py`：空格触发 `VoiceToggle`、非空空格正常输入、录音→转写→注入循环
-- `tests/test_capability_stt_egress.py`：云端 STT host 进 egress allowlist
-- `tests/test_pyproject_voice_deps.py`：语音依赖声明
+- `tests/test_tui_commands.py`：`/voice` 命令给诚实未启用提示。
 
 ## 范围与分期（YAGNI）
 
-- **本期（TUI）**：语音 = 空格（空框）触发（默认开）；多模态模型内核（方案 C）端到端就绪；图片输入 TUI 入口（路径附加 → `Ctrl+V` 剪贴板贴图 → `[图片 #N]` 占位 chip）已接通。
-- **下一期**：桌面壳复用同一 `input/` 内核，加「按住空格说话」+ 拖拽上传。
+- **本期（TUI）**：多模态模型内核端到端就绪；图片输入 TUI 入口（路径附加 → `Ctrl+V` 剪贴板贴图 → `[图片 #N]` 占位 chip）已接通；语音只提示未启用。
+- **下一期**：补 `recorder.py` / `stt.py` 后再接空格录音；桌面壳复用同一 `input/` 内核，加「按住空格说话」+ 拖拽上传。
 - **明确不做**：实时流式 STT；视频/音频附件喂模型；TUI 内联显示图片缩略（终端图形协议碎，留给桌面期，本期只显示 chip）。

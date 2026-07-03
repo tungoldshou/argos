@@ -39,6 +39,36 @@ def test_load_routing_no_routing_section_returns_builtin_default(tmp_path):
     assert cfg.is_active() is True
 
 
+def test_load_routing_non_object_routing_raises(tmp_path):
+    """Malformed routing config must not be silently treated as missing config."""
+    (tmp_path / "config.json").write_text(json.dumps({
+        "models": {"default": {}},
+        "active": "default",
+        "routing": [],
+    }))
+
+    with pytest.raises(ConfigError, match="routing"):
+        load_routing(tmp_path)
+
+
+def test_load_routing_non_object_by_category_raises(tmp_path):
+    _write_config(tmp_path,
+                  models={"default": {}, "cheap": {}},
+                  routing={"by_category": [["file_edit", "cheap"]]})
+
+    with pytest.raises(ConfigError, match="by_category"):
+        load_routing(tmp_path)
+
+
+def test_load_routing_non_string_default_raises(tmp_path):
+    _write_config(tmp_path,
+                  models={"default": {}, "strong": {}},
+                  routing={"default": False, "by_category": {"verify": "strong"}})
+
+    with pytest.raises(ConfigError, match="default"):
+        load_routing(tmp_path)
+
+
 def test_load_routing_parses_all_fields(tmp_path):
     _write_config(tmp_path,
                   models={"cheap": {}, "default": {}, "strong": {}},
@@ -62,10 +92,24 @@ def test_load_routing_invalid_category_raises(tmp_path):
         load_routing(tmp_path)
 
 
+def test_load_routing_unknown_tier_raises(tmp_path):
+    _write_config(tmp_path, models={"default": {}, "cheap": {}},
+                  routing={"by_category": {"file_edit": "srong"}})
+    with pytest.raises(ConfigError, match="srong"):
+        load_routing(tmp_path)
+
+
 def test_load_routing_garbage_json_raises(tmp_path):
     (tmp_path / "config.json").write_text("not json")
     with pytest.raises(ConfigError, match="config.json 解析失败"):
         load_routing(tmp_path)
+
+
+def test_set_category_non_utf8_config_raises_config_error(tmp_path):
+    (tmp_path / "config.json").write_bytes(b"\xff\xfe")
+
+    with pytest.raises(ConfigError, match="config.json"):
+        set_category(tmp_path, TaskCategory.VERIFY, "strong")
 
 
 def test_set_category_writes_to_config_atomically(tmp_path):
@@ -77,10 +121,71 @@ def test_set_category_writes_to_config_atomically(tmp_path):
     assert cfg.by_category["file_edit"] == "cheap"
 
 
+def test_set_category_uses_active_as_default_when_routing_default_missing(tmp_path):
+    (tmp_path / "config.json").write_text(json.dumps({
+        "active": "local",
+        "models": {"local": {}, "strong": {}},
+    }))
+    new = set_category(tmp_path, TaskCategory.VERIFY, "strong")
+    assert new.default == "local"
+    assert new.by_category["verify"] == "strong"
+
+
 def test_set_category_unknown_tier_raises(tmp_path):
     _write_config(tmp_path, models={"default": {}, "cheap": {}})
     with pytest.raises(ConfigError, match="srong"):
         set_category(tmp_path, TaskCategory.FILE_EDIT, "srong")
+
+
+def test_set_category_rejects_non_object_existing_routing_without_writing(tmp_path):
+    original = {
+        "active": "default",
+        "models": {"default": {}, "strong": {}},
+        "routing": [],
+    }
+    (tmp_path / "config.json").write_text(json.dumps(original))
+
+    with pytest.raises(ConfigError, match="routing"):
+        set_category(tmp_path, TaskCategory.VERIFY, "strong")
+
+    assert json.loads((tmp_path / "config.json").read_text()) == original
+
+
+def test_set_category_rejects_non_object_existing_by_tool_without_writing(tmp_path):
+    original = {
+        "active": "default",
+        "models": {"default": {}, "cheap": {}, "strong": {}},
+        "routing": {"by_tool": [["run_command", "cheap"]]},
+    }
+    (tmp_path / "config.json").write_text(json.dumps(original))
+
+    with pytest.raises(ConfigError, match="by_tool"):
+        set_category(tmp_path, TaskCategory.VERIFY, "strong")
+
+    assert json.loads((tmp_path / "config.json").read_text()) == original
+
+
+def test_set_category_rejects_non_string_existing_default_without_writing(tmp_path):
+    original = {
+        "active": "default",
+        "models": {"default": {}, "strong": {}},
+        "routing": {"default": False},
+    }
+    (tmp_path / "config.json").write_text(json.dumps(original))
+
+    with pytest.raises(ConfigError, match="default"):
+        set_category(tmp_path, TaskCategory.VERIFY, "strong")
+
+    assert json.loads((tmp_path / "config.json").read_text()) == original
+
+
+def test_set_category_rejects_invalid_existing_routing_without_writing(tmp_path):
+    _write_config(tmp_path, models={"default": {}, "strong": {}},
+                  routing={"by_tool": {"run_command": "srong"}})
+    with pytest.raises(ConfigError, match="srong"):
+        set_category(tmp_path, TaskCategory.VERIFY, "strong")
+    raw = json.loads((tmp_path / "config.json").read_text())
+    assert raw["routing"].get("by_category") is None
 
 
 def test_set_category_persists_across_reload(tmp_path):

@@ -71,6 +71,44 @@ def test_path_not_found_chat_message(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_skill_cmd_uses_app_workspace(tmp_path, monkeypatch):
+    """TUI skill commands must scan the workspace Argos was launched for, not process cwd."""
+    from argos.skills_runtime.analysis import AnalysisSkillResult
+    from argos.tui.app import ArgosApp
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    seen: dict[str, Path] = {}
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    other = tmp_path / "other"
+    other.mkdir()
+    monkeypatch.chdir(other)
+
+    async def fake_run_skill(name, args, ctx):  # noqa: ANN001
+        seen["workspace"] = ctx.workspace
+        return AnalysisSkillResult(
+            summary="ok",
+            findings=(),
+            duration_ms=0,
+            errors=(),
+            verdict="passed",
+        )
+
+    monkeypatch.setattr("argos.skills_runtime.run_skill", fake_run_skill)
+    monkeypatch.setattr("argos.skills_runtime.register_builtin_skills", lambda: None)
+
+    await ArgosApp(workspace=workspace)._cmd_verify(Log(), "")
+
+    assert seen["workspace"] == workspace.resolve()
+
+
+@pytest.mark.asyncio
 @pytest.mark.slow
 async def test_pilot_skill_cmd_dispatch(tmp_path, monkeypatch):
     """Pilot e2e:真实 TUI 输入 /verify → 调 run_skill → chat 显 summary。"""

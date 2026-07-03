@@ -211,6 +211,16 @@ def test_save_cache_creates_skills_dir(tmp_path, monkeypatch):
     assert target.exists()
 
 
+def test_default_skills_root_honors_argos_config_dir(tmp_path, monkeypatch):
+    cfg_dir = tmp_path / ".argos"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    e = _parse_entry(_make_entry_dict())
+    target = save_cache(IndexCache(version=1, generated_at=0.0, skills=(e,)))
+
+    assert target == cfg_dir / "skills" / "index.json"
+    assert load_cache() is not None
+
+
 def test_load_cache_returns_none_when_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "argos.skills_curator.index._skills_root", lambda: tmp_path

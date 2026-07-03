@@ -55,8 +55,8 @@ def test_ink_dim_hex_matches_theme() -> None:
 
 
 def test_ink_faint_hex_matches_theme() -> None:
-    """_INK_FAINT must equal $ink-faint (#525A73)."""
-    assert _INK_FAINT == "#525A73"
+    """_INK_FAINT must equal $ink-faint (#6B7494)."""
+    assert _INK_FAINT == "#6B7494"
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -252,7 +252,7 @@ class TestSelectedRowRaise2Bgcolor:
 # ── [MEDIUM] hint line uses $ink-faint ───────────────────────────────────────
 
 class TestHintLineColor:
-    """↑↓ hint line at the bottom of SlashMenu must use $ink-faint (#525A73)."""
+    """↑↓ hint line at the bottom of SlashMenu must use $ink-faint (#6B7494)."""
 
     def test_hint_is_ink_faint(self, menu: SlashMenu) -> None:
         menu._matches = [("tools", "工具")]

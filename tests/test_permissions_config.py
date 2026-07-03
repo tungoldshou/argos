@@ -74,6 +74,36 @@ def test_load_nonexistent_returns_empty(tmp_path, monkeypatch):
     assert cfg.allow == ()
 
 
+def test_default_path_honors_argos_config_dir(tmp_path, monkeypatch):
+    from argos import config as C
+    from argos.permissions import config as _cfg
+
+    cfg_dir = tmp_path / "cfg"
+    p = cfg_dir / "permissions.json"
+    p.parent.mkdir(parents=True)
+    p.write_text(json.dumps({"version": 1}))
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
+    monkeypatch.setattr(_cfg, "CONFIG_PATH", None)
+
+    assert _cfg.load().version == 1
+
+
+def test_save_allow_rule_default_path_honors_argos_config_dir(tmp_path, monkeypatch):
+    from argos import config as C
+    from argos.permissions import config as _cfg
+
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
+    monkeypatch.setattr(_cfg, "CONFIG_PATH", None)
+    _cfg._reset_config()
+
+    assert _cfg.save_allow_rule("run_command", r"^pytest")
+    assert (cfg_dir / "permissions.json").exists()
+    assert _cfg.get_config().match_allow("run_command", "pytest -q") is not None
+
+
 def test_load_valid_json(tmp_path, monkeypatch):
     from argos.permissions import config as _cfg
     p = tmp_path / "permissions.json"

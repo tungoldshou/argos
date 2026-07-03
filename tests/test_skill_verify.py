@@ -24,6 +24,18 @@ def _ctx(workspace: Path) -> AnalysisSkillContext:
     return AnalysisSkillContext(workspace=workspace, approval_level="auto", run_id="r1")
 
 
+def test_read_verify_cmd_honors_argos_config_dir(tmp_path, monkeypatch):
+    """`/verify` default command must come from the active Argos config dir."""
+    from argos.skills_runtime.builtin.verify import _read_verify_cmd
+
+    cfg_dir = tmp_path / ".argos"
+    cfg_dir.mkdir()
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    (cfg_dir / "config.json").write_text('{"verify_cmd": "echo from-config-dir"}', encoding="utf-8")
+
+    assert _read_verify_cmd() == "echo from-config-dir"
+
+
 def test_verify_calls_verifier_verify_directly(tmp_path):
     """`/verify` 走 `Verifier.verify(...)` 入口,不动 `propose_verify`(D9/D13 关键澄清)。"""
     fake_verifier = MagicMock()
