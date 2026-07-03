@@ -102,3 +102,59 @@ def test_lsp_cmd_lists_servers(isolated_lsp_home, monkeypatch):
     assert statuses["rust"] == "NotStarted"
     # disabled_one: config.disabled=True → 反映在 LspServerConfig.disabled(给 /lsp 渲染用)
     assert cfg.servers["disabled_one"].disabled is True
+
+
+@pytest.mark.asyncio
+async def test_lsp_unknown_arg_prints_usage(isolated_lsp_home, monkeypatch):
+    """/lsp 只接受空参数或 reload,未知参数应报用法。"""
+    from argos.lsp import _reset_config
+    from argos.lsp import config as _lsp_config
+    from argos.tui.app import ArgosApp
+
+    isolated_lsp_home.mkdir(parents=True, exist_ok=True)
+    p = isolated_lsp_home / "lsp.json"
+    p.write_text(json.dumps({"version": 1, "servers": {}}))
+    monkeypatch.setattr(_lsp_config, "LSP_CONFIG_PATH", p)
+    _reset_config()
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    log = Log()
+    await ArgosApp()._lsp_cmd(log, "bogus")
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert "Usage" in text or "用法" in text
+    assert any(kind == "error" for _line, kind in log.lines)
+
+
+@pytest.mark.asyncio
+async def test_lsp_reload_arg_is_case_insensitive(isolated_lsp_home, monkeypatch):
+    """/lsp RELOAD should behave like /lsp reload."""
+    from argos.lsp import _reset_config
+    from argos.lsp import config as _lsp_config
+    from argos.tui.app import ArgosApp
+
+    isolated_lsp_home.mkdir(parents=True, exist_ok=True)
+    p = isolated_lsp_home / "lsp.json"
+    p.write_text(json.dumps({"version": 1, "servers": {}}))
+    monkeypatch.setattr(_lsp_config, "LSP_CONFIG_PATH", p)
+    _reset_config()
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    log = Log()
+    await ArgosApp()._lsp_cmd(log, "RELOAD")
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert "Usage" not in text and "用法" not in text
+    assert any(kind == "system" for _line, kind in log.lines)

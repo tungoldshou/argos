@@ -34,6 +34,17 @@ def test_write_file_allows_add_dir(tmp_path, monkeypatch):
     assert (extra / "f.txt").read_text() == "hi"        # 授权目录:真写入
 
 
+def test_read_file_blocks_add_dir(tmp_path, monkeypatch):
+    ws = tmp_path / "ws"; ws.mkdir()
+    extra = tmp_path / "extra"; extra.mkdir()
+    (extra / "secret.txt").write_text("secret")
+    monkeypatch.setattr(files, "WORKSPACE", ws.resolve())
+    monkeypatch.setenv("ARGOS_ADD_DIRS", str(extra))
+    out = files.read_file(str(extra / "secret.txt"))
+    assert "越出" in out
+    assert "第 1" not in out
+
+
 def test_write_file_blocks_unlisted_dir(tmp_path, monkeypatch):
     ws = tmp_path / "ws"; ws.mkdir()
     other = tmp_path / "other"; other.mkdir()

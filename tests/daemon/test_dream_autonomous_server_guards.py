@@ -44,6 +44,61 @@ def _fake_pipeline(*, is_running: bool = False, cross_busy: bool = False) -> Mag
     return p
 
 
+def test_dreams_dir_honors_argos_config_dir(tmp_path: Path, monkeypatch):
+    from argos import config as C
+
+    cfg_dir = tmp_path / ".argos"
+    monkeypatch.delenv("ARGOS_DREAMS_DIR", raising=False)
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
+
+    assert _make_server(tmp_path)._dreams_dir() == cfg_dir / "dreams"
+
+
+def test_dream_pipeline_paths_honor_argos_config_dir(tmp_path: Path, monkeypatch):
+    from types import SimpleNamespace
+    from argos import config as C
+
+    cfg_dir = tmp_path / ".argos"
+    monkeypatch.delenv("ARGOS_DREAMS_DIR", raising=False)
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
+
+    seen: dict[str, Path] = {}
+
+    class FakeDreamPipeline:
+        def __init__(self, **kwargs):  # noqa: ANN003
+            seen["candidates_root"] = kwargs["candidates_root"]
+            seen["skills_root"] = kwargs["skills_root"]
+            seen["memory_dir"] = kwargs["memory_dir"]
+            seen["dreams_dir"] = kwargs["dreams_dir"]
+
+    class FakeEvalRunner:
+        def __init__(self, *, base_dir, **kwargs):  # noqa: ANN003
+            seen["eval_base"] = base_dir
+
+    class FakeModel:
+        async def complete(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            return "ok"
+
+    monkeypatch.setattr("argos.learning.dream.DreamPipeline", FakeDreamPipeline)
+    monkeypatch.setattr("argos.eval.runner.EvalRunner", FakeEvalRunner)
+    monkeypatch.setattr(
+        "argos.app_factory.build_run_stack",
+        lambda *args, **kwargs: SimpleNamespace(loop_factory=lambda: object()),
+    )
+
+    srv = _make_server(tmp_path)
+    srv._components = SimpleNamespace(model=FakeModel())
+    srv._get_dream_pipeline()
+
+    assert seen["candidates_root"] == cfg_dir / "learning" / "candidates"
+    assert seen["skills_root"] == cfg_dir / "skills"
+    assert seen["memory_dir"] == cfg_dir / "memory"
+    assert seen["dreams_dir"] == cfg_dir / "dreams"
+    assert seen["eval_base"] == cfg_dir / "dreams" / "eval"
+
+
 # ── guard 1: is_running → False, no start ────────────────────────────────────
 
 @pytest.mark.asyncio

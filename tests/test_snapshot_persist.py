@@ -31,6 +31,17 @@ def test_snapshot_root_under_argos_home(tmp_path: Path, monkeypatch: pytest.Monk
     assert "argos-snapshots" not in str(root)  # 旧 tempdir 路径消失
 
 
+def test_snapshot_root_honors_env_local_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """SNAPSHOT_ROOT should use the same config dir source as model config loading."""
+    from argos import config as C
+
+    cfg_dir = tmp_path / "from-env-local"
+    monkeypatch.delenv("ARGOS_CONFIG_DIR", raising=False)
+    monkeypatch.setattr(C, "_ENV", {"ARGOS_CONFIG_DIR": str(cfg_dir)})
+
+    assert _snapshot_root() == cfg_dir / "snapshots"
+
+
 # ── (b) 快照写入后重新解析 SNAPSHOT_ROOT 仍可读(模拟跨重启) ───────────────
 
 def test_snapshot_survives_reboot_simulation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

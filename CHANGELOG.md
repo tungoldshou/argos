@@ -7,6 +7,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+- Runtime defaults now consistently follow `ARGOS_CONFIG_DIR` for MCP config, LSP prompt-tool exposure, external-surface warnings, user skills, skill index cache, Dream candidates/CLI roots/material gate, and permissions audit logs unless a test or caller injects an explicit path.
+- `argos --selftest` now uses the current Python interpreter when safe, while avoiding frozen/PyInstaller Argos binaries as a fake Python interpreter.
+- `argos dream` now reports malformed config/runtime initialization failures as failures instead of treating every `build_components()` exception as no-key memory-only mode.
+
 ### Added
 - **v6「可托付的贾维斯」— P0-P6 全落地**:将 Argos 从单进程 TUI agent 重构为**内核 / 协议 / 客户端三层架构**,让"守着看"变成"托付给它跑、随时接管"成为可能。总设计 `docs/argos-v6-design.md`(8 路子系统侦察 + 3 派提案 + 3 镜头裁决,Confidant 胜出)。P0-P6 各阶段：
   - **P0 协议层**(`argos/protocol/`):全事件族 + `EventBus` 搬入 `protocol/events.py`(内核与客户端共享 ABI);`EventEnvelope`(`v/seq/kind/id/ts/session/run/data`);`tui/events.py` 降为纯转发 shim,52 处 import 路径零破坏;`tests/protocol/` 67 个黄金 JSON 字段冻结 + round-trip + 架构契约测试

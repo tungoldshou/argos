@@ -4,9 +4,12 @@
 无 config.json 时合成单个 DEFAULT_TIER(旧 env 回退,DEFAULT_KEYS 逗号拆分喂 CredentialPool)。"""
 from __future__ import annotations
 
+import math
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse
 
 from argos.i18n import t
 
@@ -23,7 +26,10 @@ def _load_env_local() -> dict[str, str]:
             line = line.strip()
             if "=" in line and not line.startswith("#"):
                 k, v = line.split("=", 1)
-                env[k.strip()] = v.strip()
+                v = v.strip()
+                if len(v) >= 2 and v[0] == v[-1] and v[0] in ("'", '"'):
+                    v = v[1:-1]
+                env[k.strip()] = v
     return env
 
 
@@ -114,6 +120,19 @@ class ConfigError(Exception):
     """配置文件畸形/缺字段/active 悬空 —— fail-closed,诚实报错不假装能跑。"""
 
 
+def _write_json_atomic(path: Path, raw: dict) -> None:
+    tmp = path.with_name(f"{path.name}.tmp")
+    try:
+        tmp.write_text(_json.dumps(raw, indent=2, ensure_ascii=False))
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
 def _config_dir() -> Path:
     return Path(get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
 
@@ -124,22 +143,41 @@ def load_env_file(path: Path) -> dict[str, str]:
     if path.exists():
         for line in path.read_text().splitlines():
             line = line.strip()
+            if line.startswith("export "):
+                line = line[len("export "):].lstrip()
             if "=" in line and not line.startswith("#"):
                 k, v = line.split("=", 1)
-                env[k.strip()] = v.strip()
+                v = v.strip()
+                if len(v) >= 2 and v[0] == v[-1] and v[0] in ("'", '"'):
+                    v = v[1:-1]
+                env[k.strip()] = v
     return env
 
 
 _REQUIRED = ("protocol", "base_url", "model")
 _VALID_PROTOCOLS = ("anthropic", "openai")
+_ENV_VAR_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
-def _validate_profile(name: str, m: dict) -> None:
+def _validate_profile(name: str, m: dict, *, require_key_env: bool = True) -> None:
     """校验单个 profile dict(fail-closed,raises ConfigError)。load_config 与 set_active 共用,
     避免把 active 切到一个畸形 profile 后失败被推迟到下次启动才暴露。"""
+    if not str(name).strip() or "\n" in str(name) or "\r" in str(name):
+        raise ConfigError(t("config.profile.missing_field", name=name, field="profile name"))
+    if not isinstance(m, dict):
+        raise ConfigError(t("config.profile.missing_field", name=name, field="profile object"))
     for f in _REQUIRED:
-        if not m.get(f):
+        value = m.get(f)
+        if not isinstance(value, str) or not value.strip() or "\n" in value or "\r" in value:
             raise ConfigError(t("config.profile.missing_field", name=name, field=f))
+    base_url = urlparse(m["base_url"])
+    if base_url.scheme not in ("http", "https") or not base_url.netloc:
+        raise ConfigError(t("config.profile.invalid_base_url", name=name, base_url=m["base_url"]))
+    api_key_env = m.get("api_key_env")
+    if require_key_env and (not isinstance(api_key_env, str) or not api_key_env.strip()):
+        raise ConfigError(t("config.profile.missing_field", name=name, field="api_key_env"))
+    if api_key_env and (not isinstance(api_key_env, str) or not _ENV_VAR_RE.fullmatch(api_key_env)):
+        raise ConfigError(t("config.profile.invalid_api_key_env", name=name, env=api_key_env))
     # protocol 必须在已知集合内:拼错(如 'anthropc')会让 get_protocol 静默退化成 Anthropic
     # 框架去打 OpenAI 端点 → 运行时困惑的假退化;在加载/切换期 fail-closed 明确报错。
     if m["protocol"] not in _VALID_PROTOCOLS:
@@ -150,6 +188,8 @@ def _validate_profile(name: str, m: dict) -> None:
     # 数字字段:非数字 int() 会漏 ValueError;0/负数会让请求 400 或 on_context 占用%除零。
     # 一律包成 ConfigError 守住 fail-closed 契约,且要求为正整数。
     try:
+        if isinstance(m.get("max_tokens"), (bool, float)) or isinstance(m.get("context_window"), (bool, float)):
+            raise TypeError("token limit is not an integer")
         mt = int(m.get("max_tokens", 4096))
         cw = int(m.get("context_window", 200_000))
     except (ValueError, TypeError) as e:
@@ -158,6 +198,26 @@ def _validate_profile(name: str, m: dict) -> None:
     if mt <= 0 or cw <= 0:
         raise ConfigError(
             t("config.profile.non_positive_tokens", name=name, mt=mt, cw=cw))
+    if "multimodal" in m and not isinstance(m["multimodal"], bool):
+        raise ConfigError(t("config.profile.invalid_multimodal", name=name))
+    if "embedding_model" in m:
+        embedding_model = m["embedding_model"]
+        if not isinstance(embedding_model, str) or not embedding_model.strip() or "\n" in embedding_model or "\r" in embedding_model:
+            raise ConfigError(t("config.profile.missing_field", name=name, field="embedding_model"))
+    has_price_in = m.get("price_in") is not None
+    has_price_out = m.get("price_out") is not None
+    if has_price_in != has_price_out:
+        raise ConfigError(t("config.profile.invalid_price", name=name))
+    if has_price_in:
+        try:
+            if isinstance(m["price_in"], bool) or isinstance(m["price_out"], bool):
+                raise TypeError("boolean is not a price")
+            price_in = float(m["price_in"])
+            price_out = float(m["price_out"])
+        except (ValueError, TypeError) as e:
+            raise ConfigError(t("config.profile.invalid_price", name=name)) from e
+        if not math.isfinite(price_in) or not math.isfinite(price_out) or price_in < 0 or price_out < 0:
+            raise ConfigError(t("config.profile.invalid_price", name=name))
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,13 +238,22 @@ def load_config() -> ArgosConfig:
         raise ConfigError(t("config.load.no_config_file", path=cfile))   # Task 5 的回退在 active_tier 层处理
     try:
         raw = _json.loads(cfile.read_text())
-    except _json.JSONDecodeError as e:
+    except (_json.JSONDecodeError, UnicodeDecodeError) as e:
         raise ConfigError(t("config.load.json_parse_error", exc=e)) from e
+    if not isinstance(raw, dict):
+        raise ConfigError(t("config.load.json_parse_error", exc="top-level JSON must be an object"))
     models = raw.get("models") or {}
+    if not isinstance(models, dict):
+        raise ConfigError(t("config.profile.missing_field", name="config", field="models"))
     active = raw.get("active")
+    if not isinstance(active, str) or not active.strip() or "\n" in active or "\r" in active:
+        raise ConfigError(t("config.load.active_not_in_models", active=active))
     if not models or active not in models:
         raise ConfigError(t("config.load.active_not_in_models", active=active))
-    secrets = load_env_file(cdir / ".env")
+    try:
+        secrets = load_env_file(cdir / ".env")
+    except (OSError, UnicodeDecodeError) as e:
+        raise ConfigError(t("config.load.env_parse_error", path=cdir / ".env", exc=e)) from e
     tiers, key_envs, embed_models = {}, {}, {}
     for name, m in models.items():
         _validate_profile(name, m)
@@ -297,6 +366,8 @@ def active_embedder():
 def tier_for(name: str):
     """按 profile 名取 ModelTier(供 `argos --model <name>` 启动覆盖用);无 config.json 时只认
     DEFAULT_TIER 的名字,其余 → ConfigError。"""
+    if not isinstance(name, str) or not name.strip() or "\n" in name or "\r" in name:
+        raise ConfigError(t("config.tier_for.not_found", name=name, available=[]))
     if _has_config_file():
         cfg = load_config()
         if name not in cfg.tiers:
@@ -304,15 +375,21 @@ def tier_for(name: str):
         return cfg.tiers[name]
     if name == DEFAULT_TIER.name:
         return DEFAULT_TIER
-    raise ConfigError(t("config.tier_for.no_config", default=DEFAULT_TIER.name))
+    raise ConfigError(t("config.tier_for.no_config", name=name, default=DEFAULT_TIER.name))
 
 
 def key_for(name: str) -> str | None:
     """按 profile 名取密钥(供启动覆盖用)。"""
+    if not isinstance(name, str) or not name.strip() or "\n" in name or "\r" in name:
+        raise ConfigError(t("config.tier_for.not_found", name=name, available=[]))
     if _has_config_file():
         cfg = load_config()
+        if name not in cfg.key_envs:
+            raise ConfigError(t("config.tier_for.not_found", name=name, available=list(cfg.tiers)))
         env_name = cfg.key_envs.get(name) or ""
         return os.environ.get(env_name) or cfg.secrets.get(env_name) or None
+    if name != DEFAULT_TIER.name:
+        raise ConfigError(t("config.tier_for.no_config", name=name, default=DEFAULT_TIER.name))
     return DEFAULT_KEYS[0] if DEFAULT_KEYS else None
 
 
@@ -329,11 +406,20 @@ def set_active(name: str) -> None:
     cfile = _config_dir() / "config.json"
     if not cfile.exists():
         raise ConfigError(t("config.set_active.no_config"))
-    raw = _json.loads(cfile.read_text())
+    try:
+        raw = _json.loads(cfile.read_text())
+    except (_json.JSONDecodeError, UnicodeDecodeError) as e:
+        raise ConfigError(t("config.load.json_parse_error", exc=e)) from e
+    if not isinstance(raw, dict):
+        raise ConfigError(t("config.load.json_parse_error", exc="top-level JSON must be an object"))
     models = raw.get("models") or {}
+    if not isinstance(models, dict):
+        raise ConfigError(t("config.profile.missing_field", name="config", field="models"))
+    if not isinstance(name, str) or not name.strip() or "\n" in name or "\r" in name:
+        raise ConfigError(t("config.set_active.not_found", name=name))
     if name not in models:
         raise ConfigError(t("config.set_active.not_found", name=name))
     # fail-closed:切之前校验目标 profile 合法,避免切到畸形 profile 后失败被推迟到下次启动才暴露。
     _validate_profile(name, models[name])
     raw["active"] = name
-    cfile.write_text(_json.dumps(raw, indent=2, ensure_ascii=False))
+    _write_json_atomic(cfile, raw)

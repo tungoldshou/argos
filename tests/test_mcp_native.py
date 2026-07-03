@@ -67,6 +67,22 @@ def test_zero_config_is_honest(tmp_path):
     mgr.close()
 
 
+def test_default_path_honors_argos_config_dir(tmp_path, monkeypatch):
+    import argos.mcp_native as mcp_native
+
+    cfg_dir = tmp_path / ".argos"
+    cfg_dir.mkdir()
+    (cfg_dir / "mcp.json").write_text(json.dumps({"servers": {}}), encoding="utf-8")
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(mcp_native, "CONFIG_PATH", None)
+
+    mgr = McpManager()
+    try:
+        assert mgr._config_path == cfg_dir / "mcp.json"
+    finally:
+        mgr.close()
+
+
 # 应答握手但对 tools/call 永不回应的 server(模拟"活着但沉默"——常见 MCP 挂法)。
 _SILENT_CALL_SERVER = textwrap.dedent('''
     import sys, json

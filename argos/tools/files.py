@@ -31,7 +31,7 @@ def _ws() -> Path:
         return WORKSPACE
 
 
-def _safe_path(rel: str) -> Path | None:
+def _safe_path(rel: str, *, allow_extra_write_dirs: bool = False) -> Path | None:
     """把传入的 path 解析为 workspace 内的安全路径,越界返 None。
 
     路径约定(适配 TB 任务):TB 任务 agent 看到的"工作区"是容器内 /app(worktree 在
@@ -62,7 +62,9 @@ def _safe_path(rel: str) -> Path | None:
 
     if _within(ws):
         return p
-    # #2 CC对齐:--add-dir / ARGOS_ADD_DIRS 授权的额外目录也放行(用户显式授权 → 应用层写牢笼之外可写)。
+    if not allow_extra_write_dirs:
+        return None
+    # #2 CC对齐:--add-dir / ARGOS_ADD_DIRS 授权的额外目录只放行写工具。
     from argos.config import extra_write_dirs
     if any(_within(extra) for extra in extra_write_dirs()):
         return p
@@ -88,6 +90,8 @@ def read_file(path: str, offset: int = 0, limit: int | None = None) -> str:
         return t("tools.files.read.failed", exc=e)
     lines = text.splitlines(keepends=True)
     total = len(lines)
+    if total == 0:
+        return t("tools.files.read.header", path=path, start=0, end=0, total=0, chunk="")
     if offset >= total:
         return t("tools.files.read.offset_oob", total=total, offset=offset)
     end = offset + limit if limit is not None else total
@@ -99,7 +103,7 @@ def read_file(path: str, offset: int = 0, limit: int | None = None) -> str:
 
 def write_file(path: str, content: str) -> str:
     """把内容写入 workspace 内某个文件(覆盖)。path 是相对 workspace 的路径。"""
-    p = _safe_path(path)
+    p = _safe_path(path, allow_extra_write_dirs=True)
     if p is None:
         return t("tools.files.write.outside_workspace", path=path)
     try:
@@ -122,7 +126,7 @@ def edit_file(path: str, old: str, new: str, all_occurrences: bool = False) -> s
     all_occurrences=False(默认)=唯一匹配,多处命中报错(同旧);
     all_occurrences=True = 替换全部出现,返回 '已编辑 path(N 处)';
     上限 _OCCURRENCES_CAP=1000(防爆)。"""
-    p = _safe_path(path)
+    p = _safe_path(path, allow_extra_write_dirs=True)
     if p is None:
         return t("tools.files.edit.outside_workspace", path=path)
     if not p.exists():

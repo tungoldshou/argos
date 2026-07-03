@@ -204,9 +204,9 @@ class ConductorSupervisor:
         if getattr(s, "action", "run") != "dream":
             return True
         try:
-            from argos.learning.candidates import DEFAULT_ROOT
+            from argos.learning.candidates import default_root
             from argos.learning.dream import has_material
-            return has_material(DEFAULT_ROOT)
+            return has_material(default_root())
         except Exception as exc:  # noqa: BLE001 — 学习模块故障视为无材料
             log.warning("conductor_supervisor: 材料门检查失败(视为无材料,静默): %s", exc)
             return False

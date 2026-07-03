@@ -158,12 +158,13 @@ class StartupSplash(Static):
         """host 切换入口:切前缀 + 切色。"""
         self.plan_mode = bool(active)
 
-    def set_bad_config(self, reason: str) -> None:
+    def set_bad_config(self, reason: str, *, source: str | None = None) -> None:
         """启动时坏配置 banner(覆盖主标题下一行)。
         reason 来自 HooksConfigError / LspConfigError,简洁一行即可,绝不长段(spec §2.4)。
         reason 串首部含 'LSP' → 显 'LSP 已禁用' 前缀;否则显 'hooks 已禁用'(默认,向后兼容)。"""
         # 存属性;_refresh 时拼到 _text 末尾
         self._bad_config = reason
+        self._bad_config_source = source
         self._refresh()
 
     def _refresh(self) -> None:  # type: ignore[no-redef]
@@ -176,13 +177,19 @@ class StartupSplash(Static):
             # reason 串首部含 'permissions' → 'permissions 已禁用'(spec 2026-06-06 §2.6);
             # 'LSP' → 'LSP 已禁用'(同 hooks/LSP 行为);否则 'hooks 已禁用'(默认)。
             reason = str(self._bad_config)
-            if "permissions" in reason:
+            source = getattr(self, "_bad_config_source", None)
+            if source == "config":
+                prefix = t("widget.splash_bad_config_config")
+                text += f"\n       ⚠︎ {prefix}" + t("widget.splash_bad_config_error_suffix", reason=reason)
+            elif "permissions" in reason:
                 prefix = t("widget.splash_bad_config_permissions")
+                text += f"\n       ⚠︎ {prefix}" + t("widget.splash_bad_config_suffix", reason=reason)
             elif "LSP" in reason:
                 prefix = t("widget.splash_bad_config_lsp")
+                text += f"\n       ⚠︎ {prefix}" + t("widget.splash_bad_config_suffix", reason=reason)
             else:
                 prefix = t("widget.splash_bad_config_hooks")
-            text += f"\n       ⚠︎ {prefix}" + t("widget.splash_bad_config_suffix", reason=reason)
+                text += f"\n       ⚠︎ {prefix}" + t("widget.splash_bad_config_suffix", reason=reason)
         self._text = text
         self.update(self._text)
         # 切色 CSS 类:plan mode 走 $primary 冷靛蓝(对齐 glow.phase_color("plan")),act 走 $accent

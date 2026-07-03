@@ -25,11 +25,21 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from argos import config
 from argos.i18n import t
 
-CONFIG_PATH = Path.home() / ".argos" / "mcp.json"
+CONFIG_PATH: Path | None = None
 _INIT_TIMEOUT_S = 15.0
 _CALL_TIMEOUT_S = 60.0
+
+
+def resolve_config_path(path: Path | None = None) -> Path:
+    return Path(
+        path or CONFIG_PATH or (
+            Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+            / "mcp.json"
+        )
+    )
 
 
 @dataclass
@@ -201,7 +211,7 @@ class McpManager:
     """进程内 MCP 连接管理器(单例)。懒加载 ~/.argos/mcp.json;连接失败优雅降级。"""
 
     def __init__(self, config_path: Path | None = None) -> None:
-        self._config_path = config_path or CONFIG_PATH
+        self._config_path = resolve_config_path(config_path)
         self._servers: dict[str, _StdioServer] = {}
         self._loaded = False
         self._lock = threading.Lock()

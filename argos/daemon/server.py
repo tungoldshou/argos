@@ -1299,10 +1299,10 @@ class DaemonHTTPServer:
 
     def _conductor_orders_dir(self):
         """conductor OrderStore 目录（与 conductor_supervisor 一致）。"""
-        from pathlib import Path
         if self._conductor is not None:
             return self._conductor._orders_dir
-        return Path.home() / ".argos" / "conductor"
+        from argos.daemon.__main__ import _default_conductor_dir
+        return _default_conductor_dir()
 
     async def _handle_create_order(self, writer, headers, body):
         """POST /orders — 创建 StandingOrder。
@@ -1575,7 +1575,8 @@ class DaemonHTTPServer:
         override = os.environ.get("ARGOS_DREAMS_DIR")
         if override:
             return Path(override)
-        return Path(os.path.expanduser("~/.argos/dreams"))
+        from argos.daemon.__main__ import _default_argos_dir
+        return _default_argos_dir() / "dreams"
 
     def _get_dream_pipeline(self):
         """懒初始化并缓存 DreamPipeline 单例（单飞锁在实例上，必须复用同一实例）。
@@ -1592,16 +1593,17 @@ class DaemonHTTPServer:
         if client is None:
             return None
 
-        import os
         from argos.app_factory import build_run_stack
         from argos.eval.runner import EvalRunner
-        from argos.learning.candidates import DEFAULT_ROOT
         from argos.learning.dream import DreamPipeline, HintedRunner
 
         dreams_dir = self._dreams_dir()
-        skills_root = Path(os.path.expanduser("~/.argos/skills"))
-        memory_dir = Path(os.path.expanduser("~/.argos/memory"))
-        eval_base = Path(os.path.expanduser("~/.argos/dreams/eval"))
+        from argos.daemon.__main__ import _default_argos_dir
+        argos_dir = _default_argos_dir()
+        candidates_root = argos_dir / "learning" / "candidates"
+        skills_root = argos_dir / "skills"
+        memory_dir = argos_dir / "memory"
+        eval_base = dreams_dir / "eval"
 
         # per-run 隔离栈的 loop_factory（() -> AgentLoop）；EvalRunner 期望
         # loop_factory(model_tier) → loop，故包一层吞掉 tier（Dream 内不分档）。
@@ -1637,7 +1639,7 @@ class DaemonHTTPServer:
             await self._manager.fanout(CONDUCTOR_RUN_ID, payload)
 
         self._dream_pipeline = DreamPipeline(
-            candidates_root=DEFAULT_ROOT,
+            candidates_root=candidates_root,
             skills_root=skills_root,
             memory_dir=memory_dir,
             dreams_dir=dreams_dir,

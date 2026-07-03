@@ -78,7 +78,7 @@ async def test_retry_no_messages():
 
 @pytest.mark.asyncio
 async def test_retry_no_get_messages_attribute():
-    """store 无 get_messages 属性 → 报"当前 store 不支持"。"""
+    """store 无 get_messages 属性 → 报当前会话无持久 store。"""
     class _BareStore:
         pass
     class _StubLoop:
@@ -86,13 +86,13 @@ async def test_retry_no_get_messages_attribute():
     app = _make_app(run_active=False, loop_factory=lambda: _StubLoop())
     log = TranscriptLog()
     await app._retry(log)  # type: ignore[attr-defined]
-    assert "当前 store 不支持" in log.rendered_text
+    assert "持久 store" in log.rendered_text
 
 
 @pytest.mark.asyncio
 async def test_retry_no_loop_factory():
-    """_loop_factory 返 None → 报"当前 store 不支持"。"""
+    """_loop_factory 返 None → 报当前会话无持久 store。"""
     app = _make_app(run_active=False, loop_factory=lambda: None)
     log = TranscriptLog()
     await app._retry(log)  # type: ignore[attr-defined]
-    assert "当前 store 不支持" in log.rendered_text
+    assert "持久 store" in log.rendered_text

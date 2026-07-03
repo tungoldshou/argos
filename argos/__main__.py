@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import shlex
 import sys
 from pathlib import Path
 
@@ -56,6 +57,7 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sp_setup.add_argument("--advanced", action="store_true", help=t("cli.setup.advanced_help"))
+    sp_setup.add_argument("setup_action", nargs="?", choices=["status"], help=t("cli.setup.status.help"))
     sp_update = sub.add_parser(
         "self-update",
         help=t("cli.self_update.help"),
@@ -94,6 +96,17 @@ class _SelftestModel:
 
     async def complete(self, messages, *, system) -> str:
         return self._next()
+
+
+def _selftest_verify_cmd() -> str:
+    from argos.tools import ALLOWED_CMDS
+
+    executable = Path(sys.executable)
+    if not getattr(sys, "frozen", False) and executable.name in ALLOWED_CMDS:
+        python_cmd = shlex.quote(str(executable))
+    else:
+        python_cmd = "python3"
+    return f"{python_cmd} -c \"import st; assert st.f() == 1\""
 
 
 def resolve_workspace(project_arg: str | None) -> str | None:
@@ -138,8 +151,7 @@ def _run_selftest() -> int:
     with tempfile.TemporaryDirectory() as td:
         proj = Path(td) / "proj"
         proj.mkdir()
-        # selftest 用系统 python3 自包含验证 —— 不依赖 pytest 在 PATH(裸 binary 运行时
-        # shell PATH 常无 pytest;真实用户在自己项目里 pytest 在其 venv,不受影响)。
+        # selftest 用当前解释器自包含验证 —— 不依赖 pytest 或 python3 在 PATH。
         os.environ["ARGOS_WORKSPACE"] = str(proj)
         tok = runtime.use_project(str(proj))
         store = None
@@ -164,7 +176,7 @@ def _run_selftest() -> int:
             loop = AgentLoop(
                 store=store, bus=EventBus(), sandbox=sandbox, broker=broker, model=model,
                 verifier=Verifier(max_rounds=3),
-                config=LoopConfig(verify_cmd='python3 -c "import st; assert st.f() == 1"',
+                config=LoopConfig(verify_cmd=_selftest_verify_cmd(),
                                   approval_level=ApprovalLevel.AUTO, compaction=False),
                 workspace=proj, verify_dir=proj,
             )
@@ -260,9 +272,8 @@ def main() -> None:
         os.environ["ARGOS_SANDBOX"] = "1"
     if getattr(args, "add_dir", None):   # --add-dir PATH … → 额外可写目录(env 是 extra_write_dirs() 真源)
         os.environ["ARGOS_ADD_DIRS"] = os.pathsep.join(args.add_dir)
-    # 启动时查更新(同步,失败静默,stderr 提示)。headless `exec` 跳过 —— CI / 脚本化场景
-    # 既不该被 5s 网络检查拖慢,也不该往 stderr 喷升级提示污染输出。
-    if getattr(args, "command", None) != "exec":
+    # 启动时查更新(同步,失败静默,stderr 提示)。只给默认 TUI 启动做;显式子命令保持输出干净。
+    if getattr(args, "command", None) is None and not args.selftest:
         _spawn_update_check()
 
     # 子命令分发:func 子命令(exec / self-update / …)的返回值即进程退出码(sys.exit 真正传递,
@@ -272,12 +283,20 @@ def main() -> None:
 
     if getattr(args, "command", None) == "setup":
         from argos import setup_wizard
+        if getattr(args, "setup_action", None) == "status":
+            setup_wizard.print_status(writer=print)
+            return
         _con = None
         if sys.stdout.isatty():   # 真终端才上色 + spinner;管道/CI 保持纯文本
             from rich.console import Console
             _con = Console()
+        def _setup_reader(prompt: str = "") -> str:
+            if prompt == t("setup.prompt_paste_key"):
+                import getpass
+                return getpass.getpass(prompt)
+            return input(prompt)
         asyncio.run(setup_wizard.run(
-            reader=lambda prompt="": input(prompt), writer=print,
+            reader=_setup_reader, writer=print,
             console=_con, advanced=getattr(args, "advanced", False)))
         return
 

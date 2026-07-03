@@ -37,6 +37,10 @@ EN: dict[str, str] = {
     "perception.executor.screenshot_failed": (
         "Screenshot failed (exit {rc}): {err}"
     ),
+    "perception.executor.screen_recording_denied": (
+        "The system denied Screen Recording permission. Go to System Settings → Privacy & Security → Screen Recording "
+        "and add your terminal (Terminal / iTerm / Warp / etc.), then retry."
+    ),
     # executor._screenshot: unknown error fallback
     "perception.executor.unknown_error": "unknown error",
     # executor._screenshot: success
@@ -161,6 +165,10 @@ ZH: dict[str, str] = {
     # executor._screenshot: failure
     "perception.executor.screenshot_failed": (
         "截图失败(exit {rc}): {err}"
+    ),
+    "perception.executor.screen_recording_denied": (
+        "系统拒绝了屏幕录制权限。请前往「系统设置 → 隐私与安全性 → 屏幕录制」,"
+        "将终端(Terminal / iTerm / Warp 等)加入允许列表后重试。"
     ),
     # executor._screenshot: unknown error fallback
     "perception.executor.unknown_error": "未知错误",

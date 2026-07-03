@@ -18,22 +18,23 @@ EN: dict[str, str] = {
     "cli.sandbox.help": "Enable the OS sandbox (Seatbelt/bwrap kernel cage: no network, writes caged to the workspace). Opt-in, off by default; governance (approval + egress + AST limits) applies either way. Or set ARGOS_SANDBOX=1.",
     "cli.add_dir.help": "Grant write access to a directory outside the workspace (repeatable). The file tools and the write-cage treat it as writable; under --sandbox it's also added to the kernel cage. Or set ARGOS_ADD_DIRS (path-separated).",
     # setup sub-command
-    "cli.setup.help": "Interactive wizard to connect a model (choose provider → enter key → probe → save)",
-    "cli.setup.advanced_help": "Also prompt for max_tokens / context_window / embedding model (defaults used otherwise)",
+    "cli.setup.help": "Interactive wizard to connect a model (choose provider → key source → probe → save)",
+    "cli.setup.advanced_help": "Also prompt for max_tokens / context_window / embedding model / image input override (defaults used otherwise)",
+    "cli.setup.status.help": "Print current setup status and exit",
     "cli.setup.epilog": (
-        "The wizard writes ~/.argos/config.json (profile table + active pointer)"
-        " and ~/.argos/.env (key, 0600).\n\n"
+        "The wizard writes ~/.argos/config.json (profile table + active pointer). "
+        "Paste-key mode also writes ~/.argos/.env (0600); existing environment variable mode stores only api_key_env.\n\n"
         "Minimal config.json example:\n"
         '  { "active": "default",\n'
         '    "models": { "default": {\n'
         '      "protocol": "anthropic",   # or "openai"\n'
         '      "base_url": "https://api.anthropic.com",\n'
-        '      "model": "claude-sonnet-4-5",\n'
+        '      "model": "claude-sonnet-4-6",\n'
         '      "api_key_env": "ANTHROPIC_API_KEY",\n'
-        '      "max_tokens": 8096, "context_window": 200000,\n'
-        '      "price_in": 0.000003, "price_out": 0.000015 } } }\n\n'
+        '      "max_tokens": 4096, "context_window": 200000,\n'
+        '      "price_in": 3.00, "price_out": 15.00 } } }\n\n'
         "Full field reference: docs/setup-wizard.md\n"
-        "For non-TTY environments (Docker/CI) write the files above manually or mount a secret."
+        "For non-TTY environments (Docker/CI), write config.json and provide the key via .env or an existing environment variable."
     ),
     # self-update sub-command
     "cli.self_update.help": "Check for a newer version and print upgrade instructions (skips the 7-day cache)",
@@ -63,7 +64,7 @@ EN: dict[str, str] = {
         "Run `argos self-update` to upgrade."
     ),
     # __main__.py main() — no-key fallback
-    "cli.no_key_fallback": "[argos] {err}\n[argos] Run `argos setup` to connect a model, or set the environment variable and restart.",
+    "cli.no_key_fallback": "[argos] {err}\n[argos] Run `argos setup` to choose a key source, or set the existing environment variable and restart.",
     # headless.py — missing prompt
     "cli.exec.missing_prompt": "argos exec: no task description (pass it as an argument or pipe it in on stdin).",
     # headless.py — trivial verify rejection
@@ -74,7 +75,7 @@ EN: dict[str, str] = {
     ),
     # headless.py — build_components failure
     "cli.exec.no_key": "argos exec: {err}",
-    "cli.exec.run_setup_hint": "argos exec: run `argos setup` to connect a model, or set the environment variable.",
+    "cli.exec.run_setup_hint": "argos exec: run `argos setup` to choose a key source, or set the existing environment variable.",
     # headless.py progress lines
     "cli.exec.progress_start": "[argos exec] starting: {prompt}",
     "cli.exec.progress_phase": "[argos exec] phase → {label}",
@@ -94,6 +95,7 @@ EN: dict[str, str] = {
     "setup.available_presets": "Available provider presets:",
     "setup.preset_item": "  {i}. {name}",
     "setup.invalid_choice": "Invalid choice, try again.",
+    "setup.ambiguous_provider_choice": "Ambiguous provider '{choice}'. Use a full name: {matches}.",
     "setup.arrow_hint": "(↑↓ to select, Enter to confirm)\r\n",
     "setup.banner": "✦ Argos setup — connect a model",
     "setup.section_provider": "Provider",
@@ -111,6 +113,8 @@ EN: dict[str, str] = {
     "setup.prompt_max_tokens": "max_tokens [4096]:",
     "setup.prompt_context_window": "context_window [200000]:",
     "setup.prompt_embedding_model": "Embedding model (blank = keyword recall, no extra model call; e.g. text-embedding-3-small):",
+    "setup.prompt_multimodal": "Image input override (blank = auto-detect, y = enabled, n = disabled):",
+    "setup.invalid_multimodal_choice": "Unrecognized image input override — please reconfigure this model.",
     "setup.no_embeddings_note": "(This provider uses the Anthropic protocol — no /embeddings endpoint; memory falls back to keyword recall.)",
     "setup.probing": "Running connection probe…",
     "setup.probe_rating": "[{rating}] {message}",
@@ -122,18 +126,40 @@ EN: dict[str, str] = {
     "setup.set_active_prompt": "Make this the active model? (y/N):",
     "setup.warn_set_active_disconnected": "⚠️ This model failed the connection probe, but you chose to make it active — confirm it is reachable before you use it.",
     "setup.save_failed": "Save failed (invalid configuration): {err} — please reconfigure this model.",
+    "setup.save_failed_io": "Save failed: {err} — check disk space or file permissions, then reconfigure this model.",
     "setup.saved_active": "Saved '{name}' and made it the active model.",
     "setup.saved_inactive": "Saved '{name}' (active model unchanged).",
     "setup.key_stored_warning": "Note: the API key is stored in plain text in ~/.argos/.env (permissions 0600), not encrypted.",
     "setup.key_empty": "No key entered — leaving the key blank can't connect. Re-enter this model (or pick the env-var method if your key lives in the environment).",
+    "setup.key_invalid": "API key must be a single line.",
+    "setup.env_var_empty": "No environment variable name entered — re-enter this model or choose paste-key instead.",
+    "setup.env_var_missing": "Environment variable {env} is not set — export it first, re-enter this model, or choose paste-key instead.",
+    "setup.cancelled": "Setup cancelled.",
     "setup.add_another_prompt": "Add another model? (y/N):",
     "setup.done": "Setup complete. Run `argos` to use the active model.",
+    "setup.next_steps": "Next: run `argos` to use the active profile, or `argos --model {name}` to use this profile explicitly. Config: {config}",
+    "setup.status_not_configured": "Setup status: not configured ({err}).",
+    "setup.status_next_setup": "Run `argos setup` to connect a model.",
+    "setup.status_active": "Active profile: {active}",
+    "setup.status_model": "Model: {model} ({protocol}, {base_url})",
+    "setup.status_key": "API key {env}: {status} ({source})",
+    "setup.status_key_found": "found",
+    "setup.status_key_missing": "missing",
+    "setup.status_embedding": "Memory embedding: {model}",
+    "setup.status_embedding_fts5": "FTS5 keyword fallback",
+    "setup.status_image": "Image input: {mode}",
+    "setup.status_image_enabled": "enabled",
+    "setup.status_image_disabled": "disabled",
+    "setup.status_image_auto": "auto-detect on first image",
+    "setup.status_config": "Config: {path}",
+    "setup.corrupt_backup_failed": "config.json is corrupt and could not be backed up ({err}); refusing to overwrite {path}.",
     "setup.no_tty": (
         "\n⚠ stdin is closed (`argos setup` needs an interactive terminal).\n"
         "  • Run it in a real terminal: `argos setup` (or `uv run argos setup`)\n"
-        "  • For non-interactive environments (scripts / CI), write two files by hand:\n"
+        "  • For non-interactive environments (scripts / CI), write config by hand:\n"
         "      ~/.argos/config.json   ← provider / model / base_url declaration\n"
-        "      ~/.argos/.env          ← API key (permissions 0600)\n"
+        "      ~/.argos/.env          ← optional API key file (permissions 0600)\n"
+        "    Or set an existing environment variable named by api_key_env.\n"
         "    File schema: `argos setup --help` or docs/setup-wizard.md"
     ),
     # setup_wizard.py _ask_int fail-soft message
@@ -219,9 +245,10 @@ EN: dict[str, str] = {
     # ── argos/cli/pkg.py ─────────────────────────────────────────────────────
     "cli.pkg.usage_info": "  info      — print project metadata + packaging/VERSION + git tag",
     "cli.pkg.usage_check": "  check     — verify self + argos entry-point import succeeds",
-    "cli.pkg.usage_manifest": "  manifest  — dry-run winget manifest generation (real in v0.2.0)",
+    "cli.pkg.usage_manifest": "  manifest  — list winget manifest files for release review",
     "cli.pkg.check_import_failed": "argospkg check: import failed: {exc_type}: {err}",
-    "cli.pkg.manifest_placeholder": "argospkg manifest: v0.1.0 placeholder only; v0.2.0 will wire wingetcreate for auto-generation",
+    "cli.pkg.manifest_ready": "argospkg manifest: winget files ready for manual release review",
+    "cli.pkg.manifest_missing": "argospkg manifest: missing {path}",
 }
 
 ZH: dict[str, str] = {
@@ -233,21 +260,23 @@ ZH: dict[str, str] = {
     "cli.sandbox.help": "启用 OS 沙箱(Seatbelt/bwrap 内核牢笼:断网、写牢笼 workspace)。opt-in、默认关;无论开关,治理(审批+egress+AST 限制)都在。也可设 ARGOS_SANDBOX=1。",
     "cli.add_dir.help": "授权 workspace 之外的一个目录可写(可重复)。文件工具与写牢笼视其为可写;开 --sandbox 时也加进内核牢笼。也可设 ARGOS_ADD_DIRS(路径分隔符分隔)。",
     # setup sub-command
-    "cli.setup.help": "接入模型的交互向导(选 provider→填 key→连通测试→保存)",
-    "cli.setup.advanced_help": "额外询问 max_tokens / context_window / embedding 模型(否则用缺省值)",
+    "cli.setup.help": "接入模型的交互向导(选 provider→key 来源→连通测试→保存)",
+    "cli.setup.advanced_help": "额外询问 max_tokens / context_window / embedding 模型 / 图片输入 override(否则用缺省值)",
+    "cli.setup.status.help": "打印当前 setup 状态并退出",
     "cli.setup.epilog": (
-        "向导写入 ~/.argos/config.json(profile 表 + active 指针)和 ~/.argos/.env(key, 0600)。\n\n"
+        "向导写入 ~/.argos/config.json(profile 表 + active 指针)。"
+        "粘贴 key 时也写 ~/.argos/.env(0600);使用已有环境变量时只保存 api_key_env。\n\n"
         "config.json 最小示例:\n"
         '  { "active": "default",\n'
         '    "models": { "default": {\n'
         '      "protocol": "anthropic",   # 或 "openai"\n'
         '      "base_url": "https://api.anthropic.com",\n'
-        '      "model": "claude-sonnet-4-5",\n'
+        '      "model": "claude-sonnet-4-6",\n'
         '      "api_key_env": "ANTHROPIC_API_KEY",\n'
-        '      "max_tokens": 8096, "context_window": 200000,\n'
-        '      "price_in": 0.000003, "price_out": 0.000015 } } }\n\n'
+        '      "max_tokens": 4096, "context_window": 200000,\n'
+        '      "price_in": 3.00, "price_out": 15.00 } } }\n\n'
         "完整字段说明见 docs/setup-wizard.md 。\n"
-        "非 TTY 场景(Docker/CI)请手动写上述文件或挂载 secret。"
+        "非 TTY 场景(Docker/CI)请手动写 config.json,并通过 .env 或已有环境变量提供 key。"
     ),
     # self-update sub-command
     "cli.self_update.help": "检查并提示新版本(不自动下载;跳过 7 天缓存)",
@@ -277,7 +306,7 @@ ZH: dict[str, str] = {
         "Run `argos self-update` to upgrade."
     ),
     # __main__.py main() — no-key fallback
-    "cli.no_key_fallback": "[argos] {err}\n[argos] 运行 `argos setup` 接入模型,或配置环境变量后重启。",
+    "cli.no_key_fallback": "[argos] {err}\n[argos] 运行 `argos setup` 选择 key 来源,或设置已有环境变量后重启。",
     # headless.py — missing prompt
     "cli.exec.missing_prompt": "argos exec: 缺少任务描述(传 positional 参数或经 stdin 提供)。",
     # headless.py — trivial verify rejection
@@ -288,7 +317,7 @@ ZH: dict[str, str] = {
     ),
     # headless.py — build_components failure
     "cli.exec.no_key": "argos exec: {err}",
-    "cli.exec.run_setup_hint": "argos exec: 运行 `argos setup` 接入模型,或配置环境变量。",
+    "cli.exec.run_setup_hint": "argos exec: 运行 `argos setup` 选择 key 来源,或设置已有环境变量。",
     # headless.py progress lines
     "cli.exec.progress_start": "[argos exec] 开始: {prompt}",
     "cli.exec.progress_phase": "[argos exec] phase → {label}",
@@ -308,6 +337,7 @@ ZH: dict[str, str] = {
     "setup.available_presets": "可选 provider 预设:",
     "setup.preset_item": "  {i}. {name}",
     "setup.invalid_choice": "无效编号,重来。",
+    "setup.ambiguous_provider_choice": "provider '{choice}' 有歧义。请使用完整名称:{matches}。",
     "setup.arrow_hint": "(↑↓ 选,回车确认)\r\n",
     "setup.banner": "✦ Argos 配置向导 —— 接入一个模型",
     "setup.section_provider": "模型提供方",
@@ -325,6 +355,8 @@ ZH: dict[str, str] = {
     "setup.prompt_max_tokens": "max_tokens [4096]:",
     "setup.prompt_context_window": "context_window [200000]:",
     "setup.prompt_embedding_model": "embedding 模型(留空=记忆走关键词,不额外调模型;如 text-embedding-3-small):",
+    "setup.prompt_multimodal": "图片输入 override(留空=自动探测,y=启用,n=禁用):",
+    "setup.invalid_multimodal_choice": "无法识别图片输入 override —— 请重新配置这个模型。",
     "setup.no_embeddings_note": "(此 provider 是 Anthropic 端,无 embeddings;记忆走关键词召回)",
     "setup.probing": "正在连通测试…",
     "setup.probe_rating": "[{rating}] {message}",
@@ -336,18 +368,40 @@ ZH: dict[str, str] = {
     "setup.set_active_prompt": "设为当前默认模型?(y/N):",
     "setup.warn_set_active_disconnected": "⚠️ 此模型连通测试未通过,仍按你的选择设为当前模型——下次使用前请确认它可用。",
     "setup.save_failed": "保存失败(配置不合法):{err} —— 请重新配置这个模型。",
+    "setup.save_failed_io": "保存失败:{err} —— 请检查磁盘空间或文件权限,然后重新配置这个模型。",
     "setup.saved_active": "已保存 '{name}'并设为当前模型。",
     "setup.saved_inactive": "已保存 '{name}'(未改当前默认模型)。",
     "setup.key_stored_warning": "注意:API key 以明文存于 ~/.argos/.env(权限 0600),不加密。",
     "setup.key_empty": "没输入 key —— 留空连不上。请重配这个模型(或改用环境变量方式,如果 key 在环境里)。",
+    "setup.key_invalid": "API key 必须是单行文本。",
+    "setup.env_var_empty": "没输入环境变量名 —— 请重配这个模型,或改用粘贴 key。",
+    "setup.env_var_missing": "环境变量 {env} 未设置 —— 请先 export 它,然后重配这个模型,或改用粘贴 key。",
+    "setup.cancelled": "setup 已取消。",
     "setup.add_another_prompt": "再配一个模型?(y/N):",
     "setup.done": "setup 完成。运行 `argos` 即用当前模型。",
+    "setup.next_steps": "下一步:运行 `argos` 使用当前模型；或运行 `argos --model {name}` 明确使用此 profile。配置文件:{config}",
+    "setup.status_not_configured": "Setup 状态:未配置({err})。",
+    "setup.status_next_setup": "运行 `argos setup` 接入模型。",
+    "setup.status_active": "当前 profile:{active}",
+    "setup.status_model": "模型:{model} ({protocol}, {base_url})",
+    "setup.status_key": "API key {env}: {status} ({source})",
+    "setup.status_key_found": "可用",
+    "setup.status_key_missing": "缺失",
+    "setup.status_embedding": "记忆向量:{model}",
+    "setup.status_embedding_fts5": "FTS5 关键词兜底",
+    "setup.status_image": "图片输入:{mode}",
+    "setup.status_image_enabled": "启用",
+    "setup.status_image_disabled": "禁用",
+    "setup.status_image_auto": "首次发图时自动探测",
+    "setup.status_config": "配置文件:{path}",
+    "setup.corrupt_backup_failed": "config.json 已损坏且无法备份({err});拒绝覆盖 {path}。",
     "setup.no_tty": (
         "\n⚠ 检测到 stdin 关闭(`argos setup` 需交互终端)。\n"
         "  • 在真终端直接跑:`argos setup`(或 `uv run argos setup`)\n"
-        "  • 非交互场景(脚本/CI)手工写两份文件:\n"
+        "  • 非交互场景(脚本/CI)手工写配置:\n"
         "      ~/.argos/config.json   ← provider / model / base_url 声明\n"
-        "      ~/.argos/.env          ← API key(权限 0600)\n"
+        "      ~/.argos/.env          ← 可选 API key 文件(权限 0600)\n"
+        "    或设置 api_key_env 指向的已有环境变量。\n"
         "    文件 schema 见 `argos setup --help` 或 docs/setup-wizard.md"
     ),
     # setup_wizard.py _ask_int fail-soft message
@@ -432,7 +486,8 @@ ZH: dict[str, str] = {
     # ── argos/cli/pkg.py ─────────────────────────────────────────────────────
     "cli.pkg.usage_info": "  info      — 打印项目元数据 + packaging/VERSION + git tag",
     "cli.pkg.usage_check": "  check     — 校验 self + argos 入口 import 成功",
-    "cli.pkg.usage_manifest": "  manifest  — 预演生成 winget manifest(v0.2.0 真出)",
+    "cli.pkg.usage_manifest": "  manifest  — 列出 winget manifest 文件,供发布前审阅",
     "cli.pkg.check_import_failed": "argospkg check: import 失败:{exc_type}: {err}",
-    "cli.pkg.manifest_placeholder": "argospkg manifest: v0.1.0 仅占位;v0.2.0 接 wingetcreate 自动生成",
+    "cli.pkg.manifest_ready": "argospkg manifest: winget 文件已就绪,供人工发布审阅",
+    "cli.pkg.manifest_missing": "argospkg manifest: 缺少 {path}",
 }

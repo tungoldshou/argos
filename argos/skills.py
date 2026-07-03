@@ -13,9 +13,20 @@ from typing import Literal
 
 import yaml
 
+from argos import config
+
 BUILTIN_DIR = Path(__file__).parent / "skills_builtin"
-USER_DIR = Path.home() / ".argos" / "skills"
+USER_DIR: Path | None = None
 MAX_SKILL_CHARS = 3000  # 导入上限
+
+
+def user_dir(path: Path | None = None) -> Path:
+    return Path(
+        path or USER_DIR or (
+            Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+            / "skills"
+        )
+    )
 
 
 Trust = Literal["builtin", "imported", "user_created"]
@@ -78,7 +89,7 @@ def _serialize(skill: Skill) -> str:
 
 def load_all() -> list[Skill]:
     out: dict[str, Skill] = {}
-    for d in (BUILTIN_DIR, USER_DIR):
+    for d in (BUILTIN_DIR, user_dir()):
         if not d.exists():
             continue
         for p in sorted(d.glob("*.md")):
@@ -100,7 +111,7 @@ def toggle(name: str, *, enabled: bool) -> bool:
     先试平铺 d/<name>.md;找不到回退试子目录 d/<name>/SKILL.md(晋升/curator 产物),
     写回实际找到的那个路径。
     """
-    for d in (BUILTIN_DIR, USER_DIR):
+    for d in (BUILTIN_DIR, user_dir()):
         p = d / f"{name}.md"
         if not p.exists():
             p = d / name / "SKILL.md"  # 回退:子目录格式
@@ -125,8 +136,9 @@ def import_skill(*, content: str, source: str = "") -> Skill:
     if s is None:
         raise ValueError("invalid skill markdown (need --- YAML --- frontmatter with name)")
     s.source = source
-    USER_DIR.mkdir(parents=True, exist_ok=True)
-    (USER_DIR / f"{s.name}.md").write_text(_serialize(s), encoding="utf-8")
+    root = user_dir()
+    root.mkdir(parents=True, exist_ok=True)
+    (root / f"{s.name}.md").write_text(_serialize(s), encoding="utf-8")
     return s
 
 

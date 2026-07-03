@@ -13,7 +13,7 @@ argos
 
 TUI 启动时自动探测本地 daemon socket（`probe_or_spawn`）：已在运行则复用；
 未运行则尝试拉起 `argosd` 子进程并等待就绪（最多 3s）；拉起失败则退回 inline
-单进程模式（状态栏显 `inline`）。**不需要也不存在 `--with-daemon` 标志。**
+单进程模式（状态栏显 `inline`）。**不需要额外 flag。**
 
 起手时,顶部出现一行 tab 条(只有当前 run,1 个 tab):
 

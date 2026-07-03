@@ -10,11 +10,13 @@ EN: dict[str, str] = {
     # server.py — no-key rejections
     "daemon.srv.no_key_run": (
         "daemon has no API key configured; cannot execute run. "
-        "Run `argos setup` to configure a model key, then restart the daemon."
+        "Run `argos setup` to choose a key source, or set the existing "
+        "environment variable, then restart the daemon."
     ),
     "daemon.srv.no_key_run_confirm": (
         "daemon has no API key configured; cannot execute run. "
-        "Run `argos setup` to configure a model key, then restart the daemon."
+        "Run `argos setup` to choose a key source, or set the existing "
+        "environment variable, then restart the daemon."
     ),
     # server.py — undo: ledger missing
     "daemon.srv.undo_no_ledger": (
@@ -105,7 +107,8 @@ EN: dict[str, str] = {
     # server.py — no key for Dream
     "daemon.srv.no_key_dream": (
         "daemon has no API key configured; cannot run Dream. "
-        "Run `argos setup` to configure a model key, then restart the daemon."
+        "Run `argos setup` to choose a key source, or set the existing "
+        "environment variable, then restart the daemon."
     ),
     # server.py — Dream already running
     "daemon.srv.dream_busy": "a nightly consolidation is already running; please try again later.",
@@ -137,10 +140,10 @@ ZH: dict[str, str] = {
     # server.py — no-key rejections
     "daemon.srv.no_key_run": (
         "daemon 未配置 API key,无法执行 run。"
-        "请运行 `argos setup` 配置模型 key 后重启 daemon。"
+        "请运行 `argos setup` 选择 key 来源,或设置已有环境变量后重启 daemon。"
     ),
     "daemon.srv.no_key_run_confirm": (
-        "daemon 未配置 API key，无法执行 run。请运行 `argos setup` 配置模型 key 后重启 daemon。"
+        "daemon 未配置 API key，无法执行 run。请运行 `argos setup` 选择 key 来源,或设置已有环境变量后重启 daemon。"
     ),
     # server.py — undo: ledger missing
     "daemon.srv.undo_no_ledger": (
@@ -228,7 +231,7 @@ ZH: dict[str, str] = {
     ),
     # server.py — no key for Dream
     "daemon.srv.no_key_dream": (
-        "daemon 未配置 API key，无法执行 Dream。请运行 `argos setup` 配置模型 key 后重启 daemon。"
+        "daemon 未配置 API key，无法执行 Dream。请运行 `argos setup` 选择 key 来源,或设置已有环境变量后重启 daemon。"
     ),
     # server.py — Dream already running
     "daemon.srv.dream_busy": "已有一次夜间整合在跑，请稍后再试。",

@@ -30,21 +30,17 @@ Argos 内置一个**自评估子包** `argos.eval/`,让 Argos 跑一份**任务�
 $ argos eval corpus
 corpus version 0 (0 tasks)
 
-# 2. 跑单个 —— 注意:CLI `eval run` 是占位,不驱动 agent。
-#    cli/eval.py 构造 EvalRunner 时不传 loop_factory,runner 立即返回 error
-#    "loop_factory_required: v1 全用 fake 桩(真模式 v1.1)" —— 永远只输出 error。
-#    要真跑请用 TUI `/eval run`(见 §3.2),或在代码中向 EvalRunner 注入 loop_factory。
+# 2. 跑单个 —— 真实驱动 AgentLoop;无 key/配置错会返回 error,不会写 fake passed。
 $ argos eval run bug_fix_001_off_by_one
 [eval] task=bug_fix_001_off_by_one category=bug_fix difficulty=easy
 [eval] running model=cheap budget=$1.00 600s ...
-[eval] error  cost=$N/A  duration=0s  steps=0  run_id=abc123def456
-[eval] error: loop_factory_required: v1 全用 fake 桩(真模式 v1.1)
+[eval] passed  cost=$0.0130  duration=120s  steps=8  run_id=abc123def456
 
-# 3. A/B 对比 —— 同样是占位:compare 走同一 EvalRunner,两边都返 error。
+# 3. A/B 对比
 $ argos eval compare bug_fix_001_off_by_one cheap strong
 [eval] A/B: cheap vs strong on bug_fix_001_off_by_one ...
-[eval]   cheap       error  $N/A  0s
-[eval]   strong      error  $N/A  0s
+[eval]   cheap       passed  $0.0130  120s
+[eval]   strong      passed  $0.0870  95s
 [eval] report: ~/.argos/eval/reports/ab-bug_fix_001_off_by_one-2026-06-07.md
 [eval] json:   ~/.argos/eval/reports/ab-bug_fix_001_off_by_one-2026-06-07.json
 
@@ -213,7 +209,7 @@ argos eval corpus                                 # 列 corpus 任务
 | 问题 | 检查 |
 |---|---|
 | `eval` 命令 unknown | `python -c "import argos.eval"` 确认包可导入 |
-| `loop_factory_required` | CLI `argos eval run` / `compare` 不注入 loop_factory,故只返回此 error、从不驱动 agent(不产 fake 结果)。要真跑请用 TUI `/eval run`,或在代码中向 `EvalRunner` 传入 `loop_factory` |
+| `loop_factory_failed` / 无 key | 先跑 `argos setup`;或用 `--model` 指向已有 key 的 profile |
 | 报告不写盘 | `~/.argos/eval/reports/` 权限;或 `keep_worktree` flag 留下的 worktree |
 | 任务找不到 | `argos eval corpus` 看清单;task id 区分大小写 |
 

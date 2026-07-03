@@ -14,6 +14,16 @@ def _cand(name: str = "fix-login") -> SkillCandidate:
     )
 
 
+def test_default_root_honors_argos_config_dir(tmp_path: Path, monkeypatch):
+    from argos.learning import candidates
+
+    cfg_dir = tmp_path / ".argos"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(candidates, "DEFAULT_ROOT", None)
+
+    assert candidates.default_root() == cfg_dir / "learning" / "candidates"
+
+
 def test_save_then_list_roundtrip(tmp_path: Path):
     p = save_candidate(
         _cand(), root=tmp_path, source_run="abc123def45678",

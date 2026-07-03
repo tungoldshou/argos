@@ -53,20 +53,30 @@ def _build_log_handlers(socket_path) -> list[logging.Handler]:
         return [logging.StreamHandler()]
 
 
+def _default_argos_dir() -> Path:
+    from argos import config
+    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+
+
 def _default_runs_dir() -> Path:
-    return Path.home() / ".argos" / "runs"
+    return _default_argos_dir() / "runs"
 
 
 def _default_index_path() -> Path:
-    return Path.home() / ".argos" / "runs" / "index.json"
+    return _default_runs_dir() / "index.json"
 
 
 def _default_socket_path() -> Path:
-    return Path.home() / ".argos" / "daemon.sock"
+    from argos import config
+    return Path(config.get("ARGOS_DAEMON_SOCKET", "~/.argos/daemon.sock")).expanduser()
 
 
 def _default_pid_path() -> Path:
-    return Path.home() / ".argos" / "daemon.pid"
+    return _default_argos_dir() / "daemon.pid"
+
+
+def _default_conductor_dir() -> Path:
+    return _default_argos_dir() / "conductor"
 
 
 async def _serve(args: argparse.Namespace) -> int:
@@ -92,7 +102,7 @@ async def _serve(args: argparse.Namespace) -> int:
         return 1
 
     # P1 通电:装配真实组件 + loop_factory ──────────────────────────────
-    # 无 worker key → loop_factory=_NO_KEY 哨兵,daemon 仍能启动;create_run 明确拒绝并说明原因。
+    # 无 API key → loop_factory=_NO_KEY 哨兵,daemon 仍能启动;create_run 明确拒绝并说明原因。
     from argos.daemon.server import _NO_KEY
     loop_factory = _NO_KEY  # 默认无 key 状态
     components = None
@@ -118,7 +128,7 @@ async def _serve(args: argparse.Namespace) -> int:
     # P5b §9 自治面：conductor supervisor（tick loop 后台协程）
     # 广播函数：向 _conductor 虚拟 run_id 的 SSE 扇出通道投事件
     from argos.daemon.conductor_supervisor import ConductorSupervisor, CONDUCTOR_RUN_ID
-    conductor_orders_dir = Path.home() / ".argos" / "conductor"
+    conductor_orders_dir = _default_conductor_dir()
 
     async def _conductor_broadcast(ev_dict: dict) -> None:
         """把 conductor 事件扇出到 SSE 订阅者(纯实时广播,不落盘 —— _conductor 是虚拟总线)。"""

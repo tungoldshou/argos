@@ -90,6 +90,11 @@ def _app_version() -> str:
         return "0.x"
 
 
+def _argos_dir() -> Path:
+    """返回 Argos 配置根目录(ARGOS_CONFIG_DIR 覆盖,否则 ~/.argos)。"""
+    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+
+
 class ArgosApp(App):
     TITLE = "Argos"
 
@@ -147,7 +152,7 @@ class ArgosApp(App):
         workspace: Path | str | None = None,
     ) -> None:
         super().__init__()
-        # 真实 workspace(入口解析:--project 或 cwd 默认);None = 旧默认 ~/.argos/workspace。
+        # 真实 workspace(入口解析:--project 或 cwd 默认);None = 配置根下 workspace。
         # 必须与 build_components 用的同一路径,否则 daemon create_run 会把 run 落到错误目录
         # (实测 bug:在 ~/argos-field-test 启动,agent 却跑在默认工作区整理不到任何文件)。
         self._workspace_override: Path | None = (
@@ -189,8 +194,8 @@ class ArgosApp(App):
         # 致不同会话共享同一持久化线程。
         self._session_id = uuid.uuid4().hex
         # /undo 配套:workspace 根 + run 自增序号 + 本轮 run 起点的快照(供 /undo 还原)。
-        # 入口传入的真实 workspace 优先(与 build_components 同源);否则旧默认。
-        self._workspace: Path = self._workspace_override or (Path.home() / ".argos" / "workspace")
+        # 入口传入的真实 workspace 优先(与 build_components 同源);否则配置根下默认工作区。
+        self._workspace: Path = self._workspace_override or (_argos_dir() / "workspace")
         self._run_seq: int = 0
         self._snapshot: "RunSnapshot | None" = None
         # ── Daemon 模式状态(v6 P3b §2)────────────────────────────────
@@ -324,14 +329,21 @@ class ArgosApp(App):
         self._refresh_topbar()
         self.query_one("#prompt", PromptArea).focus()
         tier = self._display_tier()
+        has_key = False
+        key_config_error = None
+        try:
+            has_key = bool(config.active_key())
+        except config.ConfigError as e:
+            key_config_error = str(e)
         # has_key 必须真查 config.active_key(),不能只信 demo 开关(2026-06-09 修复假阳:
         # demo=False + 没配 key 此前显 LIVE 撒了谎,跑起来 401)
-        self.query_one("#transcript", Transcript).mount(
-            StartupSplash(
-                model_label=tier.model, tier=tier.name,
-                live=True, has_key=bool(config.active_key()),
-            )
+        splash = StartupSplash(
+            model_label=tier.model, tier=tier.name,
+            live=True, has_key=has_key,
         )
+        if key_config_error:
+            splash.set_bad_config(key_config_error, source="config")
+        self.query_one("#transcript", Transcript).mount(splash)
         # 启动时根据 _plan_mode 状态把指示器对齐(默认 False;若 /plan 已触发过则 True)。
         self._set_plan_mode_indicators()
         # 工作态边缘光(Task 13):idle 灭=中性灰;run 期间随真实阶段着色,并在非终态做呼吸动画。
@@ -401,6 +413,7 @@ class ArgosApp(App):
         ARGOS_NO_DAEMON=1(测试钉)→ 强制 inline,不探测真 daemon。
         """
         import os
+        from argos import config as _cfg
         from argos.tui.daemon_spawn import probe_or_spawn
         from argos.daemon.client import DaemonClient
 
@@ -416,7 +429,7 @@ class ArgosApp(App):
                 pass
             return
 
-        socket_path = Path(os.environ.get("ARGOS_DAEMON_SOCKET", "~/.argos/daemon.sock")).expanduser()
+        socket_path = Path(_cfg.get("ARGOS_DAEMON_SOCKET", "~/.argos/daemon.sock")).expanduser()
 
         ready = await probe_or_spawn(socket_path)
         if not ready:
@@ -433,7 +446,7 @@ class ArgosApp(App):
                 self.run_worker(
                     self.query_one("#transcript", Transcript).append_line(
                         t("tui.daemon.unavailable"),
-                        kind="system",
+                        kind="error",
                     ),
                     exclusive=False,
                 )
@@ -460,7 +473,7 @@ class ArgosApp(App):
                 self.run_worker(
                     self.query_one("#transcript", Transcript).append_line(
                         t("tui.daemon.unavailable"),
-                        kind="system",
+                        kind="error",
                     ),
                     exclusive=False,
                 )
@@ -545,7 +558,7 @@ class ArgosApp(App):
                 source.stop()
                 self._conductor_source = None
 
-        self.run_worker(_stream_conductor(), exclusive=False)
+        self.run_worker(_stream_conductor, exclusive=False)
 
     async def _daemon_create_run(
         self, goal: str, attachments: list | None, *, verify_cmd: str | None = None
@@ -764,127 +777,243 @@ class ArgosApp(App):
             return
         self.run_worker(self._dispatch_slash(cmd), exclusive=False)
 
+    @staticmethod
+    def _slash_handlers() -> dict[str, str]:
+        """Slash command dispatch table.
+
+        Values are ArgosApp method names with signature (log, arg).
+        """
+        return {
+            "yolo": "_cmd_yolo",
+            "trust": "_trust_cmd",
+            "model": "_cmd_model",
+            "status": "_cmd_status",
+            "cost": "_cmd_cost",
+            "clear": "_cmd_clear",
+            "resume": "_cmd_resume",
+            "help": "_cmd_help",
+            "voice": "_cmd_voice",
+            "tools": "_cmd_tools",
+            "skills": "_cmd_skills",
+            "mcp": "_cmd_mcp",
+            "undo": "_cmd_undo",
+            "ledger": "_cmd_ledger",
+            "journal": "_journal_cmd",
+            "setup": "_cmd_setup",
+            "retry": "_cmd_retry",
+            "plan": "_cmd_plan",
+            "hooks": "_hooks_cmd",
+            "lsp": "_lsp_cmd",
+            "permissions": "_permissions_cmd",
+            "runs": "_runs_cmd",
+            "orders": "_cmd_orders",
+            "confirm": "_confirm_suggestion_cmd",
+            "dismiss": "_dismiss_suggestion_cmd",
+            "verify": "_cmd_verify",
+            "security-review": "_cmd_security_review",
+            "simplify": "_cmd_simplify",
+            "remember": "_remember_cmd",
+            "forget": "_forget_cmd",
+            "memory": "_cmd_memory",
+            "eval": "_eval_cmd",
+            "routing": "_routing_cmd",
+            "context": "_context_cmd",
+            "dream": "_dream_cmd",
+            "goal": "_cmd_goal",
+            "loop": "_cmd_loop",
+            "schedule": "_schedule_cmd",
+            "watch": "_watch_cmd",
+        }
+
+    async def _cmd_yolo(self, log, arg: str) -> None:
+        # /yolo 是 /trust autonomous 的别名（保留命令，直接生效；提示新用法）。
+        # 与 /trust autonomous 不同：/yolo 不弹升档确认（历史合约；用户明确输入即表示确认）。
+        if arg.strip():
+            await log.append_line(t("tui.yolo.usage"), kind="error")
+            return
+        self.gate.set_trust_level(
+            __import__("argos.permissions.trust_dial", fromlist=["TrustLevel"]).TrustLevel.L4_AUTONOMOUS
+        )
+        self._yolo = True
+        self.sub_title = self._compose_subtitle()
+        self._refresh_topbar()
+        await log.append_line(t("tui.yolo.activated"))
+
+    async def _cmd_model(self, log, arg: str) -> None:
+        import os
+        from argos import config as _cfg
+        if not arg:
+            try:
+                if _cfg._has_config_file():
+                    cfg = _cfg.load_config()
+                    profs = list(cfg.tiers)
+                    cur = cfg.active
+                    labels = []
+                    for p in profs:
+                        env_name = cfg.key_envs.get(p, "")
+                        suffix = " *" if p == cur else ""
+                        if env_name and not (os.environ.get(env_name) or cfg.secrets.get(env_name)):
+                            suffix += f" {t('tui.model.missing_key_short', env=env_name)}"
+                        labels.append(f"{p}{suffix}")
+                else:
+                    profs = _cfg.list_profiles()
+                    labels = [f"{p}{' *' if i == 0 else ''}" for i, p in enumerate(profs)]
+            except Exception as e:  # noqa: BLE001
+                await log.append_line(t("tui.model.switch_failed", err=e), kind="error")
+                return
+            await log.append_line(
+                t("tui.model.available", list=", ".join(labels)),
+                kind="system")
+            return
+        try:
+            cfg = _cfg.load_config()
+            if arg in cfg.key_envs and _cfg.key_for(arg) is None:
+                raise _cfg.ConfigError(t(
+                    "tui.model.missing_key",
+                    name=arg,
+                    env=cfg.key_envs.get(arg) or "(none)",
+                ))
+            _cfg.set_active(arg)
+            # 诚实:模型在启动时 build_components 注入一次,会话内不热切换;只重启真生效
+            #(不写"新任务生效"——那是假话,会话内新任务仍用旧模型)。
+            await log.append_line(t("tui.model.switched", name=arg), kind="done")
+        except Exception as e:  # noqa: BLE001
+            await log.append_line(t("tui.model.switch_failed", err=e), kind="error")
+
+    async def _cmd_status(self, log, arg: str) -> None:
+        if arg.strip():
+            await log.append_line(t("tui.status.usage"), kind="error")
+            return
+        bar = self.query_one("#status-bar", StatusBar)
+        await log.append_line(bar.render_text)
+
+    async def _cmd_cost(self, log, arg: str) -> None:
+        if arg.strip():
+            await log.append_line(t("tui.cost.usage"), kind="error")
+            return
+        # CostMeter 已退役为活动栏内的"成本 + 缓存"区;/cost 直接回显该区当前正文。
+        ap = self.query_one("#activity", ActivityPanel)
+        await log.append_line(t("tui.cost.header") + "\n" + ap.snapshot_text())
+
+    async def _cmd_clear(self, log, arg: str) -> None:
+        if arg.strip():
+            await log.append_line(t("tui.clear.usage"), kind="error")
+            return
+        await log.clear()
+        self._step_blocks.clear()
+        self._session_id = uuid.uuid4().hex
+        await log.append_line(t("tui.clear.done"))
+
+    async def _cmd_resume(self, log, arg: str) -> None:
+        if arg.strip():
+            await log.append_line(t("tui.resume.usage"), kind="error")
+            return
+        await self._resume_recent(log)
+
+    async def _cmd_help(self, log, arg: str) -> None:
+        from argos.tui.commands import _build_command_help
+        _ch = _build_command_help()
+        name = arg.strip().lstrip("/").lower()
+        if name:
+            hidden = {
+                "remember": t("tui.remember.usage"),
+                "forget": t("tui.forget.usage"),
+                "memory": t("tui.memory.usage"),
+            }
+            desc = _ch.get(name) or hidden.get(name)
+            if desc is None:
+                await log.append_line(t("tui.help.usage", name=name), kind="error")
+                return
+            await log.append_line(f"/{name}  {desc}", kind="system")
+            return
+        lines = [t("tui.help.header")]
+        lines += [f" · /{name:<16} {desc}" for name, desc in _ch.items()]
+        lines.append(t("tui.help.shortcuts"))
+        await log.append_line("\n".join(lines), kind="system")
+
+    async def _cmd_tools(self, log, arg: str) -> None:
+        if arg.strip():
+            await log.append_line(t("tui.tools.usage"), kind="error")
+            return
+        await self._show_tools(log)
+
+    async def _cmd_skills(self, log, arg: str) -> None:
+        self._last_skills_arg = arg
+        await self._show_skills(log)
+
+    async def _cmd_mcp(self, log, arg: str) -> None:
+        if arg.strip():
+            await log.append_line(t("tui.mcp.usage"), kind="error")
+            return
+        await self._show_mcp(log)
+
+    async def _cmd_undo(self, log, arg: str) -> None:
+        if arg.strip():
+            await log.append_line(t("tui.undo.usage"), kind="error")
+            return
+        await self._undo(log)
+
+    async def _cmd_ledger(self, log, arg: str) -> None:
+        if arg.strip():
+            await log.append_line(t("tui.ledger.usage"), kind="error")
+            return
+        await self._ledger_cmd(log)
+
+    async def _cmd_setup(self, log, arg: str) -> None:
+        if arg.strip():
+            await log.append_line(t("tui.setup.usage"), kind="error")
+            return
+        await self._setup_cmd(log)
+
+    async def _cmd_retry(self, log, arg: str) -> None:
+        if arg.strip():
+            await log.append_line(t("tui.retry.usage"), kind="error")
+            return
+        await self._retry(log)
+
+    async def _cmd_plan(self, log, arg: str) -> None:
+        if arg.strip():
+            await log.append_line(t("tui.plan.usage"), kind="error")
+            return
+        await self._enter_plan_mode(log)
+
+    async def _cmd_orders(self, log, arg: str) -> None:
+        if arg.strip():
+            await log.append_line(t("tui.orders.usage"), kind="error")
+            return
+        await self._orders_cmd(log)
+
+    async def _cmd_verify(self, log, arg: str) -> None:
+        await self._skill_cmd(log, "verify", arg)
+
+    async def _cmd_security_review(self, log, arg: str) -> None:
+        await self._skill_cmd(log, "security-review", arg)
+
+    async def _cmd_simplify(self, log, arg: str) -> None:
+        await self._skill_cmd(log, "simplify", arg)
+
+    async def _cmd_memory(self, log, arg: str) -> None:
+        if arg.strip():
+            await log.append_line(t("tui.memory.usage"), kind="error")
+            return
+        await self._memory_cmd(log)
+
+    async def _cmd_goal(self, log, arg: str) -> None:
+        await self._goal_cmd(log, "goal", arg)
+
+    async def _cmd_loop(self, log, arg: str) -> None:
+        await self._goal_cmd(log, "loop", arg)
+
     async def _dispatch_slash(self, cmd: SlashCommand) -> None:
         log = self.query_one("#transcript", Transcript)
         if not cmd.known:
-            await log.append_line(t("tui.cmd.unknown", name=cmd.name))
+            await log.append_line(t("tui.cmd.unknown", name=cmd.name), kind="error")
             return
-        if cmd.name == "yolo":
-            # /yolo 是 /trust autonomous 的别名（保留命令，直接生效；提示新用法）。
-            # 与 /trust autonomous 不同：/yolo 不弹升档确认（历史合约；用户明确输入即表示确认）。
-            self.gate.set_trust_level(
-                __import__("argos.permissions.trust_dial", fromlist=["TrustLevel"]).TrustLevel.L4_AUTONOMOUS
-            )
-            self._yolo = True
-            self.sub_title = self._compose_subtitle()
-            self._refresh_topbar()
-            await log.append_line(t("tui.yolo.activated"))
-        elif cmd.name == "trust":
-            await self._trust_cmd(log, (cmd.arg or "").strip().lower())
-        elif cmd.name == "model":
-            from argos import config as _cfg
-            arg = cmd.arg  # SlashCommand.arg 已是 parse_slash 拆出的参数部分
-            if not arg:
-                try:
-                    profs = _cfg.list_profiles()
-                    cur = _cfg.load_config().active if _cfg._has_config_file() else profs[0]
-                except Exception:  # noqa: BLE001
-                    _fallback = _cfg.DEFAULT_TIER
-                    profs, cur = [_fallback.name], _fallback.name
-                await log.append_line(
-                    t("tui.model.available", list=", ".join(f"{p}{' *' if p == cur else ''}" for p in profs)),
-                    kind="system")
-            else:
-                try:
-                    _cfg.set_active(arg)
-                    # 诚实:模型在启动时 build_components 注入一次,会话内不热切换;只重启真生效
-                    #(不写"新任务生效"——那是假话,会话内新任务仍用旧模型)。
-                    await log.append_line(t("tui.model.switched", name=arg), kind="done")
-                except Exception as e:  # noqa: BLE001
-                    await log.append_line(t("tui.model.switch_failed", err=e), kind="error")
-        elif cmd.name == "status":
-            bar = self.query_one("#status-bar", StatusBar)
-            await log.append_line(bar.render_text)
-        elif cmd.name == "cost":
-            # CostMeter 已退役为活动栏内的"成本 + 缓存"区;/cost 直接回显该区当前正文。
-            ap = self.query_one("#activity", ActivityPanel)
-            await log.append_line(t("tui.cost.header") + "\n" + ap.snapshot_text())
-        elif cmd.name == "clear":
-            await log.clear()
-            self._step_blocks.clear()
-            self._session_id = uuid.uuid4().hex  # 换新 session = 开新会话、断多轮上下文。
-            await log.append_line(t("tui.clear.done"))
-        elif cmd.name == "resume":
-            await self._resume_recent(log)
-        elif cmd.name == "help":
-            from argos.tui.commands import _build_command_help
-            _ch = _build_command_help()
-            lines = [t("tui.help.header")]
-            lines += [f" · /{name:<16} {desc}" for name, desc in _ch.items()]
-            lines.append(t("tui.help.shortcuts"))
-            await log.append_line("\n".join(lines), kind="system")
-        elif cmd.name == "tools":
-            await self._show_tools(log)
-        elif cmd.name == "skills":
-            self._last_skills_arg = cmd.arg
-            await self._show_skills(log)
-        elif cmd.name == "mcp":
-            await self._show_mcp(log)
-        elif cmd.name == "undo":
-            await self._undo(log)
-        elif cmd.name == "ledger":
-            await self._ledger_cmd(log)
-        elif cmd.name == "journal":
-            await self._journal_cmd(log, cmd.arg)
-        elif cmd.name == "setup":
-            await self._setup_cmd(log)
-        elif cmd.name == "retry":
-            await self._retry(log)
-        elif cmd.name == "plan":
-            await self._enter_plan_mode(log)
-        elif cmd.name == "hooks":
-            await self._hooks_cmd(log, cmd.arg)
-        elif cmd.name == "lsp":
-            await self._lsp_cmd(log, cmd.arg)
-        elif cmd.name == "permissions":
-            await self._permissions_cmd(log, cmd.arg)
-        elif cmd.name == "runs":
-            await self._runs_cmd(log, cmd.arg)
-        elif cmd.name == "orders":
-            await self._orders_cmd(log)
-        elif cmd.name == "confirm":
-            await self._confirm_suggestion_cmd(log, cmd.arg)
-        elif cmd.name == "dismiss":
-            await self._dismiss_suggestion_cmd(log, cmd.arg)
-        elif cmd.name == "verify":
-            await self._skill_cmd(log, "verify", cmd.arg)
-        elif cmd.name == "security-review":
-            await self._skill_cmd(log, "security-review", cmd.arg)
-        elif cmd.name == "simplify":
-            await self._skill_cmd(log, "simplify", cmd.arg)
-        elif cmd.name == "remember":
-            await self._remember_cmd(log, cmd.arg)
-        elif cmd.name == "forget":
-            await self._forget_cmd(log, cmd.arg)
-        elif cmd.name == "memory":
-            await self._memory_cmd(log)
-        elif cmd.name == "eval":
-            await self._eval_cmd(log, cmd.arg)
-        elif cmd.name == "routing":
-            await self._routing_cmd(log, cmd.arg)
-        elif cmd.name == "context":
-            await self._context_cmd(log, cmd.arg)
-        elif cmd.name == "dream":
-            await self._dream_cmd(log, cmd.arg)
-        elif cmd.name in ("goal", "loop"):
-            await self._goal_cmd(log, cmd.name, cmd.arg)
-        elif cmd.name == "schedule":
-            await self._schedule_cmd(log, cmd.arg)
-        elif cmd.name == "watch":
-            await self._watch_cmd(log, cmd.arg)
-        else:
-            # known command with no handler yet — honest fallback
-            await log.append_line(t("tui.cmd.unwired", name=cmd.name))
+        method_name = self._slash_handlers().get(cmd.name)
+        if method_name is None:
+            await log.append_line(t("tui.cmd.unwired", name=cmd.name), kind="error")
+            return
+        await getattr(self, method_name)(log, cmd.arg)
 
     async def _undo(self, log) -> None:
         """/undo:用本轮 run 起点的快照还原 workspace;不发 goal。"""
@@ -925,6 +1054,7 @@ class ArgosApp(App):
         from argos.permissions.trust_dial import (
             TrustLevel, escalation_warning, next_in_cycle, to_approval_semantics,
         )
+        arg = arg.strip().lower()
 
         # 计算当前 TrustLevel(单一真源,与 TopBar Trust 徽标共用)
         current_trust = self._resolve_trust_level()
@@ -960,7 +1090,7 @@ class ArgosApp(App):
             if target_trust is None:
                 await log.append_line(
                     t("tui.trust.unknown_mode", arg=arg),
-                    kind="system",
+                    kind="error",
                 )
                 return
 
@@ -1061,16 +1191,26 @@ class ArgosApp(App):
 
         widget = LedgerTable(entries=visible, run_id=run_id)
         await log.mount_block(widget)
-        journal_path = Path.home() / ".argos" / "ledger" / f"{run_id}.jsonl"
+        journal_path = _argos_dir() / "ledger" / f"{run_id}.jsonl"
         await log.append_line(
             t("tui.ledger.footer", path=journal_path, run_id=run_id),
             kind="system",
         )
 
     async def _setup_cmd(self, log) -> None:
-        """/setup:显示配置向导入口。TUI 内无法直接运行 argos setup(它是交互式 CLI);
-        诚实告知路径,让用户退出后运行。"""
+        """/setup:显示当前配置状态和配置向导入口。"""
+        from argos import setup_wizard
+        lines: list[str] = []
+        setup_wizard.print_status(writer=lines.append)
+        await log.append_line("\n".join(lines), kind="system")
         await log.append_line(t("tui.setup.hint"), kind="system")
+
+    async def _cmd_voice(self, log, arg: str) -> None:
+        """/voice:当前构建未接录音/STT,诚实提示而不是静默无效。"""
+        if arg.strip():
+            await log.append_line(t("tui.voice.usage"), kind="error")
+            return
+        await log.append_line(t("tui.voice.unavailable"), kind="warn")
 
     async def _journal_cmd(self, log, arg: str) -> None:
         """/journal [run_id]:显示账本 JSONL 的绝对路径。
@@ -1078,8 +1218,12 @@ class ArgosApp(App):
         有 run_id → 显示指定 run 的路径;无参数 → 显示当前 run 的路径(若有)。
         任意情况下都只打路径,不尝试读文件内容(避免在 TUI 里输出大量 JSONL)。
         """
-        ledger_dir = Path.home() / ".argos" / "ledger"
-        run_id = arg.strip() or getattr(self, "_daemon_run_id", None) or getattr(self, "_run_id", None)
+        ledger_dir = _argos_dir() / "ledger"
+        parts = arg.split()
+        if len(parts) > 1:
+            await log.append_line(t("tui.journal.usage"), kind="error")
+            return
+        run_id = parts[0] if parts else getattr(self, "_daemon_run_id", None) or getattr(self, "_run_id", None)
         if run_id:
             journal_path = ledger_dir / f"{run_id}.jsonl"
             await log.append_line(t("tui.journal.with_id", path=journal_path), kind="system")
@@ -1159,12 +1303,16 @@ class ArgosApp(App):
     async def _hooks_cmd(self, log, arg: str) -> None:
         """/hooks / /hooks reload slash 命令入口。"""
         from argos.hooks import get_config, reload_config, HooksConfigError
+        arg = arg.strip().lower()
         if arg == "reload":
             try:
                 cfg = reload_config()
                 await log.append_line(t("tui.hooks.reloaded", n=len(cfg.entries)), kind="system")
             except HooksConfigError as e:
                 await log.append_line(t("tui.hooks.reload_failed", err=e), kind="error")
+            return
+        if arg:
+            await log.append_line(t("tui.hooks.usage"), kind="error")
             return
         # /hooks 无参 → 列当前配置
         cfg = get_config()
@@ -1186,6 +1334,7 @@ class ArgosApp(App):
         """/lsp / /lsp reload slash 命令入口(spec 2026-06-06 §2.7)。"""
         from argos import lsp as _lsp
         from argos.lsp import get_config, reload_config, LspConfigError
+        arg = arg.strip().lower()
         if arg == "reload":
             try:
                 cfg = reload_config()
@@ -1195,6 +1344,9 @@ class ArgosApp(App):
                 )
             except LspConfigError as e:
                 await log.append_line(t("tui.lsp.reload_failed", err=e), kind="error")
+            return
+        if arg:
+            await log.append_line(t("tui.lsp.usage"), kind="error")
             return
         # /lsp 无参 → 列当前 servers
         cfg = get_config()
@@ -1230,6 +1382,7 @@ class ArgosApp(App):
         from argos.permissions import (
             get_config, reload_config, PermissionsConfigError,
         )
+        arg = arg.strip().lower()
         if arg == "reload":
             try:
                 cfg = reload_config()
@@ -1244,6 +1397,9 @@ class ArgosApp(App):
                 await log.append_line(
                     t("tui.permissions.reload_failed", err=e), kind="error",
                 )
+            return
+        if arg:
+            await log.append_line(t("tui.permissions.usage"), kind="error")
             return
         # /permissions 无参 → 列当前配置摘要
         try:
@@ -1322,7 +1478,7 @@ class ArgosApp(App):
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             await log.append_line(
                 t("tui.runs.no_daemon"),
-                kind="system",
+                kind="error",
             )
             return
         # #5b observer 标识
@@ -1364,7 +1520,10 @@ class ArgosApp(App):
             return
         # /runs {id} [focus|resume|cancel]
         run_id = parts[0]
-        action = parts[1].strip() if len(parts) > 1 else "info"
+        action = parts[1].strip().lower() if len(parts) > 1 else "info"
+        if action not in {"info", "focus", "resume", "cancel"}:
+            await log.append_line(t("tui.runs.usage"), kind="error")
+            return
         if action == "focus":
             # #5b:owner-only;observer 拿 403
             try:
@@ -1410,7 +1569,7 @@ class ArgosApp(App):
                 from argos.tui.widgets.tab_strip import _format_cost
                 cost = _format_cost(info.get("cost_usd"))
                 wt = info.get("worktree_path") or "(none)"
-                journal_path = Path.home() / ".argos" / "ledger" / f"{run_id}.jsonl"
+                journal_path = _argos_dir() / "ledger" / f"{run_id}.jsonl"
                 await log.append_line(
                     f"{run_id}: state={info.get('state')}  events={info.get('events_count')}  "
                     f"cost={cost}  worktree={wt}\n"
@@ -1456,10 +1615,11 @@ class ArgosApp(App):
         TUI 只是 daemon 客户端，真正的确认通过 POST /suggestions/{id}/confirm（daemon 侧）。
         铁律：isolation=worktree + trust_level=L1_DANGEROUS_ONLY（server 端写死，TUI 不可覆盖）。
         """
-        suggestion_id = suggestion_id.strip()
-        if not suggestion_id:
+        parts = suggestion_id.split()
+        if len(parts) != 1:
             await log.append_line(t("tui.confirm.no_id"), kind="error")
             return
+        suggestion_id = parts[0]
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             await log.append_line(
                 t("tui.confirm.no_daemon"),
@@ -1501,10 +1661,11 @@ class ArgosApp(App):
 
     async def _dismiss_suggestion_cmd(self, log, suggestion_id: str) -> None:
         """/dismiss <suggestion_id>:忽略 conductor 建议（通过 daemon 端点）。"""
-        suggestion_id = suggestion_id.strip()
-        if not suggestion_id:
+        parts = suggestion_id.split()
+        if len(parts) != 1:
             await log.append_line(t("tui.dismiss.no_id"), kind="error")
             return
+        suggestion_id = parts[0]
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             await log.append_line(
                 t("tui.dismiss.no_daemon"),
@@ -1633,7 +1794,7 @@ class ArgosApp(App):
         # 首次调用注册 builtin(幂等)
         register_builtin_skills()
         path = arg.strip() or None
-        workspace = _P.cwd()
+        workspace = getattr(self, "_workspace", None) or _P.cwd()
         ctx = AnalysisSkillContext(
             workspace=workspace, approval_level="auto", run_id=f"slash-{skill_name}",
         )
@@ -1696,11 +1857,11 @@ class ArgosApp(App):
         await log.append_line(text, kind="system")
 
     async def _eval_cmd(self, log, arg: str) -> None:
-        """/eval [run <id> | compare <a> <b>] — Agent 自我评估 + A/B 对比(#7)。
+        """/eval [run <id> | compare <task_id>[:<model>] <task_id>[:<model>]] — Agent 自我评估 + A/B 对比(#7)。
 
         - 无参:列最近 20 run + 7d pass rate
         - run <task_id>:跑单个 task(走 config active model)
-        - compare <a> <b>:<a> / <b> 形如 `<task_id>:<model>`,或纯 run_id
+        - compare <task_id>[:<model>] <task_id>[:<model>]:model 缺省为 active profile
         """
         import time as _time
         from argos.eval.results import list_runs, summary
@@ -1733,12 +1894,13 @@ class ArgosApp(App):
                             f"({stats['pass_rate']*100:.0f}%)")
             await log.append_line("\n".join(lines), kind="system")
             return
-        # 有参:解析 "run <id>" / "compare <a> <b>"
+        # 有参:解析 "run <id>" / "compare <task_id>[:<model>] <task_id>[:<model>]"
         parts = arg.split()
-        if parts[0] == "run" and len(parts) == 2:
+        sub = parts[0].lower()
+        if sub == "run" and len(parts) == 2:
             await self._eval_run_cmd(log, parts[1])
             return
-        if parts[0] == "compare" and len(parts) == 3:
+        if sub == "compare" and len(parts) == 3:
             await self._eval_compare_cmd(log, parts[1], parts[2])
             return
         await log.append_line(
@@ -1747,9 +1909,9 @@ class ArgosApp(App):
     async def _eval_run_cmd(self, log, task_id: str) -> None:
         """/eval run <task_id>:跑单个 task(走 EvalRunner)。"""
         from argos.eval.corpus import load_task
-        from argos.eval.runner import EvalRunner, PASS_PASSED
+        from argos.eval.runner import PASS_PASSED
         from argos.eval.results import append as append_result
-        from argos.daemon.worktree import WorktreeManager
+        from argos.cli.eval import _make_runner as _make_eval_runner
         try:
             task = load_task(task_id)
         except FileNotFoundError as e:
@@ -1763,12 +1925,11 @@ class ArgosApp(App):
                 model_tier = _cfg.load_config().active
         except Exception:  # noqa: BLE001
             pass
-        base = Path.home() / ".argos" / "eval"
+        base = _argos_dir() / "eval"
         await log.append_line(
             f"[eval] task={task.id} category={task.category} difficulty={task.difficulty} "
             f"model={model_tier}")
-        wm = WorktreeManager(base_dir=base / "worktrees")
-        runner = EvalRunner(worktree=wm, base_dir=base)
+        runner = _make_eval_runner(base=base)
         result = runner.run(task, model_tier=model_tier)
         append_result(result, base=base)
         cost = f"${result.cost_usd:.4f}" if result.cost_usd is not None else "$N/A"
@@ -1781,11 +1942,10 @@ class ArgosApp(App):
             await log.append_line(f"[eval] error: {result.error}", kind="error")
 
     async def _eval_compare_cmd(self, log, a: str, b: str) -> None:
-        """/eval compare <a> <b>:A/B side-by-side,渲 markdown 报告到 transcript。"""
+        """/eval compare <task_id>[:<model>] <task_id>[:<model>]:A/B side-by-side,渲 markdown 报告到 transcript。"""
         from argos.eval.corpus import load_task
         from argos.eval.compare import run_pair, write_report
-        from argos.eval.runner import EvalRunner
-        from argos.daemon.worktree import WorktreeManager
+        from argos.cli.eval import _make_runner as _make_eval_runner
         # 解析 a/b:<task_id>:<model> 或纯 <task_id>(默认 = 同一 model 两遍)
         def _parse(spec: str) -> tuple[str | None, str | None]:
             if ":" in spec:
@@ -1816,10 +1976,9 @@ class ArgosApp(App):
             pass
         ma = ma or active
         mb = mb or active
-        base = Path.home() / ".argos" / "eval"
+        base = _argos_dir() / "eval"
         await log.append_line(f"[eval] A/B: {ma} vs {mb} on {ta} ...")
-        wm = WorktreeManager(base_dir=base / "worktrees")
-        runner = EvalRunner(worktree=wm, base_dir=base)
+        runner = _make_eval_runner(base=base)
         ra, rb = run_pair(runner, task, model_a=ma, model_b=mb)
         p = write_report(ra, rb, base=base)
         md = p.read_text("utf-8")
@@ -1834,8 +1993,14 @@ class ArgosApp(App):
         """#11 per-task routing TUI:无参列配置 + 最近 10 步决策;
         set <category> <tier> 改写 ~/.argos/config.json(下次 run 生效)。"""
         parts = arg.strip().split()
-        if parts and parts[0] == "set":
+        if parts and parts[0].lower() == "set":
             await self._routing_set(log, " ".join(parts[1:]))
+            return
+        if parts:
+            from argos.routing.categorizer import TaskCategory
+            await log.append_line(
+                t("tui.routing.set_usage", cats=str([c.value for c in TaskCategory])),
+                kind="error")
             return
         # 无参:列 routing config + history
         router = self._current_router()
@@ -1854,16 +2019,20 @@ class ArgosApp(App):
         analyzer 失败永不崩 run(降级返全空桶,记 error)。"""
         from argos.context.analyzer import analyze
         from argos.context.render import format_json, format_table
+        fmt = arg.strip().lower()
+        if fmt not in ("", "--json"):
+            await log.append_line(t("tui.context.usage"), kind="error")
+            return
         # 找 loop 实例 / store / workspace;无 loop 实例(罕见 e.g. demo)→ 走空分析
         loop = getattr(self, "_agent_loop", None)
         store = getattr(self, "_store", None)
-        workspace = getattr(self, "_workspace", None) or Path.home() / ".argos" / "workspace"
+        workspace = getattr(self, "_workspace", None) or (_argos_dir() / "workspace")
         try:
             b = analyze(loop, store=store, workspace=workspace)  # type: ignore[arg-type]
         except Exception as e:  # noqa: BLE001 — 任何分析失败都降级
             await log.append_line(t("tui.context.failed", err=e), kind="error")
             return
-        if "--json" in arg:
+        if fmt == "--json":
             await log.append_line(format_json(b), kind="info")
             return
         for line in format_table(b).split("\n"):
@@ -1893,12 +2062,15 @@ class ArgosApp(App):
         import json as _json
 
         sub = arg.strip().lower()
+        if sub and sub != "status":
+            await log.append_line(t("tui.dream.usage"), kind="error")
+            return
 
         # ── inline 模式:诚实拒绝 ─────────────────────────────────────
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             await log.append_line(
                 t("tui.dream.no_daemon"),
-                kind="system",
+                kind="error",
             )
             return
 
@@ -1985,11 +2157,16 @@ class ArgosApp(App):
             # normalize "until: <cmd>" → "| verify: <cmd>" 再走统一解析
             arg = re.sub(r"\buntil:\s*", "| verify: ", arg, count=1, flags=re.IGNORECASE)
 
+        if re.search(r"\|\s*verify:\s*$", arg, re.IGNORECASE) or re.search(r"--verify\s*$", arg, re.IGNORECASE):
+            await log.append_line(t("tui.goal.usage"), kind="error")
+            return
+
         goal_text, verify_cmd = self._parse_verify_arg(arg)
 
         if not goal_text:
             await log.append_line(
                 t("tui.goal.usage"),  # 无 goal 文本:诚实给用法提示(命令已知,是参数缺失)
+                kind="error",
             )
             return
 
@@ -2004,18 +2181,18 @@ class ArgosApp(App):
 
     async def _schedule_cmd(self, log, arg: str) -> None:
         """/schedule <when>: <goal> — 通过 daemon 创建 kind=schedule StandingOrder。"""
-        if not self._with_daemon or not self._daemon_client:
-            await log.append_line(t("tui.schedule.needs_daemon"), kind="system")
-            return
         # parse "every 1h: summarize logs" → schedule="every 1h", goal="summarize logs"
         if ":" not in arg:
-            await log.append_line(t("tui.schedule.usage"), kind="system")
+            await log.append_line(t("tui.schedule.usage"), kind="error")
             return
         when, _, goal = arg.partition(":")
         when = when.strip()
         goal = goal.strip()
         if not when or not goal:
-            await log.append_line(t("tui.schedule.usage"), kind="system")
+            await log.append_line(t("tui.schedule.usage"), kind="error")
+            return
+        if not self._with_daemon or not self._daemon_client:
+            await log.append_line(t("tui.schedule.needs_daemon"), kind="error")
             return
         body = {
             "utterance": f"/schedule {arg}",
@@ -2035,16 +2212,16 @@ class ArgosApp(App):
 
     async def _watch_cmd(self, log, arg: str) -> None:
         """/watch <glob> <goal> — 通过 daemon 创建 kind=file_trigger StandingOrder。"""
-        if not self._with_daemon or not self._daemon_client:
-            await log.append_line(t("tui.watch.needs_daemon"), kind="system")
-            return
         parts = arg.strip().split(None, 1)
         if len(parts) < 2:
-            await log.append_line(t("tui.watch.usage"), kind="system")
+            await log.append_line(t("tui.watch.usage"), kind="error")
             return
         glob_pat, goal = parts[0], parts[1].strip()
         if not goal:
-            await log.append_line(t("tui.watch.usage"), kind="system")
+            await log.append_line(t("tui.watch.usage"), kind="error")
+            return
+        if not self._with_daemon or not self._daemon_client:
+            await log.append_line(t("tui.watch.needs_daemon"), kind="error")
             return
         body = {
             "utterance": f"/watch {arg}",
@@ -2066,6 +2243,7 @@ class ArgosApp(App):
         """#11 /routing set <category> <tier>:原子改写 config.json。"""
         import os
         from pathlib import Path
+        from argos import config as _cfg
         from argos.config import ConfigError
         from argos.routing.categorizer import TaskCategory
         from argos.routing.config import set_category
@@ -2085,8 +2263,14 @@ class ArgosApp(App):
                 kind="error")
             return
         try:
-            config_dir = Path(os.environ.get("ARGOS_CONFIG_DIR")
-                              or Path.home() / ".argos")
+            config_dir = Path(_cfg.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+            _cfg.tier_for(tier)
+            if _cfg.key_for(tier) is None:
+                cfg = _cfg.load_config()
+                env_name = cfg.key_envs.get(tier) or ""
+                raise ConfigError(
+                    t("tui.routing.missing_key", name=tier, env=env_name)
+                )
             set_category(config_dir, category, tier)
         except ConfigError as e:
             await log.append_line(t("tui.routing.set_failed", err=e), kind="error")
@@ -2111,9 +2295,22 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         # 取上一条 slash 命令的 arg(由 _dispatch_slash 在 call 前 set)
         cmd_arg = getattr(self, "_last_skills_arg", "")
         sub_parts = cmd_arg.split()
-        if sub_parts and sub_parts[0] in ("install", "remove", "refresh", "test"):
-            sub = sub_parts[0]
+        known_subcommands = ("install", "remove", "refresh", "test")
+        sub = sub_parts[0].lower() if sub_parts else ""
+        if sub_parts and sub not in known_subcommands:
+            await log.append_line(t("tui.skills.usage"), kind="error")
+            return
+        if sub_parts and sub in known_subcommands:
             sub_arg = sub_parts[1] if len(sub_parts) > 1 else ""
+            if sub in ("install", "remove", "test") and len(sub_parts) != 2:
+                await log.append_line(
+                    t("tui.skills.named_usage", sub=sub) if not sub_arg else t("tui.skills.usage"),
+                    kind="error",
+                )
+                return
+            if sub == "refresh" and len(sub_parts) != 1:
+                await log.append_line(t("tui.skills.usage"), kind="error")
+                return
             await log.append_line(t("tui.skills.side_effect_hint", sub=sub, arg=sub_arg), kind="system")
             return
 

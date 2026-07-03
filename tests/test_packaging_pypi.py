@@ -139,6 +139,19 @@ def test_argospkg_manifest_lists_winget_dir():
     assert r.returncode == 0, f"argospkg manifest 返 {r.returncode};stderr={r.stderr}"
     # 不强制 winget 文件存在(本期任务 T8 后才有),但 stdout 必含 manifest 提示
     assert "manifest" in r.stdout.lower()
+    assert "placeholder" not in r.stdout.lower()
+    assert "占位" not in r.stdout
+    assert "v0.2.0" not in r.stdout.lower()
+
+
+def test_argospkg_manifest_fails_without_winget_dir(tmp_path, monkeypatch, capsys):
+    """缺 packaging/winget 时不能发布检查假绿。"""
+    from argos.cli.pkg import cmd_manifest
+
+    monkeypatch.chdir(tmp_path)
+    assert cmd_manifest([]) == 1
+    captured = capsys.readouterr()
+    assert "packaging/winget" in captured.err
 
 
 def test_argospkg_help_prints_usage():

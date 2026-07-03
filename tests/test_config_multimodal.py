@@ -10,7 +10,7 @@ def _write_config(tmp_path: Path, model_extra: dict) -> None:
         "active": "m",
         "models": {"m": {
             "model": "agnes-2.0-flash", "base_url": "https://x/v1",
-            "protocol": "openai", "max_tokens": 1024, **model_extra,
+            "protocol": "openai", "api_key_env": "TEST_KEY", "max_tokens": 1024, **model_extra,
         }},
     }
     (tmp_path / "config.json").write_text(json.dumps(cfg))

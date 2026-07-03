@@ -21,12 +21,17 @@ EN: dict[str, str] = {
     # ── route: routing/config.py ──────────────────────────────────────────────
     "route.not_valid_json": "not valid JSON",
     "route.config_parse_fail": "config.json parse failed: {detail}",
+    "route.routing_must_be_object": "routing must be an object, got {type_name}",
+    "route.field_must_be_object": "routing.{field} must be an object, got {type_name}",
+    "route.field_must_be_list": "routing.{field} must be a list, got {type_name}",
+    "route.field_must_be_str": "routing.{field} must be str, got {type_name}",
     "route.tier_must_be_str": "routing.{key} tier value must be str, got {type_name}",
     "route.tier_force_confirm_must_be_str": "routing.tier_force_confirm entries must be str",
     "route.category_key_invalid": "routing.by_category key {key!r} not in valid categories {valid} ",
     "route.tier_not_in_models": "routing tier '{tier}' not in config.models {models} (typo guard)",
     "route.no_config_set_category": "no {path}, cannot set_category",
     # ── route: routing/router.py ──────────────────────────────────────────────
+    "route.profile_missing_key": "profile '{tier}' has no available API key ({env})",
     "route.factory_returned_none": "profile '{tier}' factory returned None, cannot construct ModelClient",
     # ── skill: skills_curator/recommend.py ────────────────────────────────────
     "skill.recommend_py_files": "edited {count} .py file(s)",
@@ -74,12 +79,17 @@ ZH: dict[str, str] = {
     # ── route: routing/config.py ──────────────────────────────────────────────
     "route.not_valid_json": "不是合法 JSON",
     "route.config_parse_fail": "config.json 解析失败:{detail}",
+    "route.routing_must_be_object": "routing 必须是 object,得 {type_name}",
+    "route.field_must_be_object": "routing.{field} 必须是 object,得 {type_name}",
+    "route.field_must_be_list": "routing.{field} 必须是 list,得 {type_name}",
+    "route.field_must_be_str": "routing.{field} 必须是 str,得 {type_name}",
     "route.tier_must_be_str": "routing.{key} 的 tier 值必须是 str,得 {type_name}",
     "route.tier_force_confirm_must_be_str": "routing.tier_force_confirm 项必须是 str",
     "route.category_key_invalid": "routing.by_category 的键 {key!r} 不在合法类别 {valid} 内",
     "route.tier_not_in_models": "routing tier '{tier}' 不在 config.models {models} 内(防拼写退化)",
     "route.no_config_set_category": "无 {path},无法 set_category",
     # ── route: routing/router.py ──────────────────────────────────────────────
+    "route.profile_missing_key": "profile '{tier}' 没有可用 API key({env})",
     "route.factory_returned_none": "profile '{tier}' 工厂返 None,无法构造 ModelClient",
     # ── skill: skills_curator/recommend.py ────────────────────────────────────
     "skill.recommend_py_files": "编辑 {count} 个 .py 文件",

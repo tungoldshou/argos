@@ -108,3 +108,57 @@ def test_command_help_includes_hooks():
     from argos.tui.commands import COMMAND_HELP
     assert "hooks" in COMMAND_HELP
     assert "reload" in COMMAND_HELP["hooks"]
+
+
+@pytest.mark.asyncio
+async def test_hooks_unknown_arg_prints_usage(isolated_hooks_home, monkeypatch):
+    """/hooks 只接受空参数或 reload,未知参数应报用法。"""
+    from argos.hooks import _reset_config
+    from argos.tui.app import ArgosApp
+
+    isolated_hooks_home.mkdir(parents=True, exist_ok=True)
+    p = isolated_hooks_home / "hooks.json"
+    p.write_text(json.dumps({"version": 1, "hooks": {}}))
+    monkeypatch.setattr("argos.hooks.config.HOOKS_CONFIG_PATH", p)
+    _reset_config()
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    log = Log()
+    await ArgosApp()._hooks_cmd(log, "bogus")
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert "Usage" in text or "用法" in text
+    assert any(kind == "error" for _line, kind in log.lines)
+
+
+@pytest.mark.asyncio
+async def test_hooks_reload_arg_is_case_insensitive(isolated_hooks_home, monkeypatch):
+    """/hooks RELOAD should behave like /hooks reload."""
+    from argos.hooks import _reset_config
+    from argos.tui.app import ArgosApp
+
+    isolated_hooks_home.mkdir(parents=True, exist_ok=True)
+    p = isolated_hooks_home / "hooks.json"
+    p.write_text(json.dumps({"version": 1, "hooks": {}}))
+    monkeypatch.setattr("argos.hooks.config.HOOKS_CONFIG_PATH", p)
+    _reset_config()
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    log = Log()
+    await ArgosApp()._hooks_cmd(log, "RELOAD")
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert "Usage" not in text and "用法" not in text
+    assert any(kind == "system" for _line, kind in log.lines)

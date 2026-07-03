@@ -107,11 +107,11 @@ async def test_conductor_event_reaches_apply_event():
     app = _make_app()
     suggestion = _fake_suggestion_event()
 
-    # 捕获 run_worker 的协程参数
-    captured_coro: list = []
+    # 捕获 run_worker 的 work 参数(Textual 接受 async function 或 awaitable)
+    captured_work: list = []
 
-    def _capture_worker(coro, exclusive=False):
-        captured_coro.append(coro)
+    def _capture_worker(work, exclusive=False):
+        captured_work.append(work)
         return MagicMock()
 
     app.run_worker = _capture_worker
@@ -151,8 +151,9 @@ async def test_conductor_event_reaches_apply_event():
 
         app._start_conductor_subscription(Path("/tmp/fake.sock"), "sess-t")
 
-    assert len(captured_coro) == 1, "expected one worker coroutine"
-    await captured_coro[0]
+    assert len(captured_work) == 1, "expected one worker"
+    work = captured_work[0]
+    await (work() if callable(work) else work)
 
     assert len(applied) == 1, f"expected 1 event applied, got {len(applied)}"
     ev = applied[0]
@@ -195,10 +196,10 @@ async def test_conductor_source_resets_to_none_after_stream_ends():
 
     app = _make_app()
 
-    captured_coro: list = []
+    captured_work: list = []
 
-    def _capture_worker(coro, exclusive=False):
-        captured_coro.append(coro)
+    def _capture_worker(work, exclusive=False):
+        captured_work.append(work)
         return MagicMock()
 
     app.run_worker = _capture_worker
@@ -226,12 +227,13 @@ async def test_conductor_source_resets_to_none_after_stream_ends():
 
         app._start_conductor_subscription(Path("/tmp/fake.sock"), "sess-t")
 
-    assert len(captured_coro) == 1
+    assert len(captured_work) == 1
     # _conductor_source is set before stream starts
     assert app._conductor_source is not None
 
     # run the stream to completion
-    await captured_coro[0]
+    work = captured_work[0]
+    await (work() if callable(work) else work)
 
     # _conductor_source should be reset to None after stream ends
     assert app._conductor_source is None, (

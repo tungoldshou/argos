@@ -139,13 +139,15 @@ EN: dict[str, str] = {
     # ── splash ────────────────────────────────────────────────────────────────
 
     "widget.splash_subtitle": "hundred-eyed agent · v{version} · ",
-    "widget.splash_hint": "type a goal to begin · / for commands · Esc to interrupt · ^C to quit",
+    "widget.splash_hint": "type a goal to begin · / for commands · Esc/^C interrupt · ^D quit",
     "widget.splash_badge_no_key": "no key · /setup",
     "widget.splash_badge_live": "LIVE",
     "widget.splash_bad_config_permissions": "permissions",
     "widget.splash_bad_config_lsp": "LSP",
     "widget.splash_bad_config_hooks": "hooks",
+    "widget.splash_bad_config_config": "config error",
     "widget.splash_bad_config_suffix": " disabled ({reason})",
+    "widget.splash_bad_config_error_suffix": " ({reason})",
 
     # ── top_bar badges ────────────────────────────────────────────────────────
 
@@ -402,13 +404,15 @@ ZH: dict[str, str] = {
     # ── splash ────────────────────────────────────────────────────────────────
 
     "widget.splash_subtitle": "百眼智能体 · v{version} · ",
-    "widget.splash_hint": "输入目标开始 · / 命令 · Esc 打断 · ^C 退出",
+    "widget.splash_hint": "输入目标开始 · / 命令 · Esc/^C 打断 · ^D 退出",
     "widget.splash_badge_no_key": "未配 key · /setup",
     "widget.splash_badge_live": "LIVE",
     "widget.splash_bad_config_permissions": "permissions",
     "widget.splash_bad_config_lsp": "LSP",
     "widget.splash_bad_config_hooks": "hooks",
+    "widget.splash_bad_config_config": "配置错误",
     "widget.splash_bad_config_suffix": " 已禁用({reason})",
+    "widget.splash_bad_config_error_suffix": "({reason})",
 
     # ── top_bar badges ────────────────────────────────────────────────────────
 

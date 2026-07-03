@@ -62,6 +62,19 @@ _DEFAULT_BY_CATEGORY: dict[str, str] = {
 _BUILTIN_DEFAULT = RoutingConfig(by_category=_DEFAULT_BY_CATEGORY)
 
 
+def _validate_routing_tiers(tiers: list[str], models: dict) -> None:
+    for tier in tiers:
+        if tier not in models:
+            raise ConfigError(t("route.tier_not_in_models", tier=tier, models=list(models)))
+
+
+def _validate_category_keys(by_category: dict[str, str]) -> None:
+    valid_cats = {c.value for c in TaskCategory}
+    for k in by_category:
+        if k not in valid_cats:
+            raise ConfigError(t("route.category_key_invalid", key=k, valid=sorted(valid_cats)))
+
+
 def load_routing(config_dir: Path) -> RoutingConfig:
     """从 config_dir/config.json 读 routing 段;缺则返内置默认映射(出厂激活)。"""
     config_dir = Path(config_dir).expanduser()
@@ -79,12 +92,26 @@ def load_routing(config_dir: Path) -> RoutingConfig:
     if raw is None:
         return _BUILTIN_DEFAULT
     routing = raw.get("routing")
-    if not isinstance(routing, dict):
+    if routing is None:
         return _BUILTIN_DEFAULT
-    default = routing.get("default") or "default"
-    by_category = dict(routing.get("by_category") or {})
-    by_tool = dict(routing.get("by_tool") or {})
-    tier_force_confirm = list(routing.get("tier_force_confirm") or [])
+    if not isinstance(routing, dict):
+        raise ConfigError(t("route.routing_must_be_object", type_name=type(routing).__name__))
+    raw_default = routing.get("default")
+    if raw_default is not None and not isinstance(raw_default, str):
+        raise ConfigError(t("route.field_must_be_str", field="default", type_name=type(raw_default).__name__))
+    default = raw_default or raw.get("active") or "default"
+    raw_by_category = routing.get("by_category") or {}
+    raw_by_tool = routing.get("by_tool") or {}
+    raw_tier_force_confirm = routing.get("tier_force_confirm") or []
+    if not isinstance(raw_by_category, dict):
+        raise ConfigError(t("route.field_must_be_object", field="by_category", type_name=type(raw_by_category).__name__))
+    if not isinstance(raw_by_tool, dict):
+        raise ConfigError(t("route.field_must_be_object", field="by_tool", type_name=type(raw_by_tool).__name__))
+    if not isinstance(raw_tier_force_confirm, list):
+        raise ConfigError(t("route.field_must_be_list", field="tier_force_confirm", type_name=type(raw_tier_force_confirm).__name__))
+    by_category = dict(raw_by_category)
+    by_tool = dict(raw_by_tool)
+    tier_force_confirm = list(raw_tier_force_confirm)
     for k, v in {**by_category, **by_tool}.items():
         if not isinstance(v, str):
             raise ConfigError(t("route.tier_must_be_str", key=k, type_name=type(v).__name__))
@@ -92,10 +119,11 @@ def load_routing(config_dir: Path) -> RoutingConfig:
         if not isinstance(v, str):
             raise ConfigError(t("route.tier_force_confirm_must_be_str"))
     # 校验 category 键必须在 8 枚举内(spec D11 严格 schema)
-    valid_cats = {c.value for c in TaskCategory}
-    for k in by_category:
-        if k not in valid_cats:
-            raise ConfigError(t("route.category_key_invalid", key=k, valid=sorted(valid_cats)))
+    _validate_category_keys(by_category)
+    _validate_routing_tiers(
+        [default, *by_category.values(), *by_tool.values(), *tier_force_confirm],
+        raw.get("models") or {},
+    )
     return RoutingConfig(
         default=default, by_category=by_category, by_tool=by_tool,
         tier_force_confirm=tier_force_confirm,
@@ -114,9 +142,7 @@ def _validate_tier(tier: str, config_dir: Path) -> None:
         raise
     if raw is None:
         return
-    models = raw.get("models") or {}
-    if tier not in models:
-        raise ConfigError(t("route.tier_not_in_models", tier=tier, models=list(models)))
+    _validate_routing_tiers([tier], raw.get("models") or {})
 
 
 def set_category(config_dir: Path, category: TaskCategory, tier: str) -> RoutingConfig:
@@ -132,10 +158,35 @@ def set_category(config_dir: Path, category: TaskCategory, tier: str) -> Routing
         raw = json.loads(cfile.read_text())
     except json.JSONDecodeError as e:
         raise ConfigError(t("route.config_parse_fail", detail=str(e))) from e
-    routing = dict(raw.get("routing") or {})
-    by_category = dict(routing.get("by_category") or {})
+    raw_routing = raw.get("routing")
+    if raw_routing is not None and not isinstance(raw_routing, dict):
+        raise ConfigError(t("route.routing_must_be_object", type_name=type(raw_routing).__name__))
+    routing = dict(raw_routing or {})
+    raw_default = routing.get("default")
+    if raw_default is not None and not isinstance(raw_default, str):
+        raise ConfigError(t("route.field_must_be_str", field="default", type_name=type(raw_default).__name__))
+    raw_by_category = routing.get("by_category") or {}
+    raw_by_tool = routing.get("by_tool") or {}
+    raw_tier_force_confirm = routing.get("tier_force_confirm") or []
+    if not isinstance(raw_by_category, dict):
+        raise ConfigError(t("route.field_must_be_object", field="by_category", type_name=type(raw_by_category).__name__))
+    if not isinstance(raw_by_tool, dict):
+        raise ConfigError(t("route.field_must_be_object", field="by_tool", type_name=type(raw_by_tool).__name__))
+    if not isinstance(raw_tier_force_confirm, list):
+        raise ConfigError(t("route.field_must_be_list", field="tier_force_confirm", type_name=type(raw_tier_force_confirm).__name__))
+    by_category = dict(raw_by_category)
     by_category[category.value] = tier
     routing["by_category"] = by_category
+    _validate_category_keys(by_category)
+    _validate_routing_tiers(
+        [
+            routing.get("default") or raw.get("active") or "default",
+            *by_category.values(),
+            *raw_by_tool.values(),
+            *raw_tier_force_confirm,
+        ],
+        raw.get("models") or {},
+    )
     raw["routing"] = routing
     # 原子写:.tmp + os.replace(spec D12)
     tmp_fd, tmp_path = tempfile.mkstemp(dir=str(config_dir), suffix=".tmp")

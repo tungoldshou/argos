@@ -81,6 +81,81 @@ def test_build_components_uses_active_profile(tmp_path, monkeypatch):
     c.close()
 
 
+def test_routed_profile_without_key_fails_on_select(tmp_path, monkeypatch):
+    import json
+    from argos.config import ConfigError
+    from argos.routing.categorizer import TaskCategory
+
+    monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    (tmp_path / "config.json").write_text(json.dumps({
+        "active": "a",
+        "models": {
+            "a": {
+                "protocol": "openai",
+                "base_url": "https://api.example.com/v1",
+                "model": "model-a",
+                "api_key_env": "AK",
+            },
+            "b": {
+                "protocol": "openai",
+                "base_url": "https://api.example.com/v1",
+                "model": "model-b",
+                "api_key_env": "BK",
+            },
+        },
+        "routing": {"by_category": {"simple_read": "b"}},
+    }))
+    (tmp_path / ".env").write_text("AK=secret\n")
+    monkeypatch.delenv("BK", raising=False)
+
+    c = af.build_components(workspace=str(tmp_path / "ws"))
+    try:
+        assert c.router is not None
+        with pytest.raises(ConfigError, match="BK"):
+            c.router.select(category=TaskCategory.SIMPLE_READ, tool=None)
+    finally:
+        c.close()
+
+
+def test_build_components_router_honors_env_local_config_dir(tmp_path, monkeypatch):
+    import json
+    from argos import config as C
+
+    cfg_dir = tmp_path / "from-env-local"
+    cfg_dir.mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
+    monkeypatch.delenv("ARGOS_CONFIG_DIR", raising=False)
+    monkeypatch.setattr(C, "_ENV", {"ARGOS_CONFIG_DIR": str(cfg_dir)})
+    (cfg_dir / "config.json").write_text(json.dumps({
+        "active": "local",
+        "models": {
+            "local": {
+                "protocol": "openai",
+                "base_url": "https://api.example.com/v1",
+                "model": "model-local",
+                "api_key_env": "AK",
+            },
+            "strong": {
+                "protocol": "openai",
+                "base_url": "https://api.example.com/v1",
+                "model": "model-strong",
+                "api_key_env": "SK",
+            },
+        },
+        "routing": {"by_category": {"simple_read": "strong"}},
+    }))
+    (cfg_dir / ".env").write_text("AK=secret\nSK=secret\n")
+
+    c = af.build_components(workspace=str(tmp_path / "ws"))
+    try:
+        assert c.router is not None
+        assert c.router.routing.by_category["simple_read"] == "strong"
+    finally:
+        c.close()
+
+
 def test_build_loop_factory_wires_workflow_engine(tmp_path, monkeypatch):
     monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))   # 空目录:走旧 env 回退路径

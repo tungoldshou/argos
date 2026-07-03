@@ -173,6 +173,7 @@ def test_run_no_loop_factory_returns_error(tmp_path, eval_task):
     r = runner.run(eval_task, model_tier="cheap")
     assert r.pass_status == PASS_ERROR
     assert "loop_factory_required" in r.error
+    assert "fake" not in r.error.lower()
 
 
 def test_run_unverifiable_passes_through(runner_with_fake):

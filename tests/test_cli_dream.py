@@ -33,6 +33,21 @@ def _args(report: bool = False) -> argparse.Namespace:
     return ns
 
 
+def test_cli_dream_default_dirs_honor_argos_config_dir(tmp_path, monkeypatch):
+    """未显式覆盖 dreams/memory 时,CLI 默认目录应跟随 ARGOS_CONFIG_DIR。"""
+    from argos import config as C
+    from argos.cli import dream
+
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.delenv("ARGOS_DREAMS_DIR", raising=False)
+    monkeypatch.delenv("ARGOS_MEMORY_DIR", raising=False)
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
+
+    assert dream._dreams_dir() == cfg_dir / "dreams"
+    assert dream._memory_dir() == cfg_dir / "memory"
+
+
 # ── 1. --report 空目录 → 诚实空态 ───────────────────────────────────────
 
 
@@ -134,6 +149,20 @@ def test_cli_dream_no_key_degrades(tmp_path, monkeypatch, capsys):
     assert len(consolidate_called) == 1  # consolidate 真的跑了
 
 
+def test_cli_dream_build_components_error_is_not_reported_as_no_key(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("ARGOS_DREAMS_DIR", str(tmp_path / "dreams"))
+    monkeypatch.setenv("ARGOS_MEMORY_DIR", str(tmp_path / "memory"))
+
+    with patch("argos.app_factory.build_components", side_effect=ValueError("bad config")):
+        from argos.cli import dream as _dream_mod
+        code = _dream_mod.run_dream(_args(report=False))
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "argos setup" not in captured.out
+    assert "bad config" in captured.err
+
+
 # ── 4. TUI:inline 模式 /dream 拒绝 ─────────────────────────────────────
 
 
@@ -157,6 +186,23 @@ async def test_tui_dream_inline_refuses():
         assert "daemon" in txt.lower() or "inline" in txt.lower()
     finally:
         os.environ.pop("ARGOS_NO_DAEMON", None)
+
+
+@pytest.mark.asyncio
+async def test_tui_dream_inline_refusal_is_error():
+    from argos.tui.app import ArgosApp
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    log = Log()
+    await ArgosApp()._dream_cmd(log, "")
+
+    assert log.lines[0][1] == "error"
 
 
 # ── 5. TUI:daemon 模式 /dream → POST /dream/run ─────────────────────────
@@ -199,6 +245,36 @@ async def test_tui_dream_daemon_posts():
         assert "/dream/run" in call_args[0][1]
         # 断言渲染了成功文案(202 分支 → "Dream 已启动,进度见活动栏。")
         assert "已启动" in txt
+    finally:
+        os.environ.pop("ARGOS_NO_DAEMON", None)
+
+
+@pytest.mark.asyncio
+async def test_tui_dream_unknown_arg_prints_usage_without_posting():
+    """daemon session 中 /dream 未知子命令不能误触发 /dream/run。"""
+    import os
+    os.environ["ARGOS_NO_DAEMON"] = "1"
+    try:
+        from argos.tui.app import ArgosApp
+        from argos.tui.commands import parse_slash
+        from argos.tui.fakeloop import FakeLoop
+        from argos.tui.widgets.transcript import Transcript
+
+        app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
+        mock_client = MagicMock()
+        mock_client._request = AsyncMock(return_value=(202, {}, '{"state":"dream_started"}'))
+        app._with_daemon = True
+        app._daemon_client = mock_client
+        app._daemon_session_id = "test-session-id"
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            cmd = parse_slash("/dream typo")
+            await app._dispatch_slash(cmd)
+            txt = app.query_one("#transcript", Transcript).rendered_text
+
+        mock_client._request.assert_not_called()
+        assert "Usage" in txt or "用法" in txt
     finally:
         os.environ.pop("ARGOS_NO_DAEMON", None)
 
@@ -458,4 +534,7 @@ def test_cli_dream_eval_runner_receives_loop_factory(tmp_path, monkeypatch, caps
     assert kw["loop_factory"] is not None, (
         "EvalRunner 收到的 loop_factory 是 None；"
         "runner.run() 将直接返回 PASS_ERROR，A/B 晋升永不发生。"
+    )
+    assert kw["base_dir"] == dreams_dir / "eval", (
+        f"EvalRunner base_dir 应跟随 dreams_dir/eval，实际为 {kw['base_dir']}"
     )

@@ -12,6 +12,8 @@
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 from argos.tui.app import ArgosApp
 from argos.tui.fakeloop import FakeLoop
@@ -28,6 +30,30 @@ async def test_splash_shown_on_mount_with_mode_badge():
         assert len(sp) == 1
         assert "ARGOS" in sp[0].renderable_text
         assert "DEMO" not in sp[0].renderable_text       # demo 徽标已移除
+
+
+@pytest.mark.asyncio
+async def test_splash_bad_model_config_does_not_crash(tmp_path, monkeypatch):
+    """旧版 setup 写出非法 api_key_env 时,TUI 启动页应降级提示,不能 mount 崩溃。"""
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    (tmp_path / "config.json").write_text(json.dumps({
+        "active": "bad",
+        "models": {"bad": {
+            "protocol": "openai",
+            "base_url": "https://x/v1",
+            "model": "bad",
+            "api_key_env": "BAD.NAME_KEY",
+        }},
+    }))
+
+    app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        sp = app.query_one(StartupSplash)
+        text = sp.renderable_text
+        assert "LIVE" not in text
+        assert "未配 key" in text
+        assert "配置错误" in text
 
 
 @pytest.mark.asyncio

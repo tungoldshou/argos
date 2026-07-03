@@ -91,7 +91,6 @@ argos/                # Main package
 ├── protocol/              # Shared protocol layer: Event dataclasses + EventBus (v6 P0)
 ├── capability/            # CapabilityRegistry — dynamic tool/skill registration (v6)
 ├── conductor/             # Conductor engine — autonomous trigger & scheduling (v6)
-├── intent/                # NL→Goal IntentEngine → structured IntentCard
 ├── ledger/                # Signed receipts JSONL + 3-state undo (Reversible)
 ├── perception/            # Computer-use executor (OS-level screen/mouse/keyboard) (v6)
 ├── sandbox/               # OS Seatbelt profiles, sandbox child

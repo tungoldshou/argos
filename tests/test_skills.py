@@ -34,6 +34,21 @@ def test_load_all_merges_dirs(skills_dir):
     assert a.trust == "builtin"
 
 
+def test_user_dir_honors_argos_config_dir(tmp_path, monkeypatch):
+    cfg_dir = tmp_path / ".argos"
+    user = cfg_dir / "skills"
+    user.mkdir(parents=True)
+    (user / "x.md").write_text(
+        "---\nname: x\ndescription: xray\ntrust: user_created\nenabled: true\n---\n# x\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(skills, "BUILTIN_DIR", tmp_path / "builtin")
+    monkeypatch.setattr(skills, "USER_DIR", None)
+
+    assert "x" in {s.name for s in skills.load_all()}
+
+
 def test_toggle_persists(skills_dir):
     _, user = skills_dir
     skills.toggle("a", enabled=False)

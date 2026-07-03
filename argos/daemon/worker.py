@@ -735,8 +735,7 @@ class RunWorker:
         """
         try:
             from argos.learning.hook import on_run_completed
-            import os
-            from pathlib import Path
+            from argos.daemon.__main__ import _default_argos_dir
 
             verdict_status = "failed"
             verify_cmd: str | None = None
@@ -757,7 +756,8 @@ class RunWorker:
                 pass
 
             store_dir = self._manager.store.runs_dir()
-            skills_root = Path(os.path.expanduser("~/.argos/skills"))
+            argos_dir = _default_argos_dir()
+            skills_root = argos_dir / "skills"
 
             # ponytail: Loop-4 ORCHESTRATION is wired — promote() is reachable,
             # A=bare/B=hinted runners are correctly separated — but live A/B eval
@@ -772,7 +772,7 @@ class RunWorker:
             if self._loop_factory is not None and self._worktree is not None:
                 try:
                     from argos.eval.runner import EvalRunner
-                    _eval_base = Path(os.path.expanduser("~/.argos/eval/learning"))
+                    _eval_base = argos_dir / "eval" / "learning"
                     _wt = self._worktree
                     _lf = self._loop_factory
 
@@ -809,7 +809,7 @@ class RunWorker:
                 verdict_status=verdict_status,
                 self_verified=self_verified,
                 skills_root=skills_root,
-                candidates_root=Path(os.path.expanduser("~/.argos/learning/candidates")),
+                candidates_root=argos_dir / "learning" / "candidates",
                 workspace=(getattr(entry, "workspace", "") or None),
                 runner_factory=_runner_factory,
                 tasks=[],  # hook auto-builds EvalTask from workspace+verify_cmd

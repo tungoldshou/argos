@@ -168,6 +168,11 @@ class PromptArea(TextArea):
     async def _on_key(self, event: events.Key) -> None:
         menu = self._menu()
         menu_active = menu is not None and menu.display and menu.has_matches
+        if event.key == "space" and not self.text.strip():
+            event.stop()
+            event.prevent_default()
+            self.post_message(self.Submitted("/voice"))
+            return
         if event.key in ("up", "down"):
             if menu_active:
                 event.stop()

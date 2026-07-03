@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -94,14 +95,40 @@ def _read_config(config_dir: Path) -> dict:
     f = config_dir / "config.json"
     if not f.exists():
         return {"models": {}}
-    try:
-        return json.loads(f.read_text())
-    except json.JSONDecodeError:
+    def backup_corrupt() -> dict:
+        backup = config_dir / "config.json.corrupt.bak"
+        idx = 1
+        while backup.exists():
+            backup = config_dir / f"config.json.corrupt.bak.{idx}"
+            idx += 1
         try:
-            f.replace(config_dir / "config.json.corrupt.bak")
-        except OSError:
-            pass
+            f.replace(backup)
+        except OSError as e:
+            from argos.config import ConfigError
+            raise ConfigError(t("setup.corrupt_backup_failed", path=f, err=e)) from e
         return {"models": {}}
+    try:
+        data = json.loads(f.read_text())
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return backup_corrupt()
+    if not isinstance(data, dict):
+        return backup_corrupt()
+    if "models" in data and not isinstance(data["models"], dict):
+        return backup_corrupt()
+    return data
+
+
+def _validate_final_config(cfg: dict) -> None:
+    from argos import config as _config
+
+    models = cfg.get("models")
+    if not isinstance(models, dict):
+        raise _config.ConfigError(t("config.profile.missing_field", name="config", field="models"))
+    active = cfg.get("active")
+    if not isinstance(active, str) or active not in models:
+        raise _config.ConfigError(t("config.load.active_not_in_models", active=active))
+    for model_name, profile in models.items():
+        _config._validate_profile(model_name, profile)
 
 
 def _ask_int(reader, writer, prompt: str, default: int) -> int:
@@ -120,14 +147,30 @@ def _ask_int(reader, writer, prompt: str, default: int) -> int:
 def _append_env(config_dir: Path, name: str, value: str) -> None:
     """把 NAME=value 写进 ~/.argos/.env(已存在同名则替换),权限 0600。
     以 0600 创建临时文件再原子替换 → 明文密钥从落盘第一刻就 0600,无 0644 暴露窗口(TOCTOU)。"""
+    if "\n" in value or "\r" in value:
+        from argos.config import ConfigError
+        raise ConfigError(t("setup.key_invalid"))
     f = config_dir / ".env"
-    lines = f.read_text().splitlines() if f.exists() else []
-    lines = [ln for ln in lines if not ln.strip().startswith(f"{name}=")]
+    try:
+        lines = f.read_text().splitlines() if f.exists() else []
+    except UnicodeDecodeError:
+        backup = config_dir / ".env.corrupt.bak"
+        idx = 1
+        while backup.exists():
+            backup = config_dir / f".env.corrupt.bak.{idx}"
+            idx += 1
+        f.replace(backup)
+        lines = []
+    lines = [
+        ln for ln in lines
+        if "=" not in ln or ln.split("=", 1)[0].strip().removeprefix("export ").strip() != name
+    ]
     lines.append(f"{name}={value}")
     content = "\n".join(lines) + "\n"
     tmp = f.with_suffix(".env.tmp")
     fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
+        os.fchmod(fd, 0o600)
         os.write(fd, content.encode())
     finally:
         os.close(fd)
@@ -135,34 +178,188 @@ def _append_env(config_dir: Path, name: str, value: str) -> None:
     os.chmod(f, 0o600)   # 替换后再确保一次(防原已存在文件残留宽权限)
 
 
+def _restore_env(config_dir: Path, old_content: bytes | None) -> None:
+    f = config_dir / ".env"
+    if old_content is None:
+        try:
+            f.unlink()
+        except FileNotFoundError:
+            pass
+        return
+    tmp = f.with_suffix(".env.tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        os.write(fd, old_content)
+    finally:
+        os.close(fd)
+    os.replace(tmp, f)
+    os.chmod(f, 0o600)
+
+
+def _write_config_atomic(config_dir: Path, cfg: dict) -> None:
+    target = config_dir / "config.json"
+    tmp = config_dir / "config.json.tmp"
+    try:
+        tmp.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
+        os.replace(tmp, target)
+    except Exception:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def _env_name_for_profile(name: str) -> str:
+    """Derive a shell-friendly env var name from a profile name."""
+    stem = re.sub(r"[^A-Z0-9]+", "_", name.upper()).strip("_")
+    if stem[:1].isdigit():
+        stem = f"ARGOS_{stem}"
+    return f"{stem or 'ARGOS_PROFILE'}_KEY"
+
+
 def write_profile(*, config_dir: Path, name: str, protocol: str, base_url: str, model: str,
                   api_key: str | None, api_key_env: str, set_active: bool,
                   max_tokens: int = 4096, context_window: int = 200_000,
                   price_in: float | None = None, price_out: float | None = None,
-                  embedding_model: str = "") -> None:
+                  embedding_model: str = "", multimodal: bool | None = None) -> None:
     """写一个 profile:设置进 config.json,密钥(若给)进 .env(0600);密钥绝不进 config.json。
     embedding_model 非空 → 记忆向量召回复用本 provider 的 /embeddings;空 → 记忆走 FTS5。"""
-    config_dir.mkdir(parents=True, exist_ok=True)
+    from argos.config import ConfigError
+    if not isinstance(name, str):
+        raise ConfigError(t("config.profile.missing_field", name=name, field="profile name"))
+    for field, value in (
+        ("protocol", protocol),
+        ("base_url", base_url),
+        ("model", model),
+        ("api_key_env", api_key_env),
+        ("embedding_model", embedding_model),
+    ):
+        if not isinstance(value, str):
+            raise ConfigError(t("config.profile.missing_field", name=name, field=field))
+    if api_key is not None and not isinstance(api_key, str):
+        raise ConfigError(t("setup.key_invalid"))
+    name = name.strip()
+    protocol = protocol.strip().lower()
+    base_url = base_url.strip().rstrip("/")
+    model = model.strip()
+    api_key_env = api_key_env.strip()
+    if api_key is not None:
+        api_key = api_key.strip()
+        if not api_key:
+            raise ConfigError(t("setup.key_empty"))
+        if "\n" in api_key or "\r" in api_key:
+            raise ConfigError(t("setup.key_invalid"))
+    embedding_model = embedding_model.strip()
     prof = {"protocol": protocol, "base_url": base_url, "model": model,
             "api_key_env": api_key_env, "max_tokens": max_tokens,
             "context_window": context_window}
-    if price_in is not None and price_out is not None:
+    if price_in is not None or price_out is not None:
         prof["price_in"] = price_in
         prof["price_out"] = price_out
     if embedding_model:
         prof["embedding_model"] = embedding_model
+    if multimodal is not None:
+        prof["multimodal"] = multimodal
     # fail-closed:落盘前校验本 profile 合法(空 base_url/model、非法 protocol、非正整数都拒)——
     # 否则会写出"假成功"的坏 config 并顶掉原可用 active(下次启动才 ConfigError 落 demo 态)。
     from argos import config as _config
     _config._validate_profile(name, prof)
+    config_dir.mkdir(parents=True, exist_ok=True)
     cfg = _read_config(config_dir)
     cfg.setdefault("models", {})
     cfg["models"][name] = prof
-    if set_active or "active" not in cfg:
+    if set_active or "active" not in cfg or cfg.get("active") not in cfg["models"]:
         cfg["active"] = name
-    (config_dir / "config.json").write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
+    _validate_final_config(cfg)
+    old_env = (config_dir / ".env").read_bytes() if api_key and (config_dir / ".env").exists() else None
     if api_key:   # 仅"粘贴 key"路径写 .env;"用已有环境变量"路径 api_key=None 不写
         _append_env(config_dir, api_key_env, api_key)
+    try:
+        _write_config_atomic(config_dir, cfg)
+    except Exception:
+        if api_key:
+            _restore_env(config_dir, old_env)
+        raise
+
+
+def _config_dir(config_dir: Path | None) -> Path:
+    if config_dir is not None:
+        return config_dir
+    from argos import config as C
+    return Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+
+
+def print_status(*, writer, config_dir: Path | None = None) -> None:
+    """只读打印当前 setup 状态:active profile、模型端点、key 来源与配置文件位置。"""
+    from argos import config as C
+
+    cdir = _config_dir(config_dir)
+    cfile = cdir / "config.json"
+    old = os.environ.get("ARGOS_CONFIG_DIR")
+    if config_dir is not None:
+        os.environ["ARGOS_CONFIG_DIR"] = str(config_dir)
+    try:
+        if C._has_config_file():
+            cfg = C.load_config()
+            active = cfg.active
+            tier = cfg.tiers[active]
+            env_name = cfg.key_envs.get(active, "")
+            embedding_model = cfg.embed_models.get(active, "")
+            key_found = bool(env_name and (os.environ.get(env_name) or cfg.secrets.get(env_name)))
+            key_source = (
+                "environment" if env_name and os.environ.get(env_name)
+                else ".env" if key_found
+                else "missing"
+            )
+        else:
+            active = C.DEFAULT_TIER.name
+            tier = C.active_tier()
+            embedding_model = ""
+            fallback_keys = ("ARGOS_LLM_KEY", "VITE_LLM_KEY", "VITE_MINIMAX_KEY")
+            env_name = next((k for k in fallback_keys if os.environ.get(k)), "ARGOS_LLM_KEY")
+            key_found = C.active_key() is not None
+            key_source = (
+                "environment" if any(os.environ.get(k) for k in fallback_keys)
+                else ".env.local" if key_found
+                else "missing"
+            )
+    except (C.ConfigError, OSError) as e:
+        writer(t("setup.status_not_configured", err=e))
+        writer(t("setup.status_next_setup"))
+        return
+    finally:
+        if config_dir is not None:
+            if old is None:
+                os.environ.pop("ARGOS_CONFIG_DIR", None)
+            else:
+                os.environ["ARGOS_CONFIG_DIR"] = old
+
+    key_state = t("setup.status_key_found") if key_found else t("setup.status_key_missing")
+
+    writer(t("setup.status_active", active=active))
+    writer(t(
+        "setup.status_model",
+        protocol=tier.protocol,
+        base_url=tier.base_url,
+        model=tier.model,
+    ))
+    writer(t("setup.status_key", env=env_name or "(none)", status=key_state, source=key_source))
+    writer(t(
+        "setup.status_embedding",
+        model=embedding_model or t("setup.status_embedding_fts5"),
+    ))
+    if tier.multimodal is True:
+        image_mode = t("setup.status_image_enabled")
+    elif tier.multimodal is False:
+        image_mode = t("setup.status_image_disabled")
+    else:
+        image_mode = t("setup.status_image_auto")
+    writer(t("setup.status_image", mode=image_mode))
+    writer(t("setup.status_config", path=cfile))
+    if not key_found:
+        writer(t("setup.status_next_setup"))
 
 
 # ── 连通 + 格式探针(spec §6.2) ────────────────────────────────────────────────
@@ -248,7 +445,13 @@ def _select_key_method(reader, writer, console) -> str:
                             title=t("setup.section_apikey"), writer=writer)
         return "paste" if idx == 0 else "env"
     except _NotATTY:
-        return (reader(t("setup.prompt_key_method")) or "paste").strip()
+        while True:
+            raw = (reader(t("setup.prompt_key_method")) or "paste").strip().lower()
+            if raw in {"", "1", "p", "paste"}:
+                return "paste"
+            if raw in {"2", "e", "env", "environment", "environment variable"}:
+                return "env"
+            writer(t("setup.invalid_choice"))
 
 
 async def _probe_with_status(console, writer, *, protocol, base_url, model, api_key) -> "ProbeResult":
@@ -272,7 +475,7 @@ async def run(*, reader, writer, config_dir: Path | None = None,
       → 深探?(y/N) → profile 名 → [已有模型: 设为默认?] → 再配?(y/N)
     """
     from argos import config as C
-    cdir = config_dir or Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos"))
+    cdir = _config_dir(config_dir)
     names = list(PRESETS)
     _banner(console)
     # 非 TTY 友好兜底(2026-06-09):管道/CI 跑 setup 时 input() 抛 EOFError,以前裸 traceback
@@ -293,11 +496,24 @@ async def run(*, reader, writer, config_dir: Path | None = None,
                     if not (0 <= pidx < len(names)):
                         raise ValueError
                 except ValueError:
-                    writer(t("setup.invalid_choice"))
-                    continue
+                    lowered = choice.lower()
+                    matches = [i for i, n in enumerate(names) if n.lower() == lowered]
+                    if not matches:
+                        matches = [i for i, n in enumerate(names) if n.lower().startswith(lowered)]
+                    if not matches:
+                        writer(t("setup.invalid_choice"))
+                        continue
+                    if len(matches) > 1:
+                        writer(t(
+                            "setup.ambiguous_provider_choice",
+                            choice=choice,
+                            matches=", ".join(names[i] for i in matches),
+                        ))
+                        continue
+                    pidx = matches[0]
             preset = PRESETS[names[pidx]]
             # 「Custom」预设 protocol/base_url 为空 → 向用户询问(spec §6.1 表格「(问)」)
-            protocol = preset["protocol"] or (reader(t("setup.prompt_protocol")) or "openai").strip()
+            protocol = preset["protocol"] or (reader(t("setup.prompt_protocol")) or "openai").strip().lower()
             base_url = preset["base_url"] or (reader(t("setup.prompt_base_url")) or "").strip()
             default_model = preset["model"]
             model = (reader(t("setup.prompt_model", default=default_model)) or default_model).strip()
@@ -307,6 +523,19 @@ async def run(*, reader, writer, config_dir: Path | None = None,
             if way == "env":
                 api_key = None
                 api_key_env = (reader(t("setup.prompt_env_var_name")) or "").strip()
+                if not api_key_env:
+                    writer(t("setup.env_var_empty"))
+                    continue
+                if not C._ENV_VAR_RE.fullmatch(api_key_env):
+                    writer(t(
+                        "setup.save_failed",
+                        err=t("config.profile.invalid_api_key_env", name="probe", env=api_key_env),
+                    ))
+                    continue
+                probe_api_key = os.environ.get(api_key_env)
+                if not probe_api_key:
+                    writer(t("setup.env_var_missing", env=api_key_env))
+                    continue
                 derive_env = False
             else:
                 api_key = (reader(t("setup.prompt_paste_key")) or "").strip()
@@ -314,10 +543,11 @@ async def run(*, reader, writer, config_dir: Path | None = None,
                     # 空 key:别静默拿占位 "x" 去探针换一个迷惑的 401,当场说清并重配本模型。
                     writer(t("setup.key_empty"))
                     continue
+                probe_api_key = api_key
                 api_key_env = ""        # paste 路径:env 名延后由【唯一 profile 名】派生
                 derive_env = True       # (避免同 model 不同 key 的两 profile 撞同名 env 互相覆盖)
             # 高级项(可选):默认走合理缺省,--advanced 才问。价格不再询问(费用显示已移除)。
-            max_tokens, ctx, embedding_model = 4096, 200_000, ""
+            max_tokens, ctx, embedding_model, multimodal = 4096, 200_000, "", None
             if advanced:
                 _rule(console, "setup.section_advanced")
                 max_tokens = _ask_int(reader, writer, t("setup.prompt_max_tokens"), 4096)
@@ -327,10 +557,30 @@ async def run(*, reader, writer, config_dir: Path | None = None,
                     embedding_model = (reader(t("setup.prompt_embedding_model")) or "").strip()
                 else:
                     writer(t("setup.no_embeddings_note"))
+                raw_multimodal = (reader(t("setup.prompt_multimodal")) or "").strip().lower()
+                if raw_multimodal in ("y", "yes", "true", "1"):
+                    multimodal = True
+                elif raw_multimodal in ("n", "no", "false", "0"):
+                    multimodal = False
+                elif raw_multimodal:
+                    writer(t("setup.invalid_multimodal_choice"))
+                    continue
+            try:
+                C._validate_profile("probe", {
+                    "protocol": protocol,
+                    "base_url": base_url,
+                    "model": model,
+                    "api_key_env": api_key_env,
+                    "max_tokens": max_tokens,
+                    "context_window": ctx,
+                }, require_key_env=not derive_env)
+            except C.ConfigError as e:
+                writer(t("setup.save_failed", err=e))
+                continue
             # 连通+格式探针(必做)
             _rule(console, "setup.section_connect")
             res = await _probe_with_status(console, writer, protocol=protocol,
-                                           base_url=base_url, model=model, api_key=api_key)
+                                           base_url=base_url, model=model, api_key=probe_api_key)
             _emit_probe(console, writer, res)
             if not res.connected:
                 again = (reader(t("setup.reconnect_prompt")) or "y").strip().lower()
@@ -339,7 +589,7 @@ async def run(*, reader, writer, config_dir: Path | None = None,
             # 可选深度探针(默认跳过)
             if (reader(t("setup.deep_probe_prompt")) or "n").strip().lower() == "y":
                 writer(t("setup.deep_probing"))
-                dres = await deep_probe(protocol=protocol, base_url=base_url, model=model, api_key=api_key)
+                dres = await deep_probe(protocol=protocol, base_url=base_url, model=model, api_key=probe_api_key)
                 writer(t("setup.deep_probe_result", rating=dres.rating, message=dres.message))
             # profile 命名:向用户提问,默认用 model id;重名追加序号(spec §6.1 step 5)
             cfg_existing = _read_config(cdir)
@@ -353,7 +603,7 @@ async def run(*, reader, writer, config_dir: Path | None = None,
                 idx += 1
             # paste 路径:env 名由唯一 profile 名派生(此时 name 已去重),杜绝同 model 撞名覆盖。
             if derive_env:
-                api_key_env = f"{name.upper().replace('-', '_').replace('/', '_')}_KEY"
+                api_key_env = _env_name_for_profile(name)
             # 是否设为当前默认:首个模型自动设;已有模型时默认【不】改 active(重跑 setup 加模型不静默劫持)。
             if existing_models:
                 make_active = (reader(t("setup.set_active_prompt")) or "n").strip().lower() == "y"
@@ -366,10 +616,14 @@ async def run(*, reader, writer, config_dir: Path | None = None,
                 write_profile(config_dir=cdir, name=name, protocol=protocol, base_url=base_url,
                               model=model, api_key=api_key, api_key_env=api_key_env,
                               max_tokens=max_tokens, context_window=ctx,
-                              embedding_model=embedding_model, set_active=make_active)
+                              embedding_model=embedding_model, multimodal=multimodal,
+                              set_active=make_active)
             except C.ConfigError as e:
                 # fail-closed:配置不合法绝不假成功,也不顶掉原 active;让用户重配这个模型。
                 writer(t("setup.save_failed", err=e))
+                continue
+            except OSError as e:
+                writer(t("setup.save_failed_io", err=e))
                 continue
             if make_active:
                 writer(t("setup.saved_active", name=name))
@@ -379,11 +633,14 @@ async def run(*, reader, writer, config_dir: Path | None = None,
                 writer(t("setup.key_stored_warning"))
             if (reader(t("setup.add_another_prompt")) or "n").strip().lower() != "y":
                 writer(t("setup.done"))
+                writer(t("setup.next_steps", name=name, config=str(cdir / "config.json")))
                 break
     except EOFError:
         # 非 TTY(管道 / CI)兜底:input() 抛 EOFError 时给一条清楚出路(不裸 traceback)。
         # 关键:真用户来用会卡在这,必须显式告诉他"setup 需真终端"+"可以手工写 config"。
         writer(t("setup.no_tty"))
+    except KeyboardInterrupt:
+        writer(t("setup.cancelled"))
 
 
 # ── 深度探针(spec §6.3) ──────────────────────────────────────────────────────────

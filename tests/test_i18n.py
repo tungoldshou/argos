@@ -78,6 +78,48 @@ def test_bad_format_falls_back_to_template(monkeypatch):
         i18n._catalog.cache_clear()
 
 
+def test_daemon_no_key_hint_mentions_key_source(monkeypatch):
+    monkeypatch.setenv("ARGOS_LANG", "en")
+    msg = i18n.t("daemon.srv.no_key_run")
+    assert "key source" in msg
+    assert "existing environment variable" in msg
+    assert "configure a model key" not in msg
+
+
+def test_cli_no_key_hints_mention_key_source(monkeypatch):
+    monkeypatch.setenv("ARGOS_LANG", "en")
+    combined = "\n".join([
+        i18n.t("cli.no_key_fallback", err="no key"),
+        i18n.t("cli.exec.run_setup_hint"),
+    ])
+    assert "key source" in combined
+    assert "existing environment variable" in combined
+
+
+def test_tui_dream_no_key_fallback_uses_product_language(monkeypatch):
+    monkeypatch.setenv("ARGOS_LANG", "en")
+    msg = i18n.t("tui.dream.no_worker_key")
+    assert "API key" in msg
+    assert "argos setup" in msg
+    assert "worker key" not in msg.lower()
+
+
+def test_splash_hint_matches_ctrl_c_behavior(monkeypatch):
+    monkeypatch.setenv("ARGOS_LANG", "en")
+    msg = i18n.t("widget.splash_hint")
+    assert "^C to quit" not in msg
+    assert "^C" in msg
+    assert "interrupt" in msg
+    assert "^D" in msg
+
+
+def test_eval_tb_help_matches_default_smoke_subset(monkeypatch):
+    monkeypatch.setenv("ARGOS_LANG", "en")
+    msg = i18n.t("eval.tb.cmd_help")
+    assert "default: smoke" in msg.lower()
+    assert "requires --subset" not in msg
+
+
 def test_en_zh_catalogs_have_same_keys():
     """每个目录模块的 EN/ZH 应覆盖同一组 key(防漏译 / 防孤儿键)。"""
     import importlib

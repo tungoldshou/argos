@@ -13,7 +13,6 @@ from argos.hooks.config import (
     HooksConfig,
     HooksConfigError,
     load,
-    HOOKS_CONFIG_PATH,   # 期望:PosixPath('~/.argos/hooks.json')
 )
 from argos.hooks.matcher import match
 from argos.hooks import get_config, reload_config
@@ -157,9 +156,19 @@ def test_match_invalid_regex_ignored():
 
 # ── 加载 + 校验 + reload 流程测试(spec §4.1 / §3 错误处理表)────────────
 
-def test_hooks_config_path_is_argos_home():
-    """HOOKS_CONFIG_PATH = ~/.argos/hooks.json(spec §2.2)。"""
-    assert HOOKS_CONFIG_PATH == Path.home() / ".argos" / "hooks.json"
+def test_load_default_path_honors_argos_config_dir(tmp_path, monkeypatch):
+    from argos import config as C
+    from argos.hooks import config as HC
+
+    cfg_dir = tmp_path / "cfg"
+    hooks_file = cfg_dir / "hooks.json"
+    hooks_file.parent.mkdir(parents=True)
+    hooks_file.write_text(json.dumps({"version": 1, "hooks": {}}))
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
+    monkeypatch.setattr(HC, "HOOKS_CONFIG_PATH", None)
+
+    assert load().entries == {}
 
 
 def test_load_missing_file_returns_empty(tmp_path, monkeypatch):

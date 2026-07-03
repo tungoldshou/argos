@@ -14,6 +14,8 @@ Covers:
 """
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from argos.tui.commands import COMMAND_HELP, COMMAND_NAMES, match_commands, parse_slash
@@ -38,11 +40,48 @@ class TestSetupCommand:
         assert cmd.name == "setup"
 
     def test_setup_help_mentions_argos_setup(self) -> None:
-        """Help text for /setup should mention the shell command 'argos setup'."""
+        """Help text for /setup should mention status plus the shell command."""
         desc = COMMAND_HELP["setup"]
         assert "argos setup" in desc or "setup" in desc.lower(), (
             f"/setup description should mention 'argos setup', got: {desc!r}"
         )
+        assert "status" in desc.lower() or "状态" in desc, (
+            f"/setup description should mention status, got: {desc!r}"
+        )
+
+    def test_setup_command_prints_current_status(self, tmp_path, monkeypatch) -> None:
+        """TUI /setup should surface current config status, not only a generic hint."""
+        from argos.setup_wizard import write_profile
+        from argos.tui.app import ArgosApp
+
+        cfg_dir = tmp_path / ".argos"
+        write_profile(
+            config_dir=cfg_dir,
+            name="fast",
+            protocol="openai",
+            base_url="https://api.example.com/v1",
+            model="test-model",
+            api_key="sk-test",
+            api_key_env="FAST_KEY",
+            set_active=True,
+        )
+        monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+
+        class Log:
+            def __init__(self) -> None:
+                self.lines: list[str] = []
+
+            async def append_line(self, text: str, **_kwargs) -> None:
+                self.lines.append(text)
+
+        log = Log()
+        asyncio.run(ArgosApp()._setup_cmd(log))
+
+        text = "\n".join(log.lines)
+        assert "fast" in text
+        assert "test-model" in text
+        assert "FAST_KEY" in text
+        assert "Image input" in text or "图片输入" in text
 
 
 # ── #7 /journal command ───────────────────────────────────────────────────────
@@ -325,6 +364,35 @@ class TestStatusBarHints:
         assert "^V" in _HINTS or "Ctrl+V" in _HINTS or "ctrl+v" in _HINTS.lower(), (
             f"StatusBar hint must mention Ctrl+V (贴图), got: {_HINTS!r}"
         )
+
+    def test_hints_include_space_voice(self) -> None:
+        from argos.tui.widgets.status_bar import _hints
+        _HINTS = _hints()
+        assert (
+            ("Space" in _HINTS or "space" in _HINTS.lower() or "空格" in _HINTS)
+            and ("voice" in _HINTS.lower() or "语音" in _HINTS)
+        ), f"StatusBar hint must mention Space voice, got: {_HINTS!r}"
+
+    def test_hints_do_not_claim_ctrl_c_quits_immediately(self) -> None:
+        from argos.tui.widgets.status_bar import _hints
+
+        hints = _hints()
+        assert "^C/^D quit" not in hints
+        assert "^C interrupt" in hints or "^C 打断" in hints
+        assert "^D quit" in hints or "^D 退出" in hints
+
+
+class TestHelpShortcuts:
+    """#21: /help shortcuts should match status bar discoverability."""
+
+    def test_help_shortcuts_include_space_voice(self) -> None:
+        from argos.i18n import t
+
+        shortcuts = t("tui.help.shortcuts")
+        assert (
+            ("Space" in shortcuts or "space" in shortcuts.lower() or "空格" in shortcuts)
+            and ("voice" in shortcuts.lower() or "语音" in shortcuts)
+        ), f"/help shortcuts must mention Space voice, got: {shortcuts!r}"
 
 
 # ── #22 match_commands substring fallback ────────────────────────────────────

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
+from argos import config
 from argos import config_base
 from argos.i18n import t
 from argos.lsp.schema import SERVER_NAME_PATTERN
@@ -87,7 +88,11 @@ BUILTIN_DEFAULT_CONFIG: LspConfig = LspConfig(
 
 # ── 加载 / 校验(spec §2.2 / §3 / D11)────────────────────────────────────
 
-LSP_CONFIG_PATH: Path = Path.home() / ".argos" / "lsp.json"
+LSP_CONFIG_PATH: Path | None = None
+
+
+def _default_config_path() -> Path:
+    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "lsp.json"
 
 
 def _parse_server_config(name: str, raw: dict) -> LspServerConfig:
@@ -145,7 +150,7 @@ def load(path: Path | None = None) -> LspConfig:
     Raises:
         LspConfigError: JSON 坏字 / 字段类型错 / version 不匹配 / server name 非法。
     """
-    p = path or LSP_CONFIG_PATH
+    p = path or LSP_CONFIG_PATH or _default_config_path()
     # lsp 旧行为:连 OSError(PermissionError 等)也吞,回 BUILTIN_DEFAULT(spec §2.2 / §3)。
     data = config_base.read_json_file(
         p, ErrorCls=LspConfigError, on_os_error="silent",

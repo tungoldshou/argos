@@ -11,17 +11,18 @@ from __future__ import annotations
 EN: dict[str, str] = {
     # ── COMMAND_HELP entries ──────────────────────────────────────────────────
     "cmd.help":             "Show all commands",
-    "cmd.setup":            "Show config wizard entry (run argos setup after exiting TUI)",
+    "cmd.setup":            "Show setup status and config wizard entry (argos setup)",
+    "cmd.voice":            "Voice input status",
     "cmd.tools":            "List callable tools",
     "cmd.skills":           "Manage skill ecosystem: list/install/remove/refresh/test (runs argos skills ...)",
     "cmd.mcp":              "List MCP external tools",
-    "cmd.model":            "View / switch model",
+    "cmd.model":            "View / switch model (restart Argos to take effect)",
     "cmd.status":           "Current run status",
     "cmd.cost":             "Current round cost + cache",
     "cmd.resume":           "Resume last session",
     "cmd.clear":            "Start new session (clear)",
     "cmd.yolo":             "Run without approval (legacy; same as /trust autonomous)",
-    "cmd.trust":            "View / switch trust mode (/trust [cautious|trusted|autonomous|status]) — replaces /yolo",
+    "cmd.trust":            "View / switch trust mode (/trust [cautious|trusted|autonomous|paranoid|status]) — replaces /yolo",
     "cmd.undo":             "Undo file changes from this round (restore to run start)",
     "cmd.ledger":           "View behavior ledger for current run (plain-language entries + undo status)",
     "cmd.journal":          "Show ledger JSONL path (/journal [run_id])",
@@ -30,7 +31,7 @@ EN: dict[str, str] = {
     "cmd.hooks":            "List / reload hooks config (/hooks, /hooks reload)",
     "cmd.lsp":              "List / reload LSP config (/lsp, /lsp reload)",
     "cmd.permissions":      "View / reload permissions config (/permissions, /permissions reload)",
-    "cmd.runs":             "List / background runs (/runs, /runs {id} resume/cancel) — daemon mode",
+    "cmd.runs":             "List / background runs (/runs, /runs {id} focus|resume|cancel) — daemon mode",
     "cmd.orders":           "List autonomous standing orders (/orders) — conductor autonomy panel",
     "cmd.confirm":          "Confirm conductor proactive suggestion (/confirm <suggestion_id>) — autonomy panel",
     "cmd.dismiss":          "Dismiss conductor proactive suggestion (/dismiss <suggestion_id>)",
@@ -38,13 +39,15 @@ EN: dict[str, str] = {
     "cmd.verify":           "Explicitly run verify_cmd (/verify [path]) — user review of verify gate",
     "cmd.security-review":  "Security audit (secrets + dependency vulnerabilities + dangerous APIs) (/security-review [path])",
     "cmd.simplify":         "Code duplication / complexity / dead code scan (/simplify [path])",
-    "cmd.eval":             "Agent self-evaluation + A/B (/eval, /eval run <id>, /eval compare <a> <b>)",
+    "cmd.eval":             "Agent self-evaluation + A/B (/eval, /eval run <id>, /eval compare <task_id>[:<model>] <task_id>[:<model>])",
     "cmd.routing":          "View / switch routing config (/routing, /routing set <cat> <tier>)",
     "cmd.context":          "View current LLM context buckets (/context, /context --json)",
-    "cmd.loop":             "Run a task repeatedly until a condition is met (/loop <task> [until: <condition>])",
-    "cmd.goal":             "Submit a goal with a verify exit condition (/goal <task> | verify: <cmd>)",
-    "cmd.schedule":         "Create a timed standing order (/schedule <cron> <task>)",
-    "cmd.watch":            "Watch for file changes and trigger a task (/watch <glob> <task>)",
+    "cmd.loop":             "Submit a task with an until/verify command (/loop <task> until: <cmd>)",
+    "cmd.goal":             "Submit a goal with an optional verify command (/goal <task> | verify: <cmd>)",
+    "cmd.schedule":         "Create a timed standing order (/schedule <when>: <goal>)",
+    "cmd.watch":            "Watch for file changes and trigger a goal (/watch <glob> <goal>)",
+    "tui.voice.usage":       "Usage: /voice",
+    "tui.voice.unavailable": "Voice input is not enabled in this build. Use typed input, or paste images with Ctrl+V.",
 
     # ── prompt.py paste / image tokens ───────────────────────────────────────
     "tui.prompt.paste_token": "[pasted text #{n} +{lines} lines]",
@@ -54,7 +57,7 @@ EN: dict[str, str] = {
     "tui.slash_menu.nav_hint": "  ↑↓ select · ↹ complete · ↵ execute",
 
     # ── status_bar.py hints line ──────────────────────────────────────────────
-    "tui.statusbar.hints":        "Esc interrupt · \\↵ newline · ^B background · ^O right panel · ^V paste image · ^C/^D quit",
+    "tui.statusbar.hints":        "Esc/^C interrupt · \\↵ newline · Space voice · ^B background · ^O right panel · ^V paste image · ^D quit",
     "tui.statusbar.blocked_label": "approval pending",
     "tui.statusbar.plan_mode":    "[plan mode]",
     "tui.statusbar.action":       "action {n}",
@@ -64,6 +67,7 @@ EN: dict[str, str] = {
 
     # ── /help command response ────────────────────────────────────────────────
     "tui.help.header":    "Commands (type / to list in-place, Tab to complete):",
+    "tui.help.usage":     "Usage: /help [command] — unknown command '{name}'",
     "tui.help.shortcuts": (
         "Shortcuts:\n"
         "  Esc / Ctrl+C   interrupt current task\n"
@@ -72,6 +76,7 @@ EN: dict[str, str] = {
         "  Ctrl+B         background current run (daemon mode)\n"
         "  Ctrl+O         cycle right panel view\n"
         "  Ctrl+V         paste image from clipboard\n"
+        "  Space          voice input status (empty prompt)\n"
         "  \\ + Enter      insert newline (multi-line input)\n"
         "  ↑ / ↓          browse input history"
     ),
@@ -79,17 +84,22 @@ EN: dict[str, str] = {
     # ── /model command ────────────────────────────────────────────────────────
     "tui.model.available":      "Available models: {list}",
     "tui.model.switched":       "Switched to '{name}' (restart argos to take effect).",
+    "tui.model.missing_key_short": "(missing {env})",
+    "tui.model.missing_key":    "Profile '{name}' has no available API key ({env}); run `argos setup` or export the variable before switching.",
     "tui.model.switch_failed":  "Switch failed: {err}",
 
-    # ── /status command ───────────────────────────────────────────────────────
+    # ── /status / /cost command ───────────────────────────────────────────────
+    "tui.status.usage": "Usage: /status",
+    "tui.cost.usage": "Usage: /cost",
     "tui.cost.header": "Cost + Cache",
 
     # ── /clear command ────────────────────────────────────────────────────────
+    "tui.clear.usage": "Usage: /clear",
     "tui.clear.done": "New session started (clear).",
 
     # ── unknown command ───────────────────────────────────────────────────────
     "tui.cmd.unknown": "Unknown command /{name}",
-    "tui.cmd.unwired": "/{name} is not wired yet — coming in a future batch.",
+    "tui.cmd.unwired": "/{name} is recognized but unavailable in this build.",
 
     # ── /goal and /loop commands ──────────────────────────────────────────────
     "tui.goal.submitted": "Goal submitted with verify: {verify_cmd}",
@@ -106,6 +116,7 @@ EN: dict[str, str] = {
     "tui.orders.request_failed": "Failed to reach daemon for /orders: {err}",
 
     # ── /yolo command ────────────────────────────────────────────────────────
+    "tui.yolo.usage": "Usage: /yolo",
     "tui.yolo.activated": (
         "Switched to Autonomous (full autonomy/YOLO) — top bar shows ⏻ YOLO marker."
         " Tip: new usage is /trust autonomous (or /trust with no args to cycle)."
@@ -124,12 +135,14 @@ EN: dict[str, str] = {
     "tui.trust.confirm_no":    "Cancel, stay at current level",
 
     # ── /undo command ────────────────────────────────────────────────────────
+    "tui.undo.usage":         "Usage: /undo",
     "tui.undo.no_snapshot":   "Nothing to undo (no run started in this session, or snapshot has been cleaned up).",
     "tui.undo.partial":       "Partial restore (succeeded {ok} / failed {fail}):\n{head}{more}",
     "tui.undo.more":          "\n  …(more omitted)",
     "tui.undo.success":       "Restored {n} file(s) to run start.\nTo continue, /retry to resend the last goal, or enter a new goal.",
 
     # ── /ledger command ───────────────────────────────────────────────────────
+    "tui.ledger.usage":      "Usage: /ledger",
     "tui.ledger.no_ledger":   "No behavior ledger in current session (ledger is only available in daemon mode, or no side-effect actions this run).",
     "tui.ledger.read_failed": "Ledger read failed: {err}",
     "tui.ledger.empty":       "run {run_id} has no ledger entries (no side-effect actions this run).",
@@ -137,28 +150,34 @@ EN: dict[str, str] = {
     "tui.ledger.footer":      "Each entry is HMAC-signed · summary template generated without calling model\njournal: {path}  (/journal {run_id} to see path)",
 
     # ── /setup command ────────────────────────────────────────────────────────
+    "tui.setup.usage": "Usage: /setup",
     "tui.setup.hint": (
         "Config Wizard\n"
+        "  To inspect this outside TUI:\n"
+        "    argos setup status\n"
         "  After exiting TUI run:\n"
         "    argos setup\n"
-        "  The wizard will guide you through provider, API key, and connectivity test,\n"
-        "  writing results to ~/.argos/.env and ~/.argos/config.json.\n"
-        "  You can also manually edit ~/.argos/.env to add ANTHROPIC_API_KEY=... etc."
+        "  The wizard will guide you through provider, key source, and connectivity test,\n"
+        "  writing config to ~/.argos/config.json.\n"
+        "  Paste-key mode stores the key in ~/.argos/.env; existing environment variable mode stores only the variable name."
     ),
 
     # ── /journal command ──────────────────────────────────────────────────────
+    "tui.journal.usage":      "Usage: /journal [run_id]",
     "tui.journal.with_id":   "Ledger JSONL: {path}\n  View: cat {path}\n  Live tail: tail -f {path}",
     "tui.journal.no_id":     "Ledger dir: {dir}\n  No run_id in current session (no run started or not in daemon mode).\n  Usage: /journal <run_id>",
 
     # ── /retry command ────────────────────────────────────────────────────────
+    "tui.retry.usage":          "Usage: /retry",
     "tui.retry.busy":           "Press Esc to interrupt the current task first, then /retry.",
-    "tui.retry.no_store":       "Current store does not support /retry (demo mode or not injected via build_components).",
+    "tui.retry.no_store":       "Current session has no persistent store for /retry.",
     "tui.retry.read_failed":    "Failed to read history: {err}",
     "tui.retry.no_messages":    "No retryable message in current session.",
 
     # ── /hooks command ────────────────────────────────────────────────────────
     "tui.hooks.reloaded":       "Reloaded hooks config ({n} events).",
     "tui.hooks.reload_failed":  "/hooks reload failed (keeping old config): {err}",
+    "tui.hooks.usage":          "Usage: /hooks [reload]",
     "tui.hooks.empty":          "No hooks configured (empty ~/.argos/hooks.json or not configured).",
     "tui.hooks.header":         "Current hooks config ({n} events):",
     "tui.hooks.all_match":      "(match all)",
@@ -166,6 +185,7 @@ EN: dict[str, str] = {
     # ── /lsp command ─────────────────────────────────────────────────────────
     "tui.lsp.reloaded":       "Reloaded LSP config ({n} servers).",
     "tui.lsp.reload_failed":  "/lsp reload failed (keeping old config): {err}",
+    "tui.lsp.usage":          "Usage: /lsp [reload]",
     "tui.lsp.empty":          "No LSP configured (empty ~/.argos/lsp.json or unreadable → using built-in defaults).",
     "tui.lsp.init_failed":    "LSP manager init failed: {err}",
     "tui.lsp.header":         "Current LSP config ({n} servers):",
@@ -174,6 +194,7 @@ EN: dict[str, str] = {
     # ── /permissions command ──────────────────────────────────────────────────
     "tui.permissions.reloaded":     "Reloaded permissions config (allow {allow} / deny {deny} / ask {ask} / per-tool {tools} / default_level={level}).",
     "tui.permissions.reload_failed": "/permissions reload failed (keeping old config): {err}",
+    "tui.permissions.usage":         "Usage: /permissions [reload]",
     "tui.permissions.read_failed":  "Failed to read permissions config: {err}",
     "tui.permissions.header":       "Current permissions config:",
     "tui.permissions.default_level": " · default_level: {level}",
@@ -185,6 +206,7 @@ EN: dict[str, str] = {
     "tui.permissions.default_gate":  "(follow gate.level)",
 
     # ── /tools command ────────────────────────────────────────────────────────
+    "tui.tools.usage":      "Usage: /tools",
     "tui.tools.header":      "{n} tools in total:",
     "tui.tools.wf_off":      "orchestration (workflow, disabled via ARGOS_WORKFLOWS=0)",
     "tui.tools.wf_on":       "orchestration (workflow)",
@@ -197,7 +219,8 @@ EN: dict[str, str] = {
     "tui.tools.group.os":            "OS-level control (P6a)",
 
     # ── /runs command ─────────────────────────────────────────────────────────
-    "tui.runs.no_daemon":      "daemon not enabled (--with-daemon flag); /runs unavailable.",
+    "tui.runs.no_daemon":      "daemon unavailable; /runs is only available in daemon mode.",
+    "tui.runs.usage":          "Usage: /runs [run_id [focus|resume|cancel]]",
     "tui.runs.list_failed":    "Failed to list runs: {err}",
     "tui.runs.empty":          "No runs.",
     "tui.runs.list_header":    "Run list (#5b extended: cost / worktree):",
@@ -213,12 +236,13 @@ EN: dict[str, str] = {
     "tui.runs.info_failed":    "Failed to query run: {err}",
 
     # ── /orders command ───────────────────────────────────────────────────────
+    "tui.orders.usage":          "Usage: /orders",
     "tui.orders.request_failed": "/orders request failed (daemon): {err}",
     "tui.orders.local_failed":   "Failed to read local orders: {err}",
 
     # ── /confirm command ──────────────────────────────────────────────────────
     "tui.confirm.no_id":        "Usage: /confirm <suggestion_id>",
-    "tui.confirm.no_daemon":    "confirm requires daemon mode (--with-daemon).",
+    "tui.confirm.no_daemon":    "confirm requires daemon mode.",
     "tui.confirm.request_failed": "/confirm request failed: {err}",
     "tui.confirm.ok":           "Suggestion confirmed and run created: {run_id}\n  Isolation: worktree={wt}\n  Trust level: L1_DANGEROUS_ONLY (hard-coded, not upgradeable)\n  Use /runs to check run status.",
     "tui.confirm.not_found":    "Suggestion {id!r} not found or already processed (dismissed/confirmed).",
@@ -227,23 +251,26 @@ EN: dict[str, str] = {
 
     # ── /dismiss command ──────────────────────────────────────────────────────
     "tui.dismiss.no_id":          "Usage: /dismiss <suggestion_id>",
-    "tui.dismiss.no_daemon":      "dismiss requires daemon mode (--with-daemon).",
+    "tui.dismiss.no_daemon":      "dismiss requires daemon mode.",
     "tui.dismiss.request_failed": "/dismiss request failed: {err}",
     "tui.dismiss.ok":             "Suggestion {id!r} dismissed.",
     "tui.dismiss.not_found":      "Suggestion {id!r} not found or already processed.",
     "tui.dismiss.failed":         "/dismiss failed (HTTP {status}): {err}",
 
     # ── /routing command ──────────────────────────────────────────────────────
-    "tui.routing.no_router":     "/routing unavailable (no router injected; demo/fake mode).",
+    "tui.routing.no_router":     "/routing unavailable (no router injected).",
     "tui.routing.set_usage":     "Usage: /routing set <category> <tier>  ({cats} valid categories)",
     "tui.routing.bad_category":  "category '{cat}' does not exist; valid values: {cats}",
+    "tui.routing.missing_key":   "Routing tier '{name}' has no available API key ({env}); run `argos setup` or export the variable before using it.",
     "tui.routing.set_failed":    "/routing set failed: {err}",
     "tui.routing.set_ok":        "Written to {dir}/config.json: routing.by_category.{cat} = {tier}",
 
     # ── /context command ──────────────────────────────────────────────────────
+    "tui.context.usage": "Usage: /context [--json]",
     "tui.context.failed": "/context failed: {err}",
 
     # ── /dream command ────────────────────────────────────────────────────────
+    "tui.dream.usage":            "Usage: /dream [status]",
     "tui.dream.no_daemon":        "Dream requires daemon mode (currently inline).\nHint: restart Argos to auto-connect daemon, or check ~/.argos/daemon.sock.",
     "tui.dream.report_failed":    "/dream report request failed: {err}",
     "tui.dream.no_report":        "No Dream report yet (nightly consolidation has not run).",
@@ -265,29 +292,35 @@ EN: dict[str, str] = {
     "tui.forget.usage":       "Usage: /forget <id or key or text>",
     "tui.forget.not_found":   "No memory matching '{query}' found.",
     "tui.forget.ok":          "Soft-deleted {n} entries:",
+    "tui.memory.usage":       "Usage: /memory",
 
     # ── /resume command ───────────────────────────────────────────────────────
+    "tui.resume.usage":         "Usage: /resume",
     "tui.resume.no_store":       "/resume unavailable (no persistent session).",
     "tui.resume.no_sessions":    "No history sessions available to resume.",
     "tui.resume.ok":             "Session '{title}' resumed, {n} history messages loaded — continue to pick up where you left off.",
 
     # ── /skills command ───────────────────────────────────────────────────────
+    "tui.skills.usage":            "Usage: /skills [install <name>|remove <name>|refresh|test <name>]",
     "tui.skills.side_effect_hint": "[skills] TUI does not install side effects directly. Run on host:\n        $ argos skills {sub} {arg}",
+    "tui.skills.named_usage":       "Usage: /skills {sub} <name>",
     "tui.skills.curator_failed":   "curator not loaded: {err}",
 
     # ── /mcp command ─────────────────────────────────────────────────────────
+    "tui.mcp.usage":          "Usage: /mcp",
     "tui.mcp.query_failed":    "MCP query failed: {err}",
     "tui.mcp.empty":           "No MCP configured, or configured server not connected / no tools.\nConfigure stdio server in ~/.argos/mcp.json to extend tools (zero pre-configured by default).",
     "tui.mcp.header":          "Connected MCP tools: {n}, called via mcp_call(server, tool, arguments):",
 
     # ── /eval command ─────────────────────────────────────────────────────────
     "tui.eval.no_runs":        "No evals run yet. Try /eval run <task_id> or argos eval corpus",
-    "tui.eval.usage":          "Usage: /eval [run <task_id> | compare <a> <b>]",
+    "tui.eval.usage":          "Usage: /eval [run <task_id> | compare <task_id>[:<model>] <task_id>[:<model>]]",
     "tui.eval.compare_usage":  "Usage: /eval compare <task_id>[:<model>] <task_id>[:<model>]",
     "tui.eval.task_mismatch":  "task_id mismatch: {a} vs {b}",
     "tui.eval.task_not_found": "Task not found: {err}",
 
     # ── /plan command ─────────────────────────────────────────────────────────
+    "tui.plan.usage":          "Usage: /plan",
     "tui.plan.factory_failed": "/plan unavailable (loop factory failed): {err}",
 
     # ── inline / start_run ────────────────────────────────────────────────────
@@ -400,23 +433,24 @@ EN: dict[str, str] = {
     "tui.confirm.service_unavailable": "service temporarily unavailable",
 
     # ── dream 503 fallback ────────────────────────────────────────────────────
-    "tui.dream.no_worker_key": "no worker key",
+    "tui.dream.no_worker_key": "API key missing; run `argos setup` to choose a key source.",
 }
 
 ZH: dict[str, str] = {
     # ── COMMAND_HELP entries ──────────────────────────────────────────────────
     "cmd.help":             "显示所有命令",
-    "cmd.setup":            "显示配置向导入口(退出 TUI 后运行 argos setup)",
+    "cmd.setup":            "显示 setup 状态和配置向导入口(argos setup)",
+    "cmd.voice":            "语音输入状态",
     "cmd.tools":            "列出可调用的工具",
     "cmd.skills":           "管理 skill 生态:list/install/remove/refresh/test (跑 argos skills ...)",
     "cmd.mcp":              "列出 MCP 外部工具",
-    "cmd.model":            "查看 / 切换模型",
+    "cmd.model":            "查看 / 切换模型(重启 Argos 后生效)",
     "cmd.status":           "当前运行状态",
     "cmd.cost":             "本轮成本 + 缓存",
     "cmd.resume":           "续上一次会话",
     "cmd.clear":            "开新会话(清空)",
     "cmd.yolo":             "放手执行(免审批；旧命令，同 /trust autonomous)",
-    "cmd.trust":            "查看 / 切换信任档位(/trust [cautious|trusted|autonomous|status])—替代 /yolo",
+    "cmd.trust":            "查看 / 切换信任档位(/trust [cautious|trusted|autonomous|paranoid|status])—替代 /yolo",
     "cmd.undo":             "撤销本轮文件改动(还原到 run 起点)",
     "cmd.ledger":           "查看当前 run 的行为账本(人话条目 + 撤销状态)",
     "cmd.journal":          "显示账本 JSONL 路径(/journal [run_id])",
@@ -425,7 +459,7 @@ ZH: dict[str, str] = {
     "cmd.hooks":            "列出 / 重载 hooks 配置(/hooks, /hooks reload)",
     "cmd.lsp":              "列出 / 重载 LSP 配置(/lsp, /lsp reload)",
     "cmd.permissions":      "查看 / 重载权限配置(/permissions, /permissions reload)",
-    "cmd.runs":             "列出 / 后台 run(/runs, /runs {id} resume/cancel)—daemon 模式",
+    "cmd.runs":             "列出 / 后台 run(/runs, /runs {id} focus|resume|cancel)—daemon 模式",
     "cmd.orders":           "列出自治常驻指令(/orders)—conductor 自治面",
     "cmd.confirm":          "确认 conductor 主动建议(/confirm <suggestion_id>)—自治面通电",
     "cmd.dismiss":          "忽略 conductor 主动建议(/dismiss <suggestion_id>)",
@@ -433,13 +467,15 @@ ZH: dict[str, str] = {
     "cmd.verify":           "显式跑 verify_cmd(/verify [path])—用户复核 verify 门",
     "cmd.security-review":  "安全审计(secrets + 依赖漏洞 + 危险 API)(/security-review [path])",
     "cmd.simplify":         "代码重复 / 复杂度 / 死代码扫描(/simplify [path])",
-    "cmd.eval":             "Agent 自我评估 + A/B(/eval, /eval run <id>, /eval compare <a> <b>)",
+    "cmd.eval":             "Agent 自我评估 + A/B(/eval, /eval run <id>, /eval compare <task_id>[:<model>] <task_id>[:<model>])",
     "cmd.routing":          "查看 / 切换路由配置(/routing, /routing set <cat> <tier>)",
     "cmd.context":          "查看当前 LLM 上下文分桶(/context, /context --json)",
-    "cmd.loop":             "循环执行直到条件满足(/loop <任务> [until: <条件>])",
-    "cmd.goal":             "提交带验证退出条件的目标(/goal <任务> | verify: <命令>)",
-    "cmd.schedule":         "创建定时任务(standing order)(/schedule <cron> <任务>)",
-    "cmd.watch":            "监视文件变更触发任务(/watch <glob> <任务>)",
+    "cmd.loop":             "提交带 until/验证命令的任务(/loop <任务> until: <命令>)",
+    "cmd.goal":             "提交目标,可选验证命令(/goal <任务> | verify: <命令>)",
+    "cmd.schedule":         "创建定时任务(standing order)(/schedule <when>: <goal>)",
+    "cmd.watch":            "监视文件变更触发目标(/watch <glob> <goal>)",
+    "tui.voice.usage":       "用法:/voice",
+    "tui.voice.unavailable": "语音输入在当前构建未启用。请先用文字输入；图片可用 Ctrl+V 粘贴。",
 
     # ── prompt.py paste / image tokens ───────────────────────────────────────
     "tui.prompt.paste_token": "[粘贴文本 #{n} +{lines} 行]",
@@ -449,7 +485,7 @@ ZH: dict[str, str] = {
     "tui.slash_menu.nav_hint": "  ↑↓ 选择 · ↹ 补全 · ↵ 执行",
 
     # ── status_bar.py ─────────────────────────────────────────────────────────
-    "tui.statusbar.hints":        "Esc 打断 · \\↵ 换行 · ^B 后台 · ^O 右栏 · ^V 贴图 · ^C/^D 退出",
+    "tui.statusbar.hints":        "Esc/^C 打断 · \\↵ 换行 · 空格语音 · ^B 后台 · ^O 右栏 · ^V 贴图 · ^D 退出",
     "tui.statusbar.blocked_label": "审批挂起",
     "tui.statusbar.plan_mode":    "[plan mode]",
     "tui.statusbar.action":       "动作{n}",
@@ -459,6 +495,7 @@ ZH: dict[str, str] = {
 
     # ── /help command response ────────────────────────────────────────────────
     "tui.help.header":    "命令(打 / 也会就地列出,Tab 补全):",
+    "tui.help.usage":     "用法:/help [command] — 未知命令 '{name}'",
     "tui.help.shortcuts": (
         "快捷键:\n"
         "  Esc / Ctrl+C   打断当前任务\n"
@@ -467,6 +504,7 @@ ZH: dict[str, str] = {
         "  Ctrl+B         后台化当前 run(daemon 模式)\n"
         "  Ctrl+O         循环切换右栏视图\n"
         "  Ctrl+V         从剪贴板粘贴图片\n"
+        "  空格           语音输入状态(空输入框)\n"
         "  行尾 \\ + 回车  插入换行(多行输入)\n"
         "  ↑ / ↓          浏览输入历史"
     ),
@@ -474,17 +512,22 @@ ZH: dict[str, str] = {
     # ── /model command ────────────────────────────────────────────────────────
     "tui.model.available":      "可用模型:{list}",
     "tui.model.switched":       "已切到 '{name}'(重启 argos 后生效)。",
+    "tui.model.missing_key_short": "(缺 {env})",
+    "tui.model.missing_key":    "profile '{name}' 没有可用 API key({env});请先运行 `argos setup` 或 export 该变量再切换。",
     "tui.model.switch_failed":  "切换失败:{err}",
 
     # ── /status / /cost command ───────────────────────────────────────────────
+    "tui.status.usage": "用法:/status",
+    "tui.cost.usage": "用法:/cost",
     "tui.cost.header": "成本 + 缓存",
 
     # ── /clear command ────────────────────────────────────────────────────────
+    "tui.clear.usage": "用法:/clear",
     "tui.clear.done": "已开新会话(clear)。",
 
     # ── unknown command ───────────────────────────────────────────────────────
     "tui.cmd.unknown": "未知命令 /{name}",
-    "tui.cmd.unwired": "/{name} 命令尚未接线，将在后续批次中实现。",
+    "tui.cmd.unwired": "/{name} 命令已识别，但当前构建不可用。",
 
     # ── /goal and /loop commands ──────────────────────────────────────────────
     "tui.goal.submitted": "目标已提交，验证命令：{verify_cmd}",
@@ -501,6 +544,7 @@ ZH: dict[str, str] = {
     "tui.orders.request_failed": "访问 daemon /orders 失败：{err}",
 
     # ── /yolo command ────────────────────────────────────────────────────────
+    "tui.yolo.usage": "用法:/yolo",
     "tui.yolo.activated": (
         "已切换到 Autonomous（全自治/YOLO）——顶栏显示 ⏻ YOLO 标记。"
         " 提示：新用法为 /trust autonomous（或无参数 /trust 循环切换）。"
@@ -519,12 +563,14 @@ ZH: dict[str, str] = {
     "tui.trust.confirm_no":    "取消，保持当前档位",
 
     # ── /undo command ────────────────────────────────────────────────────────
+    "tui.undo.usage":       "用法:/undo",
     "tui.undo.no_snapshot":   "无可撤销的运行(本会话尚未启动 run,或快照已清理)。",
     "tui.undo.partial":       "部分还原(成功 {ok} / 失败 {fail}):\n{head}{more}",
     "tui.undo.more":          "\n  …(更多省略)",
     "tui.undo.success":       "已还原 {n} 个文件到 run 起点。\n如要继续,可 /retry 重发上一条 goal,或输入新 goal。",
 
     # ── /ledger command ───────────────────────────────────────────────────────
+    "tui.ledger.usage":      "用法:/ledger",
     "tui.ledger.no_ledger":   "当前会话无行为账本(账本仅在 daemon 模式下可用,或本轮 run 尚未产生副作用动作)。",
     "tui.ledger.read_failed": "账本读取失败:{err}",
     "tui.ledger.empty":       "run {run_id} 尚无账本记录(本轮 run 未产生副作用动作)。",
@@ -532,28 +578,34 @@ ZH: dict[str, str] = {
     "tui.ledger.footer":      "每条回执签名 · summary 模板生成不调模型\njournal: {path}  (/journal {run_id} 查路径)",
 
     # ── /setup command ────────────────────────────────────────────────────────
+    "tui.setup.usage": "用法:/setup",
     "tui.setup.hint": (
         "配置向导\n"
+        "  在 TUI 外查看当前配置:\n"
+        "    argos setup status\n"
         "  退出 TUI 后运行:\n"
         "    argos setup\n"
-        "  向导会引导你填写 provider、API key,并做连通性测试,\n"
-        "  结果写入 ~/.argos/.env 和 ~/.argos/config.json。\n"
-        "  也可手动编辑 ~/.argos/.env 添加 ANTHROPIC_API_KEY=... 等环境变量。"
+        "  向导会引导你填写 provider、key 来源,并做连通性测试,\n"
+        "  配置写入 ~/.argos/config.json。\n"
+        "  粘贴 key 会写入 ~/.argos/.env;使用已有环境变量时只保存变量名。"
     ),
 
     # ── /journal command ──────────────────────────────────────────────────────
+    "tui.journal.usage":      "用法:/journal [run_id]",
     "tui.journal.with_id":   "账本 JSONL: {path}\n  查看:cat {path}\n  实时跟踪:tail -f {path}",
     "tui.journal.no_id":     "账本目录: {dir}\n  当前会话暂无 run_id(未起 run 或非 daemon 模式)。\n  用法:/journal <run_id>",
 
     # ── /retry command ────────────────────────────────────────────────────────
+    "tui.retry.usage":          "用法:/retry",
     "tui.retry.busy":           "先 Esc 打断当前任务,再 /retry。",
-    "tui.retry.no_store":       "当前 store 不支持 /retry(demo 模式或未通过 build_components 注入)。",
+    "tui.retry.no_store":       "当前会话没有可供 /retry 使用的持久 store。",
     "tui.retry.read_failed":    "读取历史失败:{err}",
     "tui.retry.no_messages":    "当前会话没有可重试的消息。",
 
     # ── /hooks command ────────────────────────────────────────────────────────
     "tui.hooks.reloaded":       "已重载 hooks 配置(共 {n} 个事件)。",
     "tui.hooks.reload_failed":  "/hooks reload 失败(保留旧配置):{err}",
+    "tui.hooks.usage":          "用法:/hooks [reload]",
     "tui.hooks.empty":          "当前无 hooks 配置(空 ~/.argos/hooks.json 或未配置)。",
     "tui.hooks.header":         "当前 hooks 配置({n} 个事件):",
     "tui.hooks.all_match":      "(全匹配)",
@@ -561,6 +613,7 @@ ZH: dict[str, str] = {
     # ── /lsp command ─────────────────────────────────────────────────────────
     "tui.lsp.reloaded":       "已重载 LSP 配置(共 {n} 个 server)。",
     "tui.lsp.reload_failed":  "/lsp reload 失败(保留旧配置):{err}",
+    "tui.lsp.usage":          "用法:/lsp [reload]",
     "tui.lsp.empty":          "当前无 LSP 配置(空 ~/.argos/lsp.json 或不可读 → 走 built-in 默认)。",
     "tui.lsp.init_failed":    "LSP manager 初始化失败:{err}",
     "tui.lsp.header":         "当前 LSP 配置({n} 个 server):",
@@ -569,6 +622,7 @@ ZH: dict[str, str] = {
     # ── /permissions command ──────────────────────────────────────────────────
     "tui.permissions.reloaded":      "已重载 permissions 配置(allow {allow} / deny {deny} / ask {ask} / per-tool {tools} / default_level={level})。",
     "tui.permissions.reload_failed": "/permissions reload 失败(保留旧配置):{err}",
+    "tui.permissions.usage":         "用法:/permissions [reload]",
     "tui.permissions.read_failed":   "读取 permissions 配置失败:{err}",
     "tui.permissions.header":        "当前 permissions 配置:",
     "tui.permissions.default_level": " · default_level: {level}",
@@ -580,6 +634,7 @@ ZH: dict[str, str] = {
     "tui.permissions.default_gate":  "(沿用 gate.level)",
 
     # ── /tools command ────────────────────────────────────────────────────────
+    "tui.tools.usage":      "用法:/tools",
     "tui.tools.header":      "共 {n} 个工具:",
     "tui.tools.wf_off":      "编排(工作流,已禁用 ARGOS_WORKFLOWS=0)",
     "tui.tools.wf_on":       "编排(工作流)",
@@ -592,7 +647,8 @@ ZH: dict[str, str] = {
     "tui.tools.group.os":            "OS 级控制(P6a)",
 
     # ── /runs command ─────────────────────────────────────────────────────────
-    "tui.runs.no_daemon":      "未启用 daemon(--with-daemon flag);/runs 不可用。",
+    "tui.runs.no_daemon":      "daemon 不可用；/runs 仅在 daemon 模式可用。",
+    "tui.runs.usage":          "用法:/runs [run_id [focus|resume|cancel]]",
     "tui.runs.list_failed":    "列 run 失败:{err}",
     "tui.runs.empty":          "无 run。",
     "tui.runs.list_header":    "Run 列表(#5b 扩展:cost / worktree):",
@@ -608,12 +664,13 @@ ZH: dict[str, str] = {
     "tui.runs.info_failed":    "查 run 失败:{err}",
 
     # ── /orders command ───────────────────────────────────────────────────────
+    "tui.orders.usage":          "用法:/orders",
     "tui.orders.request_failed": "/orders 请求失败（daemon）:{err}",
     "tui.orders.local_failed":   "读取本地 orders 失败:{err}",
 
     # ── /confirm command ──────────────────────────────────────────────────────
     "tui.confirm.no_id":          "用法:/confirm <suggestion_id>",
-    "tui.confirm.no_daemon":      "confirm 需要 daemon 模式（--with-daemon）。",
+    "tui.confirm.no_daemon":      "confirm 需要 daemon 模式。",
     "tui.confirm.request_failed": "/confirm 请求失败:{err}",
     "tui.confirm.ok":             "建议已确认并创建 run：{run_id}\n  隔离：worktree={wt}\n  信任档：L1_DANGEROUS_ONLY（写死，不可升级）\n  用 /runs 查看运行状态。",
     "tui.confirm.not_found":      "建议 {id!r} 未找到或已处理（dismissed/confirmed）。",
@@ -622,23 +679,26 @@ ZH: dict[str, str] = {
 
     # ── /dismiss command ──────────────────────────────────────────────────────
     "tui.dismiss.no_id":          "用法:/dismiss <suggestion_id>",
-    "tui.dismiss.no_daemon":      "dismiss 需要 daemon 模式（--with-daemon）。",
+    "tui.dismiss.no_daemon":      "dismiss 需要 daemon 模式。",
     "tui.dismiss.request_failed": "/dismiss 请求失败:{err}",
     "tui.dismiss.ok":             "建议 {id!r} 已忽略。",
     "tui.dismiss.not_found":      "建议 {id!r} 未找到或已处理。",
     "tui.dismiss.failed":         "/dismiss 失败（HTTP {status}）：{err}",
 
     # ── /routing command ──────────────────────────────────────────────────────
-    "tui.routing.no_router":     "/routing 不可用(无 router 注入;demo/fake 模式)。",
+    "tui.routing.no_router":     "/routing 不可用(无 router 注入)。",
     "tui.routing.set_usage":     "用法:/routing set <category> <tier>  (8 个合法 category: {cats})",
     "tui.routing.bad_category":  "category '{cat}' 不存在;8 个合法值:{cats}",
+    "tui.routing.missing_key":   "路由 tier '{name}' 没有可用 API key({env});请先运行 `argos setup` 或 export 该变量再使用。",
     "tui.routing.set_failed":    "/routing set 失败:{err}",
     "tui.routing.set_ok":        "已写入 {dir}/config.json:routing.by_category.{cat} = {tier}",
 
     # ── /context command ──────────────────────────────────────────────────────
+    "tui.context.usage": "用法:/context [--json]",
     "tui.context.failed": "/context 失败:{err}",
 
     # ── /dream command ────────────────────────────────────────────────────────
+    "tui.dream.usage":            "用法:/dream [status]",
     "tui.dream.no_daemon":        "Dream 需要 daemon 模式(当前 inline)。\n提示:重启 Argos 让其自动连接 daemon,或检查 ~/.argos/daemon.sock。",
     "tui.dream.report_failed":    "/dream report 请求失败:{err}",
     "tui.dream.no_report":        "暂无 Dream 报告(还没跑过夜间整合)。",
@@ -660,29 +720,35 @@ ZH: dict[str, str] = {
     "tui.forget.usage":       "用法:/forget <id 或 key 或 文本>",
     "tui.forget.not_found":   "未找到匹配 '{query}' 的记忆。",
     "tui.forget.ok":          "已软删 {n} 条:",
+    "tui.memory.usage":       "用法:/memory",
 
     # ── /resume command ───────────────────────────────────────────────────────
+    "tui.resume.usage":         "用法:/resume",
     "tui.resume.no_store":       "/resume 不可用(当前无持久化会话)。",
     "tui.resume.no_sessions":    "没有可恢复的历史会话。",
     "tui.resume.ok":             "已恢复会话「{title}」,带回 {n} 条历史 —— 继续输入即接上文。",
 
     # ── /skills command ───────────────────────────────────────────────────────
+    "tui.skills.usage":            "用法:/skills [install <name>|remove <name>|refresh|test <name>]",
     "tui.skills.side_effect_hint": "[skills] TUI 不直装副作用。请到 host 跑:\n        $ argos skills {sub} {arg}",
+    "tui.skills.named_usage":       "用法:/skills {sub} <name>",
     "tui.skills.curator_failed":   "curator 未加载:{err}",
 
     # ── /mcp command ─────────────────────────────────────────────────────────
+    "tui.mcp.usage":          "用法:/mcp",
     "tui.mcp.query_failed":    "MCP 查询失败:{err}",
     "tui.mcp.empty":           "未配置 MCP,或配置的 server 未连上 / 无工具。\n在 ~/.argos/mcp.json 配置 stdio server 即可扩展工具(默认零预配)。",
     "tui.mcp.header":          "已连接 MCP 工具 {n} 个,经 mcp_call(server, tool, arguments) 调用:",
 
     # ── /eval command ─────────────────────────────────────────────────────────
     "tui.eval.no_runs":        "尚未跑过 eval。试试 /eval run <task_id> 或 argos eval corpus",
-    "tui.eval.usage":          "用法:/eval [run <task_id> | compare <a> <b>]",
+    "tui.eval.usage":          "用法:/eval [run <task_id> | compare <task_id>[:<model>] <task_id>[:<model>]]",
     "tui.eval.compare_usage":  "用法:/eval compare <task_id>[:<model>] <task_id>[:<model>]",
     "tui.eval.task_mismatch":  "task_id 不一致:{a} vs {b}",
     "tui.eval.task_not_found": "未找到 task: {err}",
 
     # ── /plan command ─────────────────────────────────────────────────────────
+    "tui.plan.usage":          "用法:/plan",
     "tui.plan.factory_failed": "/plan 不可用(loop factory 失败):{err}",
 
     # ── inline / start_run ────────────────────────────────────────────────────
@@ -795,5 +861,5 @@ ZH: dict[str, str] = {
     "tui.confirm.service_unavailable": "服务暂不可用",
 
     # ── dream 503 fallback ────────────────────────────────────────────────────
-    "tui.dream.no_worker_key": "无 worker key",
+    "tui.dream.no_worker_key": "缺少 API key;请运行 `argos setup` 选择 key 来源。",
 }

@@ -15,7 +15,7 @@ See `README.md` for the product story and `docs/argos-product-definition.md` for
 ## Where the code lives
 
 - **`argos/`** — the entire active codebase (Python 3.12+). All work happens here.
-- **`tests/`** — pytest suite (3459 tests). Mirrors `argos/` subpackage layout, plus
+- **`tests/`** — pytest suite (389 test files at last local count; use pytest collection for the exact current count). Mirrors `argos/` subpackage layout, plus
   integration subdirs: `tests/e2e/`, `tests/eval/`, `tests/workflow/`, `tests/skills_curator/`,
   `tests/input/`, `tests/daemon/`, `tests/tui/`, …
 - **`scripts/`** — standalone demo/benchmark scripts (`best_of_n_demo.py`, `tb_pass_at_1_benchmark.py`, …).
@@ -35,8 +35,6 @@ uv run argos self-update      # check for a newer version and print upgrade inst
 uv run argos dream            # run Dream consolidation now (cross-run distill + memory tidy)
 uv run argos dream --report   # show the latest Dream report
 uv run argos --selftest       # offline full-machine self-check (scripted model, real sandbox) — fast smoke
-uv run argos --demo           # FakeLoop success demo (no key needed)
-uv run argos --demo-fail      # FakeLoop escalation / honest-failure demo
 uv run argos --effort high    # per-run effort tier (low=8 steps/AUTO, medium=40/CONFIRM, high=80/CONFIRM)
 uv run argos --project PATH   # run in a user project directory
 python -m argos.daemon  # start the background daemon (Unix socket at ~/.argos/daemon.sock)
@@ -74,11 +72,11 @@ through four **unskippable** phases: **plan → act → verify → report**.
 
 ### Everything flows through the broker → sandbox
 
-`CapabilityBroker` (`sandbox/broker.py`) is the **only** path to side effects. It checks the action
+`CapabilityBroker` (`argos/sandbox/broker.py`) is the **only** path to side effects. It checks the action
 against the egress policy (v6: manifest-driven from `CapabilityRegistry` + `_NETWORK_ACTIONS`
 fallback), asks the `ApprovalGate` when needed, signs an HMAC receipt, then hands to the executor.
 The OS sandbox is **opt-in** (#2 CC-aligned: `--sandbox` / `ARGOS_SANDBOX=1`, **default off**, like
-Claude Code's). When **on**, `SeatbeltExecutor` (`sandbox/executor.py`) runs the executor child as a
+Claude Code's). When **on**, `SeatbeltExecutor` (`argos/sandbox/executor.py`) runs the executor child as a
 **separate subprocess** under a macOS Seatbelt profile (no network, writes caged to the workspace);
 Linux uses bwrap/unshare. When **off** (default), the child runs **unwrapped** — the broker / approval /
 egress / AST governance above still gates side effects (residual risk: AST-permitted raw network/file

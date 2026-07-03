@@ -137,6 +137,25 @@ async def test_eval_unknown_subcommand_errors():
     assert "用法" in text
 
 
+@pytest.mark.asyncio
+async def test_eval_run_subcommand_is_case_insensitive():
+    class App(_FakeApp):
+        def __init__(self):
+            super().__init__()
+            self.task_id: str | None = None
+
+        async def _eval_run_cmd(self, log, task_id: str) -> None:
+            self.task_id = task_id
+            await log.append_line("ran")
+
+    app = App()
+    log = _FakeLog()
+    await app._eval_cmd(log, "RUN bug_fix_001")
+
+    assert app.task_id == "bug_fix_001"
+    assert "用法" not in log.joined()
+
+
 # ── /eval run ────────────────────────────────────────────────────────
 
 
@@ -157,24 +176,29 @@ async def test_eval_run_happy_path_appends_and_prints(tmp_path, monkeypatch):
     """/eval run bug_fix_001 → 调 runner + 落 JSONL + 打印结果。"""
     from tests.eval._seed_corpus import write_seed_corpus
     from tests.eval._fakes import FakeWorktree, make_fake_loop, make_fake_loop_factory
-    from argos.eval import runner as _runner_mod
-    from argos.daemon import worktree as _wt_mod
+    from argos.eval.runner import EvalRunner
+    from argos.cli import eval as _eval_cli
+    from argos import config as C
 
     root = tmp_path / "corpus"
+    cfg_dir = tmp_path / "cfg"
     write_seed_corpus(root)
     monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", str(root))
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     loop = make_fake_loop()
-    monkeypatch.setattr(_wt_mod, "WorktreeManager",
-                        lambda *a, **kw: FakeWorktree(tmp_path / "wt",
-                                                      **{k: v for k, v in kw.items() if k == "fail_create"}))
-    real_init = _runner_mod.EvalRunner.__init__
-    def _init(self, **kw):
-        if "loop_factory" not in kw:
-            kw["loop_factory"] = make_fake_loop_factory(loop)
-        real_init(self, **kw)
-    monkeypatch.setattr(_runner_mod.EvalRunner, "__init__", _init)
+
+    def _fake_runner(*, base, keep_worktree=False):
+        return EvalRunner(
+            worktree=FakeWorktree(tmp_path / "wt"),
+            base_dir=base,
+            keep_worktree=keep_worktree,
+            loop_factory=make_fake_loop_factory(loop),
+        )
+
+    monkeypatch.setattr(_eval_cli, "_make_runner", _fake_runner)
 
     app = _FakeApp()
     log = _FakeLog()
@@ -183,8 +207,7 @@ async def test_eval_run_happy_path_appends_and_prints(tmp_path, monkeypatch):
     assert "bug_fix_001_off_by_one" in text
     assert "passed" in text
     assert "run_id=" in text
-    # 走 _eval_run_cmd → Path.home() / ".argos" / "eval" / "runs"
-    assert (tmp_path / ".argos" / "eval" / "runs").exists()
+    assert (cfg_dir / "eval" / "runs").exists()
 
 
 # ── /eval compare ────────────────────────────────────────────────────
@@ -194,8 +217,8 @@ async def test_eval_run_happy_path_appends_and_prints(tmp_path, monkeypatch):
 async def test_eval_compare_requires_colon_or_matches_ids(tmp_path, monkeypatch):
     """compare 缺冒号时,会用纯 id(此时 task_id 必须一致)。"""
     from tests.eval._seed_corpus import write_seed_corpus
-    from argos.eval import runner as _runner_mod
-    from argos.daemon import worktree as _wt_mod
+    from argos.eval.runner import EvalRunner
+    from argos.cli import eval as _eval_cli
     from tests.eval._fakes import FakeWorktree, make_fake_loop
 
     root = tmp_path / "corpus"
@@ -207,15 +230,16 @@ async def test_eval_compare_requires_colon_or_matches_ids(tmp_path, monkeypatch)
     loop_strong = make_fake_loop(cost_usd=0.087)
     def factory(model_tier: str):
         return loop_cheap if model_tier == "cheap" else loop_strong
-    monkeypatch.setattr(_wt_mod, "WorktreeManager",
-                        lambda *a, **kw: FakeWorktree(tmp_path / "wt",
-                                                      **{k: v for k, v in kw.items() if k == "fail_create"}))
-    real_init = _runner_mod.EvalRunner.__init__
-    def _init(self, **kw):
-        if "loop_factory" not in kw:
-            kw["loop_factory"] = factory
-        real_init(self, **kw)
-    monkeypatch.setattr(_runner_mod.EvalRunner, "__init__", _init)
+
+    def _fake_runner(*, base, keep_worktree=False):
+        return EvalRunner(
+            worktree=FakeWorktree(tmp_path / "wt"),
+            base_dir=base,
+            keep_worktree=keep_worktree,
+            loop_factory=factory,
+        )
+
+    monkeypatch.setattr(_eval_cli, "_make_runner", _fake_runner)
 
     app = _FakeApp()
     log = _FakeLog()
