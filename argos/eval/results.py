@@ -24,16 +24,22 @@ import time
 from pathlib import Path
 from typing import Any
 
-from argos import jsonl_log
+from argos import config, jsonl_log
 from argos.eval.runner import EvalResult
 
-_RUNS_DIR = Path.home() / ".argos" / "eval" / "runs"
+_RUNS_DIR: Path | None = None
 _WRITE_LOCK = threading.Lock()
 
 
 def _runs_dir(base: Path | None = None) -> Path:
-    """返 runs 目录(base 是 eval 根,加 /runs 子目录;不传则用模块默认)。"""
-    return (base if base is not None else _RUNS_DIR.parent) / "runs"
+    """返 runs 目录(base 是 eval 根;不传则跟随 ARGOS_CONFIG_DIR)。"""
+    if base is not None:
+        return base / "runs"
+    if _RUNS_DIR is not None:
+        return _RUNS_DIR
+    return Path(
+        config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")
+    ).expanduser() / "eval" / "runs"
 
 
 def _date_str(ts: float) -> str:

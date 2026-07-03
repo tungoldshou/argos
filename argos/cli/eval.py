@@ -13,6 +13,7 @@ D16:--keep-worktree flag 调试用
 from __future__ import annotations
 
 import argparse
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,21 @@ from argos.daemon.worktree import WorktreeManager
 from argos.i18n import t
 
 
+class _ManagedEvalLoop:
+    """Close eval components after the loop finishes."""
+
+    def __init__(self, components, loop) -> None:
+        self._components = components
+        self._loop = loop
+
+    async def run(self, goal: str, session_id: str = ""):
+        try:
+            async for ev in self._loop.run(goal, session_id):
+                yield ev
+        finally:
+            self._components.close()
+
+
 def _format_run(r) -> str:
     cost = f"${r.cost_usd:.4f}" if r.cost_usd is not None else "$N/A"
     date = time.strftime("%Y-%m-%d", time.localtime(r.finished_at))
@@ -32,9 +48,37 @@ def _format_run(r) -> str:
             f"{r.pass_status:<14}  {cost}  {r.duration_s:.0f}s")
 
 
+def _real_loop_factory(model_tier: str, wt_path: str, verify_cmd: str | None = None):
+    """Build a real AgentLoop caged to the eval worktree."""
+    from argos.app_factory import build_components, build_loop_factory
+    from argos.approval import ApprovalLevel
+
+    components = build_components(
+        workspace=wt_path,
+        model_override=model_tier,
+        verify_cmd=verify_cmd,
+        approval_level=ApprovalLevel.ACCEPT_EDITS,
+    )
+    gate = components.gate
+    gate.set_ask_listener(lambda call_id, _payload: gate.respond(call_id, "deny"))
+    return _ManagedEvalLoop(components, build_loop_factory(components)(verify_cmd))
+
+
 def _make_runner(*, base: Path, keep_worktree: bool = False) -> EvalRunner:
     wm = WorktreeManager(base_dir=base / "worktrees")
-    return EvalRunner(worktree=wm, base_dir=base, keep_worktree=keep_worktree)
+    return EvalRunner(
+        worktree=wm,
+        base_dir=base,
+        keep_worktree=keep_worktree,
+        loop_factory=_real_loop_factory,
+    )
+
+
+def _eval_base() -> Path:
+    """返回 eval 数据根目录(ARGOS_CONFIG_DIR 覆盖,否则 ~/.argos/eval)。"""
+    from argos import config
+
+    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "eval"
 
 
 # ── subcommand handlers ──────────────────────────────────────────────
@@ -68,9 +112,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     try:
         task = load_task(args.task_id)
     except FileNotFoundError as e:
-        print(t("cli.eval.task_not_found", err=e), file=__import__("sys").stderr)
+        print(t("cli.eval.task_not_found", err=e), file=sys.stderr)
         return 2
-    base = Path.home() / ".argos" / "eval"
+    base = _eval_base()
     model = args.model or _active_profile()
     print(f"[eval] task={task.id} category={task.category} difficulty={task.difficulty}")
     print(f"[eval] running model={model} budget=${args.budget:.2f} {args.budget_s}s ...")
@@ -84,7 +128,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"[eval] {result.pass_status}  cost={cost}  duration={result.duration_s:.0f}s  "
           f"steps={result.steps}  run_id={result.run_id}")
     if result.error:
-        print(f"[eval] error: {result.error}", file=__import__("sys").stderr)
+        print(f"[eval] error: {result.error}", file=sys.stderr)
     return 0 if result.pass_status == PASS_PASSED else 1
 
 
@@ -93,9 +137,9 @@ def cmd_compare(args: argparse.Namespace) -> int:
     try:
         task = load_task(args.task_id)
     except FileNotFoundError as e:
-        print(t("cli.eval.task_not_found", err=e), file=__import__("sys").stderr)
+        print(t("cli.eval.task_not_found", err=e), file=sys.stderr)
         return 2
-    base = Path.home() / ".argos" / "eval"
+    base = _eval_base()
     print(f"[eval] A/B: {args.model_a} vs {args.model_b} on {task.id} ...")
     runner = _make_runner(base=base, keep_worktree=args.keep_worktree)
     runner._budget_cost_usd = args.budget
@@ -144,6 +188,7 @@ def _active_profile() -> str:
 def add_subparser(sub: Any) -> None:
     """注册 eval 子命令到 argparse subparsers。"""
     p = sub.add_parser("eval", help=t("cli.eval.help"))
+    p.set_defaults(func=lambda _args, parser=p: (parser.print_help(), 2)[1])
     sp = p.add_subparsers(dest="eval_command")
 
     p_list = sp.add_parser("list", help=t("cli.eval.list.help"))

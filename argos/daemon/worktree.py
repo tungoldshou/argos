@@ -27,7 +27,11 @@ class WorktreeManager:
     """每 run 一个隔离 worktree(或 tempdir fallback)。"""
 
     def __init__(self, base_dir: Path | None = None):
-        self._base = Path(base_dir) if base_dir else (Path.home() / ".argos" / "worktrees")
+        if base_dir is None:
+            from argos import config
+
+            base_dir = Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")) / "worktrees"
+        self._base = Path(base_dir).expanduser()
         self._base.mkdir(parents=True, exist_ok=True)
 
     @property

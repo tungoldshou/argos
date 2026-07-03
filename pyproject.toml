@@ -97,9 +97,9 @@ dev = [
 pythonpath = ["."]
 testpaths = ["tests"]
 # 80% 覆盖门(spec §9)。注:跑测试子集时总覆盖会低于门 → 以全量 `uv run pytest` 为准。
-addopts = "--cov=argos --cov-report=term-missing --cov-fail-under=80"
+addopts = "--cov=argos --cov-report=term-missing --cov-fail-under=80 -m 'not slow'"
 markers = [
-    "slow: 真进程/真 pyright e2e,默认 skip(uv run pytest -m 'not slow' 跑快测)",
+    "slow: 真进程/真 pyright e2e,默认 skip;用 uv run pytest -m slow -q --no-cov 显式运行",
     "xdist_group: 同组测试串行在同一 worker(用于共享不可隔离资源;组名按资源命名)",
 ]
 # 推荐并行命令:uv run --no-sync pytest -n auto --dist loadgroup

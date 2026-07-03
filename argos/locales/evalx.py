@@ -15,7 +15,7 @@ EN: dict[str, str] = {
     ),
     "eval.tb.path_not_found": "[eval tb] Path does not exist: {path}",
     # argparse help strings
-    "eval.tb.cmd_help": "Run a Terminal-Bench subset (adapter; requires --subset)",
+    "eval.tb.cmd_help": "Run a Terminal-Bench subset (adapter; default: smoke)",
     "eval.tb.subset_help": "Comma-separated TB task directories; or 'smoke' to run the built-in fixture (default: smoke)",
     "eval.tb.keep_worktree_help": "Debug: keep worktree after run",
     "eval.tb.format_help": "Report format",
@@ -31,7 +31,7 @@ EN: dict[str, str] = {
     "eval.bon.n_must_be_positive": "n must be ≥ 1, got {n}",
 
     # ── runner.py ───────────────────────────────────────────────────────────
-    "eval.runner.loop_factory_required": "loop_factory_required: v1 uses fake stubs (real mode v1.1)",
+    "eval.runner.loop_factory_required": "loop_factory_required: no AgentLoop factory configured",
 
     # ── dream.py ────────────────────────────────────────────────────────────
     "learn.dream.narrative_prompt": (
@@ -60,7 +60,7 @@ ZH: dict[str, str] = {
     ),
     "eval.tb.path_not_found": "[eval tb] 路径不存在:{path}",
     # argparse help strings
-    "eval.tb.cmd_help": "跑 Terminal-Bench 子集(适配器,需 --subset)",
+    "eval.tb.cmd_help": "跑 Terminal-Bench 子集(适配器;默认 smoke)",
     "eval.tb.subset_help": "逗号分隔 TB 任务目录;或 'smoke' 跑内置 fixture(默认 smoke)",
     "eval.tb.keep_worktree_help": "调试:不删 worktree",
     "eval.tb.format_help": "报告格式",
@@ -76,7 +76,7 @@ ZH: dict[str, str] = {
     "eval.bon.n_must_be_positive": "n 必须 ≥ 1,得 {n}",
 
     # ── runner.py ───────────────────────────────────────────────────────────
-    "eval.runner.loop_factory_required": "loop_factory_required: v1 全用 fake 桩(真模式 v1.1)",
+    "eval.runner.loop_factory_required": "loop_factory_required:未配置 AgentLoop factory",
 
     # ── dream.py ────────────────────────────────────────────────────────────
     "learn.dream.narrative_prompt": (

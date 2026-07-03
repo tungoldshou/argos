@@ -141,6 +141,7 @@ def add_subparser(sub: Any) -> None:
         "skills",
         help=t("cli.skills.help"),
     )
+    p.set_defaults(func=lambda _args, parser=p: (parser.print_help(), 2)[1])
     sp = p.add_subparsers(dest="skills_command")
 
     p_refresh = sp.add_parser("refresh", help=t("cli.skills.refresh.help"))

@@ -3,20 +3,29 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final, Mapping, Sequence
 
+from argos import config
 from argos import config_base
 from argos.i18n import t
 from argos.permissions.schema import VALID_LEVELS
 
 _log = logging.getLogger("argos.permissions")
 
-# 默认路径
-CONFIG_PATH: Final[Path] = Path(os.path.expanduser("~/.argos/permissions.json"))
+# 默认路径；None 时运行时跟随 ARGOS_CONFIG_DIR。
+CONFIG_PATH: Path | None = None
+
+
+def _config_path(path: Path | None = None) -> Path:
+    return Path(
+        path or CONFIG_PATH or (
+            Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+            / "permissions.json"
+        )
+    )
 
 
 # ReDoS 危险模式(同 hooks D14 防 ReDoS)
@@ -151,7 +160,7 @@ def load(path: Path | None = None) -> PermissionsConfig:
     任务:JSON 读 + 解析走 config_base.read_json_file(OSError 行为保持"显式抛");
     permissions 专属的 default_level / tools / preauth 校验留在本函数。
     """
-    p = path or CONFIG_PATH
+    p = _config_path(path)
     data = config_base.read_json_file(p, ErrorCls=PermissionsConfigError)
     if data is None:
         return PermissionsConfig.empty()
@@ -247,7 +256,7 @@ def save_allow_rule(tool: str, matcher: str, path: Path | None = None) -> bool:
 
     安全:allow 规则【不能】越过 hard rule —— 评估器先跑 hard(rm -rf/系统路径/密钥)再 soft_allow,
     所以即便 matcher 较宽(如 run_command 匹配二进制名),危险命令仍被 hard rule 兜底拦。"""
-    p = path or CONFIG_PATH
+    p = _config_path(path)
     raw: dict = {}
     if p.exists():
         try:

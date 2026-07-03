@@ -15,15 +15,22 @@ import time
 from pathlib import Path
 from typing import Any
 
+from argos import config
 from argos.eval.corpus import EvalTask
 from argos.eval.results import append as append_result
 from argos.eval.runner import EvalResult, EvalRunner, PASS_PASSED
 
-_REPORTS_DIR = Path.home() / ".argos" / "eval" / "reports"
+_REPORTS_DIR: Path | None = None
 
 
 def _reports_dir(base: Path | None = None) -> Path:
-    return (base if base is not None else _REPORTS_DIR.parent) / "reports"
+    if base is not None:
+        return base / "reports"
+    if _REPORTS_DIR is not None:
+        return _REPORTS_DIR
+    return Path(
+        config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")
+    ).expanduser() / "eval" / "reports"
 
 
 def run_pair(

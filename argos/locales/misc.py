@@ -15,6 +15,14 @@ EN: dict[str, str] = {
         "profile '{name}' has protocol='{protocol}' which is invalid;"
         " must be one of {valid}"
     ),
+    "config.profile.invalid_api_key_env": (
+        "profile '{name}' has invalid api_key_env '{env}'"
+        " (use shell variable syntax, e.g. ARGOS_LLM_KEY)"
+    ),
+    "config.profile.invalid_base_url": (
+        "profile '{name}' has invalid base_url '{base_url}'"
+        " (use http:// or https:// with a host)"
+    ),
     "config.profile.non_integer_tokens": (
         "profile '{name}' max_tokens/context_window must be integers: {exc}"
     ),
@@ -22,10 +30,17 @@ EN: dict[str, str] = {
         "profile '{name}' max_tokens/context_window must be positive integers"
         " (got {mt}/{cw})"
     ),
+    "config.profile.invalid_multimodal": (
+        "profile '{name}' field 'multimodal' must be true or false"
+    ),
+    "config.profile.invalid_price": (
+        "profile '{name}' price_in/price_out must both be present and non-negative numbers"
+    ),
 
     # load_config
     "config.load.no_config_file": "No config file at {path}",
     "config.load.json_parse_error": "config.json parse error: {exc}",
+    "config.load.env_parse_error": "{path} parse error: {exc}",
     "config.load.active_not_in_models": (
         "active='{active}' is not in models (or models is empty)"
     ),
@@ -35,7 +50,7 @@ EN: dict[str, str] = {
         "profile '{name}' does not exist (available: {available})"
     ),
     "config.tier_for.no_config": (
-        "No config.json; only the default profile '{default}' is available"
+        "profile '{name}' is unavailable; no config.json; only the default profile '{default}' is available"
         " (run 'argos setup' first)"
     ),
 
@@ -126,15 +141,28 @@ ZH: dict[str, str] = {
     "config.profile.invalid_protocol": (
         "profile '{name}' 的 protocol='{protocol}' 非法,只能是 {valid}"
     ),
+    "config.profile.invalid_api_key_env": (
+        "profile '{name}' 的 api_key_env '{env}' 非法,请使用 shell 环境变量名格式,如 ARGOS_LLM_KEY"
+    ),
+    "config.profile.invalid_base_url": (
+        "profile '{name}' 的 base_url '{base_url}' 非法,请使用带 host 的 http:// 或 https:// 地址"
+    ),
     "config.profile.non_integer_tokens": (
         "profile '{name}' 的 max_tokens/context_window 必须是整数:{exc}"
     ),
     "config.profile.non_positive_tokens": (
         "profile '{name}' 的 max_tokens/context_window 必须是正整数(得 {mt}/{cw})"
     ),
+    "config.profile.invalid_multimodal": (
+        "profile '{name}' 的 'multimodal' 字段必须是 true 或 false"
+    ),
+    "config.profile.invalid_price": (
+        "profile '{name}' 的 price_in/price_out 必须同时填写且为非负数字"
+    ),
 
     "config.load.no_config_file": "无 {path}",
     "config.load.json_parse_error": "config.json 解析失败:{exc}",
+    "config.load.env_parse_error": "{path} 解析失败:{exc}",
     "config.load.active_not_in_models": (
         "active='{active}' 不在 models 中(或 models 为空)"
     ),
@@ -143,7 +171,7 @@ ZH: dict[str, str] = {
         "profile '{name}' 不存在(可用:{available})"
     ),
     "config.tier_for.no_config": (
-        "无 config.json,仅有默认 profile '{default}'(请先 argos setup)"
+        "profile '{name}' 不可用;无 config.json,仅有默认 profile '{default}'(请先 argos setup)"
     ),
 
     "config.set_active.no_config": "无 config.json,无法切换(请先 argos setup)",

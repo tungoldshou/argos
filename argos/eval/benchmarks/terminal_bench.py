@@ -39,6 +39,7 @@ Terminal-Bench 是 Laude Institute 维护的「terminal-only agent」公开 benc
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import re
 import shlex
@@ -629,7 +630,10 @@ def _resolve_subset_arg(arg: str, *, default_subset: str | None = None) -> list[
     if not arg:
         return []
     if arg == "smoke":
-        return [_smoke_subset_dir()]
+        root = _smoke_subset_dir()
+        if not root.exists():
+            return [root]
+        return sorted(p for p in root.iterdir() if (p / "task.yaml").is_file())
     # 否则按逗号拆路径
     return [Path(p.strip()) for p in arg.split(",") if p.strip()]
 
@@ -662,6 +666,21 @@ def cmd_tb(args: argparse.Namespace) -> int:
             return 2
     workdir = base / "tb_corpus"
     report = run_subset(subset, runner=runner, model_tier=args.model, workdir=workdir)
+    if getattr(args, "format", "text") == "json":
+        print(json.dumps({
+            "total_seen": report.total_seen,
+            "supported": report.supported,
+            "unsupported": report.unsupported,
+            "passed": report.passed,
+            "failed": report.failed,
+            "error": report.error,
+            "setup_failed": report.setup_failed,
+            "skipped": report.skipped,
+            "pass_at_1": report.pass_at_1,
+            "unsupported_reasons": dict(report.unsupported_reasons),
+            "per_task_status": dict(report.per_task_status),
+        }, ensure_ascii=False))
+        return 0
     # sync_output=None → 现场交给 sync_batch probe;True/False → 显式覆盖。
     # A/B 对比时显式 --sync-output / --no-sync-output 跑两次,肉眼可见 batch 块的渲染差异。
     sync_enabled: bool | None = getattr(args, "sync_output", None)

@@ -29,6 +29,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import ctypes
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -81,6 +82,19 @@ def _is_access_denied(stderr: str, stdout: str) -> bool:
     """osascript 错误输出中是否含 Accessibility 权限拒绝标志。"""
     combined = (stderr + stdout).lower()
     return any(m in combined for m in _ACCESS_DENIED_MARKERS)
+
+
+def _screen_capture_allowed() -> bool:
+    """macOS Screen Recording 权限预检；无法预检的平台保持现状。"""
+    if sys.platform != "darwin":
+        return True
+    try:
+        cg = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+        check = cg.CGPreflightScreenCaptureAccess
+        check.restype = ctypes.c_bool
+        return bool(check())
+    except Exception:  # noqa: BLE001
+        return True
 
 
 # ── 主 executor ──────────────────────────────────────────────────────────────
@@ -275,6 +289,12 @@ class ComputerExecutor:
 
     def _screenshot(self) -> ComputerActionResult:
         """全屏截图 → 临时 PNG 文件;返回路径 + 尺寸。"""
+        if not _screen_capture_allowed():
+            return ComputerActionResult(
+                ok=False,
+                detail=_t("perception.executor.screen_recording_denied"),
+            )
+
         tmp = tempfile.NamedTemporaryFile(
             suffix=".png", prefix="argos_screen_", delete=False
         )

@@ -53,6 +53,7 @@ def add_subparser(sub: Any) -> None:
         "context",
         help=t("cli.context.help"),
     )
+    p.set_defaults(func=lambda _args, parser=p: (parser.print_help(), 2)[1])
     sp = p.add_subparsers(dest="context_command")
     p_show = sp.add_parser("show", help=t("cli.context.show.help"))
     p_show.add_argument("--json", action="store_true", help=t("cli.context.json.help"))

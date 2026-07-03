@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import shutil
 
 from argos.i18n import t
@@ -24,7 +23,8 @@ logger = logging.getLogger(__name__)
 
 def _snapshot_root() -> Path:
     """返回快照根目录:优先 ARGOS_CONFIG_DIR 环境变量,其次 ~/.argos/snapshots/。"""
-    base = Path(os.environ.get("ARGOS_CONFIG_DIR", "") or (Path.home() / ".argos")).expanduser()
+    from argos import config as C
+    base = Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
     return base / "snapshots"
 
 

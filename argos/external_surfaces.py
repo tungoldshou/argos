@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from argos import config
 from argos.i18n import t
 
 # 三个沙箱外子系统的 config 文件名 → i18n key(用户配了 = 有沙箱外执行面)。
@@ -30,7 +31,9 @@ def external_surface_warnings(argos_dir: Path | None = None) -> list[str]:
 
     argos_dir:配置目录(测试可注入;默认 ~/.argos)。
     """
-    base = argos_dir if argos_dir is not None else (Path.home() / ".argos")
+    base = argos_dir if argos_dir is not None else Path(
+        config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")
+    ).expanduser()
     out: list[str] = []
     for filename, key in _SURFACE_KEYS:
         if (base / filename).exists():

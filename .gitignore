@@ -10,9 +10,10 @@
 .env.local
 .env*.local
 # CLAUDE.md is tracked (dev guide for Claude Code working on Argos) — not ignored.
-# AGENTS.md stays ignored: guard against re-adding a root-level dev clone. The product
-# reads AGENTS.md from *user* projects; it doesn't belong in this repo's root.
+# Root AGENTS.md is tracked as the Codex project guide. Keep other AGENTS.md files
+# ignored so user-project fixtures or copied dev clones do not slip into commits.
 AGENTS.md
+!/AGENTS.md
 
 # codegraph index
 .codegraph

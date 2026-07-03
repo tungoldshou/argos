@@ -10,33 +10,48 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
-from argos.learning.candidates import DEFAULT_ROOT as _DEFAULT_CANDIDATES_DIR
-from argos.skills import USER_DIR as _DEFAULT_SKILLS_DIR
 from argos.i18n import t
 
 log = logging.getLogger(__name__)
 
-# ARGOS_DREAMS_DIR 环境变量覆盖(测试/CI 用)
-_DEFAULT_DREAMS_DIR = Path.home() / ".argos" / "dreams"
-_DEFAULT_MEMORY_DIR = Path.home() / ".argos" / "memory"
-# candidates_root / skills_root 单一来源:直接 import，消除路径漂移根因
-# _DEFAULT_CANDIDATES_DIR = ~/.argos/learning/candidates  (来自 candidates.DEFAULT_ROOT)
-# _DEFAULT_SKILLS_DIR     = ~/.argos/skills              (来自 skills.USER_DIR)
+# ARGOS_DREAMS_DIR / ARGOS_MEMORY_DIR 显式覆盖;否则跟随 ARGOS_CONFIG_DIR。
+_DEFAULT_CANDIDATES_DIR: Path | None = None
+_DEFAULT_SKILLS_DIR: Path | None = None
+
+
+def _argos_dir() -> Path:
+    """返回 Argos 配置根目录(ARGOS_CONFIG_DIR 覆盖,否则 ~/.argos)。"""
+    from argos import config
+
+    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
 
 
 def _dreams_dir() -> Path:
     """返回 dreams 报告目录(ARGOS_DREAMS_DIR 覆盖,测试友好)。"""
     env = os.environ.get("ARGOS_DREAMS_DIR")
-    return Path(env) if env else _DEFAULT_DREAMS_DIR
+    return Path(env).expanduser() if env else _argos_dir() / "dreams"
 
 
 def _memory_dir() -> Path:
     """返回 memory 目录(ARGOS_MEMORY_DIR 覆盖,测试友好)。"""
     env = os.environ.get("ARGOS_MEMORY_DIR")
-    return Path(env) if env else _DEFAULT_MEMORY_DIR
+    return Path(env).expanduser() if env else _argos_dir() / "memory"
+
+
+def _candidates_root() -> Path:
+    from argos.learning.candidates import default_root
+
+    return default_root(_DEFAULT_CANDIDATES_DIR)
+
+
+def _skills_root() -> Path:
+    from argos.skills import user_dir
+
+    return user_dir(_DEFAULT_SKILLS_DIR)
 
 
 def _latest_report() -> dict | None:
@@ -100,13 +115,19 @@ def run_dream(args: Any) -> int:
     # ── 跑一轮 ────────────────────────────────────────────────────────
     # 尝试构建 components(有 key 才能跑 A/B 晋升)
     has_key = True
+    comps = None
     try:
         from argos.app_factory import build_components
-        build_components()          # 仅检测 key 是否配好;RuntimeError → 无 key
-    except RuntimeError:
-        has_key = False
-    except Exception:  # noqa: BLE001 — 其他初始化失败也视为无法跑完整 pipeline
-        has_key = False
+        comps = build_components()          # RuntimeError(no key) → memory-only fallback
+    except RuntimeError as e:
+        if "key" in str(e).lower():
+            has_key = False
+        else:
+            print(t("cli.dream.pipeline_failed", err=e), file=sys.stderr)
+            return 1
+    except Exception as e:  # noqa: BLE001
+        print(t("cli.dream.pipeline_failed", err=e), file=sys.stderr)
+        return 1
 
     if not has_key:
         # 无 key:仅做记忆整理 + 候选区盘点,诚实告知晋升需要模型
@@ -122,8 +143,8 @@ def run_dream(args: Any) -> int:
             print(t("cli.dream.memory_tidy_failed", err=e))
         # 候选区盘点
         try:
-            from argos.learning.candidates import list_unconsumed, DEFAULT_ROOT
-            cands = list_unconsumed(DEFAULT_ROOT)
+            from argos.learning.candidates import list_unconsumed
+            cands = list_unconsumed(_candidates_root())
             print(t("cli.dream.candidates_count", n=len(cands)))
         except Exception as e:  # noqa: BLE001
             log.warning("dream CLI: 候选区盘点失败: %s", e)
@@ -139,15 +160,11 @@ def run_dream(args: Any) -> int:
 
     # Blocking-2 修复：skills_root 用单一来源 USER_DIR（~/.argos/skills），
     # 与技能加载器（skills.py _load_dir）扫的目录一致；原 learning/skills 是死目录。
-    candidates_root = _DEFAULT_CANDIDATES_DIR
-    skills_root = _DEFAULT_SKILLS_DIR
+    candidates_root = _candidates_root()
+    skills_root = _skills_root()
 
     # 构建 components（一次，narrate + runner_factory 共享）
-    from argos.app_factory import build_components, build_run_stack
-    try:
-        comps = build_components()
-    except Exception:  # noqa: BLE001
-        comps = None
+    from argos.app_factory import build_run_stack
 
     # 构建 narrate fn(调 model.complete)
     _narrate = None
@@ -173,7 +190,7 @@ def run_dream(args: Any) -> int:
             from argos.eval.runner import EvalRunner
             from argos.daemon.worktree import WorktreeManager
             from argos.learning.dream import HintedRunner
-            eval_base = Path.home() / ".argos" / "dreams" / "eval"
+            eval_base = dreams_dir / "eval"
             wm = WorktreeManager(base_dir=eval_base / "worktrees")
             # per-run 隔离栈：提供真实 loop_factory（吞掉 model_tier，Dream 内不分档）
             run_stack = build_run_stack(comps, workspace=None, session_id="dream-eval")
