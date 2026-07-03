@@ -141,6 +141,7 @@ Last updated: 2026-07-04
 - Repaired the cleanup regressions with English-only source-doc contracts and reran broad non-slow verification plus the code comment/docstring Chinese scanner.
 - Changed the public `curl | bash` docs to use the `v0.1.1` raw tag URL instead of a default-branch raw installer URL, and verified README/install/publish release tests.
 - Pushed release commit `89fa66b` to `origin/codex/ship-readiness` and ran `publish.yml`; remote CI/build passed, and TestPyPI failed on trusted publisher configuration (`invalid-publisher`).
+- Opened draft PR #29 for the `v0.1.1` launch branch with the TestPyPI trusted-publisher blocker documented.
 
 ## In Progress
 
