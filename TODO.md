@@ -146,22 +146,21 @@ Last updated: 2026-07-04
 - Completed product-spine reset on `codex/product-spine-reset`: default command surface is core-only, advanced commands are hidden by default but still available, workflow prompt/execution is opt-in, contract prompts are limited to clearly structured engineering domains, persistent allow rules are scoped, verify mutation detection is receipt/tool-name driven, `/setup` shows a status card, docs present core-stable plus advanced-experimental surfaces, and exact `"""Internal documentation."""` noise is removed repo-wide.
 - Reviewed the high-risk product-reset diff and tightened `run_command` persistent allow matchers so commands with leading flags do not persist as bare-command approvals.
 - Opened draft PR #30 for `codex/product-spine-reset` and verified its GitHub CI run passed.
+- Merged PR #29 and PR #30 to `main`, then reran `publish.yml` from `main`; CI/build/twine/wheel-smoke passed, and TestPyPI failed only on missing trusted publisher configuration.
 
 ## In Progress
 
 - Preserve the existing `AGENTS.md` instructions and avoid overwriting project memory files.
-- Keep `codex/ship-readiness` / PR #29 protected from this larger product reset unless the user explicitly chooses to supersede the release PR.
+- Keep release publishing blocked until TestPyPI/PyPI trusted publishers are configured.
 
 ## Next
 
-- Review draft PR #30, especially the mechanical docstring-cleanup portion, before deciding whether it should merge before or after the launch PR.
-- Configure TestPyPI trusted publishing for repository `tungoldshou/argos`, workflow `.github/workflows/publish.yml`, environment `testpypi`, then rerun `publish.yml` on `codex/ship-readiness` or after merging to `main`.
-- If TestPyPI trusted publishing is configured for branch `main` only, merge PR #29 first, then rerun `publish.yml` from `main` before tagging `v0.1.1`.
+- Configure TestPyPI pending trusted publisher for repository `tungoldshou/argos`, workflow `.github/workflows/publish.yml`, environment `testpypi`, ref `refs/heads/main`, then rerun `publish.yml` from `main`.
 - Verify `uv tool install --index-url https://test.pypi.org/simple/ argos-agent`, then publish fresh tag `v0.1.1` to PyPI and verify the tag-pinned raw GitHub `curl | bash` installer.
+- Configure the matching PyPI trusted publisher before pushing tag `v0.1.1`; otherwise the tag-gated PyPI job will fail with the same `invalid-publisher` class.
 - Use a fresh release tag for the next public launch; the old GitHub `v0.1.0` release and remote tag were deleted after user confirmation.
 - Keep future code comments/docstrings English-only; do not convert intentional Chinese locale/test strings or Chinese documentation prose merely for this rule.
-- Review the mechanical docstring-cleanup portion separately during PR review because it touches many files but is intentionally behavior-neutral.
 
 ## Backlog
 
-- Continue pruning PR/release handoff risk after review feedback on PR #29 or PR #30.
+- Continue pruning release handoff risk after TestPyPI/PyPI publisher setup.
