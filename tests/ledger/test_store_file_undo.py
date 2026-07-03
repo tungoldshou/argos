@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -114,7 +113,6 @@ class TestMarkEntryDone:
         assert store.mark_entry_done("r1", 1) is False
 
     def test_mark_entry_done_idempotent_check(self, tmp_path: Path):
-        """Internal documentation."""
         store = LedgerStore(tmp_path)
         e_orig = _entry(1)
         store.append(e_orig)

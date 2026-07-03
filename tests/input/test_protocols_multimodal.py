@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import base64
@@ -20,7 +19,6 @@ def _tier(multimodal: bool = True):
 
 
 def test_coalesce_no_attachments_unchanged():
-    """Internal documentation."""
     from argos.core.protocols import _coalesce_consecutive_roles
     msgs = [
         {"role": "user", "content": "hi"},
@@ -34,7 +32,6 @@ def test_coalesce_no_attachments_unchanged():
 
 
 def test_coalesce_consecutive_same_role_text_joined():
-    """Internal documentation."""
     from argos.core.protocols import _coalesce_consecutive_roles
     msgs = [
         {"role": "user", "content": "a"},
@@ -46,7 +43,6 @@ def test_coalesce_consecutive_same_role_text_joined():
 
 
 def test_coalesce_consecutive_same_role_attachments_concat():
-    """Internal documentation."""
     from argos.core.protocols import _coalesce_consecutive_roles
     att1 = _att(b"A", source_label="a.png")
     att2 = _att(b"B", source_label="b.png")
@@ -61,7 +57,6 @@ def test_coalesce_consecutive_same_role_attachments_concat():
 
 
 def test_coalesce_attachment_message_followed_by_plain_different_role():
-    """Internal documentation."""
     from argos.core.protocols import _coalesce_consecutive_roles
     att = _att()
     msgs = [
@@ -76,7 +71,6 @@ def test_coalesce_attachment_message_followed_by_plain_different_role():
 
 
 def test_anthropic_payload_no_attachments_content_is_plain_string():
-    """Internal documentation."""
     from argos.core.protocols import AnthropicProtocol
     p = AnthropicProtocol()
     payload = p.payload(
@@ -89,7 +83,6 @@ def test_anthropic_payload_no_attachments_content_is_plain_string():
 
 
 def test_anthropic_payload_with_attachment_content_becomes_list():
-    """Internal documentation."""
     from argos.core.protocols import AnthropicProtocol
     att = _att(b"\x89PNG\x00\x00\x00", "image/png", "screen.png")
     p = AnthropicProtocol()
@@ -109,7 +102,6 @@ def test_anthropic_payload_with_attachment_content_becomes_list():
 
 
 def test_anthropic_payload_multiple_attachments():
-    """Internal documentation."""
     from argos.core.protocols import AnthropicProtocol
     att1 = _att(b"A", "image/png", "a.png")
     att2 = _att(b"B", "image/jpeg", "b.jpg")
@@ -129,7 +121,6 @@ def test_anthropic_payload_multiple_attachments():
 
 
 def test_openai_payload_no_attachments_content_is_plain_string():
-    """Internal documentation."""
     from argos.core.protocols import OpenAIProtocol
     p = OpenAIProtocol()
     payload = p.payload(
@@ -142,7 +133,6 @@ def test_openai_payload_no_attachments_content_is_plain_string():
 
 
 def test_openai_payload_with_attachment_content_becomes_list():
-    """Internal documentation."""
     from argos.core.protocols import OpenAIProtocol
     att = _att(b"\xff\xd8\xff\xe0", "image/jpeg", "photo.jpg")
     p = OpenAIProtocol()
@@ -161,7 +151,6 @@ def test_openai_payload_with_attachment_content_becomes_list():
 
 
 def test_openai_payload_multiple_attachments():
-    """Internal documentation."""
     from argos.core.protocols import OpenAIProtocol
     att1 = _att(b"A", "image/png", "a.png")
     att2 = _att(b"B", "image/webp", "b.webp")

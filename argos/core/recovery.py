@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import random
@@ -15,7 +14,6 @@ class ClassifiedError:
 
 
 def flatten_exception_chain(exc: BaseException, max_depth: int = 4) -> list[str]:
-    """Internal documentation."""
     out: list[str] = []
     cur: BaseException | None = exc
     depth = 0
@@ -33,7 +31,6 @@ _CONTEXT_OVERFLOW_MARKERS = (
 
 
 def _status_of(exc: BaseException) -> int | None:
-    """Internal documentation."""
     resp = getattr(exc, "response", None)
     if resp is not None:
         return getattr(resp, "status_code", None)
@@ -80,7 +77,6 @@ def classify_error(exc: BaseException) -> ClassifiedError:
 
 
 def jittered_backoff(attempt: int, *, base: float = 0.5, cap: float = 30.0) -> float:
-    """Internal documentation."""
     ceiling = min(cap, base * (2 ** attempt))
     floor = ceiling / 2.0
     return floor + random.random() * (ceiling - floor)

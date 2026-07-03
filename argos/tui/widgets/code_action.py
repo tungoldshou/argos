@@ -53,7 +53,6 @@ class CodeActionBlock(Vertical):
         yield Static(t("widget.code_running"), id="result", markup=False)
 
     def set_result(self, *, stdout: str, value_repr: str, exc: str, ok: bool) -> None:
-        """Internal documentation."""
         self.ok = ok
         body = exc if (not ok and exc) else (stdout or "")
         if value_repr:

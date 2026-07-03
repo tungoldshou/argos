@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -24,13 +23,11 @@ def test_rule_entry_frozen():
 
 
 def test_rule_entry_empty_matcher_allowed():
-    """Internal documentation."""
     RuleEntry(tool="x", matcher="")
     RuleEntry(tool="x", matcher="*")
 
 
 def test_permissions_config_empty():
-    """Internal documentation."""
     cfg = PermissionsConfig.empty()
     assert cfg.version == 1
     assert cfg.default_level is None
@@ -41,7 +38,6 @@ def test_permissions_config_empty():
 
 
 def test_permissions_config_construction():
-    """Internal documentation."""
     cfg = PermissionsConfig(
         version=1,
         default_level="confirm",
@@ -66,7 +62,6 @@ def test_invalid_tool_level_raises():
 
 
 def test_load_nonexistent_returns_empty(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.permissions import config as _cfg
     monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")
     cfg = _cfg.load()
@@ -132,7 +127,6 @@ def test_load_bad_json_raises(tmp_path, monkeypatch):
 
 
 def test_get_config_bad_json_fails_closed_observe(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.permissions import config as _cfg
     from argos.permissions.evaluator import evaluate
 
@@ -164,7 +158,6 @@ def test_load_wrong_version_raises(tmp_path, monkeypatch):
 
 
 def test_load_bad_regex_skipped_not_raises(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.permissions import config as _cfg
     p = tmp_path / "permissions.json"
     p.write_text(json.dumps({
@@ -180,7 +173,6 @@ def test_load_bad_regex_skipped_not_raises(tmp_path, monkeypatch):
 
 
 def test_wildcard_matcher_loads_and_matches(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.permissions import config as _cfg
     p = tmp_path / "permissions.json"
     p.write_text(json.dumps({
@@ -200,7 +192,6 @@ def test_wildcard_matcher_loads_and_matches(tmp_path, monkeypatch):
 
 
 def test_reload_config_keeps_old_on_failure(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.permissions.config import reload_config as _reload
     from argos.permissions import config as _cfg
     monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")
@@ -216,7 +207,6 @@ def test_reload_config_keeps_old_on_failure(tmp_path, monkeypatch):
 
 
 def test_reload_config_first_failure_caches_observe_fail_closed(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.permissions.config import reload_config as _reload
     from argos.permissions import config as _cfg
     monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")
@@ -230,7 +220,6 @@ def test_reload_config_first_failure_caches_observe_fail_closed(tmp_path, monkey
 
 
 def test_reload_config_picks_up_new(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.permissions.config import reload_config as _reload
     from argos.permissions import config as _cfg
     monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")

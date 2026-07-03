@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -77,7 +76,6 @@ async def test_focus_missing_session_returns_400(focus_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_multiple_focus_calls_last_wins(focus_server, tmp_path: Path):
-    """Internal documentation."""
     srv, _, reg = focus_server
     sid1 = await _create_session(srv.socket_path)   # owner
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",
@@ -95,7 +93,6 @@ async def test_multiple_focus_calls_last_wins(focus_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_focus_can_clear_session(focus_server, tmp_path: Path):
-    """Internal documentation."""
     srv, _, reg = focus_server
     sid = await _create_session(srv.socket_path)
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",

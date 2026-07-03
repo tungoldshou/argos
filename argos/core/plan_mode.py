@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,7 +7,7 @@ from argos.i18n import t
 
 
 class PlanModeError(Exception):
-    """Internal documentation."""
+    pass
 
 
 PlanExitAction = Literal["approve_start", "approve_accept_edits", "keep_planning", "refine"]
@@ -16,7 +15,6 @@ _VALID_ACTIONS = ("approve_start", "approve_accept_edits", "keep_planning", "ref
 
 
 def set_plan_mode(active: bool) -> None:
-    """Internal documentation."""
     from argos import runtime as _rt
     ctx = _rt._current_var.get()
     if ctx is None:
@@ -26,14 +24,12 @@ def set_plan_mode(active: bool) -> None:
 
 
 def is_plan_mode() -> bool:
-    """Internal documentation."""
     from argos import runtime as _rt
     return _rt.current().plan_mode
 
 
 @dataclass(frozen=True)
 class PlanExitDecision:
-    """Internal documentation."""
     action: PlanExitAction
     feedback: str | None = None
 
@@ -45,7 +41,6 @@ class PlanExitDecision:
 
 
 def EnterPlanMode(loop) -> str:
-    """Internal documentation."""
     if getattr(loop, "_busy", False):
         return t("plan.enter.busy")
     if getattr(loop, "mode", "act") == "plan":
@@ -59,7 +54,6 @@ def EnterPlanMode(loop) -> str:
 
 
 def ExitPlanMode(loop, action: str, feedback: str | None = None) -> str:
-    """Internal documentation."""
     if getattr(loop, "mode", "act") != "plan":
         return t("plan.exit.not_in_plan")
     if action == "refine" and not (feedback and feedback.strip()):
@@ -78,7 +72,6 @@ def ExitPlanMode(loop, action: str, feedback: str | None = None) -> str:
 
 
 class PlanRenderer:
-    """Internal documentation."""
 
     @staticmethod
     def render(
@@ -87,7 +80,6 @@ class PlanRenderer:
         tool_calls: list[dict],
         risks: list[str] | None = None,
     ) -> str:
-        """Internal documentation."""
         title = goal.strip()[:50] + ("..." if len(goal.strip()) > 50 else "")
         lines = [f"# Plan: {title}", ""]
 

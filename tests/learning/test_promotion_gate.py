@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -23,7 +22,6 @@ class _FakeOutcome:
 
 @dataclass
 class _FakeLoop:
-    """Internal documentation."""
     hint: str | None = None
     pass_sequence: list[str] = field(default_factory=lambda: ["passed"])
 
@@ -33,7 +31,6 @@ class _FakeLoop:
 
 
 class _FakeRunner:
-    """Internal documentation."""
     def __init__(self, sequence_a: list[str], sequence_b: list[str]):
         self._seq_a = list(sequence_a)
         self._seq_b = list(sequence_b)
@@ -81,7 +78,6 @@ def _make_candidate(name: str, body: str = "# skill body", verify_cmd: str = "tr
 
 
 def test_promoted_when_pass_rate_improves(tmp_path):
-    """Internal documentation."""
     from argos.learning.distiller import SkillCandidate
 
     tasks = [_make_task("t1"), _make_task("t2")]
@@ -97,7 +93,6 @@ def test_promoted_when_pass_rate_improves(tmp_path):
 
 
 def test_not_promoted_when_no_improvement(tmp_path):
-    """Internal documentation."""
     tasks = [_make_task("t1"), _make_task("t2")]
     runner = _FakeRunner(sequence_a=["passed", "failed"], sequence_b=["passed", "failed"])
     cand = _make_candidate("learned-tie")
@@ -111,7 +106,6 @@ def test_not_promoted_when_no_improvement(tmp_path):
 
 
 def test_not_promoted_when_regression(tmp_path):
-    """Internal documentation."""
     tasks = [_make_task("t1"), _make_task("t2")]
     runner = _FakeRunner(sequence_a=["passed", "passed"], sequence_b=["passed", "failed"])
     cand = _make_candidate("learned-bad")
@@ -125,7 +119,6 @@ def test_not_promoted_when_regression(tmp_path):
 
 
 def test_builtin_name_rejected(tmp_path):
-    """Internal documentation."""
     from argos.skills_curator.index import BUILTIN_NAMES
     builtin = next(iter(BUILTIN_NAMES))
     cand = _make_candidate(builtin)
@@ -139,7 +132,6 @@ def test_builtin_name_rejected(tmp_path):
 
 
 def test_promote_swallows_runner_exceptions(tmp_path):
-    """Internal documentation."""
     class _BoomRunner(_FakeRunner):
         def run(self, task, *, model_tier):
             raise RuntimeError("boom")
@@ -154,7 +146,6 @@ def test_promote_swallows_runner_exceptions(tmp_path):
 
 
 def test_promote_writes_frontmatter_enabled_true(tmp_path):
-    """Internal documentation."""
     tasks = [_make_task("t1"), _make_task("t2")]
     runner = _FakeRunner(sequence_a=["failed", "failed"], sequence_b=["passed", "passed"])
     body_with_fm = (
@@ -175,7 +166,6 @@ def test_promote_writes_frontmatter_enabled_true(tmp_path):
 
 
 class _FullPassRunner:
-    """Internal documentation."""
     def __init__(self):
         self.calls: list[tuple] = []
 
@@ -194,7 +184,6 @@ class _FullPassRunner:
 
 
 class _FullFailRunner:
-    """Internal documentation."""
     def run(self, task, *, model_tier: str):
         from argos.eval.runner import EvalResult
         return EvalResult(
@@ -209,7 +198,6 @@ class _FullFailRunner:
 
 
 def test_promote_runner_b_used_for_b_side(tmp_path):
-    """Internal documentation."""
     tasks = [object(), object()]
     class _ObjRunnerFail:
         def run(self, task, *, model_tier: str):
@@ -242,7 +230,6 @@ def test_promote_runner_b_used_for_b_side(tmp_path):
 
 
 def test_promote_refuses_overwrite_user_skill(tmp_path):
-    """Internal documentation."""
     skills_root = tmp_path / "skills"
     skill_dir = skills_root / "my-skill"
     skill_dir.mkdir(parents=True)
@@ -265,7 +252,6 @@ def test_promote_refuses_overwrite_user_skill(tmp_path):
 
 
 def test_promote_overwrites_learned_skill(tmp_path):
-    """Internal documentation."""
     skills_root = tmp_path / "skills"
     skill_dir = skills_root / "dream-skill"
     skill_dir.mkdir(parents=True)
@@ -300,7 +286,6 @@ def test_promote_overwrites_learned_skill(tmp_path):
 
 
 def test_promote_refuses_overwrite_user_skill_with_source_run_in_body(tmp_path):
-    """Internal documentation."""
     skills_root = tmp_path / "skills"
     skill_dir = skills_root / "user-doc-skill"
     skill_dir.mkdir(parents=True)
@@ -338,7 +323,6 @@ def test_promote_refuses_overwrite_user_skill_with_source_run_in_body(tmp_path):
 
 
 def test_promote_refuses_overwrite_skill_with_markdown_divider_trick(tmp_path):
-    """Internal documentation."""
     skills_root = tmp_path / "skills"
     skill_dir = skills_root / "markdown-divider-skill"
     skill_dir.mkdir(parents=True)

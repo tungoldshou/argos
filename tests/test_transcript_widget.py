@@ -1,5 +1,4 @@
 # tests/test_transcript_widget.py
-"""Internal documentation."""
 import pytest
 from textual.app import App, ComposeResult
 from argos.tui.theme import ARGOS_NIGHT
@@ -46,7 +45,6 @@ async def test_append_token_streams_into_one_assistant_bubble_stripping_fences()
 
 @pytest.mark.asyncio
 async def test_append_token_survives_concurrent_finalize_during_mount():
-    """Internal documentation."""
     app = _Harness()
     async with app.run_test() as pilot:
         t = app.query_one("#t", Transcript)
@@ -92,7 +90,6 @@ async def test_append_line_mounts_system_line():
 
 @pytest.mark.asyncio
 async def test_system_line_prefixes_v3():
-    """Internal documentation."""
     app = _Harness()
     async with app.run_test() as pilot:
         t = app.query_one("#t", Transcript)
@@ -110,14 +107,12 @@ async def test_system_line_prefixes_v3():
 
 @pytest.mark.asyncio
 async def test_user_message_markup_false():
-    """Internal documentation."""
     msg = UserMessage("list[int] dict[str,Any] [/invalid-tag]")
     assert msg._render_markup is False, "UserMessage 必须关 Rich markup 防注入崩溃"
 
 
 @pytest.mark.asyncio
 async def test_scroll_position_preserved_when_user_scrolled_up():
-    """Internal documentation."""
     app = _Harness()
     async with app.run_test(size=(80, 10)) as pilot:
         t = app.query_one("#t", Transcript)
@@ -136,7 +131,6 @@ async def test_scroll_position_preserved_when_user_scrolled_up():
 
 @pytest.mark.asyncio
 async def test_scroll_follows_when_already_at_bottom():
-    """Internal documentation."""
     app = _Harness()
     async with app.run_test(size=(80, 10)) as pilot:
         t = app.query_one("#t", Transcript)
@@ -150,7 +144,6 @@ async def test_scroll_follows_when_already_at_bottom():
 
 @pytest.mark.asyncio
 async def test_short_content_stays_at_top_not_bottom_anchored():
-    """Internal documentation."""
     from textual.widgets import Static
 
     app = _Harness()
@@ -169,7 +162,6 @@ async def test_short_content_stays_at_top_not_bottom_anchored():
 
 @pytest.mark.asyncio
 async def test_scroll_follows_during_burst_of_events():
-    """Internal documentation."""
     from textual.widgets import Static
 
     class _Tall(Static):

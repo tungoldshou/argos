@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -15,7 +14,6 @@ from argos.tui.widgets.verdict_badge import VerdictBadge
 
 
 class _RaisingLoop:
-    """Internal documentation."""
 
     async def run(self, goal, session_id):
         yield PhaseChange(phase="act", actions=1)
@@ -108,7 +106,6 @@ async def test_unknown_slash_is_reported_not_run_as_goal():
 
 @pytest.mark.asyncio
 async def test_loop_exception_degrades_to_error_not_crash():
-    """Internal documentation."""
     app = ArgosApp(loop_factory=lambda **kw: _RaisingLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -123,7 +120,6 @@ async def test_loop_exception_degrades_to_error_not_crash():
 
 @pytest.mark.asyncio
 async def test_input_focused_on_mount_and_receives_typing():
-    """Internal documentation."""
     from argos.tui.widgets.prompt import PromptArea
 
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
@@ -138,7 +134,6 @@ async def test_input_focused_on_mount_and_receives_typing():
 
 @pytest.mark.asyncio
 async def test_input_accepts_cjk_characters():
-    """Internal documentation."""
     from argos.tui.widgets.prompt import PromptArea
 
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
@@ -155,7 +150,6 @@ async def test_input_accepts_cjk_characters():
 
 @pytest.mark.asyncio
 async def test_transcript_fills_main_area_not_collapsed():
-    """Internal documentation."""
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
@@ -168,7 +162,6 @@ async def test_transcript_fills_main_area_not_collapsed():
 
 @pytest.mark.asyncio
 async def test_pageup_scrolls_transcript_while_prompt_focused():
-    """Internal documentation."""
     from argos.tui.widgets.prompt import PromptArea
     from argos.tui.widgets.transcript import Transcript
 
@@ -193,7 +186,6 @@ async def test_pageup_scrolls_transcript_while_prompt_focused():
 
 @pytest.mark.asyncio
 async def test_mouse_wheel_scrolls_transcript_when_event_reaches_app():
-    """Internal documentation."""
     from textual import events
 
     from argos.tui.widgets.transcript import Transcript
@@ -221,7 +213,6 @@ async def test_mouse_wheel_scrolls_transcript_when_event_reaches_app():
 
 @pytest.mark.asyncio
 async def test_transcript_can_take_focus_for_history_review():
-    """Internal documentation."""
     from argos.tui.widgets.prompt import PromptArea
     from argos.tui.widgets.transcript import Transcript
 
@@ -240,7 +231,6 @@ async def test_transcript_can_take_focus_for_history_review():
 
 
 def test_kitty_keyboard_protocol_disabled_by_default():
-    """Internal documentation."""
     import importlib
     import os
 
@@ -258,7 +248,6 @@ def test_kitty_keyboard_protocol_disabled_by_default():
 
 
 def test_kitty_disable_respects_explicit_user_optin():
-    """Internal documentation."""
     import importlib
     import os
 
@@ -285,7 +274,6 @@ async def test_user_goal_echoed_to_transcript():
 
 
 class _LoopWithStore:
-    """Internal documentation."""
     def __init__(self, store):
         self.store = store
     async def run(self, goal, session_id):
@@ -295,7 +283,6 @@ class _LoopWithStore:
 
 @pytest.mark.asyncio
 async def test_resume_switches_to_most_recent_session(tmp_path):
-    """Internal documentation."""
     from argos.memory.store import ArgosStore
     from argos.tui.widgets.transcript import Transcript
 
@@ -319,7 +306,6 @@ async def test_resume_switches_to_most_recent_session(tmp_path):
 
 @pytest.mark.asyncio
 async def test_resume_honest_when_no_history(tmp_path):
-    """Internal documentation."""
     from argos.memory.store import ArgosStore
     from argos.tui.widgets.transcript import Transcript
 
@@ -338,7 +324,6 @@ async def test_resume_honest_when_no_history(tmp_path):
 
 @pytest.mark.asyncio
 async def test_compacted_event_writes_transcript_line_and_panel():
-    """Internal documentation."""
     from argos.tui.events import CompactedEvent
     script = [
         PhaseChange(phase="act", actions=1),
@@ -356,7 +341,6 @@ async def test_compacted_event_writes_transcript_line_and_panel():
 
 @pytest.mark.asyncio
 async def test_pruned_event_writes_transcript_line():
-    """Internal documentation."""
     from argos.tui.events import PrunedEvent
     script = [
         PhaseChange(phase="act", actions=1),
@@ -374,7 +358,6 @@ async def test_pruned_event_writes_transcript_line():
 
 @pytest.mark.asyncio
 async def test_status_bar_blocked_on_approval_card_then_cleared():
-    """Internal documentation."""
     from argos.tui.events import ApprovalRequest
     from argos.tui.widgets.inline_choice import InlineChoice
     script = [
@@ -405,7 +388,6 @@ async def test_status_bar_blocked_on_approval_card_then_cleared():
 
 @pytest.mark.asyncio
 async def test_status_bar_alert_locked_on_failed_verdict_not_overwritten_by_report():
-    """Internal documentation."""
     script = [
         PhaseChange(phase="verify", actions=2),
         VerifyVerdict(verdict=Verdict.failed(detail="1 failed", verify_cmd="pytest", attempts=3)),
@@ -426,7 +408,6 @@ async def test_status_bar_alert_locked_on_failed_verdict_not_overwritten_by_repo
 
 @pytest.mark.asyncio
 async def test_status_bar_alert_cleared_on_new_run():
-    """Internal documentation."""
     fail_script = [
         VerifyVerdict(verdict=Verdict.failed(detail="x", verify_cmd="pytest", attempts=1)),
     ]
@@ -452,7 +433,6 @@ async def test_status_bar_alert_cleared_on_new_run():
 
 @pytest.mark.asyncio
 async def test_memory_recall_line_shown_with_real_store_hits(tmp_path):
-    """Internal documentation."""
     class _LoopWithRecallEvent:
         async def run(self, goal, session_id):
             yield MemoryRecallEvent(hits=["上次也改过 auth → passed（similar goal）"])
@@ -470,7 +450,6 @@ async def test_memory_recall_line_shown_with_real_store_hits(tmp_path):
 
 @pytest.mark.asyncio
 async def test_memory_recall_silent_when_no_store():
-    """Internal documentation."""
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -485,7 +464,6 @@ async def test_memory_recall_silent_when_no_store():
 
 @pytest.mark.asyncio
 async def test_apply_event_phase_change_drives_activity_panel_view():
-    """Internal documentation."""
     from argos.tui.widgets.activity_panel import ActivityPanel
 
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop())

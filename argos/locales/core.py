@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 
@@ -71,7 +70,7 @@ EN: dict[str, str] = {
 
     # ── workflow notes ───────────────────────────────────────────────────────
     "loop.workflow.not_enabled": (
-        "[note] Workflows are disabled (ARGOS_WORKFLOWS=0); "
+        "[note] Workflows are disabled by default (set ARGOS_WORKFLOWS=1 to opt in); "
         "your propose_workflow will not be executed. "
         "Complete the task in a single thread directly, without waiting for it to run."
     ),
@@ -251,7 +250,7 @@ ZH: dict[str, str] = {
     ),
 
     "loop.workflow.not_enabled": (
-        "[note] 工作流已禁用(ARGOS_WORKFLOWS=0),你的 propose_workflow 不会被执行;"
+        "[note] 工作流已禁用/未启用(设置 ARGOS_WORKFLOWS=1 才会开启),你的 propose_workflow 不会被执行;"
         "请直接单线程完成任务,不要等待它运行。"
     ),
 

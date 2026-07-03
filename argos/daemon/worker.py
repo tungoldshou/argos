@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -20,7 +19,6 @@ log = logging.getLogger(__name__)
 
 
 def _to_event_dict(ev: Any) -> dict:
-    """Internal documentation."""
     if isinstance(ev, dict):
         return dict(ev)
     if dataclasses.is_dataclass(ev) and not isinstance(ev, type):
@@ -39,7 +37,6 @@ def _to_event_dict(ev: Any) -> dict:
 
 
 class DaemonApprovalGate:
-    """Internal documentation."""
 
     def __init__(self, real_gate: Any, *, timeout_s: float = 60.0,
                  run_id: str = "", manager: "RunManager | None" = None) -> None:
@@ -67,13 +64,11 @@ class DaemonApprovalGate:
         return self._gate.pending()
 
     def has_pending_call(self, call_id: str) -> bool:
-        """Internal documentation."""
         return call_id in self._pending_call_ids
 
     async def request(self, action: str, args: dict, *, description: str,
                       risk: Any, timeout: float = 60.0,
                       call_id: str | None = None) -> Any:
-        """Internal documentation."""
         import uuid as _uuid
         if call_id is None:
             call_id = _uuid.uuid4().hex[:12]
@@ -141,7 +136,6 @@ class DaemonApprovalGate:
             self._pending_call_ids.discard(call_id)
 
     def respond(self, call_id: str, kind: Any) -> bool:
-        """Internal documentation."""
         return self._gate.respond(call_id, kind)
 
     def approve(self, call_id: str) -> None:
@@ -154,7 +148,6 @@ class DaemonApprovalGate:
 
 
 class FakeLoop:
-    """Internal documentation."""
 
     def __init__(self, *, steps: int = 5, delay_s: float = 0.0):
         self._steps = steps
@@ -172,7 +165,6 @@ class FakeLoop:
 
 
 class RunWorker:
-    """Internal documentation."""
 
     def __init__(self, *, run_id: str, manager: RunManager, loop_factory,
                  registry=None, worktree=None, gate=None,
@@ -211,11 +203,9 @@ class RunWorker:
 
     @property
     def gate(self) -> "DaemonApprovalGate | None":
-        """Internal documentation."""
         return self._gate  # type: ignore[return-value]
 
     def request_hard_cancel(self) -> bool:
-        """Internal documentation."""
         t = self._task
         if t is not None and not t.done():
             t.cancel()
@@ -223,7 +213,6 @@ class RunWorker:
         return False
 
     async def run(self) -> None:
-        """Internal documentation."""
         self._task = asyncio.current_task()
         entry = self._manager.get_run(self.run_id)
         if entry is None:
@@ -362,7 +351,6 @@ class RunWorker:
             await self._post_terminal_cleanup()
 
     def _maybe_start_watchdog(self) -> "asyncio.Task | None":
-        """Internal documentation."""
         raw = os.environ.get("ARGOS_RUN_TIMEOUT_S", "").strip()
         if not raw:
             return None
@@ -375,7 +363,6 @@ class RunWorker:
         return asyncio.create_task(self._watchdog_timer(timeout_s))
 
     async def _watchdog_timer(self, timeout_s: float) -> None:
-        """Internal documentation."""
         try:
             await asyncio.sleep(timeout_s)
         except asyncio.CancelledError:
@@ -386,7 +373,6 @@ class RunWorker:
         self.request_hard_cancel()
 
     async def _emit_terminal_signal(self) -> None:
-        """Internal documentation."""
         try:
             entry = self._manager.index.get(self.run_id)
             state = entry.state if entry is not None else None
@@ -403,7 +389,6 @@ class RunWorker:
             log.warning("worker: 终态广播失败 for %s: %s", self.run_id, e)
 
     async def _maybe_append_ledger(self, ev_dict: dict) -> None:
-        """Internal documentation."""
         try:
             from argos.ledger.builder import build_entry
             from argos.protocol.events import LedgerEntryEvent
@@ -467,7 +452,6 @@ class RunWorker:
             log.warning("worker: ledger append failed for %s: %s", self.run_id, e)
 
     async def _maybe_append_ledger_for_file_diff(self, ev_dict: dict) -> None:
-        """Internal documentation."""
         try:
             from argos.ledger.entry import LedgerEntry
             from argos.protocol.events import LedgerEntryEvent
@@ -540,7 +524,6 @@ class RunWorker:
             log.warning("worker: file_diff ledger append failed for %s: %s", self.run_id, e)
 
     async def _post_terminal_cleanup(self) -> None:
-        """Internal documentation."""
         try:
             cur = self._manager.index.get(self.run_id)
             if cur is None:
@@ -564,7 +547,6 @@ class RunWorker:
             log.warning("worker: post_terminal_cleanup failed for %s: %s", self.run_id, e)
 
     async def _maybe_run_learning_hook(self, entry) -> None:
-        """Internal documentation."""
         try:
             from argos.learning.hook import on_run_completed
             from argos.daemon.__main__ import _default_argos_dir

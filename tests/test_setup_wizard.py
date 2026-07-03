@@ -8,7 +8,6 @@ from argos.i18n import t
 
 
 def test_presets_have_protocol_and_base_url():
-    """Internal documentation."""
     for name, p in PRESETS.items():
         if name == "Custom":
             assert p["protocol"] == ""
@@ -38,7 +37,6 @@ def test_write_profile_splits_secret_and_settings(tmp_path):
 
 
 def test_write_profile_env_reference_only_no_secret(tmp_path):
-    """Internal documentation."""
     write_profile(config_dir=tmp_path, name="o", protocol="openai",
                   base_url="http://x/v1", model="m", api_key=None,
                   api_key_env="MY_EXISTING_ENV", set_active=True)
@@ -192,7 +190,6 @@ from argos.setup_wizard import run
 
 @pytest.mark.asyncio
 async def test_run_wizard_happy_path(tmp_path, monkeypatch):
-    """Internal documentation."""
     inputs = iter([
         "3",
         "",
@@ -243,7 +240,6 @@ async def test_run_wizard_expands_config_dir_env_tilde(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_wizard_accepts_provider_name_in_numbered_fallback(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.setup_wizard as W
 
     async def fake_probe(**kw):
@@ -272,7 +268,6 @@ async def test_run_wizard_accepts_provider_name_in_numbered_fallback(tmp_path, m
 
 @pytest.mark.asyncio
 async def test_run_wizard_accepts_unambiguous_provider_prefix(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.setup_wizard as W
 
     async def fake_probe(**kw):
@@ -301,7 +296,6 @@ async def test_run_wizard_accepts_unambiguous_provider_prefix(tmp_path, monkeypa
 
 @pytest.mark.asyncio
 async def test_run_wizard_ambiguous_provider_prefix_lists_matches(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.setup_wizard as W
 
     async def fake_probe(**kw):
@@ -332,7 +326,6 @@ async def test_run_wizard_ambiguous_provider_prefix_lists_matches(tmp_path, monk
 
 @pytest.mark.asyncio
 async def test_run_wizard_save_io_error_reprompts_instead_of_traceback(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.setup_wizard as W
 
     async def fake_probe(**kw):
@@ -368,7 +361,6 @@ async def test_run_wizard_save_io_error_reprompts_instead_of_traceback(tmp_path,
 
 @pytest.mark.asyncio
 async def test_run_uses_console_for_sections_spinner_and_color(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.setup_wizard as W
     calls = {"rule": 0, "status": 0, "print": 0}
 
@@ -394,7 +386,6 @@ async def test_run_uses_console_for_sections_spinner_and_color(tmp_path, monkeyp
 
 @pytest.mark.asyncio
 async def test_run_wizard_custom_preset(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.setup_wizard as W
     # "Custom" is the last entry in PRESETS
     custom_idx = str(list(W.PRESETS.keys()).index("Custom") + 1)
@@ -459,7 +450,6 @@ async def test_run_wizard_custom_protocol_is_case_insensitive(tmp_path, monkeypa
 
 @pytest.mark.asyncio
 async def test_run_wizard_invalid_multimodal_choice_skips_probe(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.setup_wizard as W
 
     seen_keys: list[str | None] = []
@@ -662,7 +652,6 @@ async def test_run_wizard_missing_env_var_skips_probe(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_wizard_duplicate_name_appends_index(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.setup_wizard as W
     async def fake_probe(**kw):
         return W.ProbeResult(True, True, "行", "OK")
@@ -683,7 +672,6 @@ async def test_run_wizard_duplicate_name_appends_index(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_run_wizard_paste_key_derives_shell_safe_env_name(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.setup_wizard as W
 
     async def fake_probe(**kw):
@@ -712,7 +700,6 @@ async def test_run_wizard_paste_key_derives_shell_safe_env_name(tmp_path, monkey
 
 @pytest.mark.asyncio
 async def test_run_wizard_paste_key_env_name_does_not_start_with_digit(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.setup_wizard as W
 
     async def fake_probe(**kw):
@@ -740,7 +727,6 @@ async def test_run_wizard_paste_key_env_name_does_not_start_with_digit(tmp_path,
 
 @pytest.mark.asyncio
 async def test_run_wizard_invalid_custom_profile_skips_probe(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.setup_wizard as W
 
     seen_protocols: list[str] = []
@@ -780,7 +766,6 @@ async def test_run_wizard_invalid_custom_profile_skips_probe(tmp_path, monkeypat
 
 
 def test_write_profile_rejects_empty_base_url(tmp_path):
-    """Internal documentation."""
     import argos.config as C
     with pytest.raises(C.ConfigError):
         write_profile(config_dir=tmp_path, name="bad", protocol="openai", base_url="",
@@ -906,7 +891,6 @@ def test_write_profile_rejects_blank_pasted_api_key(tmp_path):
 
 
 def test_write_profile_does_not_update_config_when_key_write_fails(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.setup_wizard as W
 
     def boom(*_args, **_kwargs):
@@ -922,7 +906,6 @@ def test_write_profile_does_not_update_config_when_key_write_fails(tmp_path, mon
 
 
 def test_append_env_chmods_stale_tmp_before_writing_secret(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.setup_wizard as W
 
     stale = (tmp_path / ".env").with_suffix(".env.tmp")
@@ -992,7 +975,6 @@ def test_append_env_backs_up_non_utf8_env_before_writing(tmp_path):
 
 
 def test_write_profile_removes_new_key_when_config_write_fails(tmp_path, monkeypatch):
-    """Internal documentation."""
     import pathlib
     import argos.setup_wizard as W
 
@@ -1014,7 +996,6 @@ def test_write_profile_removes_new_key_when_config_write_fails(tmp_path, monkeyp
 
 
 def test_write_profile_restores_existing_env_when_config_write_fails(tmp_path, monkeypatch):
-    """Internal documentation."""
     import pathlib
     import argos.setup_wizard as W
 
@@ -1039,7 +1020,6 @@ def test_write_profile_restores_existing_env_when_config_write_fails(tmp_path, m
 
 
 def test_write_profile_keeps_existing_config_when_config_write_is_partial(tmp_path, monkeypatch):
-    """Internal documentation."""
     import pathlib
     import argos.setup_wizard as W
 
@@ -1087,7 +1067,6 @@ class _ScriptModel:
 
 @pytest.mark.asyncio
 async def test_deep_probe_passed_rates_xing(tmp_path, monkeypatch):
-    """Internal documentation."""
     res = await deep_probe(protocol="openai", base_url="http://x/v1", model="m", api_key="k",
                            model_factory=lambda tier, key: _ScriptModel([
                                "```python\nwrite_file('st.py','def f():\\n    return 1\\n')\n```\n"
@@ -1098,7 +1077,6 @@ async def test_deep_probe_passed_rates_xing(tmp_path, monkeypatch):
 
 
 def test_corrupt_existing_config_backed_up_not_destroyed(tmp_path):
-    """Internal documentation."""
     (tmp_path / "config.json").write_text('{ corrupt ,, not valid }')
     write_profile(config_dir=tmp_path, name="new", protocol="openai", base_url="http://x/v1",
                   model="m", api_key="k", api_key_env="NK", set_active=True)
@@ -1122,7 +1100,6 @@ def test_non_utf8_existing_config_backed_up_not_crash(tmp_path):
 
 
 def test_corrupt_existing_config_backup_does_not_overwrite_previous_backup(tmp_path):
-    """Internal documentation."""
     (tmp_path / "config.json.corrupt.bak").write_text("first corrupt")
     (tmp_path / "config.json").write_text("second corrupt")
 
@@ -1162,7 +1139,6 @@ def test_existing_config_with_non_object_models_backed_up_not_crash(tmp_path):
 
 
 def test_corrupt_existing_config_backup_failure_refuses_to_overwrite(tmp_path, monkeypatch):
-    """Internal documentation."""
     import pathlib
     import argos.config as C
 
@@ -1187,7 +1163,6 @@ def test_corrupt_existing_config_backup_failure_refuses_to_overwrite(tmp_path, m
 
 
 def test_ask_int_fail_soft_on_non_numeric():
-    """Internal documentation."""
     from argos.setup_wizard import _ask_int
     out: list = []
     assert _ask_int(lambda p="": "abc", out.append, "max:", 4096) == 4096
@@ -1196,7 +1171,6 @@ def test_ask_int_fail_soft_on_non_numeric():
 
 
 def test_arrow_select_falls_back_when_not_tty():
-    """Internal documentation."""
     from argos.setup_wizard import _arrow_select, _NotATTY
     with pytest.raises(_NotATTY):
         _arrow_select(["OpenAI", "Anthropic"], title="选择 provider:", writer=lambda _: None)
@@ -1204,7 +1178,6 @@ def test_arrow_select_falls_back_when_not_tty():
 
 
 def test_openai_embedder_hits_embeddings_endpoint():
-    """Internal documentation."""
     import httpx
     from argos.memory.embedding import OpenAIEmbedder
 
@@ -1225,7 +1198,6 @@ def test_openai_embedder_hits_embeddings_endpoint():
 
 
 def test_openai_embedder_endpoint_idempotent():
-    """Internal documentation."""
     from argos.memory.embedding import OpenAIEmbedder
     e1 = OpenAIEmbedder(base_url="http://x/v1", api_key="K", model="m")
     e2 = OpenAIEmbedder(base_url="http://x/v1/embeddings", api_key="K", model="m")

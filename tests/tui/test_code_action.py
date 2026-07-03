@@ -1,12 +1,10 @@
 # tests/tui/test_code_action.py
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.tui.widgets.code_action import CodeActionBlock
 
 
 def test_module_docstring_reflects_implementation():
-    """Internal documentation."""
     import inspect
     docstring = inspect.getdoc(CodeActionBlock)
     lines = docstring.split('\n')
@@ -25,7 +23,6 @@ def test_module_docstring_reflects_implementation():
 
 
 def test_class_docstring_consistent():
-    """Internal documentation."""
     docstring = CodeActionBlock.__doc__ or ""
 
     assert '◕' in docstring, "Class docstring should use ◕ for ok=True"
@@ -34,7 +31,6 @@ def test_class_docstring_consistent():
 
 
 def test_code_action_block_ok_true_glyph():
-    """Internal documentation."""
     block = CodeActionBlock(code="x = 1", step=1)
 
     import unittest.mock as mock
@@ -52,7 +48,6 @@ def test_code_action_block_ok_true_glyph():
 
 
 def test_code_action_block_ok_false_glyph():
-    """Internal documentation."""
     block = CodeActionBlock(code="x = 1", step=1)
 
     import unittest.mock as mock
@@ -70,7 +65,6 @@ def test_code_action_block_ok_false_glyph():
 
 
 def test_traceback_shows_real_cause_not_internal_frames():
-    """Internal documentation."""
     block = CodeActionBlock(code="print(undefined)", step=1)
     tb = (
         "Traceback (most recent call last):\n"
@@ -91,7 +85,6 @@ def test_traceback_shows_real_cause_not_internal_frames():
 
 
 def test_css_class_ok_false_set_correctly():
-    """Internal documentation."""
     block = CodeActionBlock(code="x = 1", step=1)
 
     import unittest.mock as mock
@@ -102,7 +95,6 @@ def test_css_class_ok_false_set_correctly():
 
 
 def test_css_class_ok_true_not_set():
-    """Internal documentation."""
     block = CodeActionBlock(code="x = 1", step=1)
 
     import unittest.mock as mock
@@ -113,7 +105,6 @@ def test_css_class_ok_true_not_set():
 
 
 def test_code_folding_threshold():
-    """Internal documentation."""
     long_code = "\n".join([f"line {i}" for i in range(10)])
     block = CodeActionBlock(code=long_code, step=1)
 
@@ -127,7 +118,6 @@ def test_code_folding_threshold():
 
 
 def test_result_folding_threshold():
-    """Internal documentation."""
     block = CodeActionBlock(code="x = 1", step=1)
 
     long_output = "\n".join([f"output line {i}" for i in range(15)])
@@ -145,7 +135,6 @@ def test_result_folding_threshold():
 
 
 def test_markup_false_preserves_brackets():
-    """Internal documentation."""
     block = CodeActionBlock(code='run("button[aria-label=\'x\']")', step=1)
 
     import unittest.mock as mock
@@ -167,7 +156,6 @@ def test_markup_false_preserves_brackets():
 
 
 def test_default_css_raise_background():
-    """Internal documentation."""
     css = CodeActionBlock.DEFAULT_CSS
 
     assert '$raise' in css, "DEFAULT_CSS should reference $raise token"
@@ -175,7 +163,6 @@ def test_default_css_raise_background():
 
 
 def test_result_color_tokens():
-    """Internal documentation."""
     css = CodeActionBlock.DEFAULT_CSS
 
     assert '#result' in css, "Should have #result selector"

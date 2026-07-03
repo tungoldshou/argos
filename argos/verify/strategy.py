@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -22,7 +21,6 @@ Kind = Literal[
 
 @dataclass(frozen=True, slots=True)
 class VerifyStrategy:
-    """Internal documentation."""
 
     level: Level
     kind: Kind
@@ -42,7 +40,6 @@ class VerifyStrategy:
 
 @dataclass(frozen=True, slots=True)
 class WorkspaceFacts:
-    """Internal documentation."""
 
     has_pytest: bool = False
     has_cargo: bool = False
@@ -55,7 +52,6 @@ class WorkspaceFacts:
 
 
 def _has_test_files(path: Path) -> bool:
-    """Internal documentation."""
     import os as _os
 
     def _is_test(name: str) -> bool:
@@ -79,7 +75,6 @@ def _has_test_files(path: Path) -> bool:
 
 
 def probe_workspace(path: Path) -> WorkspaceFacts:
-    """Internal documentation."""
     if not path.is_dir():
         return WorkspaceFacts()
 
@@ -181,7 +176,6 @@ _TEMPLATE_PLACEHOLDER = re.compile(
 
 
 def _is_valid_artifact_path(s: str) -> bool:
-    """Internal documentation."""
     if s != s.strip():
         return False
     s = s.strip()
@@ -195,13 +189,11 @@ def _is_valid_artifact_path(s: str) -> bool:
 
 
 def _is_negation_context(goal: str, match_start: int) -> bool:
-    """Internal documentation."""
     prefix = goal[max(0, match_start - 20):match_start]
     return bool(_NEGATION_BEFORE.search(prefix))
 
 
 def _extract_zh_dir_targets(goal: str) -> list[str]:
-    """Internal documentation."""
     results: list[str] = []
     seen: set[str] = set()
 
@@ -223,7 +215,6 @@ def _extract_zh_dir_targets(goal: str) -> list[str]:
 
 
 def _extract_zh_file_targets(goal: str) -> list[str]:
-    """Internal documentation."""
     results: list[str] = []
     seen: set[str] = set()
 
@@ -254,7 +245,6 @@ _URL_PATTERN = re.compile(r'https?://[^\s\'"<>]+', re.I)
 
 
 def _l5_fallback(reason: str = "") -> VerifyStrategy:
-    """Internal documentation."""
     reason_part = (" " + reason) if reason else ""
     human = t("verify.strategy.l5_human", reason=reason_part)
     return VerifyStrategy(
@@ -328,7 +318,6 @@ def _l2_artifact_exists(file_path: str, hints: dict[str, str]) -> VerifyStrategy
 
 
 def _l2_artifact_exists_dir(dir_path: str) -> VerifyStrategy:
-    """Internal documentation."""
     rationale = t("verify.strategy.l2_artifact_exists_dir_rationale", dir_path=dir_path)
     return VerifyStrategy(
         level="L2", kind="artifact_exists",
@@ -358,7 +347,6 @@ def _l2_content_assert_csv(file_path: str) -> VerifyStrategy:
 
 
 def _l3_dom_assert(hints: dict[str, str], goal_url: str | None = None) -> VerifyStrategy:
-    """Internal documentation."""
     selector = hints.get("dom_selector", "body")
     url = hints.get("dom_url") or goal_url or ""
     if not url:
@@ -392,7 +380,6 @@ def generate(
     workspace_facts: WorkspaceFacts,
     capability_hints: dict[str, str] | None = None,
 ) -> tuple[VerifyStrategy, ...]:
-    """Internal documentation."""
     hints: dict[str, str] = capability_hints or {}
     candidates: list[VerifyStrategy] = []
 

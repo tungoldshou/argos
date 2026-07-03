@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -8,7 +7,6 @@ from argos.workflow.subagent import SubAgentFactory
 
 
 def _spy_agent_loop(monkeypatch, captured: dict):
-    """Internal documentation."""
     from argos.workflow import subagent as _sub
 
     real_AgentLoop = _sub.AgentLoop
@@ -24,7 +22,6 @@ def _spy_agent_loop(monkeypatch, captured: dict):
 async def test_explorer_role_physically_strips_writes(
     tmp_path, scripted_model_factory, monkeypatch, requires_sandbox,
 ):
-    """Internal documentation."""
     captured: dict = {}
     _spy_agent_loop(monkeypatch, captured)
 
@@ -99,7 +96,6 @@ async def test_coder_role_keeps_writes(
 async def test_coder_without_verify_reports_no_test(
     tmp_path, scripted_model_factory, requires_sandbox,
 ):
-    """Internal documentation."""
     factory = SubAgentFactory.for_test(
         workspace=tmp_path, model_factory=scripted_model_factory,
     )
@@ -116,7 +112,6 @@ async def test_coder_without_verify_reports_no_test(
 async def test_legacy_no_role_task_unchanged(
     tmp_path, scripted_model_factory, monkeypatch, requires_sandbox,
 ):
-    """Internal documentation."""
     captured: dict = {}
     _spy_agent_loop(monkeypatch, captured)
 
@@ -136,7 +131,6 @@ async def test_legacy_no_role_task_unchanged(
 async def test_legacy_no_role_full_scope_keeps_writes(
     tmp_path, scripted_model_factory, monkeypatch, requires_sandbox,
 ):
-    """Internal documentation."""
     captured: dict = {}
     _spy_agent_loop(monkeypatch, captured)
 
@@ -156,7 +150,6 @@ async def test_legacy_no_role_full_scope_keeps_writes(
 async def test_all_four_roles_run_in_single_model_path(
     tmp_path, scripted_model_factory, role, requires_sandbox,
 ):
-    """Internal documentation."""
     factory = SubAgentFactory.for_test(
         workspace=tmp_path, model_factory=scripted_model_factory,
     )
@@ -172,7 +165,6 @@ async def test_all_four_roles_run_in_single_model_path(
 async def test_role_max_steps_applied(
     tmp_path, scripted_model_factory, monkeypatch, requires_sandbox,
 ):
-    """Internal documentation."""
     captured: dict = {}
     _spy_agent_loop(monkeypatch, captured)
 
@@ -193,7 +185,6 @@ async def test_role_max_steps_applied(
 async def test_role_system_prompt_injected_into_prompt(
     tmp_path, scripted_model_factory, requires_sandbox,
 ):
-    """Internal documentation."""
     factory = SubAgentFactory.for_test(
         workspace=tmp_path, model_factory=scripted_model_factory,
     )

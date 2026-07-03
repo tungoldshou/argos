@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -17,18 +16,15 @@ from argos.learning.distiller import SkillCandidate
 
 @dataclass
 class _FakeResult:
-    """Internal documentation."""
     pass_status: str
 
 
 class _PassRunner:
-    """Internal documentation."""
     def run(self, task, *, model_tier: str):
         return _FakeResult(pass_status="passed")
 
 
 class _FailRunner:
-    """Internal documentation."""
     def run(self, task, *, model_tier: str):
         return _FakeResult(pass_status="failed")
 
@@ -41,7 +37,6 @@ def _seed_candidate(
     workspace: Path,
     verify_cmd: str = "true",
 ) -> Path:
-    """Internal documentation."""
     cand = SkillCandidate(
         name="learned",
         body_markdown=f"# {goal}\n\n```python\nprint('ok')\n```",
@@ -58,7 +53,6 @@ def _seed_candidate(
 
 
 def test_dream_promote_and_load_end_to_end(tmp_path: Path, monkeypatch):
-    """Internal documentation."""
     cand_root = tmp_path / "candidates"
     skills_root = tmp_path / "skills"
     ws = tmp_path / "ws"

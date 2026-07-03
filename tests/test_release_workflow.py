@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import re
 import subprocess
 from pathlib import Path
@@ -13,7 +12,6 @@ def test_workflow_exists():
 
 
 def test_workflow_yaml_valid():
-    """Internal documentation."""
     import yaml
     with WORKFLOW.open() as f:
         try:
@@ -36,7 +34,6 @@ def test_workflow_yaml_valid():
 
 
 def test_workflow_is_manual_for_binary_release():
-    """Internal documentation."""
     import yaml
     data = yaml.safe_load(WORKFLOW.read_text())
     triggers = data.get(True, data.get("on", {}))
@@ -45,7 +42,6 @@ def test_workflow_is_manual_for_binary_release():
 
 
 def test_workflow_uses_gh_release_create_not_softprops():
-    """Internal documentation."""
     import yaml
     data = yaml.safe_load(WORKFLOW.read_text())
     job = data["jobs"]["release"]
@@ -57,7 +53,6 @@ def test_workflow_uses_gh_release_create_not_softprops():
 
 
 def test_workflow_uploads_assets_via_gh_release_create():
-    """Internal documentation."""
     import yaml
     data = yaml.safe_load(WORKFLOW.read_text())
     job = data["jobs"]["release"]

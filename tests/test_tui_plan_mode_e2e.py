@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -27,7 +26,6 @@ from argos.tui.widgets.inline_choice import InlineChoice
 
 
 class _ScriptedModel:
-    """Internal documentation."""
     def __init__(self, scripts: list[str]):
         self._scripts = list(scripts)
         self._i = 0
@@ -58,7 +56,6 @@ class _PassVerifier:
 
 
 class _RecordingStore:
-    """Internal documentation."""
     def __init__(self):
         self.events: list = []
         self.messages: list[dict] = []
@@ -75,7 +72,6 @@ class _RecordingStore:
 
 
 def _build_real_plan_loop(store, in_project, scripts):
-    """Internal documentation."""
     gate = ApprovalGate(level=ApprovalLevel.AUTO)
     broker = CapabilityBroker(
         gate=gate,
@@ -93,7 +89,6 @@ def _build_real_plan_loop(store, in_project, scripts):
 
 @pytest.fixture
 def e2e_loop_factory():
-    """Internal documentation."""
     store = _RecordingStore()
     in_project = None
     def factory(loop: AgentLoop) -> AgentLoop:
@@ -103,7 +98,6 @@ def e2e_loop_factory():
 
 @pytest.mark.asyncio
 async def test_e2e_plan_to_approve_to_completion(e2e_loop_factory, tmp_path):
-    """Internal documentation."""
     store, _in_project, _ = e2e_loop_factory
     loop = _build_real_plan_loop(
         store, None,
@@ -143,11 +137,9 @@ async def test_e2e_plan_to_approve_to_completion(e2e_loop_factory, tmp_path):
 
 @pytest.mark.asyncio
 async def test_e2e_plan_modal_pushed_on_screen_and_dismissed_on_key_1(e2e_loop_factory, tmp_path):
-    """Internal documentation."""
     store, _in_project, _ = e2e_loop_factory
 
     class _MiniLoop:
-        """Internal documentation."""
         def __init__(self):
             self.mode = "plan"
             self._plan_decision_event = asyncio.Event()
@@ -191,13 +183,11 @@ async def test_e2e_plan_modal_pushed_on_screen_and_dismissed_on_key_1(e2e_loop_f
 
 # ── helpers ──
 async def _drain(loop: AgentLoop, goal: str, store: _RecordingStore) -> None:
-    """Internal documentation."""
     async for ev in loop.run(goal, "sess-e2e"):
         store.append_event("sess-e2e", ev)
 
 
 async def _wait_for_event(store: _RecordingStore, kind: type, *, timeout: float) -> Any:
-    """Internal documentation."""
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
         for ev in store.events:

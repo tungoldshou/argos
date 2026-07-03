@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -17,7 +16,6 @@ _SCRIPTS = [
 @pytest.mark.slow
 @pytest.mark.asyncio
 async def test_run_command_through_bridge_approves_and_executes(build_real_loop):
-    """Internal documentation."""
     loop = build_real_loop(_SCRIPTS, level=ApprovalLevel.CONFIRM, gated=True)
     gate = loop._broker.gate
 
@@ -52,7 +50,6 @@ async def test_run_command_through_bridge_approves_and_executes(build_real_loop)
 @pytest.mark.slow
 @pytest.mark.asyncio
 async def test_cancel_mid_approval_settles_orphan(build_real_loop):
-    """Internal documentation."""
     loop = build_real_loop(_SCRIPTS, level=ApprovalLevel.CONFIRM, gated=True)
     gate = loop._broker.gate
 

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import sys
@@ -14,14 +13,12 @@ from argos.sandbox.linux import sandbox_backend_summary
 
 
 def test_select_backend_raises_on_win32():
-    """Internal documentation."""
     with mock.patch.object(sys, "platform", "win32"):
         with pytest.raises(RuntimeError, match="Windows"):
             select_backend()
 
 
 def test_select_backend_win32_message_mentions_macos_and_linux():
-    """Internal documentation."""
     with mock.patch.object(sys, "platform", "win32"):
         with pytest.raises(RuntimeError) as exc_info:
             select_backend()
@@ -34,7 +31,6 @@ def test_select_backend_win32_message_mentions_macos_and_linux():
 
 
 def test_backend_summary_darwin_is_strong():
-    """Internal documentation."""
     with mock.patch.object(sys, "platform", "darwin"):
         name, weak = sandbox_backend_summary()
     assert name == "seatbelt"
@@ -42,7 +38,6 @@ def test_backend_summary_darwin_is_strong():
 
 
 def test_backend_summary_linux_bwrap_is_strong():
-    """Internal documentation."""
     with mock.patch.object(sys, "platform", "linux"),\
          mock.patch.object(linux_mod, "_AVAILABLE_BACKEND", "bwrap"):
         name, weak = sandbox_backend_summary()
@@ -51,7 +46,6 @@ def test_backend_summary_linux_bwrap_is_strong():
 
 
 def test_backend_summary_linux_unshare_is_weak():
-    """Internal documentation."""
     with mock.patch.object(sys, "platform", "linux"),\
          mock.patch.object(linux_mod, "_AVAILABLE_BACKEND", "unshare"):
         name, weak = sandbox_backend_summary()
@@ -60,7 +54,6 @@ def test_backend_summary_linux_unshare_is_weak():
 
 
 def test_backend_summary_linux_no_backend_is_weak():
-    """Internal documentation."""
     with mock.patch.object(sys, "platform", "linux"),\
          mock.patch.object(linux_mod, "_AVAILABLE_BACKEND", None):
         name, weak = sandbox_backend_summary()
@@ -69,7 +62,6 @@ def test_backend_summary_linux_no_backend_is_weak():
 
 
 def test_backend_summary_unknown_platform_is_weak():
-    """Internal documentation."""
     with mock.patch.object(sys, "platform", "win32"):
         name, weak = sandbox_backend_summary()
     assert name == "none"
@@ -77,7 +69,6 @@ def test_backend_summary_unknown_platform_is_weak():
 
 
 def test_backend_summary_return_type():
-    """Internal documentation."""
     with mock.patch.object(sys, "platform", "darwin"):
         result = sandbox_backend_summary()
     assert isinstance(result, tuple)

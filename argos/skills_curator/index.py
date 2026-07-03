@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -56,7 +55,7 @@ class IndexCache:
 
 
 class IndexFetchError(RuntimeError):
-    """Internal documentation."""
+    pass
 
 
 def _skills_root() -> Path:
@@ -91,7 +90,6 @@ def _parse_entry(raw: dict) -> IndexEntry:
 
 
 def fetch_remote(*, url: str = DEFAULT_INDEX_URL, timeout: float = 10.0) -> IndexCache:
-    """Internal documentation."""
     try:
         with urllib.request.urlopen(url, timeout=timeout) as r:
             data = json.loads(r.read().decode("utf-8"))
@@ -124,7 +122,6 @@ def fetch_remote(*, url: str = DEFAULT_INDEX_URL, timeout: float = 10.0) -> Inde
 
 
 def save_cache(cache: IndexCache, *, base_dir: Path | None = None) -> Path:
-    """Internal documentation."""
     root = base_dir or _skills_root()
     root.mkdir(parents=True, exist_ok=True)
     target = root / "index.json"

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.tools import ALL_TOOL_NAMES, build_child_namespace

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -11,7 +10,6 @@ from argos.permissions.secrets import (
 
 
 def test_secret_patterns_count_is_9():
-    """Internal documentation."""
     assert len(SECRET_PATTERNS) == 9
 
 
@@ -51,13 +49,11 @@ def test_hardcoded_password_detected():
 
 
 def test_example_key_still_flagged():
-    """Internal documentation."""
     content = "EXAMPLE_AWS_KEY=AKIAIOSFODNN7EXAMPLE"
     assert find_secret_in_content(content) == "AWS access key"
 
 
 def test_env_example_not_scanned():
-    """Internal documentation."""
     content = "EXAMPLE_AWS_KEY=AKIAIOSFODNN7EXAMPLE"
     assert find_secret_in_content(content) is not None
 
@@ -67,12 +63,10 @@ def test_normal_content_not_flagged():
 
 
 def test_large_content_skipped():
-    """Internal documentation."""
     big = "a" * (MAX_SCAN_BYTES + 100)
     assert find_secret_in_content(big) is None
 
 
 def test_edit_file_scans_new_content():
-    """Internal documentation."""
     new_content = "AKIAIOSFODNN7EXAMPLE"   # new
     assert find_secret_in_content(new_content) == "AWS access key"

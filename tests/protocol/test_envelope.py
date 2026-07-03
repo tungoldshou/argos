@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -14,7 +13,6 @@ from argos.protocol.events import (
 
 
 def test_wrap_event_fields():
-    """Internal documentation."""
     ev = TokenDelta(text="hi")
     frame = wrap_event(ev, seq=0, session="sess-1", run="run-abc")
     assert frame.v == 1
@@ -28,14 +26,12 @@ def test_wrap_event_fields():
 
 
 def test_wrap_event_default_run_empty():
-    """Internal documentation."""
     ev = TokenDelta(text="x")
     frame = wrap_event(ev, seq=0, session="s")
     assert frame.run == ""
 
 
 def test_wrap_event_custom_id_and_ts():
-    """Internal documentation."""
     ev = PhaseChange(phase="act", actions=1)
     frame = wrap_event(ev, seq=5, session="s", run="r",
                        ts=1234567890.0, id="deadbeef0123456789ab")
@@ -44,7 +40,6 @@ def test_wrap_event_custom_id_and_ts():
 
 
 def test_wrap_event_data_matches_serialize():
-    """Internal documentation."""
     ev = CostUpdate(tokens_in=10, tokens_out=5, cost_usd=0.001, elapsed_s=1.0)
     frame = wrap_event(ev, seq=1, session="s")
     expected_data = json.loads(serialize_event(ev))["data"]
@@ -52,7 +47,6 @@ def test_wrap_event_data_matches_serialize():
 
 
 def test_wrap_event_frozen():
-    """Internal documentation."""
     ev = TokenDelta(text="x")
     frame = wrap_event(ev, seq=0, session="s")
     with pytest.raises((AttributeError, TypeError)):
@@ -78,7 +72,6 @@ def test_envelope_to_json_from_json_roundtrip():
 
 
 def test_envelope_to_json_keys():
-    """Internal documentation."""
     ev = Error(message="boom")
     frame = wrap_event(ev, seq=0, session="s")
     obj = json.loads(frame.to_json())
@@ -87,7 +80,6 @@ def test_envelope_to_json_keys():
 
 
 def test_envelope_from_json_missing_field():
-    """Internal documentation."""
     incomplete = json.dumps({"v": 1, "seq": 0, "kind": "token_delta"})
     with pytest.raises(KeyError):
         EventEnvelope.from_json(incomplete)
@@ -95,7 +87,6 @@ def test_envelope_from_json_missing_field():
 
 
 def test_envelope_golden_snapshot():
-    """Internal documentation."""
     ev = TokenDelta(text="黄金")
     frame = wrap_event(
         ev, seq=42, session="session-golden", run="run-golden",
@@ -113,7 +104,6 @@ def test_envelope_golden_snapshot():
 
 
 def test_envelope_seq_monotonic():
-    """Internal documentation."""
     ev = TokenDelta(text="x")
     frames = [wrap_event(ev, seq=i, session="s") for i in range(5)]
     seqs = [f.seq for f in frames]

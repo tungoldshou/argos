@@ -94,7 +94,6 @@ def _project_version() -> str:
 
 
 def test_public_docs_use_current_fresh_version():
-    """Internal documentation."""
     version = _project_version()
     readme = README.read_text()
     packaging = PACKAGING_DOC.read_text()
@@ -122,6 +121,19 @@ def test_readme_lists_setup_tui_command():
 def test_readme_lists_public_tui_commands():
     missing = set(COMMAND_NAMES) - _readme_command_rows()
     assert missing == set()
+
+
+def test_readme_splits_core_and_advanced_commands():
+    text = README.read_text()
+    assert "### Core commands" in text
+    assert "### Experimental / advanced commands" in text
+    assert "/help advanced" in text
+    core = text.split("### Core commands", 1)[1].split("### Experimental / advanced commands", 1)[0]
+    advanced = text.split("### Experimental / advanced commands", 1)[1].split("## Memory & state", 1)[0]
+    assert "| `/verify` |" in core
+    assert "| `/dream` |" not in core
+    assert "| `/dream` |" in advanced
+    assert "| `/yolo` |" in advanced
 
 
 def test_readme_keyboard_bindings_include_right_panel_cycle():
@@ -244,7 +256,6 @@ def test_readme_pypi_install_text_is_release_neutral():
 
 
 def test_readme_launch_install_surface_is_small():
-    """Internal documentation."""
     section = README.read_text().split("## Install", 1)[1].split("\n---", 1)[0]
     assert "uv tool install argos-agent" in section
     assert "curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/v0.1.1/install.sh | bash" in section

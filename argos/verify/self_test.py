@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -23,7 +22,6 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class TestProposal:
-    """Internal documentation."""
 
     __test__ = False
 
@@ -38,7 +36,6 @@ TestProposer = Callable[[str, Path], tuple[str, str, str] | None]
 
 
 def default_test_proposer(goal: str, workspace: Path) -> tuple[str, str, str] | None:
-    """Internal documentation."""
     return None
 
 
@@ -146,7 +143,6 @@ def _parse_reviewer_response(response: str) -> tuple[str, str, str] | None:
 
 
 def _is_whitelisted(cmd: str) -> bool:
-    """Internal documentation."""
     try:
         parts = shlex.split(cmd)
     except ValueError:
@@ -157,7 +153,6 @@ def _is_whitelisted(cmd: str) -> bool:
 
 
 def _run_in_workspace(cmd: str, workspace: Path, *, timeout: float = 30.0) -> tuple[int, str, str]:
-    """Internal documentation."""
     try:
         parts = shlex.split(cmd)
     except ValueError as e:
@@ -179,7 +174,6 @@ def _run_in_workspace(cmd: str, workspace: Path, *, timeout: float = 30.0) -> tu
 
 
 def _canary_check(cmd: str, workspace: Path, *, timeout: float = 30.0) -> tuple[bool, str]:
-    """Internal documentation."""
     if not workspace.is_dir():
         return False, t("verify.self_test.workspace_missing", workspace=workspace)
     backup = workspace.parent / f".{workspace.name}.canary_backup"
@@ -201,7 +195,6 @@ def _canary_check(cmd: str, workspace: Path, *, timeout: float = 30.0) -> tuple[
 
 
 def _restore_check(cmd: str, workspace: Path, *, timeout: float = 30.0) -> bool:
-    """Internal documentation."""
     rc, _out, _err = _run_in_workspace(cmd, workspace, timeout=timeout)
     return rc != -1
 
@@ -210,7 +203,6 @@ def _restore_check(cmd: str, workspace: Path, *, timeout: float = 30.0) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class TestGenerator:
-    """Internal documentation."""
 
     __test__ = False
 
@@ -221,7 +213,6 @@ class TestGenerator:
     def propose_and_validate(
         self, *, goal: str, workspace: Path,
     ) -> TestProposal | None:
-        """Internal documentation."""
         if self.proposer is None:
             return None
         if not workspace.exists():

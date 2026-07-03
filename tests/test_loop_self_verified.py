@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -10,7 +9,6 @@ from argos.tui.events import Escalation, EventBus, PhaseChange, VerifyVerdict
 
 
 class CompletingModel:
-    """Internal documentation."""
     def __init__(self):
         self.calls = 0
 
@@ -21,7 +19,6 @@ class CompletingModel:
 
 
 class WorkingThenCompletingModel:
-    """Internal documentation."""
     def __init__(self):
         self.calls = 0
         self.code_emitted = 0
@@ -48,7 +45,6 @@ class FakeStore:
 
 
 class SelfPassedVerifier:
-    """Internal documentation."""
     def __init__(self):
         self.calls = 0
 
@@ -61,7 +57,6 @@ class SelfPassedVerifier:
 
 
 class UserPassedVerifier:
-    """Internal documentation."""
     def __init__(self):
         self.calls = 0
 
@@ -77,7 +72,6 @@ class UserPassedVerifier:
 
 @pytest.mark.asyncio
 async def test_loop_self_verified_pass_does_not_break_as_user_verified(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_NO_MEMORY", "1")
     verifier = SelfPassedVerifier()
     loop = AgentLoop(
@@ -101,7 +95,6 @@ async def test_loop_self_verified_pass_does_not_break_as_user_verified(monkeypat
 
 @pytest.mark.asyncio
 async def test_loop_user_verified_pass_breaks_normally(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_NO_MEMORY", "1")
     verifier = UserPassedVerifier()
     loop = AgentLoop(
@@ -126,7 +119,6 @@ async def test_loop_user_verified_pass_breaks_normally(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_loop_self_verified_does_not_capture_run_success(monkeypatch, tmp_path):
-    """Internal documentation."""
     mem_dir = tmp_path / "memory"
     monkeypatch.setenv("ARGOS_MEMORY_DIR", str(mem_dir))
     monkeypatch.setenv("ARGOS_NO_MEMORY", "1")
@@ -158,7 +150,6 @@ async def test_loop_self_verified_does_not_capture_run_success(monkeypatch, tmp_
 
 @pytest.mark.asyncio
 async def test_loop_user_verified_captures_run_success(monkeypatch, tmp_path):
-    """Internal documentation."""
     mem_dir = tmp_path / "memory"
     monkeypatch.setenv("ARGOS_MEMORY_DIR", str(mem_dir))
     monkeypatch.setenv("ARGOS_NO_MEMORY", "1")
@@ -188,7 +179,6 @@ async def test_loop_user_verified_captures_run_success(monkeypatch, tmp_path):
 
 
 def test_is_user_verified_is_single_source_of_truth():
-    """Internal documentation."""
     user_passed = Verdict.passed("ok", "pytest -q", 1)
     self_passed = Verdict.passed_self("ok", "pytest -q", 1)
     failed = Verdict.failed("boom", "pytest -q", 1)

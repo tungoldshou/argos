@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -10,8 +9,15 @@ from argos.tui.events import EventBus, VerifyVerdict
 from tests.test_loop_codeact import FakeStore
 
 
+def test_tool_names_indicate_file_mutation_without_source_string_scan():
+    from argos.core.loop import _tool_names_indicate_mutation
+
+    assert _tool_names_indicate_mutation(["write_file"]) is True
+    assert _tool_names_indicate_mutation(["edit_file"]) is True
+    assert _tool_names_indicate_mutation(["read_file", "run_command"]) is False
+
+
 class _ProposeSandbox:
-    """Internal documentation."""
     def __init__(self, on_propose): self._on_propose = on_propose
     def spawn(self, *, workspace, namespace, allow_workflow=True, read_only=False): pass
     def exec_code(self, code):
@@ -31,7 +37,6 @@ class _RecordingVerifier:
 
 
 def test_propose_verify_rejects_trivial_noop_commands():
-    """Internal documentation."""
     from tests.test_loop_codeact import FakeModel
     loop = AgentLoop(store=FakeStore(), bus=EventBus(),
                      sandbox=_ProposeSandbox(lambda c: None), broker=None,
@@ -47,7 +52,6 @@ def test_propose_verify_rejects_trivial_noop_commands():
 
 
 class _RecModel:
-    """Internal documentation."""
     def __init__(self, scripts): self._s = scripts; self._i = 0; self.seen = []
     async def stream(self, messages, *, system, system_dynamic=None):
         self.seen.append([m.get("content", "") for m in messages])
@@ -58,7 +62,6 @@ class _RecModel:
 
 @pytest.mark.asyncio
 async def test_h2_nudges_to_verify_when_code_changed_without_verify_cmd():
-    """Internal documentation."""
     from argos.core.verify_gate import Verifier
     model = _RecModel([
         "```python\nwrite_file('x.py', 'x=1')\n```",
@@ -77,7 +80,6 @@ async def test_h2_nudges_to_verify_when_code_changed_without_verify_cmd():
 
 @pytest.mark.asyncio
 async def test_h2_no_nudge_for_readonly_task():
-    """Internal documentation."""
     from argos.core.verify_gate import Verifier
     model = _RecModel([
         "```python\nprint(read_file('x.py'))\n```",
@@ -94,7 +96,6 @@ async def test_h2_no_nudge_for_readonly_task():
 
 @pytest.mark.asyncio
 async def test_fake_verify_command_does_not_produce_false_green():
-    """Internal documentation."""
     from tests.test_loop_codeact import FakeModel
     from argos.core.verify_gate import Verifier
     model = FakeModel([

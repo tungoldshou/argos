@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,7 +6,6 @@ from argos.daemon.store import RunStore
 
 
 def test_append_assigns_monotonic_seq_to_all_nonmeta_events(tmp_path: Path):
-    """Internal documentation."""
     store = RunStore(tmp_path / "runs")
     assert store.append("r1", {"kind": "run_meta", "run_id": "r1"}) == 0
     s1 = store.append("r1", {"kind": "token_delta", "text": "a"})
@@ -19,7 +17,6 @@ def test_append_assigns_monotonic_seq_to_all_nonmeta_events(tmp_path: Path):
 
 
 def test_replay_since_filters_by_seq_field_not_physical_row(tmp_path: Path):
-    """Internal documentation."""
     store = RunStore(tmp_path / "runs")
     store.append("r1", {"kind": "run_meta", "run_id": "r1"})
     store.append("r1", {"kind": "token_delta"})        # _seq=1
@@ -34,7 +31,6 @@ def test_replay_since_filters_by_seq_field_not_physical_row(tmp_path: Path):
 
 
 def test_seq_monotonic_across_store_reinit(tmp_path: Path):
-    """Internal documentation."""
     store1 = RunStore(tmp_path / "runs")
     store1.append("r1", {"kind": "run_meta", "run_id": "r1"})
     store1.append("r1", {"kind": "token_delta"})   # _seq=1
@@ -44,7 +40,6 @@ def test_seq_monotonic_across_store_reinit(tmp_path: Path):
 
 
 def test_full_replay_yields_legacy_events_without_seq(tmp_path: Path):
-    """Internal documentation."""
     store = RunStore(tmp_path / "runs")
     path = tmp_path / "runs" / "r1.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)

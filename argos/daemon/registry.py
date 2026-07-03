@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -12,7 +11,6 @@ from argos.daemon.state_machine import TERMINAL_STATES
 
 @dataclass
 class RunEntry:
-    """Internal documentation."""
     run_id: str
     state: str
     goal: str
@@ -35,7 +33,6 @@ class RunEntry:
 
 
 class RunRegistry:
-    """Internal documentation."""
 
     def __init__(self, *, max_concurrent: int = 5, max_history: int = 100):
         self._entries: dict[str, RunEntry] = {}
@@ -55,12 +52,10 @@ class RunRegistry:
 
     @property
     def active_count(self) -> int:
-        """Internal documentation."""
         return sum(1 for e in self._entries.values() if e.state not in TERMINAL_STATES)
 
     @property
     def sem(self) -> asyncio.Semaphore:
-        """Internal documentation."""
         return self._sem
 
     @property
@@ -71,7 +66,6 @@ class RunRegistry:
         self, *, run_id: str, goal: str, workspace: str,
         worktree_path: str | None = None,
     ) -> RunEntry:
-        """Internal documentation."""
         now = time.time()
         entry = RunEntry(
             run_id=run_id, state="pending", goal=goal, workspace=workspace,
@@ -91,7 +85,6 @@ class RunRegistry:
         return [e for e in self._entries.values() if e.state == state]
 
     def mark(self, *, run_id: str, state: str) -> None:
-        """Internal documentation."""
         e = self._entries.get(run_id)
         if e is None:
             return
@@ -102,7 +95,6 @@ class RunRegistry:
         self, *, run_id: str, tokens_in_delta: int = 0,
         tokens_out_delta: int = 0, cost_usd_delta: float | None = None,
     ) -> None:
-        """Internal documentation."""
         e = self._entries.get(run_id)
         if e is None:
             return
@@ -126,24 +118,20 @@ class RunRegistry:
     # ── semaphore ────────────────────────────────────────────────────
 
     async def acquire_slot(self) -> None:
-        """Internal documentation."""
         await self._sem.acquire()
 
     def release_slot(self) -> None:
-        """Internal documentation."""
         try:
             self._sem.release()
         except ValueError:
             pass
 
     def has_capacity(self) -> bool:
-        """Internal documentation."""
         return not self._sem.locked() and self._sem._value > 0  # type: ignore[attr-defined]
 
     # ── cleanup / max_history ───────────────────────────────────────
 
     async def cleanup(self, *, run_id: str, terminal_state: str) -> None:
-        """Internal documentation."""
         async with self._lock:
             e = self._entries.get(run_id)
             if e is None:
@@ -154,7 +142,6 @@ class RunRegistry:
         await self._enforce_max_history()
 
     async def _enforce_max_history(self) -> None:
-        """Internal documentation."""
         async with self._lock:
             terminal = [e for e in self._entries.values() if e.state in TERMINAL_STATES]
             if len(terminal) <= self._max_history:
@@ -165,7 +152,6 @@ class RunRegistry:
                 self._entries.pop(e.run_id, None)
 
     def snapshot(self) -> list[dict[str, Any]]:
-        """Internal documentation."""
         out = []
         for e in self._entries.values():
             out.append({
@@ -182,5 +168,4 @@ class RunRegistry:
 
 
 def new_run_id() -> str:
-    """Internal documentation."""
     return uuid.uuid4().hex[:12]

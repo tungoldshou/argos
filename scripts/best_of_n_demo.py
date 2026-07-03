@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -37,7 +36,6 @@ TASK_VERIFY_CMD = (
 
 
 def _build_components(workspace: Path):
-    """Internal documentation."""
     tier = config.active_tier()
     key = config.active_key()
     if not key:
@@ -66,7 +64,6 @@ def _build_components(workspace: Path):
 
 
 def _n_candidate_spec(*, n: int, model_tier: str) -> dict:
-    """Internal documentation."""
     return {
         "name": f"fib-demo-N{n}",
         "description": f"best_of_n 自包含 demo:写 fib(N={n}, model={model_tier}, cap=1 单 key 串行)",
@@ -88,7 +85,6 @@ def _n_candidate_spec(*, n: int, model_tier: str) -> dict:
 
 
 def _run_one_spec(engine: WorkflowEngine, spec_dict: dict) -> dict:
-    """Internal documentation."""
     spec = parse_spec(spec_dict)
 
     async def _go():

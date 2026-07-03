@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from rich.text import Text
@@ -27,7 +26,6 @@ def _hints() -> str:
 
 
 class StatusBar(Static):
-    """Internal documentation."""
 
     DEFAULT_CSS = """
     StatusBar { dock: bottom; height: 1; background: $abyss; color: $ink-faint; padding: 0 2; }
@@ -59,11 +57,9 @@ class StatusBar(Static):
         self._kernel_mode: str = ""
 
     def _phase_eye(self) -> str:
-        """Internal documentation."""
         return _PHASE_GLYPH.get(self.phase, "◌")
 
     def _resolve_render_state(self) -> tuple[str, str]:
-        """Internal documentation."""
         if self._blocked:
             return _GLYPH_BLOCKED, "-blocked"
         if self._alert:
@@ -71,7 +67,6 @@ class StatusBar(Static):
         return self._phase_eye(), ""
 
     def _ctx_class(self) -> str:
-        """Internal documentation."""
         if self.ctx_pct >= 0.95:
             return "-ctx-crit"
         if self.ctx_pct >= 0.80:
@@ -79,19 +74,16 @@ class StatusBar(Static):
         return ""
 
     def set_blocked(self, active: bool) -> None:
-        """Internal documentation."""
         self._blocked = bool(active)
         self._refresh()
 
     def set_alert(self, active: bool, kind: str = "fail") -> None:
-        """Internal documentation."""
         self._alert = bool(active)
         self._alert_kind = "warn" if kind == "warn" else "fail"
         self._refresh()
 
     @property
     def render_text(self) -> str:
-        """Internal documentation."""
         eye, _ = self._resolve_render_state()
 
         _action_str = (
@@ -112,12 +104,10 @@ class StatusBar(Static):
         return " · ".join(parts)
 
     def set_run_summary(self, runs: list[tuple[str, str]]) -> None:
-        """Internal documentation."""
         self._run_summary = list(runs)
         self._refresh()
 
     def render_count_badges(self, runs: list[tuple[str, str]]) -> str:
-        """Internal documentation."""
         if not runs:
             return ""
         active  = sum(1 for _, s in runs if s == "running")
@@ -129,14 +119,12 @@ class StatusBar(Static):
         return f"⏵{active} / ⏸{paused} / ⏹{history}"
 
     def set_phase(self, phase: Phase, actions: int, max_steps: int | None = None) -> None:
-        """Internal documentation."""
         self.phase   = phase
         self.actions = actions
         if max_steps is not None:
             self.max_steps = max_steps
 
     def mark_run_end(self) -> None:
-        """Internal documentation."""
         self.phase     = "idle"
         self.actions   = 0
         self.max_steps = None
@@ -149,27 +137,22 @@ class StatusBar(Static):
         cost_usd: float | None,
         elapsed_s: float,
     ) -> None:
-        """Internal documentation."""
         self.tokens_in  = tokens_in
         self.tokens_out = tokens_out
         self.cost_usd   = cost_usd
         self.elapsed_s  = elapsed_s
 
     def set_plan_mode(self, active: bool) -> None:
-        """Internal documentation."""
         self.plan_mode = bool(active)
 
     def set_kernel_mode(self, mode: str) -> None:
-        """Internal documentation."""
         self._kernel_mode = mode
         self._refresh()
 
     def update_ctx_pressure(self, pct: float) -> None:
-        """Internal documentation."""
         self.ctx_pct = max(0.0, min(1.0, float(pct or 0.0)))
 
     def render(self) -> Text:
-        """Internal documentation."""
         left_str = self.render_text
         left = Text(left_str, no_wrap=True, overflow="ellipsis")
 
@@ -186,7 +169,6 @@ class StatusBar(Static):
         return left
 
     def _refresh(self) -> None:
-        """Internal documentation."""
         self.refresh()
         self.set_class(self.plan_mode, "-plan-mode")
         _, css_suffix = self._resolve_render_state()

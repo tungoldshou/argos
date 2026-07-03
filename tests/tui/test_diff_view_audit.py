@@ -1,5 +1,4 @@
 # tests/tui/test_diff_view_audit.py
-"""Internal documentation."""
 from __future__ import annotations
 
 import inspect
@@ -20,7 +19,6 @@ _MONOKAI_RED   = "#FF4689"
 
 
 def test_no_monokai_import() -> None:
-    """Internal documentation."""
     import argos.tui.widgets.diff_view as m
     assert not hasattr(m, "Syntax"), (
         "diff_view 仍导出 Syntax — 应已移除 rich.syntax 导入"
@@ -28,7 +26,6 @@ def test_no_monokai_import() -> None:
 
 
 def test_no_rich_syntax_in_module_source() -> None:
-    """Internal documentation."""
     import argos.tui.widgets.diff_view as m
     src_file = inspect.getfile(m)
     with open(src_file, encoding="utf-8") as f:
@@ -49,7 +46,6 @@ def test_no_rich_syntax_in_module_source() -> None:
 
 
 def test_module_exposes_token_constants() -> None:
-    """Internal documentation."""
     import argos.tui.widgets.diff_view as m
     assert hasattr(m, "_PASS"), "缺少 _PASS 常量"
     assert hasattr(m, "_FAIL"), "缺少 _FAIL 常量"
@@ -58,7 +54,6 @@ def test_module_exposes_token_constants() -> None:
 
 
 def test_token_pass_is_project_green_not_monokai() -> None:
-    """Internal documentation."""
     from argos.tui.widgets.diff_view import _PASS
     assert _PASS.upper() == "#9ECE6A", (
         f"_PASS={_PASS!r} — 应为 #9ECE6A($pass),不得为 monokai #A6E22E"
@@ -69,7 +64,6 @@ def test_token_pass_is_project_green_not_monokai() -> None:
 
 
 def test_token_fail_is_project_red_not_monokai() -> None:
-    """Internal documentation."""
     from argos.tui.widgets.diff_view import _FAIL
     assert _FAIL.upper() == "#F7768E", (
         f"_FAIL={_FAIL!r} — 应为 #F7768E($fail),不得为 monokai #FF4689"
@@ -80,20 +74,17 @@ def test_token_fail_is_project_red_not_monokai() -> None:
 
 
 def test_token_dim_value() -> None:
-    """Internal documentation."""
     from argos.tui.widgets.diff_view import _DIM
     assert _DIM.upper() == "#7E869C", f"_DIM={_DIM!r} — 应为 $ink-dim #7E869C"
 
 
 def test_token_ink_value() -> None:
-    """Internal documentation."""
     from argos.tui.widgets.diff_view import _INK
     assert _INK.upper() == "#C8CCDA", f"_INK={_INK!r} — 应为 $ink #C8CCDA"
 
 
 
 def _spans_for(text: Text) -> dict[str, list[str]]:
-    """Internal documentation."""
     result: dict[str, list[str]] = {}
     for span in text._spans:
         fragment = text.plain[span.start:span.end]
@@ -114,7 +105,6 @@ def sample_diff() -> str:
 
 
 def test_render_diff_returns_rich_text(sample_diff: str) -> None:
-    """Internal documentation."""
     from argos.tui.widgets.diff_view import _render_diff
     result = _render_diff(sample_diff)
     assert isinstance(result, Text), (
@@ -123,7 +113,6 @@ def test_render_diff_returns_rich_text(sample_diff: str) -> None:
 
 
 def test_added_line_uses_pass_token(sample_diff: str) -> None:
-    """Internal documentation."""
     from argos.tui.widgets.diff_view import _render_diff
     result = _render_diff(sample_diff)
     plain = result.plain
@@ -139,7 +128,6 @@ def test_added_line_uses_pass_token(sample_diff: str) -> None:
 
 
 def test_removed_line_uses_fail_token(sample_diff: str) -> None:
-    """Internal documentation."""
     from argos.tui.widgets.diff_view import _render_diff
     result = _render_diff(sample_diff)
     plain = result.plain
@@ -155,7 +143,6 @@ def test_removed_line_uses_fail_token(sample_diff: str) -> None:
 
 
 def test_hunk_header_uses_dim_token(sample_diff: str) -> None:
-    """Internal documentation."""
     from argos.tui.widgets.diff_view import _render_diff
     result = _render_diff(sample_diff)
     plain = result.plain
@@ -171,7 +158,6 @@ def test_hunk_header_uses_dim_token(sample_diff: str) -> None:
 
 
 def test_context_line_uses_ink_token(sample_diff: str) -> None:
-    """Internal documentation."""
     from argos.tui.widgets.diff_view import _render_diff
     result = _render_diff(sample_diff)
     plain = result.plain
@@ -187,7 +173,6 @@ def test_context_line_uses_ink_token(sample_diff: str) -> None:
 
 
 def test_added_line_not_monokai_green(sample_diff: str) -> None:
-    """Internal documentation."""
     from argos.tui.widgets.diff_view import _render_diff
     result = _render_diff(sample_diff)
     plain = result.plain
@@ -200,7 +185,6 @@ def test_added_line_not_monokai_green(sample_diff: str) -> None:
 
 
 def test_removed_line_not_monokai_red(sample_diff: str) -> None:
-    """Internal documentation."""
     from argos.tui.widgets.diff_view import _render_diff
     result = _render_diff(sample_diff)
     plain = result.plain
@@ -214,7 +198,6 @@ def test_removed_line_not_monokai_red(sample_diff: str) -> None:
 
 
 def test_diff_view_constructor_signature() -> None:
-    """Internal documentation."""
     from argos.tui.widgets.diff_view import DiffView
     sig = inspect.signature(DiffView.__init__)
     params = list(sig.parameters.keys())
@@ -228,7 +211,6 @@ def test_diff_view_constructor_signature() -> None:
 
 
 def test_diff_view_instantiation() -> None:
-    """Internal documentation."""
     from argos.tui.widgets.diff_view import DiffView
     dv = DiffView(path="argos/replay.py", added=3, removed=1, unified="+new\n-old\n")
     assert dv.path == "argos/replay.py"
@@ -239,7 +221,6 @@ def test_diff_view_instantiation() -> None:
 
 
 def test_diff_view_border_title_format() -> None:
-    """Internal documentation."""
     from argos.tui.widgets.diff_view import DiffView
     dv = DiffView(path="foo/bar.py", added=2, removed=0, unified="")
     assert dv.border_title == "Edit · foo/bar.py", (
@@ -248,7 +229,6 @@ def test_diff_view_border_title_format() -> None:
 
 
 def test_diff_view_border_subtitle_uses_unicode_minus() -> None:
-    """Internal documentation."""
     from argos.tui.widgets.diff_view import DiffView
     dv = DiffView(path="x.py", added=5, removed=2, unified="")
     subtitle = dv.border_subtitle

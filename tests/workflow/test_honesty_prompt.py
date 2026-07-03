@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from argos.core.honesty import HONESTY_SYSTEM, WORKFLOW_PROMPT
 
 
@@ -28,8 +27,7 @@ def test_build_system_pair_respects_argos_workflows_env():
     assert "WORKFLOW_PROMPT" in src
 
 
-def test_build_system_pair_default_on(monkeypatch):
-    """Internal documentation."""
+def test_build_system_pair_default_off(monkeypatch):
     import os
     monkeypatch.delenv("ARGOS_WORKFLOWS", raising=False)
 
@@ -47,12 +45,11 @@ def test_build_system_pair_default_on(monkeypatch):
         config=LoopConfig(verify_cmd=None, max_steps=2),
     )
     stable, _ = loop._build_system_pair("test")
-    assert "propose_workflow" in stable,\
-        "默认(无 env var)应注入 WORKFLOW_PROMPT,使 propose_workflow 可达"
+    assert "propose_workflow" not in stable,\
+        "默认(无 env var)不应注入 WORKFLOW_PROMPT"
 
 
 def test_build_system_pair_off_when_zero(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_WORKFLOWS", "0")
 
     from argos.core.loop import AgentLoop, LoopConfig

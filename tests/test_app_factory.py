@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 
 import argos.app_factory as af
@@ -78,7 +77,6 @@ def test_build_run_stack_uses_reloaded_permissions_config(tmp_path, monkeypatch)
 
 
 def test_model_override_picks_named_profile(tmp_path, monkeypatch):
-    """Internal documentation."""
     import json
     monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))

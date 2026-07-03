@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -29,7 +28,6 @@ _SEARCH_EGRESS: tuple[str, ...] = (
 
 
 def _builtin_capabilities() -> tuple[Capability, ...]:
-    """Internal documentation."""
     caps: list[Capability] = [
         Capability(
             name="read_file",
@@ -216,7 +214,6 @@ def register_builtins(
     *,
     egress: "EgressPolicy | None" = None,
 ) -> None:
-    """Internal documentation."""
     for cap in _builtin_capabilities():
         if cap.name in registry:
             continue

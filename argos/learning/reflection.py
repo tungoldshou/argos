@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -15,7 +14,6 @@ def reflect_failure(
     self_verified: bool = False,
     skills_root: Path | None = None,
 ) -> None:
-    """Internal documentation."""
     snippet: str = ""
     try:
         from argos.daemon.store import RunStore

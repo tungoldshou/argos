@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -44,24 +43,20 @@ def _import_widget():
 
 class TestImport:
     def test_ledger_table_importable(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         assert LedgerTable is not None
 
     def test_ledger_table_is_static_subclass(self):
-        """Internal documentation."""
         from textual.widgets import Static
         LedgerTable = _import_widget()
         assert issubclass(LedgerTable, Static)
 
     def test_ledger_table_markup_false(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         widget = LedgerTable(entries=[], run_id="aabbcc001122")
         assert widget._render_markup is False  # type: ignore[attr-defined]
 
     def test_can_focus_false(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         assert LedgerTable.can_focus is False
 
@@ -71,20 +66,17 @@ class TestImport:
 
 class TestConstructor:
     def test_accepts_entries_and_run_id(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         entries = [_make_entry()]
         w = LedgerTable(entries=entries, run_id="4f9c00000000")
         assert w is not None
 
     def test_empty_entries(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         w = LedgerTable(entries=[], run_id="4f9c00000000")
         assert w is not None
 
     def test_rendered_text_property_returns_str(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         w = LedgerTable(entries=[_make_entry()], run_id="4f9c00000000")
         rt = w.rendered_text
@@ -100,22 +92,18 @@ class TestHeaderLine:
         return LedgerTable(entries=entries, run_id=run_id).rendered_text
 
     def test_header_contains_ledger_title(self):
-        """Internal documentation."""
         text = self._render([_make_entry()])
         assert "行为账本" in text
 
     def test_header_contains_run_id(self):
-        """Internal documentation."""
         text = self._render([_make_entry(run_id="aabbcc001122")], run_id="aabbcc001122")
         assert "aabbcc001122" in text
 
     def test_header_count_one(self):
-        """Internal documentation."""
         text = self._render([_make_entry()])
         assert "1 条" in text
 
     def test_header_count_three(self):
-        """Internal documentation."""
         entries = [
             _make_entry(seq=1, action="read_file", summary_human="读取了 a.py"),
             _make_entry(seq=2, action="write_file", summary_human="写入了 b.py", risk="low"),
@@ -125,7 +113,6 @@ class TestHeaderLine:
         assert "3 条" in text
 
     def test_undo_done_sentinel_filtered_out_of_count(self):
-        """Internal documentation."""
         entries = [
             _make_entry(seq=1, action="write_file", summary_human="写入了 x.py"),
             _make_entry(seq=0, action="undo_done", summary_human="撤销标记"),
@@ -136,7 +123,6 @@ class TestHeaderLine:
         assert "1 条" in text
 
     def test_undo_done_sentinel_not_rendered_in_table(self):
-        """Internal documentation."""
         entries = [
             _make_entry(seq=1, action="write_file", summary_human="写入了 x.py"),
             _make_entry(seq=0, action="undo_done", summary_human="undo sentinel text"),
@@ -156,31 +142,24 @@ class TestColumnHeaders:
         return LedgerTable(entries=[_make_entry()], run_id="4f9c00000000").rendered_text
 
     def test_col_seq_header(self):
-        """Internal documentation."""
         assert "seq" in self._render()
 
     def test_col_action_header(self):
-        """Internal documentation."""
         assert "动作 · 人话" in self._render()
 
     def test_col_risk_header(self):
-        """Internal documentation."""
         assert "风险" in self._render()
 
     def test_col_reversible_header(self):
-        """Internal documentation."""
         assert "可逆" in self._render()
 
     def test_col_undo_header(self):
-        """Internal documentation."""
         assert "撤销" in self._render()
 
     def test_col_sig_header(self):
-        """Internal documentation."""
         assert "签名" in self._render()
 
     def test_hairline_rule_present(self):
-        """Internal documentation."""
         assert "─" in self._render()
 
 
@@ -194,28 +173,23 @@ class TestDataRowContent:
         return LedgerTable(entries=[entry], run_id=entry.run_id).rendered_text
 
     def test_seq_number_rendered(self):
-        """Internal documentation."""
         e = _make_entry(seq=3)
         assert "3" in self._render(e)
 
     def test_summary_human_verbatim(self):
-        """Internal documentation."""
         e = _make_entry(summary_human="读取了 replay.py")
         assert "读取了 replay.py" in self._render(e)
 
     def test_summary_human_with_brackets(self):
-        """Internal documentation."""
         e = _make_entry(summary_human="跑了命令: pytest -q [test_foo, test_bar]")
         text = self._render(e)
         assert "pytest -q [test_foo, test_bar]" in text
 
     def test_summary_human_edit_template(self):
-        """Internal documentation."""
         e = _make_entry(summary_human="编辑了 replay.py(+1/-1)", action="edit_file")
         assert "编辑了 replay.py(+1/-1)" in self._render(e)
 
     def test_summary_human_write_template(self):
-        """Internal documentation."""
         e = _make_entry(summary_human="写入了 report.md(+120 行)", action="write_file")
         assert "写入了 report.md(+120 行)" in self._render(e)
 
@@ -231,18 +205,15 @@ class TestRiskColumn:
         return LedgerTable(entries=[e], run_id=e.run_id)
 
     def test_risk_low_displays_low(self):
-        """Internal documentation."""
         w = self._widget("low")
         assert "low" in w.rendered_text
 
     def test_risk_medium_displays_med(self):
-        """Internal documentation."""
         w = self._widget("medium")
         text = w.rendered_text
         assert "med" in text
 
     def test_risk_medium_does_not_display_full_word(self):
-        """Internal documentation."""
         w = self._widget("medium")
         # 'medium' as a standalone word should NOT appear (only 'med' after mapping)
         # We check that the standalone risk cell does not contain 'medium' literally
@@ -252,12 +223,10 @@ class TestRiskColumn:
         assert "med" in text
 
     def test_risk_high_displays_high(self):
-        """Internal documentation."""
         w = self._widget("high")
         assert "high" in w.rendered_text
 
     def test_risk_low_color_ink_dim(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         e = _make_entry(risk="low")
         w = LedgerTable(entries=[e], run_id=e.run_id)
@@ -266,7 +235,6 @@ class TestRiskColumn:
         assert any("#7E869C" in h.upper() or "7e869c" in h.lower() for h in spans_hex)
 
     def test_risk_medium_color_unverif(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         e = _make_entry(risk="medium")
         w = LedgerTable(entries=[e], run_id=e.run_id)
@@ -275,7 +243,6 @@ class TestRiskColumn:
         assert any("#FF9E64" in h.upper() or "ff9e64" in h.lower() for h in spans_hex)
 
     def test_risk_high_color_fail(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         e = _make_entry(risk="high")
         w = LedgerTable(entries=[e], run_id=e.run_id)
@@ -284,7 +251,6 @@ class TestRiskColumn:
         assert any("#F7768E" in h.upper() or "f7768e" in h.lower() for h in spans_hex)
 
     def test_risk_unknown_fallback_ink_dim(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         e = _make_entry(risk="weird")
         w = LedgerTable(entries=[e], run_id=e.run_id)
@@ -305,30 +271,25 @@ class TestReversibleColumn:
         return [str(s.style) for s in rt._spans]
 
     def test_reversible_yes_text(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         e = _make_entry(reversible="yes")
         assert "yes" in LedgerTable(entries=[e], run_id=e.run_id).rendered_text
 
     def test_reversible_no_text(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         e = _make_entry(reversible="no")
         assert "no" in LedgerTable(entries=[e], run_id=e.run_id).rendered_text
 
     def test_reversible_unknown_text(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         e = _make_entry(reversible="unknown")
         assert "unknown" in LedgerTable(entries=[e], run_id=e.run_id).rendered_text
 
     def test_reversible_yes_color_pass_weak(self):
-        """Internal documentation."""
         spans = self._spans_hex("yes")
         assert any("73A857" in s.upper() or "73a857" in s.lower() for s in spans)
 
     def test_reversible_yes_not_strong_pass(self):
-        """Internal documentation."""
         spans = self._spans_hex("yes")
         assert any("73A857" in s.upper() or "73a857" in s.lower() for s in spans)
 
@@ -355,40 +316,33 @@ class TestUndoStateColumn:
         return [str(s.style) for s in w._build_rich_text()._spans]
 
     def test_undo_available_text(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         e = _make_entry(undo_state="available")
         assert "available" in LedgerTable(entries=[e], run_id=e.run_id).rendered_text
 
     def test_undo_done_text(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         e = _make_entry(undo_state="done")
         assert "done" in LedgerTable(entries=[e], run_id=e.run_id).rendered_text
 
     def test_undo_impossible_text(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         e = _make_entry(undo_state="impossible")
         assert "impossible" in LedgerTable(entries=[e], run_id=e.run_id).rendered_text
 
     def test_undo_available_color_pass(self):
-        """Internal documentation."""
         spans = self._spans_hex("available")
         assert any("9ECE6A" in s.upper() or "9ece6a" in s.lower() for s in spans)
 
     def test_undo_done_color_ink_dim(self):
-        """Internal documentation."""
         spans = self._spans_hex("done")
         assert any("7E869C" in s.upper() or "7e869c" in s.lower() for s in spans)
 
     def test_undo_impossible_color_ink_faint(self):
-        """Internal documentation."""
         spans = self._spans_hex("impossible")
         assert any("6B7494" in s.upper() or "6b7494" in s.lower() for s in spans)
 
     def test_undo_sentinel_dash_for_unknown(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         # on a 'yes'-reversible low-risk row（per spec .dc.html row1 read_file shows —）
         e = _make_entry(action="read_file", reversible="yes", undo_state="impossible")
@@ -402,7 +356,6 @@ class TestUndoStateColumn:
 
 class TestCssTokens:
     def test_no_raw_hex_in_default_css(self):
-        """Internal documentation."""
         import re
         LedgerTable = _import_widget()
         css = LedgerTable.DEFAULT_CSS
@@ -413,7 +366,6 @@ class TestCssTokens:
         assert not matches, f"DEFAULT_CSS 含裸 hex: {matches}"
 
     def test_default_css_uses_stream_or_tokens(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         css = LedgerTable.DEFAULT_CSS
         if css.strip():
@@ -425,7 +377,6 @@ class TestCssTokens:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestHexConstants:
-    """Internal documentation."""
 
     def _mod(self):
         import argos.tui.widgets.ledger_table as m
@@ -478,7 +429,6 @@ class TestHexConstants:
 
 class TestHonestyInvariants:
     def test_computer_action_high_risk_irreversible(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         e = _make_entry(
             action="computer.click",
@@ -498,7 +448,6 @@ class TestHonestyInvariants:
         assert any("6B7494" in h.upper() for h in spans_hex)
 
     def test_error_never_rendered_as_success(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         e = _make_entry(
             risk="high",
@@ -511,7 +460,6 @@ class TestHonestyInvariants:
         assert not any("9ECE6A" in h.upper() for h in spans_hex)
 
     def test_pass_weak_not_equal_pass(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         # entry where reversible=yes and undo_state=impossible (no undo colour distraction)
         e = _make_entry(reversible="yes", undo_state="impossible")
@@ -521,7 +469,6 @@ class TestHonestyInvariants:
         assert any("73A857" in h.upper() for h in spans_hex)
 
     def test_undo_state_available_uses_strong_pass(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         e = _make_entry(reversible="yes", undo_state="available")
         w = LedgerTable(entries=[e], run_id=e.run_id)
@@ -530,7 +477,6 @@ class TestHonestyInvariants:
         assert any("9ECE6A" in h.upper() for h in spans_hex)
 
     def test_risk_colors_distinct_all_three(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         entries = [
             _make_entry(seq=1, risk="low", summary_human="读取 a"),
@@ -545,7 +491,6 @@ class TestHonestyInvariants:
         assert any("F7768E" in h for h in spans_hex), "high risk fail missing"
 
     def test_receipt_sig_visible_in_per_row_render(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         e = _make_entry(receipt_sig="deadbeefcafe0000")
         w = LedgerTable(entries=[e], run_id=e.run_id)
@@ -555,7 +500,6 @@ class TestHonestyInvariants:
         )
 
     def test_empty_ledger_zero_count(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         w = LedgerTable(entries=[], run_id="000000000000")
         text = w.rendered_text
@@ -568,13 +512,11 @@ class TestHonestyInvariants:
 
 class TestGlyphs:
     def test_hairline_glyph_present(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         w = LedgerTable(entries=[_make_entry()], run_id="000000000000")
         assert "─" in w.rendered_text
 
     def test_no_forbidden_glyphs(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         entries = [
             _make_entry(seq=1, risk="low"),
@@ -594,7 +536,6 @@ class TestGlyphs:
 
 class TestBuildRichText:
     def test_build_rich_text_returns_rich_text(self):
-        """Internal documentation."""
         from rich.text import Text
         LedgerTable = _import_widget()
         w = LedgerTable(entries=[_make_entry()], run_id="000000000000")
@@ -602,7 +543,6 @@ class TestBuildRichText:
         assert isinstance(rt, Text)
 
     def test_build_rich_text_plain_matches_rendered_text(self):
-        """Internal documentation."""
         LedgerTable = _import_widget()
         e = _make_entry(summary_human="读取了 foo.py")
         w = LedgerTable(entries=[e], run_id=e.run_id)

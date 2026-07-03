@@ -1,5 +1,4 @@
 # argos/tui/widgets/top_bar.py
-"""Internal documentation."""
 from __future__ import annotations
 
 from rich.text import Text
@@ -52,7 +51,6 @@ class TopBar(Static):
         trust_level: int | None = None,
         trust_label: str | None = None,
     ) -> None:
-        """Internal documentation."""
         if model_label is not None:
             self._model = model_label
         if plan_mode is not None:
@@ -68,12 +66,10 @@ class TopBar(Static):
         self.refresh()
 
     def set_phase(self, phase: str) -> None:
-        """Internal documentation."""
         self._phase = phase
         self.refresh()
 
     def badges(self) -> list[str]:
-        """Internal documentation."""
         out: list[str] = []
         if self._plan_mode:
             out.append(t("widget.badge_plan"))
@@ -94,7 +90,6 @@ class TopBar(Static):
 
     @property
     def render_text(self) -> str:
-        """Internal documentation."""
         return str(self.render())
 
     def render(self) -> Text:
@@ -122,7 +117,6 @@ class TopBar(Static):
         return Text.assemble(left, " " * pad, right) if right.cell_len else left
 
     def _badge_style(self, badge: str) -> str:
-        """Internal documentation."""
         _FIXED: dict[str, str] = {
             t("widget.badge_plan"): _PLAN,
             t("widget.badge_yolo"): _FAIL,

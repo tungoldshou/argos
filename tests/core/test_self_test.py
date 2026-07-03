@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -17,7 +16,6 @@ from argos.verify.self_test import TestGenerator, TestProposal, _is_whitelisted
 
 @pytest.fixture
 def in_tmp_workspace(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_NO_MEMORY", "1")
     token = runtime.use_project(str(tmp_path))
     yield tmp_path
@@ -25,7 +23,6 @@ def in_tmp_workspace(tmp_path, monkeypatch):
 
 
 def _make_proposer_with(cmd: str, content: str, test_path: str = "test_argos_selftest.py"):
-    """Internal documentation."""
     def _prop(goal: str, workspace: Path):
         return (cmd, content, test_path)
     return _prop
@@ -36,7 +33,6 @@ def _make_proposer_with(cmd: str, content: str, test_path: str = "test_argos_sel
 def test_self_test_passes_when_canary_and_real_both_pass(
     in_tmp_workspace, monkeypatch,
 ):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_SELF_TEST", "1")
     ws = in_tmp_workspace
     (ws / "sentinel.py").write_text("ANSWER = 42\n")
@@ -67,7 +63,6 @@ def test_self_test_passes_when_canary_and_real_both_pass(
 def test_self_test_discards_noop_test_via_canary(
     in_tmp_workspace, monkeypatch,
 ):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_SELF_TEST", "1")
     test_content = "# will be discarded by canary\n"
     proposer = _make_proposer_with(_trivially_passing_echo_cmd(), test_content)
@@ -83,7 +78,6 @@ def test_self_test_discards_noop_test_via_canary(
 def test_self_test_no_proposer_no_self_test(
     in_tmp_workspace, monkeypatch,
 ):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_SELF_TEST", "1")
     gen = TestGenerator(proposer=None)
     v = Verifier(test_generator=gen, goal="...")
@@ -92,12 +86,10 @@ def test_self_test_no_proposer_no_self_test(
 
 
 def _trivially_passing_py_cmd() -> str:
-    """Internal documentation."""
     return 'python3 -c "import sys; sys.exit(0)"'
 
 
 def _trivially_passing_echo_cmd() -> str:
-    """Internal documentation."""
     return "echo argos_selftest"
 
 
@@ -106,7 +98,6 @@ def _trivially_passing_echo_cmd() -> str:
 def test_self_verified_verdict_distinguishable_from_user_verified(
     in_tmp_workspace, monkeypatch,
 ):
-    """Internal documentation."""
     # user-level passed(self_verified=False)
     user_v = Verdict.passed(
         detail="[exit_code=0]", verify_cmd="pytest -q", attempts=1,
@@ -128,7 +119,6 @@ def test_self_verified_verdict_distinguishable_from_user_verified(
 def test_self_verified_passed_carries_self_verified_marker_in_detail(
     in_tmp_workspace, monkeypatch,
 ):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_SELF_TEST", "1")
     ws = in_tmp_workspace
     (ws / "thing.py").write_text("X = 1\n")
@@ -153,7 +143,6 @@ def test_self_verified_passed_carries_self_verified_marker_in_detail(
 
 
 def test_self_test_default_off_returns_unverifiable(in_tmp_workspace, monkeypatch):
-    """Internal documentation."""
     monkeypatch.delenv("ARGOS_SELF_TEST", raising=False)
 
     proposer_called = {"n": 0}
@@ -169,7 +158,6 @@ def test_self_test_default_off_returns_unverifiable(in_tmp_workspace, monkeypatc
 
 
 def test_self_test_flag_off_keeps_existing_behavior(in_tmp_workspace, monkeypatch):
-    """Internal documentation."""
     monkeypatch.delenv("ARGOS_SELF_TEST", raising=False)
     (in_tmp_workspace / "thing.py").write_text("X = 1\n")
     v = Verifier()
@@ -181,7 +169,6 @@ def test_self_test_flag_off_keeps_existing_behavior(in_tmp_workspace, monkeypatc
 
 
 def test_self_test_rejects_cmd_not_in_whitelist(in_tmp_workspace, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_SELF_TEST", "1")
     proposer = _make_proposer_with("rm -rf /tmp/nonexistent_argos_dir", "# x")
     gen = TestGenerator(proposer=proposer)
@@ -194,7 +181,6 @@ def test_self_test_rejects_cmd_not_in_whitelist(in_tmp_workspace, monkeypatch):
 
 
 def test_test_generator_canary_check_unit(tmp_path):
-    """Internal documentation."""
     gen = TestGenerator(
         proposer=_make_proposer_with("echo trivially-passing", "# x"),
     )
@@ -203,7 +189,6 @@ def test_test_generator_canary_check_unit(tmp_path):
 
 
 def test_test_generator_writes_test_file_and_canary_passes(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos import runtime
     token = runtime.use_project(str(tmp_path))
     try:
@@ -231,7 +216,6 @@ def test_test_generator_writes_test_file_and_canary_passes(tmp_path, monkeypatch
 
 
 def test_is_whitelisted():
-    """Internal documentation."""
     assert _is_whitelisted("pytest -q") is True
     assert _is_whitelisted("python3 -c 'x'") is True
     assert _is_whitelisted("python3 -c 'exit 0'") is True

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -49,7 +48,6 @@ async def mr_daemon(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_app_compose_mounts_tab_strip():
-    """Internal documentation."""
     from argos.tui.app import ArgosApp
     from argos.tui.widgets.tab_strip import TabStrip
 
@@ -61,7 +59,6 @@ async def test_app_compose_mounts_tab_strip():
 
 @pytest.mark.asyncio
 async def test_app_calls_focus_on_tab_change(mr_daemon, tmp_path: Path):
-    """Internal documentation."""
     srv, _, reg = mr_daemon
     from argos.daemon.client import DaemonClient
     from argos.tui.app import ArgosApp
@@ -103,7 +100,6 @@ async def test_app_calls_focus_on_tab_change(mr_daemon, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_app_handles_tab_activated_message(mr_daemon, tmp_path: Path):
-    """Internal documentation."""
     from argos.daemon.client import DaemonClient
     from argos.tui.app import ArgosApp
 
@@ -129,7 +125,6 @@ async def test_app_handles_tab_activated_message(mr_daemon, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_app_does_not_switch_active_tab_when_focus_returns_non_200():
-    """Internal documentation."""
     from argos.tui.app import ArgosApp
     from argos.tui.widgets.tab_strip import TabStrip
 
@@ -162,7 +157,6 @@ async def test_app_does_not_switch_active_tab_when_focus_returns_non_200():
 
 @pytest.mark.asyncio
 async def test_runs_command_shows_all_runs_with_cost(mr_daemon, tmp_path: Path):
-    """Internal documentation."""
     from argos.daemon.client import DaemonClient
     from argos.tui.app import ArgosApp
 
@@ -196,7 +190,6 @@ async def test_runs_command_shows_all_runs_with_cost(mr_daemon, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_runs_command_observer_shows_readonly_banner(mr_daemon, tmp_path: Path):
-    """Internal documentation."""
     from argos.daemon.client import DaemonClient
     from argos.tui.app import ArgosApp
 
@@ -218,7 +211,6 @@ async def test_runs_command_observer_shows_readonly_banner(mr_daemon, tmp_path: 
 
 @pytest.mark.asyncio
 async def test_app_handles_observer_readonly_focus():
-    """Internal documentation."""
     from argos.tui.app import ArgosApp
 
     app = ArgosApp()

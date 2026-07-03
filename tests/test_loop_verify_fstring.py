@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.core.loop import AgentLoop, LoopConfig, _PROPOSE_VERIFY

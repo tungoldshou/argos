@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -29,7 +28,6 @@ _FIELD_RE = re.compile(r"^\*(?:/(\d+))?$|^(\d+)$")
 # -----------------------------------------------------------------------
 
 def _parse_field(token: str, lo: int, hi: int, label: str) -> set[int]:
-    """Internal documentation."""
     m = _FIELD_RE.match(token)
     if not m:
         raise ValueError(t("cond.cronlite.field_invalid", label=label, token=token))
@@ -53,7 +51,6 @@ def _parse_field(token: str, lo: int, hi: int, label: str) -> set[int]:
 
 
 def _parse_five_field(spec: str) -> tuple[set[int], set[int], set[int], set[int], set[int]]:
-    """Internal documentation."""
     parts = spec.split()
     if len(parts) != 5:
         raise ValueError(
@@ -72,7 +69,6 @@ def _parse_five_field(spec: str) -> tuple[set[int], set[int], set[int], set[int]
 # -----------------------------------------------------------------------
 
 def _python_wday_to_cron(wday: int) -> int:
-    """Internal documentation."""
     return (wday + 1) % 7
 
 
@@ -84,7 +80,6 @@ def _next_cron_v2(
     wdays:   set[int],
     now_ts:  float,
 ) -> float:
-    """Internal documentation."""
     MAX_MINS = 366 * 24 * 60
     next_sec = (int(now_ts) // 60 + 1) * 60
 
@@ -113,7 +108,6 @@ def next_due(
     *,
     clock: Callable[[], float] | None = None,
 ) -> float:
-    """Internal documentation."""
     spec = spec.strip()
 
     if spec in _ALIASES:

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -22,7 +21,6 @@ def _args(report: bool = False) -> argparse.Namespace:
 
 
 def test_cli_dream_default_dirs_honor_argos_config_dir(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos import config as C
     from argos.cli import dream
 
@@ -39,7 +37,6 @@ def test_cli_dream_default_dirs_honor_argos_config_dir(tmp_path, monkeypatch):
 
 
 def test_cli_dream_report_empty(tmp_path, monkeypatch, capsys):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_DREAMS_DIR", str(tmp_path))
 
     from argos.cli.dream import run_dream
@@ -52,7 +49,6 @@ def test_cli_dream_report_empty(tmp_path, monkeypatch, capsys):
 
 
 def test_cli_dream_report_shows_latest(tmp_path, monkeypatch, capsys):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_DREAMS_DIR", str(tmp_path))
 
     old = tmp_path / "2020-01-01.jsonl"
@@ -78,7 +74,6 @@ def test_cli_dream_report_shows_latest(tmp_path, monkeypatch, capsys):
 
 @pytest.mark.parametrize("bad_payload", [[], 42, "str", True])
 def test_cli_dream_report_non_dict_does_not_crash(tmp_path, monkeypatch, capsys, bad_payload):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_DREAMS_DIR", str(tmp_path))
 
     report_file = tmp_path / "2020-01-01.jsonl"
@@ -94,7 +89,6 @@ def test_cli_dream_report_non_dict_does_not_crash(tmp_path, monkeypatch, capsys,
 
 
 def test_cli_dream_no_key_degrades(tmp_path, monkeypatch, capsys):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_DREAMS_DIR", str(tmp_path / "dreams"))
     monkeypatch.setenv("ARGOS_MEMORY_DIR", str(tmp_path / "memory"))
     (tmp_path / "dreams").mkdir()
@@ -142,7 +136,6 @@ def test_cli_dream_build_components_error_is_not_reported_as_no_key(tmp_path, mo
 
 @pytest.mark.asyncio
 async def test_tui_dream_inline_refuses():
-    """Internal documentation."""
     import os
     os.environ["ARGOS_NO_DAEMON"] = "1"
     try:
@@ -187,7 +180,6 @@ async def test_tui_dream_inline_refusal_is_error(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_tui_dream_daemon_posts():
-    """Internal documentation."""
     import os
     os.environ["ARGOS_NO_DAEMON"] = "1"
     try:
@@ -222,7 +214,6 @@ async def test_tui_dream_daemon_posts():
 
 @pytest.mark.asyncio
 async def test_tui_dream_unknown_arg_prints_usage_without_posting():
-    """Internal documentation."""
     import os
     os.environ["ARGOS_NO_DAEMON"] = "1"
     try:
@@ -255,7 +246,6 @@ async def test_tui_dream_unknown_arg_prints_usage_without_posting():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("bad_report", [[], 42, "string", True])
 async def test_tui_dream_status_non_dict_report_does_not_crash(bad_report):
-    """Internal documentation."""
     import json as _json
     import os
     os.environ["ARGOS_NO_DAEMON"] = "1"
@@ -290,7 +280,6 @@ async def test_tui_dream_status_non_dict_report_does_not_crash(bad_report):
 
 
 def test_cli_dream_has_key_promotion(tmp_path, monkeypatch, capsys):
-    """Internal documentation."""
     from argos.learning.candidates import save_candidate
     from argos.learning.distiller import SkillCandidate
 
@@ -321,12 +310,10 @@ def test_cli_dream_has_key_promotion(tmp_path, monkeypatch, capsys):
         pass_status: str
 
     class _FakeEvalRunner:
-        """Internal documentation."""
         def run(self, task, *, model_tier: str = "default"):
             return _FakeResult(pass_status="failed")
 
     class _FakeHintedRunner:
-        """Internal documentation."""
         def __init__(self, inner, hint, max_hint_len=4000):
             self.inner = inner
             self.hint = hint
@@ -388,7 +375,6 @@ def test_cli_dream_has_key_promotion(tmp_path, monkeypatch, capsys):
 
 
 def test_cli_dream_eval_runner_receives_loop_factory(tmp_path, monkeypatch, capsys):
-    """Internal documentation."""
     from argos.learning.candidates import save_candidate
     from argos.learning.distiller import SkillCandidate
 

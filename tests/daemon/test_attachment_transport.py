@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from argos.daemon.attachments_wire import encode_attachments, decode_attachments
 from argos.input.attachments import ImageAttachment
 
@@ -29,6 +28,5 @@ def test_decode_empty_is_empty():
 
 
 def test_decode_skips_malformed():
-    """Internal documentation."""
     good = encode_attachments([_ATT])[0]
     assert decode_attachments([{"media_type": "image/png"}, good]) == decode_attachments([good])

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -21,7 +20,6 @@ from argos.permissions.trust_dial import (
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestGateSetTrustLevel:
-    """Internal documentation."""
 
     def _gate(self) -> ApprovalGate:
         return ApprovalGate()
@@ -34,7 +32,6 @@ class TestGateSetTrustLevel:
         (TrustLevel.L4_AUTONOMOUS,      ApprovalLevel.AUTO),
     ])
     def test_approval_level_written(self, trust: TrustLevel, expected_level: ApprovalLevel):
-        """Internal documentation."""
         gate = self._gate()
         gate.set_trust_level(trust)
         assert gate.level is expected_level, (
@@ -42,25 +39,21 @@ class TestGateSetTrustLevel:
         )
 
     def test_l0_sets_ask_readonly(self):
-        """Internal documentation."""
         gate = self._gate()
         gate.set_trust_level(TrustLevel.L0_EVERY_STEP)
         assert getattr(gate, "_ask_readonly", False) is True
 
     def test_l1_ask_readonly_false(self):
-        """Internal documentation."""
         gate = self._gate()
         gate.set_trust_level(TrustLevel.L1_DANGEROUS_ONLY)
         assert getattr(gate, "_ask_readonly", False) is False
 
     def test_l4_level_is_auto(self):
-        """Internal documentation."""
         gate = self._gate()
         gate.set_trust_level(TrustLevel.L4_AUTONOMOUS)
         assert gate.level is ApprovalLevel.AUTO
 
     def test_no_bypass_hard_rules_field_in_semantics(self):
-        """Internal documentation."""
         for trust in TrustLevel:
             sem = to_approval_semantics(trust)
             assert sem["hard_rules_immune"] is True, (
@@ -68,14 +61,12 @@ class TestGateSetTrustLevel:
             )
 
     def test_set_trust_level_idempotent(self):
-        """Internal documentation."""
         gate = self._gate()
         gate.set_trust_level(TrustLevel.L3_SESSION_TRUSTED)
         gate.set_trust_level(TrustLevel.L3_SESSION_TRUSTED)
         assert gate.level is ApprovalLevel.ACCEPT_EDITS
 
     def test_set_trust_level_allows_downgrade(self):
-        """Internal documentation."""
         gate = self._gate()
         gate.set_trust_level(TrustLevel.L4_AUTONOMOUS)
         assert gate.level is ApprovalLevel.AUTO
@@ -87,26 +78,22 @@ class TestGateSetTrustLevel:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestHardRulesContractUnderL4:
-    """Internal documentation."""
 
     def test_hard_rules_immune_returns_true(self):
         assert hard_rules_immune() is True
 
     @pytest.mark.parametrize("trust", list(TrustLevel))
     def test_hard_rules_immune_all_levels(self, trust: TrustLevel):
-        """Internal documentation."""
         sem = to_approval_semantics(trust)
         assert sem["hard_rules_immune"] is True
 
     def test_l4_semantics_no_bypass_hard_rules(self):
-        """Internal documentation."""
         sem = to_approval_semantics(TrustLevel.L4_AUTONOMOUS)
         assert sem.get("bypass_hard_rules") is None
         assert sem["approval_level"] == "auto"
         assert sem["hard_rules_immune"] is True
 
     def test_l4_gate_hard_rules_immune_survives(self):
-        """Internal documentation."""
         gate = ApprovalGate()
         gate.set_trust_level(TrustLevel.L4_AUTONOMOUS)
         assert gate.level is ApprovalLevel.AUTO
@@ -117,7 +104,6 @@ class TestHardRulesContractUnderL4:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestEscalationWarningFlow:
-    """Internal documentation."""
 
     @pytest.mark.parametrize("from_l,to_l", [
         (TrustLevel.L0_EVERY_STEP,      TrustLevel.L1_DANGEROUS_ONLY),
@@ -129,7 +115,6 @@ class TestEscalationWarningFlow:
         (TrustLevel.L3_SESSION_TRUSTED,  TrustLevel.L4_AUTONOMOUS),
     ])
     def test_escalation_warning_nonempty_on_upgrade(self, from_l: TrustLevel, to_l: TrustLevel):
-        """Internal documentation."""
         warning = escalation_warning(from_l, to_l)
         assert warning, f"升档 {from_l.name}→{to_l.name} 应有非空警示，实际为空"
 
@@ -140,12 +125,10 @@ class TestEscalationWarningFlow:
         (TrustLevel.L1_DANGEROUS_ONLY,  TrustLevel.L1_DANGEROUS_ONLY),
     ])
     def test_escalation_warning_empty_on_downgrade_or_same(self, from_l: TrustLevel, to_l: TrustLevel):
-        """Internal documentation."""
         warning = escalation_warning(from_l, to_l)
         assert warning == "", f"降档/同档 {from_l.name}→{to_l.name} 应返回空串，实际：{warning!r}"
 
     def test_l4_warning_contains_hard_rules_mention(self):
-        """Internal documentation."""
         warning = escalation_warning(TrustLevel.L0_EVERY_STEP, TrustLevel.L4_AUTONOMOUS)
         assert "HARD RULES" in warning or "hard rules" in warning.lower(), (
             "L4 升档警示应提及 HARD RULES"
@@ -156,7 +139,6 @@ class TestEscalationWarningFlow:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestSlashCommandRegistration:
-    """Internal documentation."""
 
     def test_yolo_still_known(self):
         from argos.tui.commands import parse_slash
@@ -205,10 +187,8 @@ class TestSlashCommandRegistration:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestDaemonTrustLevelParam:
-    """Internal documentation."""
 
     def _make_server(self):
-        """Internal documentation."""
         from argos.daemon.server import DaemonHTTPServer
         mgr = MagicMock()
         mgr.create_run = AsyncMock(return_value="run-test-001")
@@ -239,7 +219,6 @@ class TestDaemonTrustLevelParam:
         return server
 
     def test_no_trust_level_gate_unchanged(self):
-        """Internal documentation."""
         gate = ApprovalGate()
         assert gate.level is ApprovalLevel.CONFIRM
         trust_str = None
@@ -256,14 +235,12 @@ class TestDaemonTrustLevelParam:
         ("L4_AUTONOMOUS",      ApprovalLevel.AUTO),
     ])
     def test_valid_trust_name_applied(self, trust_name: str, expected_al: ApprovalLevel):
-        """Internal documentation."""
         gate = ApprovalGate()
         from argos.permissions.trust_dial import TrustLevel
         gate.set_trust_level(TrustLevel[trust_name])
         assert gate.level is expected_al
 
     def test_invalid_trust_name_does_not_raise(self):
-        """Internal documentation."""
         gate = ApprovalGate()
         original_level = gate.level
         trust_str = "INVALID_LEVEL_XYZ"
@@ -276,7 +253,6 @@ class TestDaemonTrustLevelParam:
         assert gate.level is original_level, "非法枚举名不应修改 gate.level"
 
     def test_empty_trust_level_no_effect(self):
-        """Internal documentation."""
         gate = ApprovalGate()
         trust_str = ""
         if trust_str:
@@ -289,27 +265,23 @@ class TestDaemonTrustLevelParam:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestNoTrustLevelBackwardCompat:
-    """Internal documentation."""
 
     def test_gate_default_is_confirm(self):
         gate = ApprovalGate()
         assert gate.level is ApprovalLevel.CONFIRM
 
     def test_set_level_still_works(self):
-        """Internal documentation."""
         gate = ApprovalGate()
         gate.set_level(ApprovalLevel.AUTO)
         assert gate.level is ApprovalLevel.AUTO
 
     def test_set_trust_level_does_not_break_set_level(self):
-        """Internal documentation."""
         gate = ApprovalGate()
         gate.set_trust_level(TrustLevel.L4_AUTONOMOUS)
         gate.set_level(ApprovalLevel.CONFIRM)
         assert gate.level is ApprovalLevel.CONFIRM
 
     def test_hard_rules_immune_always_true_regardless_of_gate_state(self):
-        """Internal documentation."""
         gate = ApprovalGate()
         gate.set_trust_level(TrustLevel.L4_AUTONOMOUS)
         assert hard_rules_immune() is True

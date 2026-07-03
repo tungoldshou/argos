@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -39,7 +38,6 @@ async def test_request_times_out_on_stalled_daemon(tmp_path):
 
 @pytest.mark.asyncio
 async def test_request_succeeds_within_timeout(tmp_path):
-    """Internal documentation."""
     sock = tmp_path / "d.sock"
 
     async def _handler(reader, writer):

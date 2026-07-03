@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -13,7 +12,6 @@ from argos.sandbox.backend import ExecResult
 
 
 class _CompletingModel:
-    """Internal documentation."""
     last_usage: dict = {}
 
     async def stream(self, messages, *, system="", system_dynamic=""):
@@ -22,7 +20,6 @@ class _CompletingModel:
 
 
 class _ImplementingModel:
-    """Internal documentation."""
     last_usage: dict = {}
 
     def __init__(self) -> None:
@@ -43,7 +40,6 @@ class _FakeSandbox:
 
 
 class _RecordingVerifier:
-    """Internal documentation."""
     def __init__(self) -> None:
         self.received_cmds: list[str | None] = []
 
@@ -55,7 +51,6 @@ class _RecordingVerifier:
 
 
 class _FailingVerifier:
-    """Internal documentation."""
     def __init__(self) -> None:
         self.received_cmds: list[str | None] = []
 
@@ -80,7 +75,6 @@ def _make_loop(
     capability_hints: dict[str, str] | None = None,
     model=None,
 ) -> AgentLoop:
-    """Internal documentation."""
     return AgentLoop(
         store=_FakeStore(),
         bus=EventBus(),
@@ -94,7 +88,6 @@ def _make_loop(
 
 
 def _collect_events(loop: AgentLoop, goal: str) -> list:
-    """Internal documentation."""
     import asyncio
 
     async def _run():
@@ -105,11 +98,9 @@ def _collect_events(loop: AgentLoop, goal: str) -> list:
 
 
 def test_auto_l1_strategy_in_pytest_workspace(tmp_path: Path) -> None:
-    """Internal documentation."""
     (tmp_path / "conftest.py").write_text("")
 
     class _ImplementingModel:
-        """Internal documentation."""
         last_usage: dict = {}
 
         def __init__(self) -> None:
@@ -146,7 +137,6 @@ def test_auto_l1_strategy_in_pytest_workspace(tmp_path: Path) -> None:
 
 
 def test_auto_strategy_sets_verify_cmd_on_loop(tmp_path: Path) -> None:
-    """Internal documentation."""
     (tmp_path / "conftest.py").write_text("")
 
     loop = _make_loop()
@@ -159,7 +149,6 @@ def test_auto_strategy_sets_verify_cmd_on_loop(tmp_path: Path) -> None:
 
 
 def test_blacklisted_strategy_cmd_degrades_to_no_test(tmp_path: Path, monkeypatch) -> None:
-    """Internal documentation."""
     from argos.verify import strategy as _strat_mod
     from argos.verify.strategy import VerifyStrategy, WorkspaceFacts
 
@@ -192,7 +181,6 @@ def test_blacklisted_strategy_cmd_degrades_to_no_test(tmp_path: Path, monkeypatc
 
 
 def test_trivial_cmd_in_strategy_degrades_gracefully(tmp_path: Path, monkeypatch) -> None:
-    """Internal documentation."""
     from argos.verify import strategy as _strat_mod
     from argos.verify.strategy import VerifyStrategy
 
@@ -221,7 +209,6 @@ def test_trivial_cmd_in_strategy_degrades_gracefully(tmp_path: Path, monkeypatch
 
 
 def test_non_allowlisted_cmd_in_strategy_degrades_gracefully(tmp_path: Path, monkeypatch) -> None:
-    """Internal documentation."""
     from argos.verify import strategy as _strat_mod
     from argos.verify.strategy import VerifyStrategy
 
@@ -257,7 +244,6 @@ def test_non_allowlisted_cmd_in_strategy_degrades_gracefully(tmp_path: Path, mon
     "purchase product id 42",
 ])
 def test_send_goal_no_strategy_cmd(send_goal: str, tmp_path: Path) -> None:
-    """Internal documentation."""
     (tmp_path / "conftest.py").write_text("")
 
     loop = _make_loop()
@@ -271,7 +257,6 @@ def test_send_goal_no_strategy_cmd(send_goal: str, tmp_path: Path) -> None:
 
 
 def test_explicit_verify_cmd_takes_priority(tmp_path: Path) -> None:
-    """Internal documentation."""
     (tmp_path / "conftest.py").write_text("")
 
     verifier = _RecordingVerifier()
@@ -295,7 +280,6 @@ def test_explicit_verify_cmd_takes_priority(tmp_path: Path) -> None:
 
 
 def test_proposed_verify_takes_priority_over_strategy(tmp_path: Path) -> None:
-    """Internal documentation."""
     (tmp_path / "conftest.py").write_text("")
 
     verifier = _RecordingVerifier()
@@ -311,7 +295,6 @@ def test_proposed_verify_takes_priority_over_strategy(tmp_path: Path) -> None:
 
 
 def test_no_verify_strategy_env_disables_generation(tmp_path: Path, monkeypatch) -> None:
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_NO_VERIFY_STRATEGY", "1")
 
     (tmp_path / "conftest.py").write_text("")
@@ -334,7 +317,6 @@ def test_no_verify_strategy_env_disables_generation(tmp_path: Path, monkeypatch)
 
 
 def test_no_verify_strategy_env_empty_string_still_enables(tmp_path: Path, monkeypatch) -> None:
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_NO_VERIFY_STRATEGY", "")
 
     (tmp_path / "conftest.py").write_text("")
@@ -347,7 +329,6 @@ def test_no_verify_strategy_env_empty_string_still_enables(tmp_path: Path, monke
 
 
 def test_capability_hints_passed_to_generate(tmp_path: Path, monkeypatch) -> None:
-    """Internal documentation."""
     from argos.verify import strategy as _strat_mod
 
     received_hints: list[dict] = []
@@ -375,7 +356,6 @@ def test_capability_hints_passed_to_generate(tmp_path: Path, monkeypatch) -> Non
 
 
 def test_capability_hints_pytest_cmd_used_as_verify_cmd(tmp_path: Path) -> None:
-    """Internal documentation."""
     (tmp_path / "conftest.py").write_text("")
 
     loop = _make_loop(capability_hints={"pytest_cmd": "pytest tests/unit -x"})
@@ -388,7 +368,6 @@ def test_capability_hints_pytest_cmd_used_as_verify_cmd(tmp_path: Path) -> None:
 
 
 def test_pick_strategy_cmd_does_not_mutate_verify_cmd(tmp_path: Path) -> None:
-    """Internal documentation."""
     (tmp_path / "conftest.py").write_text("")
 
     loop = _make_loop()
@@ -401,7 +380,6 @@ def test_pick_strategy_cmd_does_not_mutate_verify_cmd(tmp_path: Path) -> None:
 
 
 def test_pick_strategy_cmd_returns_none_on_exception(tmp_path: Path, monkeypatch) -> None:
-    """Internal documentation."""
     from argos.verify import strategy as _strat_mod
 
     monkeypatch.setattr(_strat_mod, "generate", lambda *a, **kw: 1 / 0)
@@ -414,7 +392,6 @@ def test_pick_strategy_cmd_returns_none_on_exception(tmp_path: Path, monkeypatch
 
 
 def test_pick_strategy_cmd_nonexistent_workspace() -> None:
-    """Internal documentation."""
     loop = _make_loop()
     loop._workspace = Path("/nonexistent/path/xyz_does_not_exist")
 
@@ -423,7 +400,6 @@ def test_pick_strategy_cmd_nonexistent_workspace() -> None:
 
 
 def test_pick_strategy_cmd_skips_l3(tmp_path: Path, monkeypatch) -> None:
-    """Internal documentation."""
     from argos.verify import strategy as _strat_mod
     from argos.verify.strategy import VerifyStrategy
 

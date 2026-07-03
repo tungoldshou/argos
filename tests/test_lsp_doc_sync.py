@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -21,7 +20,6 @@ from test_lsp_manager import _FakeProc, _read_one_frame
 
 @pytest.fixture
 def capture_server(monkeypatch):
-    """Internal documentation."""
     captured: list[dict] = []
     tasks: list[asyncio.Task] = []
 
@@ -64,7 +62,6 @@ def capture_server(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_first_sync_triggers_didopen_with_version_1(capture_server, tmp_path):
-    """Internal documentation."""
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
     })
@@ -84,7 +81,6 @@ async def test_first_sync_triggers_didopen_with_version_1(capture_server, tmp_pa
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_second_sync_triggers_didchange_incremental(capture_server, tmp_path):
-    """Internal documentation."""
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
     })
@@ -108,7 +104,6 @@ async def test_second_sync_triggers_didchange_incremental(capture_server, tmp_pa
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_version_monotonic_across_reopen(capture_server, tmp_path):
-    """Internal documentation."""
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
     })
@@ -128,7 +123,6 @@ async def test_version_monotonic_across_reopen(capture_server, tmp_path):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_large_file_skips_didopen(capture_server, tmp_path):
-    """Internal documentation."""
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
     })
@@ -148,7 +142,6 @@ async def test_large_file_skips_didopen(capture_server, tmp_path):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_unknown_extension_no_op(capture_server, tmp_path):
-    """Internal documentation."""
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
     })
@@ -165,7 +158,6 @@ async def test_unknown_extension_no_op(capture_server, tmp_path):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_sync_file_no_extension_no_op(capture_server, tmp_path):
-    """Internal documentation."""
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
     })

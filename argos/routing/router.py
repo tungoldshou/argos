@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import threading
@@ -27,7 +26,6 @@ class ModelRouter:
 
     def select(self, *, category: TaskCategory, tool: str | None,
                step: int = 0) -> tuple[ModelClient, RouteDecision]:
-        """Internal documentation."""
         with self._lock:
             decision = resolve(self._routing, category=category, tool=tool)
             client = self._clients.get(decision.tier)
@@ -41,7 +39,6 @@ class ModelRouter:
             return client, decision
 
     def history(self) -> list[RouteDecision]:
-        """Internal documentation."""
         return list(self._history)
 
     @property

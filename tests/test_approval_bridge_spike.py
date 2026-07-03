@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -7,7 +6,6 @@ import pytest
 
 
 async def _drive_to_pending_then(gate, respond_kind: str):
-    """Internal documentation."""
     for _ in range(300):
         await asyncio.sleep(0.01)
         pend = gate.pending()

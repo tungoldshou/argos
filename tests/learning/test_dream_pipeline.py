@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -19,24 +18,20 @@ from argos.learning.distiller import SkillCandidate
 
 @dataclass
 class _FakeResult:
-    """Internal documentation."""
     pass_status: str
 
 
 class _PassRunner:
-    """Internal documentation."""
     def run(self, task, *, model_tier: str):
         return _FakeResult(pass_status="passed")
 
 
 class _FailRunner:
-    """Internal documentation."""
     def run(self, task, *, model_tier: str):
         return _FakeResult(pass_status="failed")
 
 
 class _SlowPassRunner:
-    """Internal documentation."""
     def run(self, task, *, model_tier: str):
         import time
         time.sleep(0.05)
@@ -48,7 +43,6 @@ def _seed_candidate(
     root: Path, *, run: str, goal: str, workspace: str | None,
     verify_cmd: str | None = "true", body: str = "",
 ) -> Path:
-    """Internal documentation."""
     cand = SkillCandidate(
         name="learned",
         body_markdown=body or f"# {goal}\n\n```python\nprint('ok')\n```",
@@ -68,7 +62,6 @@ def _read_consumed_reason(cand_dir: Path) -> str | None:
 
 
 def _make_pipeline(tmp_path: Path, runner_factory, **kw) -> tuple:
-    """Internal documentation."""
     events: list[dict] = []
 
     def _broadcast(payload: dict) -> None:
@@ -88,7 +81,6 @@ def _make_pipeline(tmp_path: Path, runner_factory, **kw) -> tuple:
 
 
 def test_pipeline_promotes_and_consumes_on_improvement(tmp_path: Path):
-    """Internal documentation."""
     cand_root = tmp_path / "candidates"
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -122,7 +114,6 @@ def test_pipeline_promotes_and_consumes_on_improvement(tmp_path: Path):
 # ── test 2: workspace_gone ────────────────────────────────────────────────────
 
 def test_pipeline_workspace_gone_consumes(tmp_path: Path):
-    """Internal documentation."""
     cand_root = tmp_path / "candidates"
     cand_dir = _seed_candidate(cand_root, run="gone0001aaaa", goal="孤儿任务",
                                workspace=None, verify_cmd="true")
@@ -139,7 +130,6 @@ def test_pipeline_workspace_gone_consumes(tmp_path: Path):
 
 
 def test_pipeline_single_flight(tmp_path: Path):
-    """Internal documentation."""
     cand_root = tmp_path / "candidates"
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -161,7 +151,6 @@ def test_pipeline_single_flight(tmp_path: Path):
 
 
 def test_pipeline_holds_over_truncated_sources(tmp_path: Path):
-    """Internal documentation."""
     cand_root = tmp_path / "candidates"
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -187,7 +176,6 @@ def test_pipeline_holds_over_truncated_sources(tmp_path: Path):
 
 
 def test_pipeline_name_collision_consumes_sources(tmp_path: Path, monkeypatch):
-    """Internal documentation."""
     import asyncio as _asyncio
     from unittest.mock import patch
 
@@ -217,7 +205,6 @@ def test_pipeline_name_collision_consumes_sources(tmp_path: Path, monkeypatch):
 
 
 def test_pipeline_rejected_ab_consumes_with_reason(tmp_path: Path):
-    """Internal documentation."""
     cand_root = tmp_path / "candidates"
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -257,7 +244,6 @@ def test_pipeline_rejected_ab_consumes_with_reason(tmp_path: Path):
 
 
 def test_emit_handles_async_broadcast_fn(tmp_path: Path):
-    """Internal documentation."""
     cand_root = tmp_path / "candidates"
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -269,7 +255,6 @@ def test_emit_handles_async_broadcast_fn(tmp_path: Path):
     collected: list[dict] = []
 
     async def _async_broadcast(payload: dict) -> None:
-        """Internal documentation."""
         collected.append(payload)
 
     pipe = dream.DreamPipeline(

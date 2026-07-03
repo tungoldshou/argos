@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 from pathlib import Path
 
@@ -57,7 +56,6 @@ def test_toggle_persists(skills_dir):
 
 
 def test_load_all_finds_subdir_skill(skills_dir):
-    """Internal documentation."""
     _, user = skills_dir
     sub = user / "promoted-skill"
     sub.mkdir()
@@ -72,7 +70,6 @@ def test_load_all_finds_subdir_skill(skills_dir):
 
 
 def test_load_all_subdir_does_not_override_flat(skills_dir):
-    """Internal documentation."""
     _, user = skills_dir
     sub = user / "c"
     sub.mkdir()
@@ -85,7 +82,6 @@ def test_load_all_subdir_does_not_override_flat(skills_dir):
 
 
 def test_toggle_subdir_skill(skills_dir):
-    """Internal documentation."""
     _, user = skills_dir
     sub = user / "promoted-skill"
     sub.mkdir()
@@ -115,7 +111,6 @@ def test_import_rejects_oversize(tmp_path, skills_dir):
 
 
 class _FakeEmbedder:
-    """Internal documentation."""
     dim = 8
 
     def __init__(self, fn):
@@ -126,12 +121,10 @@ class _FakeEmbedder:
 
 
 def _use_embedder(monkeypatch, fn):
-    """Internal documentation."""
     monkeypatch.setattr("argos.config.active_embedder", lambda: _FakeEmbedder(fn))
 
 
 def test_recall_keyword_fallback_when_no_embedder(skills_dir, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr("argos.config.active_embedder", lambda: None)
     # skills_dir: a(desc=alpha,enabled) / b(disabled) / c(desc=charlie,enabled)
     out = skills.recall("帮我处理 alpha 相关的事", k=3, sim_min=0.4)
@@ -183,7 +176,6 @@ def test_recall_filters_below_simmin(skills_dir, monkeypatch, tmp_path):
 
 
 def test_recall_embed_failure_falls_back_to_keyword(skills_dir, monkeypatch, tmp_path):
-    """Internal documentation."""
     def boom(_texts):
         raise RuntimeError("simulated embedding failure")
     _use_embedder(monkeypatch, boom)

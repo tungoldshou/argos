@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -24,7 +23,6 @@ from argos.memory.store import ArgosStore
 
 
 def _resolve_tier_and_key(use_env_override: bool) -> tuple:
-    """Internal documentation."""
     if use_env_override:
         model = (os.environ.get("ARGOS_LLM_MODEL")
                  or os.environ.get("VITE_LLM_MODEL")
@@ -52,7 +50,6 @@ def _resolve_tier_and_key(use_env_override: bool) -> tuple:
 
 
 def _build_components(workspace: Path, *, use_env_override: bool) -> dict:
-    """Internal documentation."""
     tier, key = _resolve_tier_and_key(use_env_override)
     if not key:
         raise RuntimeError(

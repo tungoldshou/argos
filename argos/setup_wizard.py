@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -13,11 +12,10 @@ from argos.i18n import t
 
 
 class _NotATTY(Exception):
-    """Internal documentation."""
+    pass
 
 
 def _arrow_select(options: list[str], *, title: str, writer) -> int:
-    """Internal documentation."""
     if os.environ.get("ARGOS_NO_ARROW_SELECT") == "1":
         raise _NotATTY
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
@@ -84,7 +82,6 @@ PRESETS: dict[str, dict] = {
 
 
 def _read_config(config_dir: Path) -> dict:
-    """Internal documentation."""
     f = config_dir / "config.json"
     if not f.exists():
         return {"models": {}}
@@ -125,7 +122,6 @@ def _validate_final_config(cfg: dict) -> None:
 
 
 def _ask_int(reader, writer, prompt: str, default: int) -> int:
-    """Internal documentation."""
     raw = (reader(prompt) or "").strip()
     if not raw:
         return default
@@ -137,7 +133,6 @@ def _ask_int(reader, writer, prompt: str, default: int) -> int:
 
 
 def _append_env(config_dir: Path, name: str, value: str) -> None:
-    """Internal documentation."""
     if "\n" in value or "\r" in value:
         from argos.config import ConfigError
         raise ConfigError(t("setup.key_invalid"))
@@ -215,7 +210,6 @@ def write_profile(*, config_dir: Path, name: str, protocol: str, base_url: str, 
                   max_tokens: int = 4096, context_window: int = 200_000,
                   price_in: float | None = None, price_out: float | None = None,
                   embedding_model: str = "", multimodal: bool | None = None) -> None:
-    """Internal documentation."""
     from argos.config import ConfigError
     if not isinstance(name, str):
         raise ConfigError(t("config.profile.missing_field", name=name, field="profile name"))
@@ -280,7 +274,6 @@ def _config_dir(config_dir: Path | None) -> Path:
 
 
 def print_status(*, writer, config_dir: Path | None = None) -> None:
-    """Internal documentation."""
     from argos import config as C
 
     cdir = _config_dir(config_dir)
@@ -366,7 +359,6 @@ _PROBE_TIMEOUT_S = 20.0
 
 async def probe_connection(*, protocol: str, base_url: str, model: str, api_key: str | None,
                            client_factory=None) -> ProbeResult:
-    """Internal documentation."""
     from argos.core.models import ModelClient, CredentialPool, ModelTier
     tier = ModelTier(name="probe", model=model, base_url=base_url, max_tokens=256,
                      context_window=8192, protocol=protocol)
@@ -398,19 +390,16 @@ async def probe_connection(*, protocol: str, base_url: str, model: str, api_key:
 
 
 def _rule(console, key: str) -> None:
-    """Internal documentation."""
     if console is not None:
         console.rule(f"[dim]{t(key)}[/dim]")
 
 
 def _banner(console) -> None:
-    """Internal documentation."""
     if console is not None:
         console.print(t("setup.banner"), style="bold cyan")
 
 
 def _emit_probe(console, writer, res: "ProbeResult") -> None:
-    """Internal documentation."""
     line = t("setup.probe_rating", rating=res.rating, message=res.message)
     if console is not None:
         console.print(line, style="green" if res.codeact_ok else ("yellow" if res.connected else "red"))
@@ -419,7 +408,6 @@ def _emit_probe(console, writer, res: "ProbeResult") -> None:
 
 
 def _select_key_method(reader, writer, console) -> str:
-    """Internal documentation."""
     try:
         idx = _arrow_select([t("setup.key_method_paste"), t("setup.key_method_env")],
                             title=t("setup.section_apikey"), writer=writer)
@@ -435,7 +423,6 @@ def _select_key_method(reader, writer, console) -> str:
 
 
 async def _probe_with_status(console, writer, *, protocol, base_url, model, api_key) -> "ProbeResult":
-    """Internal documentation."""
     if console is not None:
         with console.status(t("setup.probing")):
             return await probe_connection(protocol=protocol, base_url=base_url, model=model, api_key=api_key)
@@ -445,7 +432,6 @@ async def _probe_with_status(console, writer, *, protocol, base_url, model, api_
 
 async def run(*, reader, writer, config_dir: Path | None = None,
               console=None, advanced: bool = False) -> None:
-    """Internal documentation."""
     from argos import config as C
     cdir = _config_dir(config_dir)
     names = list(PRESETS)
@@ -602,7 +588,6 @@ async def run(*, reader, writer, config_dir: Path | None = None,
 
 async def deep_probe(*, protocol: str, base_url: str, model: str, api_key: str | None,
                      model_factory=None) -> ProbeResult:
-    """Internal documentation."""
     import tempfile
     from pathlib import Path as _P
     from argos import runtime

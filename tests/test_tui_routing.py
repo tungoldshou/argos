@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import json
 from pathlib import Path
 
@@ -75,7 +74,6 @@ def test_tui_routing_set_subcommand_is_case_insensitive(monkeypatch):
 
 
 def test_routing_config_set_persists(tmp_path):
-    """Internal documentation."""
     (tmp_path / "config.json").write_text(json.dumps({
         "models": {"default": {}, "cheap": {}, "strong": {}},
         "active": "default",
@@ -230,7 +228,6 @@ def test_tui_routing_set_honors_env_local_config_dir(tmp_path, monkeypatch):
 
 
 def test_routing_config_builtin_default_when_no_routing(tmp_path):
-    """Internal documentation."""
     from argos.routing.config import _DEFAULT_BY_CATEGORY
     cfg = load_routing(tmp_path)
     assert cfg.by_category == _DEFAULT_BY_CATEGORY
@@ -249,7 +246,6 @@ def test_routing_config_force_confirm_helper():
 
 
 def test_activity_panel_cost_update_renders_tier_label():
-    """Internal documentation."""
     import inspect
     from argos.tui.widgets.activity_panel import ActivityPanel
     sig = inspect.signature(ActivityPanel.on_cost)
@@ -258,7 +254,6 @@ def test_activity_panel_cost_update_renders_tier_label():
 
 
 def test_activity_panel_on_cost_default_no_tier_label():
-    """Internal documentation."""
     import inspect
     from argos.tui.widgets.activity_panel import ActivityPanel
     sig = inspect.signature(ActivityPanel.on_cost)

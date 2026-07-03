@@ -25,7 +25,6 @@ def test_anthropic_payload_system_toplevel_and_coalesced():
 
 
 def test_anthropic_payload_marks_system_for_prompt_caching():
-    """Internal documentation."""
     p = AnthropicProtocol()
     pl = p.payload([{"role": "user", "content": "a"}], system="sys", tier=_tier())
     assert isinstance(pl["system"], list), "system 应为内容块列表(才能挂 cache_control)"
@@ -54,7 +53,6 @@ def test_anthropic_text_delta_and_usage():
 
 
 def test_anthropic_captures_output_tokens_from_message_start():
-    """Internal documentation."""
     p = AnthropicProtocol()
     u = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0, "cache_creation": 0}
     p.capture_usage({"type": "message_start", "message": {"usage": {
@@ -137,7 +135,6 @@ async def test_openai_stream_end_to_end_mock():
 
 
 def test_anthropic_context_total_is_input_plus_cache():
-    """Internal documentation."""
     p = AnthropicProtocol()
     u: dict = {}
     p.capture_usage({"type": "message_start", "message": {"usage": {
@@ -147,7 +144,6 @@ def test_anthropic_context_total_is_input_plus_cache():
 
 
 def test_openai_context_total_does_not_double_count_cache():
-    """Internal documentation."""
     p = OpenAIProtocol()
     u: dict = {}
     p.capture_usage({"usage": {"prompt_tokens": 1000, "completion_tokens": 45,

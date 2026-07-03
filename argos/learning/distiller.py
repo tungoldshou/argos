@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -12,13 +11,11 @@ from argos.memory.auto import _redact_secrets
 
 
 class _EventSource(Protocol):
-    """Internal documentation."""
     def replay(self, run_id: str) -> Iterable[dict]: ...  # noqa: D401, ANN001
 
 
 @dataclass(frozen=True, slots=True)
 class SkillCandidate:
-    """Internal documentation."""
 
     name: str
     body_markdown: str
@@ -47,7 +44,6 @@ _slugify_goal = slugify_goal
 
 
 def _format_code_block(snippets: list[str]) -> str:
-    """Internal documentation."""
     if not snippets:
         return ""
     body = "\n\n".join(snippets)
@@ -62,7 +58,6 @@ def _build_markdown(
     code_snippets: list[str],
     source_run_id: str,
 ) -> str:
-    """Internal documentation."""
     safe_goal = _redact_secrets(goal or "(no goal)")
     safe_snippets = [_redact_secrets(s) for s in code_snippets]
 
@@ -95,7 +90,6 @@ def _build_markdown(
 
 
 def _read_jsonl_relaxed(path: Path) -> list[dict]:
-    """Internal documentation."""
     out: list[dict] = []
     if not path.exists():
         return out
@@ -117,7 +111,6 @@ def _read_jsonl_relaxed(path: Path) -> list[dict]:
 
 
 def _events_from_store(store: Any, run_id: str) -> list[dict]:
-    """Internal documentation."""
     try:
         if hasattr(store, "replay"):
             return list(store.replay(run_id))
@@ -138,7 +131,6 @@ def distill_run_to_skill(
     verify_cmd: str | None,
     skills_root: Path,
 ) -> SkillCandidate | None:
-    """Internal documentation."""
     events = _events_from_store(store, run_id)
     if not events:
         return None

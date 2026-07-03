@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -87,7 +86,6 @@ def test_limit_truncates(mem_root):
 
 # ── score / recency ─────────────────────────────────────────────────────────
 def test_score_decays_with_age(monkeypatch, mem_root):
-    """Internal documentation."""
     p = mem_auto._user_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     now = time.time()
@@ -97,7 +95,6 @@ def test_score_decays_with_age(monkeypatch, mem_root):
 
 
 def test_use_count_boost_confidence(monkeypatch, mem_root):
-    """Internal documentation."""
     p = mem_auto._user_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     e = _entry(key="k", confidence=0.5, use_count=0, last_used_at=0.0)
@@ -128,7 +125,6 @@ def test_dedup_returns_false_when_value_changed(mem_root):
 
 
 def test_dedup_returns_false_when_old(mem_root):
-    """Internal documentation."""
     p = mem_auto._user_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     e = _entry(key="k", value="v", ts=time.time() - 86400 * 2)

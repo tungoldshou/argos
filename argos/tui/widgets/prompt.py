@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from rich.style import Style
@@ -20,10 +19,8 @@ _RAISE_2    = "#23263A"
 
 
 class PromptArea(TextArea):
-    """Internal documentation."""
 
     class Submitted(Message):
-        """Internal documentation."""
 
         def __init__(self, text: str, attachments: list | None = None) -> None:
             self.text = text
@@ -46,7 +43,6 @@ class PromptArea(TextArea):
         self._draft: str = ""
 
     def _make_paste_token(self, text: str) -> str | None:
-        """Internal documentation."""
         if len(text) <= _PASTE_THRESHOLD:
             return None
         self._paste_seq += 1
@@ -56,14 +52,12 @@ class PromptArea(TextArea):
         return token
 
     def register_image(self, att: ImageAttachment) -> str:
-        """Internal documentation."""
         self._image_seq += 1
         token = _t("tui.prompt.image_token", n=self._image_seq)
         self._image_store[token] = att
         return token
 
     def _expand_submission(self, text: str) -> tuple[str, list[ImageAttachment]]:
-        """Internal documentation."""
         out_text = text
         for token, full in self._paste_store.items():
             out_text = out_text.replace(token, full)
@@ -80,14 +74,12 @@ class PromptArea(TextArea):
         return out_text.strip(), attachments
 
     def _get_app_history(self) -> list[str]:
-        """Internal documentation."""
         try:
             return list(self.app._input_history)  # type: ignore[attr-defined]
         except Exception:  # noqa: BLE001
             return []
 
     def _navigate_history(self, direction: str, history: list[str]) -> None:
-        """Internal documentation."""
         n = len(history)
         if n == 0:
             return
@@ -110,12 +102,10 @@ class PromptArea(TextArea):
                 self._draft = ""
 
     def _refill(self, text: str) -> None:
-        """Internal documentation."""
         self.load_text(text)
         self.move_cursor(self.document.end)
 
     def reset_history_nav(self) -> None:
-        """Internal documentation."""
         self._history_idx = -1
         self._draft = ""
 
@@ -126,7 +116,6 @@ class PromptArea(TextArea):
             return None
 
     async def _on_paste(self, event: events.Paste) -> None:
-        """Internal documentation."""
         event.stop()
         event.prevent_default()
         token = self._make_paste_token(event.text)
@@ -135,11 +124,6 @@ class PromptArea(TextArea):
     async def _on_key(self, event: events.Key) -> None:
         menu = self._menu()
         menu_active = menu is not None and menu.display and menu.has_matches
-        if event.key == "space" and not self.text.strip():
-            event.stop()
-            event.prevent_default()
-            self.post_message(self.Submitted("/voice"))
-            return
         if event.key in ("up", "down"):
             if menu_active:
                 event.stop()
@@ -190,7 +174,6 @@ class PromptArea(TextArea):
 
 
 class SlashMenu(Static):
-    """Internal documentation."""
 
     DEFAULT_CSS = """
     SlashMenu {
@@ -211,20 +194,17 @@ class SlashMenu(Static):
         return bool(self._matches)
 
     def selected(self) -> str | None:
-        """Internal documentation."""
         if not self._matches:
             return None
         return self._matches[self._cursor][0]
 
     def move(self, delta: int) -> None:
-        """Internal documentation."""
         if not self._matches:
             return
         self._cursor = (self._cursor + delta) % len(self._matches)
         self._render_items()
 
     def show_matches(self, matches: list[tuple[str, str]]) -> None:
-        """Internal documentation."""
         if matches != self._matches:
             self._cursor = 0
         self._matches = list(matches)
@@ -235,7 +215,6 @@ class SlashMenu(Static):
         self.display = True
 
     def _render_items(self) -> None:
-        """Internal documentation."""
         t = Text()
         for i, (name, desc) in enumerate(self._matches):
             cur = i == self._cursor

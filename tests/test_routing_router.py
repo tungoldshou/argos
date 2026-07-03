@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 
 from argos.approval import ApprovalLevel

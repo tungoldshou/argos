@@ -1,5 +1,4 @@
 # argos/tui/widgets/orders_panel.py
-"""Internal documentation."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -31,7 +30,6 @@ _COL_FAIL       = "#F7768E"
 # ---------------------------------------------------------------------------
 
 def _normalize_order(obj: StandingOrder | dict) -> StandingOrder:
-    """Internal documentation."""
     if isinstance(obj, StandingOrder):
         return obj
     return StandingOrder.from_dict(obj)
@@ -41,7 +39,6 @@ def _normalize_order(obj: StandingOrder | dict) -> StandingOrder:
 # ---------------------------------------------------------------------------
 
 class OrdersPanel(Vertical):
-    """Internal documentation."""
 
     DEFAULT_CSS = """
     OrdersPanel {
@@ -68,23 +65,18 @@ class OrdersPanel(Vertical):
 
 
     def _count_line(self) -> str:
-        """Internal documentation."""
         return f"standing orders ({len(self._orders)})"
 
     def _empty_state_text(self) -> str:
-        """Internal documentation."""
         return t("widget.orders_empty")
 
     def _footer_left(self) -> str:
-        """Internal documentation."""
         return t("widget.orders_footer_left")
 
     def _footer_right(self) -> str:
-        """Internal documentation."""
         return "argos/conductor"
 
     def _order_row_text(self, order: StandingOrder) -> Text:
-        """Internal documentation."""
         t = Text()
 
         if order.enabled:
@@ -120,7 +112,6 @@ class OrdersPanel(Vertical):
 
 
     def compose(self) -> ComposeResult:
-        """Internal documentation."""
         # count line
         yield Static(self._count_line(), markup=False, classes="op-count")
 
@@ -142,7 +133,6 @@ class OrdersPanel(Vertical):
 # ---------------------------------------------------------------------------
 
 class ConductorSuggestionChoice(InlineChoice):
-    """Internal documentation."""
 
     DEFAULT_CSS = """
     ConductorSuggestionChoice {
@@ -200,5 +190,4 @@ class ConductorSuggestionChoice(InlineChoice):
         self.add_class("conductor")
 
     def _hint_text(self) -> str:
-        """Internal documentation."""
         return t("widget.conductor_hint")

@@ -1,11 +1,9 @@
-"""Internal documentation."""
 import pytest
 
 from argos.memory.store import ArgosStore, MemoryRecord
 
 
 class _FakeEmbedder:
-    """Internal documentation."""
     dim = 3
 
     def embed(self, texts):

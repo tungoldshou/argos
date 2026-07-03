@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -58,7 +57,6 @@ def test_state_icon_known_states():
 
 
 class _TabApp(App):
-    """Internal documentation."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -162,7 +160,6 @@ async def test_tab_strip_includes_cost():
 
 @pytest.mark.asyncio
 async def test_tab_strip_post_activated_message_on_click():
-    """Internal documentation."""
     app = _TabApp()
     activated: list[TabActivated] = []
     original_post = TabStrip.post_message
@@ -190,7 +187,6 @@ async def test_tab_strip_post_activated_message_on_click():
 
 @pytest.mark.asyncio
 async def test_tab_strip_action_select_tab_0_to_4():
-    """Internal documentation."""
     app = _TabApp()
     activated: list[TabActivated] = []
     original_post = TabStrip.post_message
@@ -222,7 +218,6 @@ async def test_tab_strip_action_select_tab_0_to_4():
 
 @pytest.mark.asyncio
 async def test_tab_strip_ctrl_5_noop_when_fewer_tabs():
-    """Internal documentation."""
     app = _TabApp()
     activated: list[TabActivated] = []
     original_post = TabStrip.post_message

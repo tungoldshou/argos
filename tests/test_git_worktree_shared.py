@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import shutil
@@ -66,7 +65,6 @@ def test_primitive_remove_nonexistent_is_noop(tmp_path: Path):
 
 
 def test_daemon_and_workflow_produce_equivalent_isolation(tmp_path: Path):
-    """Internal documentation."""
     repo = _git_repo(tmp_path / "repo")
 
     mgr = WorktreeManager(base_dir=tmp_path / "wt-base")
@@ -90,7 +88,6 @@ def test_daemon_and_workflow_produce_equivalent_isolation(tmp_path: Path):
 
 
 def test_daemon_and_workflow_both_degrade_honestly_on_non_git(tmp_path: Path):
-    """Internal documentation."""
     plain = tmp_path / "plain"
     plain.mkdir()
 

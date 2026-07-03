@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,7 +10,6 @@ from argos.daemon.worker import FakeLoop, RunWorker
 
 
 def test_status_bar_count_badges_active_paused_history():
-    """Internal documentation."""
     from argos.tui.widgets.status_bar import StatusBar
     bar = StatusBar()
     runs = [
@@ -28,7 +26,6 @@ def test_status_bar_count_badges_active_paused_history():
 
 
 def test_status_bar_count_badges_empty():
-    """Internal documentation."""
     from argos.tui.widgets.status_bar import StatusBar
     bar = StatusBar()
     assert bar.render_count_badges([]) == ""
@@ -36,7 +33,6 @@ def test_status_bar_count_badges_empty():
 
 
 def test_status_bar_run_summary_not_in_text_after_dedup():
-    """Internal documentation."""
     from argos.tui.widgets.status_bar import StatusBar
     bar = StatusBar()
     bar.set_run_summary([("a", "running"), ("b", "paused")])
@@ -46,13 +42,11 @@ def test_status_bar_run_summary_not_in_text_after_dedup():
 
 
 def test_activity_panel_run_section_idx_exists():
-    """Internal documentation."""
     from argos.tui.widgets.activity_panel import ActivityPanel
     assert ActivityPanel._RUN_IDX == 4
 
 
 def test_activity_panel_run_section_text_format():
-    """Internal documentation."""
     from argos.tui.widgets.activity_panel import ActivityPanel
     panel = ActivityPanel()
     captured = {}
@@ -65,7 +59,6 @@ def test_activity_panel_run_section_text_format():
 
 
 def test_activity_panel_run_section_empty():
-    """Internal documentation."""
     from argos.tui.widgets.activity_panel import ActivityPanel
     panel = ActivityPanel()
     captured = {}
@@ -76,14 +69,12 @@ def test_activity_panel_run_section_empty():
 
 
 def test_runs_command_in_command_help():
-    """Internal documentation."""
     from argos.tui.commands import COMMAND_HELP
     assert "runs" in COMMAND_HELP
     assert "daemon" in COMMAND_HELP["runs"].lower()
 
 
 def test_parse_slash_runs():
-    """Internal documentation."""
     from argos.tui.commands import parse_slash
     cmd = parse_slash("/runs abc123def456 resume")
     assert cmd is not None
@@ -94,7 +85,6 @@ def test_parse_slash_runs():
 
 
 def test_ctrl_b_marks_suspended(tmp_path: Path):
-    """Internal documentation."""
     import asyncio
     async def _go():
         mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
@@ -111,7 +101,6 @@ def test_ctrl_b_marks_suspended(tmp_path: Path):
 
 
 def test_double_esc_detection_window(monkeypatch):
-    """Internal documentation."""
     import time
     last = 0.0
     now1 = 1000.0
@@ -125,7 +114,6 @@ def test_double_esc_detection_window(monkeypatch):
 
 
 def test_resume_modal_data_format(tmp_path: Path):
-    """Internal documentation."""
     import asyncio
     import time as _t
 
@@ -145,7 +133,6 @@ def test_resume_modal_data_format(tmp_path: Path):
 
 
 def test_bindings_contain_ctrl_b():
-    """Internal documentation."""
     from argos.tui.app import ArgosApp
 
     def _key(binding):

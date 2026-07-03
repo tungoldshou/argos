@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import hashlib
@@ -17,7 +16,7 @@ CACHE_PATH: Path | None = None
 
 
 class EmbedError(RuntimeError):
-    """Internal documentation."""
+    pass
 
 
 def _cache_key(text: str) -> str:
@@ -55,7 +54,6 @@ def _save_cache(cache: dict[str, list[float]]) -> None:
 
 
 def embed_text(texts: list[str]) -> list[list[float]]:
-    """Internal documentation."""
     key = os.environ.get("VITE_LLM_KEY") or os.environ.get("VITE_MINIMAX_KEY") or os.environ.get("MINIMAX_KEY")
     if not key:
         raise EmbedError("no LLM key configured")

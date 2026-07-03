@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import subprocess
@@ -22,20 +21,17 @@ def _make_run_result(returncode: int, stdout: str = "", stderr: str = "") -> Any
 
 
 def test_executor_accepts_scale_factor():
-    """Internal documentation."""
     ex = ComputerExecutor(scale_factor=2.0)
     assert ex._scale_factor == 2.0
 
 
 def test_executor_default_scale_factor_is_one():
-    """Internal documentation."""
     ex = ComputerExecutor()
     assert ex._scale_factor == 1.0
 
 
 
 def test_click_divides_coords_by_scale_factor(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     calls: list[list[str]] = []
 
@@ -59,7 +55,6 @@ def test_click_divides_coords_by_scale_factor(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_click_scale_factor_one_passes_coords_unchanged(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     calls: list[list[str]] = []
 
@@ -78,7 +73,6 @@ def test_click_scale_factor_one_passes_coords_unchanged(monkeypatch: pytest.Monk
 
 
 def test_double_click_also_scales(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     calls: list[list[str]] = []
 
@@ -100,7 +94,6 @@ def test_double_click_also_scales(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_scroll_divides_coords_by_scale_factor(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     calls: list[list[str]] = []
 
@@ -120,7 +113,6 @@ def test_scroll_divides_coords_by_scale_factor(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_scroll_scale_factor_one_unchanged(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     calls: list[list[str]] = []
 
@@ -140,7 +132,6 @@ def test_scroll_scale_factor_one_unchanged(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_disabled_path_unaffected_by_scale_factor(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.delenv("ARGOS_COMPUTER_USE", raising=False)
     executor = ComputerExecutor(scale_factor=2.0)
     result = executor.dispatch(ComputerAction(kind="click", x=100, y=200))
@@ -150,25 +141,21 @@ def test_disabled_path_unaffected_by_scale_factor(monkeypatch: pytest.MonkeyPatc
 
 
 def test_detect_scale_factor_returns_float():
-    """Internal documentation."""
     result = detect_scale_factor(screenshot_width=2880, logical_width=1440)
     assert isinstance(result, float)
     assert result == 2.0
 
 
 def test_detect_scale_factor_unit_display():
-    """Internal documentation."""
     assert detect_scale_factor(screenshot_width=1920, logical_width=1920) == 1.0
 
 
 def test_detect_scale_factor_zero_logical_returns_one():
-    """Internal documentation."""
     assert detect_scale_factor(screenshot_width=1920, logical_width=0) == 1.0
 
 
 
 def test_auto_detect_scale_applies_on_click_when_enabled(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     import argos.perception.executor as ex_mod
     monkeypatch.setattr(ex_mod, "detect_display_scale", lambda: 2.0)
@@ -183,7 +170,6 @@ def test_auto_detect_scale_applies_on_click_when_enabled(monkeypatch):
 
 
 def test_auto_detect_scale_inert_when_computer_use_off(monkeypatch):
-    """Internal documentation."""
     monkeypatch.delenv("ARGOS_COMPUTER_USE", raising=False)
     import argos.perception.executor as ex_mod
 
@@ -201,7 +187,6 @@ def test_auto_detect_scale_inert_when_computer_use_off(monkeypatch):
 
 
 def test_detect_display_scale_fallbacks_to_one(monkeypatch):
-    """Internal documentation."""
     import argos.perception.executor as ex_mod
     ex_mod._SCALE_CACHE.clear()
     monkeypatch.setattr(subprocess, "run",

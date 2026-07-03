@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import json
 
 import httpx
@@ -87,7 +86,6 @@ def _build_router(cheap: bool = True) -> ModelRouter:
 
 
 def test_agent_loop_no_router_uses_existing_model_and_tier():
-    """Internal documentation."""
     from argos.core.loop import AgentLoop
     from argos.core.verify_gate import Verifier
     from argos.memory.store import ArgosStore
@@ -121,7 +119,6 @@ def test_agent_loop_no_router_uses_existing_model_and_tier():
 
 
 def test_agent_loop_strong_tier_sets_approval_level_override():
-    """Internal documentation."""
     routing = RoutingConfig(
         default="default", by_category={"file_edit": "strong"},
         tier_force_confirm=["strong"],
@@ -154,7 +151,6 @@ def test_agent_loop_strong_tier_sets_approval_level_override():
 
 
 def test_app_factory_build_components_constructs_router():
-    """Internal documentation."""
     from argos.app_factory import AppComponents
     import dataclasses
     fields = {f.name for f in dataclasses.fields(AppComponents)}
@@ -162,7 +158,6 @@ def test_app_factory_build_components_constructs_router():
 
 
 def test_agent_loop_router_kw_accepted():
-    """Internal documentation."""
     from argos.core.loop import AgentLoop
     import inspect
     sig = inspect.signature(AgentLoop.__init__)

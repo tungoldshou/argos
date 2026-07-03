@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import dataclasses
@@ -40,7 +39,6 @@ class TestFileTriggerFact:
 
 class TestFileTriggerWatcherBasic:
     def test_no_trigger_on_first_poll_unchanged(self, tmp_path: Path):
-        """Internal documentation."""
         f = tmp_path / "req.txt"
         f.write_text("deps")
 
@@ -58,7 +56,6 @@ class TestFileTriggerWatcherBasic:
         assert facts[0].path == str(f.resolve())
 
     def test_no_retrigger_within_debounce(self, tmp_path: Path):
-        """Internal documentation."""
         f = tmp_path / "req.txt"
         f.write_text("deps")
 
@@ -83,7 +80,6 @@ class TestFileTriggerWatcherBasic:
         assert len(facts2) == 0
 
     def test_retrigger_after_debounce_window(self, tmp_path: Path):
-        """Internal documentation."""
         f = tmp_path / "req.txt"
         f.write_text("deps")
 
@@ -108,7 +104,6 @@ class TestFileTriggerWatcherBasic:
         assert facts2[0].detected_at == 10.0
 
     def test_no_facts_when_no_files_match(self, tmp_path: Path):
-        """Internal documentation."""
         t = [0.0]
         w = FileTriggerWatcher(
             "*.txt",
@@ -118,7 +113,6 @@ class TestFileTriggerWatcherBasic:
         assert w.poll() == []
 
     def test_multiple_files_each_trigger(self, tmp_path: Path):
-        """Internal documentation."""
         (tmp_path / "a.txt").write_text("a")
         (tmp_path / "b.txt").write_text("b")
 
@@ -135,7 +129,6 @@ class TestFileTriggerWatcherBasic:
         assert any("b.txt" in p for p in paths)
 
     def test_fact_fields_populated_correctly(self, tmp_path: Path):
-        """Internal documentation."""
         f = tmp_path / "watch.txt"
         f.write_text("content")
 
@@ -153,7 +146,6 @@ class TestFileTriggerWatcherBasic:
         assert fact.mtime > 0
 
     def test_clock_injected_not_real_time(self, tmp_path: Path):
-        """Internal documentation."""
         f = tmp_path / "x.txt"
         f.write_text("hi")
 
@@ -173,7 +165,6 @@ class TestFileTriggerWatcherBasic:
 
 class TestDebounce:
     def test_debounce_boundary_exact(self, tmp_path: Path):
-        """Internal documentation."""
         f = tmp_path / "b.txt"
         f.write_text("v1")
 
@@ -191,7 +182,6 @@ class TestDebounce:
         assert len(facts) == 0
 
     def test_debounce_just_over(self, tmp_path: Path):
-        """Internal documentation."""
         f = tmp_path / "c.txt"
         f.write_text("v1")
 
@@ -209,7 +199,6 @@ class TestDebounce:
         assert len(facts) == 1
 
     def test_same_file_multiple_polls_idempotent(self, tmp_path: Path):
-        """Internal documentation."""
         f = tmp_path / "d.txt"
         f.write_text("v1")
 
@@ -230,7 +219,6 @@ class TestDebounce:
 
 class TestGlobBoundaryJail:
     def test_dotdot_glob_cannot_escape_base_dir(self, tmp_path):
-        """Internal documentation."""
         base = tmp_path / "ws"
         base.mkdir()
         secret = tmp_path / "secret.txt"
@@ -246,7 +234,6 @@ class TestGlobBoundaryJail:
             assert str(base.resolve()) in p, f"返回了 base 外路径: {p}"
 
     def test_symlink_escape_also_jailed(self, tmp_path):
-        """Internal documentation."""
         base = tmp_path / "ws"
         base.mkdir()
         outside = tmp_path / "outside.txt"

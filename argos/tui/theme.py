@@ -1,5 +1,4 @@
 # argos/tui/theme.py
-"""Internal documentation."""
 from __future__ import annotations
 
 from textual.theme import Theme

@@ -12,7 +12,6 @@ def scripted_model_factory():
 
 @pytest.fixture
 def workflow_loop(tmp_path, scripted_model_factory, requires_sandbox, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_WORKFLOWS", "1")
     from argos.core.loop import AgentLoop, LoopConfig
     from argos.core.verify_gate import Verifier

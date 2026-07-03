@@ -1,5 +1,4 @@
 # tests/tui/test_prompt_audit.py
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -100,7 +99,6 @@ def menu() -> SlashMenu:
 
 
 class TestSelectedRowRaise2Bgcolor:
-    """Internal documentation."""
 
     def _setup_two_items(self, menu: SlashMenu) -> Text:
         """Load two commands, first selected (cursor=0), render."""

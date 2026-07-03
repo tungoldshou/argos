@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -24,13 +23,11 @@ REAL_WORLD_GOAL = (
 
 
 class TestRealWorldGoalRegression:
-    """Internal documentation."""
 
     def _get_candidates(self) -> tuple[VerifyStrategy, ...]:
         return generate(REAL_WORLD_GOAL, workspace_facts=WorkspaceFacts())
 
     def test_has_l2_artifact_exists_for_meetings_dir(self) -> None:
-        """Internal documentation."""
         strats = self._get_candidates()
         l2_dir = [
             s for s in strats
@@ -45,7 +42,6 @@ class TestRealWorldGoalRegression:
         )
 
     def test_no_template_placeholder_assertion(self) -> None:
-        """Internal documentation."""
         strats = self._get_candidates()
         bad = [
             s for s in strats
@@ -58,7 +54,6 @@ class TestRealWorldGoalRegression:
         )
 
     def test_no_shopping_list_or_notes_assertion(self) -> None:
-        """Internal documentation."""
         strats = self._get_candidates()
         bad = [
             s for s in strats
@@ -71,13 +66,11 @@ class TestRealWorldGoalRegression:
         )
 
     def test_last_strategy_is_l5(self) -> None:
-        """Internal documentation."""
         strats = self._get_candidates()
         assert strats[-1].level == "L5", f"末位不是 L5：{strats[-1]}"
         assert strats[-1].kind == "evidence_trail"
 
     def test_result_is_non_empty(self) -> None:
-        """Internal documentation."""
         strats = self._get_candidates()
         assert len(strats) >= 1
 
@@ -86,7 +79,6 @@ class TestRealWorldGoalRegression:
 # ═══════════════════════════════════════════════════════
 
 class TestExtractZhDirTargets:
-    """Internal documentation."""
 
     @pytest.mark.parametrize("goal,expected", [
         ("把会议记录整理到 meetings 子文件夹", ["meetings"]),
@@ -113,7 +105,6 @@ class TestExtractZhDirTargets:
         assert _extract_zh_dir_targets("") == []
 
     def test_deduplication(self) -> None:
-        """Internal documentation."""
         goal = "整理到 meetings 子文件夹，再整理到 meetings 目录"
         result = _extract_zh_dir_targets(goal)
         assert result.count("meetings") == 1
@@ -123,7 +114,6 @@ class TestExtractZhDirTargets:
 # ═══════════════════════════════════════════════════════
 
 class TestExtractZhFileTargets:
-    """Internal documentation."""
 
     @pytest.mark.parametrize("goal,expected", [
         ("创建 report.json 文件", ["report.json"]),
@@ -141,7 +131,6 @@ class TestExtractZhFileTargets:
             )
 
     def test_no_extraction_without_extension(self) -> None:
-        """Internal documentation."""
         result = _extract_zh_file_targets("创建 output 文件夹")
         assert "output" not in result, "无扩展名不应被当作文件提取"
 
@@ -150,7 +139,6 @@ class TestExtractZhFileTargets:
 # ═══════════════════════════════════════════════════════
 
 class TestNegationContextRedLine:
-    """Internal documentation."""
 
     @pytest.mark.parametrize("goal", [
         "购物清单和随手记不要动",
@@ -161,21 +149,18 @@ class TestNegationContextRedLine:
         "keep notes unchanged",
     ])
     def test_negation_context_not_extracted_dir(self, goal: str) -> None:
-        """Internal documentation."""
         result = _extract_zh_dir_targets(goal)
         assert result == [], (
             f"否定语境不应提取目录目标，goal={goal!r}，实际结果：{result}"
         )
 
     def test_mixed_goal_only_positive_extracted(self) -> None:
-        """Internal documentation."""
         goal = "把会议记录整理到 meetings 子文件夹，购物清单不要动"
         result = _extract_zh_dir_targets(goal)
         assert "meetings" in result, f"肯定语境 meetings 应被提取：{result}"
         assert len(result) >= 1
 
     def test_real_world_negation_isolation(self) -> None:
-        """Internal documentation."""
         goal = REAL_WORLD_GOAL
         dir_targets = _extract_zh_dir_targets(goal)
         assert "购物清单" not in dir_targets
@@ -186,7 +171,6 @@ class TestNegationContextRedLine:
 # ═══════════════════════════════════════════════════════
 
 class TestTemplatePlaceholderRedLine:
-    """Internal documentation."""
 
     @pytest.mark.parametrize("placeholder_path", [
         "YYYY-MM-DD 会议记录.txt",
@@ -204,13 +188,11 @@ class TestTemplatePlaceholderRedLine:
         )
 
     def test_real_filename_is_valid(self) -> None:
-        """Internal documentation."""
         valid_names = ["meetings", "report.json", "data/output.csv", "my-file.txt"]
         for name in valid_names:
             assert _is_valid_artifact_path(name), f"合法路径被误判为不合法：{name!r}"
 
     def test_no_template_assertion_in_generate(self) -> None:
-        """Internal documentation."""
         goal = "文件名统一改成「YYYY-MM-DD 会议记录.txt」格式"
         strats = generate(goal, workspace_facts=WorkspaceFacts())
         bad = [
@@ -225,7 +207,6 @@ class TestTemplatePlaceholderRedLine:
 # ═══════════════════════════════════════════════════════
 
 class TestInvalidPathRedLine:
-    """Internal documentation."""
 
     @pytest.mark.parametrize("invalid_path", [
         "",
@@ -256,10 +237,8 @@ class TestInvalidPathRedLine:
 # ═══════════════════════════════════════════════════════
 
 class TestGenerateDirL2Integration:
-    """Internal documentation."""
 
     def test_dir_strategy_uses_test_d(self) -> None:
-        """Internal documentation."""
         goal = "把日志整理到 logs 文件夹"
         strats = generate(goal, workspace_facts=WorkspaceFacts())
         dir_strats = [
@@ -272,7 +251,6 @@ class TestGenerateDirL2Integration:
         )
 
     def test_dir_strategy_confidence(self) -> None:
-        """Internal documentation."""
         goal = "把文件归档到 archive 目录"
         strats = generate(goal, workspace_facts=WorkspaceFacts())
         dir_strats = [
@@ -283,7 +261,6 @@ class TestGenerateDirL2Integration:
         assert all(s.confidence == 0.75 for s in dir_strats)
 
     def test_dir_l2_before_l5(self) -> None:
-        """Internal documentation."""
         goal = "整理到 output 目录"
         strats = generate(goal, workspace_facts=WorkspaceFacts())
         levels = [s.level for s in strats]
@@ -291,7 +268,6 @@ class TestGenerateDirL2Integration:
             assert levels.index("L2") < levels.index("L5")
 
     def test_dir_and_file_both_extracted(self) -> None:
-        """Internal documentation."""
         goal = "整理到 meetings 文件夹，生成 summary.json"
         strats = generate(goal, workspace_facts=WorkspaceFacts())
         targets = [s.target for s in strats if s.target]
@@ -303,17 +279,14 @@ class TestGenerateDirL2Integration:
 # ═══════════════════════════════════════════════════════
 
 class TestExistingRedLinesUnaffected:
-    """Internal documentation."""
 
     def test_send_goal_with_zh_dir_keyword_still_l5_only(self) -> None:
-        """Internal documentation."""
         goal = "发送整理到 inbox 文件夹的文件给所有用户"
         strats = generate(goal, workspace_facts=WorkspaceFacts())
         assert strats[0].level == "L5"
         assert len(strats) == 1
 
     def test_fallback_always_present_with_zh_goal(self) -> None:
-        """Internal documentation."""
         goals = [
             "整理到 meetings 子文件夹",
             "把图片移动到 photos 目录",
@@ -325,7 +298,6 @@ class TestExistingRedLinesUnaffected:
             assert strats[-1].level == "L5", f"末位必须是 L5：{goal!r} → {strats}"
 
     def test_no_duplicate_dir_strategies(self) -> None:
-        """Internal documentation."""
         goal = "整理到 meetings 子文件夹，会议记录整理到 meetings 目录"
         strats = generate(goal, workspace_facts=WorkspaceFacts())
         dir_meetings = [

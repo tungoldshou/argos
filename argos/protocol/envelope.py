@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -12,7 +11,6 @@ from argos.protocol.events import Event, serialize_event, event_kind
 
 @dataclass(frozen=True, slots=True)
 class EventEnvelope:
-    """Internal documentation."""
     v: int
     seq: int
     kind: str       # Event.kind
@@ -23,7 +21,6 @@ class EventEnvelope:
     data: dict
 
     def to_json(self) -> str:
-        """Internal documentation."""
         return json.dumps(
             {
                 "v": self.v,
@@ -40,7 +37,6 @@ class EventEnvelope:
 
     @classmethod
     def from_json(cls, blob: str) -> "EventEnvelope":
-        """Internal documentation."""
         obj = json.loads(blob)
         return cls(
             v=obj["v"],
@@ -63,7 +59,6 @@ def wrap_event(
     ts: float | None = None,
     id: str | None = None,  # noqa: A002
 ) -> EventEnvelope:
-    """Internal documentation."""
     import dataclasses
     payload = dataclasses.asdict(ev)  # type: ignore[arg-type]
     return EventEnvelope(

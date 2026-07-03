@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -20,7 +19,6 @@ from argos.workflow.subagent import SubAgentFactory
 
 
 def _make_fake_run_task(scripts: dict[str, AgentResult]):
-    """Internal documentation."""
     async def _run(self, task, *, item, agent_id, on_phase):
         await asyncio.sleep(0.001)
         if agent_id in scripts:
@@ -45,7 +43,6 @@ def _build_engine(tmp_path, *, model_factory=None) -> WorkflowEngine:
 
 
 def _drive(engine: WorkflowEngine, spec_dict: dict) -> AgentResult:
-    """Internal documentation."""
     spec = parse_spec(spec_dict)
     async def _go():
         async for _ev in engine.run(spec):
@@ -89,7 +86,6 @@ def _error_result(agent_id: str) -> AgentResult:
 
 
 def test_best_of_n_runs_n_candidates_in_parallel(tmp_path, monkeypatch):
-    """Internal documentation."""
     seen: list[str] = []
     scripts: dict[str, AgentResult] = {}
 
@@ -121,7 +117,6 @@ def test_best_of_n_runs_n_candidates_in_parallel(tmp_path, monkeypatch):
 
 
 def test_best_of_n_default_n_is_three(tmp_path, monkeypatch):
-    """Internal documentation."""
     seen: list[str] = []
 
     async def _spy(self, task, *, item, agent_id, on_phase):
@@ -141,7 +136,6 @@ def test_best_of_n_default_n_is_three(tmp_path, monkeypatch):
 
 
 def test_best_of_n_n_is_configurable(tmp_path, monkeypatch):
-    """Internal documentation."""
     seen: list[str] = []
 
     async def _spy(self, task, *, item, agent_id, on_phase):
@@ -164,7 +158,6 @@ def test_best_of_n_n_is_configurable(tmp_path, monkeypatch):
 
 
 def test_best_of_n_picks_first_passed_when_some_pass(tmp_path, monkeypatch):
-    """Internal documentation."""
     scripts = {
         "s#c0": _failed_result("s#c0"),
         "s#c1": _passed_result("s#c1", files=2),
@@ -188,7 +181,6 @@ def test_best_of_n_picks_first_passed_when_some_pass(tmp_path, monkeypatch):
 
 
 def test_best_of_n_tie_breaks_by_smallest_diff(tmp_path, monkeypatch):
-    """Internal documentation."""
     scripts = {
         "s#c0": _passed_result("s#c0", files=5),
         "s#c1": _passed_result("s#c1", files=1),
@@ -208,7 +200,6 @@ def test_best_of_n_tie_breaks_by_smallest_diff(tmp_path, monkeypatch):
 
 
 def test_best_of_n_tie_breaks_by_index_when_diff_equal(tmp_path, monkeypatch):
-    """Internal documentation."""
     scripts = {
         "s#c0": _passed_result("s#c0", files=3),
         "s#c1": _passed_result("s#c1", files=3),
@@ -228,7 +219,6 @@ def test_best_of_n_tie_breaks_by_index_when_diff_equal(tmp_path, monkeypatch):
 
 
 def test_best_of_n_all_failed_returns_failed_not_passed(tmp_path, monkeypatch):
-    """Internal documentation."""
     scripts = {
         "s#c0": _failed_result("s#c0", files=2),
         "s#c1": _failed_result("s#c1", files=1),
@@ -251,7 +241,6 @@ def test_best_of_n_all_failed_returns_failed_not_passed(tmp_path, monkeypatch):
 
 
 def test_best_of_n_all_unverifiable_returns_unverifiable(tmp_path, monkeypatch):
-    """Internal documentation."""
     scripts = {
         "s#c0": _unverifiable_result("s#c0"),
         "s#c1": _unverifiable_result("s#c1"),
@@ -273,7 +262,6 @@ def test_best_of_n_all_unverifiable_returns_unverifiable(tmp_path, monkeypatch):
 
 
 def test_best_of_n_mixed_unverifiable_failed_returns_unverifiable(tmp_path, monkeypatch):
-    """Internal documentation."""
     scripts = {
         "s#c0": _failed_result("s#c0"),
         "s#c1": _unverifiable_result("s#c1"),
@@ -297,7 +285,6 @@ def test_best_of_n_mixed_unverifiable_failed_returns_unverifiable(tmp_path, monk
 
 
 def test_best_of_n_with_some_crashed_still_picks_passed(tmp_path, monkeypatch):
-    """Internal documentation."""
     scripts = {
         "s#c0": _error_result("s#c0"),
         "s#c1": _passed_result("s#c1"),
@@ -321,7 +308,6 @@ def test_best_of_n_with_some_crashed_still_picks_passed(tmp_path, monkeypatch):
 
 
 def test_best_of_n_emits_progress_per_candidate(tmp_path, monkeypatch):
-    """Internal documentation."""
     progress_events: list[tuple[str, str, str]] = []
 
     async def _spy(self, task, *, item, agent_id, on_phase):
@@ -352,7 +338,6 @@ def test_best_of_n_emits_progress_per_candidate(tmp_path, monkeypatch):
 
 
 def test_best_of_n_uses_diff_summary_mode_by_default(tmp_path, monkeypatch):
-    """Internal documentation."""
     async def _spy(self, task, *, item, agent_id, on_phase):
         await asyncio.sleep(0.001)
         return AgentResult(
@@ -381,7 +366,6 @@ def test_best_of_n_uses_diff_summary_mode_by_default(tmp_path, monkeypatch):
 
 
 def test_best_of_n_spec_parses_n_defaults_to_three():
-    """Internal documentation."""
     spec = parse_spec({
         "name": "t", "description": "",
         "stages": [{
@@ -393,7 +377,6 @@ def test_best_of_n_spec_parses_n_defaults_to_three():
 
 
 def test_best_of_n_spec_clamps_n_to_at_least_one():
-    """Internal documentation."""
     spec = parse_spec({
         "name": "t", "description": "",
         "stages": [{
@@ -405,7 +388,6 @@ def test_best_of_n_spec_clamps_n_to_at_least_one():
 
 
 def test_best_of_n_spec_clamps_n_to_max_cap():
-    """Internal documentation."""
     spec = parse_spec({
         "name": "t", "description": "",
         "stages": [{
@@ -417,7 +399,6 @@ def test_best_of_n_spec_clamps_n_to_max_cap():
 
 
 def test_best_of_n_spec_rejects_non_int_n():
-    """Internal documentation."""
     from argos.workflow.spec import WorkflowSpecError
     with pytest.raises(WorkflowSpecError, match="n 非法"):
         parse_spec({

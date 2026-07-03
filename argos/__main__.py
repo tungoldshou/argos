@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -73,7 +72,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 class _SelftestModel:
-    """Internal documentation."""
 
     def __init__(self, scripts: list[str]) -> None:
         self._s = scripts
@@ -104,7 +102,6 @@ def _selftest_verify_cmd() -> str:
 
 
 def resolve_workspace(project_arg: str | None) -> str | None:
-    """Internal documentation."""
     if project_arg:
         return project_arg
     import os
@@ -115,7 +112,6 @@ def resolve_workspace(project_arg: str | None) -> str | None:
 
 
 def _run_selftest() -> int:
-    """Internal documentation."""
     import os
     import tempfile
     from pathlib import Path
@@ -185,7 +181,6 @@ def _run_selftest() -> int:
 
 
 def _cmd_self_update(args) -> int:
-    """Internal documentation."""
     try:
         from argos import __version__
         from argos.core.updater import check_github_release
@@ -211,7 +206,6 @@ def _cmd_self_update(args) -> int:
 
 
 def _spawn_update_check() -> None:
-    """Internal documentation."""
     try:
         from argos import __version__
         from argos.core.updater import check_github_release

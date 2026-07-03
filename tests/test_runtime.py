@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 
 from argos import runtime
@@ -13,7 +12,6 @@ def reset_sandbox():
 
 @pytest.fixture(autouse=True)
 def auto_approve_gate():
-    """Internal documentation."""
     from argos import approval
     gate = approval.ApprovalGate(level=approval.ApprovalLevel.AUTO)
     token = approval.set_current_gate(gate)
@@ -94,7 +92,6 @@ def test_tamper_detection_flags_deleted_test(tmp_path):
 
 
 def test_tamper_detection_catches_same_size_same_mtime(tmp_path):
-    """Internal documentation."""
     import os
     runtime.use_project(str(tmp_path))
     f = tmp_path / "test_a.py"
@@ -108,7 +105,6 @@ def test_tamper_detection_catches_same_size_same_mtime(tmp_path):
 
 
 def test_guard_project_tests_snapshots_existing_only(tmp_path):
-    """Internal documentation."""
     import time
     (tmp_path / "test_app.py").write_text("def test_a(): assert add(1, 1) == 2\n")
     (tmp_path / "src.py").write_text("def add(a, b): return a + b\n")
@@ -133,13 +129,11 @@ def test_guard_project_tests_snapshots_existing_only(tmp_path):
 
 
 def test_guard_project_tests_noop_in_sandbox_mode(tmp_path):
-    """Internal documentation."""
     runtime.use_sandbox()
     assert runtime.guard_project_tests() == 0
 
 
 def test_guard_directory_flags_added_file(tmp_path):
-    """Internal documentation."""
     runtime.use_project(str(tmp_path))
     d = tmp_path / "tests"
     d.mkdir()

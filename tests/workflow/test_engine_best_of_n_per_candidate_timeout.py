@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -12,7 +11,6 @@ from argos.workflow.engine import WorkflowEngine
 
 
 class _HangOneFactory:
-    """Internal documentation."""
     def __init__(self, *, normal_delay_s: float = 0.02, hang_idx: int = 1):
         self._normal_delay_s = normal_delay_s
         self._hang_idx = hang_idx
@@ -36,7 +34,6 @@ class _HangOneFactory:
 
 
 async def _consume(engine: WorkflowEngine, spec, *, outer_timeout_s: float = 5.0):
-    """Internal documentation."""
     return await asyncio.wait_for(_drain(engine, spec), timeout=outer_timeout_s)
 
 
@@ -47,7 +44,6 @@ async def _drain(engine: WorkflowEngine, spec):
 
 @pytest.mark.asyncio
 async def test_per_candidate_timeout_kills_hang_candidate(tmp_path):
-    """Internal documentation."""
     factory = _HangOneFactory(normal_delay_s=0.02, hang_idx=1)
     spec = parse_spec({
         "name": "t", "description": "",
@@ -88,7 +84,6 @@ async def test_per_candidate_timeout_kills_hang_candidate(tmp_path):
 
 @pytest.mark.asyncio
 async def test_per_candidate_timeout_field_is_optional_with_safe_default(tmp_path):
-    """Internal documentation."""
     class _NormalFactory:
         def __init__(self):
             self._n = 0

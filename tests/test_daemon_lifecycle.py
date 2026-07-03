@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -15,7 +14,6 @@ from argos.daemon.worker import FakeLoop, RunWorker
 
 @pytest.mark.asyncio
 async def test_recover_marks_running_as_suspended(tmp_path: Path):
-    """Internal documentation."""
     runs_dir = tmp_path / "runs"
     index_path = tmp_path / "index.json"
     mgr1 = RunManager(runs_dir=runs_dir, index_path=index_path)
@@ -29,7 +27,6 @@ async def test_recover_marks_running_as_suspended(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_recover_preserves_completed(tmp_path: Path):
-    """Internal documentation."""
     mgr1 = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr1.create_run(goal="x", workspace="/tmp")
     mgr1.mark_running(rid)
@@ -41,7 +38,6 @@ async def test_recover_preserves_completed(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_recover_preserves_paused(tmp_path: Path):
-    """Internal documentation."""
     mgr1 = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr1.create_run(goal="x", workspace="/tmp")
     mgr1.mark_running(rid)
@@ -53,7 +49,6 @@ async def test_recover_preserves_paused(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_recover_marks_pending_as_cancelled(tmp_path: Path):
-    """Internal documentation."""
     mgr1 = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr1.create_run(goal="x", workspace="/tmp")
     mgr2 = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
@@ -64,7 +59,6 @@ async def test_recover_marks_pending_as_cancelled(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_persistence_across_workers(tmp_path: Path):
-    """Internal documentation."""
     mgr1 = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr1.create_run(goal="x", workspace="/tmp")
     w1 = RunWorker(run_id=rid, manager=mgr1,
@@ -78,7 +72,6 @@ async def test_persistence_across_workers(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_corrupt_index_rebuilds_from_jsonl(tmp_path: Path):
-    """Internal documentation."""
     index_path = tmp_path / "index.json"
     index_path.write_text("{not valid json", encoding="utf-8")
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=index_path)
@@ -88,7 +81,6 @@ async def test_corrupt_index_rebuilds_from_jsonl(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_resume_from_paused(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     mgr.mark_running(rid)
@@ -100,7 +92,6 @@ async def test_resume_from_paused(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_resume_from_suspended(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     rid = await mgr.create_run(goal="x", workspace="/tmp")
     mgr.mark_running(rid)
@@ -111,7 +102,6 @@ async def test_resume_from_suspended(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_index_state_machine_full_transitions(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     from argos.daemon.state_machine import ALLOWED, TERMINAL_STATES
     rid = await mgr.create_run(goal="x", workspace="/tmp")
@@ -129,7 +119,6 @@ async def test_index_state_machine_full_transitions(tmp_path: Path):
 
 
 def test_recover_skips_corrupt_and_virtual_streams(tmp_path: Path) -> None:
-    """Internal documentation."""
     import json
     runs_dir = tmp_path / "runs"
     runs_dir.mkdir(parents=True)

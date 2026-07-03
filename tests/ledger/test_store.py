@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -46,7 +45,6 @@ class TestLedgerStoreAppendReplay:
         assert store.replay("nonexistent") == []
 
     def test_replay_sorted_by_seq(self, tmp_path: Path):
-        """Internal documentation."""
         store = LedgerStore(tmp_path)
         e3 = _make_entry(3)
         e1 = _make_entry(1)
@@ -115,7 +113,6 @@ class TestLedgerStoreUndoComplete:
         assert store.is_undo_done("run001") is True
 
     def test_impossible_entries_not_affected_by_undo_complete(self, tmp_path: Path):
-        """Internal documentation."""
         store = LedgerStore(tmp_path)
         store.append(_make_entry(1, undo_state="available"))
         store.append(_make_entry(2, reversible="no", undo_state="impossible", undo_token=None))

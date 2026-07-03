@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import uuid
@@ -13,13 +12,11 @@ if TYPE_CHECKING:
 
 
 def _new_suggestion_id() -> str:
-    """Internal documentation."""
     return uuid.uuid4().hex
 
 
 @dataclass(frozen=True, slots=True)
 class ProactiveSuggestion:
-    """Internal documentation."""
     id: str
     order_id: str
     goal: str
@@ -29,7 +26,6 @@ class ProactiveSuggestion:
     action: OrderAction = "run"
 
     def __post_init__(self) -> None:
-        """Internal documentation."""
         if not self.requires_confirmation:
             raise ValueError(t("cond.proposal.requires_confirmation_true"))
         if self.action not in ("run", "dream"):
@@ -42,7 +38,6 @@ def propose(
     *,
     clock: object = None,
 ) -> ProactiveSuggestion:
-    """Internal documentation."""
     import time as _t
 
     now: float = clock() if callable(clock) else _t.time()
@@ -67,7 +62,6 @@ def propose(
 
 
 def _safe_format(template: str, context: dict) -> str:
-    """Internal documentation."""
     import string
 
     class _SafeDict(dict):

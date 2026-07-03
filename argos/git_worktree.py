@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import logging
@@ -12,16 +11,14 @@ WORKTREE_TIMEOUT_S = 10
 
 
 class WorktreeError(Exception):
-    """Internal documentation."""
+    pass
 
 
 def git_available() -> bool:
-    """Internal documentation."""
     return shutil.which("git") is not None
 
 
 def is_git_repo(workspace: str | Path) -> bool:
-    """Internal documentation."""
     try:
         return (Path(workspace) / ".git").exists()
     except OSError:
@@ -35,7 +32,6 @@ def add_worktree(
     branch: str | None = None,
     ref: str = "HEAD",
 ) -> None:
-    """Internal documentation."""
     if branch is not None:
         cmd = ["git", "worktree", "add", "-b", branch, str(path), ref]
     else:
@@ -56,7 +52,6 @@ def add_worktree(
 
 
 def remove_worktree(path: str | Path, *, repo: str | Path | None = None) -> None:
-    """Internal documentation."""
     p = Path(path)
     if not p.exists():
         return

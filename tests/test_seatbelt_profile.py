@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import sys
@@ -43,7 +42,6 @@ def test_profile_workspace_outside_not_writable():
 
 
 def test_profile_denies_credential_reads():
-    """Internal documentation."""
     prof = seatbelt.build_profile(workspace=Path.home() / ".argos" / "workspace")
     home = Path.home()
     assert "(allow file-read*)" in prof
@@ -57,7 +55,6 @@ def test_profile_denies_credential_reads():
 
 
 def test_profile_denies_active_argos_config_dir_credential_reads(tmp_path, monkeypatch):
-    """Internal documentation."""
     cfg_dir = tmp_path / "cfg"
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
 
@@ -70,7 +67,6 @@ def test_profile_denies_active_argos_config_dir_credential_reads(tmp_path, monke
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX home/symlink 语义")
 def test_profile_denies_resolved_credential_reads_when_home_symlinked(tmp_path, monkeypatch):
-    """Internal documentation."""
     real_home = tmp_path / "real_home"
     real_home.mkdir()
     link_home = tmp_path / "link_home"

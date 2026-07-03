@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -109,7 +108,6 @@ _SILENT_CALL_SERVER = textwrap.dedent('''
 
 
 def test_silent_server_call_times_out_not_hangs(tmp_path, monkeypatch):
-    """Internal documentation."""
     import time
 
     import argos.mcp_native as mcp_native

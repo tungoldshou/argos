@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -23,7 +22,6 @@ SMOKE_DIR = Path(__file__).parent / "_fixtures" / "tb_smoke"
 
 
 def test_loader_parses_supported_task():
-    """Internal documentation."""
     src = SMOKE_DIR / "tb_echo_hello"
     parsed = tb.load_tb_task(src)
     assert parsed is not None
@@ -38,20 +36,17 @@ def test_loader_parses_supported_task():
 
 
 def test_loader_returns_none_for_missing_yaml(tmp_path):
-    """Internal documentation."""
     (tmp_path / "run-tests.sh").write_text("pytest")
     assert tb.load_tb_task(tmp_path) is None
 
 
 def test_loader_returns_none_for_missing_instruction(tmp_path):
-    """Internal documentation."""
     (tmp_path / "task.yaml").write_text("difficulty: easy\n")
     (tmp_path / "run-tests.sh").write_text("pytest")
     assert tb.load_tb_task(tmp_path) is None
 
 
 def test_to_eval_task_writes_goal_verify_setup(tmp_path):
-    """Internal documentation."""
     parsed = tb.load_tb_task(SMOKE_DIR / "tb_echo_hello")
     assert parsed is not None
     workdir = tmp_path / "corpus"
@@ -75,7 +70,6 @@ def test_to_eval_task_writes_goal_verify_setup(tmp_path):
 
 
 def test_to_eval_task_loads_back_through_corpus_loader(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", str(tmp_path / "corpus_root"))
     parsed = tb.load_tb_task(SMOKE_DIR / "tb_echo_hello")
     assert parsed is not None
@@ -94,7 +88,6 @@ def test_to_eval_task_loads_back_through_corpus_loader(tmp_path, monkeypatch):
 
 
 def test_classify_marks_python_base_as_supported():
-    """Internal documentation."""
     parsed = tb.load_tb_task(SMOKE_DIR / "tb_echo_hello")
     cls = tb.classify(parsed)
     assert cls.supported is True
@@ -102,7 +95,6 @@ def test_classify_marks_python_base_as_supported():
 
 
 def test_classify_marks_custom_t_bench_image_unsupported():
-    """Internal documentation."""
     parsed = tb.load_tb_task(SMOKE_DIR / "tb_compile_asm")
     cls = tb.classify(parsed, docker_available=False)
     assert cls.supported is False
@@ -111,7 +103,6 @@ def test_classify_marks_custom_t_bench_image_unsupported():
 
 
 def test_classify_marks_protected_path_unsupported():
-    """Internal documentation."""
     parsed = tb.load_tb_task(SMOKE_DIR / "tb_hidden_state")
     cls = tb.classify(parsed)
     assert cls.supported is False
@@ -120,7 +111,6 @@ def test_classify_marks_protected_path_unsupported():
 
 
 def test_classify_handles_missing_dockerfile(tmp_path):
-    """Internal documentation."""
     d = tmp_path / "bare"
     d.mkdir()
     (d / "task.yaml").write_text("instruction: do something\ndifficulty: easy\n")
@@ -134,7 +124,6 @@ def test_classify_handles_missing_dockerfile(tmp_path):
 
 
 def _make_runner(tmp_path, *, verdict, detail="", steps=1):
-    """Internal documentation."""
     wt = FakeWorktree(tmp_path / "wt_base")
     loop = make_fake_loop(verdict=verdict, detail=detail, steps=steps)
     factory = make_fake_loop_factory(loop)
@@ -143,7 +132,6 @@ def _make_runner(tmp_path, *, verdict, detail="", steps=1):
 
 
 def test_run_subset_picks_supported_and_skips_unsupported(tmp_path):
-    """Internal documentation."""
     runner = _make_runner(tmp_path, verdict=PASS_PASSED, detail="1 passed")
     workdir = tmp_path / "corpus"
     report = tb.run_subset(
@@ -165,7 +153,6 @@ def test_run_subset_picks_supported_and_skips_unsupported(tmp_path):
 
 
 def test_run_subset_does_not_let_skipped_drag_pass_at_1(tmp_path):
-    """Internal documentation."""
     runner = _make_runner(tmp_path, verdict=PASS_FAILED, detail="1 failed")
     workdir = tmp_path / "corpus"
     subset = [SMOKE_DIR / "tb_compile_asm"] * 5 + [SMOKE_DIR / "tb_echo_hello"]
@@ -181,7 +168,6 @@ def test_run_subset_does_not_let_skipped_drag_pass_at_1(tmp_path):
 
 
 def test_run_subset_persists_jsonl_for_supported(tmp_path):
-    """Internal documentation."""
     runner = _make_runner(tmp_path, verdict=PASS_PASSED, detail="1 passed")
     workdir = tmp_path / "corpus"
     tb.run_subset(
@@ -201,7 +187,6 @@ def test_run_subset_persists_jsonl_for_supported(tmp_path):
 
 
 def test_run_subset_does_not_persist_for_skipped(tmp_path):
-    """Internal documentation."""
     runner = _make_runner(tmp_path, verdict=PASS_PASSED)
     workdir = tmp_path / "corpus"
     tb.run_subset(
@@ -216,7 +201,6 @@ def test_run_subset_does_not_persist_for_skipped(tmp_path):
 
 
 def test_smoke_subset_resolves_to_task_dirs():
-    """Internal documentation."""
     subset = tb._resolve_subset_arg("smoke")
 
     assert subset
@@ -226,7 +210,6 @@ def test_smoke_subset_resolves_to_task_dirs():
 
 
 def test_smoke_subset_missing_fixture_returns_missing_path(tmp_path, monkeypatch):
-    """Internal documentation."""
     missing = tmp_path / "missing_smoke"
     monkeypatch.setattr(tb, "_smoke_subset_dir", lambda: missing)
 

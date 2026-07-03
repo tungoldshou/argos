@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -9,7 +8,6 @@ from argos.i18n import t
 
 
 def _prefix(key: str) -> str:
-    """Internal documentation."""
     s = t(key).lstrip()
     for cut in ("{", "\n"):
         i = s.find(cut)
@@ -19,7 +17,6 @@ def _prefix(key: str) -> str:
 
 
 def _markers() -> tuple[tuple[str, ...], tuple[str, ...], str]:
-    """Internal documentation."""
     tool = (_prefix("loop.exec.result"), _prefix("loop.exec.no_output"), _prefix("loop.exec.value_repr"))
     dead = (_prefix("loop.exec.exception"),)
     plan = _prefix("loop.todos.header")
@@ -28,14 +25,12 @@ def _markers() -> tuple[tuple[str, ...], tuple[str, ...], str]:
 
 @dataclass(frozen=True, slots=True)
 class CoreKeep:
-    """Internal documentation."""
     recent_turns: int = 6
     verify_cmd: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class PruneResult:
-    """Internal documentation."""
     messages: list[dict]
     removed: int
     removed_tokens: int
@@ -43,7 +38,6 @@ class PruneResult:
 
 
 def _bucket(content: str) -> str:
-    """Internal documentation."""
     c = (content or "").lstrip()
     tool_markers, dead_markers, plan_marker = _markers()
     if plan_marker and c.startswith(plan_marker):
@@ -71,7 +65,6 @@ def prune_messages(
     core: CoreKeep,
     aggressiveness: float = 0.5,
 ) -> PruneResult:
-    """Internal documentation."""
     n = len(messages)
     if aggressiveness <= 0 or n == 0:
         return PruneResult(messages=list(messages), removed=0, removed_tokens=0, kept_core=n)

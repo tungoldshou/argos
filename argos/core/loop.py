@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -70,10 +69,18 @@ _PROPOSE_WORKFLOW = re.compile(r"propose_workflow\(", re.DOTALL)
 _FIXED_SPAWN_NAMESPACE: dict[str, Any] = {}
 
 _FEEDBACK_MAX_CHARS = 10000
+_MUTATION_TOOL_NAMES = frozenset({"write_file", "edit_file"})
+
+
+def _tool_names_indicate_mutation(tool_names: list[str] | tuple[str, ...] | set[str]) -> bool:
+    return any(name in _MUTATION_TOOL_NAMES for name in tool_names)
+
+
+def _code_mentions_file_mutation(code: str) -> bool:
+    return "write_file(" in code or "edit_file(" in code
 
 
 def _clamp_feedback(out: str, limit: int = _FEEDBACK_MAX_CHARS) -> str:
-    """Internal documentation."""
     if len(out) <= limit:
         return out
     head = out[: limit * 2 // 3]
@@ -83,7 +90,6 @@ def _clamp_feedback(out: str, limit: int = _FEEDBACK_MAX_CHARS) -> str:
 
 
 def extract_code_block(text: str) -> str | None:
-    """Internal documentation."""
     m = _CODE_BLOCK.search(text)
     if not m:
         return None
@@ -97,7 +103,6 @@ def _context_used_from_usage(
     system_dynamic: str | None = None,
     messages: list[dict] | None = None,
 ) -> int:
-    """Internal documentation."""
     total = usage.get("context_total")
     if total is not None:
         return int(total)
@@ -134,7 +139,6 @@ _LAZY_CLAIM_EN: tuple[str, ...] = (
 
 
 def _looks_like_lazy_claim(text: str) -> bool:
-    """Internal documentation."""
     t = (text or "").strip()
     if not t:
         return True
@@ -162,7 +166,6 @@ def _asks_user_confirmation_before_action(text: str) -> bool:
 
 
 def extract_plan_todos(text: str) -> list[dict] | None:
-    """Internal documentation."""
     import ast
     last: list[dict] | None = None
     for m in _UPDATE_PLAN.finditer(text):
@@ -201,7 +204,6 @@ def extract_plan_todos(text: str) -> list[dict] | None:
 
 
 def extract_workflow_spec(text: str) -> dict | None:
-    """Internal documentation."""
     import ast
     last: dict | None = None
     for m in _PROPOSE_WORKFLOW.finditer(text):
@@ -240,7 +242,6 @@ def extract_workflow_spec(text: str) -> dict | None:
 
 
 class _CollectingBus(EventBus):
-    """Internal documentation."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -256,7 +257,6 @@ class _CollectingBus(EventBus):
 
 
 def _git_status_snapshot(workspace: Path) -> str:
-    """Internal documentation."""
     import subprocess
     try:
         out = subprocess.run(
@@ -274,7 +274,6 @@ def _git_status_snapshot(workspace: Path) -> str:
 
 
 def _env_context(workspace: Path) -> str:
-    """Internal documentation."""
     import platform
     from datetime import date
     block = (
@@ -297,7 +296,6 @@ def _env_context(workspace: Path) -> str:
 
 
 def _governance_context(approval_level) -> str:
-    """Internal documentation."""
     from argos import config as _config
     level = getattr(approval_level, "name", str(approval_level))
     if _config.sandbox_enabled():
@@ -324,7 +322,6 @@ def _governance_context(approval_level) -> str:
 
 @dataclass(frozen=True, slots=True)
 class LoopConfig:
-    """Internal documentation."""
     model_tier: ModelTierName = "default"
     verify_cmd: str | None = None
     max_rounds: int = 3
@@ -340,7 +337,6 @@ class LoopConfig:
 
 
 class AgentLoop:
-    """Internal documentation."""
 
     def __init__(
         self,
@@ -461,7 +457,6 @@ class AgentLoop:
         self._pending_gui_expected_text = ""
 
     def _on_propose_verify(self, cmd: str) -> bool:
-        """Internal documentation."""
         cmd = (cmd or "").strip()
         if not cmd:
             return False
@@ -485,7 +480,6 @@ class AgentLoop:
         return True
 
     def _on_propose_dom_verify(self, raw_args: str) -> bool:
-        """Internal documentation."""
         if self._verify_cmd is not None and self._verify_cmd.strip():
             return False
         if self._dom_prober is None:
@@ -523,7 +517,6 @@ class AgentLoop:
             return False
 
     def _on_propose_gui_verify(self, raw_args: str) -> bool:
-        """Internal documentation."""
         if self._verify_cmd is not None and self._verify_cmd.strip():
             return False
         if self._gui_prober is None:
@@ -539,7 +532,6 @@ class AgentLoop:
     def respond_plan_decision(
         self, call_id: str, action: str, feedback: str | None = None,
     ) -> bool:
-        """Internal documentation."""
         if call_id not in self._plan_call_registry:
             return False
         from argos.core.plan_mode import ExitPlanMode
@@ -551,7 +543,6 @@ class AgentLoop:
 
     @staticmethod
     def _todos_summary(todos: list[dict]) -> str:
-        """Internal documentation."""
         glyph = {"completed": "[x]", "in_progress": "[~]", "pending": "[ ]"}
         done = sum(1 for t in todos if t.get("status") == "completed")
         lines = [_i18n_t("loop.todos.header", done=done, total=len(todos))]
@@ -561,7 +552,6 @@ class AgentLoop:
         return "\n".join(lines)
 
     def _pick_strategy_cmd(self, goal: str) -> str | None:
-        """Internal documentation."""
         try:
             from argos.verify.strategy import generate, probe_workspace, WorkspaceFacts
             from argos.tools import ALLOWED_CMDS
@@ -603,7 +593,6 @@ class AgentLoop:
             return None
 
     async def _run_dom_probe_verdict(self, strategy: Any, *, attempt: int) -> "Verdict":
-        """Internal documentation."""
         import asyncio as _asyncio
         from argos.core.types import Verdict
         from argos.protocol.events import VerifyVerdict as _VV
@@ -658,7 +647,6 @@ class AgentLoop:
         return verdict
 
     async def _run_gui_probe_verdict(self, expected_text: str, *, attempt: int) -> "Verdict":
-        """Internal documentation."""
         import asyncio as _asyncio
         from argos.core.types import Verdict
         from argos.protocol.events import VerifyVerdict as _VV
@@ -695,7 +683,6 @@ class AgentLoop:
 
     async def run(self, goal: str, session_id: str,  # noqa: E501
                   attachments: "list | None" = None) -> AsyncIterator["Event"]:
-        """Internal documentation."""
         await self._resolve_vision_capable(attachments)
         self._reset_run_state()
         if self._manage_runtime_context:
@@ -776,13 +763,11 @@ class AgentLoop:
             self._sandbox.close()
 
     async def _enter_phase(self, phase: str) -> AsyncIterator["Event"]:
-        """Internal documentation."""
         await self._harness.enter_phase(phase, actions=self._actions, max_steps=self._cfg.max_steps)  # type: ignore[arg-type]
         for ev in self._hbus.drain():
             yield ev
 
     async def _resolve_vision_capable(self, attachments: "list | None") -> None:
-        """Internal documentation."""
         self._vision_capable = None
         if not (attachments or os.environ.get("ARGOS_COMPUTER_USE")):
             return
@@ -802,7 +787,6 @@ class AgentLoop:
             )
 
     def _maybe_attach_screenshot(self, fb_msg: dict, shot: "tuple | None") -> None:
-        """Internal documentation."""
         if shot is None:
             return
         if not getattr(self, "_vision_capable", False):
@@ -824,7 +808,6 @@ class AgentLoop:
             __import__("logging").getLogger(__name__).debug("screenshot attach skipped: %s", exc)
 
     def _tool_signatures_block(self) -> str:
-        """Internal documentation."""
         return (
             "\n\n<tool_signatures>\n"
             "- read_file(path, offset: int = 0, limit: int | None = None) "
@@ -837,7 +820,6 @@ class AgentLoop:
         )
 
     def _inline_maybe_append_ledger(self, ev: "Any", run_id: str) -> None:
-        """Internal documentation."""
         import time as _time
         import os as _os
         from argos.ledger.builder import build_entry
@@ -893,7 +875,6 @@ class AgentLoop:
             )
 
     async def _maybe_proactive_compact(self, session_id: str, step: int) -> AsyncIterator["Event"]:
-        """Internal documentation."""
         from argos.context.threshold import (
             _should_compact, LastCompactedAt as _LCA, safe_compact_threshold,
         )
@@ -939,7 +920,6 @@ class AgentLoop:
         )
 
     def _anchor_core_messages(self, messages: list[dict], goal: str) -> list[dict]:
-        """Internal documentation."""
         if not goal:
             return messages
         try:
@@ -950,7 +930,6 @@ class AgentLoop:
             return messages
 
     def _maybe_prune(self, messages: list[dict], session_id: str = "") -> tuple[list[dict], "PrunedEvent | None"]:
-        """Internal documentation."""
         aggressiveness = float(getattr(self._cfg, "prune_aggressiveness", 0.5) or 0.0)
         if aggressiveness <= 0 or not messages:
             return messages, None
@@ -974,7 +953,6 @@ class AgentLoop:
         return result.messages, ev
 
     def _build_system(self, goal: str) -> str:
-        """Internal documentation."""
         stable, dynamic = self._build_system_pair(goal)
         if not dynamic:
             return stable
@@ -983,7 +961,6 @@ class AgentLoop:
     def _build_system_pair(
         self, goal: str, *, _prefetched_memory_lines: list[str] | None = None,
     ) -> tuple[str, str]:
-        """Internal documentation."""
         safe = (
             HONESTY_SYSTEM
             + _env_context(self._workspace)
@@ -1027,7 +1004,7 @@ class AgentLoop:
             safe = safe + "\n\n" + COMPUTER_USE_PROMPT
         # ponytail: /workflows TUI toggle is deferred (no in-TUI on/off switch
         # yet); control via ARGOS_WORKFLOWS env var only for now.
-        if _os_cu.environ.get("ARGOS_WORKFLOWS", "1") != "0":
+        if _os_cu.environ.get("ARGOS_WORKFLOWS") == "1":
             from argos.core.honesty import WORKFLOW_PROMPT
             safe = safe + "\n\n" + WORKFLOW_PROMPT
         try:
@@ -1047,9 +1024,10 @@ class AgentLoop:
             "for. If you wrote a file, run it through run_command before you call it done.\n"
             "</final_reminder>"
         ) if _cfg_wm.weak_model() else ""
+        safe = safe + _weak_reminder
 
         if not self._cfg.recall:
-            return (safe + _weak_reminder, "")
+            return (safe, "")
 
         skill_bodies: list[str] = []
         try:
@@ -1074,16 +1052,10 @@ class AgentLoop:
                 memory_lines = []
 
         dynamic = format_untrusted(skill_bodies=skill_bodies, memory_lines=memory_lines)
-        if _weak_reminder:
-            if dynamic:
-                dynamic = dynamic + _weak_reminder
-            else:
-                safe = safe + _weak_reminder
         return (safe, dynamic)
 
     async def _drive(self, goal: str, session_id: str,
                      attachments: "list | None" = None) -> AsyncIterator["Event"]:
-        """Internal documentation."""
         if hasattr(self._store, "ensure_session"):
             self._store.ensure_session(  # type: ignore[attr-defined]
                 session_id, title=goal[:80], model=self._cfg.model_tier, system_snapshot="",
@@ -1337,7 +1309,9 @@ class AgentLoop:
                     if _ovr_snap is not None:
                         _ovr_gate.pop_override_semantics(_ovr_snap)
                 self._actions += 1
-                if "write_file(" in code or "edit_file(" in code:
+                if result.ok and _tool_names_indicate_mutation(tool_names):
+                    made_changes = True
+                elif result.ok and _code_mentions_file_mutation(code):
                     made_changes = True
                 if result.ok:
                     try:
@@ -1449,10 +1423,12 @@ class AgentLoop:
                 if self._broker is not None:
                     new_receipt = self._broker.take_receipt()
                     if new_receipt is not None and self._harness.accept_receipt(new_receipt):
+                        if new_receipt.action in _MUTATION_TOOL_NAMES:
+                            made_changes = True
                         yield ToolReceipt(receipt=new_receipt)
                 if self._broker is not None and hasattr(self._broker, "take_computer_artifact"):
                     self._pending_screenshot = self._broker.take_computer_artifact()
-                _wf_on = __import__("os").environ.get("ARGOS_WORKFLOWS", "1") != "0"
+                _wf_on = __import__("os").environ.get("ARGOS_WORKFLOWS") == "1"
                 _wf_spec = (extract_workflow_spec(text) if "propose_workflow" in text else None)
                 if _wf_spec is not None and _wf_on:
                     async for ev in self._run_workflow(_wf_spec, messages):
@@ -1720,7 +1696,6 @@ class AgentLoop:
             yield TokenDelta(text=done)
 
     async def _run_workflow(self, raw_spec: dict, messages: list) -> "AsyncIterator[Event]":
-        """Internal documentation."""
         from argos.protocol.events import WorkflowProposed, WorkflowDone
         from argos.workflow.result import render_preview
         from argos.workflow.spec import WorkflowSpecError, parse_spec
@@ -1763,7 +1738,6 @@ class AgentLoop:
     async def _run_plan_phase_loop(
         self, goal: str, messages: list[dict], system: str,
     ) -> "AsyncIterator[Event]":
-        """Internal documentation."""
         while True:
             async for ev in self._plan_phase_round(goal, messages, system):
                 yield ev
@@ -1812,7 +1786,6 @@ class AgentLoop:
     async def _plan_phase_round(
         self, goal: str, messages: list[dict], system: str,
     ) -> "AsyncIterator[Event]":
-        """Internal documentation."""
         scrubber = StreamingContextScrubber()
         text = ""
         prompt_messages = list(messages)
@@ -1862,7 +1835,6 @@ class AgentLoop:
 
     @staticmethod
     def _feedback(result: Any) -> str:
-        """Internal documentation."""
         from argos.i18n import t as _t_fb
         if not result.ok:
             return _t_fb("loop.exec.exception", exc=result.exc)

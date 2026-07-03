@@ -8,7 +8,6 @@ from argos.memory.store import ArgosStore
 
 
 class _EchoModel:
-    """Internal documentation."""
     def __init__(self): self.seen = []
     async def stream(self, messages, *, system, system_dynamic=None):
         self.seen.append([(m["role"], m["content"]) for m in messages])
@@ -44,7 +43,6 @@ async def test_second_run_sees_first_turn_history(tmp_path):
 
 
 class _EmptyFinalModel:
-    """Internal documentation."""
     async def stream(self, messages, *, system, system_dynamic=None):
         for ch in "   ":
             yield ch
@@ -52,7 +50,6 @@ class _EmptyFinalModel:
 
 @pytest.mark.asyncio
 async def test_empty_final_answer_still_persists_assistant(tmp_path):
-    """Internal documentation."""
     store = ArgosStore(db_path=str(tmp_path / "empty.db"))
 
     def mk():
@@ -71,7 +68,6 @@ async def test_empty_final_answer_still_persists_assistant(tmp_path):
 
 @pytest.mark.asyncio
 async def test_loop_reuse_resets_run_state(tmp_path):
-    """Internal documentation."""
     store = ArgosStore(db_path=str(tmp_path / "b.db"))
     loop = AgentLoop(store=store, bus=EventBus(), sandbox=_FakeSandbox(), broker=None,
                      model=_EchoModel(), verifier=_NoCmdVerifier(), config=LoopConfig())

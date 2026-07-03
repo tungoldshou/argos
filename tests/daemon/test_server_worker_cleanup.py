@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +12,6 @@ from argos.daemon.worker import FakeLoop, RunWorker
 
 @pytest.mark.asyncio
 async def test_spawn_worker_pops_routing_table_on_terminal(tmp_path: Path):
-    """Internal documentation."""
     mgr = RunManager(runs_dir=tmp_path / "runs", index_path=tmp_path / "index.json")
     srv = DaemonHTTPServer(manager=mgr, socket_path=tmp_path / "s.sock")
     rid = await mgr.create_run(goal="x", workspace=str(tmp_path))

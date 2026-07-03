@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -10,7 +9,6 @@ OUT_DIR = Path("/tmp/argos-tui-v3-shots")
 
 
 def _ensure_outdir() -> None:
-    """Internal documentation."""
     import shutil
     if OUT_DIR.exists():
         shutil.rmtree(OUT_DIR)
@@ -25,7 +23,6 @@ def _save_svg(name: str, svg: str) -> Path:
 
 
 def _try_png(svg_path: Path) -> Path | None:
-    """Internal documentation."""
     png_path = svg_path.with_suffix(".png")
 
     try:
@@ -58,7 +55,6 @@ def _try_png(svg_path: Path) -> Path | None:
 
 
 async def shot_splash_idle() -> None:
-    """Internal documentation."""
     from argos.tui.app import ArgosApp
     from argos.tui.fakeloop import FakeLoop
 
@@ -72,7 +68,6 @@ async def shot_splash_idle() -> None:
 
 
 async def shot_run_act() -> None:
-    """Internal documentation."""
     from argos.tui.app import ArgosApp
     from argos.tui.fakeloop import FakeLoop
     from argos.tui.events import PhaseChange, TokenDelta, CodeAction, CodeResult, FileDiff, CostUpdate
@@ -107,7 +102,6 @@ async def shot_run_act() -> None:
 
 
 async def shot_approval() -> None:
-    """Internal documentation."""
     from argos.tui.app import ArgosApp
     from argos.tui.fakeloop import FakeLoop
     from argos.tui.events import PhaseChange, TokenDelta, ApprovalRequest
@@ -142,7 +136,6 @@ async def shot_approval() -> None:
 
 
 async def shot_verdict_passed() -> None:
-    """Internal documentation."""
     from argos.tui.app import ArgosApp
     from argos.tui.fakeloop import FakeLoop
     from argos.core.types import Verdict
@@ -174,7 +167,6 @@ async def shot_verdict_passed() -> None:
 
 
 async def shot_verdict_failed() -> None:
-    """Internal documentation."""
     from argos.tui.app import ArgosApp
     from argos.tui.fakeloop import FakeLoop
     from argos.core.types import Verdict
@@ -202,7 +194,6 @@ async def shot_verdict_failed() -> None:
 
 
 async def main() -> None:
-    """Internal documentation."""
     _ensure_outdir()
     print(f"\n产出目录:{OUT_DIR}\n")
 

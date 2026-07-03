@@ -116,7 +116,6 @@ def test_bare_group_subcommands_print_help_instead_of_launching_tui(capsys):
 
 
 def test_setup_subcommand_dispatches_to_wizard(monkeypatch):
-    """Internal documentation."""
     import argos.__main__ as M
     called = {}
 
@@ -130,7 +129,6 @@ def test_setup_subcommand_dispatches_to_wizard(monkeypatch):
 
 
 def test_setup_cli_reader_hides_pasted_api_key(monkeypatch):
-    """Internal documentation."""
     import argos.__main__ as M
     from argos.i18n import t
 
@@ -151,7 +149,6 @@ def test_setup_cli_reader_hides_pasted_api_key(monkeypatch):
 
 
 def test_setup_prints_next_steps_after_save(tmp_path, monkeypatch):
-    """Internal documentation."""
     import asyncio
     from argos import setup_wizard as sw
 

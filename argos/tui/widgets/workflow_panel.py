@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from rich.text import Text
@@ -44,7 +43,6 @@ _PHASE_GLYPH_COLOR = {
 
 
 class WorkflowPanel(Static):
-    """Internal documentation."""
 
     DEFAULT_CSS = """
     WorkflowPanel {
@@ -66,14 +64,12 @@ class WorkflowPanel(Static):
         self.update(self._compose_text())
 
     def update_progress(self, agent_id: str, phase: str, note: str = "") -> None:
-        """Internal documentation."""
         if agent_id not in self._agents:
             self._order.append(agent_id)
         self._agents[agent_id] = (phase, note)
         self.update(self._compose_text())
 
     def finish(self, synthesis: str, notes: tuple[str, ...] = ()) -> None:
-        """Internal documentation."""
         self._done = True
         self._synthesis = synthesis
         self._notes = tuple(notes or ())
@@ -81,11 +77,9 @@ class WorkflowPanel(Static):
 
     @property
     def rendered_text(self) -> str:
-        """Internal documentation."""
         return self._compose_text().plain
 
     def _compose_text(self) -> Text:
-        """Internal documentation."""
         result = Text(no_wrap=False, end="")
 
         if self._done:

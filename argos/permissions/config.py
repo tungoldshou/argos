@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -36,11 +35,10 @@ _REDOS_PATTERNS: Final[tuple[str, ...]] = (
 
 
 class PermissionsConfigError(Exception):
-    """Internal documentation."""
+    pass
 
 
 def _is_safe_regex(matcher: str) -> bool:
-    """Internal documentation."""
     if not isinstance(matcher, str):
         return False
     if matcher in ("", "*"):
@@ -59,14 +57,12 @@ def _is_safe_regex(matcher: str) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class RuleEntry:
-    """Internal documentation."""
     tool: str
     matcher: str
 
 
 @dataclass(frozen=True, slots=True)
 class ToolLevelOverride:
-    """Internal documentation."""
     tool: str
     level: str  # observe / propose / confirm / auto / accept_edits
 
@@ -94,7 +90,6 @@ class PermissionsConfig:
 
     @staticmethod
     def empty() -> "PermissionsConfig":
-        """Internal documentation."""
         return PermissionsConfig(version=1)
 
     def match_allow(self, tool: str, arg_str: str) -> RuleEntry | None:
@@ -117,7 +112,6 @@ class PermissionsConfig:
 
 
 def _matcher_match(matcher: str, arg_str: str) -> bool:
-    """Internal documentation."""
     if not matcher or matcher == "*":
         return True
     try:
@@ -127,7 +121,6 @@ def _matcher_match(matcher: str, arg_str: str) -> bool:
 
 
 def _safe_rule_entries(arr: Sequence[dict]) -> tuple[RuleEntry, ...]:
-    """Internal documentation."""
     out: list[RuleEntry] = []
     for ent in arr:
         if not isinstance(ent, dict):
@@ -146,7 +139,6 @@ def _safe_rule_entries(arr: Sequence[dict]) -> tuple[RuleEntry, ...]:
 
 
 def load(path: Path | None = None) -> PermissionsConfig:
-    """Internal documentation."""
     p = _config_path(path)
     data = config_base.read_json_file(p, ErrorCls=PermissionsConfigError)
     if data is None:
@@ -206,7 +198,6 @@ def _reset_config() -> None:
 
 
 def get_config() -> PermissionsConfig:
-    """Internal documentation."""
     global _config
     if _config is None:
         try:
@@ -218,7 +209,6 @@ def get_config() -> PermissionsConfig:
 
 
 def reload_config(path: Path | None = None) -> PermissionsConfig:
-    """Internal documentation."""
     global _config
     try:
         new_cfg = load(path)
@@ -231,7 +221,6 @@ def reload_config(path: Path | None = None) -> PermissionsConfig:
 
 
 def save_allow_rule(tool: str, matcher: str, path: Path | None = None) -> bool:
-    """Internal documentation."""
     p = _config_path(path)
     raw: dict = {}
     if p.exists():

@@ -1,5 +1,4 @@
 # tests/tui/test_trust_dial.py
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -13,7 +12,6 @@ from argos.tui.widgets.trust_dial import TrustDial
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _plain(widget: TrustDial) -> str:
-    """Internal documentation."""
     rt = widget._compose_text()
     if isinstance(rt, Text):
         return rt.plain
@@ -21,7 +19,6 @@ def _plain(widget: TrustDial) -> str:
 
 
 def _rich(widget: TrustDial) -> Text:
-    """Internal documentation."""
     rt = widget._compose_text()
     if isinstance(rt, Text):
         return rt
@@ -33,18 +30,15 @@ def _rich(widget: TrustDial) -> Text:
 
 class TestConstruction:
     def test_constructs_with_all_levels(self):
-        """Internal documentation."""
         for lvl in TrustLevel:
             widget = TrustDial(current=lvl)
             assert widget is not None
 
     def test_can_focus_false(self):
-        """Internal documentation."""
         widget = TrustDial(current=TrustLevel.L1_DANGEROUS_ONLY)
         assert widget.can_focus is False
 
     def test_default_current_l0(self):
-        """Internal documentation."""
         widget = TrustDial(current=TrustLevel.L0_EVERY_STEP)
         assert widget._current == TrustLevel.L0_EVERY_STEP
 
@@ -54,13 +48,11 @@ class TestConstruction:
 
 class TestHeaderLine:
     def test_header_contains_trust_dial_label(self):
-        """Internal documentation."""
         for lvl in TrustLevel:
             plain = _plain(TrustDial(current=lvl))
             assert "信任拨盘" in plain, f"level={lvl}: missing '信任拨盘'"
 
     def test_header_contains_current_marker(self):
-        """Internal documentation."""
         for lvl in TrustLevel:
             plain = _plain(TrustDial(current=lvl))
             assert "当前 " in plain, f"level={lvl}: missing '当前 '"
@@ -73,7 +65,6 @@ class TestHeaderLine:
         (TrustLevel.L4_AUTONOMOUS,      "L4"),
     ])
     def test_header_level_token(self, lvl, short):
-        """Internal documentation."""
         plain = _plain(TrustDial(current=lvl))
         assert short in plain, f"level={lvl}: missing '{short}' in header"
 
@@ -82,7 +73,6 @@ class TestHeaderLine:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestDialRows:
-    """Internal documentation."""
 
     # (level, label, hint_fragment)
     ROWS = [
@@ -95,14 +85,12 @@ class TestDialRows:
 
     @pytest.mark.parametrize("lvl,label,hint", ROWS)
     def test_label_present_all_levels(self, lvl, label, hint):
-        """Internal documentation."""
         widget = TrustDial(current=TrustLevel.L0_EVERY_STEP)
         plain = _plain(widget)
         assert label in plain, f"missing label '{label}'"
 
     @pytest.mark.parametrize("lvl,label,hint", ROWS)
     def test_hint_present_when_current(self, lvl, label, hint):
-        """Internal documentation."""
         widget = TrustDial(current=lvl)
         plain = _plain(widget)
         core = hint.split(" · ")[0]
@@ -110,7 +98,6 @@ class TestDialRows:
 
     @pytest.mark.parametrize("lvl,label,hint", ROWS)
     def test_all_five_rows_appear(self, lvl, label, hint):
-        """Internal documentation."""
         widget = TrustDial(current=lvl)
         plain = _plain(widget)
         for _, lbl, _ in self.ROWS:
@@ -123,17 +110,14 @@ class TestDialRows:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestCursorMarker:
-    """Internal documentation."""
 
     def test_current_row_has_triangle(self):
-        """Internal documentation."""
         for lvl in TrustLevel:
             widget = TrustDial(current=lvl)
             plain = _plain(widget)
             assert "▸" in plain, f"level={lvl}: ▸ not found"
 
     def test_exactly_one_triangle(self):
-        """Internal documentation."""
         for lvl in TrustLevel:
             widget = TrustDial(current=lvl)
             plain = _plain(widget)
@@ -144,7 +128,6 @@ class TestCursorMarker:
 
     @pytest.mark.parametrize("current_lvl", list(TrustLevel))
     def test_current_row_label_near_triangle(self, current_lvl):
-        """Internal documentation."""
         widget = TrustDial(current=current_lvl)
         plain = _plain(widget)
         lines = plain.splitlines()
@@ -171,13 +154,11 @@ class TestCursorMarker:
 
 class TestL4RedLamp:
     def test_power_symbol_present(self):
-        """Internal documentation."""
         widget = TrustDial(current=TrustLevel.L0_EVERY_STEP)
         plain = _plain(widget)
         assert "⏻" in plain, "⏻ (U+23FB) must appear in L4 row hint"
 
     def test_power_symbol_on_l4_line(self):
-        """Internal documentation."""
         widget = TrustDial(current=TrustLevel.L0_EVERY_STEP)
         plain = _plain(widget)
         lines = plain.splitlines()
@@ -188,7 +169,6 @@ class TestL4RedLamp:
         )
 
     def test_l4_red_lamp_uses_fail_color(self):
-        """Internal documentation."""
         widget = TrustDial(current=TrustLevel.L0_EVERY_STEP)
         rt = _rich(widget)
         fail_hex = "#F7768E"
@@ -211,7 +191,6 @@ class TestL4RedLamp:
 
 class TestHardRulesLine:
     def test_hard_rules_label_present(self):
-        """Internal documentation."""
         for lvl in TrustLevel:
             plain = _plain(TrustDial(current=lvl))
             assert "HARD RULES 永不降级:" in plain, (
@@ -219,7 +198,6 @@ class TestHardRulesLine:
             )
 
     def test_hard_rules_three_categories(self):
-        """Internal documentation."""
         for lvl in TrustLevel:
             plain = _plain(TrustDial(current=lvl))
             assert "危险 shell" in plain, f"level={lvl}: missing '危险 shell'"
@@ -227,7 +205,6 @@ class TestHardRulesLine:
             assert "secret 检测" in plain, f"level={lvl}: missing 'secret 检测'"
 
     def test_hard_rules_three_fail_spans(self):
-        """Internal documentation."""
         fail_hex = "#F7768E"
         categories = ["危险 shell", "系统路径", "secret 检测"]
         widget = TrustDial(current=TrustLevel.L1_DANGEROUS_ONLY)
@@ -251,7 +228,6 @@ class TestHardRulesLine:
             )
 
     def test_hard_rules_present_even_at_l4(self):
-        """Internal documentation."""
         plain = _plain(TrustDial(current=TrustLevel.L4_AUTONOMOUS))
         assert "HARD RULES 永不降级:" in plain
         assert "危险 shell" in plain
@@ -263,7 +239,6 @@ class TestHardRulesLine:
 
 class TestHonestyInvariants:
     def test_current_row_is_bright_not_faint(self):
-        """Internal documentation."""
         for lvl in TrustLevel:
             widget = TrustDial(current=lvl)
             plain = _plain(widget)
@@ -272,7 +247,6 @@ class TestHonestyInvariants:
             assert len(tri_lines) == 1, f"level={lvl}: expected 1 cursor row, got {len(tri_lines)}"
 
     def test_no_extra_triangle_on_non_current(self):
-        """Internal documentation."""
         for lvl in TrustLevel:
             widget = TrustDial(current=lvl)
             plain = _plain(widget)
@@ -292,12 +266,10 @@ class TestHonestyInvariants:
                     )
 
     def test_hard_rules_immune_always_true(self):
-        """Internal documentation."""
         from argos.permissions.trust_dial import hard_rules_immune
         assert hard_rules_immune() is True
 
     def test_l4_hint_mentions_hard_rules(self):
-        """Internal documentation."""
         widget = TrustDial(current=TrustLevel.L4_AUTONOMOUS)
         plain = _plain(widget)
         lines = plain.splitlines()
@@ -308,7 +280,6 @@ class TestHonestyInvariants:
         )
 
     def test_markup_false_on_static(self):
-        """Internal documentation."""
         from textual.widgets import Static
         widget = TrustDial(current=TrustLevel.L1_DANGEROUS_ONLY)
         assert isinstance(widget, Static)
@@ -319,7 +290,6 @@ class TestHonestyInvariants:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestColorDiscipline:
-    """Internal documentation."""
 
     def test_col_eye_matches_theme(self):
         """_COL_EYE = '#D9A85C' ($eye)。"""

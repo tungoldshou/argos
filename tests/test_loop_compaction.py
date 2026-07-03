@@ -1,5 +1,4 @@
 # tests/test_loop_compaction.py
-"""Internal documentation."""
 import pytest
 
 from argos.core.loop import AgentLoop, LoopConfig
@@ -10,7 +9,6 @@ from argos.memory.store import ArgosStore
 
 
 class _OverflowThenOkModel:
-    """Internal documentation."""
     def __init__(self) -> None:
         self.calls = 0
 

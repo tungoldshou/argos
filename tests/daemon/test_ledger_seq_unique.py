@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -13,7 +12,6 @@ from argos.ledger.store import LedgerStore
 
 
 class _ReceiptLoop:
-    """Internal documentation."""
 
     async def run(self, goal: str, session_id: str) -> AsyncIterator[dict]:
         for i in range(3):

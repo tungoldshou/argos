@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -14,7 +13,6 @@ class _H(App):
 
 @pytest.mark.asyncio
 async def test_topbar_shows_brand_version_model():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -25,7 +23,6 @@ async def test_topbar_shows_brand_version_model():
 
 @pytest.mark.asyncio
 async def test_topbar_shows_unsandboxed_badge_when_off(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_SANDBOX", "0")
     app = _H()
     async with app.run_test() as pilot:
@@ -36,7 +33,6 @@ async def test_topbar_shows_unsandboxed_badge_when_off(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_topbar_no_unsandboxed_badge_when_on(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_SANDBOX", "1")
     app = _H()
     async with app.run_test() as pilot:
@@ -47,7 +43,6 @@ async def test_topbar_no_unsandboxed_badge_when_on(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_topbar_logo_eye_glyph_not_star():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -59,7 +54,6 @@ async def test_topbar_logo_eye_glyph_not_star():
 
 @pytest.mark.asyncio
 async def test_topbar_phase_eye_changes():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -83,7 +77,6 @@ async def test_topbar_phase_eye_changes():
 
 @pytest.mark.asyncio
 async def test_topbar_no_key_badge_never_lies_live():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -97,7 +90,6 @@ async def test_topbar_no_key_badge_never_lies_live():
 
 @pytest.mark.asyncio
 async def test_topbar_live_badge_present_with_key():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -110,7 +102,6 @@ async def test_topbar_live_badge_present_with_key():
 
 @pytest.mark.asyncio
 async def test_topbar_plan_and_yolo_badges():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -128,7 +119,6 @@ async def test_topbar_plan_and_yolo_badges():
 
 @pytest.mark.asyncio
 async def test_topbar_no_bullet_before_live():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()

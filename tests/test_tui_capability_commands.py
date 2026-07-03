@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -20,7 +19,10 @@ async def test_help_lists_commands():
     async with app.run_test() as pilot:
         await pilot.pause()
         txt = await _dispatch(app, "/help")
-        assert "/tools" in txt and "/skills" in txt and "/mcp" in txt
+        assert "/tools" in txt and "/verify" in txt
+        assert "/skills" not in txt and "/mcp" not in txt
+        advanced = await _dispatch(app, "/help advanced")
+        assert "/skills" in advanced and "/mcp" in advanced
 
 
 @pytest.mark.asyncio
@@ -38,7 +40,6 @@ async def test_tools_lists_real_29_tools_grouped():
 
 @pytest.mark.asyncio
 async def test_skills_lists_builtin_library(tmp_path, monkeypatch):
-    """Internal documentation."""
     import argos.skills_curator.index as _idx
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop())

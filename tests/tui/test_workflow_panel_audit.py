@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from rich.text import Text
@@ -120,7 +119,6 @@ class TestPerGlyphColour:
 # ---------------------------------------------------------------------------
 
 class TestHonestyInvariant:
-    """Internal documentation."""
 
     def test_error_renders_fail_text(self) -> None:
         panel = _make_panel("流", agents=[("a1", "error", "")])
@@ -178,7 +176,6 @@ class TestHonestyInvariant:
 # ---------------------------------------------------------------------------
 
 class TestHeaderStyling:
-    """Internal documentation."""
 
     def test_header_contains_name(self) -> None:
         panel = _make_panel("我的流")
@@ -195,7 +192,6 @@ class TestHeaderStyling:
         )
 
     def test_done_header_is_bold_and_ink_bright(self) -> None:
-        """Internal documentation."""
         panel = _make_panel(
             "流",
             agents=[("a", "done", "")],

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.sandbox._sandbox_child import (
@@ -33,7 +32,6 @@ def test_no_duplicates_when_already_present():
 
 
 def test_os_path_executes_under_resolved_imports():
-    """Internal documentation."""
     import os
     import pathlib
     import sys

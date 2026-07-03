@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -25,7 +24,6 @@ class FakeSandbox:
 
 
 class FailingVerifier:
-    """Internal documentation."""
     def verify(self, verify_cmd, *, attempts=1):
         return Verdict.failed(
             detail="[exit_code=1]\nassert False",
@@ -39,13 +37,11 @@ class FakeStore:
 
 
 class NonConformingPassedVerifier:
-    """Internal documentation."""
     def verify(self, verify_cmd, *, attempts=1):
         return Verdict.passed(detail="[non-conforming]", verify_cmd=verify_cmd, attempts=attempts)
 
 
 class CompletingModel:
-    """Internal documentation."""
     def __init__(self):
         self._i = 0
 
@@ -59,7 +55,6 @@ class CompletingModel:
 
 @pytest.mark.asyncio
 async def test_loop_no_verify_cmd_nonconforming_verifier_honest_completion():
-    """Internal documentation."""
     loop = AgentLoop(
         store=FakeStore(), bus=EventBus(), sandbox=FakeSandbox(), broker=None,
         model=CompletingModel(), verifier=NonConformingPassedVerifier(),

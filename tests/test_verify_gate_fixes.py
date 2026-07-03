@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -32,7 +31,6 @@ class TestIsTrivialVerify:
         assert is_trivial_verify("") is False
 
     def test_all_trivial_bins_covered(self):
-        """Internal documentation."""
         for b in TRIVIAL_VERIFY_BINS:
             assert is_trivial_verify(b) is True, f"{b!r} 应该是 trivial"
             assert is_trivial_verify(f"{b} --some-flag arg") is True, (
@@ -47,7 +45,6 @@ class TestVerifierNoCheckPath:
         return Verifier()
 
     def test_no_verify_cmd_returns_unverifiable(self, tmp_path, monkeypatch):
-        """Internal documentation."""
         import argos.runtime as rt
         monkeypatch.setattr(rt, "detect_tampering", lambda: [])
         monkeypatch.setattr(rt, "current", lambda: type("ctx", (), {
@@ -59,7 +56,6 @@ class TestVerifierNoCheckPath:
         assert verdict.status == "unverifiable"
 
     def test_no_verify_cmd_sets_no_test_true(self, tmp_path, monkeypatch):
-        """Internal documentation."""
         import argos.runtime as rt
         monkeypatch.setattr(rt, "detect_tampering", lambda: [])
         monkeypatch.setattr(rt, "current", lambda: type("ctx", (), {
@@ -71,7 +67,6 @@ class TestVerifierNoCheckPath:
         assert verdict.no_test is True
 
     def test_tampering_returns_unverifiable_no_test_false(self, tmp_path, monkeypatch):
-        """Internal documentation."""
         import argos.runtime as rt
         monkeypatch.setattr(rt, "detect_tampering", lambda: ["tests/critical.py"])
         v = self._make_verifier()
@@ -81,7 +76,6 @@ class TestVerifierNoCheckPath:
         assert "tests/critical.py" in verdict.tampered
 
     def test_trivial_verify_cmd_returns_unverifiable_no_test_false(self, tmp_path, monkeypatch):
-        """Internal documentation."""
         import argos.runtime as rt
         monkeypatch.setattr(rt, "detect_tampering", lambda: [])
         monkeypatch.setattr(rt, "current", lambda: type("ctx", (), {
@@ -97,10 +91,8 @@ class TestVerifierNoCheckPath:
 # ── #29: ARGOS_BRIDGE_VERIFY_LOCK env var rename + backward compat ─────────
 
 class TestBridgeVerifyLockEnvVar:
-    """Internal documentation."""
 
     def _make_loop(self, tmp_path, verify_cmd: str = "pytest"):
-        """Internal documentation."""
         import types
         from argos.core.loop import AgentLoop, LoopConfig
 
@@ -114,7 +106,6 @@ class TestBridgeVerifyLockEnvVar:
         return loop
 
     def test_new_env_name_locks_proposal(self, tmp_path, monkeypatch):
-        """Internal documentation."""
         monkeypatch.setenv("ARGOS_BRIDGE_VERIFY_LOCK", "1")
         monkeypatch.delenv("ARGSOS_BRIDGE_VERIFY_LOCK", raising=False)
         loop = self._make_loop(tmp_path, verify_cmd="pytest -q")
@@ -123,7 +114,6 @@ class TestBridgeVerifyLockEnvVar:
         assert loop._verify_rejected is not None
 
     def test_new_env_name_unlocks_when_zero(self, tmp_path, monkeypatch):
-        """Internal documentation."""
         monkeypatch.setenv("ARGOS_BRIDGE_VERIFY_LOCK", "0")
         monkeypatch.delenv("ARGSOS_BRIDGE_VERIFY_LOCK", raising=False)
         loop = self._make_loop(tmp_path, verify_cmd="pytest -q")
@@ -132,7 +122,6 @@ class TestBridgeVerifyLockEnvVar:
         assert loop._verify_cmd == "cargo test"
 
     def test_old_typo_env_name_still_unlocks(self, tmp_path, monkeypatch):
-        """Internal documentation."""
         monkeypatch.setenv("ARGOS_BRIDGE_VERIFY_LOCK", "1")
         monkeypatch.setenv("ARGSOS_BRIDGE_VERIFY_LOCK", "0")
         loop = self._make_loop(tmp_path, verify_cmd="pytest -q")

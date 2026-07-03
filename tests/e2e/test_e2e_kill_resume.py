@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import sys
 
 import pytest

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 
 from argos.core.types import Verdict

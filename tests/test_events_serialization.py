@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import dataclasses
 
 import pytest
@@ -153,13 +152,11 @@ def test_verify_verdict_unverifiable_roundtrip_with_tampered():
 
 
 def test_hook_fired_in_kind_to_class():
-    """Internal documentation."""
     from argos.hooks.events import HookFired
     assert E._KIND_TO_CLASS.get("hook_fired") is HookFired
 
 
 def test_hook_fired_serialize_roundtrip():
-    """Internal documentation."""
     from argos.hooks.events import HookFired
     ev = HookFired(
         event_name="PreToolUse", command="echo ok",
@@ -177,19 +174,16 @@ def test_hook_fired_serialize_roundtrip():
 
 # ── LSP(spec 2026-06-06 §10.1):LspServerEvent / LspDiagnosticEvent ─────────
 def test_lsp_server_event_in_kind_to_class():
-    """Internal documentation."""
     from argos.lsp.events import LspServerEvent
     assert E._KIND_TO_CLASS.get("lsp_server_event") is LspServerEvent
 
 
 def test_lsp_diagnostic_event_in_kind_to_class():
-    """Internal documentation."""
     from argos.lsp.events import LspDiagnosticEvent
     assert E._KIND_TO_CLASS.get("lsp_diagnostic_event") is LspDiagnosticEvent
 
 
 def test_lsp_server_event_serialize_roundtrip():
-    """Internal documentation."""
     from argos.lsp.events import LspServerEvent
     ev = LspServerEvent(
         server_name="python", status="ready", command="pyright-langserver --stdio",
@@ -209,7 +203,6 @@ def test_lsp_server_event_serialize_roundtrip():
 
 
 def test_lsp_diagnostic_event_serialize_roundtrip():
-    """Internal documentation."""
     from argos.lsp.events import LspDiagnosticEvent
     ev = LspDiagnosticEvent(
         server_name="python", uri="file:///a.py", count=3,
@@ -228,7 +221,6 @@ def test_lsp_diagnostic_event_serialize_roundtrip():
 
 
 def test_lsp_event_kinds_in_event_kind_literal():
-    """Internal documentation."""
     args = set(E.EventKind.__args__)
     assert "lsp_server_event" in args
     assert "lsp_diagnostic_event" in args

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,7 +9,6 @@ from argos.core.snapshot import RunSnapshot
 
 class TestRestoreFileSingleFile:
     def test_modified_file_restored_byte_for_byte(self, tmp_path: Path):
-        """Internal documentation."""
         ws = tmp_path / "ws"
         ws.mkdir()
         original = "original content\nline2\n"
@@ -27,7 +25,6 @@ class TestRestoreFileSingleFile:
         assert (ws / "report.md").read_text() == original
 
     def test_other_files_not_touched(self, tmp_path: Path):
-        """Internal documentation."""
         ws = tmp_path / "ws"
         ws.mkdir()
         (ws / "target.py").write_text("v1")
@@ -45,7 +42,6 @@ class TestRestoreFileSingleFile:
         assert (ws / "untouched.py").read_text() == "also_changed"
 
     def test_subdir_file_restored(self, tmp_path: Path):
-        """Internal documentation."""
         ws = tmp_path / "ws"
         (ws / "src").mkdir(parents=True)
         original = "def foo(): pass\n"
@@ -63,7 +59,6 @@ class TestRestoreFileSingleFile:
 
 class TestRestoreFileNewFileUndo:
     def test_new_file_undo_deletes_file(self, tmp_path: Path):
-        """Internal documentation."""
         ws = tmp_path / "ws"
         ws.mkdir()
         (ws / "existing.py").write_text("v1")
@@ -80,7 +75,6 @@ class TestRestoreFileNewFileUndo:
         assert not (ws / "new_file.py").exists(), "新建文件 undo 后应被删除"
 
     def test_new_file_already_deleted_no_error(self, tmp_path: Path):
-        """Internal documentation."""
         ws = tmp_path / "ws"
         ws.mkdir()
 
@@ -94,7 +88,6 @@ class TestRestoreFileNewFileUndo:
 
 class TestRestoreFilePathJail:
     def test_dotdot_escape_rejected(self, tmp_path: Path):
-        """Internal documentation."""
         ws = tmp_path / "ws"
         ws.mkdir()
         (tmp_path / "secret.txt").write_text("secret")
@@ -108,7 +101,6 @@ class TestRestoreFilePathJail:
         assert (tmp_path / "secret.txt").read_text() == "secret"
 
     def test_absolute_path_outside_workspace_rejected(self, tmp_path: Path):
-        """Internal documentation."""
         ws = tmp_path / "ws"
         ws.mkdir()
 
@@ -122,7 +114,6 @@ class TestRestoreFilePathJail:
 
 class TestRestoreFileMissingSnapshot:
     def test_missing_snapshot_returns_error(self, tmp_path: Path):
-        """Internal documentation."""
         ws = tmp_path / "ws"
         ws.mkdir()
         (ws / "f.py").write_text("v1")

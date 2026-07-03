@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -104,7 +103,6 @@ _BINARY_EXTS: frozenset[str] = frozenset({
 
 
 def _should_skip(path: Path, relpath: str) -> bool:
-    """Internal documentation."""
     name = path.name
     if name in SKIP_BASENAMES:
         return True
@@ -120,7 +118,6 @@ def _should_skip(path: Path, relpath: str) -> bool:
 
 
 def _is_downgrade(relpath: str) -> bool:
-    """Internal documentation."""
     import fnmatch
     for pat in DOWNGRADE_PATH_PATTERNS:
         if fnmatch.fnmatch(relpath, pat):
@@ -129,7 +126,6 @@ def _is_downgrade(relpath: str) -> bool:
 
 
 def _is_binary(path: Path) -> bool:
-    """Internal documentation."""
     return path.suffix.lower() in _BINARY_EXTS
 
 
@@ -143,7 +139,6 @@ def scan_file_for_secrets(
     relpath: str,
     workspace: Path,
 ) -> tuple[Finding, ...]:
-    """Internal documentation."""
     if _should_skip(file, relpath):
         return ()
     if _is_binary(file):

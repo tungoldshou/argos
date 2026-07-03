@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from rich.text import Text
@@ -13,7 +12,6 @@ _INK   = "#C8CCDA"
 
 
 def _render_diff(unified: str) -> Text:
-    """Internal documentation."""
     out = Text(no_wrap=False, overflow="fold")
     for i, raw_line in enumerate(unified.splitlines(keepends=False)):
         if i > 0:
@@ -31,7 +29,6 @@ def _render_diff(unified: str) -> Text:
 
 
 class DiffView(Vertical):
-    """Internal documentation."""
 
     DEFAULT_CSS = """
     DiffView {

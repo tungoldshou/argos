@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import asyncio
 from pathlib import Path
 
@@ -27,7 +26,6 @@ def test_use_project_returns_token_and_sets_project_mode(tmp_path):
 
 
 def test_concurrent_tasks_isolated(tmp_path):
-    """Internal documentation."""
     async def worker(tag: str) -> str:
         token = runtime.set_context(RunContext(workspace=tmp_path / tag, verify_dir=tmp_path / tag))
         await asyncio.sleep(0.01)
@@ -42,7 +40,6 @@ def test_concurrent_tasks_isolated(tmp_path):
 
 
 def test_guard_and_detect_read_contextvar(tmp_path):
-    """Internal documentation."""
     ws = tmp_path / "proj"
     ws.mkdir()
     t = ws / "test_x.py"

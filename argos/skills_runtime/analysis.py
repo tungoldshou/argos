@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -26,7 +25,6 @@ _CATEGORY_VALUES: frozenset[str] = frozenset({
 
 @dataclass(frozen=True, slots=True)
 class Finding:
-    """Internal documentation."""
     severity: Severity
     category: str
     message: str
@@ -44,7 +42,6 @@ class Finding:
 
 @dataclass(frozen=True, slots=True)
 class AnalysisSkillContext:
-    """Internal documentation."""
     workspace: Path
     approval_level: str
     run_id: str
@@ -53,7 +50,6 @@ class AnalysisSkillContext:
 
 @dataclass(frozen=True, slots=True)
 class AnalysisSkillResult:
-    """Internal documentation."""
     summary: str
     findings: tuple[Finding, ...]
     duration_ms: int
@@ -73,7 +69,6 @@ AnalysisSkillRun = Callable[[Mapping[str, object], AnalysisSkillContext], Awaita
 
 @dataclass(frozen=True, slots=True)
 class AnalysisSkill:
-    """Internal documentation."""
     name: str
     description: str
     parameters_schema: Mapping[str, object]

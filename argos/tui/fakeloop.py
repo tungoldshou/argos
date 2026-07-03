@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -21,7 +20,6 @@ from argos.tui.events import (
 
 
 class FakeLoop:
-    """Internal documentation."""
 
     def __init__(self, script: list[Event] | None = None) -> None:
         self._script = script
@@ -54,7 +52,6 @@ class FakeLoop:
 
 
 class FailingFakeLoop(FakeLoop):
-    """Internal documentation."""
 
     def _default_script(self, goal: str) -> list[Event]:
         return [

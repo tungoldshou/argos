@@ -1,11 +1,9 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.context.threshold import LastCompactedAt, _should_compact
 
 
 def test_skip_when_compaction_disabled():
-    """Internal documentation."""
     assert _should_compact(
         used=90_000, window=100_000, threshold=0.8, phase="act",
         compaction_enabled=False,
@@ -13,7 +11,6 @@ def test_skip_when_compaction_disabled():
 
 
 def test_skip_when_phase_is_verify():
-    """Internal documentation."""
     assert _should_compact(
         used=90_000, window=100_000, threshold=0.8, phase="verify",
         compaction_enabled=True,
@@ -21,7 +18,6 @@ def test_skip_when_phase_is_verify():
 
 
 def test_skip_when_phase_is_plan():
-    """Internal documentation."""
     assert _should_compact(
         used=90_000, window=100_000, threshold=0.8, phase="plan",
         compaction_enabled=True,
@@ -29,7 +25,6 @@ def test_skip_when_phase_is_plan():
 
 
 def test_skip_when_threshold_zero():
-    """Internal documentation."""
     assert _should_compact(
         used=90_000, window=100_000, threshold=0.0, phase="act",
         compaction_enabled=True,
@@ -37,14 +32,12 @@ def test_skip_when_threshold_zero():
 
 
 def test_skip_when_ratio_below_threshold():
-    """Internal documentation."""
     assert _should_compact(
         used=60_000, window=100_000, threshold=0.8, phase="act",
     ) is False
 
 
 def test_skip_when_just_compacted_5pct_buffer():
-    """Internal documentation."""
     # already_compacted_at.used=90k, current=91k, window=200k, buffer=10k
     # 91k <= 90k + 10k → False
     assert _should_compact(
@@ -54,7 +47,6 @@ def test_skip_when_just_compacted_5pct_buffer():
 
 
 def test_skip_when_recent_verify_failed():
-    """Internal documentation."""
     assert _should_compact(
         used=90_000, window=100_000, threshold=0.8, phase="act",
         last_verdict_fail_count=1,
@@ -62,7 +54,6 @@ def test_skip_when_recent_verify_failed():
 
 
 def test_allow_when_above_threshold_and_idle():
-    """Internal documentation."""
     assert _should_compact(
         used=85_000, window=100_000, threshold=0.8, phase="act",
         compaction_enabled=True,
@@ -72,7 +63,6 @@ def test_allow_when_above_threshold_and_idle():
 
 
 def test_allow_when_above_buffer_after_compact():
-    """Internal documentation."""
     # already_compacted_at.used=50k, current=80k, window=100k, buffer=5k
     # 80k > 50k + 5k → True
     assert _should_compact(
@@ -82,7 +72,6 @@ def test_allow_when_above_buffer_after_compact():
 
 
 def test_skip_when_window_zero():
-    """Internal documentation."""
     assert _should_compact(
         used=0, window=0, threshold=0.8, phase="act",
     ) is False

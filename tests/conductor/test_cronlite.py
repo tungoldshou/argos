@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -12,7 +11,6 @@ from argos.conductor.cronlite import next_due
 
 def _utc(year: int, month: int, day: int,
          hour: int = 0, minute: int = 0, second: int = 0) -> float:
-    """Internal documentation."""
     dt = datetime(year, month, day, hour, minute, second, tzinfo=timezone.utc)
     return dt.timestamp()
 
@@ -21,7 +19,6 @@ def _utc(year: int, month: int, day: int,
 # ---------------------------------------------------------------------------
 
 class TestAliases:
-    """Internal documentation."""
 
     def test_hourly_fires_at_next_whole_hour(self):
         # now = 2024-01-01 09:30:00 UTC
@@ -53,7 +50,6 @@ class TestAliases:
         assert dt.minute == 0
 
     def test_daily_at_midnight_already_passed(self):
-        """Internal documentation."""
         now = _utc(2024, 1, 1, 0, 5, 0)
         due = next_due("@daily", now)
         dt = datetime.fromtimestamp(due, tz=timezone.utc)
@@ -64,7 +60,6 @@ class TestAliases:
 # ---------------------------------------------------------------------------
 
 class TestHHMM:
-    """Internal documentation."""
 
     def test_fires_today_if_not_yet(self):
         now = _utc(2024, 1, 1, 8, 59, 0)
@@ -83,7 +78,6 @@ class TestHHMM:
         assert dt.minute == 0
 
     def test_fires_tomorrow_if_exactly_now(self):
-        """Internal documentation."""
         now = _utc(2024, 1, 1, 9, 0, 0)
         due = next_due("09:00", now)
         dt = datetime.fromtimestamp(due, tz=timezone.utc)
@@ -104,7 +98,6 @@ class TestHHMM:
         assert dt.minute == 30
 
     def test_single_digit_hour(self):
-        """Internal documentation."""
         now = _utc(2024, 1, 1, 8, 0, 0)
         due = next_due("9:00", now)
         dt = datetime.fromtimestamp(due, tz=timezone.utc)
@@ -123,7 +116,6 @@ class TestHHMM:
 # ---------------------------------------------------------------------------
 
 class TestEvery:
-    """Internal documentation."""
 
     def test_every_30m(self):
         now = _utc(2024, 1, 1, 9, 1, 0)
@@ -156,13 +148,11 @@ class TestEvery:
         assert due1 == due2
 
     def test_every_spacing_flexible(self):
-        """Internal documentation."""
         now = _utc(2024, 1, 1, 9, 0, 0)
         due = next_due("every  2 m", now)
         assert due > now
 
     def test_every_zero_raises(self):
-        """Internal documentation."""
         with pytest.raises(ValueError):
             next_due("every 0m", _utc(2024, 1, 1, 9, 0, 0))
 
@@ -171,7 +161,6 @@ class TestEvery:
 # ---------------------------------------------------------------------------
 
 class TestFiveFieldCron:
-    """Internal documentation."""
 
     def test_specific_minute_and_hour(self):
         now = _utc(2024, 1, 1, 9, 0, 0)
@@ -217,7 +206,6 @@ class TestFiveFieldCron:
         assert dt.day == 1
 
     def test_cross_day_boundary(self):
-        """Internal documentation."""
         now = _utc(2024, 1, 1, 23, 59, 0)
         due = next_due("0 0 * * *", now)
         dt = datetime.fromtimestamp(due, tz=timezone.utc)
@@ -225,7 +213,6 @@ class TestFiveFieldCron:
         assert dt.hour == 0
 
     def test_cross_week_boundary(self):
-        """Internal documentation."""
         now = _utc(2024, 1, 6, 12, 0, 0)
         due = next_due("0 0 * * 0", now)
         dt = datetime.fromtimestamp(due, tz=timezone.utc)
@@ -243,7 +230,6 @@ class TestFiveFieldCron:
 # ---------------------------------------------------------------------------
 
 class TestInvalidSpec:
-    """Internal documentation."""
 
     @pytest.mark.parametrize("bad_spec", [
         "",
@@ -271,10 +257,8 @@ class TestInvalidSpec:
 # ---------------------------------------------------------------------------
 
 class TestClockInjection:
-    """Internal documentation."""
 
     def test_clock_param_accepted(self):
-        """Internal documentation."""
         called = []
 
         def fake_clock():
@@ -286,7 +270,6 @@ class TestClockInjection:
         assert due > now
 
     def test_no_real_time_import_needed(self):
-        """Internal documentation."""
         fixed_now = 1_000_000.0  # 1970-01-12
         due = next_due("* * * * *", fixed_now)
         assert due > fixed_now

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -152,7 +151,6 @@ def test_parse_slash_recognizes_memory():
 
 
 def test_remember_not_in_command_help():
-    """Internal documentation."""
     assert "memory" not in tui_cmd.COMMAND_HELP
     assert "remember" not in tui_cmd.COMMAND_HELP
     assert "forget" not in tui_cmd.COMMAND_HELP
@@ -189,19 +187,16 @@ def test_view_all_includes_session_when_sid_given(mem_root):
 
 
 def test_memory_command_renders_to_transcript(mem_root):
-    """Internal documentation."""
     from argos.memory.auto import view_all
     text = view_all()
     assert "memories" in text
 
 
 def test_memory_command_not_in_command_help():
-    """Internal documentation."""
     assert "memory" not in tui_cmd.COMMAND_HELP
 
 
 def test_memory_command_known_in_parse_slash():
-    """Internal documentation."""
     cmd = tui_cmd.parse_slash("/memory")
     assert cmd is not None
     assert cmd.known is True

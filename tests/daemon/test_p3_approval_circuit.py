@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -18,13 +17,11 @@ from argos.daemon.worker import DaemonApprovalGate, RunWorker
 
 
 class GateHolder:
-    """Internal documentation."""
     def __init__(self) -> None:
         self.gate: Any = None
 
 
 class FakeApprovalLoop:
-    """Internal documentation."""
 
     def __init__(self, *, gate_holder: GateHolder, action: str = "write_file",
                  call_id: str | None = None):
@@ -62,7 +59,6 @@ class FakeApprovalLoop:
 
 
 class FakeApprovalLoopFactory:
-    """Internal documentation."""
 
     def __init__(self, loop: FakeApprovalLoop):
         self._loop = loop
@@ -72,7 +68,6 @@ class FakeApprovalLoopFactory:
 
 
 class GateSetterWorker(RunWorker):
-    """Internal documentation."""
 
     def __init__(self, *args, gate_holder: GateHolder, **kwargs):
         super().__init__(*args, **kwargs)
@@ -122,7 +117,6 @@ async def _wait_run_state(manager: RunManager, run_id: str, state: str,
 
 @pytest.mark.asyncio
 async def test_approval_circuit_full(tmp_path: Path):
-    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -214,7 +208,6 @@ async def test_approval_circuit_full(tmp_path: Path):
 @pytest.mark.slow
 @pytest.mark.asyncio
 async def test_approval_wrong_call_id_returns_409(tmp_path: Path):
-    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -278,7 +271,6 @@ async def test_approval_wrong_call_id_returns_409(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_approval_timeout_deny(tmp_path: Path):
-    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -336,7 +328,6 @@ async def test_approval_timeout_deny(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_concurrent_runs_approval_isolation(tmp_path: Path):
-    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -442,7 +433,6 @@ async def test_concurrent_runs_approval_isolation(tmp_path: Path):
 # ══════════════════════════════════════════════════════════════════════════
 
 class FakePlanLoop:
-    """Internal documentation."""
 
     def __init__(self, *, call_id: str | None = None, decision_timeout_s: float = 30.0):
         _call_id = call_id or uuid.uuid4().hex[:12]
@@ -456,7 +446,6 @@ class FakePlanLoop:
 
     def respond_plan_decision(self, call_id: str, action: str,
                               feedback: str | None = None) -> bool:
-        """Internal documentation."""
         if call_id not in self._plan_call_registry:
             return False
         from argos.core.plan_mode import ExitPlanMode
@@ -467,7 +456,6 @@ class FakePlanLoop:
         return True
 
     async def run(self, goal: str, session_id: str) -> AsyncIterator[dict]:
-        """Internal documentation."""
         yield {"kind": "token_delta", "text": "generating plan..."}
 
         self._plan_call_registry[self.call_id] = self._plan_decision_event
@@ -502,7 +490,6 @@ class FakePlanLoopFactory:
 
 @pytest.mark.asyncio
 async def test_plan_decision_full_circuit(tmp_path: Path):
-    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -589,7 +576,6 @@ async def test_plan_decision_unknown_run_404(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_plan_decision_no_loop_409(tmp_path: Path):
-    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -598,7 +584,6 @@ async def test_plan_decision_no_loop_409(tmp_path: Path):
     run_id = await manager.create_run(goal="no loop run", workspace=str(tmp_path))
 
     class NoLoopWorker:
-        """Internal documentation."""
         state = "running"
         _loop = None
 
@@ -622,7 +607,6 @@ async def test_plan_decision_no_loop_409(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_plan_decision_unknown_call_id_409(tmp_path: Path):
-    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -657,7 +641,6 @@ async def test_plan_decision_unknown_call_id_409(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_plan_decision_invalid_action_400(tmp_path: Path):
-    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -694,7 +677,6 @@ async def test_plan_decision_invalid_action_400(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_plan_decision_refine_missing_feedback_400(tmp_path: Path):
-    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -731,7 +713,6 @@ async def test_plan_decision_refine_missing_feedback_400(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_plan_decision_cross_run_isolation(tmp_path: Path):
-    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -823,7 +804,6 @@ async def test_plan_decision_cross_run_isolation(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_plan_decision_observer_session_rejected(tmp_path: Path):
-    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",

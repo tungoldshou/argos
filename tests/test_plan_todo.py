@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.tui.events import PlanUpdate, deserialize_event, serialize_event

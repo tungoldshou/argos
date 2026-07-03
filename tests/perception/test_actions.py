@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -8,7 +7,6 @@ from argos.perception.actions import ComputerAction, TEXT_MAX_LEN
 
 
 def test_screenshot_no_fields():
-    """Internal documentation."""
     a = ComputerAction(kind="screenshot")
     assert a.kind == "screenshot"
     assert a.x is None and a.y is None
@@ -46,13 +44,11 @@ def test_open_app_with_valid_name():
 
 
 def test_open_app_with_dots_and_dashes():
-    """Internal documentation."""
     a = ComputerAction(kind="open_app", app="Some-App.v2")
     assert a.app == "Some-App.v2"
 
 
 def test_frozen_dataclass():
-    """Internal documentation."""
     a = ComputerAction(kind="screenshot")
     with pytest.raises((AttributeError, TypeError)):
         a.kind = "click"  # type: ignore[misc]
@@ -70,7 +66,6 @@ def test_negative_y_raises():
 
 
 def test_zero_coord_is_valid():
-    """Internal documentation."""
     a = ComputerAction(kind="click", x=0, y=0)
     assert a.x == 0 and a.y == 0
 
@@ -88,13 +83,11 @@ def test_text_over_limit_raises():
 
 
 def test_app_name_with_semicolon_raises():
-    """Internal documentation."""
     with pytest.raises(ValueError, match="含非法字符"):
         ComputerAction(kind="open_app", app="Finder; rm -rf /")
 
 
 def test_app_name_with_slash_raises():
-    """Internal documentation."""
     with pytest.raises(ValueError, match="含非法字符"):
         ComputerAction(kind="open_app", app="../../bin/bash")
 

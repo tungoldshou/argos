@@ -27,7 +27,6 @@ def test_costupdate_has_cache_read_field():
 
 
 def test_coalesce_consecutive_roles_keeps_alternation():
-    """Internal documentation."""
     out = _coalesce_consecutive_roles([
         {"role": "user", "content": "第一轮目标"},
         {"role": "user", "content": "第二轮:继续"},
@@ -38,7 +37,6 @@ def test_coalesce_consecutive_roles_keeps_alternation():
 
 
 def test_payload_normalizes_messages():
-    """Internal documentation."""
     from argos.core.protocols import get_protocol
     mc = ModelClient.__new__(ModelClient)
     from argos.core.models import ModelTier

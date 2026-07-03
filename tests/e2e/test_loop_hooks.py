@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -19,14 +18,12 @@ from argos.hooks.events import HookFired
 
 
 def _set_hooks(entries_per_event: dict[str, list[HookMatcherEntry]]) -> None:
-    """Internal documentation."""
     import argos.hooks as h
     h._config = HooksConfig(entries=entries_per_event)
 
 
 @pytest.fixture(autouse=True)
 def _isolated(monkeypatch):
-    """Internal documentation."""
     import tempfile
     tmp = tempfile.mkdtemp()
     monkeypatch.setenv("HOME", tmp)
@@ -37,7 +34,6 @@ def _isolated(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_pre_blocking_skips_exec_code(tmp_path):
-    """Internal documentation."""
     h_block2 = HookHandler(
         type="command",
         command="bash -c 'printf %s \"{\\\"stopReason\\\":\\\"blocked\\\"}\"; exit 2'",
@@ -56,7 +52,6 @@ async def test_pre_blocking_skips_exec_code(tmp_path):
 
 @pytest.mark.asyncio
 async def test_pre_blocking_message_template():
-    """Internal documentation."""
     h = HookHandler(
         type="command",
         command="bash -c 'printf %s \"{\\\"stopReason\\\":\\\"secret detected\\\"}\"; exit 2'",
@@ -72,7 +67,6 @@ async def test_pre_blocking_message_template():
 
 @pytest.mark.asyncio
 async def test_post_hook_fires_after_sandbox_exec(tmp_path):
-    """Internal documentation."""
     target = tmp_path / "post_payload.json"
     h = HookHandler(
         type="command",
@@ -95,7 +89,6 @@ async def test_post_hook_fires_after_sandbox_exec(tmp_path):
 
 @pytest.mark.asyncio
 async def test_stop_hook_fires_with_verdict_status(tmp_path):
-    """Internal documentation."""
     target = tmp_path / "seen.json"
     h = HookHandler(
         type="command",
@@ -117,7 +110,6 @@ async def test_stop_hook_fires_with_verdict_status(tmp_path):
 
 @pytest.mark.asyncio
 async def test_user_prompt_submit_hook_fires_with_goal(tmp_path):
-    """Internal documentation."""
     target = tmp_path / "ups.json"
     h = HookHandler(
         type="command",
@@ -134,7 +126,6 @@ async def test_user_prompt_submit_hook_fires_with_goal(tmp_path):
 
 @pytest.mark.asyncio
 async def test_session_start_hook_fires_with_model_tier(tmp_path):
-    """Internal documentation."""
     target = tmp_path / "ss.json"
     h = HookHandler(
         type="command",
@@ -153,7 +144,6 @@ async def test_session_start_hook_fires_with_model_tier(tmp_path):
 
 @pytest.mark.asyncio
 async def test_pre_timeout_not_blocking():
-    """Internal documentation."""
     h = HookHandler(type="command", command="sleep 5", timeout=100)
     _set_hooks({"PreToolUse": [HookMatcherEntry(matcher="*", hooks=(h,))]})
     payload = build_pre_payload(
@@ -167,7 +157,6 @@ async def test_pre_timeout_not_blocking():
 
 @pytest.mark.asyncio
 async def test_drive_emits_session_start_hook_fired(build_real_loop, tmp_path):
-    """Internal documentation."""
     from argos.hooks.events import HookFired as _HookFired
 
     marker = tmp_path / "hook_fired.marker"
@@ -193,7 +182,6 @@ async def test_drive_emits_session_start_hook_fired(build_real_loop, tmp_path):
 
 @pytest.mark.asyncio
 async def test_drive_pre_timeout_blocks_tool_execution(build_real_loop, tmp_path):
-    """Internal documentation."""
     h = HookHandler(type="command", command="sleep 5", timeout=100)
     _set_hooks({"PreToolUse": [HookMatcherEntry(matcher="*", hooks=(h,))]})
 
@@ -211,7 +199,6 @@ async def test_drive_pre_timeout_blocks_tool_execution(build_real_loop, tmp_path
 
 @pytest.mark.asyncio
 async def test_drive_pre_blocking_yields_fail_hookfired(build_real_loop):
-    """Internal documentation."""
     from argos.hooks.events import HookFired as _HookFired
 
     reject_cmd = "bash -c 'printf %s \"{\\\"stopReason\\\":\\\"audit blocked\\\"}\"; exit 2'"

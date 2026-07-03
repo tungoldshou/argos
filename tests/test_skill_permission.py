@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -86,7 +85,6 @@ def test_js_inner_html_warning(tmp_path):
 
 
 def test_tests_directory_eval_downgraded_to_info(tmp_path):
-    """Internal documentation."""
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir()
     f = tests_dir / "test_x.py"
@@ -97,7 +95,6 @@ def test_tests_directory_eval_downgraded_to_info(tmp_path):
 
 
 def test_conftest_py_in_tests_downgraded(tmp_path):
-    """Internal documentation."""
     tests_dir = tmp_path / "tests"
     tests_dir.mkdir()
     f = tests_dir / "conftest.py"
@@ -108,7 +105,6 @@ def test_conftest_py_in_tests_downgraded(tmp_path):
 
 
 def test_unsupported_language_partial(tmp_path):
-    """Internal documentation."""
     f = tmp_path / "main.go"
     f.write_text('package main\n')
     findings = scan_file_for_permission_issues(f, relpath="main.go", workspace=tmp_path)
@@ -116,7 +112,6 @@ def test_unsupported_language_partial(tmp_path):
 
 
 def test_finding_has_snippet_and_line(tmp_path):
-    """Internal documentation."""
     f = tmp_path / "script.py"
     f.write_text('# comment\neval("x")\n')
     findings = scan_file_for_permission_issues(f, relpath="script.py", workspace=tmp_path)

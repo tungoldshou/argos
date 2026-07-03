@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -14,7 +13,6 @@ import pytest
 
 
 def test_eval_list_no_runs_prints_message(capsys, tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from argos.eval import results as _results
     monkeypatch.setattr(_results, "_RUNS_DIR", tmp_path / "eval" / "runs")
@@ -26,7 +24,6 @@ def test_eval_list_no_runs_prints_message(capsys, tmp_path, monkeypatch):
 
 
 def test_eval_list_with_runs_prints_table(capsys, tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from argos.eval import results as _results
     monkeypatch.setattr(_results, "_RUNS_DIR", tmp_path / "eval" / "runs")
@@ -75,7 +72,6 @@ def test_eval_corpus_prints_task_list(capsys, tmp_path, monkeypatch):
 
 
 def test_eval_run_invokes_runner(capsys, tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.cli import eval as cli
     from argos import config as C
     from tests.eval._seed_corpus import write_seed_corpus
@@ -123,7 +119,6 @@ def test_eval_run_unknown_task_raises(capsys, tmp_path, monkeypatch):
 
 
 def test_eval_run_returns_nonzero_on_failure(capsys, tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.cli import eval as cli
     from tests.eval._seed_corpus import write_seed_corpus
     from tests.eval._fakes import FakeWorktree, make_fake_loop, make_fake_loop_factory
@@ -146,7 +141,6 @@ def test_eval_run_returns_nonzero_on_failure(capsys, tmp_path, monkeypatch):
 
 
 def test_make_runner_wires_real_loop_factory(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.cli import eval as cli
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -207,7 +201,6 @@ def test_eval_compare_writes_report(capsys, tmp_path, monkeypatch):
 
 
 def test_eval_subcommand_registered_in_main(monkeypatch):
-    """Internal documentation."""
     from argos.__main__ import _build_parser
     p = _build_parser()
     import argparse
@@ -233,6 +226,5 @@ def test_eval_compare_subparser_registers_required_args():
 
 
 def _ns(**kwargs):
-    """Internal documentation."""
     import argparse
     return argparse.Namespace(**kwargs)

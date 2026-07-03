@@ -1,10 +1,10 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, TYPE_CHECKING
+from urllib.parse import urlparse
 
 from argos.approval import ApprovalLevel
 from argos.i18n import t
@@ -47,17 +47,27 @@ class DecisionMeta:
 
 
 def _arg_str(args: dict[str, Any]) -> str:
-    """Internal documentation."""
     if not isinstance(args, dict):
         return str(args)
+    server = args.get("server")
+    tool = args.get("tool")
+    if isinstance(server, str) and isinstance(tool, str) and server.strip() and tool.strip():
+        return f"{server.strip()}/{tool.strip()}"
     for key in ("cmd", "command"):
         v = args.get(key)
         if isinstance(v, str):
             return v
+    url = args.get("url")
+    if isinstance(url, str):
+        parsed = urlparse(url.strip())
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+        if parsed.netloc:
+            return parsed.netloc.lower()
     for key in ("path", "file", "filepath"):
         v = args.get(key)
         if isinstance(v, str):
-            return v
+            return str(Path(v).expanduser().resolve(strict=False))
     return repr(args)
 
 
@@ -70,7 +80,6 @@ def _gate_level_str(level: ApprovalLevel | str | None) -> str:
 
 
 def _run_command_needs_net(args: dict[str, Any]) -> bool:
-    """Internal documentation."""
     if not isinstance(args, dict):
         return False
     cmd = args.get("command") or args.get("cmd")
@@ -84,7 +93,6 @@ def _run_command_needs_net(args: dict[str, Any]) -> bool:
 
 
 def _check_hard_path_write(args: dict[str, Any], *, workspace: str | Path | None) -> DecisionMeta | None:
-    """Internal documentation."""
     path = args.get("path") or args.get("file") or args.get("filepath")
     if not isinstance(path, str):
         return None
@@ -116,7 +124,6 @@ def evaluate(
     low_risk_auto: bool = False,
     risk: str = "medium",
 ) -> DecisionMeta:
-    """Internal documentation."""
     arg_str = _arg_str(args)
 
     if action == "run_command":
@@ -182,7 +189,7 @@ def evaluate(
             decision="ask",
             trigger=f"secret:{secret_name}",
             secret_pattern=secret_name,
-            reason=f"⚠ Possible secret pattern matched: {secret_name} — did you mean to commit this?",
+            reason=t("perm2.eval.secret_ask_reason", name=secret_name),
         )
 
     # 4. Soft ask
@@ -268,7 +275,6 @@ def _apply_trust_semantics(
     ask_readonly: bool,
     reversible_lookup: "Callable[[str], bool | None] | None",
 ) -> DecisionMeta:
-    """Internal documentation."""
     if meta.decision == "deny":
         return meta
 

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -27,7 +26,6 @@ _SPAM_TOKENS = (
 
 
 def _infer_region(query: str) -> str:
-    """Internal documentation."""
     q = query or ""
     if any(0x3040 <= ord(c) <= 0x30FF for c in q):
         return "jp-jp"
@@ -39,7 +37,6 @@ def _infer_region(query: str) -> str:
 
 
 def _filter_results(results: list[dict], limit: int) -> list[dict]:
-    """Internal documentation."""
     from urllib.parse import urlparse
     seen: set[str] = set()
     out: list[dict] = []
@@ -64,7 +61,6 @@ def _filter_results(results: list[dict], limit: int) -> list[dict]:
 
 
 def _ddgs_search(query: str, limit: int) -> dict:
-    """Internal documentation."""
     if _DDGS is None:
         return {"success": False, "error": t("web.ddgs_unavailable")}
 
@@ -106,7 +102,6 @@ def _ddgs_search(query: str, limit: int) -> dict:
 
 
 def _tavily_search(query: str, limit: int) -> dict:
-    """Internal documentation."""
     import httpx
     key = os.environ.get("TAVILY_API_KEY", "")
     try:
@@ -132,7 +127,6 @@ DDGS_HOST = "duckduckgo.com"
 
 
 def search(query: str, limit: int = 5) -> dict:
-    """Internal documentation."""
     if os.environ.get("TAVILY_API_KEY", "").strip():
         res = _tavily_search(query, limit)
     else:
@@ -143,14 +137,12 @@ def search(query: str, limit: int = 5) -> dict:
 
 
 def active_search_host() -> str:
-    """Internal documentation."""
     if os.environ.get("TAVILY_API_KEY", "").strip():
         return TAVILY_HOST
     return DDGS_HOST
 
 
 def _is_blocked_host(host: str) -> bool:
-    """Internal documentation."""
     import ipaddress
     h = (host or "").strip().lower().strip("[]")
     if h in ("localhost", "0.0.0.0", "metadata.google.internal", "metadata", ""):
@@ -164,7 +156,6 @@ def _is_blocked_host(host: str) -> bool:
 
 
 def _transient_error(exc: Exception) -> bool:
-    """Internal documentation."""
     import ssl
     try:
         import httpx
@@ -174,7 +165,6 @@ def _transient_error(exc: Exception) -> bool:
 
 
 def _http_get_once(url: str, *, user_agent: str) -> str:
-    """Internal documentation."""
     import httpx
     from urllib.parse import urljoin, urlparse
     cur = url
@@ -197,7 +187,6 @@ def _http_get_once(url: str, *, user_agent: str) -> str:
 
 
 def _http_get(url: str) -> str:
-    """Internal documentation."""
     import time
     attempts = 1 + max(0, _HTTP_RETRIES)
     last: Exception | None = None
@@ -215,13 +204,11 @@ def _http_get(url: str) -> str:
 
 
 def _trafilatura_extract(html: str) -> str | None:
-    """Internal documentation."""
     import trafilatura
     return trafilatura.extract(html, output_format="markdown")
 
 
 def _strip_tags(html: str) -> str:
-    """Internal documentation."""
     import re
     html = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
     text = re.sub(r"<[^>]+>", " ", html)
@@ -232,7 +219,6 @@ _MODEL_EXTRACT_MAX_HTML = 40000
 
 
 def _model_extract(html: str) -> str | None:
-    """Internal documentation."""
     try:
         from argos import config as _cfg
         key = _cfg.active_key()
@@ -270,7 +256,6 @@ def _model_extract(html: str) -> str | None:
 
 
 def extract(url: str) -> dict:
-    """Internal documentation."""
     try:
         html = _http_get(url)
     except Exception as e:  # noqa: BLE001

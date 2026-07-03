@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -7,22 +6,20 @@ from typing import AsyncIterable, AsyncIterator, Any
 
 
 class LspProtocolError(Exception):
-    """Internal documentation."""
+    pass
 
 
 class LspStreamClosed(Exception):
-    """Internal documentation."""
+    pass
 
 
 def encode_frame(message: dict) -> bytes:
-    """Internal documentation."""
     body = json.dumps(message, ensure_ascii=False).encode("utf-8")
     header = f"Content-Length: {len(body)}\r\n\r\n".encode("ascii")
     return header + body
 
 
 async def parse_frames(stream: AsyncIterable[bytes]) -> AsyncIterator[dict]:
-    """Internal documentation."""
     buffer = bytearray()
     async for chunk in stream:
         if not chunk:
@@ -60,7 +57,6 @@ async def parse_frames(stream: AsyncIterable[bytes]) -> AsyncIterator[dict]:
 
 
 class _StreamLike:
-    """Internal documentation."""
 
     def __init__(self, stdin: Any, stdout: Any) -> None:
         self.stdin = stdin
@@ -68,7 +64,6 @@ class _StreamLike:
 
 
 class LspClient:
-    """Internal documentation."""
 
     def __init__(self, proc_or_streams: Any) -> None:
         self._proc = proc_or_streams
@@ -78,12 +73,10 @@ class LspClient:
         self._reader_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
-        """Internal documentation."""
         if self._reader_task is None:
             self._reader_task = asyncio.create_task(self._reader_loop())
 
     async def stop(self) -> None:
-        """Internal documentation."""
         if self._reader_task is not None:
             self._reader_task.cancel()
             try:
@@ -93,7 +86,6 @@ class LspClient:
             self._reader_task = None
 
     async def _reader_loop(self) -> None:
-        """Internal documentation."""
         stream = self._proc.stdout
         protocol_error: Exception | None = None
         try:
@@ -126,7 +118,6 @@ class LspClient:
     async def send_request(
         self, method: str, params: dict | None = None, *, timeout: float = 5.0,
     ) -> Any:
-        """Internal documentation."""
         msg_id = self._next_id
         self._next_id += 1
         loop = asyncio.get_event_loop()
@@ -139,14 +130,12 @@ class LspClient:
         return await asyncio.wait_for(fut, timeout=timeout)
 
     async def send_notification(self, method: str, params: dict | None = None) -> None:
-        """Internal documentation."""
         msg = {"jsonrpc": "2.0", "method": method, "params": params or {}}
         stdin = self._proc.stdin
         stdin.write(encode_frame(msg))
         await stdin.drain()
 
     async def notifications(self) -> AsyncIterator[dict]:
-        """Internal documentation."""
         while True:
             msg = await self._notifications.get()
             yield msg

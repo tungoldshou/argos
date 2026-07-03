@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -14,14 +13,12 @@ from argos.core.plan_mode import (
 
 
 def test_plan_mode_error_is_exception():
-    """Internal documentation."""
     err = PlanModeError("sandbox tool not allowed in plan mode")
     assert isinstance(err, Exception)
     assert "sandbox" in str(err).lower() or "plan" in str(err).lower()
 
 
 def test_plan_exit_decision_construction():
-    """Internal documentation."""
     d1 = PlanExitDecision(action="approve_start")
     d2 = PlanExitDecision(action="approve_accept_edits")
     d3 = PlanExitDecision(action="keep_planning")
@@ -35,7 +32,6 @@ def test_plan_exit_decision_construction():
 
 
 def test_plan_exit_decision_invalid_action_raises():
-    """Internal documentation."""
     with pytest.raises(ValueError):
         PlanExitDecision(action="invalid_action")
 
@@ -44,7 +40,6 @@ def test_plan_exit_decision_invalid_action_raises():
 
 
 class _FakeLoop:
-    """Internal documentation."""
     def __init__(self, *, busy: bool = False, mode: str = "act"):
         self._busy = busy
         self.mode = mode
@@ -56,7 +51,6 @@ class _FakeLoop:
 
 
 def test_enter_plan_mode_from_act():
-    """Internal documentation."""
     loop = _FakeLoop()
     msg = EnterPlanMode(loop)
     assert loop.mode == "plan"
@@ -65,7 +59,6 @@ def test_enter_plan_mode_from_act():
 
 
 def test_enter_plan_mode_already_in_plan():
-    """Internal documentation."""
     loop = _FakeLoop(mode="plan")
     msg = EnterPlanMode(loop)
     assert loop.mode == "plan"
@@ -73,7 +66,6 @@ def test_enter_plan_mode_already_in_plan():
 
 
 def test_enter_plan_mode_when_busy():
-    """Internal documentation."""
     loop = _FakeLoop(busy=True)
     msg = EnterPlanMode(loop)
     assert loop.mode == "act"
@@ -81,7 +73,6 @@ def test_enter_plan_mode_when_busy():
 
 
 def test_exit_plan_mode_approve_start():
-    """Internal documentation."""
     loop = _FakeLoop(mode="plan")
     msg = ExitPlanMode(loop, action="approve_start")
     assert loop.mode == "act"
@@ -90,7 +81,6 @@ def test_exit_plan_mode_approve_start():
 
 
 def test_exit_plan_mode_refine_requires_feedback():
-    """Internal documentation."""
     import asyncio
     loop = _FakeLoop(mode="plan")
     loop._plan_decision_event = asyncio.Event()
@@ -104,7 +94,6 @@ def test_exit_plan_mode_refine_requires_feedback():
 
 
 def test_exit_plan_mode_succeeds_sets_event():
-    """Internal documentation."""
     import asyncio
     loop = _FakeLoop(mode="plan")
     loop._plan_decision_event = asyncio.Event()
@@ -117,7 +106,6 @@ def test_exit_plan_mode_succeeds_sets_event():
 
 
 def test_exit_plan_mode_refine_with_feedback_sets_event():
-    """Internal documentation."""
     import asyncio
     loop = _FakeLoop(mode="plan")
     loop._plan_decision_event = asyncio.Event()
@@ -128,7 +116,6 @@ def test_exit_plan_mode_refine_with_feedback_sets_event():
 
 
 def test_exit_plan_mode_refine_with_feedback():
-    """Internal documentation."""
     loop = _FakeLoop(mode="plan")
     msg = ExitPlanMode(loop, action="refine", feedback="更多上下文")
     assert loop.mode == "act"
@@ -136,14 +123,12 @@ def test_exit_plan_mode_refine_with_feedback():
 
 
 def test_exit_plan_mode_not_in_plan():
-    """Internal documentation."""
     loop = _FakeLoop(mode="act")
     msg = ExitPlanMode(loop, action="approve_start")
     assert "plan mode" in msg.lower() or "不在" in msg
 
 
 def test_exit_plan_mode_invalid_action():
-    """Internal documentation."""
     loop = _FakeLoop(mode="plan")
     msg = ExitPlanMode(loop, action="bogus")
     assert loop.mode == "plan"
@@ -156,7 +141,6 @@ from argos.core.plan_mode import PlanRenderer  # noqa: E402
 
 
 def test_render_empty_plan():
-    """Internal documentation."""
     md = PlanRenderer.render(goal="noop", todos=[], tool_calls=[])
     assert "# Plan: noop" in md
     assert "无具体任务分解" in md or "no specific task breakdown" in md.lower()
@@ -164,7 +148,6 @@ def test_render_empty_plan():
 
 
 def test_render_with_todos():
-    """Internal documentation."""
     todos = [
         {"step": 1, "description": "Read main.py", "tool": "read_file"},
         {"step": 2, "description": "Edit config", "tool": "edit_file"},
@@ -177,7 +160,6 @@ def test_render_with_todos():
 
 
 def test_render_with_tool_calls():
-    """Internal documentation."""
     tool_calls = [
         {"tool": "read_file", "args": {"path": "x.py"}},
         {"tool": "run_command", "args": {"command": "pytest"}},
@@ -189,7 +171,6 @@ def test_render_with_tool_calls():
 
 
 def test_render_with_risks():
-    """Internal documentation."""
     md = PlanRenderer.render(
         goal="x", todos=[], tool_calls=[], risks=["rm -rf 风险", "无 verify_cmd"],
     )
@@ -199,7 +180,6 @@ def test_render_with_risks():
 
 
 def test_render_goal_truncated_to_title():
-    """Internal documentation."""
     long_goal = "x" * 200
     md = PlanRenderer.render(goal=long_goal, todos=[], tool_calls=[])
     title_line = [l for l in md.splitlines() if l.startswith("# Plan:")][0]
@@ -209,7 +189,6 @@ def test_render_goal_truncated_to_title():
 
 
 def test_set_and_get_plan_mode():
-    """Internal documentation."""
     set_plan_mode(True)
     try:
         assert is_plan_mode() is True
@@ -219,7 +198,6 @@ def test_set_and_get_plan_mode():
 
 
 def test_sandbox_tool_blocked_in_plan_mode():
-    """Internal documentation."""
     from argos.tools import run_command_gated
     set_plan_mode(True)
     try:
@@ -230,7 +208,6 @@ def test_sandbox_tool_blocked_in_plan_mode():
 
 
 def test_write_file_blocked_in_plan_mode():
-    """Internal documentation."""
     from argos.tools import write_file_gated
     set_plan_mode(True)
     try:
@@ -241,7 +218,6 @@ def test_write_file_blocked_in_plan_mode():
 
 
 def test_edit_file_blocked_in_plan_mode():
-    """Internal documentation."""
     from argos.tools import edit_file_gated
     set_plan_mode(True)
     try:
@@ -252,7 +228,6 @@ def test_edit_file_blocked_in_plan_mode():
 
 
 def test_sandbox_tools_work_in_normal_act_mode():
-    """Internal documentation."""
     from argos.tools import run_command_gated
     set_plan_mode(False)
     result = run_command_gated(command="echo hello")
@@ -260,7 +235,6 @@ def test_sandbox_tools_work_in_normal_act_mode():
 
 
 def test_enter_plan_mode_sets_module_state():
-    """Internal documentation."""
     from argos.core.plan_mode import EnterPlanMode
 
     class _Loop:
@@ -277,7 +251,6 @@ def test_enter_plan_mode_sets_module_state():
 
 
 def test_exit_plan_mode_clears_module_state():
-    """Internal documentation."""
     from argos.core.plan_mode import EnterPlanMode, ExitPlanMode
 
     class _Loop:

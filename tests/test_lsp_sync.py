@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -26,7 +25,6 @@ from argos.lsp.manager import (
 
 
 def test_extract_file_writes_single():
-    """Internal documentation."""
     from argos.lsp.trigger import extract_file_writes
     code = "write_file('a.py', 'x = 1\\n')"
     writes = extract_file_writes(code)
@@ -34,7 +32,6 @@ def test_extract_file_writes_single():
 
 
 def test_extract_file_writes_multiple():
-    """Internal documentation."""
     from argos.lsp.trigger import extract_file_writes
     code = "write_file('a.py', '1')\nwrite_file('b.py', '2')"
     writes = extract_file_writes(code)
@@ -42,7 +39,6 @@ def test_extract_file_writes_multiple():
 
 
 def test_extract_file_writes_double_quotes():
-    """Internal documentation."""
     from argos.lsp.trigger import extract_file_writes
     code = 'write_file("a.py", "hello\\nworld")'
     writes = extract_file_writes(code)
@@ -50,14 +46,12 @@ def test_extract_file_writes_double_quotes():
 
 
 def test_extract_file_writes_no_call():
-    """Internal documentation."""
     from argos.lsp.trigger import extract_file_writes
     assert extract_file_writes("x = 1\nprint(x)") == []
     assert extract_file_writes("") == []
 
 
 def test_extract_file_writes_handles_escaped_quote():
-    """Internal documentation."""
     from argos.lsp.trigger import extract_file_writes
     code = r"write_file('a.py', 'it\'s ok')"
     writes = extract_file_writes(code)
@@ -68,7 +62,6 @@ def test_extract_file_writes_handles_escaped_quote():
 
 
 def test_extract_file_paths_combines_write_and_edit():
-    """Internal documentation."""
     from argos.lsp.trigger import extract_file_paths
     code = (
         "write_file('a.py', '1')\n"
@@ -82,7 +75,6 @@ def test_extract_file_paths_combines_write_and_edit():
 
 
 def test_extract_file_paths_no_call():
-    """Internal documentation."""
     from argos.lsp.trigger import extract_file_paths
     assert extract_file_paths("print('hi')") == []
 
@@ -90,7 +82,6 @@ def test_extract_file_paths_no_call():
 
 
 def test_lsp_loop_singleton():
-    """Internal documentation."""
     import argos.lsp.manager as mgr_mod
     saved = (mgr_mod._LSP_LOOP, mgr_mod._LSP_LOOP_THREAD, mgr_mod._LSP_STARTED)
     try:
@@ -109,7 +100,6 @@ def test_lsp_loop_singleton():
 
 
 def test_request_sync_via_loop_submits_to_background_loop():
-    """Internal documentation."""
     import argos.lsp.manager as mgr_mod
     mgr_mod._ensure_lsp_loop_started()
     def coro_factory():
@@ -123,7 +113,6 @@ def test_request_sync_via_loop_submits_to_background_loop():
 
 
 def test_sync_file_sync_calls_sync_file_in_background_loop(tmp_path):
-    """Internal documentation."""
     import argos.lsp.manager as mgr_mod
 
     cfg = LspConfig(servers={
@@ -144,7 +133,6 @@ def test_sync_file_sync_calls_sync_file_in_background_loop(tmp_path):
 
 
 def test_sync_file_sync_handles_noop_silently(tmp_path):
-    """Internal documentation."""
     import argos.lsp.manager as mgr_mod
 
     cfg = LspConfig(servers={

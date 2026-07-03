@@ -1,11 +1,9 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.tui.widgets.activity_panel import ActivityPanel
 
 
 def test_approval_section_starts_empty():
-    """Internal documentation."""
     p = ActivityPanel()
     p.compose()
     p._approval_count = {"ok": 0, "ask": 0, "deny": 0}
@@ -14,7 +12,6 @@ def test_approval_section_starts_empty():
 
 
 def test_on_approval_decision_increments():
-    """Internal documentation."""
     p = ActivityPanel()
     p.compose()
     p._approval_count["ok"] += 1

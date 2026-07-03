@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -12,7 +11,6 @@ from argos.workflow.engine import WorkflowEngine
 
 
 class _TimedFactory:
-    """Internal documentation."""
     def __init__(self, *, stream_delay_s: float = 0.05):
         self._stream_delay_s = stream_delay_s
         self.candidate_start_times: list[float] = []
@@ -44,7 +42,6 @@ class _TimedFactory:
 
 @pytest.mark.asyncio
 async def test_best_of_n_staggers_candidate_starts(tmp_path):
-    """Internal documentation."""
     factory = _TimedFactory(stream_delay_s=0.05)
     spec = parse_spec({
         "name": "t", "description": "",
@@ -73,7 +70,6 @@ async def test_best_of_n_staggers_candidate_starts(tmp_path):
 
 @pytest.mark.asyncio
 async def test_best_of_n_caps_concurrency_below_n(tmp_path):
-    """Internal documentation."""
     factory = _TimedFactory(stream_delay_s=0.10)
     spec = parse_spec({
         "name": "t", "description": "",

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -24,7 +23,6 @@ def _write_pid(path: Path, pid: int) -> None:
 
 
 def _make_listening_socket(path: Path) -> _stdlib_socket.socket:
-    """Internal documentation."""
     srv = _stdlib_socket.socket(_stdlib_socket.AF_UNIX, _stdlib_socket.SOCK_STREAM)
     srv.bind(str(path))
     srv.listen(1)
@@ -33,7 +31,6 @@ def _make_listening_socket(path: Path) -> _stdlib_socket.socket:
 
 
 def test_socket_alive_no_file(tmp_path: Path) -> None:
-    """Internal documentation."""
     assert _socket_alive(tmp_path / "nonexistent.sock") is False
 
 
@@ -83,14 +80,12 @@ def test_default_conductor_dir_honors_argos_config_dir(tmp_path: Path, monkeypat
 
 
 def test_socket_alive_dead_socket(tmp_path: Path) -> None:
-    """Internal documentation."""
     sock_path = tmp_path / "dead.sock"
     sock_path.touch()
     assert _socket_alive(sock_path) is False
 
 
 def test_socket_alive_live_socket(tmp_path: Path) -> None:
-    """Internal documentation."""
     import tempfile
     with tempfile.TemporaryDirectory(dir="/tmp", prefix="argtest_") as td:
         sock_path = Path(td) / "t.sock"
@@ -104,7 +99,6 @@ def test_socket_alive_live_socket(tmp_path: Path) -> None:
 
 
 def test_stop_no_daemon(tmp_path: Path, capsys) -> None:
-    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -116,7 +110,6 @@ def test_stop_no_daemon(tmp_path: Path, capsys) -> None:
 
 
 def test_stop_stale_pid_no_socket(tmp_path: Path, capsys) -> None:
-    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -132,7 +125,6 @@ def test_stop_stale_pid_no_socket(tmp_path: Path, capsys) -> None:
 
 
 def test_stop_running_daemon_exits_cleanly(tmp_path: Path, capsys) -> None:
-    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -157,7 +149,6 @@ def test_stop_running_daemon_exits_cleanly(tmp_path: Path, capsys) -> None:
 
 
 def test_stop_daemon_timeout(tmp_path: Path, capsys) -> None:
-    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -177,7 +168,6 @@ def test_stop_daemon_timeout(tmp_path: Path, capsys) -> None:
 
 
 def test_stop_no_pid_file_but_socket_exists(tmp_path: Path, capsys) -> None:
-    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
     sock_path.touch()
@@ -190,7 +180,6 @@ def test_stop_no_pid_file_but_socket_exists(tmp_path: Path, capsys) -> None:
 
 
 def test_stop_process_already_gone(tmp_path: Path, capsys) -> None:
-    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -210,7 +199,6 @@ def test_stop_process_already_gone(tmp_path: Path, capsys) -> None:
 
 
 def test_status_not_running(tmp_path: Path, capsys) -> None:
-    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -222,7 +210,6 @@ def test_status_not_running(tmp_path: Path, capsys) -> None:
 
 
 def test_status_running(tmp_path: Path, capsys) -> None:
-    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -243,7 +230,6 @@ def test_status_running(tmp_path: Path, capsys) -> None:
 
 
 def test_status_shows_uptime(tmp_path: Path, capsys) -> None:
-    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -265,7 +251,6 @@ def test_status_shows_uptime(tmp_path: Path, capsys) -> None:
 
 
 def test_status_stale_pid(tmp_path: Path, capsys) -> None:
-    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -284,7 +269,6 @@ def test_status_stale_pid(tmp_path: Path, capsys) -> None:
 
 
 def test_main_stop_subcommand(tmp_path: Path, capsys) -> None:
-    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -305,7 +289,6 @@ def test_main_stop_subcommand(tmp_path: Path, capsys) -> None:
 
 
 def test_main_status_subcommand(tmp_path: Path, capsys) -> None:
-    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -326,7 +309,6 @@ def test_main_status_subcommand(tmp_path: Path, capsys) -> None:
 
 
 def test_main_no_subcommand_calls_serve(tmp_path: Path) -> None:
-    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -347,7 +329,6 @@ def test_main_no_subcommand_calls_serve(tmp_path: Path) -> None:
 
 
 def test_main_start_subcommand_calls_serve(tmp_path: Path) -> None:
-    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 

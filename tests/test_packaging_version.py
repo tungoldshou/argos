@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import re
 import subprocess
 from pathlib import Path
@@ -13,7 +12,6 @@ def test_version_file_exists():
 
 
 def test_version_file_format():
-    """Internal documentation."""
     text = VERSION_FILE.read_text().strip()
     assert re.match(r"^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?$", text), (
         f"VERSION 内容 '{text}' 不符合 x.y.z 格式"
@@ -21,7 +19,6 @@ def test_version_file_format():
 
 
 def test_version_matches_git_tag():
-    """Internal documentation."""
     text = VERSION_FILE.read_text().strip()
     try:
         tag = subprocess.check_output(

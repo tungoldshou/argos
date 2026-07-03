@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -46,7 +45,6 @@ class TestOpenAIEmbedderAembed:
             await emb.aembed(["hello"])
 
     def test_sync_embed_uses_short_timeout(self, monkeypatch):
-        """Internal documentation."""
         from argos.memory import embedding as emb_mod
         assert emb_mod._RECALL_ASYNC_TIMEOUT_S <= 10.0
 
@@ -69,7 +67,6 @@ class TestStoreArecall:
 
     @pytest.mark.asyncio
     async def test_arecall_falls_back_to_fts5_when_no_embedder(self, tmp_path):
-        """Internal documentation."""
         from argos.memory.store import ArgosStore
         store = ArgosStore(db_path=str(tmp_path / "test.db"), embedder=None)
         store._write(
@@ -81,7 +78,6 @@ class TestStoreArecall:
 
     @pytest.mark.asyncio
     async def test_arecall_with_failing_aembed_falls_back_to_sync(self, tmp_path):
-        """Internal documentation."""
         class FailingEmbedder:
             dim = 3
             def embed(self, texts):

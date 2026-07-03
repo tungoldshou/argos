@@ -1,4 +1,3 @@
-"""Internal documentation."""
 
 CATALOG_MODULES: list[str] = [
     "common",

@@ -1,11 +1,9 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from typing import Any, Protocol as _TypingProtocol, runtime_checkable
 
 
 def _coalesce_consecutive_roles(messages: list[dict]) -> list[dict]:
-    """Internal documentation."""
     out: list[dict] = []
     for m in messages:
         role = m.get("role")
@@ -25,7 +23,6 @@ def _coalesce_consecutive_roles(messages: list[dict]) -> list[dict]:
 
 
 def _anthropic_wire_message(m: dict) -> dict:
-    """Internal documentation."""
     atts = m.get("attachments")
     if not atts:
         return {"role": m["role"], "content": m.get("content", "")}
@@ -44,7 +41,6 @@ def _anthropic_wire_message(m: dict) -> dict:
 
 
 def _openai_wire_message(m: dict) -> dict:
-    """Internal documentation."""
     atts = m.get("attachments")
     if not atts:
         return {"role": m["role"], "content": m.get("content", "")}
@@ -141,7 +137,6 @@ class AnthropicProtocol:
 
 
 class OpenAIProtocol:
-    """Internal documentation."""
     name = "openai"
 
     def endpoint(self, base_url: str) -> str:

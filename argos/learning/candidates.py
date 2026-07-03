@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -29,13 +28,11 @@ def default_root(path: Path | None = None) -> Path:
 
 
 def _unique_tmp(target: Path) -> Path:
-    """Internal documentation."""
     return target.with_name(f"{target.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
 
 
 @dataclass(frozen=True, slots=True)
 class StoredCandidate:
-    """Internal documentation."""
     name: str
     body_markdown: str
     verify_cmd: str | None
@@ -60,7 +57,6 @@ def _dir_for(root: Path, name: str, source_run: str) -> Path:
 def save_candidate(cand: Any, *, root: Path, source_run: str,
                    workspace: str | None, goal: str,
                    self_verified: bool = False) -> Path | None:
-    """Internal documentation."""
     try:
         d = _dir_for(root, getattr(cand, "name", "learned"), source_run)
         d.mkdir(parents=True, exist_ok=True)
@@ -99,7 +95,6 @@ def save_candidate(cand: Any, *, root: Path, source_run: str,
 
 
 def list_unconsumed(root: Path) -> list[StoredCandidate]:
-    """Internal documentation."""
     out: list[StoredCandidate] = []
     if not root.exists():
         return out
@@ -134,7 +129,6 @@ def list_unconsumed(root: Path) -> list[StoredCandidate]:
 
 
 def mark_consumed(cand_dir: Path, *, reason: str) -> bool:
-    """Internal documentation."""
     meta_path = cand_dir / "meta.json"
     try:
         meta = json.loads(meta_path.read_text(encoding="utf-8"))

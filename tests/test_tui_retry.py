@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 
 from argos.tui.app import ArgosApp
@@ -6,7 +5,6 @@ from argos.tui.widgets.transcript import Transcript as TranscriptLog
 
 
 def _make_app(*, run_active: bool, loop_factory, session_id: str = "sess-test") -> ArgosApp:
-    """Internal documentation."""
     app = ArgosApp.__new__(ArgosApp)
     app._session_id = session_id
     app._run_active = run_active
@@ -18,7 +16,6 @@ def _make_app(*, run_active: bool, loop_factory, session_id: str = "sess-test") 
 
 @pytest.mark.asyncio
 async def test_retry_resends_last_user_message():
-    """Internal documentation."""
     class _StubStore:
         def get_messages(self, sid):
             return [
@@ -40,7 +37,6 @@ async def test_retry_resends_last_user_message():
 
 @pytest.mark.asyncio
 async def test_retry_busy_blocks():
-    """Internal documentation."""
     sent: list[str] = []
     async def _fake_start_run(goal: str) -> None:
         sent.append(goal)
@@ -54,7 +50,6 @@ async def test_retry_busy_blocks():
 
 @pytest.mark.asyncio
 async def test_retry_no_messages():
-    """Internal documentation."""
     class _EmptyStore:
         def get_messages(self, sid):
             return []
@@ -68,7 +63,6 @@ async def test_retry_no_messages():
 
 @pytest.mark.asyncio
 async def test_retry_no_get_messages_attribute():
-    """Internal documentation."""
     class _BareStore:
         pass
     class _StubLoop:
@@ -81,7 +75,6 @@ async def test_retry_no_get_messages_attribute():
 
 @pytest.mark.asyncio
 async def test_retry_no_loop_factory():
-    """Internal documentation."""
     app = _make_app(run_active=False, loop_factory=lambda: None)
     log = TranscriptLog()
     await app._retry(log)  # type: ignore[attr-defined]

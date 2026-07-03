@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,7 +19,6 @@ def _home(p: str) -> str:
 
 
 def test_denylist_nonempty():
-    """Internal documentation."""
     assert len(HARD_PATH_DENYLIST) >= 6
 
 
@@ -49,7 +47,6 @@ def test_aws_credentials_denied():
 
 
 def test_argos_own_env_allowed(monkeypatch):
-    """Internal documentation."""
     from argos import config as C
 
     monkeypatch.delenv("ARGOS_CONFIG_DIR", raising=False)
@@ -64,7 +61,6 @@ def test_argos_own_env_honors_argos_config_dir(tmp_path, monkeypatch):
 
 
 def test_workspace_file_allowed():
-    """Internal documentation."""
     assert is_system_path("/Users/zc/Projects/argos/CLAUDE.md") is False
 
 
@@ -83,13 +79,11 @@ def test_workspace_outside(tmp_path):
 
 
 def test_workspace_traversal_denied(tmp_path):
-    """Internal documentation."""
     p = (tmp_path / ".." / "outside" / "x").resolve()
     assert is_workspace_path(str(p), tmp_path) is False
 
 
 def test_workspace_none_means_outside():
-    """Internal documentation."""
     assert is_workspace_path("/etc/passwd", None) is False
 
 

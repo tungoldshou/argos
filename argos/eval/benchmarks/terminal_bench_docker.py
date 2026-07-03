@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -23,7 +22,6 @@ _DEFAULT_VERIFY_TIMEOUT = 600.0
 
 @dataclass(frozen=True, slots=True)
 class ContainerVerifyResult:
-    """Internal documentation."""
     exit_code: int
     detail: str
     timed_out: bool = False
@@ -31,7 +29,6 @@ class ContainerVerifyResult:
 
 
 class TBContainerExecutor:
-    """Internal documentation."""
 
     def __init__(self, *, network: bool | None = None, timeout: float = _DEFAULT_VERIFY_TIMEOUT):
         if network is None:
@@ -42,7 +39,6 @@ class TBContainerExecutor:
             raise RuntimeError(t("eval.docker.no_docker"))
 
     def image_ready(self, tb_task: TBTask) -> tuple[bool, str]:
-        """Internal documentation."""
         if not tb_task.dockerfile_lines:
             return False, ""
         from_line = tb_task.dockerfile_lines[0].strip()
@@ -63,7 +59,6 @@ class TBContainerExecutor:
         return False, base_ref
 
     def pull_image(self, base_ref: str) -> tuple[bool, str]:
-        """Internal documentation."""
         try:
             r = subprocess.run(
                 ["docker", "pull", base_ref],
@@ -83,7 +78,6 @@ class TBContainerExecutor:
         *,
         task_dir: Path,
     ) -> ContainerVerifyResult:
-        """Internal documentation."""
         task_dir = Path(task_dir)
         if not task_dir.is_dir():
             return ContainerVerifyResult(

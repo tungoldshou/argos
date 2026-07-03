@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import pytest
 from argos.tui.app import ArgosApp
 from argos.tui.fakeloop import FakeLoop

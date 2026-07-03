@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import shutil
@@ -15,7 +14,6 @@ from argos.tui import daemon_spawn
 
 @pytest.fixture
 def short_sock():
-    """Internal documentation."""
     d = tempfile.mkdtemp(prefix="argos_t_", dir="/tmp")
     try:
         yield Path(d) / "d.sock"
@@ -25,7 +23,6 @@ def short_sock():
 
 
 def _responding_server(path):
-    """Internal documentation."""
     srv = _sock.socket(_sock.AF_UNIX, _sock.SOCK_STREAM)
     srv.bind(str(path))
     srv.listen(1)
@@ -45,7 +42,6 @@ def _responding_server(path):
 
 
 def _hung_server(path):
-    """Internal documentation."""
     srv = _sock.socket(_sock.AF_UNIX, _sock.SOCK_STREAM)
     srv.bind(str(path))
     srv.listen(1)
@@ -54,7 +50,6 @@ def _hung_server(path):
 
 
 def test_check_socket_available_raises_when_daemon_responds_health(short_sock):
-    """Internal documentation."""
     srv = _responding_server(short_sock)
     try:
         with pytest.raises(RuntimeError, match="already in use"):
@@ -64,7 +59,6 @@ def test_check_socket_available_raises_when_daemon_responds_health(short_sock):
 
 
 def test_check_socket_available_treats_unresponsive_as_dead(short_sock, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(daemon_socket, "_HEALTH_TIMEOUT", 0.2, raising=False)
     srv = _hung_server(short_sock)
     try:
@@ -75,12 +69,10 @@ def test_check_socket_available_treats_unresponsive_as_dead(short_sock, monkeypa
 
 
 def test_check_socket_available_returns_when_no_socket(short_sock):
-    """Internal documentation."""
     daemon_socket.check_socket_available(short_sock)
 
 
 def test_check_socket_available_cleans_refused_socket(short_sock):
-    """Internal documentation."""
     short_sock.write_text("")
     daemon_socket.check_socket_available(short_sock)
     assert not short_sock.exists(), "不可连接的残留 socket 文件应被清掉"
@@ -89,7 +81,6 @@ def test_check_socket_available_cleans_refused_socket(short_sock):
 
 @pytest.mark.asyncio
 async def test_unresponsive_socket_is_killed_before_spawn(monkeypatch, tmp_path):
-    """Internal documentation."""
     sock = tmp_path / "daemon.sock"
     sock.write_text("")
     order: list[str] = []
@@ -125,7 +116,6 @@ async def test_unresponsive_socket_is_killed_before_spawn(monkeypatch, tmp_path)
 
 @pytest.mark.asyncio
 async def test_no_socket_file_does_not_kill(monkeypatch, tmp_path):
-    """Internal documentation."""
     sock = tmp_path / "daemon.sock"
     killed = {"n": 0}
 
@@ -154,7 +144,6 @@ async def test_no_socket_file_does_not_kill(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_spawn_failure_surfaces_daemon_log(monkeypatch, tmp_path, caplog):
-    """Internal documentation."""
     import logging
 
     sock = tmp_path / "daemon.sock"
@@ -186,7 +175,6 @@ async def test_spawn_failure_surfaces_daemon_log(monkeypatch, tmp_path, caplog):
 
 
 def test_kill_stale_daemon_escalates_to_sigkill_when_sigterm_ignored(monkeypatch, tmp_path):
-    """Internal documentation."""
     import signal
 
     sock = tmp_path / "daemon.sock"
@@ -208,7 +196,6 @@ def test_kill_stale_daemon_escalates_to_sigkill_when_sigterm_ignored(monkeypatch
 
 
 def test_kill_stale_daemon_no_sigkill_when_process_exits(monkeypatch, tmp_path):
-    """Internal documentation."""
     import signal
 
     sock = tmp_path / "daemon.sock"
@@ -231,7 +218,6 @@ def test_kill_stale_daemon_no_sigkill_when_process_exits(monkeypatch, tmp_path):
 
 
 def test_daemon_build_log_handlers_uses_rotating_file(tmp_path):
-    """Internal documentation."""
     from logging.handlers import RotatingFileHandler
 
     from argos.daemon import __main__ as dmain
@@ -253,7 +239,6 @@ def test_daemon_build_log_handlers_uses_rotating_file(tmp_path):
 
 
 def test_daemon_boot_log_path_is_separate_from_run_log(tmp_path):
-    """Internal documentation."""
     sock = tmp_path / "daemon.sock"
     boot = daemon_spawn._daemon_log_path(sock)
     assert boot.name == "daemon-boot.log", "TUI 重定向应落 daemon-boot.log"

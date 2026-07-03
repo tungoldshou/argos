@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import logging
@@ -13,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 def _snapshot_root() -> Path:
-    """Internal documentation."""
     from argos import config as C
     base = Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
     return base / "snapshots"
@@ -39,12 +37,10 @@ class RestoreResult:
 
 @dataclass(frozen=True)
 class RunSnapshot:
-    """Internal documentation."""
     tar_path: Path
 
     @classmethod
     def take(cls, workspace: Path, tar_path: Path) -> "RunSnapshot":
-        """Internal documentation."""
         from argos.runtime import SNAPSHOT_PRUNE_DIRS
 
         import os as _os
@@ -88,7 +84,6 @@ class RunSnapshot:
         return cls(tar_path=tar_path)
 
     def restore(self, workspace: Path) -> RestoreResult:
-        """Internal documentation."""
         result = RestoreResult()
         if not self.tar_path.exists():
             result.errors.append(("", t("core2.snapshot.tar_not_found_restore", path=self.tar_path)))
@@ -121,7 +116,6 @@ class RunSnapshot:
         return result
 
     def restore_file(self, workspace: Path, rel_path: str) -> RestoreResult:
-        """Internal documentation."""
         result = RestoreResult()
 
         try:

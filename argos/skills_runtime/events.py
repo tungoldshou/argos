@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,7 +9,6 @@ Verdict = Literal["passed", "failed", "partial", "n_a", "skipped"]
 
 @dataclass(frozen=True, slots=True)
 class SkillRunStart:
-    """Internal documentation."""
     kind: ClassVar[str] = "skill_run_start"
     skill_name: str
     args: Mapping[str, object]
@@ -20,7 +18,6 @@ class SkillRunStart:
 
 @dataclass(frozen=True, slots=True)
 class SkillRunEnd:
-    """Internal documentation."""
     kind: ClassVar[str] = "skill_run_end"
     skill_name: str
     verdict: Verdict

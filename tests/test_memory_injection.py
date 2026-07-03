@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import time
@@ -64,7 +63,6 @@ def test_block_honors_no_memory_env(mem_root, monkeypatch):
 
 
 def test_block_uses_global_claude_md(mem_root):
-    """Internal documentation."""
     g = mem_root.parent / "argos_home" / "CLAUDE.md"
     g.parent.mkdir(parents=True, exist_ok=True)
     g.write_text("global rule: 先跑测试", encoding="utf-8")
@@ -74,7 +72,6 @@ def test_block_uses_global_claude_md(mem_root):
 
 
 def test_block_integration_in_build_system(mem_root, monkeypatch):
-    """Internal documentation."""
     from argos.core.loop import AgentLoop
     p = mem_root / "CLAUDE.md"
     p.write_text("本项目用 tabs 缩进", encoding="utf-8")

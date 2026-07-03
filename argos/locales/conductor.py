@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 EN: dict[str, str] = {

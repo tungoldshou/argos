@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import sys
@@ -40,7 +39,6 @@ class _FakeStore:
 
 @dataclass
 class _FakeLoop:
-    """Internal documentation."""
     _build_system_text: str = "sys"
     _tool_sigs_text: str = "tools"
     _model: _FakeModel = None  # type: ignore[assignment]
@@ -65,7 +63,6 @@ def _loop(*, sys_text="hello world", tool_text="abc", window=200_000,
 
 
 def test_analyze_four_buckets_independent(monkeypatch):
-    """Internal documentation."""
     loop = _loop(sys_text="will explode")
 
     def boom(_g):
@@ -78,7 +75,6 @@ def test_analyze_four_buckets_independent(monkeypatch):
 
 
 def test_analyze_system_uses_build_system(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setitem(sys.modules, "tiktoken", None)
     loop = _loop(sys_text="x" * 80)
     b = analyze(loop, store=loop.store, workspace=Path("."))
@@ -88,7 +84,6 @@ def test_analyze_system_uses_build_system(monkeypatch):
 
 
 def test_analyze_memory_loads_four_scopes(monkeypatch):
-    """Internal documentation."""
     # mock argos.memory.auto.load
     fake_auto = types.ModuleType("argos.memory.auto")
 
@@ -106,7 +101,6 @@ def test_analyze_memory_loads_four_scopes(monkeypatch):
 
 
 def test_analyze_tools_uses_signatures_block():
-    """Internal documentation."""
     loop = _loop(tool_text="read_file x y\nedit_file a b")
     b = analyze(loop, store=loop.store, workspace=Path("."))
     assert b.tools.tokens > 0
@@ -115,7 +109,6 @@ def test_analyze_tools_uses_signatures_block():
 
 
 def test_analyze_messages_uses_api_usage():
-    """Internal documentation."""
     loop = _loop(input_tokens=2000, cache_read=500, cache_creation=300,
                   msgs=[{"role": "user", "content": "x"}] * 5)
     b = analyze(loop, store=loop.store, workspace=Path("."))
@@ -133,14 +126,12 @@ def test_analyze_window_fallback():
 
 
 def test_analyze_window_from_model():
-    """Internal documentation."""
     loop = _loop(window=8192)
     b = analyze(loop, store=loop.store, workspace=Path("."))
     assert b.window == 8192
 
 
 def test_analyze_pct_calculation():
-    """Internal documentation."""
     loop = _loop(sys_text="x" * 4000, tool_text="y" * 1000, window=200_000)
     b = analyze(loop, store=loop.store, workspace=Path("."))
     assert 0.0 <= b.pct <= 1.0
@@ -176,7 +167,6 @@ def test_analyze_health_property():
 
 
 def test_analyze_never_raises():
-    """Internal documentation."""
     class _BadLoop:
         @property
         def _model(self):

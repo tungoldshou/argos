@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from argos.core.honesty import (
     HONESTY_SYSTEM,
     StreamingContextScrubber,

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from rich.text import Text
@@ -58,7 +57,6 @@ _UNDO_COLOR = {
 
 
 class LedgerTable(Static):
-    """Internal documentation."""
 
     DEFAULT_CSS = """
     LedgerTable {
@@ -88,11 +86,9 @@ class LedgerTable(Static):
 
     @property
     def rendered_text(self) -> str:
-        """Internal documentation."""
         return self._build_rich_text().plain
 
     def _build_rich_text(self) -> Text:
-        """Internal documentation."""
         t = Text(no_wrap=False)
         entries = self._entries
         n = len(entries)
@@ -127,7 +123,6 @@ class LedgerTable(Static):
         return t
 
     def _append_data_row(self, t: Text, entry: LedgerEntry) -> None:
-        """Internal documentation."""
         # ── col 1: seq ──
         seq_str = str(entry.seq)
         t.append(f"{seq_str:<{_W_SEQ}}", style=_COL_INK_FAINT)

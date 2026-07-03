@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -20,7 +19,6 @@ from test_lsp_manager import _FakeProc, _read_one_frame
 
 
 def _make_route_handler() -> dict:
-    """Internal documentation."""
     return {
         "textDocument/definition": [{
             "uri": "file:///tmp/lsp-e2e/a.py",
@@ -53,7 +51,6 @@ def _make_route_handler() -> dict:
 
 @pytest.fixture
 def fake_lsp(tmp_path, monkeypatch):
-    """Internal documentation."""
     handlers = _make_route_handler()
     tasks: list[asyncio.Task] = []
 
@@ -103,7 +100,6 @@ def fake_lsp(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_lsp_definition_returns_location(fake_lsp):
-    """Internal documentation."""
     ws = fake_lsp
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
@@ -121,7 +117,6 @@ async def test_lsp_definition_returns_location(fake_lsp):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_lsp_references_returns_list(fake_lsp):
-    """Internal documentation."""
     ws = fake_lsp
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
@@ -138,7 +133,6 @@ async def test_lsp_references_returns_list(fake_lsp):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_lsp_hover_returns_markdown(fake_lsp):
-    """Internal documentation."""
     ws = fake_lsp
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
@@ -155,7 +149,6 @@ async def test_lsp_hover_returns_markdown(fake_lsp):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_lsp_document_symbols_returns_list(fake_lsp):
-    """Internal documentation."""
     ws = fake_lsp
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
@@ -173,7 +166,6 @@ async def test_lsp_document_symbols_returns_list(fake_lsp):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_lsp_workspace_symbols_returns_list(fake_lsp):
-    """Internal documentation."""
     ws = fake_lsp
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
@@ -190,7 +182,6 @@ async def test_lsp_workspace_symbols_returns_list(fake_lsp):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_lsp_diagnostics_returns_empty_list_when_no_diag(fake_lsp):
-    """Internal documentation."""
     ws = fake_lsp
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),

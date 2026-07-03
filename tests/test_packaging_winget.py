@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -15,14 +14,12 @@ VERSION = (ROOT / "packaging" / "VERSION").read_text().strip()
 
 
 def test_winget_manifest_files_exist():
-    """Internal documentation."""
     assert WINGET_DIR.exists(), f"缺 {WINGET_DIR}"
     for p in (INSTALLER, LOCALE, DEFAULT):
         assert p.exists(), f"缺 {p.name}"
 
 
 def test_winget_installer_yaml_has_required_fields():
-    """Internal documentation."""
     txt = INSTALLER.read_text()
     for f in ("PackageIdentifier: tungoldshou.argos",
               f"PackageVersion: {VERSION}",
@@ -40,7 +37,6 @@ def test_winget_installer_yaml_has_required_fields():
 
 
 def test_winget_locale_yaml_has_description():
-    """Internal documentation."""
     txt = LOCALE.read_text()
     assert "PackageLocale: en-US" in txt
     assert "Description: |" in txt, "locale 缺 Description 长描述"
@@ -50,14 +46,12 @@ def test_winget_locale_yaml_has_description():
 
 
 def test_winget_locale_does_not_claim_unpublished_channels_are_live():
-    """Internal documentation."""
     txt = LOCALE.read_text()
     assert "Homebrew Cask or the curl one-liner" not in txt
     assert "Linux via pip, AppImage, .deb, or .rpm" not in txt
 
 
 def test_winget_version_yaml_points_to_default_locale():
-    """Internal documentation."""
     txt = DEFAULT.read_text()
     assert "ManifestType: version" in txt
     assert "DefaultLocale: en-US" in txt
@@ -65,14 +59,12 @@ def test_winget_version_yaml_points_to_default_locale():
 
 
 def test_winget_default_locale_yaml_declares_manifest_type():
-    """Internal documentation."""
     txt = LOCALE.read_text()
     assert "ManifestType: defaultLocale" in txt
     assert "ManifestVersion: 1.6.0" in txt
 
 
 def test_winget_manifest_yaml_parseable():
-    """Internal documentation."""
     import yaml
     for p in (INSTALLER, LOCALE, DEFAULT):
         try:
@@ -86,14 +78,12 @@ def test_winget_manifest_yaml_parseable():
 
 
 def test_bump_winget_workflow_fails_when_windows_digest_missing():
-    """Internal documentation."""
     txt = BUMP_WINGET_YML.read_text()
     assert "[ -n \"${SHA256_WIN:-}\" ]" in txt
     assert "exit 1" in txt
 
 
 def test_bump_winget_workflow_dispatch_requires_tag_input():
-    """Internal documentation."""
     txt = BUMP_WINGET_YML.read_text()
     assert "workflow_dispatch:" in txt
     assert "tag:" in txt
@@ -102,7 +92,6 @@ def test_bump_winget_workflow_dispatch_requires_tag_input():
 
 
 def test_bump_winget_workflow_fails_when_manifest_file_missing():
-    """Internal documentation."""
     txt = BUMP_WINGET_YML.read_text()
     assert "|| continue" not in txt
     assert "missing winget manifest" in txt

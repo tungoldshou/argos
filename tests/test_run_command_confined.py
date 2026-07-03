@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -20,7 +19,6 @@ def ws(tmp_path: Path, monkeypatch):
 
 
 def test_network_denied_by_os_sandbox(ws):
-    """Internal documentation."""
     (ws / "net.py").write_text(
         "import urllib.request\n"
         "urllib.request.urlopen('http://1.1.1.1', timeout=3)\n"
@@ -33,7 +31,6 @@ def test_network_denied_by_os_sandbox(ws):
 
 
 def test_out_of_workspace_write_denied_by_os_sandbox(ws):
-    """Internal documentation."""
     escape = Path.home() / ".argos_c1_test_escape"
     if escape.exists():
         escape.unlink()
@@ -49,7 +46,6 @@ def test_out_of_workspace_write_denied_by_os_sandbox(ws):
 
 
 def test_in_workspace_command_still_works(ws):
-    """Internal documentation."""
     (ws / "good.py").write_text(
         "import pathlib\n"
         "pathlib.Path('good_out.txt').write_text('done')\n"
@@ -69,7 +65,6 @@ def test_ls_in_workspace_works(ws):
 
 
 def test_python_inline_eval_runs_but_network_contained(ws):
-    """Internal documentation."""
     out, code = shell.run_command(
         "python3 -c \"import urllib.request;"
         " urllib.request.urlopen('http://1.1.1.1', timeout=3); print('NETOK')\""
@@ -79,7 +74,6 @@ def test_python_inline_eval_runs_but_network_contained(ws):
 
 
 def test_inline_eval_no_longer_name_rejected(ws):
-    """Internal documentation."""
     out, code = shell.run_command("python3 -c \"print(6 * 7)\"")
     assert code == 0, out
     assert "42" in out

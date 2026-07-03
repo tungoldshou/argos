@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -24,7 +23,6 @@ _DEFAULT_MAX_STEPS = 20
 
 
 def _resolve_role(task: AgentTask):
-    """Internal documentation."""
     if task.role is None:
         return None
     return ROLE_PRESETS.get(task.role)
@@ -32,7 +30,6 @@ def _resolve_role(task: AgentTask):
 
 @dataclass(frozen=True, slots=True)
 class SubAgentFactory:
-    """Internal documentation."""
 
     base_workspace: Path
     pool: Any
@@ -52,7 +49,6 @@ class SubAgentFactory:
         agent_id: str,
         on_phase: OnPhase,
     ) -> AgentResult:
-        """Internal documentation."""
         try:
             return await self._run(task, item=item, agent_id=agent_id, on_phase=on_phase)
         except Exception as e:  # noqa: BLE001
@@ -184,7 +180,6 @@ class SubAgentFactory:
 
     @staticmethod
     def _capture_diff_text(workdir: Path) -> str | None:
-        """Internal documentation."""
         import subprocess
         try:
             subprocess.run(["git", "-C", str(workdir), "add", "-A"],
@@ -200,7 +195,6 @@ class SubAgentFactory:
 
     @staticmethod
     def _summarize_diff(diff_text: str) -> tuple[str, int]:
-        """Internal documentation."""
         import re
         files = re.findall(r"^diff --git a/", diff_text, flags=re.MULTILINE)
         n = len(files)
@@ -216,7 +210,6 @@ class SubAgentFactory:
 
     @staticmethod
     def _mirror_worktree(src: Path, dst: Path) -> None:
-        """Internal documentation."""
         import shutil
         import subprocess
 
@@ -257,7 +250,6 @@ class SubAgentFactory:
 
     @staticmethod
     def _persist_diff_journal(agent_id: str, diff_text: str) -> str:
-        """Internal documentation."""
         try:
             from argos import config
             d = Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "workflow" / "diffs"
@@ -271,7 +263,6 @@ class SubAgentFactory:
 
     @classmethod
     def for_test(cls, *, workspace: Path, model_factory: Callable[[str | None], Any]) -> "SubAgentFactory":
-        """Internal documentation."""
         from argos.core.models import CredentialPool
         from argos.core.verify_gate import Verifier
         from argos.memory.store import ArgosStore

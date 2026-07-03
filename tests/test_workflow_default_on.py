@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -20,17 +19,15 @@ def _make_loop(model):
 
 # ── system prompt injection ────────────────────────────────────────────────────
 
-def test_workflow_prompt_injected_by_default(monkeypatch):
-    """Internal documentation."""
+def test_workflow_prompt_suppressed_by_default(monkeypatch):
     monkeypatch.delenv("ARGOS_WORKFLOWS", raising=False)
     model = _RecModel(["完成。"])
     loop = _make_loop(model)
     stable, dynamic = loop._build_system_pair("test")
-    assert "propose_workflow" in stable, "默认应注入 WORKFLOW_PROMPT"
+    assert "propose_workflow" not in stable, "默认不应注入 WORKFLOW_PROMPT"
 
 
 def test_workflow_prompt_suppressed_when_zero(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_WORKFLOWS", "0")
     model = _RecModel(["完成。"])
     loop = _make_loop(model)
@@ -39,7 +36,6 @@ def test_workflow_prompt_suppressed_when_zero(monkeypatch):
 
 
 def test_workflow_prompt_injected_when_explicit_one(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_WORKFLOWS", "1")
     model = _RecModel(["完成。"])
     loop = _make_loop(model)
@@ -50,8 +46,7 @@ def test_workflow_prompt_injected_when_explicit_one(monkeypatch):
 # ── dispatch behaviour ────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_propose_workflow_dispatched_by_default(monkeypatch):
-    """Internal documentation."""
+async def test_propose_workflow_swallowed_by_default(monkeypatch):
     monkeypatch.delenv("ARGOS_WORKFLOWS", raising=False)
     model = _RecModel([
         "```python\npropose_workflow({'name': 'x', 'stages': []})\n```",
@@ -61,13 +56,12 @@ async def test_propose_workflow_dispatched_by_default(monkeypatch):
     async for _ in loop.run("任务", "s"):
         pass
     flat = "\n".join(msg for call in model.seen for msg in call)
-    assert "工作流已禁用" not in flat and "disabled" not in flat,\
-        "默认开启时不应出现工作流纠偏"
+    assert "工作流已禁用" in flat or "disabled" in flat,\
+        "默认关闭时应出现工作流纠偏"
 
 
 @pytest.mark.asyncio
 async def test_propose_workflow_swallowed_when_zero(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_WORKFLOWS", "0")
     model = _RecModel([
         "```python\npropose_workflow({'name': 'x', 'stages': []})\n```",

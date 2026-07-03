@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -13,7 +12,6 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ContextBucket:
-    """Internal documentation."""
     name: str
     tokens: int
     entries: int
@@ -24,7 +22,6 @@ class ContextBucket:
 
 @dataclass(frozen=True, slots=True)
 class ContextBreakdown:
-    """Internal documentation."""
     system: ContextBucket
     memory: ContextBucket
     tools: ContextBucket
@@ -36,7 +33,6 @@ class ContextBreakdown:
 
     @property
     def health(self) -> str:
-        """Internal documentation."""
         if self.pct < 0.5:
             return "green"
         if self.pct < 0.8:
@@ -45,7 +41,6 @@ class ContextBreakdown:
 
 
 class ContextAnalyzer:
-    """Internal documentation."""
 
     @staticmethod
     def analyze(loop: "AgentLoop", *, store: Any, workspace: Path,
@@ -54,7 +49,6 @@ class ContextAnalyzer:
 
 
 def _safe_system(loop: Any) -> ContextBucket:
-    """Internal documentation."""
     try:
         text = loop._build_system(goal_for_system(loop))  # type: ignore[attr-defined]
         tok, method = token_estimate(text)
@@ -64,12 +58,10 @@ def _safe_system(loop: Any) -> ContextBucket:
 
 
 def goal_for_system(_loop: Any) -> str:
-    """Internal documentation."""
     return ""
 
 
 def _safe_memory() -> ContextBucket:
-    """Internal documentation."""
     try:
         from argos.memory import auto as _auto  # type: ignore[import-not-found]
         scopes: tuple[tuple[str, str], ...] = (
@@ -97,7 +89,6 @@ def _safe_memory() -> ContextBucket:
 
 
 def _safe_tools(loop: Any) -> ContextBucket:
-    """Internal documentation."""
     try:
         text = loop._tool_signatures_block()  # type: ignore[attr-defined]
         tok, method = token_estimate(text)
@@ -107,7 +98,6 @@ def _safe_tools(loop: Any) -> ContextBucket:
 
 
 def _safe_messages(loop: Any, store: Any) -> ContextBucket:
-    """Internal documentation."""
     try:
         msgs = store.get_messages("") if hasattr(store, "get_messages") else []  # type: ignore[attr-defined]
     except Exception:  # noqa: BLE001
@@ -124,7 +114,6 @@ def _safe_messages(loop: Any, store: Any) -> ContextBucket:
 
 
 def _safe_window(loop: Any) -> int:
-    """Internal documentation."""
     try:
         cw = loop._model.tier.context_window  # type: ignore[attr-defined]
         return int(cw) if cw and cw > 0 else 200_000
@@ -134,7 +123,6 @@ def _safe_window(loop: Any) -> int:
 
 def analyze(loop: "AgentLoop", *, store: Any, workspace: Path,
             goal: str | None = None) -> ContextBreakdown:
-    """Internal documentation."""
     system = _safe_system(loop)
     memory = _safe_memory()
     tools = _safe_tools(loop)

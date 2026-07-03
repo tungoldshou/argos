@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import io
@@ -31,7 +30,6 @@ class _Resp(io.BytesIO):
 
 @pytest.fixture
 def fresh_root(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     return tmp_path
 
@@ -39,7 +37,6 @@ def fresh_root(tmp_path, monkeypatch):
 
 
 def test_e2e_refresh_install_list_remove_cycle(fresh_root, monkeypatch):
-    """Internal documentation."""
     content = make_skill_md(name="python-lint", capabilities=["read", "execute"])
     sha = sha256_of(content)
     index_payload = make_index(entries=[

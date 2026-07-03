@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import hashlib
@@ -39,7 +38,6 @@ def _sha(text: str) -> str:
 
 
 def _seed_index_cache(tmp_path, *, entries: list[dict]) -> None:
-    """Internal documentation."""
     cache_path = tmp_path / "index.json"
     cache_path.write_text(
         json.dumps({"version": 1, "generated_at": 0.0, "skills": entries}),
@@ -168,7 +166,6 @@ class _Resp(io.BytesIO):
 
 @pytest.fixture
 def install_env(tmp_path, monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     return tmp_path
 
@@ -205,7 +202,6 @@ def test_install_sha_mismatch_raises(install_env, monkeypatch):
 
 
 def test_install_size_drift_warning(install_env, monkeypatch):
-    """Internal documentation."""
     content = _make_skill_md(name="big-skill", capabilities=["read"])
     sha = _sha(content)
     _seed_index_cache(install_env, entries=[_entry_dict(
@@ -262,7 +258,6 @@ def test_install_happy_path_writes_file(install_env, monkeypatch):
 
 
 def test_install_force_enabled_false(install_env, monkeypatch):
-    """Internal documentation."""
     content = _make_skill_md(name="auto-off", capabilities=["read"], enabled=True)
     sha = _sha(content)
     _seed_index_cache(install_env, entries=[_entry_dict(

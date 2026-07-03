@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.i18n import t
@@ -29,13 +28,11 @@ __all__ = [
 
 
 async def run_skill(name, args, ctx, *, timeout_s=60.0, event_bus=None):  # type: ignore[no-untyped-def]
-    """Internal documentation."""
     from argos.skills_runtime.runner import run_skill as _impl
     return await _impl(name, args, ctx, timeout_s=timeout_s, event_bus=event_bus)
 
 
 def register_builtin_skills() -> None:
-    """Internal documentation."""
     from argos.skills_runtime.analysis import AnalysisSkill
     from argos.skills_runtime.builtin import security_review, simplify
     from argos.skills_runtime.builtin.verify import run as _verify_run

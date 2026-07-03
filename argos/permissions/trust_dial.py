@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import enum
@@ -11,7 +10,6 @@ from argos.i18n import t
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TrustLevel(enum.IntEnum):
-    """Internal documentation."""
     L0_EVERY_STEP     = 0
     L1_DANGEROUS_ONLY = 1
     L2_IRREVERSIBLE_ONLY = 2
@@ -20,17 +18,14 @@ class TrustLevel(enum.IntEnum):
 
     @property
     def label_human(self) -> str:
-        """Internal documentation."""
         return t(_HUMAN_LABELS[self])
 
     @property
     def description(self) -> str:
-        """Internal documentation."""
         return t(_DESCRIPTIONS[self])
 
     @property
     def mode_name(self) -> str:
-        """Internal documentation."""
         return _MODE_NAMES[self]
 
 
@@ -53,7 +48,6 @@ TRUST_CYCLE: tuple[TrustLevel, ...] = (
 
 
 def next_in_cycle(level: TrustLevel) -> TrustLevel:
-    """Internal documentation."""
     if level not in TRUST_CYCLE:
         if level is TrustLevel.L0_EVERY_STEP:
             return TrustLevel.L1_DANGEROUS_ONLY
@@ -89,7 +83,6 @@ _AL_AUTO         = "auto"           # ApprovalLevel.AUTO
 
 
 def to_approval_semantics(level: TrustLevel) -> dict[str, Any]:
-    """Internal documentation."""
     _base: dict[str, Any] = {
         "hard_rules_immune": True,
     }
@@ -150,7 +143,6 @@ def to_approval_semantics(level: TrustLevel) -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def hard_rules_immune() -> bool:
-    """Internal documentation."""
     return True
 
 
@@ -167,7 +159,6 @@ _LEVEL_RELAXED_DESCRIPTION: dict[TrustLevel, str] = {
 
 
 def escalation_warning(from_level: TrustLevel, to_level: TrustLevel) -> str:
-    """Internal documentation."""
     if int(to_level) <= int(from_level):
         return ""
 

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -17,14 +16,12 @@ from argos.permissions.trust_dial import (
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestTrustLevelBasic:
-    """Internal documentation."""
 
     def test_all_five_levels_exist(self):
         levels = list(TrustLevel)
         assert len(levels) == 5
 
     def test_integer_order(self):
-        """Internal documentation."""
         assert (
             TrustLevel.L0_EVERY_STEP
             < TrustLevel.L1_DANGEROUS_ONLY
@@ -46,7 +43,6 @@ class TestTrustLevelBasic:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestToApprovalSemantics:
-    """Internal documentation."""
 
     def _sem(self, level: TrustLevel) -> dict:
         sem = to_approval_semantics(level)
@@ -60,7 +56,6 @@ class TestToApprovalSemantics:
         assert sem["approval_level"] == "confirm"
 
     def test_l0_ask_readonly_true(self):
-        """Internal documentation."""
         sem = self._sem(TrustLevel.L0_EVERY_STEP)
         assert sem.get("ask_readonly") is True
 
@@ -75,7 +70,6 @@ class TestToApprovalSemantics:
         assert sem["approval_level"] == "confirm"
 
     def test_l1_ask_readonly_false(self):
-        """Internal documentation."""
         sem = self._sem(TrustLevel.L1_DANGEROUS_ONLY)
         assert sem.get("ask_readonly") is False
 
@@ -90,12 +84,10 @@ class TestToApprovalSemantics:
         assert sem["approval_level"] == "confirm"
 
     def test_l2_reversible_check_true(self):
-        """Internal documentation."""
         sem = self._sem(TrustLevel.L2_IRREVERSIBLE_ONLY)
         assert sem["reversible_check"] is True
 
     def test_l2_reversible_check_in_description(self):
-        """Internal documentation."""
         sem = self._sem(TrustLevel.L2_IRREVERSIBLE_ONLY)
         desc = sem.get("description", "")
         assert "reversible" in desc.lower(), (
@@ -119,14 +111,12 @@ class TestToApprovalSemantics:
         assert sem["approval_level"] == "auto"
 
     def test_l4_yolo_indicator(self):
-        """Internal documentation."""
         sem = self._sem(TrustLevel.L4_AUTONOMOUS)
         assert sem.get("show_yolo_indicator") is True
 
 
     @pytest.mark.parametrize("level", list(TrustLevel))
     def test_hard_rules_immune_always_true(self, level: TrustLevel):
-        """Internal documentation."""
         sem = to_approval_semantics(level)
         assert sem["hard_rules_immune"] is True, (
             f"{level} 的 to_approval_semantics 必须含 hard_rules_immune=True"
@@ -134,7 +124,6 @@ class TestToApprovalSemantics:
 
     @pytest.mark.parametrize("level", list(TrustLevel))
     def test_no_bypass_hard_rules_field(self, level: TrustLevel):
-        """Internal documentation."""
         sem = to_approval_semantics(level)
         forbidden_keys = {
             "skip_hard_rules", "bypass_hard_rules", "ignore_hard_rules",
@@ -157,11 +146,9 @@ class TestHardRulesImmune:
         assert hard_rules_immune() is True
 
     def test_can_assert(self):
-        """Internal documentation."""
         assert hard_rules_immune()
 
     def test_always_true_multiple_calls(self):
-        """Internal documentation."""
         for _ in range(10):
             assert hard_rules_immune() is True
 
@@ -170,7 +157,6 @@ class TestHardRulesImmune:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestEscalationWarning:
-    """Internal documentation."""
 
     @pytest.mark.parametrize("from_l,to_l", [
         (TrustLevel.L0_EVERY_STEP,      TrustLevel.L1_DANGEROUS_ONLY),
@@ -184,7 +170,6 @@ class TestEscalationWarning:
         (TrustLevel.L3_SESSION_TRUSTED, TrustLevel.L4_AUTONOMOUS),
     ])
     def test_escalation_warning_nonempty(self, from_l: TrustLevel, to_l: TrustLevel):
-        """Internal documentation."""
         w = escalation_warning(from_l, to_l)
         assert w, (
             f"escalation_warning({from_l.name} → {to_l.name}) 必须非空，实际: {w!r}"
@@ -198,7 +183,6 @@ class TestEscalationWarning:
         (TrustLevel.L2_IRREVERSIBLE_ONLY, TrustLevel.L0_EVERY_STEP),
     ])
     def test_downgrade_returns_empty(self, from_l: TrustLevel, to_l: TrustLevel):
-        """Internal documentation."""
         w = escalation_warning(from_l, to_l)
         assert w == "", (
             f"escalation_warning({from_l.name} → {to_l.name}) 降档应为空串，实际: {w!r}"
@@ -206,19 +190,16 @@ class TestEscalationWarning:
 
     @pytest.mark.parametrize("level", list(TrustLevel))
     def test_same_level_returns_empty(self, level: TrustLevel):
-        """Internal documentation."""
         w = escalation_warning(level, level)
         assert w == "", f"等档 escalation_warning({level.name}) 应为空串，实际: {w!r}"
 
     def test_l4_warning_mentions_hard_rules(self):
-        """Internal documentation."""
         w = escalation_warning(TrustLevel.L0_EVERY_STEP, TrustLevel.L4_AUTONOMOUS)
         assert "HARD" in w or "hard" in w.lower() or "硬规" in w, (
             f"升到 L4 的警示应提及 HARD RULES，实际: {w!r}"
         )
 
     def test_warning_mentions_what_is_relaxed(self):
-        """Internal documentation."""
         w = escalation_warning(TrustLevel.L0_EVERY_STEP, TrustLevel.L1_DANGEROUS_ONLY)
         assert len(w) > 20, f"警示文案过短，可能没有实质内容: {w!r}"
 
@@ -227,7 +208,6 @@ class TestEscalationWarning:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestThreeModeLayer:
-    """Internal documentation."""
 
     def test_mode_names_for_visible_modes(self):
         assert TrustLevel.L1_DANGEROUS_ONLY.mode_name == "Cautious"

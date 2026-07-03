@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -35,7 +34,6 @@ def test_is_git_repo_nonexistent_returns_false(tmp_path: Path):
 @pytest.mark.skipif(not Path("/usr/bin/git").exists() and not Path("/opt/homebrew/bin/git").exists() and not Path("/usr/local/bin/git").exists(),
                     reason="git not available")
 def test_create_git_worktree(tmp_path: Path):
-    """Internal documentation."""
     import shutil
     if not shutil.which("git"):
         pytest.skip("git not in PATH")
@@ -62,7 +60,6 @@ def test_create_git_worktree(tmp_path: Path):
 
 
 def test_create_non_git_uses_temp(tmp_path: Path):
-    """Internal documentation."""
     mgr = WorktreeManager(base_dir=tmp_path / "wt")
     rid = "abc123def456"
     wt_path = mgr.create(run_id=rid, workspace=str(tmp_path / "nope"))
@@ -73,7 +70,6 @@ def test_create_non_git_uses_temp(tmp_path: Path):
 
 
 def test_create_fails_when_git_missing(monkeypatch, tmp_path: Path):
-    """Internal documentation."""
     (tmp_path / "fake-git").mkdir()
     (tmp_path / "fake-git" / ".git").mkdir()
     mgr = WorktreeManager(base_dir=tmp_path / "wt")
@@ -92,7 +88,6 @@ def test_create_fails_when_git_missing(monkeypatch, tmp_path: Path):
 
 
 def test_create_workspace_does_not_exist_falls_back_to_temp(tmp_path: Path):
-    """Internal documentation."""
     mgr = WorktreeManager(base_dir=tmp_path / "wt")
     rid = "fff123fff123"
     wt_path = mgr.create(run_id=rid, workspace="/totally/nonexistent/path/x/y/z")
@@ -110,7 +105,6 @@ def test_cleanup_nonexistent_is_noop(tmp_path: Path):
 
 
 def test_cleanup_force_removes_locked_worktree(tmp_path: Path):
-    """Internal documentation."""
     mgr = WorktreeManager(base_dir=tmp_path / "wt")
     rid = "a" * 12
     wt = tmp_path / "wt" / rid
@@ -124,7 +118,6 @@ def test_cleanup_force_removes_locked_worktree(tmp_path: Path):
 
 
 def test_default_base_dir_honors_argos_config_dir(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos import config as C
 
     cfg_dir = tmp_path / "cfg"

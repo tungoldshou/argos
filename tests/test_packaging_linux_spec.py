@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -19,7 +18,6 @@ def test_build_linux_script_exists_and_executable():
 
 
 def test_build_linux_script_runs_pyinstaller_onefile():
-    """Internal documentation."""
     txt = SCRIPT.read_text()
     assert "pyinstaller" in txt, "脚本缺 pyinstaller 调用"
     assert "--onefile" in txt, "脚本缺 --onefile"
@@ -28,7 +26,6 @@ def test_build_linux_script_runs_pyinstaller_onefile():
 
 
 def test_build_linux_script_packs_appimage_deb_rpm():
-    """Internal documentation."""
     txt = SCRIPT.read_text()
     assert "appimagetool" in txt, "脚本缺 appimagetool 调用"
     assert "dpkg-deb --build" in txt, "脚本缺 dpkg-deb --build"
@@ -36,7 +33,6 @@ def test_build_linux_script_packs_appimage_deb_rpm():
 
 
 def test_build_linux_script_fails_when_required_package_assets_are_missing():
-    """Internal documentation."""
     txt = SCRIPT.read_text()
     assert "跳 .deb" not in txt
     assert "跳 .rpm" not in txt
@@ -51,7 +47,6 @@ def test_build_linux_script_fails_when_required_package_assets_are_missing():
 
 
 def test_build_linux_script_fails_when_appimage_is_missing():
-    """Internal documentation."""
     txt = SCRIPT.read_text()
     assert "跳 AppImage" not in txt
     assert "FATAL: appimagetool" in txt
@@ -59,27 +54,23 @@ def test_build_linux_script_fails_when_appimage_is_missing():
 
 
 def test_build_linux_script_reads_argos_version():
-    """Internal documentation."""
     txt = SCRIPT.read_text()
     assert "${ARGOS_VERSION:-}" in txt, "脚本缺 ARGOS_VERSION env fallback"
     assert "cat packaging/VERSION" in txt, "脚本缺 packaging/VERSION fallback"
 
 
 def test_build_linux_script_strips_release_tag_v_prefix():
-    """Internal documentation."""
     txt = SCRIPT.read_text()
     assert 'ARGOS_VERSION="${ARGOS_VERSION#v}"' in txt
 
 
 def test_build_linux_script_excludes_dead_stacks():
-    """Internal documentation."""
     txt = SCRIPT.read_text()
     for dead in ("langchain", "langgraph", "fastapi", "uvicorn"):
         assert f"--exclude-module {dead}" in txt, f"脚本缺 --exclude-module {dead}"
 
 
 def test_build_linux_script_adds_data_files():
-    """Internal documentation."""
     txt = SCRIPT.read_text()
     for data in ("schema.sql", "packaging/VERSION", "packaging/Info.plist"):
         assert data in txt, f"脚本缺 {data} add-data"

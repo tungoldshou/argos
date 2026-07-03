@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -33,7 +32,6 @@ def _ctx(workspace: Path) -> AnalysisSkillContext:
 
 
 def test_pass1_secret_finds_planted(tmp_path):
-    """Internal documentation."""
     f = tmp_path / "leak.py"
     f.write_text('token = "ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789"\n')
     findings = scan_file_for_secrets(f, relpath="leak.py", workspace=tmp_path)
@@ -41,7 +39,6 @@ def test_pass1_secret_finds_planted(tmp_path):
 
 
 def test_pass2_dep_audit_missing_tool_yields_error_severity(tmp_path):
-    """Internal documentation."""
     (tmp_path / "package-lock.json").write_text("{}")
 
     def _raise(*a, **kw):
@@ -53,7 +50,6 @@ def test_pass2_dep_audit_missing_tool_yields_error_severity(tmp_path):
 
 
 def test_pass3_permission_finds_eval(tmp_path):
-    """Internal documentation."""
     f = tmp_path / "bad.py"
     f.write_text('eval("1+1")\n')
     findings = scan_file_for_permission_issues(f, relpath="bad.py", workspace=tmp_path)
@@ -62,7 +58,6 @@ def test_pass3_permission_finds_eval(tmp_path):
 
 
 def test_security_review_full_pipeline_planted_secret(tmp_path):
-    """Internal documentation."""
     (tmp_path / "leak.py").write_text('token = "ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789"\n')
     (tmp_path / "bad.py").write_text('eval("1+1")\n')
     with patch(
@@ -77,7 +72,6 @@ def test_security_review_full_pipeline_planted_secret(tmp_path):
 
 
 def test_security_review_zero_findings_workspace(tmp_path):
-    """Internal documentation."""
     (tmp_path / "clean.py").write_text('x = 1\n')
 
     with patch(
@@ -90,7 +84,6 @@ def test_security_review_zero_findings_workspace(tmp_path):
 
 
 def test_security_review_dep_audit_missing_tool_makes_verdict_failed(tmp_path):
-    """Internal documentation."""
     (tmp_path / "package-lock.json").write_text("{}")
     (tmp_path / "clean.py").write_text("x = 1\n")
 
@@ -105,7 +98,6 @@ def test_security_review_dep_audit_missing_tool_makes_verdict_failed(tmp_path):
 
 
 def test_security_review_one_pass_failure_does_not_block_others(tmp_path):
-    """Internal documentation."""
     (tmp_path / "bad.py").write_text('eval("1+1")\n')
 
     with patch(
@@ -125,7 +117,6 @@ def test_security_review_one_pass_failure_does_not_block_others(tmp_path):
 
 
 def test_security_review_dedup_same_file_line_category_message(tmp_path):
-    """Internal documentation."""
     f = tmp_path / "leak.py"
     f.write_text('a = "ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789" "AKIAIOSFODNN7EXAMPLE"\n')
     with patch(
@@ -138,7 +129,6 @@ def test_security_review_dedup_same_file_line_category_message(tmp_path):
 
 
 def test_security_review_findings_sorted_error_warning_info(tmp_path):
-    """Internal documentation."""
     (tmp_path / "a.py").write_text('password = "hunter2hunter2"\n')
     (tmp_path / "b.py").write_text('eval("1+1")\n')
     with patch(
@@ -155,7 +145,6 @@ def test_security_review_findings_sorted_error_warning_info(tmp_path):
 
 
 def test_security_review_binary_file_skipped_silently(tmp_path):
-    """Internal documentation."""
     f = tmp_path / "blob.bin"
     f.write_bytes(b"\x00\x01\xff\xfe")
     with patch(
@@ -167,7 +156,6 @@ def test_security_review_binary_file_skipped_silently(tmp_path):
 
 
 def test_security_review_1mb_file_skipped(tmp_path):
-    """Internal documentation."""
     f = tmp_path / "big.py"
     f.write_text("# header\n" + "x = 1\n" * 200_000)
     with patch(
@@ -180,7 +168,6 @@ def test_security_review_1mb_file_skipped(tmp_path):
 
 
 def test_security_review_with_specific_path(tmp_path):
-    """Internal documentation."""
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "auth.py").write_text('token = "ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789"\n')
     (tmp_path / "other.py").write_text('token = "ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789"\n')
@@ -197,7 +184,6 @@ def test_security_review_with_specific_path(tmp_path):
 # ── summary format ─────────────────────────────────────────────
 
 def test_security_review_summary_contains_finding_count(tmp_path):
-    """Internal documentation."""
     (tmp_path / "leak.py").write_text('token = "ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789"\n')
     with patch(
         "argos.skills_runtime.builtin.security_review.audit.detect_lockfiles",

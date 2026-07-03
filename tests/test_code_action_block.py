@@ -6,10 +6,8 @@ from argos.tui.widgets.code_action import CodeActionBlock
 
 
 class _H(App):
-    """Internal documentation."""
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
-        """Internal documentation."""
         defaults = super().get_theme_variable_defaults()
         if ARGOS_NIGHT.variables:
             defaults.update(ARGOS_NIGHT.variables)

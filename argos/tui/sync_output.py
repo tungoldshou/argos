@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -25,7 +24,6 @@ _SUPPORTED_PS = frozenset({1, 2, 3})
 
 
 def _is_tty(stream: TextIO | None) -> bool:
-    """Internal documentation."""
     if stream is None:
         return False
     try:
@@ -35,7 +33,6 @@ def _is_tty(stream: TextIO | None) -> bool:
 
 
 def _parse_dectrqm_reply(reply: str) -> bool | None:
-    """Internal documentation."""
     if not reply:
         return None
     m = _RE_DECTRQM.search(reply)
@@ -48,7 +45,6 @@ def _parse_dectrqm_reply(reply: str) -> bool | None:
 
 
 def _query_mode_2026(timeout_s: float) -> str | None:
-    """Internal documentation."""
     try:
         fd_in = sys.stdin.fileno()
         fd_out = sys.stdout.fileno()
@@ -111,7 +107,6 @@ def probe_sync_output(
     stream: TextIO | None = None,
     timeout_s: float = 0.05,
 ) -> bool:
-    """Internal documentation."""
     global _probe_cache
     if _probe_cache is not None:
         return _probe_cache
@@ -135,7 +130,6 @@ def probe_sync_output(
 
 
 def clear_probe_cache() -> None:
-    """Internal documentation."""
     global _probe_cache
     _probe_cache = None
 
@@ -145,7 +139,6 @@ def sync_batch(
     stream: TextIO,
     enabled: bool | None = None,
 ) -> Iterator[None]:
-    """Internal documentation."""
     if enabled is None:
         enabled = probe_sync_output(stream)
 

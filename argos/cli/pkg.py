@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -12,12 +11,10 @@ __all__ = ["main", "dispatch", "cmd_info", "cmd_check", "cmd_manifest"]
 
 
 def main() -> int:
-    """Internal documentation."""
     return dispatch(sys.argv[1:])
 
 
 def dispatch(argv: list[str]) -> int:
-    """Internal documentation."""
     if not argv or argv[0] in ("-h", "--help"):
         print("usage: argospkg <subcommand> [args]")
         print(t("cli.pkg.usage_info"))
@@ -38,7 +35,6 @@ def dispatch(argv: list[str]) -> int:
 
 
 def cmd_info(_rest: list[str]) -> int:
-    """Internal documentation."""
     from importlib.metadata import version as _v, metadata as _md  # noqa: PLC0415
     name = "?"
     summary = ""
@@ -76,7 +72,6 @@ def cmd_info(_rest: list[str]) -> int:
 
 
 def cmd_check(_rest: list[str]) -> int:
-    """Internal documentation."""
     try:
         from argos.__main__ import main as _argos_main  # noqa: F401,PLC0415
         from argos.cli import pkg as _self_pkg  # noqa: F401,PLC0415
@@ -88,7 +83,6 @@ def cmd_check(_rest: list[str]) -> int:
 
 
 def cmd_manifest(_rest: list[str]) -> int:
-    """Internal documentation."""
     manifest_dir = Path("packaging/winget")
     if not manifest_dir.exists():
         print(t("cli.pkg.manifest_missing", path=manifest_dir), file=sys.stderr)

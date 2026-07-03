@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -20,7 +19,6 @@ def _reset(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_d5_default_auto_cannot_bypass_hard_rule_no_soft_rule():
-    """Internal documentation."""
     Path("/tmp/d5_perm_test.json").write_text(json.dumps({"version": 1, "default_level": "auto"}))
     from argos.permissions import config as _cfg
     from argos.permissions import reload_config
@@ -34,7 +32,6 @@ async def test_d5_default_auto_cannot_bypass_hard_rule_no_soft_rule():
 
 @pytest.mark.asyncio
 async def test_d5_soft_allow_cannot_bypass_hard_rule_with_allow_rm():
-    """Internal documentation."""
     from argos.permissions import config as _cfg
     from argos.permissions import reload_config
     Path(_cfg.CONFIG_PATH).write_text(json.dumps({
@@ -51,7 +48,6 @@ async def test_d5_soft_allow_cannot_bypass_hard_rule_with_allow_rm():
 
 @pytest.mark.asyncio
 async def test_d5_other_hard_rules_still_deny():
-    """Internal documentation."""
     from argos.permissions import config as _cfg
     from argos.permissions import reload_config
     Path(_cfg.CONFIG_PATH).write_text(json.dumps({"version": 1, "default_level": "auto"}))
@@ -70,7 +66,6 @@ async def test_d5_other_hard_rules_still_deny():
 
 
 def test_d20_no_config_file_backward_compat():
-    """Internal documentation."""
     from argos.permissions import config as _cfg
     from argos.permissions import reload_config
     cfg = reload_config()

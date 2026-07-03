@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -23,7 +22,6 @@ class _Tier:
 
 
 class _DoneModel:
-    """Internal documentation."""
     def __init__(self) -> None:
         self.tier = _Tier()
         self.last_usage = {"input_tokens": 0, "output_tokens": 0,
@@ -60,7 +58,6 @@ def mem_root(monkeypatch, tmp_path):
 
 
 def test_user_goal_is_captured_on_passed_run(mem_root, tmp_path):
-    """Internal documentation."""
     store = None
     from argos.memory.store import ArgosStore
     store = ArgosStore(db_path=":memory:")
@@ -92,7 +89,6 @@ def test_user_goal_is_captured_on_passed_run(mem_root, tmp_path):
 
 
 def test_user_goal_assigned_at_run_start(tmp_path):
-    """Internal documentation."""
     from argos.memory.store import ArgosStore
     store = ArgosStore(db_path=":memory:")
     store.ensure_session("s", title="t", model="worker", system_snapshot="")

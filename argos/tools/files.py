@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -13,7 +12,6 @@ WRITE_APPROVED_SENTINEL = "\x00__ARGOS_WRITE_APPROVED__\x00"
 
 
 def _ws() -> Path:
-    """Internal documentation."""
     try:
         from argos import runtime
         ctx = runtime.current()
@@ -29,7 +27,6 @@ def _ws() -> Path:
 
 
 def _safe_path(rel: str, *, allow_extra_write_dirs: bool = False) -> Path | None:
-    """Internal documentation."""
     ws = _ws()
     ws.mkdir(parents=True, exist_ok=True)
     if rel == "/app":
@@ -58,7 +55,6 @@ def _safe_path(rel: str, *, allow_extra_write_dirs: bool = False) -> Path | None
 
 
 def read_file(path: str, offset: int = 0, limit: int | None = None) -> str:
-    """Internal documentation."""
     p = _safe_path(path)
     if p is None:
         return t("tools.files.read.outside_workspace", path=path)
@@ -86,7 +82,6 @@ def read_file(path: str, offset: int = 0, limit: int | None = None) -> str:
 
 
 def write_file(path: str, content: str) -> str:
-    """Internal documentation."""
     p = _safe_path(path, allow_extra_write_dirs=True)
     if p is None:
         return t("tools.files.write.outside_workspace", path=path)
@@ -106,13 +101,23 @@ _OCCURRENCES_CAP = 1000
 
 
 def edit_file(path: str, old: str, new: str, all_occurrences: bool = False) -> str:
-    """Internal documentation."""
     p = _safe_path(path, allow_extra_write_dirs=True)
     if p is None:
         return t("tools.files.edit.outside_workspace", path=path)
     if not p.exists():
         return t("tools.files.edit.not_found", path=path)
-    text = p.read_text(encoding="utf-8")
+    try:
+        text = p.read_text(encoding="utf-8")
+    except Exception as e:  # noqa: BLE001
+        return t("tools.files.edit.failed", exc=e)
+
+    def _write_text(new_text: str) -> str | None:
+        try:
+            p.write_text(new_text, encoding="utf-8")
+        except Exception as e:  # noqa: BLE001
+            return t("tools.files.edit.failed", exc=e)
+        return None
+
     count = text.count(old)
     if count >= 2 and not all_occurrences:
         return t("tools.files.edit.ambiguous", count=count)
@@ -120,13 +125,16 @@ def edit_file(path: str, old: str, new: str, all_occurrences: bool = False) -> s
         if count > _OCCURRENCES_CAP:
             return t("tools.files.edit.too_many", count=count, cap=_OCCURRENCES_CAP)
         new_text = text.replace(old, new)
-        p.write_text(new_text, encoding="utf-8")
+        if err := _write_text(new_text):
+            return err
         return t("tools.files.edit.ok_n", path=path, count=count)
     if count == 1:
         if all_occurrences:
-            p.write_text(text.replace(old, new), encoding="utf-8")
+            if err := _write_text(text.replace(old, new)):
+                return err
             return t("tools.files.edit.ok_1_all", path=path)
-        p.write_text(text.replace(old, new), encoding="utf-8")
+        if err := _write_text(text.replace(old, new)):
+            return err
         return t("tools.files.edit.ok_unique", path=path)
     target = _normalize_ws(old)
     lines = text.splitlines(keepends=True)
@@ -156,12 +164,14 @@ def edit_file(path: str, old: str, new: str, all_occurrences: bool = False) -> s
             new_lines.append(seg)
             covered = j + 1
         new_lines.extend(lines[covered:])
-        p.write_text("".join(new_lines), encoding="utf-8")
+        if err := _write_text("".join(new_lines)):
+            return err
         return t("tools.files.edit.ok_n_fuzzy", path=path, count=len(matches))
     i, j = matches[0]
     new_segment = new if new.endswith("\n") or j + 1 >= len(lines) else new + "\n"
     new_lines = lines[:i] + [new_segment] + lines[j + 1:]
-    p.write_text("".join(new_lines), encoding="utf-8")
+    if err := _write_text("".join(new_lines)):
+        return err
     return t("tools.files.edit.ok_1_fuzzy", path=path)
 
 
@@ -175,7 +185,6 @@ _SEARCH_MAX_FILE_BYTES = 2_000_000
 
 
 def search_files(pattern: str, target: str = "content", file_glob: str = "", limit: int = 50) -> str:
-    """Internal documentation."""
     import fnmatch
     import time
     ws = _ws()

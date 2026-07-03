@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import json
 
 import pytest
@@ -9,13 +8,11 @@ from argos.routing.resolver import resolve
 
 
 def test_load_routing_no_config_is_active(tmp_path):
-    """Internal documentation."""
     cfg = load_routing(tmp_path)
     assert cfg.is_active() is True
 
 
 def test_load_routing_no_routing_section_is_active(tmp_path):
-    """Internal documentation."""
     (tmp_path / "config.json").write_text(
         json.dumps({"active": "default", "models": {"default": {}}})
     )
@@ -24,40 +21,34 @@ def test_load_routing_no_routing_section_is_active(tmp_path):
 
 
 def test_builtin_default_simple_read_resolves_to_cheap():
-    """Internal documentation."""
     decision = resolve(_BUILTIN_DEFAULT, category=TaskCategory.SIMPLE_READ, tool=None)
     assert decision.tier == "cheap"
     assert decision.source == "by_category"
 
 
 def test_builtin_default_long_run_resolves_to_strong():
-    """Internal documentation."""
     decision = resolve(_BUILTIN_DEFAULT, category=TaskCategory.LONG_RUN, tool=None)
     assert decision.tier == "strong"
     assert decision.source == "by_category"
 
 
 def test_builtin_default_refactor_resolves_to_strong():
-    """Internal documentation."""
     decision = resolve(_BUILTIN_DEFAULT, category=TaskCategory.REFACTOR, tool=None)
     assert decision.tier == "strong"
     assert decision.source == "by_category"
 
 
 def test_builtin_default_plan_resolves_to_cheap():
-    """Internal documentation."""
     decision = resolve(_BUILTIN_DEFAULT, category=TaskCategory.PLAN, tool=None)
     assert decision.tier == "cheap"
 
 
 def test_builtin_default_file_edit_resolves_to_strong():
-    """Internal documentation."""
     decision = resolve(_BUILTIN_DEFAULT, category=TaskCategory.FILE_EDIT, tool=None)
     assert decision.tier == "strong"
 
 
 def test_single_tier_routing_no_error(tmp_path):
-    """Internal documentation."""
     from argos.routing.router import ModelRouter
     from argos.core.models import ModelClient, ModelTier, CredentialPool
 

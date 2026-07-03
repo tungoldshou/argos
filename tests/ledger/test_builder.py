@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -99,7 +98,6 @@ class TestBuildEntryFields:
 
 
 class TestBuildEntryIrreversibleNoToken:
-    """Internal documentation."""
     def test_irreversible_undo_token_forced_none(self):
         e = build_entry(receipt=_FakeReceipt("web_fetch"),
                         run_id="r1", seq=1,

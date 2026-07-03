@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.core.honesty import compose_system_pair
@@ -7,7 +6,6 @@ from argos.core.types import ModelTierName
 
 
 def test_compose_system_pair_returns_safe_and_untrusted():
-    """Internal documentation."""
     safe = "HONESTY_SYSTEM ..."
     untrusted = "<UNTRUSTED>recall ...</UNTRUSTED>"
     s, d = compose_system_pair(safe, untrusted)
@@ -16,7 +14,6 @@ def test_compose_system_pair_returns_safe_and_untrusted():
 
 
 def test_compose_system_pair_empty_untrusted_still_returns_pair():
-    """Internal documentation."""
     s, d = compose_system_pair("safe", "")
     assert s == "safe"
     assert d == ""
@@ -28,7 +25,6 @@ def _tier():
 
 
 def test_anthropic_payload_with_dynamic_splits_into_two_blocks():
-    """Internal documentation."""
     p = AnthropicProtocol()
     payload = p.payload(
         [{"role": "user", "content": "hi"}],
@@ -41,7 +37,6 @@ def test_anthropic_payload_with_dynamic_splits_into_two_blocks():
 
 
 def test_anthropic_stable_block_has_cache_control():
-    """Internal documentation."""
     p = AnthropicProtocol()
     payload = p.payload(
         [{"role": "user", "content": "hi"}],
@@ -56,7 +51,6 @@ def test_anthropic_stable_block_has_cache_control():
 
 
 def test_anthropic_dynamic_block_has_no_cache_control():
-    """Internal documentation."""
     p = AnthropicProtocol()
     payload = p.payload(
         [{"role": "user", "content": "hi"}],
@@ -71,7 +65,6 @@ def test_anthropic_dynamic_block_has_no_cache_control():
 
 
 def test_anthropic_legacy_single_string_path_unchanged():
-    """Internal documentation."""
     p = AnthropicProtocol()
     payload = p.payload(
         [{"role": "user", "content": "hi"}],
@@ -86,7 +79,6 @@ def test_anthropic_legacy_single_string_path_unchanged():
 
 
 def test_anthropic_empty_dynamic_uses_single_block():
-    """Internal documentation."""
     p = AnthropicProtocol()
     payload = p.payload(
         [{"role": "user", "content": "hi"}],
@@ -99,7 +91,6 @@ def test_anthropic_empty_dynamic_uses_single_block():
 
 
 def test_openai_payload_combines_stable_and_dynamic_in_system_message():
-    """Internal documentation."""
     p = OpenAIProtocol()
     payload = p.payload(
         [{"role": "user", "content": "hi"}],
@@ -114,7 +105,6 @@ def test_openai_payload_combines_stable_and_dynamic_in_system_message():
 
 
 def test_openai_no_cache_control_field_emitted():
-    """Internal documentation."""
     p = OpenAIProtocol()
     payload = p.payload(
         [{"role": "user", "content": "hi"}],
@@ -140,7 +130,6 @@ def test_openai_no_cache_control_field_emitted():
 
 
 def test_openai_legacy_single_string_path_unchanged():
-    """Internal documentation."""
     p = OpenAIProtocol()
     payload = p.payload(
         [{"role": "user", "content": "hi"}],
@@ -155,7 +144,6 @@ def test_openai_legacy_single_string_path_unchanged():
 
 
 def test_model_client_passes_system_dynamic_through():
-    """Internal documentation."""
     from argos.core.models import CredentialPool, ModelClient
     tier = _tier()
     pool = CredentialPool(["k"])
@@ -180,7 +168,6 @@ def test_model_client_passes_system_dynamic_through():
 
 
 def test_model_client_system_dynamic_default_none():
-    """Internal documentation."""
     from argos.core.models import CredentialPool, ModelClient
     pool = CredentialPool(["k"])
     client = ModelClient(tier=_tier(), pool=pool)

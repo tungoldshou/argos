@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -31,7 +30,6 @@ from argos.protocol.events import (
 
 def _make_order(kind: str = "schedule", schedule: str = "09:00",
                 trigger_glob: str | None = None, enabled: bool = True) -> StandingOrder:
-    """Internal documentation."""
     return StandingOrder(
         id=uuid.uuid4().hex,
         utterance="测试常驻指令",
@@ -46,7 +44,6 @@ def _make_order(kind: str = "schedule", schedule: str = "09:00",
 
 
 def _make_suggestion(order_id: str = "order_x") -> ProactiveSuggestion:
-    """Internal documentation."""
     return ProactiveSuggestion(
         id=uuid.uuid4().hex,
         order_id=order_id,
@@ -80,7 +77,6 @@ async def _make_server_with_supervisor(
     *,
     tick_interval: float = 999.0,
 ) -> tuple[DaemonHTTPServer, RunManager, ConductorSupervisor, Path]:
-    """Internal documentation."""
     socket_path = tmp_path / "daemon.sock"
     runs_dir = tmp_path / "runs"
     orders_dir = tmp_path / "conductor"
@@ -117,7 +113,6 @@ async def _make_server_with_supervisor(
 
 @pytest.mark.asyncio
 async def test_tick_emits_proactive_suggestion_event(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     try:
         s = _make_suggestion("ord_test")
@@ -137,7 +132,6 @@ async def test_tick_emits_proactive_suggestion_event(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_tick_stores_suggestion_in_pending(tmp_path: Path):
-    """Internal documentation."""
     orders_dir = tmp_path / "conductor"
     events: list[dict] = []
 
@@ -159,7 +153,6 @@ async def test_tick_stores_suggestion_in_pending(tmp_path: Path):
 
 
 class _FakeCompletedLoop:
-    """Internal documentation."""
 
     async def run(self, goal: str, session_id: str) -> AsyncIterator[dict]:
         yield {"kind": "token_delta", "text": "done"}
@@ -172,7 +165,6 @@ class _FakeLoopFactory:
 
 @pytest.mark.asyncio
 async def test_confirm_creates_run_with_worktree_and_l1_trust(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     server._loop_factory = _FakeLoopFactory()
     server._registry._max_concurrent = 5
@@ -209,7 +201,6 @@ async def test_confirm_creates_run_with_worktree_and_l1_trust(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_confirm_worktree_path_returned(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     server._loop_factory = _FakeLoopFactory()
     server._registry._max_concurrent = 5
@@ -238,7 +229,6 @@ async def test_confirm_worktree_path_returned(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_dismiss_then_confirm_returns_404(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
 
     try:
@@ -274,7 +264,6 @@ async def test_dismiss_then_confirm_returns_404(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_create_order_missing_utterance_returns_400(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     try:
         sid = await _create_session(socket_path)
@@ -295,7 +284,6 @@ async def test_create_order_missing_utterance_returns_400(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_create_order_invalid_kind_returns_400(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     try:
         sid = await _create_session(socket_path)
@@ -316,7 +304,6 @@ async def test_create_order_invalid_kind_returns_400(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_create_order_schedule_missing_schedule_returns_400(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     try:
         sid = await _create_session(socket_path)
@@ -337,7 +324,6 @@ async def test_create_order_schedule_missing_schedule_returns_400(tmp_path: Path
 
 @pytest.mark.asyncio
 async def test_list_orders_empty(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     try:
         sid = await _create_session(socket_path)
@@ -352,7 +338,6 @@ async def test_list_orders_empty(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_orders_crud_roundtrip(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     try:
         sid = await _create_session(socket_path)
@@ -403,7 +388,6 @@ async def test_orders_crud_roundtrip(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_delete_unknown_order_returns_404(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     try:
         sid = await _create_session(socket_path)
@@ -424,7 +408,6 @@ async def test_delete_unknown_order_returns_404(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_conductor_supervisor_stop_clean(tmp_path: Path):
-    """Internal documentation."""
     orders_dir = tmp_path / "conductor"
     events: list[dict] = []
 
@@ -448,7 +431,6 @@ async def test_conductor_supervisor_stop_clean(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_conductor_supervisor_double_stop(tmp_path: Path):
-    """Internal documentation."""
     orders_dir = tmp_path / "conductor"
 
     async def _bcast(ev: dict) -> None:
@@ -467,7 +449,6 @@ async def test_conductor_supervisor_double_stop(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_suggestion_never_auto_creates_run(tmp_path: Path):
-    """Internal documentation."""
     orders_dir = tmp_path / "conductor"
     events: list[dict] = []
     run_count_before = [0]
@@ -493,7 +474,6 @@ async def test_suggestion_never_auto_creates_run(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_suggestions_list_endpoint(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     try:
         sid = await _create_session(socket_path)
@@ -535,7 +515,6 @@ def test_proactive_suggestion_event_serialization():
 
 
 def test_proactive_suggestion_event_roundtrip():
-    """Internal documentation."""
     ev = ProactiveSuggestionEvent(
         suggestion_id="deadbeef0011",
         order_id="ord_rt",
@@ -553,19 +532,16 @@ def test_proactive_suggestion_event_roundtrip():
 
 
 def test_proactive_suggestion_event_in_kind_to_class():
-    """Internal documentation."""
     from argos.protocol.events import _KIND_TO_CLASS
     assert "proactive_suggestion" in _KIND_TO_CLASS
 
 
 def test_proactive_suggestion_event_in_event_kind_literal():
-    """Internal documentation."""
     from argos.protocol.events import EventKind
     assert "proactive_suggestion" in EventKind.__args__
 
 
 def test_proactive_suggestion_event_requires_confirmation_invariant():
-    """Internal documentation."""
     ev = ProactiveSuggestionEvent(
         suggestion_id="s1",
         order_id="o1",
@@ -580,7 +556,6 @@ def test_proactive_suggestion_event_requires_confirmation_invariant():
 
 
 def test_supervisor_dismiss_unknown_returns_false(tmp_path: Path):
-    """Internal documentation."""
     async def _bcast(ev: dict) -> None:
         pass
 
@@ -594,7 +569,6 @@ def test_supervisor_dismiss_unknown_returns_false(tmp_path: Path):
 
 
 def test_supervisor_get_and_pop_suggestion(tmp_path: Path):
-    """Internal documentation."""
     async def _bcast(ev: dict) -> None:
         pass
 
@@ -641,7 +615,6 @@ async def test_confirm_unknown_suggestion_returns_404(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_metadata_mode_confirm_does_not_leak_slots(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     try:
         sid = await _create_session(socket_path)
@@ -667,7 +640,6 @@ async def test_metadata_mode_confirm_does_not_leak_slots(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_metadata_mode_create_run_does_not_leak_slots(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     try:
         sid = await _create_session(socket_path)
@@ -687,7 +659,6 @@ async def test_metadata_mode_create_run_does_not_leak_slots(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_confirm_shared_gate_l1_actually_applied(tmp_path: Path):
-    """Internal documentation."""
     from argos.approval import ApprovalGate, ApprovalLevel
     from argos.permissions.trust_dial import TrustLevel
 
@@ -717,7 +688,6 @@ async def test_confirm_shared_gate_l1_actually_applied(tmp_path: Path):
 
 
 def test_builtin_dream_order_registered_idempotent(tmp_path: Path):
-    """Internal documentation."""
     store = OrderStore(tmp_path / "conductor")
     ensure_builtin_dream_order(store)
     ensure_builtin_dream_order(store)
@@ -734,7 +704,6 @@ def test_builtin_dream_order_registered_idempotent(tmp_path: Path):
 
 
 def test_dream_order_disabled_not_resurrected(tmp_path: Path):
-    """Internal documentation."""
     store = OrderStore(tmp_path / "conductor")
     ensure_builtin_dream_order(store)
 
@@ -750,7 +719,6 @@ def test_dream_order_disabled_not_resurrected(tmp_path: Path):
 
 
 def _make_dream_suggestion(order_id: str = "builtin-dream-nightly") -> ProactiveSuggestion:
-    """Internal documentation."""
     return ProactiveSuggestion(
         id=uuid.uuid4().hex,
         order_id=order_id,
@@ -763,7 +731,6 @@ def _make_dream_suggestion(order_id: str = "builtin-dream-nightly") -> Proactive
 
 
 def test_material_gate_silences_empty_candidates(tmp_path: Path, monkeypatch):
-    """Internal documentation."""
     from argos.learning import candidates as cand_mod
 
     cand_root = tmp_path / "candidates"
@@ -803,7 +770,6 @@ def test_material_gate_silences_empty_candidates(tmp_path: Path, monkeypatch):
 
 
 def test_material_gate_import_failure_treated_as_no_material(tmp_path: Path, monkeypatch):
-    """Internal documentation."""
     import builtins
 
     events: list[dict] = []
@@ -831,7 +797,6 @@ def test_material_gate_import_failure_treated_as_no_material(tmp_path: Path, mon
 
 
 class _FakeDreamPipeline:
-    """Internal documentation."""
 
     def __init__(self, *, is_running: bool = False, cross_busy: bool = False):
         self._is_running = is_running
@@ -853,7 +818,6 @@ class _FakeDreamPipeline:
 
 @pytest.mark.asyncio
 async def test_confirm_dream_routes_to_pipeline_not_create_run(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     fake = _FakeDreamPipeline(is_running=False)
     server._dream_pipeline = fake
@@ -895,7 +859,6 @@ async def test_confirm_dream_routes_to_pipeline_not_create_run(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_confirm_dream_busy_409(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     fake = _FakeDreamPipeline(is_running=True)
     server._dream_pipeline = fake
@@ -922,7 +885,6 @@ async def test_confirm_dream_busy_409(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_confirm_dream_cross_process_busy_409(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     fake = _FakeDreamPipeline(is_running=False, cross_busy=True)
     server._dream_pipeline = fake
@@ -952,7 +914,6 @@ async def test_confirm_dream_cross_process_busy_409(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_confirm_dream_no_pipeline_503(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
 
     try:
@@ -976,7 +937,6 @@ async def test_confirm_dream_no_pipeline_503(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_dream_run_endpoint_starts_pipeline(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     fake = _FakeDreamPipeline(is_running=False)
     server._dream_pipeline = fake
@@ -1000,7 +960,6 @@ async def test_dream_run_endpoint_starts_pipeline(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_dream_run_endpoint_busy_409(tmp_path: Path):
-    """Internal documentation."""
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
     server._dream_pipeline = _FakeDreamPipeline(is_running=True)
 
@@ -1019,7 +978,6 @@ async def test_dream_run_endpoint_busy_409(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_dream_report_endpoint_empty_and_nonempty(tmp_path: Path, monkeypatch):
-    """Internal documentation."""
     dreams_dir = tmp_path / "dreams"
     monkeypatch.setenv("ARGOS_DREAMS_DIR", str(dreams_dir))
 
@@ -1058,7 +1016,6 @@ async def test_dream_report_endpoint_empty_and_nonempty(tmp_path: Path, monkeypa
 
 @pytest.mark.asyncio
 async def test_start_dream_concurrent_race_at_most_one_202(tmp_path: Path):
-    """Internal documentation."""
     import asyncio
 
     server, manager, supervisor, socket_path = await _make_server_with_supervisor(tmp_path)
@@ -1066,7 +1023,6 @@ async def test_start_dream_concurrent_race_at_most_one_202(tmp_path: Path):
     run_count = 0
 
     class _SlowFakePipeline:
-        """Internal documentation."""
         def __init__(self):
             self._is_running = False
             self.run_called = 0

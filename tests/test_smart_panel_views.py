@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -9,10 +8,8 @@ from argos.tui.theme import ARGOS_NIGHT
 
 
 class _H(App):
-    """Internal documentation."""
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
-        """Internal documentation."""
         defaults = super().get_theme_variable_defaults()
         if ARGOS_NIGHT.variables:
             defaults.update(ARGOS_NIGHT.variables)
@@ -88,7 +85,6 @@ async def test_cycle_view_walks_and_returns_to_auto():
 
 @pytest.mark.asyncio
 async def test_snapshot_text_aggregates_hidden_sections():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()

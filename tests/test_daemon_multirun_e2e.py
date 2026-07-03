@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -60,7 +59,6 @@ async def e2e_daemon(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_e2e_5_concurrent_runs_with_cost_worktree_observer(e2e_daemon, tmp_path: Path):
-    """Internal documentation."""
     srv, mgr, reg, worktree = e2e_daemon
     sid_owner = await _create_session(srv.socket_path)
     assert srv.sessions.get(sid_owner).role == "owner"

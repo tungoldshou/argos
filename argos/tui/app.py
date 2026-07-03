@@ -19,7 +19,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 
 from argos import config
-from argos.approval import ApprovalGate, ApprovalLevel
+from argos.approval import ApprovalGate, ApprovalLevel, derive_persistent_allow_rule
 from argos.core.snapshot import SNAPSHOT_ROOT, RunSnapshot
 from argos.hooks.events import HookFired
 from argos.tui.commands import SlashCommand, match_commands, parse_slash
@@ -81,7 +81,6 @@ _BASE_SUBTITLE = t("tui.app.subtitle")
 
 
 def _app_version() -> str:
-    """Internal documentation."""
     try:
         from argos import __version__
         return __version__
@@ -90,7 +89,6 @@ def _app_version() -> str:
 
 
 def _argos_dir() -> Path:
-    """Internal documentation."""
     return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
 
 
@@ -172,7 +170,6 @@ class ArgosApp(App):
 
     @staticmethod
     def _display_tier():
-        """Internal documentation."""
         from argos import config
         try:
             return config.active_tier()
@@ -180,7 +177,6 @@ class ArgosApp(App):
             return config.DEFAULT_TIER
 
     def _compose_subtitle(self) -> str:
-        """Internal documentation."""
         parts = [_BASE_SUBTITLE]
         if self._plan_mode:
             parts.append("· [plan mode]")
@@ -189,7 +185,6 @@ class ArgosApp(App):
         return "  ".join(parts)
 
     def _resolve_trust_level(self):
-        """Internal documentation."""
         from argos.permissions.trust_dial import TrustLevel
         _map = {
             ApprovalLevel.CONFIRM:      TrustLevel.L1_DANGEROUS_ONLY,
@@ -207,7 +202,6 @@ class ArgosApp(App):
         return current
 
     def _refresh_topbar(self) -> None:
-        """Internal documentation."""
         try:
             tl = self._resolve_trust_level()
             self.query_one("#top-bar", TopBar).set_state(
@@ -219,7 +213,6 @@ class ArgosApp(App):
             pass
 
     async def action_paste_image(self) -> None:
-        """Internal documentation."""
         try:
             att = read_clipboard_image()
         except ClipboardError as e:
@@ -238,7 +231,6 @@ class ArgosApp(App):
         prompt.insert(token)
 
     def action_cycle_panel(self) -> None:
-        """Internal documentation."""
         try:
             self.query_one("#activity", ActivityPanel).cycle_view()
         except Exception:  # noqa: BLE001
@@ -278,7 +270,6 @@ class ArgosApp(App):
         yield PromptArea(placeholder=t("tui.prompt.placeholder"), id="prompt")
 
     def on_mount(self) -> None:
-        """Internal documentation."""
         self._refresh_topbar()
         self.query_one("#prompt", PromptArea).focus()
         tier = self._display_tier()
@@ -339,7 +330,6 @@ class ArgosApp(App):
             self.run_worker(self._setup_daemon_mode(), exclusive=False)
 
     async def _setup_daemon_mode(self) -> None:
-        """Internal documentation."""
         import os
         from argos import config as _cfg
         from argos.tui.daemon_spawn import probe_or_spawn
@@ -415,7 +405,6 @@ class ArgosApp(App):
     _DAEMON_HB_INTERVAL_S: float = 10.0
 
     def _start_daemon_heartbeat(self) -> None:
-        """Internal documentation."""
         if self._daemon_hb_timer is not None:
             return
         try:
@@ -426,7 +415,6 @@ class ArgosApp(App):
             self._daemon_hb_timer = None
 
     async def _daemon_heartbeat_tick(self) -> None:
-        """Internal documentation."""
         if not self._with_daemon or self._daemon_client is None or self._daemon_session_id is None:
             return
         from argos.daemon.client import DaemonError
@@ -444,7 +432,6 @@ class ArgosApp(App):
 
 
     def _start_conductor_subscription(self, socket_path: "Path", session_id: str) -> None:
-        """Internal documentation."""
         from argos.tui.daemon_source import DaemonEventSource
 
         if self._conductor_source is not None:
@@ -471,7 +458,6 @@ class ArgosApp(App):
     async def _daemon_create_run(
         self, goal: str, attachments: list | None, *, verify_cmd: str | None = None
     ) -> str:
-        """Internal documentation."""
         from argos.daemon.client import DaemonError
         from argos.daemon.protocol import CODE_MISSING_SESSION
         assert self._daemon_client is not None
@@ -496,7 +482,6 @@ class ArgosApp(App):
         self.screen.styles.border = ("round", color)
 
     def _set_terminal_glow(self, active: bool, *, kind: str = "fail") -> None:
-        """Internal documentation."""
         self._terminal_glow = active
         try:
             self.query_one("#status-bar", StatusBar).set_alert(active, kind=kind)
@@ -513,7 +498,6 @@ class ArgosApp(App):
             self._glow_timer = self.set_interval(0.1, self._glow_breathe)
 
     def _glow_breathe(self) -> None:
-        """Internal documentation."""
         from argos.tui import glow
         if self._terminal_glow or self._glow_base is None:
             return
@@ -529,7 +513,6 @@ class ArgosApp(App):
         self._set_border(glow.IDLE_BORDER)
 
     def _set_plan_mode_indicators(self) -> None:
-        """Internal documentation."""
         from argos.tui import glow
         for sp in self.query(StartupSplash):
             sp.set_plan_mode(self._plan_mode)
@@ -547,11 +530,9 @@ class ArgosApp(App):
         self.handle_input(event.text, event.attachments)
 
     def on_tab_strip_tab_activated(self, event: TabActivated) -> None:
-        """Internal documentation."""
         self.run_worker(self._on_tab_activated(event.run_id), exclusive=False)
 
     async def _on_tab_activated(self, run_id: str) -> None:
-        """Internal documentation."""
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             return
         try:
@@ -579,7 +560,6 @@ class ArgosApp(App):
         self.run_worker(self._replay_run_to_transcript(run_id), exclusive=False)
 
     async def _replay_run_to_transcript(self, run_id: str) -> None:
-        """Internal documentation."""
         try:
             log_widget = self.query_one(Transcript)
             await log_widget.append_line(
@@ -589,7 +569,6 @@ class ArgosApp(App):
             pass
 
     def _refresh_tab_strip(self) -> None:
-        """Internal documentation."""
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             return
         async def _do():
@@ -614,12 +593,10 @@ class ArgosApp(App):
         self.run_worker(_do(), exclusive=False)
 
     def on_text_area_changed(self, event) -> None:
-        """Internal documentation."""
         menu = self.query_one("#slash-menu", SlashMenu)
         menu.show_matches(match_commands(event.text_area.text))
 
     def _push_input_history(self, text: str) -> None:
-        """Internal documentation."""
         t = text.strip()
         if not t:
             return
@@ -630,7 +607,6 @@ class ArgosApp(App):
             self._input_history.pop(0)
 
     def handle_input(self, text: str, attachments: list | None = None) -> None:
-        """Internal documentation."""
         if text.strip():
             self._push_input_history(text)
         cmd = parse_slash(text)
@@ -777,9 +753,15 @@ class ArgosApp(App):
         await self._resume_recent(log)
 
     async def _cmd_help(self, log, arg: str) -> None:
-        from argos.tui.commands import _build_command_help
+        from argos.tui.commands import ADVANCED_COMMAND_NAMES, DEFAULT_COMMAND_NAMES, _build_command_help
         _ch = _build_command_help()
         name = arg.strip().lstrip("/").lower()
+        if name == "advanced":
+            advanced = _build_command_help(ADVANCED_COMMAND_NAMES)
+            lines = [t("tui.help.advanced_header")]
+            lines += [f" · /{cmd:<16} {desc}" for cmd, desc in advanced.items()]
+            await log.append_line("\n".join(lines), kind="system")
+            return
         if name:
             hidden = {
                 "remember": t("tui.remember.usage"),
@@ -792,8 +774,10 @@ class ArgosApp(App):
                 return
             await log.append_line(f"/{name}  {desc}", kind="system")
             return
+        core = _build_command_help(DEFAULT_COMMAND_NAMES)
         lines = [t("tui.help.header")]
-        lines += [f" · /{name:<16} {desc}" for name, desc in _ch.items()]
+        lines += [f" · /{cmd:<16} {desc}" for cmd, desc in core.items()]
+        lines.append(t("tui.help.advanced_hint"))
         lines.append(t("tui.help.shortcuts"))
         await log.append_line("\n".join(lines), kind="system")
 
@@ -882,7 +866,6 @@ class ArgosApp(App):
         await getattr(self, method_name)(log, cmd.arg)
 
     async def _undo(self, log) -> None:
-        """Internal documentation."""
         if self._snapshot is None or not self._snapshot.tar_path.exists():
             await log.append_line(t("tui.undo.no_snapshot"), kind="system")
             return
@@ -908,7 +891,6 @@ class ArgosApp(App):
             )
 
     async def _trust_cmd(self, log, arg: str) -> None:
-        """Internal documentation."""
         from argos.permissions.trust_dial import (
             TrustLevel, escalation_warning, next_in_cycle, to_approval_semantics,
         )
@@ -1000,7 +982,6 @@ class ArgosApp(App):
         ))
 
     async def _ledger_cmd(self, log) -> None:
-        """Internal documentation."""
         ledger_store = getattr(self, "_ledger_store", None)
         run_id = getattr(self, "_daemon_run_id", None) or getattr(self, "_run_id", None)
 
@@ -1039,26 +1020,72 @@ class ArgosApp(App):
         )
 
     async def _setup_cmd(self, log) -> None:
-        """Internal documentation."""
-        from argos import setup_wizard
-        lines: list[str] = []
-        setup_wizard.print_status(writer=lines.append)
-        await log.append_line("\n".join(lines), kind="system")
+        import os
+        from argos import config as C
         config_dir = _argos_dir()
+        config_path = config_dir / "config.json"
+        env_path = config_dir / ".env"
+        status = "ok"
+        next_command = "argos"
+        try:
+            if C._has_config_file():
+                cfg = C.load_config()
+                active = cfg.active
+                tier = cfg.tiers[active]
+                model = tier.model
+                image_input = "enabled" if tier.multimodal is True else "disabled" if tier.multimodal is False else "auto"
+                env_name = cfg.key_envs.get(active, "")
+                if env_name and os.environ.get(env_name):
+                    key_source = f"environment:{env_name}"
+                elif env_name and cfg.secrets.get(env_name):
+                    key_source = f".env:{env_name}"
+                else:
+                    key_source = f"missing:{env_name or '(none)'}"
+                    status = "needs key"
+                    next_command = "argos setup"
+            else:
+                active = C.DEFAULT_TIER.name
+                model = C.DEFAULT_TIER.model
+                image_input = "auto"
+                fallback_keys = ("ARGOS_LLM_KEY", "VITE_LLM_KEY", "VITE_MINIMAX_KEY")
+                env_name = next((k for k in fallback_keys if os.environ.get(k)), "ARGOS_LLM_KEY")
+                if any(os.environ.get(k) for k in fallback_keys):
+                    key_source = f"environment:{env_name}"
+                elif C.active_key() is not None:
+                    key_source = ".env.local"
+                else:
+                    key_source = f"missing:{env_name}"
+                    status = "needs setup"
+                    next_command = "argos setup"
+        except Exception as e:  # noqa: BLE001
+            active = "(not configured)"
+            model = "(unknown)"
+            image_input = "unknown"
+            key_source = f"error:{e}"
+            status = "error"
+            next_command = "argos setup"
         await log.append_line(
-            t("tui.setup.hint", config_path=config_dir / "config.json", env_path=config_dir / ".env"),
+            t(
+                "tui.setup.card",
+                active=active,
+                model=model,
+                image_input=image_input,
+                key_source=key_source,
+                config_path=config_path,
+                env_path=env_path,
+                next_command=next_command,
+                status=status,
+            ),
             kind="system",
         )
 
     async def _cmd_voice(self, log, arg: str) -> None:
-        """Internal documentation."""
         if arg.strip():
             await log.append_line(t("tui.voice.usage"), kind="error")
             return
         await log.append_line(t("tui.voice.unavailable"), kind="warn")
 
     async def _journal_cmd(self, log, arg: str) -> None:
-        """Internal documentation."""
         ledger_dir = _argos_dir() / "ledger"
         parts = arg.split()
         if len(parts) > 1:
@@ -1072,7 +1099,6 @@ class ArgosApp(App):
             await log.append_line(t("tui.journal.no_id", dir=ledger_dir), kind="system")
 
     async def _retry(self, log) -> None:
-        """Internal documentation."""
         if self._run_active:
             await log.append_line(t("tui.retry.busy"), kind="system")
             return
@@ -1110,7 +1136,6 @@ class ArgosApp(App):
         await self.start_run(last_user["text"])
 
     async def _enter_plan_mode(self, log) -> None:
-        """Internal documentation."""
         from argos.core.plan_mode import EnterPlanMode
         try:
             loop = self._loop_factory()
@@ -1123,7 +1148,6 @@ class ArgosApp(App):
         await log.append_line(msg, kind="system")
 
     async def _hooks_cmd(self, log, arg: str) -> None:
-        """Internal documentation."""
         from argos.hooks import get_config, reload_config, HooksConfigError
         arg = arg.strip().lower()
         if arg == "reload":
@@ -1152,7 +1176,6 @@ class ArgosApp(App):
         await log.append_line("\n".join(lines), kind="system")
 
     async def _lsp_cmd(self, log, arg: str) -> None:
-        """Internal documentation."""
         from argos import lsp as _lsp
         from argos.lsp import get_config, reload_config, LspConfigError
         arg = arg.strip().lower()
@@ -1195,7 +1218,6 @@ class ArgosApp(App):
         await log.append_line("\n".join(lines), kind="system")
 
     async def _permissions_cmd(self, log, arg: str) -> None:
-        """Internal documentation."""
         from argos.permissions import (
             get_config, reload_config, PermissionsConfigError,
         )
@@ -1246,7 +1268,6 @@ class ArgosApp(App):
         await log.append_line("\n".join(lines), kind="system")
 
     async def _show_tools(self, log) -> None:
-        """Internal documentation."""
         from argos import tools as _tools
         _registry = None
         _loop = getattr(self, "_current_loop", None)
@@ -1281,7 +1302,6 @@ class ArgosApp(App):
         await log.append_line("\n".join(lines), kind="system")
 
     async def _runs_cmd(self, log, arg: str) -> None:
-        """Internal documentation."""
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             await log.append_line(
                 t("tui.runs.no_daemon"),
@@ -1384,7 +1404,6 @@ class ArgosApp(App):
 
 
     async def _orders_cmd(self, log) -> None:
-        """Internal documentation."""
         if self._with_daemon and self._daemon_client and self._daemon_session_id:
             try:
                 status, _, raw = await self._daemon_client._request(
@@ -1407,7 +1426,6 @@ class ArgosApp(App):
         await self.query_one("#transcript", Transcript).mount_block(OrdersPanel(orders=orders))
 
     async def _confirm_suggestion_cmd(self, log, suggestion_id: str) -> None:
-        """Internal documentation."""
         parts = suggestion_id.split()
         if len(parts) != 1:
             await log.append_line(t("tui.confirm.no_id"), kind="error")
@@ -1453,7 +1471,6 @@ class ArgosApp(App):
             )
 
     async def _dismiss_suggestion_cmd(self, log, suggestion_id: str) -> None:
-        """Internal documentation."""
         parts = suggestion_id.split()
         if len(parts) != 1:
             await log.append_line(t("tui.dismiss.no_id"), kind="error")
@@ -1490,7 +1507,6 @@ class ArgosApp(App):
 
 
     async def _on_proactive_suggestion(self, ev) -> None:
-        """Internal documentation."""
         def _decide(value: str, _feedback: str) -> None:
             from argos.tui.widgets.transcript import Transcript as _Transcript
             try:
@@ -1512,7 +1528,6 @@ class ArgosApp(App):
 
 
     async def _on_computer_action(self, ev: "ComputerActionEvent") -> None:  # type: ignore[name-defined]
-        """Internal documentation."""
         from argos.tui.widgets.transcript import Transcript
         try:
             log = self.query_one("#transcript", Transcript)
@@ -1563,7 +1578,6 @@ class ArgosApp(App):
             pass
 
     async def _skill_cmd(self, log, skill_name: str, arg: str) -> None:
-        """Internal documentation."""
         from pathlib import Path as _P
         from argos.skills_runtime.analysis import AnalysisSkillContext
         from argos.skills_runtime import run_skill, register_builtin_skills
@@ -1592,7 +1606,6 @@ class ArgosApp(App):
                     await log.append_line(f"    fix: {f.suggestion}", kind="info")
 
     async def _remember_cmd(self, log, text: str) -> None:
-        """Internal documentation."""
         if not text.strip():
             await log.append_line(t("tui.remember.usage"), kind="error")
             return
@@ -1608,7 +1621,6 @@ class ArgosApp(App):
         )
 
     async def _forget_cmd(self, log, query: str) -> None:
-        """Internal documentation."""
         if not query.strip():
             await log.append_line(t("tui.forget.usage"), kind="error")
             return
@@ -1625,7 +1637,6 @@ class ArgosApp(App):
                                  kind="info")
 
     async def _memory_cmd(self, log) -> None:
-        """Internal documentation."""
         from argos.memory import auto as _mem
         pid = _mem.project_id_for()
         sid = self._session_id
@@ -1633,7 +1644,6 @@ class ArgosApp(App):
         await log.append_line(text, kind="system")
 
     async def _eval_cmd(self, log, arg: str) -> None:
-        """Internal documentation."""
         import time as _time
         from argos.eval.results import list_runs, summary
         if not arg.strip():
@@ -1677,7 +1687,6 @@ class ArgosApp(App):
             t("tui.eval.usage"), kind="error")
 
     async def _eval_run_cmd(self, log, task_id: str) -> None:
-        """Internal documentation."""
         from argos.eval.corpus import load_task
         from argos.eval.runner import PASS_PASSED
         from argos.eval.results import append as append_result
@@ -1711,7 +1720,6 @@ class ArgosApp(App):
             await log.append_line(f"[eval] error: {result.error}", kind="error")
 
     async def _eval_compare_cmd(self, log, a: str, b: str) -> None:
-        """Internal documentation."""
         from argos.eval.corpus import load_task
         from argos.eval.compare import run_pair, write_report
         from argos.cli.eval import _make_runner as _make_eval_runner
@@ -1757,7 +1765,6 @@ class ArgosApp(App):
             await log.append_line(md, kind="system")
 
     async def _routing_cmd(self, log, arg: str) -> None:
-        """Internal documentation."""
         parts = arg.strip().split()
         if parts and parts[0].lower() == "set":
             await self._routing_set(log, " ".join(parts[1:]))
@@ -1779,7 +1786,6 @@ class ArgosApp(App):
         await self.query_one("#transcript", Transcript).mount_block(widget)
 
     async def _context_cmd(self, log, arg: str) -> None:
-        """Internal documentation."""
         from argos.context.analyzer import analyze
         from argos.context.render import format_json, format_table
         fmt = arg.strip().lower()
@@ -1803,7 +1809,6 @@ class ArgosApp(App):
 
     @staticmethod
     def _fmt_dream_report(r: dict) -> str:
-        """Internal documentation."""
         return t(
             "tui.dream.fmt",
             units=r.get("units_total", 0),
@@ -1815,7 +1820,6 @@ class ArgosApp(App):
         )
 
     async def _dream_cmd(self, log, arg: str) -> None:
-        """Internal documentation."""
         import json as _json
 
         sub = arg.strip().lower()
@@ -1878,7 +1882,6 @@ class ArgosApp(App):
             )
 
     def _parse_verify_arg(self, arg: str) -> tuple[str, str | None]:
-        """Internal documentation."""
         # pipe syntax: "text | verify: cmd"
         m = re.search(r"\|\s*verify:\s*(.+)$", arg, re.IGNORECASE)
         if m:
@@ -1892,7 +1895,6 @@ class ArgosApp(App):
         return arg.strip(), None
 
     async def _goal_cmd(self, log, cmd_name: str, arg: str) -> None:
-        """Internal documentation."""
         if cmd_name == "loop":
             arg = re.sub(r"\buntil:\s*", "| verify: ", arg, count=1, flags=re.IGNORECASE)
 
@@ -1919,7 +1921,6 @@ class ArgosApp(App):
         await self.start_run(goal_text, verify_cmd=verify_cmd)
 
     async def _schedule_cmd(self, log, arg: str) -> None:
-        """Internal documentation."""
         # parse "every 1h: summarize logs" → schedule="every 1h", goal="summarize logs"
         if ":" not in arg:
             await log.append_line(t("tui.schedule.usage"), kind="error")
@@ -1950,7 +1951,6 @@ class ArgosApp(App):
             await log.append_line(t("tui.orders.http_failed", status=status), kind="error")
 
     async def _watch_cmd(self, log, arg: str) -> None:
-        """Internal documentation."""
         parts = arg.strip().split(None, 1)
         if len(parts) < 2:
             await log.append_line(t("tui.watch.usage"), kind="error")
@@ -1979,7 +1979,6 @@ class ArgosApp(App):
             await log.append_line(t("tui.orders.http_failed", status=status), kind="error")
 
     async def _routing_set(self, log, arg: str) -> None:
-        """Internal documentation."""
         import os
         from pathlib import Path
         from argos import config as _cfg
@@ -2019,14 +2018,12 @@ class ArgosApp(App):
             kind="done")
 
     def _current_router(self):
-        """Internal documentation."""
         loop = getattr(self, "_current_loop", None)
         if loop is None:
             return None
         return getattr(loop, "_router", None)
 
     async def _show_skills(self, log) -> None:
-        """Internal documentation."""
         cmd_arg = getattr(self, "_last_skills_arg", "")
         sub_parts = cmd_arg.split()
         known_subcommands = ("install", "remove", "refresh", "test")
@@ -2096,7 +2093,6 @@ class ArgosApp(App):
         await log.append_line("\n".join(lines), kind="system")
 
     async def _show_mcp(self, log) -> None:
-        """Internal documentation."""
         try:
             from argos import mcp_native
             mgr = mcp_native.get_manager()
@@ -2118,7 +2114,6 @@ class ArgosApp(App):
         await log.append_line("\n".join(lines), kind="system")
 
     async def _resume_recent(self, log) -> None:
-        """Internal documentation."""
         loop = self._loop_factory()
         store = getattr(loop, "store", None)
         if store is None or not hasattr(store, "list_sessions"):
@@ -2183,7 +2178,6 @@ class ArgosApp(App):
             await self._start_run_inline(goal, log, attachments or [], verify_cmd=verify_cmd)
 
     async def _start_run_inline(self, goal: str, log, attachments: list | None = None, *, verify_cmd: str | None = None) -> None:
-        """Internal documentation."""
         bus = EventBus()
         # /goal | verify: <cmd> — pass verify_cmd into the factory so it lands in LoopConfig
         # (same dataclasses.replace pattern as build_run_stack; hasattr-assignment was a silent no-op
@@ -2231,7 +2225,6 @@ class ArgosApp(App):
     async def _start_run_daemon(
         self, goal: str, log, attachments: list | None = None, *, verify_cmd: str | None = None
     ) -> None:
-        """Internal documentation."""
         from argos.tui.daemon_source import DaemonEventSource
         assert self._daemon_client is not None
         assert self._daemon_session_id is not None
@@ -2294,10 +2287,106 @@ class ArgosApp(App):
                 self._interrupted = False
 
     async def _announce_memory_recall(self, log, loop: object, goal: str) -> None:
-        """Internal documentation."""
+        pass
+
+    def _apply_phase_event(self, ev: PhaseChange, log, bar, ap) -> None:
+        from argos.tui import glow
+        for sp in log.query(ThinkingIndicator):
+            sp.set_label({
+                "plan": t("tui.event.phase.plan"),
+                "act": t("tui.event.phase.act"),
+                "verify": t("tui.event.phase.verify"),
+                "report": t("tui.event.phase.report"),
+            }.get(ev.phase, t("tui.event.phase.default")))
+        log.finalize_response()
+        bar.set_phase(ev.phase, ev.actions, ev.max_steps)
+        ap.on_phase(ev.phase, ev.actions)
+        if ev.phase == "plan" and self._terminal_glow:
+            self._set_terminal_glow(False)
+        if not self._terminal_glow:
+            self._glow_base = glow.phase_color(ev.phase)
+            self._set_border(self._glow_base)
+
+    async def _apply_verdict_event(self, ev: VerifyVerdict, log, ap) -> None:
+        from argos.tui import glow
+        existing = list(self.query(VerdictBadge))
+        if existing:
+            badge = existing[0]
+        else:
+            badge = VerdictBadge(id="verdict-badge")
+            await log.mount_block(badge)
+        badge.show(ev.verdict)
+        ap.on_verdict(ev.verdict)
+        _is_no_test = bool(getattr(ev.verdict, "no_test", False))
+        if _is_no_test:
+            self._set_border(glow.IDLE_BORDER)
+            self._set_terminal_glow(False)
+        else:
+            self._set_border(glow.verdict_color_self_aware(
+                ev.verdict.status,
+                self_verified=bool(getattr(ev.verdict, "self_verified", False)),
+            ))
+            if ev.verdict.status in ("failed", "unverifiable"):
+                self._set_terminal_glow(
+                    True, kind="warn" if ev.verdict.status == "unverifiable" else "fail")
+
+    def _apply_cost_event(self, ev: CostUpdate, bar, ap) -> None:
+        bar.set_cost(
+            tokens_in=ev.tokens_in, tokens_out=ev.tokens_out,
+            cost_usd=ev.cost_usd, elapsed_s=ev.elapsed_s,
+        )
+        ap.on_cost(
+            tokens_in=ev.tokens_in, tokens_out=ev.tokens_out,
+            cost_usd=ev.cost_usd, elapsed_s=ev.elapsed_s, cache_read=ev.cache_read,
+            tier_name=ev.tier_name,
+        )
+        window = self._display_tier().context_window
+        ap.on_context(used=ev.context_used, window=window)
+        bar.update_ctx_pressure((ev.context_used / window) if window else 0.0)
+
+    def _apply_dream_event(self, ev: DreamProgressEvent | DreamReportEvent, ap) -> None:
+        dream_card = getattr(self, "_dream_card", None)
+        if isinstance(ev, DreamProgressEvent):
+            if dream_card is not None:
+                try:
+                    dream_card.append_stage(ev.stage, ev.detail or "")
+                except Exception:  # noqa: BLE001
+                    pass
+            else:
+                try:
+                    detail = f" {ev.detail}" if ev.detail else ""
+                    ap.append_line(f"[dream] {ev.stage}{detail}")
+                except Exception:  # noqa: BLE001
+                    pass
+            return
+        if dream_card is not None:
+            try:
+                dream_card.show_report({
+                    "units_total": ev.units_total,
+                    "promoted": ev.promoted,
+                    "rejected": ev.rejected,
+                    "skipped": ev.skipped,
+                    "memory_merged": ev.memory_merged,
+                    "memory_archived": ev.memory_archived,
+                    "report_path": ev.report_path,
+                })
+            except Exception:  # noqa: BLE001
+                pass
+        else:
+            try:
+                summary_line = self._fmt_dream_report({
+                    "units_total": ev.units_total,
+                    "promoted": ev.promoted,
+                    "rejected": ev.rejected,
+                    "skipped": ev.skipped,
+                    "memory_merged": ev.memory_merged,
+                    "memory_archived": ev.memory_archived,
+                })
+                ap.append_line(summary_line)
+            except Exception:  # noqa: BLE001
+                pass
 
     async def _apply_event(self, ev: Event) -> None:
-        """Internal documentation."""
         from argos.tui import glow
         log = self.query_one("#transcript", Transcript)
         bar = self.query_one("#status-bar", StatusBar)
@@ -2305,21 +2394,7 @@ class ArgosApp(App):
         if isinstance(ev, TokenDelta):
             await log.append_token(ev.text)
         elif isinstance(ev, PhaseChange):
-            for sp in log.query(ThinkingIndicator):
-                sp.set_label({
-                    "plan": t("tui.event.phase.plan"),
-                    "act": t("tui.event.phase.act"),
-                    "verify": t("tui.event.phase.verify"),
-                    "report": t("tui.event.phase.report"),
-                }.get(ev.phase, t("tui.event.phase.default")))
-            log.finalize_response()
-            bar.set_phase(ev.phase, ev.actions, ev.max_steps)
-            ap.on_phase(ev.phase, ev.actions)
-            if ev.phase == "plan" and self._terminal_glow:
-                self._set_terminal_glow(False)
-            if not self._terminal_glow:
-                self._glow_base = glow.phase_color(ev.phase)
-                self._set_border(self._glow_base)
+            self._apply_phase_event(ev, log, bar, ap)
         elif isinstance(ev, CodeAction):
             block = CodeActionBlock(code=ev.code, step=ev.step)
             self._step_blocks[ev.step] = block
@@ -2331,40 +2406,9 @@ class ArgosApp(App):
         elif isinstance(ev, FileDiff):
             await log.mount_block(DiffView(path=ev.path, added=ev.added, removed=ev.removed, unified=ev.unified))
         elif isinstance(ev, VerifyVerdict):
-            existing = list(self.query(VerdictBadge))
-            if existing:
-                badge = existing[0]
-            else:
-                badge = VerdictBadge(id="verdict-badge")
-                await log.mount_block(badge)
-            badge.show(ev.verdict)
-            ap.on_verdict(ev.verdict)
-            _is_no_test = bool(getattr(ev.verdict, "no_test", False))
-            if _is_no_test:
-                from argos.tui import glow as _glow_mod
-                self._set_border(_glow_mod.IDLE_BORDER)
-                self._set_terminal_glow(False)
-            else:
-                self._set_border(glow.verdict_color_self_aware(
-                    ev.verdict.status,
-                    self_verified=bool(getattr(ev.verdict, "self_verified", False)),
-                ))
-                if ev.verdict.status in ("failed", "unverifiable"):
-                    self._set_terminal_glow(
-                        True, kind="warn" if ev.verdict.status == "unverifiable" else "fail")
+            await self._apply_verdict_event(ev, log, ap)
         elif isinstance(ev, CostUpdate):
-            bar.set_cost(
-                tokens_in=ev.tokens_in, tokens_out=ev.tokens_out,
-                cost_usd=ev.cost_usd, elapsed_s=ev.elapsed_s,
-            )
-            ap.on_cost(
-                tokens_in=ev.tokens_in, tokens_out=ev.tokens_out,
-                cost_usd=ev.cost_usd, elapsed_s=ev.elapsed_s, cache_read=ev.cache_read,
-                tier_name=ev.tier_name,
-            )
-            window = self._display_tier().context_window
-            ap.on_context(used=ev.context_used, window=window)
-            bar.update_ctx_pressure((ev.context_used / window) if window else 0.0)
+            self._apply_cost_event(ev, bar, ap)
         elif isinstance(ev, PlanUpdate):
             ap.on_plan(ev.todos)
         elif isinstance(ev, CompactedEvent):
@@ -2416,46 +2460,9 @@ class ArgosApp(App):
         elif isinstance(ev, ComputerActionEvent):
             await self._on_computer_action(ev)
         elif isinstance(ev, DreamProgressEvent):
-            dream_card = getattr(self, "_dream_card", None)
-            if dream_card is not None:
-                try:
-                    dream_card.append_stage(ev.stage, ev.detail or "")
-                except Exception:  # noqa: BLE001
-                    pass
-            else:
-                try:
-                    detail = f" {ev.detail}" if ev.detail else ""
-                    ap.append_line(f"[dream] {ev.stage}{detail}")
-                except Exception:  # noqa: BLE001
-                    pass
+            self._apply_dream_event(ev, ap)
         elif isinstance(ev, DreamReportEvent):
-            dream_card = getattr(self, "_dream_card", None)
-            if dream_card is not None:
-                try:
-                    dream_card.show_report({
-                        "units_total": ev.units_total,
-                        "promoted": ev.promoted,
-                        "rejected": ev.rejected,
-                        "skipped": ev.skipped,
-                        "memory_merged": ev.memory_merged,
-                        "memory_archived": ev.memory_archived,
-                        "report_path": ev.report_path,
-                    })
-                except Exception:  # noqa: BLE001
-                    pass
-            else:
-                try:
-                    summary_line = self._fmt_dream_report({
-                        "units_total": ev.units_total,
-                        "promoted": ev.promoted,
-                        "rejected": ev.rejected,
-                        "skipped": ev.skipped,
-                        "memory_merged": ev.memory_merged,
-                        "memory_archived": ev.memory_archived,
-                    })
-                    ap.append_line(summary_line)
-                except Exception:  # noqa: BLE001
-                    pass
+            self._apply_dream_event(ev, ap)
         elif isinstance(ev, Escalation):
             await log.append_line(t("tui.event.escalation", attempts=ev.attempts, reason=ev.reason, failure=ev.last_failure), kind="escalation")
             self._set_border(glow.ERROR)
@@ -2467,7 +2474,6 @@ class ArgosApp(App):
             self._set_terminal_glow(True)
 
     def action_ctrl_c(self) -> None:
-        """Internal documentation."""
         import time
         now = time.time()
         if self._run_active:
@@ -2491,7 +2497,6 @@ class ArgosApp(App):
             pass
 
     def action_interrupt(self) -> None:
-        """Internal documentation."""
         import time
         menu = self.query_one("#slash-menu", SlashMenu)
         if menu.display:
@@ -2527,7 +2532,6 @@ class ArgosApp(App):
             pass
 
     async def _daemon_pause(self) -> None:
-        """Internal documentation."""
         if not self._daemon_client or not self._daemon_session_id or not self._daemon_run_id:
             return
         try:
@@ -2537,7 +2541,6 @@ class ArgosApp(App):
             log.warning("daemon pause failed: %s", e)
 
     def action_background(self) -> None:
-        """Internal documentation."""
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             return
         if not self._run_active or not self._daemon_run_id:
@@ -2564,7 +2567,6 @@ class ArgosApp(App):
         self.run_worker(_do(), exclusive=False)
 
     def _set_blocked_status(self, active: bool) -> None:
-        """Internal documentation."""
         try:
             self.query_one("#status-bar", StatusBar).set_blocked(active)
         except Exception:  # noqa: BLE001
@@ -2586,7 +2588,6 @@ class ArgosApp(App):
         await self.query_one("#transcript", Transcript).mount_block(widget)
 
     def _choice_done(self) -> None:
-        """Internal documentation."""
         self._choice_active = False
         if self._choice_queue:
             self.run_worker(self._mount_next_choice(), exclusive=False)
@@ -2594,7 +2595,6 @@ class ArgosApp(App):
             self._set_blocked_status(False)
 
     async def _handle_workflow_proposed(self, ev: WorkflowProposed) -> None:
-        """Internal documentation."""
         log = self.query_one("#transcript", Transcript)
         panel = WorkflowPanel(name=ev.name)
         self._workflow_panel = panel
@@ -2626,7 +2626,6 @@ class ArgosApp(App):
         ))
 
     def _on_gate_ask(self, call_id: str, payload: dict) -> None:
-        """Internal documentation."""
         from argos.protocol.events import ApprovalRequest
         try:
             req = ApprovalRequest(
@@ -2643,7 +2642,6 @@ class ArgosApp(App):
             pass
 
     async def _handle_approval(self, req: ApprovalRequest) -> None:
-        """Internal documentation."""
         if self.gate.level is ApprovalLevel.AUTO and not req.action.startswith("computer_"):
             if self._with_daemon and self._daemon_client and self._daemon_session_id and self._daemon_run_id:
                 self.run_worker(
@@ -2656,7 +2654,7 @@ class ArgosApp(App):
 
         body_lines = [req.description, t("tui.approval.action_line", action=req.action, args=req.args)]
         if getattr(req, "secret_pattern", None):
-            body_lines.append("⚠︎ Possible secret pattern matched: did you mean to commit this?")
+            body_lines.append(t("tui.approval.secret_warning"))
 
         _is_daemon = (
             self._with_daemon
@@ -2693,24 +2691,26 @@ class ArgosApp(App):
             ))
             return
 
+        options = [
+            ("once", t("tui.approval.once")),
+            ("session", t("tui.approval.session")),
+        ]
+        if derive_persistent_allow_rule(req.action, req.args) is not None:
+            options.append(("always", t("tui.approval.always")))
+        options.append(("deny", t("tui.approval.deny")))
+
         await self._enqueue_choice(lambda: InlineChoice(
             title=format_approval_title(
                 risk=req.risk, trigger=getattr(req, "trigger", "") or "",
             ),
             body="\n".join(body_lines),
-            options=[
-                ("once", t("tui.approval.once")),
-                ("session", t("tui.approval.session")),
-                ("always", t("tui.approval.always")),
-                ("deny", t("tui.approval.deny")),
-            ],
+            options=options,
             on_decide=_decide,
             escape_value="deny",
             risk=req.risk,
         ))
 
     async def _daemon_approval_post(self, call_id: str, decision: str) -> None:
-        """Internal documentation."""
         if not self._daemon_client or not self._daemon_session_id or not self._daemon_run_id:
             return
         try:
@@ -2722,7 +2722,6 @@ class ArgosApp(App):
             _log.getLogger(__name__).warning("daemon approval POST failed: %s", e)
 
     async def _handle_plan_rendered(self, ev: "PlanRendered") -> None:
-        """Internal documentation."""
         loop = self._current_loop
 
         if self.gate.level is ApprovalLevel.AUTO:
@@ -2786,7 +2785,6 @@ class ArgosApp(App):
         ))
 
     async def _daemon_plan_decision_post(self, call_id: str, action: str, feedback: str | None = None) -> None:
-        """Internal documentation."""
         if not self._daemon_client or not self._daemon_session_id or not self._daemon_run_id:
             return
         try:

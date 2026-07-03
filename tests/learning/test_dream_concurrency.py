@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -57,7 +56,6 @@ def _make_pipeline(tmp_path: Path) -> dream.DreamPipeline:
 
 
 def test_acquire_cross_process_lock_is_mutually_exclusive(tmp_path: Path):
-    """Internal documentation."""
     cand_root = tmp_path / "candidates"
 
     fd1 = dream._acquire_cross_process_lock(cand_root)
@@ -73,7 +71,6 @@ def test_acquire_cross_process_lock_is_mutually_exclusive(tmp_path: Path):
 
 
 def test_lock_path_isolated_per_candidates_root(tmp_path: Path):
-    """Internal documentation."""
     root_a = tmp_path / "a" / "candidates"
     root_b = tmp_path / "b" / "candidates"
     fd_a = dream._acquire_cross_process_lock(root_a)
@@ -91,7 +88,6 @@ def test_lock_path_isolated_per_candidates_root(tmp_path: Path):
 
 
 def test_run_skips_when_external_holder_owns_lock(tmp_path: Path):
-    """Internal documentation."""
     cand_root = tmp_path / "candidates"
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -114,7 +110,6 @@ def test_run_skips_when_external_holder_owns_lock(tmp_path: Path):
 
 
 def test_cross_process_busy_probe_reflects_external_holder(tmp_path: Path):
-    """Internal documentation."""
     cand_root = tmp_path / "candidates"
     pipe = _make_pipeline(tmp_path)
 
@@ -132,7 +127,6 @@ def test_cross_process_busy_probe_reflects_external_holder(tmp_path: Path):
 
 
 def test_unique_tmp_contains_pid_and_is_distinct(tmp_path: Path):
-    """Internal documentation."""
     target = tmp_path / "meta.json"
 
     for unique_tmp in (consol_mod._unique_tmp, cand_mod._unique_tmp):
@@ -145,7 +139,6 @@ def test_unique_tmp_contains_pid_and_is_distinct(tmp_path: Path):
 
 
 def test_save_candidate_writes_no_lingering_deterministic_tmp(tmp_path: Path):
-    """Internal documentation."""
     cand_root = tmp_path / "candidates"
     ws = tmp_path / "ws"
     ws.mkdir()

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from pathlib import Path
 from argos.core.vision_capability import VisionCapabilityCache
 

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,7 +13,6 @@ OnOSError = Literal["silent", "raise"]
 def read_json_file(
     path: Path, *, ErrorCls: type, on_os_error: OnOSError = "raise",
 ) -> dict | None:
-    """Internal documentation."""
     import json as _json
     p = Path(path)
     try:
@@ -44,7 +42,6 @@ def cached_singleton(
 
 
 def cached_singleton(getter: Callable[[], T], *, _state: Any, ErrorCls: type) -> T:
-    """Internal documentation."""
     if _state is not None:
         return _state  # type: ignore[return-value]
     new = getter()
@@ -53,6 +50,5 @@ def cached_singleton(getter: Callable[[], T], *, _state: Any, ErrorCls: type) ->
 
 # ── reload_singleton ──────────────────────────────────────
 def reload_singleton(getter: Callable[[], T], _state: Any, *, ErrorCls: type) -> T:
-    """Internal documentation."""
     new = getter()
     return new

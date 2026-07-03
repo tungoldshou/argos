@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -13,7 +12,6 @@ _BRACKETY = "已点击 \"input[value='Google Search']\" [返回值] [1, 2, 3] li
 
 
 def test_static_widgets_constructed_markup_false():
-    """Internal documentation."""
     assert UserMessage(_BRACKETY)._render_markup is False
     assert SystemLine(_BRACKETY)._render_markup is False
     assert CodeActionBlock(code="x=1", step=0) is not None
@@ -21,7 +19,6 @@ def test_static_widgets_constructed_markup_false():
 
 @pytest.mark.asyncio
 async def test_code_result_with_brackets_does_not_crash():
-    """Internal documentation."""
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test() as pilot:
         await pilot.pause()

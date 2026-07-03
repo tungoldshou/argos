@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -23,7 +22,6 @@ _LOCKFILE_FILES: Mapping[str, str] = {
 
 
 def detect_lockfiles(workspace: Path) -> set[str]:
-    """Internal documentation."""
     detected: set[str] = set()
     for tool, fname in _LOCKFILE_FILES.items():
         if (workspace / fname).exists():
@@ -32,7 +30,6 @@ def detect_lockfiles(workspace: Path) -> set[str]:
 
 
 def audit_lockfile(workspace: Path, tool: str) -> tuple[Finding, ...]:
-    """Internal documentation."""
     argv: tuple[str, ...] | None = None
     for t, a in _LOCKFILE_TABLE:
         if t == tool:
@@ -65,7 +62,6 @@ def audit_lockfile(workspace: Path, tool: str) -> tuple[Finding, ...]:
 
 
 def _parse_audit_output(tool: str, data: dict) -> tuple[Finding, ...]:
-    """Internal documentation."""
     findings: list[Finding] = []
     vulns = data.get("vulnerabilities") or data.get("advisories") or {}
     for pkg_name, info in vulns.items():
@@ -118,7 +114,6 @@ def _sev_to_level(sev: str) -> str:
 
 
 def audit_dependencies(workspace: Path, *, rel_workspace: Path) -> tuple[Finding, ...]:
-    """Internal documentation."""
     findings: list[Finding] = []
     for tool in detect_lockfiles(workspace):
         try:

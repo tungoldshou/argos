@@ -1,5 +1,4 @@
 # argos/tui/widgets/trust_dial.py
-"""Internal documentation."""
 from __future__ import annotations
 
 from rich.text import Text
@@ -35,7 +34,6 @@ _L4_HINT_REST_KEY = "trust.l4_hint_rest"
 
 
 class TrustDial(Static):
-    """Internal documentation."""
 
     DEFAULT_CSS = """
     TrustDial {
@@ -56,7 +54,6 @@ class TrustDial(Static):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _compose_text(self) -> Text:
-        """Internal documentation."""
         t = Text()
 
         short = self._current.name.split("_")[0]  # "L0" / "L1" / ...
@@ -109,5 +106,4 @@ class TrustDial(Static):
         return t
 
     def render(self) -> Text:  # type: ignore[override]
-        """Internal documentation."""
         return self._compose_text()

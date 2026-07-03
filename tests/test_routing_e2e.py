@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import json
 from pathlib import Path
 
@@ -35,7 +34,6 @@ def _client(name: str, text: str) -> ModelClient:
 
 
 def test_e2e_router_routes_three_tiers_and_tracks_decisions():
-    """Internal documentation."""
     routing = RoutingConfig(
         default="default",
         by_category={"file_edit": "cheap", "verify": "strong"},
@@ -74,7 +72,6 @@ def test_e2e_router_routes_three_tiers_and_tracks_decisions():
 
 
 def test_e2e_router_is_force_confirm_for_strong():
-    """Internal documentation."""
     routing = RoutingConfig(
         default="default", by_category={"verify": "strong"},
         tier_force_confirm=["strong"],
@@ -85,7 +82,6 @@ def test_e2e_router_is_force_confirm_for_strong():
 
 
 def test_e2e_router_cheap_not_force_confirm():
-    """Internal documentation."""
     routing = RoutingConfig(
         default="default", by_category={"file_edit": "cheap"},
         tier_force_confirm=["strong"],
@@ -95,7 +91,6 @@ def test_e2e_router_cheap_not_force_confirm():
 
 
 def test_e2e_run_uses_router_loop_state():
-    """Internal documentation."""
     import tempfile
     from argos.core.verify_gate import Verifier
     from argos.memory.store import ArgosStore
@@ -134,7 +129,6 @@ def test_e2e_run_uses_router_loop_state():
 
 
 def test_e2e_run_emits_cost_update_tier_name():
-    """Internal documentation."""
     import asyncio
     import tempfile
     from argos.core.verify_gate import Verifier
@@ -145,7 +139,6 @@ def test_e2e_run_emits_cost_update_tier_name():
     from argos.tools.receipts import ReceiptSigner
 
     class _ScriptedModel:
-        """Internal documentation."""
         def __init__(self) -> None:
             self.tier = ModelTier(name="default", model="m", base_url="https://x/a",
                                   max_tokens=4096)

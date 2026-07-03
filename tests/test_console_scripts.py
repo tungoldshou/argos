@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import tomllib
@@ -12,19 +11,16 @@ def _scripts() -> dict:
 
 
 def test_argosd_console_script_declared():
-    """Internal documentation."""
     scripts = _scripts()
     assert scripts.get("argosd") == "argos.daemon.__main__:main"
 
 
 def test_argosd_entry_target_is_callable():
-    """Internal documentation."""
     from argos.daemon.__main__ import main
     assert callable(main)
 
 
 def test_all_console_script_targets_importable():
-    """Internal documentation."""
     import importlib
     for name, target in _scripts().items():
         module_path, _, attr = target.partition(":")

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import subprocess
 import pytest
 from argos.input import clipboard_image as ci
@@ -40,7 +39,6 @@ def test_empty_clipboard_is_honest(monkeypatch):
 
 
 def test_unsupported_clipboard_content_is_honest(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(ci.sys, "platform", "darwin")
     monkeypatch.setattr(ci.shutil, "which", lambda name: "/x/pngpaste")
     monkeypatch.setattr(ci.subprocess, "run",

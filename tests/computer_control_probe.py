@@ -1,4 +1,3 @@
-"""Internal documentation."""
 import asyncio
 import pytest
 
@@ -6,7 +5,6 @@ pytestmark = pytest.mark.skip(reason="第 7 步降级路径探针,运行时手�
 
 
 def test_navigate_then_snapshot():
-    """Internal documentation."""
     from argos import playwright_tools
     playwright_tools._reset_for_test()
 
@@ -22,7 +20,6 @@ def test_navigate_then_snapshot():
 
 
 def test_navigate_click_snapshot():
-    """Internal documentation."""
     from argos import playwright_tools
     playwright_tools._reset_for_test()
 
@@ -38,7 +35,6 @@ def test_navigate_click_snapshot():
 
 
 def test_navigate_type_snapshot():
-    """Internal documentation."""
     from argos import playwright_tools
     playwright_tools._reset_for_test()
 

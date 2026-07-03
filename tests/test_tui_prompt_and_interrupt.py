@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -73,7 +72,6 @@ async def test_slash_menu_shows_and_tab_completes():
 
 @pytest.mark.asyncio
 async def test_slash_menu_arrow_selects_and_enter_runs_selected():
-    """Internal documentation."""
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
@@ -89,13 +87,16 @@ async def test_slash_menu_arrow_selects_and_enter_runs_selected():
         await pilot.press("enter")
         await pilot.pause()
         log = app.query_one("#transcript")
-        assert "工具" in log.rendered_text or second in log.rendered_text
+        assert (
+            "工具" in log.rendered_text
+            or second in log.rendered_text
+            or (second == "setup" and "active profile" in log.rendered_text)
+        )
         assert menu.display is False
 
 
 @pytest.mark.asyncio
 async def test_slash_menu_tab_completes_arrow_selected():
-    """Internal documentation."""
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
@@ -124,7 +125,6 @@ async def test_slash_menu_hides_for_non_slash():
 
 
 class _SlowLoop:
-    """Internal documentation."""
 
     async def run(self, goal: str, session_id: str) -> AsyncIterator[Event]:
         yield PhaseChange(phase="plan", actions=0)

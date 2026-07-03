@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import enum
@@ -8,7 +7,6 @@ from argos.approval import ApprovalLevel
 
 
 class EffortLevel(enum.Enum):
-    """Internal documentation."""
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -16,7 +14,6 @@ class EffortLevel(enum.Enum):
 
 @dataclass(frozen=True, slots=True)
 class EffortSettings:
-    """Internal documentation."""
     max_steps: int
     approval_level: ApprovalLevel
 

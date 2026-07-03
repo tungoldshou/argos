@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import math
@@ -100,7 +99,6 @@ def load_all() -> list[Skill]:
 
 
 def toggle(name: str, *, enabled: bool) -> bool:
-    """Internal documentation."""
     for d in (BUILTIN_DIR, user_dir()):
         p = d / f"{name}.md"
         if not p.exists():
@@ -117,7 +115,6 @@ def toggle(name: str, *, enabled: bool) -> bool:
 
 
 def import_skill(*, content: str, source: str = "") -> Skill:
-    """Internal documentation."""
     if len(content) > MAX_SKILL_CHARS:
         raise ValueError(f"skill body too long (> {MAX_SKILL_CHARS} chars)")
     s = _parse_string(content)
@@ -162,13 +159,11 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
 
 def _tokens(text: str) -> set[str]:
-    """Internal documentation."""
     low = text.lower()
     return set(re.findall(r"[a-z0-9]+", low)) | set(re.findall(r"[一-鿿]", low))
 
 
 def _keyword_score(goal: str, s: "Skill") -> float:
-    """Internal documentation."""
     g = _tokens(goal)
     if not g:
         return 0.0
@@ -177,7 +172,6 @@ def _keyword_score(goal: str, s: "Skill") -> float:
 
 
 def recall(goal: str, *, k: int = 3, sim_min: float = 0.4) -> list[Skill]:
-    """Internal documentation."""
     if not goal.strip():
         return []
     skills_all = [s for s in load_all() if s.enabled]

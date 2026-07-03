@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -20,7 +19,6 @@ from argos.daemon.worker import RunWorker
 
 
 class _ScriptLoop:
-    """Internal documentation."""
 
     def __init__(self, events: list[dict]):
         self._events = events
@@ -137,7 +135,6 @@ async def test_multiple_cost_events_sum(cost_server, tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_terminal_state_releases_slot_and_calls_cleanup(cost_server, tmp_path: Path):
-    """Internal documentation."""
     import subprocess
     import shutil
     if not shutil.which("git"):

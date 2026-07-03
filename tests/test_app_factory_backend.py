@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import argos.app_factory as af
@@ -28,7 +27,6 @@ def test_make_gate_broker_sandbox_uses_select_backend(monkeypatch, tmp_path):
 
 
 def test_select_backend_returns_seatbelt_on_darwin(monkeypatch):
-    """Internal documentation."""
     import argos.sandbox.executor as ex
     monkeypatch.setattr(ex.sys, "platform", "darwin")
     assert ex.select_backend() is ex.SeatbeltExecutor

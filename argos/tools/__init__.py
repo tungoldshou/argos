@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -37,7 +36,6 @@ ALL_TOOL_NAMES: list[str] = [
 def get_tool_names(
     registry: "Any | None" = None,
 ) -> list[str]:
-    """Internal documentation."""
     if registry is not None:
         try:
             return list(registry.callable_names())
@@ -56,7 +54,6 @@ __all__ = [
 
 
 def _ws() -> Path:
-    """Internal documentation."""
     import sys
     mod = sys.modules[__name__]
     ws_attr = getattr(mod, "WORKSPACE", None)
@@ -73,7 +70,6 @@ def _ws() -> Path:
 
 
 def _vd() -> Path:
-    """Internal documentation."""
     import sys
     mod = sys.modules[__name__]
     vd_attr = getattr(mod, "VERIFY_DIR", None)
@@ -97,7 +93,6 @@ def _vd() -> Path:
 
 
 def _safe_path(rel: str) -> Path | None:
-    """Internal documentation."""
     ws = _ws()
     ws.mkdir(parents=True, exist_ok=True)
     p = (ws / rel).resolve()
@@ -110,7 +105,6 @@ def _safe_path(rel: str) -> Path | None:
 
 
 def _make_gated(broker: Any) -> dict[str, Any]:
-    """Internal documentation."""
     def run_command_gated(command: str) -> str:
         return broker.request(action="run_command", args={"command": command})
 
@@ -221,14 +215,12 @@ def _make_gated(broker: Any) -> dict[str, Any]:
 
 
 def _propose_workflow_pure(spec: dict) -> str:
-    """Internal documentation."""
     name = (spec or {}).get("name", "?") if isinstance(spec, dict) else "?"
     n = len((spec or {}).get("stages", [])) if isinstance(spec, dict) else 0
     return t("tools.propose_workflow.registered", name=name, n=n)
 
 
 def _propose_verify_pure(command: str) -> str:
-    """Internal documentation."""
     return t("tools.propose_verify.registered", command=command)
 
 
@@ -237,7 +229,6 @@ def _propose_dom_verify_pure(
     selector: str = "body",
     expected_text: str = "",
 ) -> str:
-    """Internal documentation."""
     parts = [f"url={url!r}"]
     if selector and selector != "body":
         parts.append(f"selector={selector!r}")
@@ -247,12 +238,10 @@ def _propose_dom_verify_pure(
 
 
 def _propose_gui_verify_pure(expected_text: str) -> str:
-    """Internal documentation."""
     return t("tools.propose_gui_verify.registered", expected_text=expected_text)
 
 
 def _update_plan_pure(todos: list[dict]) -> str:
-    """Internal documentation."""
     n = len(todos) if isinstance(todos, list) else 0
     return t("tools.update_plan.registered", n=n)
 
@@ -263,7 +252,6 @@ def _plan_mode_blocked_msg() -> str:
 
 
 def run_command_gated(command: str) -> str:
-    """Internal documentation."""
     from argos.core.plan_mode import is_plan_mode
     if is_plan_mode():
         return _plan_mode_blocked_msg()
@@ -273,7 +261,6 @@ def run_command_gated(command: str) -> str:
 
 
 def write_file_gated(path: str, content: str) -> str:
-    """Internal documentation."""
     from argos.core.plan_mode import is_plan_mode
     if is_plan_mode():
         return _plan_mode_blocked_msg()
@@ -281,7 +268,6 @@ def write_file_gated(path: str, content: str) -> str:
 
 
 def edit_file_gated(path: str, old: str, new: str, all_occurrences: bool = False) -> str:
-    """Internal documentation."""
     from argos.core.plan_mode import is_plan_mode
     if is_plan_mode():
         return _plan_mode_blocked_msg()
@@ -292,7 +278,6 @@ _MODULE_BROKER: Any = None
 
 
 def _set_module_broker(broker: Any) -> None:
-    """Internal documentation."""
     global _MODULE_BROKER
     _MODULE_BROKER = broker
 
@@ -310,7 +295,6 @@ def _pure() -> dict[str, Any]:
 
 
 def build_namespace(broker: Any) -> dict[str, Any]:
-    """Internal documentation."""
     _set_module_broker(broker)
     ns: dict[str, Any] = {}
     ns.update(_pure())
@@ -325,7 +309,6 @@ def build_child_namespace(
     read_only: bool = False,
     tool_allowlist: "list[str] | tuple[str, ...] | frozenset[str] | None" = None,
 ) -> dict[str, Any]:
-    """Internal documentation."""
     ns: dict[str, Any] = {}
     ns.update(_pure())
     if broker is not None:

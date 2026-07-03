@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -35,7 +34,6 @@ def test_is_compatible_rejects_missing_fields():
 
 
 def test_is_compatible_detects_dev_code_change(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(daemon_spawn, "_argos_code_mtime", lambda: 2000.0)
     assert daemon_spawn._is_compatible(
         {"daemon": ARGOS_VERSION, "protocol": PROTOCOL_VERSION, "started_at": 1000.0}
@@ -43,7 +41,6 @@ def test_is_compatible_detects_dev_code_change(monkeypatch):
 
 
 def test_is_compatible_accepts_daemon_newer_than_code(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(daemon_spawn, "_argos_code_mtime", lambda: 1000.0)
     assert daemon_spawn._is_compatible(
         {"daemon": ARGOS_VERSION, "protocol": PROTOCOL_VERSION, "started_at": 2000.0}
@@ -51,7 +48,6 @@ def test_is_compatible_accepts_daemon_newer_than_code(monkeypatch):
 
 
 def test_is_compatible_missing_started_at_falls_back_to_version(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(daemon_spawn, "_argos_code_mtime", lambda: 9e9)
     assert daemon_spawn._is_compatible(
         {"daemon": ARGOS_VERSION, "protocol": PROTOCOL_VERSION}
@@ -61,7 +57,6 @@ def test_is_compatible_missing_started_at_falls_back_to_version(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_compatible_daemon_is_reused(monkeypatch, tmp_path):
-    """Internal documentation."""
     killed = {"n": 0}
     spawned = {"n": 0}
 
@@ -91,7 +86,6 @@ async def test_compatible_daemon_is_reused(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_stale_daemon_killed_and_respawned(monkeypatch, tmp_path):
-    """Internal documentation."""
     killed = {"n": 0}
     spawned = {"n": 0}
 
@@ -126,7 +120,6 @@ async def test_stale_daemon_killed_and_respawned(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_version_unreachable_treated_as_stale(monkeypatch, tmp_path):
-    """Internal documentation."""
     killed = {"n": 0}
     spawned = {"n": 0}
 
@@ -161,7 +154,6 @@ async def test_version_unreachable_treated_as_stale(monkeypatch, tmp_path):
 # ── _kill_stale_daemon ────────────────────────────────────────────────────
 
 def test_kill_stale_daemon_removes_pid_and_sock(monkeypatch, tmp_path):
-    """Internal documentation."""
     sock = tmp_path / "daemon.sock"
     sock.write_text("")
     pid_path = tmp_path / "daemon.pid"
@@ -180,7 +172,6 @@ def test_kill_stale_daemon_removes_pid_and_sock(monkeypatch, tmp_path):
 
 
 def test_kill_stale_daemon_skips_dead_pid(monkeypatch, tmp_path):
-    """Internal documentation."""
     sock = tmp_path / "daemon.sock"
     sock.write_text("")
     pid_path = tmp_path / "daemon.pid"

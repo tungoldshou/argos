@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -20,7 +19,6 @@ from argos.perception.executor import (
 
 
 def _make_run_result(returncode: int, stdout: str = "", stderr: str = ""):
-    """Internal documentation."""
     r = MagicMock()
     r.returncode = returncode
     r.stdout = stdout
@@ -35,7 +33,6 @@ def _allow_screen_capture_preflight(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_disabled_when_no_flag(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.delenv("ARGOS_COMPUTER_USE", raising=False)
     called = []
 
@@ -53,7 +50,6 @@ def test_disabled_when_no_flag(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_disabled_when_flag_is_zero(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "0")
     executor = ComputerExecutor()
     result = executor.dispatch(ComputerAction(kind="screenshot"))
@@ -64,7 +60,6 @@ def test_disabled_when_flag_is_zero(monkeypatch: pytest.MonkeyPatch):
 # ── screenshot ────────────────────────────────────────────────────────────────
 
 def test_screenshot_calls_screencapture(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     captured_cmd = []
 
@@ -88,7 +83,6 @@ def test_screenshot_calls_screencapture(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
 
 def test_screenshot_command_structure(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     calls: list[list[str]] = []
 
@@ -110,7 +104,6 @@ def test_screenshot_command_structure(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_screenshot_timeout_returns_failure(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
 
     def mock_run(cmd, **kw):
@@ -125,7 +118,6 @@ def test_screenshot_timeout_returns_failure(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_screenshot_failure_returns_ok_false(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
 
     def mock_run(cmd, **kw):
@@ -140,7 +132,6 @@ def test_screenshot_failure_returns_ok_false(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_screenshot_preflight_denied_skips_screencapture(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     monkeypatch.setattr("argos.perception.executor._screen_capture_allowed", lambda: False)
     called: list[bool] = []
@@ -159,7 +150,6 @@ def test_screenshot_preflight_denied_skips_screencapture(monkeypatch: pytest.Mon
 
 
 def test_click_access_denied_returns_helpful_message(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
 
     def mock_run(cmd, **kw):
@@ -179,7 +169,6 @@ def test_click_access_denied_returns_helpful_message(monkeypatch: pytest.MonkeyP
 
 
 def test_type_text_access_denied(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
 
     def mock_run(cmd, **kw):
@@ -209,7 +198,6 @@ def test_key_access_denied(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_click_calls_osascript(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     calls: list[list[str]] = []
 
@@ -246,7 +234,6 @@ def test_double_click_script_contains_double_click(monkeypatch: pytest.MonkeyPat
 
 
 def test_type_text_escapes_quotes(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     calls: list[list[str]] = []
 
@@ -264,7 +251,6 @@ def test_type_text_escapes_quotes(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_key_with_modifier_uses_using_clause(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     calls: list[list[str]] = []
 
@@ -283,7 +269,6 @@ def test_key_with_modifier_uses_using_clause(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_key_without_modifier(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     calls: list[list[str]] = []
 
@@ -318,7 +303,6 @@ def test_scroll_calls_osascript_with_coords(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_open_app_uses_open_minus_a(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     calls: list[list[str]] = []
 
@@ -350,7 +334,6 @@ def test_open_app_failure_returns_ok_false(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_custom_timeout_passed_to_subprocess(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     timeouts_seen: list[int] = []
 
@@ -366,7 +349,6 @@ def test_custom_timeout_passed_to_subprocess(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_command_not_found_returns_ok_false(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
 
     def mock_run(cmd, **kw):
@@ -382,7 +364,6 @@ def test_command_not_found_returns_ok_false(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_dispatch_enabled_screenshot(monkeypatch: pytest.MonkeyPatch):
-    """Internal documentation."""
     monkeypatch.setenv("ARGOS_COMPUTER_USE", "1")
     called = []
 
@@ -432,7 +413,6 @@ def test_dispatch_enabled_open_app(monkeypatch: pytest.MonkeyPatch):
 
 
 def _make_import_fail_pil():
-    """Internal documentation."""
     _real_import = __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
 
     def _fake_import(name, *args, **kwargs):

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -49,7 +48,6 @@ def test_audit_log_appends_jsonl(tmp_path, monkeypatch):
 
 
 def test_audit_log_io_failure_continues(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "audit"
     monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)
     log = AuditLog(session_id="s1")
@@ -78,7 +76,6 @@ def test_audit_log_secret_pattern_field(tmp_path, monkeypatch):
 
 
 def test_audit_log_cleanup_old(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "audit"
     monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)
     p.mkdir()
@@ -93,7 +90,6 @@ def test_audit_log_cleanup_old(tmp_path, monkeypatch):
 
 
 def test_audit_log_user_deny_by_field(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "audit"
     monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)
     log = AuditLog(session_id="s1")
@@ -103,7 +99,6 @@ def test_audit_log_user_deny_by_field(tmp_path, monkeypatch):
 
 
 def test_audit_log_schema_fields(tmp_path, monkeypatch):
-    """Internal documentation."""
     p = tmp_path / "audit"
     monkeypatch.setattr("argos.permissions.audit.AUDIT_DIR", p)
     log = AuditLog(session_id="s1")
@@ -118,5 +113,4 @@ def test_audit_log_schema_fields(tmp_path, monkeypatch):
 
 
 def test_audit_log_retain_days_default():
-    """Internal documentation."""
     assert RETAIN_DAYS == 30

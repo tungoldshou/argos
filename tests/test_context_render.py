@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -18,7 +17,6 @@ def _b(system=100, memory=50, tools=80, messages=200, total=430, window=1000):
 
 
 def test_format_table_contains_all_buckets():
-    """Internal documentation."""
     out = format_table(_b())
     assert "system" in out
     assert "memory" in out
@@ -28,7 +26,6 @@ def test_format_table_contains_all_buckets():
 
 
 def test_format_table_method_suffix_per_bucket():
-    """Internal documentation."""
     out = format_table(_b())
     assert "[est]" in out
     # messages API:[api]
@@ -36,7 +33,6 @@ def test_format_table_method_suffix_per_bucket():
 
 
 def test_format_table_memory_details_expanded():
-    """Internal documentation."""
     out = format_table(_b())
     assert "user" in out
     assert "project" in out
@@ -55,21 +51,18 @@ def test_format_table_health_color_yellow():
 
 
 def test_format_table_no_ansi_codes():
-    """Internal documentation."""
     out = format_table(_b())
     assert "\x1b[" not in out
     assert "\033[" not in out
 
 
 def test_format_json_keys_in_spec_order():
-    """Internal documentation."""
     out = format_json(_b())
     keys = list(json.loads(out).keys())
     assert keys == ["system", "memory", "tools", "messages", "total", "window", "pct", "health", "method"]
 
 
 def test_strip_markup_removes_tags():
-    """Internal documentation."""
     assert strip_markup("[green]hello[/green]") == "hello"
     assert strip_markup("[bold red]text[/bold red]") == "text"
     assert strip_markup("no tags here") == "no tags here"
@@ -77,7 +70,6 @@ def test_strip_markup_removes_tags():
 
 
 def test_format_table_plain_no_markup_tags():
-    """Internal documentation."""
     out = format_table_plain(_b())
     assert "[green]" not in out
     assert "[/green]" not in out
@@ -88,7 +80,6 @@ def test_format_table_plain_no_markup_tags():
 
 
 def test_format_table_plain_still_contains_content():
-    """Internal documentation."""
     out = format_table_plain(_b())
     assert "system" in out
     assert "memory" in out
@@ -99,13 +90,11 @@ def test_format_table_plain_still_contains_content():
 
 
 def test_format_table_markup_preserved_for_tui():
-    """Internal documentation."""
     out = format_table(_b())
     assert "[green]" in out or "[yellow]" in out or "[red]" in out
 
 
 def test_format_json_serializable():
-    """Internal documentation."""
     out = format_json(_b())
     parsed = json.loads(out)
     assert parsed["system"]["tokens"] == 100

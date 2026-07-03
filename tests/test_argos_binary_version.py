@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from pathlib import Path
 
 import pytest
@@ -15,7 +14,6 @@ VERSION = (Path(__file__).parent.parent / "packaging" / "VERSION").read_text().s
     reason="dist/argos 不存在(本地未 build);先跑 `bash packaging/build_arm64.sh`",
 )
 def test_binary_reports_correct_version():
-    """Internal documentation."""
     result = subprocess_run(BINARY, "--version")
     out = result.stdout + result.stderr
     assert VERSION in out, f"binary --version 报号错: {out!r}"
@@ -28,7 +26,6 @@ def test_binary_reports_correct_version():
     reason="dist/argos 不存在",
 )
 def test_binary_self_update_uses_real_version():
-    """Internal documentation."""
     result = subprocess_run(BINARY, "self-update")
     out = (result.stdout + result.stderr).lower()
     assert "0.0.0" not in out, f"binary self-update 报 unknown: {out!r}"

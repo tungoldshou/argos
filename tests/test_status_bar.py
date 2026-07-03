@@ -1,5 +1,4 @@
 # tests/test_status_bar.py
-"""Internal documentation."""
 import pytest
 from textual.app import App, ComposeResult
 
@@ -8,10 +7,8 @@ from argos.tui.widgets.status_bar import StatusBar
 
 
 class _H(App):
-    """Internal documentation."""
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
-        """Internal documentation."""
         defaults = super().get_theme_variable_defaults()
         if ARGOS_NIGHT.variables:
             defaults.update(ARGOS_NIGHT.variables)
@@ -23,7 +20,6 @@ class _H(App):
 
 @pytest.mark.asyncio
 async def test_status_bar_shows_phase_and_actions():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -38,7 +34,6 @@ async def test_status_bar_shows_phase_and_actions():
 
 @pytest.mark.asyncio
 async def test_phase_eye_plan():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -50,7 +45,6 @@ async def test_phase_eye_plan():
 
 @pytest.mark.asyncio
 async def test_phase_eye_act():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -62,7 +56,6 @@ async def test_phase_eye_act():
 
 @pytest.mark.asyncio
 async def test_phase_eye_verify():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -74,7 +67,6 @@ async def test_phase_eye_verify():
 
 @pytest.mark.asyncio
 async def test_phase_eye_report():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -86,7 +78,6 @@ async def test_phase_eye_report():
 
 @pytest.mark.asyncio
 async def test_phase_eye_idle():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -97,7 +88,6 @@ async def test_phase_eye_idle():
 
 @pytest.mark.asyncio
 async def test_set_blocked_overrides_verify_phase():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -112,7 +102,6 @@ async def test_set_blocked_overrides_verify_phase():
 
 @pytest.mark.asyncio
 async def test_set_blocked_false_restores_phase():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -127,7 +116,6 @@ async def test_set_blocked_false_restores_phase():
 
 @pytest.mark.asyncio
 async def test_set_alert_adds_css_class():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -140,7 +128,6 @@ async def test_set_alert_adds_css_class():
 
 @pytest.mark.asyncio
 async def test_set_alert_false_removes_css_class():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -153,7 +140,6 @@ async def test_set_alert_false_removes_css_class():
 
 @pytest.mark.asyncio
 async def test_alert_does_not_override_phase_eye_glyph():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -167,7 +153,6 @@ async def test_alert_does_not_override_phase_eye_glyph():
 
 @pytest.mark.asyncio
 async def test_blocked_beats_alert():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -182,7 +167,6 @@ async def test_blocked_beats_alert():
 
 @pytest.mark.asyncio
 async def test_ctx_warn_at_80_percent():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -195,7 +179,6 @@ async def test_ctx_warn_at_80_percent():
 
 @pytest.mark.asyncio
 async def test_ctx_crit_at_95_percent():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -207,7 +190,6 @@ async def test_ctx_crit_at_95_percent():
 
 @pytest.mark.asyncio
 async def test_ctx_below_80_no_warn():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -222,7 +204,6 @@ async def test_ctx_below_80_no_warn():
 
 @pytest.mark.asyncio
 async def test_action_count_label():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -235,14 +216,12 @@ async def test_action_count_label():
 
 
 def test_action_label_en_has_space():
-    """Internal documentation."""
     from argos.locales.tui_app import EN
     assert EN["tui.statusbar.action"].format(n=0) == "action 0"
     assert EN["tui.statusbar.action"].format(n=7) == "action 7"
 
 
 def test_public_api_set_blocked_exists():
-    """Internal documentation."""
     import inspect
     sig = inspect.signature(StatusBar.set_blocked)
     params = list(sig.parameters)
@@ -250,7 +229,6 @@ def test_public_api_set_blocked_exists():
 
 
 def test_public_api_set_alert_exists():
-    """Internal documentation."""
     import inspect
     assert hasattr(StatusBar, "set_alert"), "StatusBar 缺 set_alert 公开方法"
     sig = inspect.signature(StatusBar.set_alert)
@@ -260,7 +238,6 @@ def test_public_api_set_alert_exists():
 
 @pytest.mark.asyncio
 async def test_blocked_eye_glyph_color_is_gold_not_orange():
-    """Internal documentation."""
     app = _H()
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -284,7 +261,6 @@ async def test_blocked_eye_glyph_color_is_gold_not_orange():
 
 
 def test_mark_run_end_resets_phase_to_idle():
-    """Internal documentation."""
     from argos.tui.widgets.status_bar import StatusBar
     bar = StatusBar()
     bar.set_phase("report", 5)

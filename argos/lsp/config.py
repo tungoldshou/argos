@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -16,12 +15,11 @@ _SERVER_NAME_RE = re.compile(SERVER_NAME_PATTERN)
 
 
 class LspConfigError(Exception):
-    """Internal documentation."""
+    pass
 
 
 @dataclass(frozen=True, slots=True)
 class LspServerConfig:
-    """Internal documentation."""
     command: tuple[str, ...]
     filetypes: tuple[str, ...]
     disabled: bool = False
@@ -45,7 +43,6 @@ def _validate_server_name(name: str) -> None:
 
 @dataclass(frozen=True, slots=True)
 class LspConfig:
-    """Internal documentation."""
     version: int = 1
     servers: Mapping[str, LspServerConfig] = field(default_factory=dict)
 
@@ -55,11 +52,9 @@ class LspConfig:
 
     @staticmethod
     def empty() -> "LspConfig":
-        """Internal documentation."""
         return LspConfig(version=1, servers={})
 
     def get_servers_for_filetype(self, ext: str) -> list[tuple[str, LspServerConfig]]:
-        """Internal documentation."""
         ext = ext if ext.startswith(".") else f".{ext}"
         result: list[tuple[str, LspServerConfig]] = []
         for name, sc in self.servers.items():
@@ -128,7 +123,6 @@ def _parse_server_config(name: str, raw: dict) -> LspServerConfig:
 
 
 def load(path: Path | None = None) -> LspConfig:
-    """Internal documentation."""
     p = path or LSP_CONFIG_PATH or _default_config_path()
     data = config_base.read_json_file(
         p, ErrorCls=LspConfigError, on_os_error="silent",
@@ -156,7 +150,6 @@ _config: LspConfig | None = None
 
 
 def get_config() -> LspConfig:
-    """Internal documentation."""
     global _config
     if _config is None:
         _config = load()
@@ -164,7 +157,6 @@ def get_config() -> LspConfig:
 
 
 def reload_config(path: Path | None = None) -> LspConfig:
-    """Internal documentation."""
     global _config
     new = load(path)
     _config = new
@@ -172,6 +164,5 @@ def reload_config(path: Path | None = None) -> LspConfig:
 
 
 def _reset_config() -> None:
-    """Internal documentation."""
     global _config
     _config = None

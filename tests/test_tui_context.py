@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,13 +13,11 @@ from argos.tui.widgets.status_bar import StatusBar
 
 
 def test_command_help_includes_context():
-    """Internal documentation."""
     assert "context" in COMMAND_HELP
     assert "context" in COMMAND_HELP["context"].lower()
 
 
 def test_parse_slash_context_recognized():
-    """Internal documentation."""
     sc1 = parse_slash("/context")
     assert sc1 is not None
     assert sc1.name == "context"
@@ -35,7 +32,6 @@ def test_parse_slash_context_recognized():
 
 
 def test_activity_panel_on_context_adds_badge():
-    """Internal documentation."""
     import inspect
     src = inspect.getsource(ActivityPanel)
     assert "ctx" in src and "badge" in src
@@ -49,14 +45,12 @@ def test_status_bar_update_ctx_pressure_above_80():
 
 
 def test_status_bar_update_ctx_pressure_below_80():
-    """Internal documentation."""
     bar = StatusBar()
     bar.update_ctx_pressure(0.5)
     assert bar.ctx_pct == 0.5
 
 
 def test_status_bar_update_ctx_pressure_zero_safe():
-    """Internal documentation."""
     bar = StatusBar()
     bar.update_ctx_pressure(0)
     assert bar.ctx_pct == 0.0
@@ -66,7 +60,6 @@ def test_status_bar_update_ctx_pressure_zero_safe():
 
 @pytest.mark.asyncio
 async def test_cost_update_refreshes_status_bar_context_pressure(monkeypatch):
-    """Internal documentation."""
     monkeypatch.setattr(
         ArgosApp,
         "_display_tier",
@@ -93,7 +86,6 @@ import argos.tui.app as _app
 
 
 def test_context_cmd_uses_analyzer_and_render():
-    """Internal documentation."""
     src = inspect.getsource(_app.ArgosApp._context_cmd)
     assert "analyze" in src
     assert "format_table" in src
@@ -103,7 +95,6 @@ def test_context_cmd_uses_analyzer_and_render():
 
 @pytest.mark.asyncio
 async def test_context_unknown_arg_prints_usage():
-    """Internal documentation."""
     class Log:
         def __init__(self) -> None:
             self.lines: list[tuple[str, str | None]] = []

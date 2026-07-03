@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import dataclasses
@@ -46,7 +45,6 @@ class TestLedgerEntryTriState:
         assert e.undo_state == undo_state
 
     def test_reversible_no_undo_token_none(self):
-        """Internal documentation."""
         e = _make_entry(reversible="no", undo_token=None, undo_state="impossible")
         assert e.undo_token is None
         assert e.undo_state == "impossible"

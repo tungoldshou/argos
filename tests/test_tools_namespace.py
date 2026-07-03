@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -28,7 +27,6 @@ def test_all_tool_names_exact():
 
 
 def test_all_tool_names_count_is_29():
-    """Internal documentation."""
     assert len(tools.ALL_TOOL_NAMES) == 31
     ns = tools.build_child_namespace(broker=_FakeStub())
     for name in ("browser_navigate", "browser_snapshot", "browser_click",
@@ -73,7 +71,6 @@ def test_child_namespace_gated_tools_call_broker():
 
 
 def test_child_namespace_no_broker_missing_gated():
-    """Internal documentation."""
     ns = tools.build_child_namespace(broker=None)
     assert "run_command" not in ns
     assert "web_search" not in ns
@@ -82,7 +79,6 @@ def test_child_namespace_no_broker_missing_gated():
 
 
 def test_build_namespace_includes_all_tools():
-    """Internal documentation."""
     calls = []
 
     class FakeBroker:
@@ -103,7 +99,6 @@ def test_build_namespace_includes_all_tools():
 
 
 def test_write_file_strips_app_prefix_for_tb_compat(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos import runtime
     from argos.tools import files as ftools
     ws = tmp_path / "ws"
@@ -127,7 +122,6 @@ def test_write_file_strips_app_prefix_for_tb_compat(tmp_path, monkeypatch):
 
 
 def test_safe_path_rejects_traversal_but_allows_app_prefix(tmp_path, monkeypatch):
-    """Internal documentation."""
     from argos.tools import files as ftools
     from argos import runtime
     ws = tmp_path / "ws"

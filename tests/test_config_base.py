@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -10,7 +9,6 @@ from argos import config_base
 
 
 def test_read_json_file_returns_parsed_dict(tmp_path):
-    """Internal documentation."""
     p = tmp_path / "cfg.json"
     p.write_text(json.dumps({"version": 1, "x": 1}), encoding="utf-8")
     data = config_base.read_json_file(p, ErrorCls=ValueError)
@@ -18,13 +16,11 @@ def test_read_json_file_returns_parsed_dict(tmp_path):
 
 
 def test_read_json_file_missing_returns_none(tmp_path):
-    """Internal documentation."""
     p = tmp_path / "nope.json"
     assert config_base.read_json_file(p, ErrorCls=ValueError) is None
 
 
 def test_read_json_file_invalid_json_raises_error_cls(tmp_path):
-    """Internal documentation."""
     p = tmp_path / "bad.json"
     p.write_text("{not json", encoding="utf-8")
 
@@ -36,7 +32,6 @@ def test_read_json_file_invalid_json_raises_error_cls(tmp_path):
 
 
 def test_read_json_file_top_level_not_dict_raises(tmp_path):
-    """Internal documentation."""
     p = tmp_path / "list.json"
     p.write_text("[1, 2, 3]", encoding="utf-8")
 
@@ -48,7 +43,6 @@ def test_read_json_file_top_level_not_dict_raises(tmp_path):
 
 
 def test_cached_singleton_loads_on_first_call():
-    """Internal documentation."""
     calls: list[int] = []
 
     def getter() -> dict:
@@ -69,7 +63,6 @@ def test_cached_singleton_loads_on_first_call():
 
 
 def test_cached_singleton_propagates_getter_errors():
-    """Internal documentation."""
     calls: list[int] = []
 
     class _TestError(Exception):
@@ -94,7 +87,6 @@ def test_cached_singleton_propagates_getter_errors():
 
 
 def test_reload_singleton_swallows_errors_keeps_old():
-    """Internal documentation."""
     class _TestError(Exception):
         pass
 
@@ -111,7 +103,6 @@ def test_reload_singleton_swallows_errors_keeps_old():
 
 
 def test_reload_singleton_replaces_on_success():
-    """Internal documentation."""
     new = {"new": 1}
     def getter() -> dict:
         return new
@@ -122,7 +113,6 @@ def test_reload_singleton_replaces_on_success():
 
 
 def test_read_json_file_requires_error_cls(tmp_path):
-    """Internal documentation."""
     p = tmp_path / "x.json"
     p.write_text("not json", encoding="utf-8")
     with pytest.raises(TypeError):

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import logging
@@ -14,7 +13,6 @@ __all__ = ["WorktreeError", "WorktreeManager"]
 
 
 class WorktreeManager:
-    """Internal documentation."""
 
     def __init__(self, base_dir: Path | None = None):
         if base_dir is None:
@@ -32,7 +30,6 @@ class WorktreeManager:
         return gw.is_git_repo(workspace)
 
     def create(self, *, run_id: str, workspace: str) -> str:
-        """Internal documentation."""
         path = self._base / run_id
         if gw.is_git_repo(workspace) and gw.git_available():
             gw.add_worktree(repo=workspace, path=path, branch=f"argos/{run_id}", ref="HEAD")
@@ -44,7 +41,6 @@ class WorktreeManager:
             raise WorktreeError(f"temp dir creation failed: {e}") from e
 
     def cleanup(self, run_id: str) -> None:
-        """Internal documentation."""
         candidates = [self._base / run_id]
         for p in self._base.iterdir():
             if p.is_dir() and p.name.startswith(f"argos-{run_id}-"):
@@ -56,5 +52,4 @@ class WorktreeManager:
                 log.warning("worktree cleanup failed for %s: %s", run_id, e)
 
     def path_for(self, run_id: str) -> Path:
-        """Internal documentation."""
         return self._base / run_id

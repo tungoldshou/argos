@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -16,7 +15,6 @@ from argos.lsp.tools import (
 
 
 def test_disabled_server_returns_error_json(tmp_path):
-    """Internal documentation."""
     cfg = LspConfig(servers={
         "x": LspServerConfig(command=("y",), filetypes=(".py",), disabled=True),
     })
@@ -30,7 +28,6 @@ def test_disabled_server_returns_error_json(tmp_path):
 
 
 def test_unknown_server_returns_error_json(tmp_path):
-    """Internal documentation."""
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("y",), filetypes=(".py",)),
     })
@@ -44,7 +41,6 @@ def test_unknown_server_returns_error_json(tmp_path):
 
 
 def test_file_outside_workspace_returns_error(tmp_path):
-    """Internal documentation."""
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("y",), filetypes=(".py",)),
     })
@@ -58,7 +54,6 @@ def test_file_outside_workspace_returns_error(tmp_path):
 
 
 def test_diagnostics_for_disabled_server_returns_error(tmp_path):
-    """Internal documentation."""
     cfg = LspConfig(servers={
         "x": LspServerConfig(command=("y",), filetypes=(".py",), disabled=True),
     })
@@ -70,7 +65,6 @@ def test_diagnostics_for_disabled_server_returns_error(tmp_path):
 
 
 def test_all_six_gated_tools_dispatch_without_exception(tmp_path):
-    """Internal documentation."""
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("y",), filetypes=(".py",), disabled=True),
     })
@@ -90,7 +84,6 @@ def test_all_six_gated_tools_dispatch_without_exception(tmp_path):
 
 
 def test_tools_registered_in_all_tool_names():
-    """Internal documentation."""
     from argos.tools import ALL_TOOL_NAMES
     for name in ("lsp_definition", "lsp_references", "lsp_hover",
                  "lsp_document_symbols", "lsp_workspace_symbols", "lsp_diagnostics"):
@@ -102,7 +95,6 @@ def test_tools_registered_in_all_tool_names():
 
 
 def test_tools_broker_dispatch_lsp_definition():
-    """Internal documentation."""
     from argos.sandbox import broker as broker_mod
     import inspect
     src = inspect.getsource(broker_mod.CapabilityBroker._execute)

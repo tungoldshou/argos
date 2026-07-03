@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -74,7 +73,6 @@ async def test_other_sessions_excludes_self():
 
 @pytest.mark.asyncio
 async def test_session_uuid_format():
-    """Internal documentation."""
     import uuid
     reg = SessionRegistry()
     rec = await reg.create()
