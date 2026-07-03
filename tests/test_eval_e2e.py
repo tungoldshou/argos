@@ -1,12 +1,4 @@
-"""#7 T9 端到端铁证:e2e_pair_run_compare + 真 fake 桩 + 报告生成。
-
-走 EvalRunner + run_pair + write_report,断言:
-  · 2 个 EvalResult 都落 JSONL
-  · markdown 报告含 pass winner / cost winner / 字段表
-  · json 报告含 winner_pass / winner_cost
-  · list_runs 跨 day 能找到
-  · summary() 算 pass rate
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -34,7 +26,7 @@ def _make_task(root: Path, task_id: str = "bug_fix_001_off_by_one") -> EvalTask:
 
 
 def test_e2e_pair_run_compare_against_fake_model(tmp_path, monkeypatch):
-    """完整链路:corpus → runner → run_pair → 报告 → 读回断言。"""
+    """Internal documentation."""
     root = tmp_path / "corpus"
     write_seed_corpus(root)
     monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", str(root))
@@ -51,7 +43,6 @@ def test_e2e_pair_run_compare_against_fake_model(tmp_path, monkeypatch):
 
     a, b = run_pair(runner, task, model_a="cheap", model_b="strong")
 
-    # 1. 两个 EvalResult 都落 JSONL
     assert a.model_tier == "cheap"
     assert b.model_tier == "strong"
     assert a.cost_usd == 0.013
@@ -59,13 +50,10 @@ def test_e2e_pair_run_compare_against_fake_model(tmp_path, monkeypatch):
     assert a.pass_status == PASS_PASSED
     assert b.pass_status == PASS_PASSED
 
-    # 2. JSONL 持久化
     runs = list_runs(base=base, limit=10)
     assert {r.run_id for r in runs} == {a.run_id, b.run_id}
-    # load_run 能找回
     assert load_run(a.run_id, base=base) is not None
 
-    # 3. 报告落盘
     md_p = write_report(a, b, base=base)
     json_p = write_report_json(a, b, base=base)
     assert md_p.exists()
@@ -75,14 +63,11 @@ def test_e2e_pair_run_compare_against_fake_model(tmp_path, monkeypatch):
     assert "bug_fix_001_off_by_one" in md
     assert "Pass winner" in md
     assert "Cost winner" in md
-    # Cost winner 应该是 cheap(cost 更低)
     assert "**Cost winner**: `a`" in md
-    # 验证
     data = json.loads(json_p.read_text("utf-8"))
     assert data["winner_cost"] == "a"
     assert data["winner_pass"] in ("a", "b", "tie")
 
-    # 4. summary 算 pass rate
     s = summary(base=base, since_days=30)
     assert s["cheap"]["bug_fix"]["passed"] == 1
     assert s["strong"]["bug_fix"]["passed"] == 1
@@ -122,7 +107,7 @@ def test_e2e_failing_task_recorded_as_failed(tmp_path, monkeypatch):
 
 
 def test_e2e_report_file_created_with_pass_rate(tmp_path, monkeypatch):
-    """报告含 pass_rate 字段信息(通过 markdown 表格透出 cost_usd / duration_s 等)。"""
+    """Internal documentation."""
     root = tmp_path / "corpus"
     write_seed_corpus(root)
     monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", str(root))
@@ -139,18 +124,15 @@ def test_e2e_report_file_created_with_pass_rate(tmp_path, monkeypatch):
     a, b = run_pair(runner, task, model_a="cheap", model_b="strong")
     md_p = write_report(a, b, base=base)
     md = md_p.read_text("utf-8")
-    # 必含字段
     for field in ("pass_status", "duration_s", "tokens_in", "tokens_out",
                   "cost_usd", "steps", "tampered"):
         assert f"| {field}" in md
-    # verify_cmd output 段
     assert "verify_cmd output" in md
-    # Goal 段
     assert "## Goal" in md
 
 
 def test_e2e_all_14_corpus_tasks_loadable(tmp_path, monkeypatch):
-    """14 个种子任务全部能 load_task + 落 corpus_version。"""
+    """Internal documentation."""
     root = tmp_path / "corpus"
     write_seed_corpus(root)
     monkeypatch.setenv("ARGOS_EVAL_CORPUS_DIR", str(root))
@@ -160,5 +142,5 @@ def test_e2e_all_14_corpus_tasks_loadable(tmp_path, monkeypatch):
     for t in tasks:
         loaded = load_task(t.id)
         assert loaded.id == t.id
-        assert loaded.verify_cmd  # 不空
+        assert loaded.verify_cmd
     assert corpus_version() == 1

@@ -1,7 +1,6 @@
 # tests/test_cli_setup.py
 def test_parser_has_setup_subcommand():
     from argos.__main__ import _build_parser
-    # setup 作为子命令或 --setup flag;约定:子命令 argv ["setup"]
     p = _build_parser()
     ns = p.parse_args(["setup"])
     assert getattr(ns, "command", None) == "setup" or getattr(ns, "setup", False)
@@ -43,6 +42,24 @@ def test_setup_help_allows_existing_environment_variable(capsys):
     assert "writes ~/.argos/config.json (profile table + active pointer) and ~/.argos/.env" not in out
 
 
+def test_setup_help_uses_configured_argos_dir(tmp_path, monkeypatch, capsys):
+    from argos.__main__ import _build_parser
+
+    cfg_dir = tmp_path / "custom-config"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+
+    p = _build_parser()
+    try:
+        p.parse_args(["setup", "--help"])
+    except SystemExit as e:
+        assert e.code == 0
+
+    out = capsys.readouterr().out
+    assert str(cfg_dir / "config.json") in out
+    assert str(cfg_dir / ".env") in out
+    assert "~/.argos" not in out
+
+
 def test_setup_help_advanced_mentions_image_input_override(capsys):
     from argos.__main__ import _build_parser
 
@@ -69,6 +86,21 @@ def test_top_level_help_setup_description_mentions_key_source(capsys):
     assert "key source" in out or "key 来源" in out or "已有环境变量" in out
 
 
+def test_top_level_help_sandbox_distinguishes_codeact_from_broker_web(capsys):
+    from argos.__main__ import _build_parser
+
+    p = _build_parser()
+    try:
+        p.parse_args(["--help"])
+    except SystemExit as e:
+        assert e.code == 0
+
+    out = capsys.readouterr().out
+    assert "CodeAct" in out
+    assert "web_search/web_extract" in out
+    assert "broker" in out
+
+
 def test_bare_group_subcommands_print_help_instead_of_launching_tui(capsys):
     from argos.__main__ import _build_parser
 
@@ -84,7 +116,7 @@ def test_bare_group_subcommands_print_help_instead_of_launching_tui(capsys):
 
 
 def test_setup_subcommand_dispatches_to_wizard(monkeypatch):
-    """argv ['setup'] 真的调到 setup_wizard.run(不只是 parser 能解析到子命令)。"""
+    """Internal documentation."""
     import argos.__main__ as M
     called = {}
 
@@ -98,7 +130,7 @@ def test_setup_subcommand_dispatches_to_wizard(monkeypatch):
 
 
 def test_setup_cli_reader_hides_pasted_api_key(monkeypatch):
-    """真实 CLI setup 读 API key 时不能用会回显的 input()."""
+    """Internal documentation."""
     import argos.__main__ as M
     from argos.i18n import t
 
@@ -119,7 +151,7 @@ def test_setup_cli_reader_hides_pasted_api_key(monkeypatch):
 
 
 def test_setup_prints_next_steps_after_save(tmp_path, monkeypatch):
-    """setup 保存后应告诉用户下一步怎么启动/指定 profile。"""
+    """Internal documentation."""
     import asyncio
     from argos import setup_wizard as sw
 

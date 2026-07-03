@@ -1,14 +1,4 @@
-"""StandingOrder + OrderStore 测试。
-
-覆盖：
-  - StandingOrder frozen 不变量
-  - 字段一致性断言（schedule/file_trigger 缺必填 → ValueError）
-  - OrderStore round-trip（add → list → get）
-  - OrderStore delete / update
-  - JSONL 文件格式正确性
-  - 空/不存在文件的防御性行为
-  - 假时钟全程
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import dataclasses
@@ -21,7 +11,6 @@ from argos.conductor.orders import StandingOrder, OrderStore
 
 
 # ---------------------------------------------------------------------------
-# 辅助
 # ---------------------------------------------------------------------------
 
 def _make_schedule_order(
@@ -63,7 +52,6 @@ def _make_file_trigger_order(
 
 
 # ---------------------------------------------------------------------------
-# StandingOrder 不变量
 # ---------------------------------------------------------------------------
 
 class TestStandingOrderFrozen:
@@ -88,7 +76,7 @@ class TestStandingOrderConstraints:
         with pytest.raises(ValueError, match="schedule"):
             StandingOrder(
                 id="x", utterance="u", kind="schedule",
-                schedule=None,          # 缺 schedule → 抛
+                schedule=None,
                 trigger_glob=None,
                 goal_template="g", enabled=True,
                 created_at=1.0, last_fired_at=None,
@@ -99,17 +87,17 @@ class TestStandingOrderConstraints:
             StandingOrder(
                 id="x", utterance="u", kind="file_trigger",
                 schedule=None,
-                trigger_glob=None,      # 缺 trigger_glob → 抛
+                trigger_glob=None,
                 goal_template="g", enabled=True,
                 created_at=1.0, last_fired_at=None,
             )
 
     def test_schedule_empty_string_also_invalid(self):
-        """空字符串视为"未提供"，应抛 ValueError。"""
+        """Internal documentation."""
         with pytest.raises(ValueError):
             StandingOrder(
                 id="x", utterance="u", kind="schedule",
-                schedule="",            # 空串 → falsy → 抛
+                schedule="",
                 trigger_glob=None,
                 goal_template="g", enabled=True,
                 created_at=1.0, last_fired_at=None,
@@ -130,18 +118,17 @@ class TestStandingOrderHelpers:
     def test_with_last_fired(self):
         o = _make_schedule_order(last_fired_at=None)
         o2 = o.with_last_fired(9999.0)
-        assert o.last_fired_at is None       # 原不变
+        assert o.last_fired_at is None
         assert o2.last_fired_at == 9999.0
 
     def test_with_enabled(self):
         o = _make_schedule_order(enabled=True)
         o2 = o.with_enabled(False)
-        assert o.enabled is True             # 原不变
+        assert o.enabled is True
         assert o2.enabled is False
 
 
 # ---------------------------------------------------------------------------
-# StandingOrder 序列化 round-trip
 # ---------------------------------------------------------------------------
 
 class TestStandingOrderSerialization:
@@ -288,7 +275,6 @@ class TestOrderStoreUpdate:
         o_a = store.get("a")
         assert o_a is not None
         store.update(o_a.with_enabled(False))
-        # b 不受影响
         o_b = store.get("b")
         assert o_b is not None
         assert o_b.enabled is True
@@ -297,7 +283,6 @@ class TestOrderStoreUpdate:
 class TestOrderStoreSortOrder:
     def test_list_sorted_by_created_at(self, tmp_path: Path):
         store = OrderStore(tmp_path)
-        # 故意倒序添加
         store.add(_make_schedule_order("c", created_at=3.0))
         store.add(_make_schedule_order("a", created_at=1.0))
         store.add(_make_schedule_order("b", created_at=2.0))
@@ -307,11 +292,10 @@ class TestOrderStoreSortOrder:
 
 
 # ---------------------------------------------------------------------------
-# action 字段
 # ---------------------------------------------------------------------------
 
 def test_order_action_default_run_and_roundtrip():
-    """action 默认 'run';to_dict/from_dict 往返;旧落盘数据(无 action 键)兼容。"""
+    """Internal documentation."""
     import time
     o = StandingOrder(
         id="x1", utterance="u", kind="schedule", schedule="03:00",
@@ -321,7 +305,7 @@ def test_order_action_default_run_and_roundtrip():
     assert o.action == "run"
     d = o.to_dict()
     assert d["action"] == "run"
-    d.pop("action")  # 模拟旧数据
+    d.pop("action")
     assert StandingOrder.from_dict(d).action == "run"
 
 

@@ -7,7 +7,6 @@ def test_strip_complete_block():
 
 
 def test_strip_unclosed_trailing_block():
-    # 流式中途:围栏开了还没闭合 → 从开围栏处剥掉
     assert strip_code_fences("写代码:\n```python\nwrite_file('a')") == "写代码:"
 
 

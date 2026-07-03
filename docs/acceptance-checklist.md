@@ -92,8 +92,8 @@
 - **期望**:弹出可见浏览器执行;没装 chromium 则诚实报错(不崩)。
 - **验收**:☐
 
-### C3. MCP 外部工具  🔧 写 `~/.argos/mcp.json`
-- **怎么测**:写 `~/.argos/mcp.json`(schema 见 docs/configuration.md)指一个 MCP server → `/mcp` 看是否连上 → 让 agent `mcp_call`。
+### C3. MCP 外部工具  🔧 写 Argos config directory 下的 `mcp.json`
+- **怎么测**:写 Argos config directory 下的 `mcp.json`(默认 config directory 是 `~/.argos`,可用 `ARGOS_CONFIG_DIR` 改到别处;schema 见 docs/configuration.md)指一个 MCP server → `/mcp` 看是否连上 → 让 agent `mcp_call`。
 - **期望**:连上的 server 工具可调;没配则诚实说"无 MCP server"。
 - **验收**:☐
 

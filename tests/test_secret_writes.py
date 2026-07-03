@@ -1,6 +1,4 @@
-"""9 条 secret pattern flag-and-ask 铁证(spec §2.4, D8 锁 flag-and-ask)。
-
-复 SECRET_PATTERNS 9 条,每条 ≥ 1 命中 case + .env.example 不误报。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -13,7 +11,7 @@ from argos.permissions.secrets import (
 
 
 def test_secret_patterns_count_is_9():
-    """spec §2.4 锁:9 条 regex,单一来源 D2。"""
+    """Internal documentation."""
     assert len(SECRET_PATTERNS) == 9
 
 
@@ -53,13 +51,13 @@ def test_hardcoded_password_detected():
 
 
 def test_example_key_still_flagged():
-    """D8 锁:EXAMPLE_AWS_KEY=AKIA... 仍 flag(不 heuristic 区分真假 key;用户**永远**看到弹窗)。"""
+    """Internal documentation."""
     content = "EXAMPLE_AWS_KEY=AKIAIOSFODNN7EXAMPLE"
     assert find_secret_in_content(content) == "AWS access key"
 
 
 def test_env_example_not_scanned():
-    """.env.example 里写 AKIA 仍被 flag(只是 path 走 allow,但内容仍 secret flag)。"""
+    """Internal documentation."""
     content = "EXAMPLE_AWS_KEY=AKIAIOSFODNN7EXAMPLE"
     assert find_secret_in_content(content) is not None
 
@@ -69,13 +67,12 @@ def test_normal_content_not_flagged():
 
 
 def test_large_content_skipped():
-    """1MB+ 内容 skip(D13 锁)。"""
+    """Internal documentation."""
     big = "a" * (MAX_SCAN_BYTES + 100)
     assert find_secret_in_content(big) is None
 
 
 def test_edit_file_scans_new_content():
-    """edit_file 替换的新内容(不是 old block)走扫描;这里只验 find 函数对"新内容"行为正确。"""
+    """Internal documentation."""
     new_content = "AKIAIOSFODNN7EXAMPLE"   # new
-    # find 接受新内容;old 不会传进来
     assert find_secret_in_content(new_content) == "AWS access key"

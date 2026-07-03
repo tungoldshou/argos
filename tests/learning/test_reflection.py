@@ -1,4 +1,4 @@
-"""learning reflection 验收 — 任务:失败路径只产 reflection,绝不升级技能。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -39,11 +39,9 @@ def _make_unverifiable_events() -> list[dict]:
     ]
 
 
-# ── 验收 c: 失败 run 永不产生技能、只产 reflection ──────────
 def test_failed_run_writes_reflection_only(tmp_path, monkeypatch):
-    """failed verdict → 调 memory capture_event,**不**写任何 skill 文件。"""
+    """Internal documentation."""
     captured: list[dict] = []
-    # monkeypatch memory.auto.capture_event 拦截
     from argos.memory import auto as _mem_auto
     monkeypatch.setattr(
         _mem_auto, "capture_event",
@@ -56,23 +54,21 @@ def test_failed_run_writes_reflection_only(tmp_path, monkeypatch):
     events = _make_failed_events()
     _write_run_store(tmp_path, run_id, events)
 
-    skills_root = tmp_path / "skills"   # 应保持空
+    skills_root = tmp_path / "skills"
     reflect_failure(
         run_id=run_id, store_dir=tmp_path / "runs",
         goal="fix foo", verify_cmd="pytest",
         verdict_status="failed",
         skills_root=skills_root,
     )
-    # 写了 reflection
     assert len(captured) == 1
     assert captured[0]["kind"] == "task_reflection"
     assert captured[0].get("verdict") == "failed"
-    # 没写 skill
     assert not skills_root.exists() or not any(skills_root.iterdir())
 
 
 def test_unverifiable_run_writes_reflection_only(tmp_path, monkeypatch):
-    """unverifiable verdict → 同样只产 reflection。"""
+    """Internal documentation."""
     captured: list[dict] = []
     from argos.memory import auto as _mem_auto
     monkeypatch.setattr(
@@ -100,14 +96,13 @@ def test_unverifiable_run_writes_reflection_only(tmp_path, monkeypatch):
 
 
 def test_reflection_swallows_memory_exceptions(tmp_path, monkeypatch):
-    """memory 写失败 → reflect_failure 不抛(caller 可以放心 await)。"""
+    """Internal documentation."""
     from argos.memory import auto as _mem_auto
     def _boom(*a, **kw):
         raise RuntimeError("memory write failed")
     monkeypatch.setattr(_mem_auto, "capture_event", _boom)
 
     from argos.learning.reflection import reflect_failure
-    # 不该抛
     reflect_failure(
         run_id="r#nope", store_dir=tmp_path / "runs",
         goal="x", verify_cmd="pytest",

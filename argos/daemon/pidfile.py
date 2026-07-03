@@ -1,4 +1,4 @@
-"""~/.argos/daemon.pid 锁(简单持有,启动时若已存在则检测 alive / 接管)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -23,7 +23,7 @@ def read_pid(path: Path) -> int | None:
 
 
 def is_alive(pid: int) -> bool:
-    """检测 pid 是否在跑(支持 Unix;Windows 退路用 os.path.exists 不可靠,本期不支持)。"""
+    """Internal documentation."""
     try:
         os.kill(pid, 0)
         return True

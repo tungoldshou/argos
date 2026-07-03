@@ -1,4 +1,4 @@
-"""permissions.json 配置加载 + 校验 + reload 单元测试(spec §2.5, D3 / D19)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -24,13 +24,13 @@ def test_rule_entry_frozen():
 
 
 def test_rule_entry_empty_matcher_allowed():
-    """空 matcher = 全匹配(spec §2.5 锁);"*" 也行。"""
+    """Internal documentation."""
     RuleEntry(tool="x", matcher="")
     RuleEntry(tool="x", matcher="*")
 
 
 def test_permissions_config_empty():
-    """PermissionsConfig.empty() → 无规则,default_level=None(D20 沿用 gate.level)。"""
+    """Internal documentation."""
     cfg = PermissionsConfig.empty()
     assert cfg.version == 1
     assert cfg.default_level is None
@@ -41,7 +41,7 @@ def test_permissions_config_empty():
 
 
 def test_permissions_config_construction():
-    """手工构造合法配置。"""
+    """Internal documentation."""
     cfg = PermissionsConfig(
         version=1,
         default_level="confirm",
@@ -66,7 +66,7 @@ def test_invalid_tool_level_raises():
 
 
 def test_load_nonexistent_returns_empty(tmp_path, monkeypatch):
-    """无 permissions.json → EmptyPermissionsConfig(D20 锁)。"""
+    """Internal documentation."""
     from argos.permissions import config as _cfg
     monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")
     cfg = _cfg.load()
@@ -131,6 +131,29 @@ def test_load_bad_json_raises(tmp_path, monkeypatch):
         _cfg.load()
 
 
+def test_get_config_bad_json_fails_closed_observe(tmp_path, monkeypatch):
+    """Internal documentation."""
+    from argos.permissions import config as _cfg
+    from argos.permissions.evaluator import evaluate
+
+    p = tmp_path / "permissions.json"
+    p.write_text("{not json")
+    monkeypatch.setattr(_cfg, "CONFIG_PATH", p)
+    _cfg._reset_config()
+
+    cfg = _cfg.get_config()
+    assert cfg.default_level == "observe"
+    meta = evaluate(
+        "run_command",
+        {"command": "pytest -q"},
+        gate_level="confirm",
+        config=cfg,
+        low_risk_auto=True,
+        risk="medium",
+    )
+    assert meta.decision == "deny"
+
+
 def test_load_wrong_version_raises(tmp_path, monkeypatch):
     from argos.permissions import config as _cfg
     p = tmp_path / "permissions.json"
@@ -141,7 +164,7 @@ def test_load_wrong_version_raises(tmp_path, monkeypatch):
 
 
 def test_load_bad_regex_skipped_not_raises(tmp_path, monkeypatch):
-    """坏 regex 不抛,只跳过该 entry(不整体禁用,防"一条 rule 写错 = 全部失效")。"""
+    """Internal documentation."""
     from argos.permissions import config as _cfg
     p = tmp_path / "permissions.json"
     p.write_text(json.dumps({
@@ -152,21 +175,19 @@ def test_load_bad_regex_skipped_not_raises(tmp_path, monkeypatch):
         ],
     }))
     monkeypatch.setattr(_cfg, "CONFIG_PATH", p)
-    cfg = _cfg.load()  # 不抛
-    assert len(cfg.allow) == 1  # 只 1 条好的
+    cfg = _cfg.load()
+    assert len(cfg.allow) == 1
 
 
 def test_wildcard_matcher_loads_and_matches(tmp_path, monkeypatch):
-    """2026-06-20 修:'*'(与 '')是 _matcher_match 的全匹配哨兵,不是正则 —— 加载时必须保留,
-    不能因 re.compile('*') 失败被当"坏 regex"丢弃。这是"总是允许"对非 run_command 工具
-    (web_search/run_workflow 等)持久化的 matcher,否则 Phase 1 的假 always 对它们复发。"""
+    """Internal documentation."""
     from argos.permissions import config as _cfg
     p = tmp_path / "permissions.json"
     p.write_text(json.dumps({
         "version": 1,
         "allow": [
-            {"tool": "web_search", "matcher": "*"},   # 整工具放行哨兵
-            {"tool": "run_workflow", "matcher": ""},  # 空串同义
+            {"tool": "web_search", "matcher": "*"},
+            {"tool": "run_workflow", "matcher": ""},
         ],
     }))
     monkeypatch.setattr(_cfg, "CONFIG_PATH", p)
@@ -174,32 +195,42 @@ def test_wildcard_matcher_loads_and_matches(tmp_path, monkeypatch):
     assert len(cfg.allow) == 2, "'*' / '' 全匹配哨兵不应被当坏 regex 丢弃"
     assert cfg.match_allow("web_search", "任意 query") is not None
     assert cfg.match_allow("run_workflow", "anything") is not None
-    # 真坏 regex 仍被拒(哨兵放行不削弱安全校验)
     assert _cfg._is_safe_regex("(unclosed") is False
-    assert _cfg._is_safe_regex("a" * 300) is False   # 超长仍拒
+    assert _cfg._is_safe_regex("a" * 300) is False
 
 
 def test_reload_config_keeps_old_on_failure(tmp_path, monkeypatch):
-    """坏配置 reload → 保旧 + 报错。"""
+    """Internal documentation."""
     from argos.permissions.config import reload_config as _reload
     from argos.permissions import config as _cfg
     monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")
     _cfg._reset_config()
-    # 先放一个合法配置
     (tmp_path / "permissions.json").write_text(json.dumps({"version": 1}))
     _reload()
-    # 改坏
     (tmp_path / "permissions.json").write_text("not json")
     with pytest.raises(PermissionsConfigError):
         _reload()
-    # 旧配置保留:reload 后仍是合法的旧 config
     cfg = _cfg.get_config()
     assert isinstance(cfg, PermissionsConfig)
     assert cfg.allow == ()
 
 
+def test_reload_config_first_failure_caches_observe_fail_closed(tmp_path, monkeypatch):
+    """Internal documentation."""
+    from argos.permissions.config import reload_config as _reload
+    from argos.permissions import config as _cfg
+    monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")
+    _cfg._reset_config()
+    (tmp_path / "permissions.json").write_text("not json")
+
+    with pytest.raises(PermissionsConfigError):
+        _reload()
+
+    assert _cfg.get_config().default_level == "observe"
+
+
 def test_reload_config_picks_up_new(tmp_path, monkeypatch):
-    """合法新 config → 切换生效。"""
+    """Internal documentation."""
     from argos.permissions.config import reload_config as _reload
     from argos.permissions import config as _cfg
     monkeypatch.setattr(_cfg, "CONFIG_PATH", tmp_path / "permissions.json")

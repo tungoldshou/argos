@@ -1,11 +1,4 @@
-"""pygls 适配层单元测试(spec §2.1 / §2.4)。
-
-pygls 自身已处理 JSON-RPC 帧 / handshake / cancel / progress;Argos 包装层只需要:
-- 暴露 `LspClient` 异步桥(server stdin/stdout ↔ asyncio)
-- 暴露 `encode_frame(message: dict) -> bytes`(测试用,验 Content-Length UTF-8 字节数)
-- 暴露 `parse_frames(stream: AsyncIterator[bytes]) -> AsyncIterator[dict]`(流式切帧)
-
-本期不手写 framing 实现;直接委托 pygls。测试仅验 framing 边界 + 路由逻辑。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -19,7 +12,7 @@ from argos.lsp.client import encode_frame, parse_frames, LspClient, LspProtocolE
 # ── encode_frame ────────────────────────────────────────────────────
 
 def test_encode_frame_basic():
-    """encode_frame({'jsonrpc': '2.0', 'id': 1, 'result': None}) → Content-Length 头 + body。"""
+    """Internal documentation."""
     msg = {"jsonrpc": "2.0", "id": 1, "result": None}
     encoded = encode_frame(msg)
     assert encoded.startswith(b"Content-Length: ")
@@ -28,7 +21,7 @@ def test_encode_frame_basic():
 
 
 def test_encode_frame_utf8_byte_length():
-    """Content-Length 按**字节**数,不是字符数(spec §4.2 中文 UTF-8 body 长度正确)。"""
+    """Internal documentation."""
     msg = {"jsonrpc": "2.0", "id": 1, "method": "foo", "params": {"text": "中文测试"}}
     encoded = encode_frame(msg)
     body = encoded.split(b"\r\n\r\n", 1)[1]
@@ -36,11 +29,11 @@ def test_encode_frame_utf8_byte_length():
     header = encoded.split(b"\r\n\r\n", 1)[0]
     actual_len = int(header.split(b":", 1)[1].strip())
     assert actual_len == expected_len
-    assert expected_len > len("中文测试")  # UTF-8 字节 > 字符数
+    assert expected_len > len("中文测试")
 
 
 def test_encode_frame_empty_body():
-    """空 body({}) → Content-Length: 2(只是 '{}')。"""
+    """Internal documentation."""
     encoded = encode_frame({})
     body = encoded.split(b"\r\n\r\n", 1)[1]
     assert body == b"{}"
@@ -51,7 +44,7 @@ def test_encode_frame_empty_body():
 # ── parse_frames ────────────────────────────────────────────────────
 
 def test_parse_frames_single():
-    """parse_frames 单帧 → 单 message。"""
+    """Internal documentation."""
     encoded = encode_frame({"jsonrpc": "2.0", "id": 1, "result": 42})
     msgs = list(_collect_sync(parse_frames(_async_iter([encoded]))))
     assert len(msgs) == 1
@@ -59,7 +52,7 @@ def test_parse_frames_single():
 
 
 def test_parse_frames_three_concatenated():
-    """3 帧拼接 → 3 message(不丢字节)。"""
+    """Internal documentation."""
     e1 = encode_frame({"jsonrpc": "2.0", "id": 1, "result": 1})
     e2 = encode_frame({"jsonrpc": "2.0", "id": 2, "result": 2})
     e3 = encode_frame({"jsonrpc": "2.0", "id": 3, "result": 3})
@@ -69,7 +62,7 @@ def test_parse_frames_three_concatenated():
 
 
 def test_parse_frames_split_across_chunks():
-    """1 帧被切成多块传输 → parse_frames 仍能切出。"""
+    """Internal documentation."""
     e = encode_frame({"jsonrpc": "2.0", "id": 1, "result": 99})
     chunks = [e[:10], e[10:50], e[50:]]
     msgs = list(_collect_sync(parse_frames(_async_iter(chunks))))
@@ -78,7 +71,7 @@ def test_parse_frames_split_across_chunks():
 
 
 def test_parse_frames_long_body():
-    """> 64KB 长 body → 不丢字节。"""
+    """Internal documentation."""
     big = "x" * (100 * 1024)
     e = encode_frame({"jsonrpc": "2.0", "id": 1, "method": "big", "params": {"text": big}})
     msgs = list(_collect_sync(parse_frames(_async_iter([e]))))
@@ -87,7 +80,7 @@ def test_parse_frames_long_body():
 
 
 def test_parse_frames_claimed_length_exceeds_eof_raises():
-    """声称 length=100 但 EOF 提前 → 抛 LspProtocolError(manager 走 crash 路径)。"""
+    """Internal documentation."""
     fake = b"Content-Length: 100\r\n\r\n{short"
     with pytest.raises(LspProtocolError):
         list(_collect_sync(parse_frames(_async_iter([fake]))))
@@ -101,7 +94,7 @@ async def _async_iter(chunks):
 
 
 def _collect_sync(agen):
-    """把 async generator 跑到尽,返 list。"""
+    """Internal documentation."""
     out = []
     async def _run():
         async for x in agen:

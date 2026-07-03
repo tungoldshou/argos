@@ -1,4 +1,4 @@
-"""Phase 2:sessions + messages 读写(契约 §2)。"""
+"""Internal documentation."""
 import pytest
 
 from argos.memory.store import ArgosStore, SessionRow, MessageRow
@@ -14,7 +14,7 @@ def store(tmp_path):
 def test_create_session_returns_12_hex_id(store):
     sid = store.create_session(title="跑测试", model="MiniMax-M2", system_snapshot="SYS")
     assert isinstance(sid, str) and len(sid) == 12
-    int(sid, 16)  # 合法 hex
+    int(sid, 16)
 
 
 def test_get_session_roundtrip(store):
@@ -54,7 +54,7 @@ def test_list_sessions_desc_by_started(store):
     a = store.create_session(title="a", model="m", system_snapshot="s")
     b = store.create_session(title="b", model="m", system_snapshot="s")
     rows = store.list_sessions(limit=10)
-    assert [r.session_id for r in rows][:2] == [b, a]  # 最新在前
+    assert [r.session_id for r in rows][:2] == [b, a]
 
 
 def test_list_sessions_respects_limit(store):

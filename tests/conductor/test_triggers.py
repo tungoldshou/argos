@@ -1,14 +1,4 @@
-"""FileTriggerWatcher 测试。
-
-覆盖：
-  - 首次 poll 不触发（无变化）
-  - 文件 mtime 变化 → 触发 FileTriggerFact
-  - 去抖：同文件在 debounce_secs 内只触发一次
-  - 去抖窗口过后可再次触发
-  - 不存在文件不报错
-  - 注入假时钟（0 真实 sleep）
-  - FileTriggerFact frozen 不变量
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import dataclasses
@@ -46,15 +36,11 @@ class TestFileTriggerFact:
 
 
 # ---------------------------------------------------------------------------
-# FileTriggerWatcher 基本行为
 # ---------------------------------------------------------------------------
 
 class TestFileTriggerWatcherBasic:
     def test_no_trigger_on_first_poll_unchanged(self, tmp_path: Path):
-        """首次 poll：文件存在但 mtime 无变化 → 触发（因为是新文件）。
-
-        注意：首次 poll 时 _known_mtimes 为空，所有匹配文件都视为"新出现" → 产出 fact。
-        """
+        """Internal documentation."""
         f = tmp_path / "req.txt"
         f.write_text("deps")
 
@@ -67,13 +53,12 @@ class TestFileTriggerWatcherBasic:
             debounce_secs=5.0,
             clock=clock,
         )
-        # 首次 poll（t=0）
         facts = w.poll()
         assert len(facts) == 1
         assert facts[0].path == str(f.resolve())
 
     def test_no_retrigger_within_debounce(self, tmp_path: Path):
-        """去抖：首次触发后，debounce 窗口内 mtime 再次变化不重复触发。"""
+        """Internal documentation."""
         f = tmp_path / "req.txt"
         f.write_text("deps")
 
@@ -86,23 +71,19 @@ class TestFileTriggerWatcherBasic:
             debounce_secs=5.0,
             clock=clock,
         )
-        # 首次 poll → 产出 fact
         facts1 = w.poll()
         assert len(facts1) == 1
 
-        # t=1（未超 debounce=5s），修改 mtime
         t[0] = 1.0
         f.write_text("deps updated")
-        # 强制 mtime 变化（write_text 通常够用，但在极快文件系统上可能相同）
         import os
         os.utime(str(f), (t[0] + 10, t[0] + 10))
 
         facts2 = w.poll()
-        # 在去抖窗口内 → 不触发
         assert len(facts2) == 0
 
     def test_retrigger_after_debounce_window(self, tmp_path: Path):
-        """去抖窗口过后可再次触发。"""
+        """Internal documentation."""
         f = tmp_path / "req.txt"
         f.write_text("deps")
 
@@ -115,21 +96,19 @@ class TestFileTriggerWatcherBasic:
             debounce_secs=5.0,
             clock=clock,
         )
-        # 首次触发
         facts1 = w.poll()
         assert len(facts1) == 1
 
-        # 推进时钟超过 debounce，并更新 mtime
         t[0] = 10.0  # 10s > debounce=5s
         import os
-        os.utime(str(f), (999.0, 999.0))  # 不同于初始 mtime
+        os.utime(str(f), (999.0, 999.0))
 
         facts2 = w.poll()
         assert len(facts2) == 1
         assert facts2[0].detected_at == 10.0
 
     def test_no_facts_when_no_files_match(self, tmp_path: Path):
-        """没有匹配文件 → poll 返回空列表。"""
+        """Internal documentation."""
         t = [0.0]
         w = FileTriggerWatcher(
             "*.txt",
@@ -139,7 +118,7 @@ class TestFileTriggerWatcherBasic:
         assert w.poll() == []
 
     def test_multiple_files_each_trigger(self, tmp_path: Path):
-        """多个匹配文件，每个首次 poll 各产出一条 fact。"""
+        """Internal documentation."""
         (tmp_path / "a.txt").write_text("a")
         (tmp_path / "b.txt").write_text("b")
 
@@ -156,7 +135,7 @@ class TestFileTriggerWatcherBasic:
         assert any("b.txt" in p for p in paths)
 
     def test_fact_fields_populated_correctly(self, tmp_path: Path):
-        """FileTriggerFact 字段正确填充。"""
+        """Internal documentation."""
         f = tmp_path / "watch.txt"
         f.write_text("content")
 
@@ -174,7 +153,7 @@ class TestFileTriggerWatcherBasic:
         assert fact.mtime > 0
 
     def test_clock_injected_not_real_time(self, tmp_path: Path):
-        """验证 detected_at 来自注入时钟，不是真实时间。"""
+        """Internal documentation."""
         f = tmp_path / "x.txt"
         f.write_text("hi")
 
@@ -190,12 +169,11 @@ class TestFileTriggerWatcherBasic:
 
 
 # ---------------------------------------------------------------------------
-# 去抖精确测试
 # ---------------------------------------------------------------------------
 
 class TestDebounce:
     def test_debounce_boundary_exact(self, tmp_path: Path):
-        """t = debounce_secs 时（等于，不超过）→ 不触发。"""
+        """Internal documentation."""
         f = tmp_path / "b.txt"
         f.write_text("v1")
 
@@ -204,16 +182,16 @@ class TestDebounce:
         debounce = 5.0
 
         w = FileTriggerWatcher("b.txt", base_dir=tmp_path, debounce_secs=debounce, clock=clock)
-        w.poll()  # 首次 t=0 触发
+        w.poll()
 
-        t[0] = debounce  # 等于 debounce，不超过
+        t[0] = debounce
         import os
         os.utime(str(f), (888.0, 888.0))
         facts = w.poll()
         assert len(facts) == 0
 
     def test_debounce_just_over(self, tmp_path: Path):
-        """t = debounce_secs + epsilon → 触发。"""
+        """Internal documentation."""
         f = tmp_path / "c.txt"
         f.write_text("v1")
 
@@ -231,7 +209,7 @@ class TestDebounce:
         assert len(facts) == 1
 
     def test_same_file_multiple_polls_idempotent(self, tmp_path: Path):
-        """文件 mtime 未变化，连续 poll 只在首次产出 fact（之后 mtime 缓存相同，不再进去）。"""
+        """Internal documentation."""
         f = tmp_path / "d.txt"
         f.write_text("v1")
 
@@ -239,25 +217,23 @@ class TestDebounce:
         clock = lambda: t[0]
         w = FileTriggerWatcher("d.txt", base_dir=tmp_path, debounce_secs=1.0, clock=clock)
 
-        facts1 = w.poll()  # 首次：新文件触发
+        facts1 = w.poll()
         assert len(facts1) == 1
 
-        t[0] = 5.0  # 超过 debounce
-        # mtime 未变 → _known_mtimes[path] 与当前 mtime 相同 → 不产出
+        t[0] = 5.0
         facts2 = w.poll()
         assert len(facts2) == 0
 
 
 # ═══════════════════════════════════════════════════════
-# 边界牢笼回归(终审 major):glob 带 .. 不得逃出 base_dir
 # ═══════════════════════════════════════════════════════
 
 class TestGlobBoundaryJail:
     def test_dotdot_glob_cannot_escape_base_dir(self, tmp_path):
-        """pattern 含 .. 时,base_dir 之外的匹配必须被丢弃(fail-closed)。"""
+        """Internal documentation."""
         base = tmp_path / "ws"
         base.mkdir()
-        secret = tmp_path / "secret.txt"   # base 之外
+        secret = tmp_path / "secret.txt"
         secret.write_text("leak")
         inside = base / "ok.txt"
         inside.write_text("fine")
@@ -270,7 +246,7 @@ class TestGlobBoundaryJail:
             assert str(base.resolve()) in p, f"返回了 base 外路径: {p}"
 
     def test_symlink_escape_also_jailed(self, tmp_path):
-        """base 内符号链接指向外部文件 → resolve 后越界,同样丢弃。"""
+        """Internal documentation."""
         base = tmp_path / "ws"
         base.mkdir()
         outside = tmp_path / "outside.txt"

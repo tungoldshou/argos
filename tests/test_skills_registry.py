@@ -1,4 +1,4 @@
-"""AnalysisSkill frozen dataclass + SkillRegistry 单元测试(spec §2.2 / §2.6)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -17,21 +17,20 @@ from argos.skills_runtime.registry import (
     register,
     get,
     list_all,
-    _reset_registry,   # 测试用
+    _reset_registry,
 )
 
 
-# ── frozen dataclass 测试 ──────────────────────────────────────────
 
 def test_finding_frozen():
-    """Finding 是 frozen dataclass;改 severity 抛 FrozenInstanceError。"""
+    """Internal documentation."""
     f = Finding(severity="error", category="secret", message="x")
     with pytest.raises(FrozenInstanceError):
         f.severity = "warning"  # type: ignore[misc]
 
 
 def test_finding_severity_literal():
-    """severity 仅接受 error/warning/info;其他 → ValueError(__post_init__)。"""
+    """Internal documentation."""
     Finding(severity="error", category="x", message="y")
     Finding(severity="warning", category="x", message="y")
     Finding(severity="info", category="x", message="y")
@@ -40,13 +39,13 @@ def test_finding_severity_literal():
 
 
 def test_finding_snippet_max_length():
-    """snippet 长度 > 120 → ValueError(防 token 暴)。"""
+    """Internal documentation."""
     with pytest.raises(ValueError, match="snippet"):
         Finding(severity="error", category="x", message="y", snippet="a" * 121)
 
 
 def test_analysis_skill_result_frozen():
-    """AnalysisSkillResult 是 frozen;findings 走 tuple(不可变 + 哈希友好)。"""
+    """Internal documentation."""
     r = AnalysisSkillResult(
         summary="x", findings=(), duration_ms=100, errors=(), verdict="passed",
     )
@@ -56,7 +55,7 @@ def test_analysis_skill_result_frozen():
 
 
 def test_analysis_skill_result_verdict_literal():
-    """verdict 仅 5 态(passed/failed/partial/n_a/skipped);其他 → ValueError。"""
+    """Internal documentation."""
     AnalysisSkillResult(summary="x", findings=(), duration_ms=0, errors=(), verdict="passed")
     AnalysisSkillResult(summary="x", findings=(), duration_ms=0, errors=(), verdict="failed")
     AnalysisSkillResult(summary="x", findings=(), duration_ms=0, errors=(), verdict="partial")
@@ -67,7 +66,7 @@ def test_analysis_skill_result_verdict_literal():
 
 
 def test_analysis_skill_frozen():
-    """AnalysisSkill frozen;name 必含 ASCII 字母数字 + _ + -。"""
+    """Internal documentation."""
     async def _noop(args, ctx):
         return AnalysisSkillResult(summary="", findings=(), duration_ms=0, errors=(), verdict="passed")
 
@@ -86,10 +85,9 @@ def test_analysis_skill_frozen():
         AnalysisSkill(name="bad name", description="x", parameters_schema={}, run=_noop, requires_approval=False)
 
 
-# ── registry 测试 ──────────────────────────────────────────────────
 
 def test_registry_register_get_identity():
-    """register(s) + get(name) → 同一实例(frozen → identity 验);同名重复注册 → ValueError。"""
+    """Internal documentation."""
     _reset_registry()
     async def _r(args, ctx):
         return AnalysisSkillResult(summary="x", findings=(), duration_ms=0, errors=(), verdict="passed")
@@ -101,19 +99,19 @@ def test_registry_register_get_identity():
 
 
 def test_registry_get_unknown_returns_none():
-    """get('nonexistent') → None,不抛(spec §3 错误处理表)。"""
+    """Internal documentation."""
     _reset_registry()
     assert get("nonexistent") is None
 
 
 def test_registry_list_all_empty_after_reset():
-    """_reset_registry 后 list_all() → 空。"""
+    """Internal documentation."""
     _reset_registry()
     assert list_all() == []
 
 
 def test_registry_list_all_preserves_insertion_order():
-    """list_all() 按注册顺序返(对位 /skills 列表展示)。"""
+    """Internal documentation."""
     _reset_registry()
     async def _r(args, ctx):
         return AnalysisSkillResult(summary="", findings=(), duration_ms=0, errors=(), verdict="passed")
@@ -126,7 +124,7 @@ def test_registry_list_all_preserves_insertion_order():
 
 
 def test_registry_clear_for_test():
-    """_reset_registry() 清空,用于测试隔离。"""
+    """Internal documentation."""
     async def _r(args, ctx):
         return AnalysisSkillResult(summary="x", findings=(), duration_ms=0, errors=(), verdict="passed")
     register(AnalysisSkill(name="tmp", description="x", parameters_schema={}, run=_r, requires_approval=False))

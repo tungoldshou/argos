@@ -1,14 +1,4 @@
-"""Plan mode wiring:TUI `app.py` 收 PlanRendered 事件 → 流内 mount InlineChoice → 决策回传 loop。
-
-Subtask C(spec §2.5):plan 阶段 loop 投 PlanRendered 事件 → TUI `_apply_event` 收事件 →
-`InlineChoice(plan 4 选项)` → 回调里 `ExitPlanMode(loop, ...)` 写
-`loop._plan_decision` + `loop._plan_decision_event.set()` 唤醒 loop 的 await。
-
-本测用一个 mock loop yield `PlanRendered` + 后续 ApprovalRequest,断言:
-  · 收到 PlanRendered 后 InlineChoice 真的挂进 Transcript 流内
-  · 数字键 1 (Approve and start) 触发回调 → loop 收到 approve_start 决策
-  · EnterPlanMode 已被 EnterPlanMode(loop) 调过(=_plan_decision_event 等待中)
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
@@ -27,28 +17,23 @@ from argos.tui.widgets.inline_choice import InlineChoice
 
 
 class _PlanRenderedLoop:
-    """进 plan mode 后,先投 PlanRendered(模拟 plan 阶段产出 → 拼 markdown),然后等决策。
-    决策设进 _plan_decision 后,再走一简短 act 路径收尾(PhaseChange(act) → 验证通过)。"""
+    """Internal documentation."""
 
     def __init__(self) -> None:
         self._mode = "plan"
         self._plan_decision_event = __import__("asyncio").Event()
         self._plan_decision = None
         self._approval_level_override = None
-        # 真实 loop 的属性(TUI 期望 loop.mode 存在 + 调 ExitPlanMode 写回 _plan_decision)
         self.mode = "plan"
         self._busy = False
 
     async def run(self, goal: str, session_id: str) -> AsyncIterator[Event]:
         yield PhaseChange(phase="plan", actions=0)
         yield TokenDelta(text=f"我会按目标做事:{goal}\n")
-        # 投 PlanRendered → TUI 应流内渲染 InlineChoice
         from argos.core.plan_mode import PlanRenderer
         plan_md = PlanRenderer.render(goal=goal, todos=[], tool_calls=[])
         yield PlanRendered(plan_md=plan_md)
-        # 挂起(模拟 ExitPlanMode 写完决策后由 TUI 唤醒)
         await self._plan_decision_event.wait()
-        # 收到决策后继续 act
         yield PhaseChange(phase="act", actions=1)
         yield TokenDelta(text="干活中\n")
         yield PhaseChange(phase="verify", actions=1)
@@ -60,20 +45,14 @@ class _PlanRenderedLoop:
 
 @pytest.mark.asyncio
 async def test_plan_rendered_event_pushes_plan_modal():
-    """进 plan mode 跑一轮 run,PlanRendered 事件到达 → InlineChoice 挂进 Transcript 流内。
-
-    用 handle_input("goal") 走 run_worker 起 run(同 test_escape_interrupts_active_run 范本),
-    不 await start_run —— 因为本测试的 loop 故意挂在 _plan_decision_event(等用户决策),不
-    自然结束,await start_run 会让测试 deadlock。"""
+    """Internal documentation."""
     loop = _PlanRenderedLoop()
     app = ArgosApp(loop_factory=lambda **kw: loop,
                    gate=ApprovalGate(ApprovalLevel.CONFIRM))
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        # 进 plan mode(TUI 内部 _plan_mode flag + EnterPlanMode(loop) 走 mini loop,见
-        # test_enter_plan_mode 既有覆盖;本测直接设 _plan_mode 让指示器对齐 + 用本 loop)。
         app._plan_mode = True
-        app.handle_input("读 a.py")     # 起 worker 跑
+        app.handle_input("读 a.py")
         for _ in range(30):
             await pilot.pause()
             if bool(app.query(InlineChoice)):
@@ -81,7 +60,6 @@ async def test_plan_rendered_event_pushes_plan_modal():
         assert bool(app.query(InlineChoice)), (
             f"PlanRendered 后 InlineChoice 应挂在流内,实际={app.query(InlineChoice)}"
         )
-        # 清理:按 1 触发 approve,让选择组件收掉 + loop 醒
         await pilot.press("1")
         await pilot.pause()
         await pilot.pause()
@@ -89,7 +67,7 @@ async def test_plan_rendered_event_pushes_plan_modal():
 
 @pytest.mark.asyncio
 async def test_modal_decision_calls_exit_plan_mode_with_approve_start():
-    """选 1 (Approve and start) → loop 收到 approve_start 决策。"""
+    """Internal documentation."""
     loop = _PlanRenderedLoop()
     app = ArgosApp(loop_factory=lambda **kw: loop,
                    gate=ApprovalGate(ApprovalLevel.CONFIRM))
@@ -112,7 +90,7 @@ async def test_modal_decision_calls_exit_plan_mode_with_approve_start():
 
 @pytest.mark.asyncio
 async def test_modal_decision_keep_planning_wakes_loop_for_another_round():
-    """选 3 (Keep planning) → loop 收到 keep_planning 决策(本测不真验再一轮,只验决策传回)。"""
+    """Internal documentation."""
     loop = _PlanRenderedLoop()
     app = ArgosApp(loop_factory=lambda **kw: loop,
                    gate=ApprovalGate(ApprovalLevel.CONFIRM))

@@ -1,5 +1,5 @@
 cask "argos" do
-  version "0.1.0"   # 由 .github/workflows/bump-homebrew-formula.yml 注入
+  version "0.1.1"
   sha256 "PLACEHOLDER_FROM_BUMP"
 
   url "https://github.com/tungoldshou/argos/releases/download/v#{version}/Argos-#{version}-arm64-mac.tar.gz"

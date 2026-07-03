@@ -69,13 +69,13 @@ EN: dict[str, str] = {
 
     # ── external_surfaces ────────────────────────────────────────────────────
     "core2.external.hooks": (
-        "hooks (~/.argos/hooks.json): lifecycle hooks run your configured commands outside the sandbox"
+        "hooks ({path}): lifecycle hooks run your configured commands outside the sandbox"
     ),
     "core2.external.lsp": (
-        "lsp (~/.argos/lsp.json): language server runs outside the sandbox as a subprocess"
+        "lsp ({path}): language server runs outside the sandbox as a subprocess"
     ),
     "core2.external.mcp": (
-        "mcp (~/.argos/mcp.json): MCP server runs outside the sandbox as a subprocess"
+        "mcp ({path}): MCP server runs outside the sandbox as a subprocess"
     ),
 
     # ── app_factory ──────────────────────────────────────────────────────────
@@ -186,13 +186,13 @@ ZH: dict[str, str] = {
 
     # ── external_surfaces ────────────────────────────────────────────────────
     "core2.external.hooks": (
-        "hooks(~/.argos/hooks.json):生命周期钩子在沙箱外运行你配置的命令"
+        "hooks({path}):生命周期钩子在沙箱外运行你配置的命令"
     ),
     "core2.external.lsp": (
-        "lsp(~/.argos/lsp.json):language server 在沙箱外作为子进程运行"
+        "lsp({path}):language server 在沙箱外作为子进程运行"
     ),
     "core2.external.mcp": (
-        "mcp(~/.argos/mcp.json):MCP server 在沙箱外作为子进程运行"
+        "mcp({path}):MCP server 在沙箱外作为子进程运行"
     ),
 
     # ── app_factory ──────────────────────────────────────────────────────────
@@ -239,4 +239,3 @@ ZH: dict[str, str] = {
         "图片超过 5MB 上限 (actual={size:.1f}MB)。请压缩或裁剪后重试。"
     ),
 }
-

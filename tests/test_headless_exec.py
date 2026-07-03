@@ -1,8 +1,4 @@
-"""`argos exec` headless 非交互执行测试(对标 claude -p / codex exec)。
-
-用 fake AppComponents + fake loop 注入,验证:结果收集、三态 verdict → 退出码裁决、
-JSON envelope、非交互审批自动 deny(不挂死)。无需真模型 / 真 key。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -73,8 +69,7 @@ def _cost():
 
 
 def test_self_verified_pass_labeled_distinctly(monkeypatch, capsys):
-    """自验证(较弱)passed 不冒充用户级强 passed:JSON verdict='passed_self' + self_verified=True,
-    退出码仍 0(它真通过了),但脚本能据 self_verified 区分。"""
+    """Internal documentation."""
     events = [TokenDelta(text="done"),
               VerifyVerdict(verdict=Verdict.passed_self("[exit_code=0]", "pytest", 1))]
     _wire(monkeypatch, events)
@@ -87,7 +82,7 @@ def test_self_verified_pass_labeled_distinctly(monkeypatch, capsys):
 
 
 def test_user_verified_pass_is_plain_passed(monkeypatch, capsys):
-    """用户级 passed → verdict='passed', self_verified=False(回归:不误标)。"""
+    """Internal documentation."""
     events = [VerifyVerdict(verdict=Verdict.passed("[exit_code=0]", "pytest", 1))]
     _wire(monkeypatch, events)
     headless.run_exec(_args(prompt="x", as_json=True))
@@ -96,7 +91,7 @@ def test_user_verified_pass_is_plain_passed(monkeypatch, capsys):
 
 
 def test_effort_threaded_from_args(monkeypatch):
-    """全局 --effort high 透传到 build_components(此前硬编 MEDIUM 被忽略)。"""
+    """Internal documentation."""
     from argos.routing.effort import EffortLevel
     captured = {}
 
@@ -157,7 +152,7 @@ def test_unverifiable_verdict_exit_1(monkeypatch):
 
 
 def test_no_verdict_completes_exit_0(monkeypatch):
-    """无声明验证(纯问答 / 读任务)→ 诚实完成 = 退出 0。"""
+    """Internal documentation."""
     _wire(monkeypatch, [TokenDelta(text="here is the answer")])
     assert headless.run_exec(_args(prompt="what is 2+2")) == 0
 
@@ -188,7 +183,7 @@ def test_json_envelope(monkeypatch, capsys):
 
 
 def test_non_auto_installs_autodeny_listener(monkeypatch):
-    """默认(非 --auto):装自动 deny 监听器 → ask 立即应答 deny,headless 不挂死。"""
+    """Internal documentation."""
     comp, gate, _ = _wire(monkeypatch, [TokenDelta(text="x")])
     headless.run_exec(_args(prompt="x", auto=False))
     assert gate.listener is not None
@@ -197,14 +192,14 @@ def test_non_auto_installs_autodeny_listener(monkeypatch):
 
 
 def test_auto_does_not_install_listener(monkeypatch):
-    """--auto:用 AUTO 档(request 直接 approve,不产生 ask)→ 不装监听器。"""
+    """Internal documentation."""
     comp, gate, _ = _wire(monkeypatch, [TokenDelta(text="x")])
     headless.run_exec(_args(prompt="x", auto=True))
     assert gate.listener is None
 
 
 def test_build_components_runtime_error_exit_2(monkeypatch):
-    """无 key → build_components 抛 RuntimeError → 诚实退出 2(不假装能跑)。"""
+    """Internal documentation."""
     def _boom(**kw):
         raise RuntimeError("未配置 API key")
     monkeypatch.setattr("argos.app_factory.build_components", _boom)
@@ -212,7 +207,7 @@ def test_build_components_runtime_error_exit_2(monkeypatch):
 
 
 def test_build_components_config_error_exit_2(monkeypatch, capsys):
-    """#8: --model nope → ConfigError → 干净 exit 2,不打 traceback。"""
+    """Internal documentation."""
     from argos.config import ConfigError
 
     def _boom(**kw):
@@ -223,7 +218,6 @@ def test_build_components_config_error_exit_2(monkeypatch, capsys):
     assert code == 2
     err = capsys.readouterr().err
     assert "不存在" in err
-    # 不应有 traceback
     assert "Traceback" not in err
 
 
@@ -244,7 +238,7 @@ def test_trivial_verify_cmd_exits_2_fast(monkeypatch, capsys):
 
 
 def test_trivial_verify_cmd_true_exits_2(monkeypatch, capsys):
-    """#17: 'true' 也是 trivial。"""
+    """Internal documentation."""
     def _should_not_be_called(**kw):
         raise AssertionError("build_components should not be called for trivial verify cmd")
 
@@ -254,7 +248,7 @@ def test_trivial_verify_cmd_true_exits_2(monkeypatch, capsys):
 
 
 def test_progress_lines_go_to_stderr_not_stdout(monkeypatch, capsys):
-    """#16: 进度行(phase / verify)走 stderr;stdout 只有最终结果。"""
+    """Internal documentation."""
     events = [
         PhaseChange(phase="plan", actions=0),
         PhaseChange(phase="act", actions=1),
@@ -266,14 +260,12 @@ def test_progress_lines_go_to_stderr_not_stdout(monkeypatch, capsys):
     code = headless.run_exec(_args(prompt="x"))
     assert code == 0
     out, err = capsys.readouterr()
-    # 进度行在 stderr
     assert "phase" in err
-    # stdout 只有 result 文本(不含 phase 进度)
     assert "phase →" not in out
 
 
 def test_quiet_flag_suppresses_progress(monkeypatch, capsys):
-    """--quiet 时 stderr 不出进度行,stdout 仍有结果。"""
+    """Internal documentation."""
     events = [
         PhaseChange(phase="plan", actions=0),
         PhaseChange(phase="act", actions=1),
@@ -285,6 +277,5 @@ def test_quiet_flag_suppresses_progress(monkeypatch, capsys):
     code = headless.run_exec(_args(prompt="x", quiet=True))
     assert code == 0
     out, err = capsys.readouterr()
-    # --quiet: 进度行全沉默(只留 verify 最终行)
     assert "phase →" not in err
     assert "result" in out

@@ -1,11 +1,9 @@
-"""顶栏 / splash 版本号单一来源回归(2026-06-16 真机:顶栏显示 v0.x)。
-根因:查 version("argos") 必 PackageNotFoundError —— 分发名是 "argos-agent",不是 "argos"
-→ 回退 "0.x"。正源是 argos.__version__(查 "argos-agent" + VERSION 文件兜底)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import os
 
-os.environ.setdefault("ARGOS_NO_DAEMON", "1")  # 导入 TUI 不触发 daemon 探测
+os.environ.setdefault("ARGOS_NO_DAEMON", "1")
 
 
 def test_app_version_is_real_not_placeholder():

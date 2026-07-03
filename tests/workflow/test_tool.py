@@ -1,4 +1,4 @@
-"""tests/workflow/test_tool.py — propose_workflow 纯工具注册 + 深度护栏测试."""
+"""Internal documentation."""
 from argos import tools
 
 
@@ -14,10 +14,8 @@ def test_propose_workflow_registered():
 
 
 def test_child_namespace_default_keeps_propose_workflow():
-    # 父 agent(默认 allow_workflow=True)必须保留 propose_workflow,否则沙箱里调它 NameError
     assert "propose_workflow" in tools.build_child_namespace(broker=None)
 
 
 def test_child_namespace_excludes_propose_workflow_when_disallowed():
-    # 子 agent(allow_workflow=False):深度护栏去掉 propose_workflow(深度恒 1)
     assert "propose_workflow" not in tools.build_child_namespace(broker=None, allow_workflow=False)

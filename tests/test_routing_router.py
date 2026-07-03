@@ -1,4 +1,4 @@
-"""#11 T4 ModelRouter 懒构造 + history + EffortLevel 映射 测试。"""
+"""Internal documentation."""
 import pytest
 
 from argos.approval import ApprovalLevel
@@ -35,7 +35,7 @@ def test_router_lazy_constructs_clients():
 
     cfg = RoutingConfig(default="default")
     router = ModelRouter(routing=cfg, client_factory=factory)
-    assert factory_calls == []  # 构造时未调
+    assert factory_calls == []
     router.select(category=TaskCategory.FILE_EDIT, tool=None)
     assert factory_calls == ["default"]
 
@@ -51,7 +51,6 @@ def test_router_caches_client_across_selects():
     router = ModelRouter(routing=cfg, client_factory=factory)
     router.select(category=TaskCategory.FILE_EDIT, tool=None)
     router.select(category=TaskCategory.SIMPLE_READ, tool=None)
-    # 第二次也走 default tier,工厂只调一次
     assert factory_calls == ["default"]
 
 
@@ -78,7 +77,6 @@ def test_router_history_appends_and_caps_at_10():
         router.select(category=TaskCategory.SIMPLE_READ, tool=None, step=i)
     hist = router.history()
     assert len(hist) == 10
-    # 最早的 5 个被裁掉;第 6 步应是 step=5
     assert hist[0].step == 5
     assert hist[-1].step == 14
 

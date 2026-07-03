@@ -1,4 +1,4 @@
-"""人话模板 summarize() 测试 — 确定性,不调模型。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -93,4 +93,4 @@ class TestFallback:
 
     def test_empty_args(self):
         s = summarize("write_file", {})
-        assert "写入" in s  # 诚实降级,不崩
+        assert "写入" in s

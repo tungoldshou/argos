@@ -1,4 +1,4 @@
-"""Phase 2:建库 + 七表 + WAL + schema_version + sqlite-vec 加载标志。"""
+"""Internal documentation."""
 import sqlite3
 
 import pytest
@@ -44,20 +44,61 @@ def test_schema_version_recorded(tmp_path):
 def test_env_path_override(tmp_path, monkeypatch):
     p = tmp_path / "from_env.db"
     monkeypatch.setenv("ARGOS_DB_PATH", str(p))
-    store = ArgosStore()  # db_path=None → 读 ARGOS_DB_PATH
+    store = ArgosStore()
     store.close()
     assert p.exists()
 
 
+def test_env_path_override_expands_user_home(tmp_path, monkeypatch):
+    """Internal documentation."""
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("ARGOS_DB_PATH", "~/argos.db")
+
+    store = ArgosStore()
+    store.close()
+
+    assert (fake_home / "argos.db").exists()
+
+
+def test_default_db_path_honors_argos_config_dir(tmp_path, monkeypatch):
+    from argos import config as C
+
+    cfg = tmp_path / "cfg"
+    monkeypatch.delenv("ARGOS_DB_PATH", raising=False)
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg))
+    monkeypatch.setattr(C, "_ENV", {})
+
+    store = ArgosStore()
+    store.close()
+
+    assert (cfg / "argos.db").exists()
+
+
+def test_db_path_env_override_wins_over_argos_config_dir(tmp_path, monkeypatch):
+    from argos import config as C
+
+    cfg = tmp_path / "cfg"
+    db = tmp_path / "explicit.db"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg))
+    monkeypatch.setenv("ARGOS_DB_PATH", str(db))
+    monkeypatch.setattr(C, "_ENV", {})
+
+    store = ArgosStore()
+    store.close()
+
+    assert db.exists()
+    assert not (cfg / "argos.db").exists()
+
+
 def test_vec_loaded_flag_is_bool(tmp_path):
     store = _open(tmp_path)
-    # sqlite-vec 已实测可加载;flag 应为 True(若环境缺扩展则 False,但不崩)
     assert isinstance(store.vec_enabled, bool)
     store.close()
 
 
 def test_reopen_idempotent(tmp_path):
-    # 二次打开同库不应重复建表报错(CREATE IF NOT EXISTS)
     _open(tmp_path).close()
     store2 = _open(tmp_path)
     store2.close()

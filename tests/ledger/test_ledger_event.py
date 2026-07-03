@@ -1,7 +1,4 @@
-"""LedgerEntryEvent 黄金快照测试 + serialize/deserialize round-trip。
-
-防 ABI 漂移:字段变化必须有意识地更新本测试。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -21,7 +18,7 @@ class TestLedgerEntryEventContract:
         assert "__slots__" in LedgerEntryEvent.__dict__, "LedgerEntryEvent 必须 slots"
 
     def test_in_event_union(self):
-        """LedgerEntryEvent 必须在 Event 联合中(隐式:serialize_event 能处理它)。"""
+        """Internal documentation."""
         ev = LedgerEntryEvent(
             ts=1000.0, run_id="r1", seq=1,
             action="write_file", summary_human="写入了 a.py",
@@ -31,11 +28,11 @@ class TestLedgerEntryEventContract:
         assert isinstance(blob, str)
 
     def test_in_all_event_kinds_literal(self):
-        """EventKind 必须包含 ledger_entry(已在 test_events_serialization.py 的 ALL_EVENT_KINDS 里)。"""
+        """Internal documentation."""
         assert "ledger_entry" in E.EventKind.__args__
 
     def test_shim_re_exports(self):
-        """tui/events.py shim 必须 re-export LedgerEntryEvent。"""
+        """Internal documentation."""
         assert hasattr(E, "LedgerEntryEvent")
         assert E.LedgerEntryEvent is LedgerEntryEvent
 
@@ -82,7 +79,7 @@ class TestLedgerEntryEventSerializeDeserialize:
         assert back.risk == "high"
 
     def test_golden_snapshot(self):
-        """黄金快照:字段集合不得悄悄漂移。"""
+        """Internal documentation."""
         ev = self._make()
         d = json.loads(E.serialize_event(ev))
         expected_data_keys = {

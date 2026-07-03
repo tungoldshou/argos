@@ -1,9 +1,4 @@
-"""daemon spawn 用正确的 CLI flag。
-
-bug:probe_or_spawn 拉起 argosd 时传 `--socket`,但 daemon argparse(argos/daemon/__main__.py)只认
-`--socket-path` → argosd 因未知 flag argparse rc=2 立即退出 → TUI 永远落 inline fallback(打脸
-README/CLAUDE 的 "daemon is the default / always-on")。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,14 +13,14 @@ async def test_spawn_uses_socket_path_flag(monkeypatch, tmp_path: Path):
     captured: dict = {}
 
     class _FakeProc:
-        returncode = None   # 不提前退出 → 走轮询到超时
+        returncode = None
 
     async def fake_exec(*args, **kwargs):
         captured["args"] = args
         return _FakeProc()
 
     async def fake_probe(_p):
-        return False        # probe 恒失败 → 触发 spawn,且 spawn 后轮询超时返 False
+        return False
 
     monkeypatch.setattr(daemon_spawn.asyncio, "create_subprocess_exec", fake_exec)
     monkeypatch.setattr(daemon_spawn, "_probe", fake_probe)
@@ -38,3 +33,5 @@ async def test_spawn_uses_socket_path_flag(monkeypatch, tmp_path: Path):
     assert "argosd" in args
     assert "--socket-path" in args, f"daemon 只认 --socket-path,实际传了 {args}"
     assert "--socket" not in args, f"旧的坏 flag --socket 仍在:{args}"
+    assert "--pid-path" in args, f"TUI spawn 必须传 pid path,否则 stale cleanup 会读错 pid 文件:{args}"
+    assert str(tmp_path / "daemon.pid") in args

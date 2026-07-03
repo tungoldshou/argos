@@ -1,10 +1,4 @@
-"""#7 T1 测试 fixture:14 个种子任务落盘到 tmp_path,供 corpus/loader/runner 测试复用。
-
-不 git 跟踪(任务元数据可由维护者编辑 / 加新任务);每次 conftest 调用落 1 套新种子,
-保证测试隔离。
-
-14 任务:bug_fix 5 / refactor 3 / test_write 3 / doc 3(spec §4.3)。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -12,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 
-# 14 任务种子(每条:files dict + corpus.json entry)
 SEED_TASKS: list[dict[str, Any]] = [
     {
         "id": "bug_fix_001_off_by_one",
@@ -186,7 +179,7 @@ SEED_TASKS: list[dict[str, Any]] = [
 
 
 def write_seed_corpus(root: Path, *, version: int = 1) -> None:
-    """把 14 任务写到 root/<id>/{goal.md,verify_cmd,category,difficulty},并写 corpus.json。"""
+    """Internal documentation."""
     root.mkdir(parents=True, exist_ok=True)
     for t in SEED_TASKS:
         d = root / t["id"]

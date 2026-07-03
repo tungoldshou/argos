@@ -1,15 +1,4 @@
-"""6 个 broker-gated LSP 工具闭包(spec §2.3)。
-
-每个工具 = 接受参数 → 走 LspManager.request_sync → 格式化结果为 JSON 字符串。
-坐标 1-based(给 agent) / 0-based(给 server)host 内部转换。
-kind / severity 翻译为字符串名(spec D17)。
-Range 表示:平铺 [startLine, startCol, endLine, endCol](spec D18)。
-
-broker-gated 模式同 `web_search` / `browser_*`:`tools/__init__.py:_make_gated` 暴露。
-
-注:工具是 sync 闭包(sandbox.broker._execute 签名 = sync),内部调
-LspManager.request_sync(在 worker 线程跑 fresh event loop,绕开 sandbox 的
-async 上下文与 LspManager 内部 asyncio 状态不互通)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -19,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from argos.lsp.manager import LspManager
 
-# LSP SymbolKind 整数 → 字符串名(spec §2.3 + D17)
 _SYMBOL_KIND_NAMES = {
     1: "File", 2: "Module", 3: "Namespace", 4: "Package", 5: "Class",
     6: "Method", 7: "Property", 8: "Field", 9: "Constructor", 10: "Enum",
@@ -32,9 +20,7 @@ _DIAG_SEVERITY_NAMES = {1: "error", 2: "warning", 3: "information", 4: "hint"}
 
 
 def _check_workspace(file: str, workspace: Path) -> str | None:
-    """workspace 牢笼校验(spec D14)。返 None=通过,返 error JSON=拒绝。
-
-    接受相对路径(相对 workspace)或绝对路径(必须在 workspace 内)。"""
+    """Internal documentation."""
     fp = Path(file)
     if not fp.is_absolute():
         p = (workspace / fp).resolve()
@@ -65,7 +51,7 @@ def _translate_location(loc: dict) -> dict:
 
 
 def _translate_symbol(sym: dict) -> dict:
-    """LSP DocumentSymbol → 字符串 kind + range 平铺数组。"""
+    """Internal documentation."""
     kind_int = sym.get("kind", 0)
     rng = sym.get("range", {})
     start = rng.get("start", {})
@@ -86,7 +72,7 @@ def _translate_symbol(sym: dict) -> dict:
 
 
 def _translate_diagnostic(d: dict) -> dict:
-    """LSP Diagnostic → 字符串 severity + range 平铺。"""
+    """Internal documentation."""
     sev_int = d.get("severity", 1)
     rng = d.get("range", {})
     start = rng.get("start", {})
@@ -103,7 +89,7 @@ def _translate_diagnostic(d: dict) -> dict:
 
 
 def _file_uri(file: str, workspace: Path | None = None) -> str:
-    """文件路径 → file:// URI(在 workspace 牢笼内)。"""
+    """Internal documentation."""
     fp = Path(file)
     if not fp.is_absolute() and workspace is not None:
         p = (workspace / fp).resolve()
@@ -113,7 +99,7 @@ def _file_uri(file: str, workspace: Path | None = None) -> str:
 
 
 def _read_content_if_exists(file: str, workspace: Path) -> str | None:
-    """读 workspace 内文件全文(若存在),用于 sync_file 触发 didOpen。"""
+    """Internal documentation."""
     p = workspace / file if not Path(file).is_absolute() else Path(file)
     try:
         return p.read_text(encoding="utf-8", errors="replace")
@@ -122,21 +108,15 @@ def _read_content_if_exists(file: str, workspace: Path) -> str | None:
 
 
 def _safe_sync_file(manager: "LspManager", file: str, workspace: Path, content: str) -> None:
-    """触发 didOpen/didChange(sync,best-effort;失败不阻断主请求)。
-
-    简化:用 request_sync 内的 threadpool 跑一个 fire-and-forget 任务;出错 no-op。
-    """
+    """Internal documentation."""
     try:
         abspath = str((workspace / file).resolve()) if not Path(file).is_absolute() else file
         manager.request_sync("__noop__", "noop", {"_fire_and_forget": True}, timeout=0.01)
     except Exception:  # noqa: BLE001
         pass
-    # 实际生产:在 host loop 异步触发;本期 v1 简化,工具触发 didOpen 由 host loop(T7)接管。
-    # 这里只做空操作,避免阻塞工具。
     return
 
 
-# ── 6 个 gated 闭包 ────────────────────────────────────────────────
 
 def lsp_definition_gated(
     *, server_name: str, file: str, line: int, col: int,
@@ -145,7 +125,6 @@ def lsp_definition_gated(
     err = _check_workspace(file, workspace)
     if err:
         return err
-    # 触发 didOpen(若未):best-effort
     content = _read_content_if_exists(file, workspace)
     if content is not None:
         _safe_sync_file(manager, file, workspace, content)
@@ -158,7 +137,6 @@ def lsp_definition_gated(
     )
     if "error" in result:
         return json.dumps(result)
-    # manager.request_sync 返 {"result": <list-of-locations>} 或 {"error": ...}
     inner = result.get("result", result)
     if isinstance(inner, list):
         locations_raw = inner
@@ -280,15 +258,13 @@ def lsp_diagnostics_gated(
     err = _check_workspace(file, workspace)
     if err:
         return err
-    # server 不存在 / disabled → 显 error(不让模型误以为"没诊断 = 文件没问题")
     status = manager.server_status(server_name)
     if status is None:
         return json.dumps({"error": f"lsp server {server_name!r} not configured"})
     from argos.lsp.manager import ServerStatus
-    if status in (ServerStatus.DISABLED,) or \
+    if status in (ServerStatus.DISABLED,) or\
        manager._servers[server_name].config.disabled:  # type: ignore[union-attr]
         return json.dumps({"error": f"lsp server {server_name!r} disabled"})
-    # 走 cache 而非 request(spec §2.5:diagnostics = server push 缓存)
     cached = manager.get_diagnostics(file)
     if cached is None:
         return json.dumps({"diagnostics": []})

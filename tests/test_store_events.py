@@ -1,4 +1,4 @@
-"""Phase 2:events 持久化 + replay 重建(契约 §2 / spec §5.8 + §12.6)。"""
+"""Internal documentation."""
 import pytest
 
 from argos.memory.store import ArgosStore, ReplayState
@@ -35,7 +35,6 @@ def test_replay_reconstructs_messages_and_events(store):
     assert len(rs.messages) == 1 and rs.messages[0].content == "goal"
     assert len(rs.events) == 3
     assert isinstance(rs.events[1], E.CodeAction)
-    # last_phase = 最后一个 PhaseChange 的 phase
     assert rs.last_phase == "act"
 
 

@@ -1,4 +1,4 @@
-"""verify 分级 + 三态 Verdict fail-closed(契约 §6.1/§6;spec §3.3 L2/§12.5)。"""
+"""Internal documentation."""
 import pytest
 
 from argos.core.types import Verdict
@@ -53,10 +53,6 @@ def in_project(tmp_path, monkeypatch):
 
 
 def test_verify_none_cmd_returns_unverifiable(in_project):
-    # HONESTY CORRECTION:没 verify_cmd → 没有机检命令真的跑过 → 诚实标 "unverifiable",
-    # 绝不当 passed(否则违反 HONESTY_SYSTEM 规则 1:未实际运行验证命令不得声称成功)。
-    # 无测任务能否完成由 Harness.run_verify_gate 据 "verify_cmd is None" 判定 —— 不 bounce,
-    # 但报告诚实标 "未机检验证 (no test command)"。
     v = Verifier(max_rounds=3).verify(None)
     assert v.status == "unverifiable"
     assert v.verify_cmd is None
@@ -83,7 +79,6 @@ def test_verify_not_whitelisted_command(in_project):
 
 
 def test_verify_tampering_forces_unverifiable(in_project):
-    # 登记受保护测试 → 改它 → 即便命令退出码 0,也判 unverifiable(优先于退出码)。
     test_file = in_project / "test_guard.py"
     test_file.write_text("def test_guard():\n    assert True\n")
     runtime.guard_files(["test_guard.py"])
@@ -94,7 +89,6 @@ def test_verify_tampering_forces_unverifiable(in_project):
 
 
 def test_verify_timeout_degrades_to_unverifiable(in_project):
-    # 超时 → 无法确认 → 诚实降级 unverifiable(绝不当 passed)。用极短 inline_timeout 触发。
     (in_project / "test_slow.py").write_text(
         "import time\ndef test_slow():\n    time.sleep(2)\n    assert True\n"
     )
@@ -105,12 +99,6 @@ def test_verify_timeout_degrades_to_unverifiable(in_project):
 
 @pytest.mark.parametrize("trivial_cmd", ["echo ok", "cat", "ls", "pwd", "true", ":"])
 def test_verify_rejects_trivial_command_as_unverifiable(in_project, trivial_cmd):
-    # P0 防假绿(canonical 门):echo/cat/ls/pwd 既在 ALLOWED_CMDS 又"什么都不验证"——退出码
-    # 恒 0,过去经 Verifier._run_verify 直接当 passed = 假绿。propose_verify 路径早设此门,但
-    # 任何直接设 verify_cmd 的入口(config/setup/bridge/workflow)都只经 canonical Verifier,
-    # 它过去只查 ALLOWED_CMDS → 'echo ok' 拿真 passed。canonical 门必须统一拒这类 trivial 命令,
-    # 落 unverifiable(命令无效、非代码没过),绝不 passed 蒙混。
     v = Verifier(max_rounds=3).verify(trivial_cmd)
     assert v.status == "unverifiable"
-    # 因 trivial 被拒(而非篡改/超时等其它 unverifiable 原因)。
     assert "trivial" in v.detail

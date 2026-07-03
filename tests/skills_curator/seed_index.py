@@ -1,4 +1,4 @@
-"""#10 T8 e2e fixture:index entries + skill markdown + smoke 样本."""
+"""Internal documentation."""
 from __future__ import annotations
 
 import hashlib

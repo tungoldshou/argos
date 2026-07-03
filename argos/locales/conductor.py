@@ -1,9 +1,4 @@
-"""conductor/* 用户可见文案 (Wave 3).
-
-key 命名空间: cond.*
-ZH 值 = 重构前的原始串 verbatim (一字不差)。
-EN 值 = 语义对等的自然英文。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 EN: dict[str, str] = {

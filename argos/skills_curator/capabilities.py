@@ -1,16 +1,4 @@
-"""#10 T2 frontmatter 解析 + capability 校验 + builtin 保护。
-
-SKILL.md frontmatter 必填字段(spec §6.1):
-  name:        str (^[a-z][a-z0-9-]{2,32}$)
-  version:     str (semver)
-  capabilities: list[str] ⊆ {read, write, execute, network}
-  enabled:     bool   ← 装时强制 false(防"装了就能跑")
-  description: str
-  author:      str
-
-D11:4 个 capability 粗粒度(read/write/execute/network)
-D7:builtin 3 名硬拒 install/remove
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -35,7 +23,7 @@ class InstalledSkill:
     enabled: bool
     description: str
     path: Path
-    source: str = ""  # index 远端 URL;builtin 留空
+    source: str = ""
 
     def to_card_dict(self) -> dict[str, Any]:
         return {
@@ -51,7 +39,7 @@ class InstalledSkill:
 
 
 def parse_frontmatter(text: str) -> dict:
-    """从 SKILL.md 文本抽 YAML frontmatter dict;解析失败 → raise ValueError."""
+    """Internal documentation."""
     m = _FRONTMATTER.match(text)
     if not m:
         raise ValueError("missing --- YAML --- frontmatter")
@@ -65,7 +53,7 @@ def parse_frontmatter(text: str) -> dict:
 
 
 def validate_skill_meta(meta: dict, *, name: str) -> list[str]:
-    """返回错误 list(空 = ok)。缺 capabilities / 未知值 / 缺 name 都报。"""
+    """Internal documentation."""
     errors: list[str] = []
     if not meta.get("name"):
         errors.append("frontmatter: missing 'name'")
@@ -92,7 +80,7 @@ def validate_skill_meta(meta: dict, *, name: str) -> list[str]:
 
 
 def read_installed_skill(path: Path) -> InstalledSkill | None:
-    """读单个 SKILL.md 返 InstalledSkill;解析失败 → None(不抛)."""
+    """Internal documentation."""
     try:
         text = path.read_text("utf-8")
         meta = parse_frontmatter(text)
@@ -112,7 +100,7 @@ def read_installed_skill(path: Path) -> InstalledSkill | None:
 
 
 def list_installed(*, base_dir: Path | None = None) -> list[InstalledSkill]:
-    """扫 `~/.argos/skills/*/SKILL.md` 返 list(按 name 升序)。"""
+    """Internal documentation."""
     root = base_dir or _index_mod._skills_root()
     if not root.exists():
         return []

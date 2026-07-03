@@ -1,5 +1,4 @@
-"""Phase 3:纯沙箱 file 工具(裸函数,无 LangChain/审批装饰)。
-工作目录由 ARGOS_WORKSPACE 环境/_ws() 决定;测试用 tmp workspace。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -47,22 +46,21 @@ def test_search_files_content(ws):
 
 
 def test_search_files_by_name_glob_and_skips_heavy_dirs(ws):
-    """2026-06-20:search_files 改纯 Python(rg 在沙箱里挂死)。files 模式按 glob 找文件名;
-    content/files 都跳过 .git/.venv/node_modules 等重/隐藏目录(原地剪枝)。"""
+    """Internal documentation."""
     (ws / "app.py").write_text("needle = 1\n")
     (ws / "readme.md").write_text("hi\n")
     (ws / ".git").mkdir()
     (ws / ".git" / "x.py").write_text("needle in git\n")
     out_f = files.search_files("*.py", target="files")
     assert "app.py" in out_f and "readme.md" not in out_f
-    assert "x.py" not in out_f          # .git 被剪枝
+    assert "x.py" not in out_f
     out_c = files.search_files("needle", target="content")
     assert "app.py" in out_c
-    assert ".git" not in out_c          # 隐藏/重目录不搜
+    assert ".git" not in out_c
 
 
 def test_search_files_skips_binary(ws):
-    """二进制文件(非 UTF-8)被跳过,不崩、不污染结果。"""
+    """Internal documentation."""
     (ws / "code.py").write_text("target_token\n")
     (ws / "blob.bin").write_bytes(b"\x00\x01target_token\xff\xfe")
     out = files.search_files("target_token", target="content")
@@ -73,10 +71,8 @@ def test_search_files_skips_binary(ws):
 def test_read_file_offset_limit(ws):
     (ws / "lines.txt").write_text("a\nb\nc\nd\ne\n")
     r = files.read_file("lines.txt", offset=2, limit=2)
-    # 第一行(行号提示)含 "第 3-4 行" 或 "第 3–4 行"(U+2013 连字符)
     head, _, body = r.partition("\n")
     assert "第 3" in head and ("-4" in head or "–4" in head)
-    # 正文只含 c、d(从第 3 行起 2 行)
     assert "c" in body
     assert "d" in body
     assert "a" not in body
@@ -96,7 +92,7 @@ def test_read_file_offset_out_of_range(ws):
     (ws / "lines.txt").write_text("a\nb\nc\n")
     r = files.read_file("lines.txt", offset=100)
     assert "越界" in r
-    assert "3" in r  # 总行数
+    assert "3" in r
 
 
 def test_read_empty_file_returns_empty_content(ws):
@@ -119,11 +115,10 @@ def test_read_file_default_unchanged(ws):
     r = files.read_file("a.txt")
     assert "hello" in r
     assert "world" in r
-    # 向后兼容:不再有 8000 字符硬截断
     big = "x" * 10000
     (ws / "big.txt").write_text(big)
     r2 = files.read_file("big.txt")
-    assert len(r2) >= 10000  # 全文返回
+    assert len(r2) >= 10000
 
 
 def test_edit_file_all_occurrences_true(tmp_path, monkeypatch):
@@ -138,12 +133,11 @@ def test_edit_file_all_occurrences_default_false_rejects_multi(tmp_path, monkeyp
     monkeypatch.setattr("argos.tools.files.WORKSPACE", tmp_path)
     (tmp_path / "a.py").write_text("x = 1\nx = 1\n")
     r = files.edit_file("a.py", "x = 1", "x = 2")
-    assert "多次匹配" in r  # 行为不变
+    assert "多次匹配" in r
 
 
 def test_edit_file_all_occurrences_with_fuzzy_fallback(tmp_path, monkeypatch):
     monkeypatch.setattr("argos.tools.files.WORKSPACE", tmp_path)
-    # 精确 0 处、模糊 1 处
     (tmp_path / "a.py").write_text("x   =   1\ny = 2\n")
     r = files.edit_file("a.py", "x = 1", "x = 9", all_occurrences=True)
     assert "1 处" in r

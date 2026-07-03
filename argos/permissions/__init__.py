@@ -1,7 +1,4 @@
-"""Smart approval + 硬规则 auto-deny(spec 2026-06-06)。
-
-模块入口:暴露 `get_config` / `reload_config` / `evaluate` / `get_audit_log`。
-evaluator 在 Task 4 补;audit 在 Task 6 补。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from argos.permissions.audit import (

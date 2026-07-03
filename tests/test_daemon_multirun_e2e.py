@@ -1,10 +1,4 @@
-"""#5b 端到端铁证:多 run 并发 + worktree + cost + 多 TUI 互斥。
-
-- 起真 daemon + 5 个 FakeLoop 并发跑 → 全 5 个完成 → GET /runs 看齐
-- 第 2 个 TUI session 连上 → 变 observer → POST /runs 拿 403
-- worktree 终态自动 cleanup
-- cost 累加正确
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -66,9 +60,8 @@ async def e2e_daemon(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_e2e_5_concurrent_runs_with_cost_worktree_observer(e2e_daemon, tmp_path: Path):
-    """端到端铁证:5 个 run 并发 + cost 累加 + worktree + observer 限权 全链路通。"""
+    """Internal documentation."""
     srv, mgr, reg, worktree = e2e_daemon
-    # 1. owner 建 5 个 run + 起 5 个 worker 并发
     sid_owner = await _create_session(srv.socket_path)
     assert srv.sessions.get(sid_owner).role == "owner"
     rids = []
@@ -80,7 +73,6 @@ async def test_e2e_5_concurrent_runs_with_cost_worktree_observer(e2e_daemon, tmp
     assert reg.active_count == 5
     assert reg.size == 5
 
-    # 2. 起 worker 并发(每 run 不同 cost)
     from argos.daemon.worker import RunWorker
     workers = []
     for i, rid in enumerate(rids):
@@ -95,24 +87,18 @@ async def test_e2e_5_concurrent_runs_with_cost_worktree_observer(e2e_daemon, tmp
             registry=reg, worktree=worktree,
         )
         workers.append(w)
-    # 并发跑
     await asyncio.gather(*(w.run() for w in workers))
-    # 3. 全部 completed
     for rid in rids:
         e = reg.get(rid)
         assert e.state == "completed", f"run {rid} not completed: {e.state}"
-        # cost 已累加
         assert e.tokens_in > 0
         assert e.cost_usd > 0
-    # 4. slot 全释放(下次能再 acquire 5 个 — 仅验证释放成功,马上归还)
     for _ in range(5):
         await asyncio.wait_for(reg.acquire_slot(), timeout=0.1)
     for _ in range(5):
         reg.release_slot()
-    # 5. 观察者连上 → 变 observer
     sid_observer = await _create_session(srv.socket_path)
     assert srv.sessions.get(sid_observer).role == "observer"
-    # 6. observer 写端点全 403
     status, _, _ = await _req(srv.socket_path, "POST", "/runs",
                                session_id=sid_observer, body={"goal": "x"})
     assert status == 403
@@ -125,22 +111,18 @@ async def test_e2e_5_concurrent_runs_with_cost_worktree_observer(e2e_daemon, tmp
     status, _, _ = await _req(srv.socket_path, "POST", f"/runs/{rids[0]}/cancel",
                                session_id=sid_observer)
     assert status == 403
-    # 7. observer 读端点 OK
     status, _, raw = await _req(srv.socket_path, "GET", "/runs",
                                  session_id=sid_observer)
     assert status == 200
     runs = json.loads(raw.decode("utf-8"))
     assert len(runs) == 5
-    # 全部 completed + cost > 0
     for r in runs:
         assert r["state"] == "completed"
         assert r["cost_usd"] > 0
         assert r["tokens_in"] > 0
-    # 8. owner 退出 → observer 自动 promote
     await _req(srv.socket_path, "DELETE", f"/sessions/{sid_owner}")
     promoted = srv.sessions.get(sid_observer)
     assert promoted.role == "owner"
-    # 9. 新 owner 能建 run
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",
                                  session_id=sid_observer, body={"goal": "after-promote"})
     assert status == 201

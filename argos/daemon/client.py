@@ -1,8 +1,4 @@
-"""DaemonClient:TUI 侧 HTTP/SSE 客户端(spec §2.5)。
-
-自写 stdlib HTTP client + SSE 解析(~100 LOC),0 新依赖。
-Unix socket 走 `socket` 模块直接接 httpx 不可用,这里用 asyncio.open_unix_connection。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -17,12 +13,7 @@ log = logging.getLogger(__name__)
 
 
 class DaemonError(Exception):
-    """daemon 端返非 2xx / 5xx 错误。
-
-    .status / .code 结构化暴露,供上层程序化判别(如 missing_session 会话自愈),
-    无需脆弱地解析 message 字符串。非 _check 路径(empty response / 超时等)构造时
-    无 code,字段取安全默认(code=""、status=None)。
-    """
+    """Internal documentation."""
 
     def __init__(self, message: str, *, status: int | None = None, code: str = "") -> None:
         super().__init__(message)
@@ -31,15 +22,7 @@ class DaemonError(Exception):
 
 
 class DaemonClient:
-    """Unix socket HTTP client + SSE 订阅。
-
-    用法:
-        client = DaemonClient(socket_path)
-        sid = await client.create_session()
-        rid = await client.create_run(goal="x", session_id=sid)
-        async for ev in client.subscribe_events(rid, sid):
-            ...
-    """
+    """Internal documentation."""
 
     def __init__(self, socket_path: Path, *, timeout: float = 30.0):
         self._socket_path = Path(socket_path)
@@ -59,7 +42,7 @@ class DaemonClient:
         session_id: str | None = None,
         body: dict | None = None,
     ) -> tuple[int, dict[str, str], bytes]:
-        """发 HTTP/1.1 请求,返 (status, headers, body_bytes)。"""
+        """Internal documentation."""
         payload = b""
         if body is not None:
             payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -83,7 +66,6 @@ class DaemonClient:
             try:
                 writer.write(raw)
                 await writer.drain()
-                # 读 status line
                 status_line = await reader.readline()
                 if not status_line:
                     raise DaemonError("empty response")
@@ -92,7 +74,6 @@ class DaemonClient:
                     status = int(status_str)
                 except (ValueError, UnicodeDecodeError) as e:
                     raise DaemonError(f"bad status line: {e}")
-                # 读 headers
                 resp_headers: dict[str, str] = {}
                 while True:
                     line = await reader.readline()
@@ -103,7 +84,6 @@ class DaemonClient:
                         resp_headers[k.strip().lower()] = v.strip()
                     except ValueError:
                         continue
-                # 读 body
                 cl = resp_headers.get("content-length")
                 body_bytes = b""
                 if cl:
@@ -119,9 +99,6 @@ class DaemonClient:
                 except Exception:  # noqa: BLE001
                     pass
 
-        # 整个往返受 self._timeout 硬约束:daemon 接了 socket 却卡死/半写时,无界 readline/
-        # readexactly 会让"思考中…"永远转(daemon 是默认运行路径)。超时抛 DaemonError,
-        # 让上层 try/except 接住并诚实降级 —— 而不是冻住界面(2026-06-18 排查 #1)。
         try:
             return await asyncio.wait_for(_roundtrip(), timeout=self._timeout)
         except asyncio.TimeoutError:
@@ -186,7 +163,7 @@ class DaemonClient:
             body["verify_cmd"] = verify_cmd
         wire = encode_attachments(attachments)
         if wire:
-            body["attachments"] = wire   # 图片 base64;无附件时不加键(请求体与现状一致)
+            body["attachments"] = wire
         status, _, raw = await self._request(
             "POST", "/runs", session_id=session_id, body=body,
         )
@@ -234,11 +211,10 @@ class DaemonClient:
         return self._check(status, self._parse_json(status, raw), (200,))
 
     async def create_order(self, session_id: str, body: dict) -> tuple[int, dict]:
-        """POST /orders — 创建 StandingOrder。返回 (status, response_dict)。"""
+        """Internal documentation."""
         status, _, raw = await self._request("POST", "/orders", session_id=session_id, body=body)
         return status, self._parse_json(status, raw)
 
-    # ── SSE 订阅(长连接)───────────────────────────────────────────
 
     async def subscribe_events(
         self,
@@ -247,10 +223,7 @@ class DaemonClient:
         *,
         since: int = 0,
     ) -> AsyncIterator[dict[str, Any]]:
-        """订阅 run 事件流;每条 event yield 一个 dict。
-
-        自写 SSE 解析:每行 `data: {...}` + 空行分隔。
-        """
+        """Internal documentation."""
         req = (
             f"GET /runs/{run_id}/events?since={since} HTTP/1.1\r\n"
             f"Host: daemon\r\n"
@@ -263,7 +236,6 @@ class DaemonClient:
         try:
             writer.write(req)
             await writer.drain()
-            # 跳过 status + headers
             status_line = await reader.readline()
             if not status_line:
                 return
@@ -271,18 +243,14 @@ class DaemonClient:
                 line = await reader.readline()
                 if line in (b"\r\n", b"\n", b""):
                     break
-            # 读 SSE 流
             current_event: str | None = None
             data_buf: list[str] = []
             while True:
                 line = await reader.readline()
                 if not line:
                     return
-                # SSE 数据体是 UTF-8(server encode("utf-8"));latin-1 会把中文打成 mojibake。
-                # SSE 按行分帧,UTF-8 多字节不含 \n,逐行 utf-8 解码安全。
                 text = line.decode("utf-8", errors="replace").rstrip("\r\n")
                 if not text:
-                    # 空行 → 一个 event 结束
                     if data_buf:
                         data_str = "\n".join(data_buf)
                         try:
@@ -295,7 +263,6 @@ class DaemonClient:
                     data_buf = []
                     continue
                 if text.startswith(":"):
-                    # SSE comment(keepalive)→ 跳过
                     continue
                 if text.startswith("event:"):
                     current_event = text[len("event:"):].strip()

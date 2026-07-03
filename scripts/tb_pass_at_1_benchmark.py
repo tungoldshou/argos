@@ -1,14 +1,4 @@
-"""TB 适配器 + best_of_n 桥接 真跑 N=1 vs N=3 报告。
-
-用法:
-  uv run python scripts/tb_pass_at_1_benchmark.py [--n 3] [--workspace DIR]
-
-读 ~/.argos/config.json 的 active profile 当 model;
-跑 tests/eval/_fixtures/tb_smoke/ 下所有支持的 TB 任务(共 4 个);
-N=1 与 N=k(=3)各跑一遍 best_of_n,打 N=1 / N=k pass@1 + supported/skipped 计数。
-
-注:这是真跑(真沙箱 / 真 verify),不是 mock。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -18,7 +8,6 @@ import sys
 import time
 from pathlib import Path
 
-# 让脚本可以 import argos(无需 pip install)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from argos import config
@@ -35,13 +24,7 @@ from argos.memory.store import ArgosStore
 
 
 def _resolve_tier_and_key(use_env_override: bool) -> tuple:
-    """解析(tier, key) — 默认走 active profile(用户在 ~/.argos/config.json 配的);
-    --use-env-override 时优先 ARGOS_LLM_* / ANTHROPIC_* 环境变量。
-
-    默认走 active 是更稳的:用户配好的模型(目前是 agnes-2.0-flash)是有 key 的,
-    也一定可达;env override 在没显式传时反而会指向 M3(慢/卡)。新增显式 flag 让
-    想用 env 的用户仍能 override。
-    """
+    """Internal documentation."""
     if use_env_override:
         model = (os.environ.get("ARGOS_LLM_MODEL")
                  or os.environ.get("VITE_LLM_MODEL")
@@ -65,12 +48,11 @@ def _resolve_tier_and_key(use_env_override: bool) -> tuple:
                 max_tokens=8192, context_window=128000, protocol=provider,
             )
         return tier, key
-    # 回退 active
     return config.active_tier(), config.active_key() or ""
 
 
 def _build_components(workspace: Path, *, use_env_override: bool) -> dict:
-    """拼一份真组件,仿 app_factory.build_components(本脚本不需要 TUI 装配)。"""
+    """Internal documentation."""
     tier, key = _resolve_tier_and_key(use_env_override)
     if not key:
         raise RuntimeError(
@@ -79,20 +61,13 @@ def _build_components(workspace: Path, *, use_env_override: bool) -> dict:
         )
     os.environ["ARGOS_WORKSPACE"] = str(workspace)
     workspace.mkdir(parents=True, exist_ok=True)
-    # 把 workspace 初始化成 git repo + 一个初始 commit,让 git status 正常工作(否则
-    # `git diff HEAD` 找不到 HEAD 而 fatal,我们的 output_mirror 退化为空)。
-    # 同样:加 .gitignore 防 mirror 反馈(bridge 写 bridge_base/agent_workspace/...
-    # 会被 agent 视为"新文件",下次 _mirror_worktree 再把它们拷进 next subagent 的 mirror,
-    # 越拷越深)。
     import subprocess as _sp
     if not (workspace / ".git").is_dir():
         _sp.run(["git", "init", "-q", str(workspace)], check=False, capture_output=True)
         _sp.run(["git", "-C", str(workspace), "config", "user.email", "bench@local"], check=False, capture_output=True)
         _sp.run(["git", "-C", str(workspace), "config", "user.name", "bench"], check=False, capture_output=True)
         (workspace / ".gitignore").write_text(
-            "bridge_base/\n"  # 唯一必须 ignore:防 mirror 反馈(详见 _mirror_worktree 注释)
-            # 不 ignore 任何 .py/.sh/.txt —— agent 产出要进 mirror
-            # 否则 _mirror_worktree 用 git status 看不到 → agent 工作白费
+            "bridge_base/\n"
             "__pycache__/\n"
             ".argos_run.sb\n"
             ".argos_sandbox.sb\n"
@@ -104,7 +79,7 @@ def _build_components(workspace: Path, *, use_env_override: bool) -> dict:
 
     pool = CredentialPool([key])
     model = ModelClient(tier=tier, pool=pool)
-    gate = ApprovalGate(ApprovalLevel.AUTO)  # 跑批量评测,关掉逐工具审批
+    gate = ApprovalGate(ApprovalLevel.AUTO)
     egress = EgressPolicy(
         llm_hosts={_host_of(tier.base_url)} if _host_of(tier.base_url) else set(),
         search_hosts=set(_SEARCH_HOSTS),
@@ -118,7 +93,6 @@ def _build_components(workspace: Path, *, use_env_override: bool) -> dict:
         return value
 
     def sub_model_factory(profile):
-        # 不管 profile 填什么,统一用本脚本解析出来的便宜模型(诚实:用户指定的就是这个)
         return ModelClient(tier=tier, pool=CredentialPool([key]))
 
     sub_factory = SubAgentFactory(
@@ -166,8 +140,6 @@ def main() -> int:
 
     print(f"[bench] model = {comps['tier'].name} / {comps['tier'].model} @ {comps['tier'].base_url}")
     if args.tb_source:
-        # 真 TB 路径:取 tb_source 下 6 个简单的子目录(hello-world + 类似,简单任务跑得
-        # 快 + 模型容错高,适合拿稳多 task Δ 数据;任务越多越接近真实)。
         target_names = [
             "hello-world", "csv-to-parquet", "fix-permissions", "broken-python",
             "count-call-stack", "processing-pipeline",

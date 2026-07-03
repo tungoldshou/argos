@@ -1,9 +1,4 @@
-"""打包 C 阶段 — PyPI 元数据 + argospkg dispatcher 测试(plan T1+T2)。
-
-- part 1:T1 pyproject.toml 字段 + sdist include
-- part 2:T2 argospkg dispatcher(info / check / unknown / help)
-- part 3:T10 publish.yml workflow 结构
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -19,10 +14,15 @@ CLI_PKG = ROOT / "argos" / "cli" / "pkg.py"
 PUBLISH_YML = ROOT / ".github" / "workflows" / "publish.yml"
 
 
-# --- T1 part 1:pyproject 字段 ---
+def _project_version() -> str:
+    match = re.search(r'^version = "([^"]+)"', PYPROJECT.read_text(), re.M)
+    assert match
+    return match.group(1)
+
+
 
 def test_pyproject_has_license_mit():
-    """[project.license] 是 {text = 'MIT'} 形式(PEP 639)。"""
+    """Internal documentation."""
     txt = PYPROJECT.read_text()
     assert re.search(r'license\s*=\s*\{\s*text\s*=\s*"MIT"\s*\}', txt), (
         f"pyproject 缺 license = {{text = 'MIT'}};got:\n{txt[txt.find('license'):txt.find('license')+80]}"
@@ -30,7 +30,7 @@ def test_pyproject_has_license_mit():
 
 
 def test_pyproject_has_authors_with_email():
-    """[project.authors] 非空 list,首项有 email。"""
+    """Internal documentation."""
     txt = PYPROJECT.read_text()
     m = re.search(r'authors\s*=\s*\[(.*?)\]', txt, flags=re.DOTALL)
     assert m, "pyproject 缺 [project.authors] 段"
@@ -40,7 +40,7 @@ def test_pyproject_has_authors_with_email():
 
 
 def test_pyproject_has_classifiers_list():
-    """[project.classifiers] 是 list,含 License + Python 3.12。"""
+    """Internal documentation."""
     txt = PYPROJECT.read_text()
     m = re.search(r'classifiers\s*=\s*\[(.*?)\]', txt, flags=re.DOTALL)
     assert m, "pyproject 缺 [project.classifiers] 段"
@@ -52,7 +52,7 @@ def test_pyproject_has_classifiers_list():
 
 
 def test_pyproject_has_urls_section():
-    """[project.urls] 含 Homepage + Repository + Issues + Changelog。"""
+    """Internal documentation."""
     txt = PYPROJECT.read_text()
     m = re.search(r'\[project\.urls\](.*?)(?=\n\[|\Z)', txt, flags=re.DOTALL)
     assert m, "pyproject 缺 [project.urls] 段"
@@ -62,19 +62,19 @@ def test_pyproject_has_urls_section():
 
 
 def test_pyproject_scripts_contains_argos_and_argospkg():
-    """[project.scripts] 既含 argos 又含 argospkg,argospkg 指向 cli.pkg:main。"""
+    """Internal documentation."""
     txt = PYPROJECT.read_text()
     m = re.search(r'\[project\.scripts\](.*?)(?=\n\[|\Z)', txt, flags=re.DOTALL)
     assert m, "pyproject 缺 [project.scripts] 段"
     body = m.group(1)
-    assert re.search(r'^\s*argos\s*=\s*"argos\.__main__:main"', body, re.M), \
+    assert re.search(r'^\s*argos\s*=\s*"argos\.__main__:main"', body, re.M),\
         "缺 argos = argos.__main__:main"
-    assert re.search(r'^\s*argospkg\s*=\s*"argos\.cli\.pkg:main"', body, re.M), \
+    assert re.search(r'^\s*argospkg\s*=\s*"argos\.cli\.pkg:main"', body, re.M),\
         "缺 argospkg = argos.cli.pkg:main"
 
 
 def test_pyproject_sdist_includes_critical_files():
-    """[tool.hatch.build.targets.sdist.include] 含 argos + README + LICENSE + VERSION + argos.spec。"""
+    """Internal documentation."""
     txt = PYPROJECT.read_text()
     m = re.search(r'\[tool\.hatch\.build\.targets\.sdist\](.*?)(?=\n\[|\Z)', txt, flags=re.DOTALL)
     assert m, "pyproject 缺 [tool.hatch.build.targets.sdist] 段"
@@ -82,8 +82,7 @@ def test_pyproject_sdist_includes_critical_files():
     for f in ("argos", "README.md", "LICENSE", "CHANGELOG.md",
               "packaging/VERSION", "packaging/Info.plist", "packaging/argos.spec"):
         assert f in body, f"[tool.hatch.build.targets.sdist.include] 缺 {f}"
-    # exclude 也得有(在 body 内)
-    assert re.search(r'exclude\s*=\s*\[(.*?)\]', body, flags=re.DOTALL), \
+    assert re.search(r'exclude\s*=\s*\[(.*?)\]', body, flags=re.DOTALL),\
         "pyproject [tool.hatch.build.targets.sdist.exclude] 缺"
     exclude_match = re.search(r'exclude\s*=\s*\[(.*?)\]', body, flags=re.DOTALL)
     exclude = exclude_match.group(1)
@@ -98,7 +97,7 @@ def test_argospkg_pkg_file_exists():
 
 
 def test_argospkg_info_prints_metadata():
-    """`argospkg info` 退出 0,stdout 含 name/version/pkg/VERSION。"""
+    """Internal documentation."""
     r = subprocess.run(
         [sys.executable, "-m", "argos.cli.pkg", "info"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
@@ -110,8 +109,23 @@ def test_argospkg_info_prints_metadata():
     assert "pkg/VERSION:" in out
 
 
+def test_argospkg_info_does_not_read_cwd_packaging_version(tmp_path, monkeypatch, capsys):
+    """Internal documentation."""
+    from argos.cli.pkg import cmd_info
+
+    fake = tmp_path / "packaging"
+    fake.mkdir()
+    (fake / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert cmd_info([]) == 0
+    out = capsys.readouterr().out
+    assert "pkg/VERSION: 9.9.9" not in out
+    assert f"pkg/VERSION: {_project_version()}" in out
+
+
 def test_argospkg_check_imports_cleanly():
-    """`argospkg check` 退出 0,stdout 含 'import OK'。"""
+    """Internal documentation."""
     r = subprocess.run(
         [sys.executable, "-m", "argos.cli.pkg", "check"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
@@ -121,7 +135,7 @@ def test_argospkg_check_imports_cleanly():
 
 
 def test_argospkg_unknown_subcommand_exits_nonzero():
-    """`argospkg foo` 退出非 0(2),stderr 含 'unknown subcommand'。"""
+    """Internal documentation."""
     r = subprocess.run(
         [sys.executable, "-m", "argos.cli.pkg", "foo"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
@@ -131,21 +145,51 @@ def test_argospkg_unknown_subcommand_exits_nonzero():
 
 
 def test_argospkg_manifest_lists_winget_dir():
-    """`argospkg manifest` 退出 0,列 packaging/winget/ 文件(若存在)。"""
+    """Internal documentation."""
     r = subprocess.run(
         [sys.executable, "-m", "argos.cli.pkg", "manifest"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
     )
-    assert r.returncode == 0, f"argospkg manifest 返 {r.returncode};stderr={r.stderr}"
-    # 不强制 winget 文件存在(本期任务 T8 后才有),但 stdout 必含 manifest 提示
-    assert "manifest" in r.stdout.lower()
+    assert "tungoldshou.argos.yaml" in r.stdout
+    assert "tungoldshou.argos.installer.yaml" in r.stdout
+    assert "tungoldshou.argos.locale.en-US.yaml" in r.stdout
     assert "placeholder" not in r.stdout.lower()
     assert "占位" not in r.stdout
     assert "v0.2.0" not in r.stdout.lower()
 
 
+def test_argospkg_manifest_fails_on_placeholder_winget_digest():
+    """Internal documentation."""
+    r = subprocess.run(
+        [sys.executable, "-m", "argos.cli.pkg", "manifest"],
+        capture_output=True, text=True, cwd=str(ROOT), timeout=30,
+    )
+    installer = ROOT / "packaging" / "winget" / "tungoldshou.argos.installer.yaml"
+    assert "PLACEHOLDER" in installer.read_text()
+    assert r.returncode != 0
+    assert "placeholder" in r.stderr.lower()
+
+
+def test_argospkg_manifest_fails_on_invalid_winget_digest(tmp_path, monkeypatch, capsys):
+    """Internal documentation."""
+    from argos.cli.pkg import cmd_manifest
+
+    src = ROOT / "packaging" / "winget"
+    dst = tmp_path / "packaging" / "winget"
+    dst.mkdir(parents=True)
+    for p in src.glob("tungoldshou.argos*.yaml"):
+        text = p.read_text()
+        text = text.replace("PLACEHOLDER_FROM_BUMP", "not-a-real-sha")
+        (dst / p.name).write_text(text)
+
+    monkeypatch.chdir(tmp_path)
+    assert cmd_manifest([]) == 1
+    captured = capsys.readouterr()
+    assert "InstallerSha256" in captured.err
+
+
 def test_argospkg_manifest_fails_without_winget_dir(tmp_path, monkeypatch, capsys):
-    """缺 packaging/winget 时不能发布检查假绿。"""
+    """Internal documentation."""
     from argos.cli.pkg import cmd_manifest
 
     monkeypatch.chdir(tmp_path)
@@ -154,8 +198,25 @@ def test_argospkg_manifest_fails_without_winget_dir(tmp_path, monkeypatch, capsy
     assert "packaging/winget" in captured.err
 
 
+def test_argospkg_manifest_fails_when_required_winget_file_missing(tmp_path, monkeypatch, capsys):
+    """Internal documentation."""
+    from argos.cli.pkg import cmd_manifest
+
+    dst = tmp_path / "packaging" / "winget"
+    dst.mkdir(parents=True)
+    (dst / "tungoldshou.argos.installer.yaml").write_text(
+        "InstallerSha256: " + ("a" * 64) + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.chdir(tmp_path)
+    assert cmd_manifest([]) == 1
+    captured = capsys.readouterr()
+    assert "tungoldshou.argos.yaml" in captured.err
+
+
 def test_argospkg_help_prints_usage():
-    """`--help` 返 0 + 显 usage;无参 返 1 + 显 usage(用户调用方式提示)。"""
+    """Internal documentation."""
     r = subprocess.run(
         [sys.executable, "-m", "argos.cli.pkg", "--help"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
@@ -167,15 +228,13 @@ def test_argospkg_help_prints_usage():
         [sys.executable, "-m", "argos.cli.pkg"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=30,
     )
-    # 无参 dispatch 返 1(告诉用户"请给子命令"),但 usage 仍打印
     assert r2.returncode == 1, f"无参期望 1,实得 {r2.returncode}"
     assert "usage: argospkg" in r2.stdout
 
 
-# --- T10 part 3:publish.yml 结构 ---
 
 def test_publish_workflow_exists_and_uses_pypa_action():
-    """publish.yml 存在 + 含 pypa/gh-action-pypi-publish@release/v1 + id-token: write。"""
+    """Internal documentation."""
     if not PUBLISH_YML.exists():
         pytest.skip("publish.yml 尚未创建(plan T10 任务) — skip 早期 commit")
     txt = PUBLISH_YML.read_text()
@@ -184,10 +243,70 @@ def test_publish_workflow_exists_and_uses_pypa_action():
     assert "id-token: write" in txt, "publish.yml 缺 id-token: write(OIDC)"
 
 
-# --- 验收:uv build 跑通(契约 §4.4;spec §1.4 锁"uv build 必须能出")---
+def test_publish_workflow_does_not_ignore_twine_check_failure():
+    """Internal documentation."""
+    txt = PUBLISH_YML.read_text()
+    assert "twine check dist/*" in txt
+    assert "twine check dist/*  ||" not in txt
+    assert "twine check dist/* ||" not in txt
+
+
+def test_publish_workflow_cleans_dist_before_build():
+    """Internal documentation."""
+    txt = PUBLISH_YML.read_text()
+    assert "run: rm -rf dist" in txt
+    assert txt.index("run: rm -rf dist") < txt.index("run: uv build")
+
+
+def test_publish_workflow_upload_artifact_fails_when_dist_is_empty():
+    """Internal documentation."""
+    txt = PUBLISH_YML.read_text()
+    assert "actions/upload-artifact@v4" in txt
+    assert "if-no-files-found: error" in txt
+
+
+def test_publish_workflow_manual_dispatch_does_not_publish_to_pypi():
+    """Internal documentation."""
+    txt = PUBLISH_YML.read_text()
+    assert "workflow_dispatch:" in txt
+    assert "if: startsWith(github.ref, 'refs/tags/v')" in txt
+
+
+def test_publish_workflow_manual_dispatch_publishes_to_testpypi_only():
+    """Internal documentation."""
+    txt = PUBLISH_YML.read_text()
+    assert "  testpypi:" in txt
+    testpypi_job = txt.split("  testpypi:", 1)[1].split("\n  pypi:", 1)[0]
+    assert "needs: [test, build]" in testpypi_job
+    assert "if: github.event_name == 'workflow_dispatch'" in testpypi_job
+    assert "environment: testpypi" in testpypi_job
+    assert "repository-url: https://test.pypi.org/legacy/" in testpypi_job
+    assert "id-token: write" in testpypi_job
+
+
+def test_publish_workflow_pypi_job_keeps_release_gates():
+    """Internal documentation."""
+    txt = PUBLISH_YML.read_text()
+    pypi_job = txt.split("  pypi:", 1)[1]
+    assert "needs: [test, build]" in pypi_job
+    assert "environment: pypi" in pypi_job
+    assert "id-token: write" in pypi_job
+
+
+def test_publish_workflow_smokes_built_wheel_before_upload():
+    """Internal documentation."""
+    txt = PUBLISH_YML.read_text()
+    smoke = (
+        "uv run pytest tests/test_packaging_pypi.py::"
+        "test_pip_install_wheel_and_run_argos_version -q --no-cov -m slow"
+    )
+    assert smoke in txt
+    assert txt.index("run: uv build") < txt.index(smoke) < txt.index("actions/upload-artifact@v4")
+
+
 
 def test_uv_build_dry_run_succeeds():
-    """`uv build` 能出 wheel + sdist(契约 §4.4 端到端铁证)。"""
+    """Internal documentation."""
     r = subprocess.run(
         ["uv", "build"],
         capture_output=True, text=True, cwd=str(ROOT), timeout=300,
@@ -199,38 +318,29 @@ def test_uv_build_dry_run_succeeds():
     sdist = list(dist.glob("*.tar.gz"))
     assert whl, f"dist/ 无 .whl;有:{list(dist.iterdir())}"
     assert sdist, f"dist/ 无 .tar.gz;有:{list(dist.iterdir())}"
-    # 名字符合 spec §4.4(hatch 把 `argos-agent` 规整为 `argos` 文件名)
     assert whl[0].name.startswith("argos_agent-"), f"wheel 名字错:{whl[0].name}"
     assert sdist[0].name.startswith("argos_agent-"), f"sdist 名字错:{sdist[0].name}"
 
 
-@pytest.mark.slow  # uv venv + uv pip install:真子进程环境搭建,需数秒 —— 标 slow。
+@pytest.mark.slow
 def test_pip_install_wheel_and_run_argos_version():
-    """uv build 出来的 wheel,临时 venv pip install + 跑 argos --version(契约 §4.4 端到端)。
-
-    走 `uv venv` 拿带 pip 的 venv(uv venv 默认带 pip;stdlib venv.create + ensurepip 在
-    沙箱下偶发 SIGABRT,这是本地沙箱已知问题,不是产品 bug)。
-    """
+    """Internal documentation."""
     whl = list((ROOT / "dist").glob("*.whl"))
     if not whl:
         pytest.skip("无 wheel 可测(先跑 test_uv_build_dry_run_succeeds)")
     import tempfile
     with tempfile.TemporaryDirectory() as td:
         venv_dir = Path(td) / "venv"
-        # 走 uv venv 拿带 pip 的 venv
         r_uv = subprocess.run(
             ["uv", "venv", str(venv_dir), "--python", sys.executable],
             capture_output=True, text=True, timeout=120,
         )
         assert r_uv.returncode == 0, f"uv venv 失败;stderr={r_uv.stderr}"
         py = venv_dir / "bin" / "python"
-        # 装
         r = subprocess.run(
             ["uv", "pip", "install", "--python", str(py), str(whl[0])],
             capture_output=True, text=True, timeout=300,
         )
-        # 网络不可达(pypi 拉依赖超时)是环境问题不是产品 bug —— 诚实 skip 而非假红。
-        # 只豁免 fetch 超时;其余任何安装失败(依赖解析/元数据/wheel 损坏)仍必须红。
         if r.returncode != 0 and "Failed to fetch" in r.stderr and "timed out" in r.stderr:
             pytest.skip(f"pypi 不可达(本地网络/代理环境),跳过端到端安装:{r.stderr.splitlines()[-1]}")
         assert r.returncode == 0, f"uv pip install 失败;stderr={r.stderr}"
@@ -240,7 +350,7 @@ def test_pip_install_wheel_and_run_argos_version():
             capture_output=True, text=True, timeout=30,
         )
         assert r2.returncode == 0, f"argos --version 返 {r2.returncode};stderr={r2.stderr}"
-        assert "0.1.0" in r2.stdout, f"--version 缺 0.1.0;got:{r2.stdout}"
-        # argospkg 应该也在
+        version = _project_version()
+        assert version in r2.stdout, f"--version 缺 {version};got:{r2.stdout}"
         argospkg = venv_dir / "bin" / "argospkg"
         assert argospkg.exists(), f"argospkg 不在 venv bin:{list((venv_dir / 'bin').iterdir())}"

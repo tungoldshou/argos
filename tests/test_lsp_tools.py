@@ -1,6 +1,4 @@
-"""6 个 broker-gated LSP 工具 e2e(用 in-process fake server 模拟 pyright,slow)。
-
-跳过条件:用 fake 替 pyright,所以不需要 pyright-langserver 二进制。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -22,7 +20,7 @@ from test_lsp_manager import _FakeProc, _read_one_frame
 
 
 def _make_route_handler() -> dict:
-    """返一个 route handler,模拟 pyright 返回定义/引用/hover/symbols 的合理 shape。"""
+    """Internal documentation."""
     return {
         "textDocument/definition": [{
             "uri": "file:///tmp/lsp-e2e/a.py",
@@ -55,7 +53,7 @@ def _make_route_handler() -> dict:
 
 @pytest.fixture
 def fake_lsp(tmp_path, monkeypatch):
-    """起 fake server,route handler 模拟 pyright,workspace = tmp_path。"""
+    """Internal documentation."""
     handlers = _make_route_handler()
     tasks: list[asyncio.Task] = []
 
@@ -71,7 +69,6 @@ def fake_lsp(tmp_path, monkeypatch):
                 return
             if msg.get("id") is not None:
                 method = msg.get("method", "")
-                # 处理 diagnostics 推送(等真有 server 时用,本测试不验)
                 if method == "textDocument/didOpen" or method == "textDocument/didChange":
                     await stream.send(encode_frame({
                         "jsonrpc": "2.0", "id": msg["id"], "result": None,
@@ -95,7 +92,6 @@ def fake_lsp(tmp_path, monkeypatch):
 
     set_spawn_proc_fn(_spawn)
     set_event_emit_fn(None)
-    # 写一个测试 file 到 workspace
     f = tmp_path / "a.py"
     f.write_text("def foo():\n    pass\n\nfoo()\n")
     yield tmp_path
@@ -107,7 +103,7 @@ def fake_lsp(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_lsp_definition_returns_location(fake_lsp):
-    """lsp_definition → JSON 含 locations[] 列表(1+ 个)。"""
+    """Internal documentation."""
     ws = fake_lsp
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
@@ -125,7 +121,7 @@ async def test_lsp_definition_returns_location(fake_lsp):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_lsp_references_returns_list(fake_lsp):
-    """lsp_references → JSON 含 locations[](2 个:def + 调)。"""
+    """Internal documentation."""
     ws = fake_lsp
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
@@ -142,7 +138,7 @@ async def test_lsp_references_returns_list(fake_lsp):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_lsp_hover_returns_markdown(fake_lsp):
-    """lsp_hover → JSON 含 contents 字段(可能空 markdown)。"""
+    """Internal documentation."""
     ws = fake_lsp
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
@@ -159,7 +155,7 @@ async def test_lsp_hover_returns_markdown(fake_lsp):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_lsp_document_symbols_returns_list(fake_lsp):
-    """lsp_document_symbols → JSON 含 symbols[] 列表(>= 1 个)。"""
+    """Internal documentation."""
     ws = fake_lsp
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
@@ -177,7 +173,7 @@ async def test_lsp_document_symbols_returns_list(fake_lsp):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_lsp_workspace_symbols_returns_list(fake_lsp):
-    """lsp_workspace_symbols(query) → JSON 含 symbols[](含匹配的 name)。"""
+    """Internal documentation."""
     ws = fake_lsp
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),
@@ -194,7 +190,7 @@ async def test_lsp_workspace_symbols_returns_list(fake_lsp):
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_lsp_diagnostics_returns_empty_list_when_no_diag(fake_lsp):
-    """无 diagnostics 推送时 → lsp_diagnostics 返空 list(不抛)。"""
+    """Internal documentation."""
     ws = fake_lsp
     cfg = LspConfig(servers={
         "python": LspServerConfig(command=("fake",), filetypes=(".py",)),

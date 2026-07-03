@@ -11,7 +11,7 @@ Argos 的灵魂是"让便宜模型可靠"。`verify 硬门禁 + 诚实协议` �
 - 简单编辑(改个 typo)用 **cheap** 模型,几毫秒、$0.0001
 - 复杂 refactor 切 **strong** 模型,$0.05 但质量稳
 - 每次切档**看得见**:活动栏 `↑100 ↓200 [str]  $0.005` 这种标签
-- 配置**一次到位**:`~/.argos/config.json` 的 `routing` 段写完,自动跑
+- 配置**一次到位**:Argos config directory 下的 `config.json` 的 `routing` 段写完,自动跑
 
 不靠"接 N 个 model 卖花活" —— 那是 LangChain/LlamaIndex 红海;靠"切档可观察可治理"——
 那条路别人没治理所以没护城河。
@@ -20,7 +20,8 @@ Argos 的灵魂是"让便宜模型可靠"。`verify 硬门禁 + 诚实协议` �
 
 ### 1. 配置 routing
 
-`~/.argos/config.json` 加 `routing` 段(可选,缺则 safe default)。
+Argos config directory 下的 `config.json` 加 `routing` 段(可选,缺则 safe default)。
+config directory 默认是 `~/.argos`,可用 `ARGOS_CONFIG_DIR` 改到别处。
 
 > **内核级配置**:routing 配置由 daemon 内核(argosd)读取,对所有接入客户端生效 —— 包括终端 TUI。修改后重启 daemon 即生效(`pkill argosd`;TUI 启动时自动重新拉起)。
 
@@ -121,7 +122,7 @@ argos --effort=high   <goal>   # 80 步 + CONFIRM(复杂 refactor / 大改)
 ### "tier 'srong' 不在 config.models"
 
 拼错 tier 名 → `set_category` 拒写,启动加载也拒。**不**悄悄退化到 default。
-检查 `~/.argos/config.json` 的 `models` 键名(routing 段必须引用存在的 model 名)。
+检查 Argos config directory 下 `config.json` 的 `models` 键名(routing 段必须引用存在的 model 名)。
 
 ### "category 'foo_bar' 不在合法类别内"
 
@@ -131,7 +132,7 @@ routing.by_category 键必须是 8 类别之一。合法值:`file_edit` / `refac
 ### "/routing 不可用(无 router 注入)"
 
 demo / fake 模式没接真 router(用 `FakeLoop`)。真 loop 路径(`argos` 不带 `--demo`)
-会自动从 `~/.argos/config.json` 读 routing + 构造 `ModelRouter`。
+会自动从 Argos config directory 下的 `config.json` 读 routing + 构造 `ModelRouter`。
 
 ### "切到 strong 还是自动跑"
 

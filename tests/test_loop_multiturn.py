@@ -8,8 +8,7 @@ from argos.memory.store import ArgosStore
 
 
 class _EchoModel:
-    """把它【看到的 messages(role+content)】记录下来,便于断言历史是否带入。
-    输出一句可辨识的 assistant 回答,用于验证 assistant 回复也跨轮带回(非单边历史)。"""
+    """Internal documentation."""
     def __init__(self): self.seen = []
     async def stream(self, messages, *, system, system_dynamic=None):
         self.seen.append([(m["role"], m["content"]) for m in messages])
@@ -38,8 +37,6 @@ async def test_second_run_sees_first_turn_history(tmp_path):
         pass
     async for _ in mk().run("好的", "sess-A"):
         pass
-    # 第二轮模型看到的 messages(role, content):必须既带回第一轮 user 目标,
-    # 也带回第一轮 assistant 回答 —— 否则就是"单边历史"(只记用户提过啥、不记 agent 答过啥)。
     last_seen = model.seen[-1]
     assert any(r == "user" and "贪吃蛇" in c for r, c in last_seen), "第二轮应带入第一轮 user 目标"
     assert any(r == "assistant" for r, c in last_seen), "第二轮应带入第一轮 assistant 回答(非单边历史)"
@@ -47,17 +44,15 @@ async def test_second_run_sees_first_turn_history(tmp_path):
 
 
 class _EmptyFinalModel:
-    """最终段输出纯空白(模型用空 turn 宣布完成)——复现"空 assistant 答复"路径。"""
+    """Internal documentation."""
     async def stream(self, messages, *, system, system_dynamic=None):
-        for ch in "   ":   # 纯空白,strip 后为空
+        for ch in "   ":
             yield ch
 
 
 @pytest.mark.asyncio
 async def test_empty_final_answer_still_persists_assistant(tmp_path):
-    """高优先级修复:即使本轮最终 assistant 文本为空(空 turn 宣布完成),也要落一条占位
-    assistant —— 否则连续多轮在 DB 堆出连续 user,模型看不出是独立任务=用户看到的"没串上下文"。
-    删掉占位逻辑(恢复 `if text.strip():` 守卫)该测试即失败(非恒真式)。"""
+    """Internal documentation."""
     store = ArgosStore(db_path=str(tmp_path / "empty.db"))
 
     def mk():
@@ -68,7 +63,7 @@ async def test_empty_final_answer_still_persists_assistant(tmp_path):
     async for _ in mk().run("第二轮任务", "sess-E"):
         pass
     roles = [m["role"] for m in store.get_messages("sess-E")]
-    assert not any(roles[i] == "user" and roles[i + 1] == "user" for i in range(len(roles) - 1)), \
+    assert not any(roles[i] == "user" and roles[i + 1] == "user" for i in range(len(roles) - 1)),\
         f"空 assistant 答复不得导致连续 user 历史:{roles}"
     assert roles.count("assistant") >= 2, f"每轮都应落一条 assistant(空答复用占位):{roles}"
     store.close()
@@ -76,12 +71,10 @@ async def test_empty_final_answer_still_persists_assistant(tmp_path):
 
 @pytest.mark.asyncio
 async def test_loop_reuse_resets_run_state(tmp_path):
-    """run() 起手必须 _reset_run_state:污染上一轮残留状态后跑一轮,残留必须被清零
-    (本轮 _EchoModel 不产代码 → 0 action)。删掉 _reset_run_state 该测试即失败(非恒真式)。"""
+    """Internal documentation."""
     store = ArgosStore(db_path=str(tmp_path / "b.db"))
     loop = AgentLoop(store=store, bus=EventBus(), sandbox=_FakeSandbox(), broker=None,
                      model=_EchoModel(), verifier=_NoCmdVerifier(), config=LoopConfig())
-    # 模拟上一轮跑完留下的脏状态
     loop._actions = 99
     loop._tok_in = 12345
     loop._tok_out = 6789

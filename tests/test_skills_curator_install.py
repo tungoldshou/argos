@@ -1,4 +1,4 @@
-"""#10 T2 + T3 capability 解析 + install 流程 测试。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import hashlib
@@ -39,7 +39,7 @@ def _sha(text: str) -> str:
 
 
 def _seed_index_cache(tmp_path, *, entries: list[dict]) -> None:
-    """写一个本地 index.json,装时直接读 cache 不走远端."""
+    """Internal documentation."""
     cache_path = tmp_path / "index.json"
     cache_path.write_text(
         json.dumps({"version": 1, "generated_at": 0.0, "skills": entries}),
@@ -157,7 +157,6 @@ def test_builtin_three_names_protected():
     assert "simplify" in BUILTIN_NAMES
 
 
-# ── T3 install tests (impl 已在 install.py) ───────────────────
 
 
 class _Resp(io.BytesIO):
@@ -169,7 +168,7 @@ class _Resp(io.BytesIO):
 
 @pytest.fixture
 def install_env(tmp_path, monkeypatch):
-    """所有 install 流程所需 mock:tmp root + cache + urlopen."""
+    """Internal documentation."""
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     return tmp_path
 
@@ -206,11 +205,11 @@ def test_install_sha_mismatch_raises(install_env, monkeypatch):
 
 
 def test_install_size_drift_warning(install_env, monkeypatch):
-    """声明 10 bytes,实际 5000 → 警告 but install 继续."""
+    """Internal documentation."""
     content = _make_skill_md(name="big-skill", capabilities=["read"])
     sha = _sha(content)
     _seed_index_cache(install_env, entries=[_entry_dict(
-        "big-skill", content=content, sha256=sha, size_bytes=10,  # 严重不符
+        "big-skill", content=content, sha256=sha, size_bytes=10,
     )])
     import urllib.request
     monkeypatch.setattr(urllib.request, "urlopen",
@@ -223,7 +222,6 @@ def test_install_size_drift_warning(install_env, monkeypatch):
 
 def test_install_capabilities_missing_raises(install_env, monkeypatch):
     content = _make_skill_md(name="bad-meta", capabilities=["read"])
-    # 改掉 frontmatter → capabilities 缺
     content = content.replace("capabilities: [read]\n", "")
     sha = _sha(content)
     _seed_index_cache(install_env, entries=[_entry_dict(
@@ -264,7 +262,7 @@ def test_install_happy_path_writes_file(install_env, monkeypatch):
 
 
 def test_install_force_enabled_false(install_env, monkeypatch):
-    """装时强制 enabled: false(user review gate,spec D8)."""
+    """Internal documentation."""
     content = _make_skill_md(name="auto-off", capabilities=["read"], enabled=True)
     sha = _sha(content)
     _seed_index_cache(install_env, entries=[_entry_dict(
@@ -290,7 +288,7 @@ def test_install_existing_skill_backs_up_to_trash(install_env, monkeypatch):
                         lambda url, timeout=10.0: _Resp(content.encode("utf-8")))
     from argos.skills_curator.install import install
     install("twice", run_smoke=False)
-    install("twice", run_smoke=False)  # 二次 → backup
+    install("twice", run_smoke=False)
     assert (install_env / ".trash").exists()
     trash_dirs = list((install_env / ".trash").iterdir())
     assert any(d.name.startswith("twice-") for d in trash_dirs)
@@ -307,11 +305,9 @@ def test_install_network_capability_requires_env_confirm(install_env, monkeypatc
                         lambda url, timeout=10.0: _Resp(content.encode("utf-8")))
     from argos.skills_curator.install import install, InstallError
     import os
-    # 不设 env
     os.environ.pop("ARGOS_SKILLS_NETWORK_OK", None)
     with pytest.raises(InstallError, match="network_capability"):
         install("net-skill")
-    # 设了 → 装成功
     os.environ["ARGOS_SKILLS_NETWORK_OK"] = "1"
     r = install("net-skill", run_smoke=False)
     assert r.path.exists()

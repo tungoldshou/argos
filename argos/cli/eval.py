@@ -1,15 +1,4 @@
-"""#7 T6 `argos eval` CLI 子命令(list / run / compare / corpus)。
-
-`__main__.py` 加 subparser 后,具体子命令实现放在这里(与 setup / self-update 同一风格)。
-
-- list:列最近 run
-- run <task_id> [--model <tier>]:跑单个
-- compare <task_id> <model_a> <model_b>:A/B 对比 + 写报告
-- corpus:列 corpus 任务清单
-
-D13:CLI 默认 model = config active profile
-D16:--keep-worktree flag 调试用
-"""
+"""CLI entrypoint for eval runs stored under ARGOS_CONFIG_DIR/eval."""
 from __future__ import annotations
 
 import argparse
@@ -75,7 +64,7 @@ def _make_runner(*, base: Path, keep_worktree: bool = False) -> EvalRunner:
 
 
 def _eval_base() -> Path:
-    """返回 eval 数据根目录(ARGOS_CONFIG_DIR 覆盖,否则 ~/.argos/eval)。"""
+    """Internal documentation."""
     from argos import config
 
     return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "eval"
@@ -85,7 +74,7 @@ def _eval_base() -> Path:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    """`argos eval list` — 列最近 run。"""
+    """Internal documentation."""
     runs = list_runs(limit=args.limit)
     if not runs:
         print(t("cli.eval.no_runs"))
@@ -108,7 +97,7 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    """`argos eval run <task_id> [--model <tier>]` — 跑单个。"""
+    """Internal documentation."""
     try:
         task = load_task(args.task_id)
     except FileNotFoundError as e:
@@ -133,7 +122,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_compare(args: argparse.Namespace) -> int:
-    """`argos eval compare <task_id> <model_a> <model_b>` — A/B 对比。"""
+    """Internal documentation."""
     try:
         task = load_task(args.task_id)
     except FileNotFoundError as e:
@@ -157,7 +146,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
 
 
 def cmd_corpus(args: argparse.Namespace) -> int:
-    """`argos eval corpus` — 列 corpus 任务清单。"""
+    """Internal documentation."""
     tasks = list_tasks()
     v = corpus_version()
     print(f"corpus version {v} ({len(tasks)} tasks)")
@@ -175,7 +164,7 @@ def cmd_corpus(args: argparse.Namespace) -> int:
 
 
 def _active_profile() -> str:
-    """从 config.json 读 active profile;读不到则返 'default'。"""
+    """Internal documentation."""
     try:
         from argos import config as _cfg
         if _cfg._has_config_file():
@@ -186,7 +175,7 @@ def _active_profile() -> str:
 
 
 def add_subparser(sub: Any) -> None:
-    """注册 eval 子命令到 argparse subparsers。"""
+    """Internal documentation."""
     p = sub.add_parser("eval", help=t("cli.eval.help"))
     p.set_defaults(func=lambda _args, parser=p: (parser.print_help(), 2)[1])
     sp = p.add_subparsers(dest="eval_command")
@@ -215,6 +204,5 @@ def add_subparser(sub: Any) -> None:
     p_corpus = sp.add_parser("corpus", help=t("cli.eval.corpus.help"))
     p_corpus.set_defaults(func=cmd_corpus)
 
-    # 子模块子命令(Terminal-Bench 适配器等);走 add_subparser 模式
     from argos.eval.benchmarks.terminal_bench import add_tb_subparser
     add_tb_subparser(sp)

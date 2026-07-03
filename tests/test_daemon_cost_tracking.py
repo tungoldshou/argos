@@ -1,12 +1,4 @@
-"""Cost tracking per-run 测试(#5b T7)。
-
-覆盖:
-  · cost_update 事件 → RunRegistry.add_cost 累加
-  · cost_usd=None 不累加
-  · 多次 cost_update 累加正确
-  · 终态 → worktree cleanup + registry slot release
-  · GET /runs/{id} body 含 cost + worktree + focus
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -28,7 +20,7 @@ from argos.daemon.worker import RunWorker
 
 
 class _ScriptLoop:
-    """脚本化的 test loop:yield 固定 list of events。"""
+    """Internal documentation."""
 
     def __init__(self, events: list[dict]):
         self._events = events
@@ -72,7 +64,6 @@ async def _create_session(socket_path) -> str:
     return json.loads(raw.decode("utf-8"))["session_id"]
 
 
-# ── cost 累加 ────────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
@@ -142,17 +133,15 @@ async def test_multiple_cost_events_sum(cost_server, tmp_path: Path):
     assert abs(entry.cost_usd - 0.03) < 1e-9
 
 
-# ── 终态 cleanup ──────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
 async def test_terminal_state_releases_slot_and_calls_cleanup(cost_server, tmp_path: Path):
-    """worker 终态(completed)→ registry.slot 释放 + worktree 删。"""
+    """Internal documentation."""
     import subprocess
     import shutil
     if not shutil.which("git"):
         pytest.skip("git not in PATH")
-    # 起一个真 git repo 让 worktree 走 git 路径(非 temp)
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
@@ -164,12 +153,10 @@ async def test_terminal_state_releases_slot_and_calls_cleanup(cost_server, tmp_p
 
     srv, mgr, reg, worktree = cost_server
     sid = await _create_session(srv.socket_path)
-    # 先 acquire 一个 slot 模拟在跑
     await reg.acquire_slot()
     status, _, raw = await _req(srv.socket_path, "POST", "/runs",
                                  session_id=sid, body={"goal": "x"})
     rid = json.loads(raw.decode("utf-8"))["run_id"]
-    # 创 worktree(走 git 路径)
     wt_path = worktree.create(run_id=rid, workspace=str(repo))
     await reg.register(run_id=rid, goal="x", workspace="", worktree_path=wt_path)
     assert (tmp_path / "wt" / rid).exists()
@@ -188,13 +175,10 @@ async def test_terminal_state_releases_slot_and_calls_cleanup(cost_server, tmp_p
         registry=reg, worktree=worktree,
     )
     await worker.run()
-    # worktree 已被清
     assert not (tmp_path / "wt" / rid).exists()
-    # state 改 completed
     assert reg.get(rid).state == "completed"
 
 
-# ── GET /runs /runs/{id} 字段 ────────────────────────────────────────
 
 
 @pytest.mark.asyncio

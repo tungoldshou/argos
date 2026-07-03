@@ -1,4 +1,4 @@
-"""clipboard_image.py — 读系统剪贴板图片(mac pngpaste / linux xclip),诚实错误。"""
+"""Internal documentation."""
 import subprocess
 import pytest
 from argos.input import clipboard_image as ci
@@ -40,7 +40,7 @@ def test_empty_clipboard_is_honest(monkeypatch):
 
 
 def test_unsupported_clipboard_content_is_honest(monkeypatch):
-    """剪贴板有内容但不是图片 → sniff_media_type 抛 ValueError → 诚实 ClipboardError。"""
+    """Internal documentation."""
     monkeypatch.setattr(ci.sys, "platform", "darwin")
     monkeypatch.setattr(ci.shutil, "which", lambda name: "/x/pngpaste")
     monkeypatch.setattr(ci.subprocess, "run",

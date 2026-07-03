@@ -158,7 +158,6 @@ async def test_goal_busy_guard():
     await app._goal_cmd(log, "goal", "write tests | verify: pytest")
 
     assert submitted == []
-    # tui.run.busy message (zh: "当前任务进行中"; en: "Task in progress")
     assert "进行中" in log.rendered_text or "in progress" in log.rendered_text.lower()
 
 
@@ -263,8 +262,8 @@ def test_build_run_stack_verify_cmd_overrides_loop_config(tmp_path):
         def __init__(self, **kwargs):
             created_configs.append(kwargs["config"])
 
-    with patch("argos.app_factory._make_gate_broker_sandbox") as mock_gbs, \
-         patch("argos.app_factory.AgentLoop", _StubLoop), \
+    with patch("argos.app_factory._make_gate_broker_sandbox") as mock_gbs,\
+         patch("argos.app_factory.AgentLoop", _StubLoop),\
          patch("argos.app_factory.EventBus"):
         mock_gbs.return_value = (MagicMock(), MagicMock(), MagicMock())
         stack = build_run_stack(c, workspace=tmp_path, verify_cmd="pytest -q")
@@ -294,7 +293,7 @@ def test_build_loop_factory_verify_cmd_reaches_loop_config(tmp_path):
         def __init__(self, **kwargs):
             created_configs.append(kwargs["config"])
 
-    with patch("argos.app_factory.AgentLoop", _StubLoop), \
+    with patch("argos.app_factory.AgentLoop", _StubLoop),\
          patch("argos.app_factory.EventBus"):
         factory = build_loop_factory(c)
         # call with verify_cmd — this is what _start_run_inline now does
@@ -322,7 +321,7 @@ def test_build_loop_factory_nullary_call_preserves_config_verify_cmd(tmp_path):
         def __init__(self, **kwargs):
             created_configs.append(kwargs["config"])
 
-    with patch("argos.app_factory.AgentLoop", _StubLoop), \
+    with patch("argos.app_factory.AgentLoop", _StubLoop),\
          patch("argos.app_factory.EventBus"):
         factory = build_loop_factory(c)
         factory()  # nullary — should not clobber

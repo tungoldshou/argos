@@ -1,4 +1,4 @@
-"""build_entry:三态推断 + 人话 + receipt 字段映射测试。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -99,7 +99,7 @@ class TestBuildEntryFields:
 
 
 class TestBuildEntryIrreversibleNoToken:
-    """不可逆动作的 undo_token 必须为 None(即使调用方传了 undo_token)。"""
+    """Internal documentation."""
     def test_irreversible_undo_token_forced_none(self):
         e = build_entry(receipt=_FakeReceipt("web_fetch"),
                         run_id="r1", seq=1,

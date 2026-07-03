@@ -1,4 +1,4 @@
-"""LedgerStore JSONL 追加 + 回放 + undo_complete 测试。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -46,7 +46,7 @@ class TestLedgerStoreAppendReplay:
         assert store.replay("nonexistent") == []
 
     def test_replay_sorted_by_seq(self, tmp_path: Path):
-        """回放结果按 seq 排序(即使落盘顺序不同)。"""
+        """Internal documentation."""
         store = LedgerStore(tmp_path)
         e3 = _make_entry(3)
         e1 = _make_entry(1)
@@ -85,7 +85,6 @@ class TestLedgerStoreUndoComplete:
         assert result is True
 
         entries = store.replay("run001")
-        # 所有 available → done
         real = [e for e in entries if e.action != "undo_done"]
         assert all(e.undo_state == "done" for e in real)
 
@@ -116,7 +115,7 @@ class TestLedgerStoreUndoComplete:
         assert store.is_undo_done("run001") is True
 
     def test_impossible_entries_not_affected_by_undo_complete(self, tmp_path: Path):
-        """不可逆条目 undo_state=impossible 在 undo_complete 后仍为 impossible。"""
+        """Internal documentation."""
         store = LedgerStore(tmp_path)
         store.append(_make_entry(1, undo_state="available"))
         store.append(_make_entry(2, reversible="no", undo_state="impossible", undo_token=None))

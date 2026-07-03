@@ -1,4 +1,4 @@
-"""Phase 5 slash:解析为 (name, arg) 并映射到动作枚举(spec §4.5)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -8,37 +8,37 @@ from argos.tui.commands import SlashCommand, parse_slash, COMMAND_NAMES, COMMAND
 
 def test_known_commands_listed():
     assert set(COMMAND_NAMES) == {
-        "yolo", "trust",  # trust = 信任拨盘(P4 阶段3);yolo = /trust l4 别名(保留)
+        "yolo", "trust",
         "undo", "clear", "retry", "status", "model", "resume", "cost",
         "help", "tools", "skills", "mcp", "plan", "hooks",
-        "lsp",  # 2026-06-06:列出 / 重载 LSP 配置(/lsp, /lsp reload)
-        "permissions",  # 2026-06-06:Smart approval — 列出 / 重载 permissions 配置(/permissions, /permissions reload)
+        "lsp",
+        "permissions",
         "verify", "security-review", "simplify",  # 2026-06-06:3 skill slash
-        "runs",  # 2026-06-06:列出 / 控制 daemon run(/runs, /runs {id} resume|cancel)
-        "eval",  # 2026-06-07:Agent 自我评估 + A/B(/eval, /eval run, /eval compare)
-        "routing",  # 2026-06-07:per-task model routing 配置 + history(/routing, /routing set)
-        "context",  # 2026-06-07:Context 可视化(/context, /context --json)
-        "ledger",   # P3b §6:行为账本(/ledger — 列出当前 run 的人话条目 + 撤销状态)
-        "orders",   # P5b §9:列出自治常驻指令(/orders)—conductor 自治面
-        "confirm",  # P5b §9:确认 conductor 建议(/confirm <suggestion_id>)—自治面
-        "dismiss",  # P5b §9:忽略 conductor 建议(/dismiss <suggestion_id>)
-        "dream",    # T10:夜间整合 Dream(聚类综合+记忆整理;/dream status 看报告)
-        "setup",    # 2026-06-21 #3:无 key 引导(/setup → 提示退出后运行 argos setup)
+        "runs",
+        "eval",
+        "routing",
+        "context",
+        "ledger",
+        "orders",
+        "confirm",
+        "dismiss",
+        "dream",
+        "setup",
         "voice",    # C5 honest entry: voice input not wired in this build
-        "journal",  # 2026-06-21 #7:显示账本 JSONL 路径(/journal [run_id])—让可篡改账本可发现
-        "loop", "goal", "schedule", "watch",  # Batch 2:循环/目标/定时/监视
+        "journal",
+        "loop", "goal", "schedule", "watch",
     }
 
 
 def test_capability_discovery_commands_known():
-    """能力可见命令(/help /tools /skills /mcp)必须 known=True,才会进 _dispatch_slash 分发。"""
+    """Internal documentation."""
     for name in ("help", "tools", "skills", "mcp"):
         cmd = parse_slash(f"/{name}")
         assert cmd is not None and cmd.known is True, f"/{name} 应为已知命令"
 
 
 def test_argos_app_exposes_slash_handler_table():
-    """TUI slash 分发应走 handler 表,避免 app.py 继续堆超长 elif 链。"""
+    """Internal documentation."""
     from argos.tui.app import ArgosApp
 
     handlers = ArgosApp._slash_handlers()
@@ -517,6 +517,31 @@ def test_setup_hint_mentions_existing_environment_variable():
     assert "provider, api key" not in msg
 
 
+def test_setup_hint_uses_configured_argos_dir(tmp_path, monkeypatch):
+    import asyncio
+    from argos import config as C
+    from argos.tui.app import ArgosApp
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    cfg_dir = tmp_path / "custom-argos"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
+
+    log = Log()
+    asyncio.run(ArgosApp()._setup_cmd(log))
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert str(cfg_dir / "config.json") in text
+    assert str(cfg_dir / ".env") in text
+    assert "~/.argos" not in text
+
+
 def test_voice_command_is_honest_unavailable_notice():
     import asyncio
     from argos.tui.app import ArgosApp
@@ -847,6 +872,36 @@ def test_mcp_rejects_unexpected_arg_without_listing_all_tools(monkeypatch):
     assert "Usage" in text or "用法" in text
     assert any(kind == "error" for _line, kind in log.lines)
     assert not called
+
+
+def test_mcp_empty_mentions_configured_path(tmp_path, monkeypatch):
+    import asyncio
+    from argos import config as C
+    from argos import mcp_native
+    from argos.tui.app import ArgosApp
+
+    class Log:
+        def __init__(self) -> None:
+            self.lines: list[tuple[str, str | None]] = []
+
+        async def append_line(self, text: str, kind: str | None = None) -> None:
+            self.lines.append((text, kind))
+
+    class EmptyManager:
+        def list_tools(self):
+            return []
+
+    cfg_dir = tmp_path / "cfg"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
+    monkeypatch.setattr(C, "_ENV", {})
+    monkeypatch.setattr(mcp_native, "get_manager", lambda: EmptyManager())
+
+    log = Log()
+    asyncio.run(ArgosApp()._cmd_mcp(log, ""))
+
+    text = "\n".join(line for line, _kind in log.lines)
+    assert str(cfg_dir / "mcp.json") in text
+    assert "~/.argos" not in text
 
 
 def test_tools_rejects_unexpected_arg_without_listing_all_tools(monkeypatch):
@@ -1190,7 +1245,7 @@ def test_match_commands_schedule_prefix():
 
 
 def test_match_commands_descriptions_follow_current_language(monkeypatch):
-    """slash 补全描述应跟随当前语言,不能停留在 import 时快照。"""
+    """Internal documentation."""
     monkeypatch.setenv("ARGOS_LANG", "en")
     desc = dict(match_commands("/set"))["setup"]
 

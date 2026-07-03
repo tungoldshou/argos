@@ -1,15 +1,4 @@
-"""`python -m argos.daemon` 入口(spec §2.10 + D13)。
-
-同一入口也由 `argosd` console script 暴露,以及 TUI 启动时探测 socket 不在则自动 spawn。
-(没有 `argos daemon` 子命令 —— daemon 不挂在 `argos` CLI 下;用 `argosd` 或 `python -m argos.daemon`。)
-
-子命令:
-  argosd              (无参数)  start daemon (当前行为,后向兼容)
-  argosd start        同上,显式 start
-  argosd stop         优雅停止:发 SIGTERM → 等 socket 消失 → 报告
-  argosd status       报告运行状态(pid / socket / uptime / version)
-  argosd restart      stop 后 start (detached)
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -28,15 +17,12 @@ from argos.i18n import t
 log = logging.getLogger(__name__)
 
 _LOG_FORMAT = "%(asctime)s %(name)s %(levelname)s %(message)s"
-_RUN_LOG_MAX_BYTES = 2_000_000   # daemon.log 单文件上限(~2MB),防长跑 daemon 无限增长
-_RUN_LOG_BACKUPS = 3             # 保留的轮转备份数(daemon.log.1 .. .3)
+_RUN_LOG_MAX_BYTES = 2_000_000
+_RUN_LOG_BACKUPS = 3
 
 
 def _build_log_handlers(socket_path) -> list[logging.Handler]:
-    """daemon 结构化日志走有界轮转的 daemon.log(与 TUI 截获的 daemon-boot.log 分离)。
-
-    建不了文件 handler(目录不可写等)时回退 stderr——绝不让日志配置挡住 daemon 启动。
-    """
+    """Internal documentation."""
     run_log = Path(socket_path).expanduser().parent / "daemon.log"
     try:
         from logging.handlers import RotatingFileHandler
@@ -49,7 +35,7 @@ def _build_log_handlers(socket_path) -> list[logging.Handler]:
         )
         fh.setFormatter(logging.Formatter(_LOG_FORMAT))
         return [fh]
-    except Exception:  # noqa: BLE001 — 文件不可写等 → 回退 stderr
+    except Exception:  # noqa: BLE001
         return [logging.StreamHandler()]
 
 
@@ -67,8 +53,8 @@ def _default_index_path() -> Path:
 
 
 def _default_socket_path() -> Path:
-    from argos import config
-    return Path(config.get("ARGOS_DAEMON_SOCKET", "~/.argos/daemon.sock")).expanduser()
+    from argos.daemon.socket import default_socket_path
+    return default_socket_path()
 
 
 def _default_pid_path() -> Path:
@@ -94,17 +80,14 @@ async def _serve(args: argparse.Namespace) -> int:
     runs_dir.mkdir(parents=True, exist_ok=True)
     index_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 检查 socket 占用
     try:
         check_socket_available(socket_path)
     except RuntimeError as e:
         print(f"[daemon] {e}", file=sys.stderr)
         return 1
 
-    # P1 通电:装配真实组件 + loop_factory ──────────────────────────────
-    # 无 API key → loop_factory=_NO_KEY 哨兵,daemon 仍能启动;create_run 明确拒绝并说明原因。
     from argos.daemon.server import _NO_KEY
-    loop_factory = _NO_KEY  # 默认无 key 状态
+    loop_factory = _NO_KEY
     components = None
     try:
         from argos.app_factory import build_components, build_loop_factory
@@ -112,7 +95,6 @@ async def _serve(args: argparse.Namespace) -> int:
         loop_factory = build_loop_factory(components)
         log.info("daemon: AgentLoop factory 装配完成(model=%s)", components.config.model_tier)
     except RuntimeError as e:
-        # 诚实降级:无 key → daemon 起得来,但 create_run 会明确拒绝(_NO_KEY 哨兵)
         print(t("daemon.serve.warn_no_key", e=e), file=sys.stderr)
         log.warning("daemon: loop_factory 装配失败: %s", e)
     except Exception as e:  # noqa: BLE001
@@ -120,18 +102,15 @@ async def _serve(args: argparse.Namespace) -> int:
         log.warning("daemon: loop_factory 装配异常: %s", e)
 
     manager = RunManager(runs_dir=runs_dir, index_path=index_path)
-    # 启动恢复
     recovered = manager.recover()
     if recovered:
         log.info("daemon: recovered %d runs: %s", len(recovered), recovered)
 
-    # P5b §9 自治面：conductor supervisor（tick loop 后台协程）
-    # 广播函数：向 _conductor 虚拟 run_id 的 SSE 扇出通道投事件
     from argos.daemon.conductor_supervisor import ConductorSupervisor, CONDUCTOR_RUN_ID
     conductor_orders_dir = _default_conductor_dir()
 
     async def _conductor_broadcast(ev_dict: dict) -> None:
-        """把 conductor 事件扇出到 SSE 订阅者(纯实时广播,不落盘 —— _conductor 是虚拟总线)。"""
+        """Internal documentation."""
         await manager.fanout(CONDUCTOR_RUN_ID, ev_dict)
 
     conductor_supervisor = ConductorSupervisor(
@@ -140,15 +119,12 @@ async def _serve(args: argparse.Namespace) -> int:
         broadcast_fn=_conductor_broadcast,
     )
 
-    # P3b §6 行为账本存储(全局单例,所有 run 共享同一个目录)
     from argos.ledger.store import LedgerStore
     ledger_store = LedgerStore()
 
     server = DaemonHTTPServer(
         manager=manager,
         socket_path=socket_path,
-        # components 路径(优先):per-run 独享 sandbox/gate/broker,并发不串台。
-        # 无 components(装配失败)时退回 loop_factory=_NO_KEY 哨兵诚实拒绝。
         components=components,
         loop_factory=loop_factory,
         gate=components.gate if components is not None else None,
@@ -156,16 +132,13 @@ async def _serve(args: argparse.Namespace) -> int:
         conductor_supervisor=conductor_supervisor,
     )
     await server.start()
-    # P5b §9:启动 conductor tick 后台协程
     conductor_supervisor.start()
 
-    # 写 PID
     write_pid(pid_path, os.getpid())
     ensure_socket_mode(socket_path)
 
     print(f"[daemon] started, socket={socket_path}, pid={os.getpid()}")
 
-    # 信号处理
     loop = asyncio.get_event_loop()
     shutdown_event = asyncio.Event()
 
@@ -179,14 +152,12 @@ async def _serve(args: argparse.Namespace) -> int:
     try:
         await shutdown_event.wait()
     finally:
-        # P5b §9:先停 conductor tick(干净取消,不留孤儿任务)
         try:
             await conductor_supervisor.stop()
         except Exception as e:  # noqa: BLE001
             log.warning("daemon: conductor_supervisor.stop() failed: %s", e)
         await graceful_shutdown(manager, server, socket_path)
         remove_pid(pid_path)
-        # 清理 AppComponents(关闭 sandbox/store/browser/mcp 子进程)
         if components is not None:
             try:
                 components.close()
@@ -195,10 +166,9 @@ async def _serve(args: argparse.Namespace) -> int:
     return 0
 
 
-# ── 子命令实现 ──────────────────────────────────────────────────────────────
 
 def _socket_alive(socket_path: Path) -> bool:
-    """检测 socket 是否有 daemon 活跃监听。"""
+    """Internal documentation."""
     if not socket_path.exists():
         return False
     s = _stdlib_socket.socket(_stdlib_socket.AF_UNIX, _stdlib_socket.SOCK_STREAM)
@@ -221,18 +191,16 @@ def _cmd_stop(
     *,
     timeout: float = 10.0,
 ) -> int:
-    """argosd stop 实现:SIGTERM → 等 socket 消失 → 报告。"""
+    """Internal documentation."""
     from argos.daemon.pidfile import read_pid, is_alive
 
     pid = read_pid(pid_path)
 
-    # 快速路径:pid 文件不存在或进程已死、socket 也不在 → 诚实说
     if pid is None and not socket_path.exists():
         print(t("daemon.stop.not_running"))
         return 0
 
     if pid is not None and not is_alive(pid):
-        # 进程已死但 pid 文件残留 → 清理
         try:
             pid_path.unlink(missing_ok=True)
         except OSError:
@@ -242,24 +210,20 @@ def _cmd_stop(
             return 0
 
     if pid is None:
-        # socket 在但 pid 文件没有 —— 无法发信号;提示用户
         print(t("daemon.stop.socket_no_pid", socket_path=socket_path), file=sys.stderr)
         return 1
 
-    # 发 SIGTERM
     try:
         os.kill(pid, signal.SIGTERM)
         print(t("daemon.stop.sigterm_sent", pid=pid))
     except ProcessLookupError:
         print(t("daemon.stop.process_gone"))
-        # 清理残留文件
         pid_path.unlink(missing_ok=True)
         return 0
     except PermissionError as e:
         print(t("daemon.stop.no_permission", e=e), file=sys.stderr)
         return 1
 
-    # 等待 socket 消失(轮询,最多 timeout 秒)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if not _socket_alive(socket_path):
@@ -276,7 +240,7 @@ def _cmd_status(
     pid_path: Path,
     socket_path: Path,
 ) -> int:
-    """argosd status 实现:报告 running/not、pid、socket 路径、uptime(若可读)。"""
+    """Internal documentation."""
     from argos.daemon.pidfile import read_pid, is_alive
 
     pid = read_pid(pid_path)
@@ -286,11 +250,9 @@ def _cmd_status(
     if not alive and not socket_ok:
         print(t("daemon.status.not_running"))
         if pid is not None:
-            # 残留 pid 文件
             print(t("daemon.status.stale_pid_note", pid_path=pid_path, pid=pid))
         return 1
 
-    # 进程存在
     status_lines: list[str] = []
     status_lines.append(t("daemon.status.running"))
     if pid is not None:
@@ -299,7 +261,6 @@ def _cmd_status(
     connectivity = t("daemon.status.socket_connectable") if socket_ok else t("daemon.status.socket_not_connectable")
     status_lines.append(t("daemon.status.socket_line", socket_path=socket_path, connectivity=connectivity))
 
-    # 尝试读取 uptime(pid 文件修改时间作为启动时间近似)
     if pid_path.exists():
         try:
             start_ts = pid_path.stat().st_mtime
@@ -310,7 +271,6 @@ def _cmd_status(
         except OSError:
             pass
 
-    # 尝试向 /version 端点查询版本号
     if socket_ok:
         try:
             version_info = _query_version_sync(socket_path)
@@ -324,7 +284,7 @@ def _cmd_status(
 
 
 def _query_version_sync(socket_path: Path) -> str | None:
-    """同步查询 daemon /version 端点,返回版本字符串或 None。"""
+    """Internal documentation."""
     try:
         s = _stdlib_socket.socket(_stdlib_socket.AF_UNIX, _stdlib_socket.SOCK_STREAM)
         s.settimeout(1.0)
@@ -338,7 +298,6 @@ def _query_version_sync(socket_path: Path) -> str | None:
                 break
             raw += chunk
         s.close()
-        # 解析 HTTP 响应体
         if b"\r\n\r\n" in raw:
             body_bytes = raw.split(b"\r\n\r\n", 1)[1]
             import json as _json
@@ -350,14 +309,13 @@ def _query_version_sync(socket_path: Path) -> str | None:
 
 
 def _cmd_restart(args: argparse.Namespace) -> int:
-    """argosd restart 实现:stop → start (detached)。"""
+    """Internal documentation."""
     pid_path = Path(args.pid_path).expanduser()
     socket_path = Path(args.socket_path).expanduser()
 
     # stop
     rc = _cmd_stop(pid_path, socket_path)
     if rc != 0:
-        # 非 0 返回意味着真错误(非"未运行");已经打印了原因
         return rc
 
     # start (detached subprocess)
@@ -368,7 +326,7 @@ def _cmd_restart(args: argparse.Namespace) -> int:
 
 
 def _spawn_detached(args: argparse.Namespace) -> None:
-    """在后台 detach 启动 daemon 子进程。"""
+    """Internal documentation."""
     cmd = [
         sys.executable, "-m", "argos.daemon",
         "--runs-dir", args.runs_dir,
@@ -377,7 +335,6 @@ def _spawn_detached(args: argparse.Namespace) -> None:
         "--pid-path", args.pid_path,
         "--log-level", args.log_level,
     ]
-    # 双 fork / setsid 等价:start_new_session=True 让子进程脱离当前控制 tty
     subprocess.Popen(
         cmd,
         stdin=subprocess.DEVNULL,
@@ -387,21 +344,18 @@ def _spawn_detached(args: argparse.Namespace) -> None:
     )
 
 
-# ── 入口 ────────────────────────────────────────────────────────────────────
 
 def main() -> int:
     p = argparse.ArgumentParser(
         prog="argosd",
         description="Argos background daemon — start / stop / status / restart",
     )
-    # 全局选项(对所有子命令有效)
     p.add_argument("--runs-dir", default=str(_default_runs_dir()))
     p.add_argument("--index-path", default=str(_default_index_path()))
     p.add_argument("--socket-path", default=str(_default_socket_path()))
     p.add_argument("--pid-path", default=str(_default_pid_path()))
     p.add_argument("--log-level", default="info",
                    choices=["debug", "info", "warning", "error"])
-    # --detach 仍保留(历史兼容;start 子命令时生效)
     p.add_argument("--detach", action="store_true",
                    help="detach from controlling tty (start subcommand only)")
 
@@ -423,8 +377,6 @@ def main() -> int:
 
     args = p.parse_args()
 
-    # daemon 运行日志走有界轮转的 daemon.log;启动期的 print/traceback 仍走 stdout/stderr,
-    # 由 TUI spawn 重定向到独立的 daemon-boot.log(职责分离,见 tui/daemon_spawn.py)。
     logging.basicConfig(
         level=getattr(logging, args.log_level.upper()),
         format=_LOG_FORMAT,
@@ -434,7 +386,6 @@ def main() -> int:
     pid_path = Path(args.pid_path).expanduser()
     socket_path = Path(args.socket_path).expanduser()
 
-    # 无子命令 or "start" → 原有行为(启动 daemon)
     if args.subcmd in (None, "start"):
         if args.detach:
             _spawn_detached(args)
@@ -452,7 +403,6 @@ def main() -> int:
     if args.subcmd == "restart":
         return _cmd_restart(args)
 
-    # 未知子命令(argparse 应已拦截,但防御)
     p.print_help()
     return 1
 

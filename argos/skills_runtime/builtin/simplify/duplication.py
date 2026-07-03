@@ -1,9 +1,4 @@
-"""Pass 1 — duplication detection(token-level shingle,spec §2.5 Pass 1)。
-
-- shingle 大小 = 20 token;窗口 = 整文件分 token(用 re.findall(r"\\w+|[^\\w\\s]"))。
-- 哈希 = blake2b(digest_size=8);**3+ 命中同 hash** → duplicate finding。
-- 白名单:`tests/**` / `docs/**` / `**/migrations/**` 跳过。
-- 单文件 > 5000 token 跳过该 pass。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import hashlib
@@ -16,7 +11,7 @@ from argos.skills_runtime.analysis import Finding
 
 _TOKEN_RE = re.compile(r"\w+|[^\w\s]")
 _SHINGLE_SIZE = 20
-_MIN_HASH_HITS = 3   # 3+ 命中 = duplicate
+_MIN_HASH_HITS = 3
 _MAX_FILE_TOKENS = 5000
 
 _SKIP_PATH_PATTERNS = ("tests/**", "docs/**", "**/migrations/**")
@@ -36,7 +31,7 @@ def _is_source_file(p: Path) -> bool:
 
 
 def _shingle_hashes(tokens: list[str]) -> list[tuple[str, int]]:
-    """返 (hash, start_token_idx) 列表;start_token_idx 用来定位 file:line。"""
+    """Internal documentation."""
     out: list[tuple[str, int]] = []
     for i in range(len(tokens) - _SHINGLE_SIZE + 1):
         shingle = " ".join(tokens[i:i + _SHINGLE_SIZE])
@@ -46,7 +41,7 @@ def _shingle_hashes(tokens: list[str]) -> list[tuple[str, int]]:
 
 
 def detect_duplicates(workspace: Path) -> tuple[Finding, ...]:
-    """扫 workspace → tuple of duplicate findings(3+ 命中)。"""
+    """Internal documentation."""
     if not workspace.exists():
         return ()
     by_hash: dict[str, list[tuple[Path, int]]] = defaultdict(list)
@@ -76,7 +71,6 @@ def detect_duplicates(workspace: Path) -> tuple[Finding, ...]:
     for h, occurrences in by_hash.items():
         if len(occurrences) < _MIN_HASH_HITS:
             continue
-        # dedup 同一文件 + 同一 shingle start token idx
         seen_files_idx: set[tuple[Path, int]] = set()
         uniq_occurrences: list[tuple[Path, int]] = []
         for f, idx in occurrences:
@@ -87,7 +81,6 @@ def detect_duplicates(workspace: Path) -> tuple[Finding, ...]:
         if len(uniq_occurrences) < _MIN_HASH_HITS:
             continue
         first_f, first_idx = uniq_occurrences[0]
-        # 简化:line = 1(精确需用 token 字符 offset 算;本期 v1 简化)
         line_no = 1
         locs = [f"{f.relative_to(workspace)}:{line_no}" for f, _ in uniq_occurrences[:5]]
         findings.append(Finding(

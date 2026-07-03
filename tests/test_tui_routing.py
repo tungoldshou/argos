@@ -1,4 +1,4 @@
-"""#11 T7 TUI /routing + /routing set + ActivityPanel tier 标签 测试。"""
+"""Internal documentation."""
 import json
 from pathlib import Path
 
@@ -75,7 +75,7 @@ def test_tui_routing_set_subcommand_is_case_insensitive(monkeypatch):
 
 
 def test_routing_config_set_persists(tmp_path):
-    """set_category 写盘 + 重读一致。"""
+    """Internal documentation."""
     (tmp_path / "config.json").write_text(json.dumps({
         "models": {"default": {}, "cheap": {}, "strong": {}},
         "active": "default",
@@ -89,7 +89,6 @@ def test_routing_config_set_unknown_tier_raises(tmp_path):
     (tmp_path / "config.json").write_text(json.dumps({
         "models": {"default": {}}, "active": "default",
     }))
-    # 故意传拼错的 tier 'srong' → ConfigError(防拼写退化)
     with pytest.raises(Exception) as exc_info:
         set_category(tmp_path, TaskCategory.VERIFY, "srong")
     assert "srong" in str(exc_info.value)
@@ -98,7 +97,6 @@ def test_routing_config_set_unknown_tier_raises(tmp_path):
 def test_routing_config_set_invalid_category_raises(tmp_path):
     from argos.config import ConfigError
     with pytest.raises(ValueError):
-        # 不用 set_category 路径,直接构造 TaskCategory 会 ValueError
         TaskCategory("foo_bar")
 
 
@@ -232,7 +230,7 @@ def test_tui_routing_set_honors_env_local_config_dir(tmp_path, monkeypatch):
 
 
 def test_routing_config_builtin_default_when_no_routing(tmp_path):
-    """無 routing 段 → 返內置默認映射(出廠激活);by_category 含 cheap/strong 分組。"""
+    """Internal documentation."""
     from argos.routing.config import _DEFAULT_BY_CATEGORY
     cfg = load_routing(tmp_path)
     assert cfg.by_category == _DEFAULT_BY_CATEGORY
@@ -251,7 +249,7 @@ def test_routing_config_force_confirm_helper():
 
 
 def test_activity_panel_cost_update_renders_tier_label():
-    """ActivityPanel.on_cost 签名接受 tier_name kw(无 Textual app 跑不动 _set,只检签名)。"""
+    """Internal documentation."""
     import inspect
     from argos.tui.widgets.activity_panel import ActivityPanel
     sig = inspect.signature(ActivityPanel.on_cost)
@@ -260,9 +258,8 @@ def test_activity_panel_cost_update_renders_tier_label():
 
 
 def test_activity_panel_on_cost_default_no_tier_label():
-    """tier_name 缺省时不应出 [?] 之类的占位标签(签名默认值 = "" 防误打)。"""
+    """Internal documentation."""
     import inspect
     from argos.tui.widgets.activity_panel import ActivityPanel
     sig = inspect.signature(ActivityPanel.on_cost)
-    # 默认值是空串,on_cost 内部据此判定不打 [xxx] 标签
     assert sig.parameters["tier_name"].default == ""

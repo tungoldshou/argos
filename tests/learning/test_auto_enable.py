@@ -1,7 +1,4 @@
-"""test_auto_enable: 通过 A/B gate 的技能写盘后 enabled:true;未通过的不写/不启用。
-
-Task 5a.2 验收测试。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field

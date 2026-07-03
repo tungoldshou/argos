@@ -1,4 +1,4 @@
-"""RunRegistry 单元测试(#5b T1)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -99,7 +99,7 @@ async def test_add_cost_accumulates_tokens():
 
 @pytest.mark.asyncio
 async def test_add_cost_with_none_keeps_none():
-    """cost_usd_delta=None → 不累加(API 返 None 诚实保 None)。"""
+    """Internal documentation."""
     reg = RunRegistry()
     await reg.register(run_id="a" * 12, goal="x", workspace="")
     reg.add_cost(run_id="a" * 12, tokens_in_delta=100, tokens_out_delta=50, cost_usd_delta=None)
@@ -130,13 +130,11 @@ async def test_acquire_and_release_increments_active_count():
     reg = RunRegistry(max_concurrent=2)
     await reg.acquire_slot()
     await reg.acquire_slot()
-    # 第 3 次 acquire 阻塞(timeout 验证)
     with pytest.raises(asyncio.TimeoutError):
         await asyncio.wait_for(reg.acquire_slot(), timeout=0.05)
     reg.release_slot()
-    # 释放后第 3 次成功
     await asyncio.wait_for(reg.acquire_slot(), timeout=0.1)
-    assert reg.active_count == 0   # 还没 register,只是 semaphore
+    assert reg.active_count == 0
 
 
 @pytest.mark.asyncio
@@ -145,7 +143,6 @@ async def test_acquire_slot_allows_max_concurrent_then_blocks():
     await reg.acquire_slot()
     await reg.acquire_slot()
     await reg.acquire_slot()
-    # 第 4 个必阻塞
     with pytest.raises(asyncio.TimeoutError):
         await asyncio.wait_for(reg.acquire_slot(), timeout=0.05)
 
@@ -163,21 +160,18 @@ async def test_cleanup_marks_terminal_and_releases_slot():
     await reg.cleanup(run_id="a" * 12, terminal_state="completed")
     entry = reg.get("a" * 12)
     assert entry.state == "completed"
-    # 槽位已释放:能再 acquire
     await asyncio.wait_for(reg.acquire_slot(), timeout=0.1)
 
 
 @pytest.mark.asyncio
 async def test_max_history_trims_oldest_terminal_runs():
-    """终态 + 注册数 > max_history → 删最旧终态。"""
+    """Internal documentation."""
     reg = RunRegistry(max_concurrent=200, max_history=3)
-    # 注册 5 个并标终态
     for i in range(5):
         rid = f"{i:012x}"
         await reg.register(run_id=rid, goal=f"g{i}", workspace="")
         reg.mark(run_id=rid, state="completed")
-    await reg.cleanup(run_id="000000000004", terminal_state="completed")  # 触发 trim
-    # 列表应只剩最新 3
+    await reg.cleanup(run_id="000000000004", terminal_state="completed")
     remaining = reg.list()
     assert len(remaining) == 3
     rids = {e.run_id for e in remaining}
@@ -187,20 +181,19 @@ async def test_max_history_trims_oldest_terminal_runs():
 @pytest.mark.asyncio
 async def test_cleanup_unknown_run_is_noop():
     reg = RunRegistry()
-    await reg.cleanup(run_id="a" * 12, terminal_state="completed")  # 不应抛
+    await reg.cleanup(run_id="a" * 12, terminal_state="completed")
 
 
 @pytest.mark.asyncio
 async def test_release_slot_does_not_error_when_not_held():
-    """release_slot 多调一次不抛(防御性,bug-friendly)。"""
+    """Internal documentation."""
     reg = RunRegistry(max_concurrent=2)
-    reg.release_slot()  # 啥也没持,不应抛
+    reg.release_slot()
     await reg.acquire_slot()
     reg.release_slot()
-    reg.release_slot()  # 多 release 一次
+    reg.release_slot()
 
 
-# ── integration: register → mark → cleanup 全流程 ──────────────────
 
 
 @pytest.mark.asyncio
@@ -220,6 +213,5 @@ async def test_full_lifecycle_includes_cost_focus_worktree():
     assert entry.focus_session_id == "sess"
     assert entry.tokens_in == 1000
     assert entry.cost_usd == 0.05
-    # 收尾
     await reg.cleanup(run_id="a" * 12, terminal_state="completed")
     assert entry.state == "completed"

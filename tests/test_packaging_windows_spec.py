@@ -1,4 +1,4 @@
-"""打包 C 阶段 — Windows build script 结构测试(plan T4)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -18,27 +18,33 @@ def test_build_windows_script_exists_and_executable():
 
 
 def test_build_windows_script_runs_pyinstaller_onefile():
-    """脚本 grep 含 pyinstaller + --onefile + --name argos + --console。"""
+    """Internal documentation."""
     txt = SCRIPT.read_text()
     assert "pyinstaller" in txt
     assert "--onefile" in txt
     assert "--name argos" in txt
     assert "--console" in txt
-    # Windows add-data 用 ; 分隔(不是 :)
     assert "schema.sql;argos/memory" in txt, "Windows add-data 应 ; 分隔"
 
 
 def test_build_windows_script_packs_zip_and_optional_msi():
-    """脚本 grep 含 zip "Argos- + candle/light (msi 可选)。"""
+    """Internal documentation."""
     txt = SCRIPT.read_text()
-    assert 'zip "Argos-' in txt, "脚本缺 zip \"Argos-...-windows.zip\""
+    assert "Compress-Archive" in txt
+    assert not re.search(r'^\s*zip\s+"Argos-', txt, re.M)
     assert "-x86_64-windows.zip" in txt
     assert "candle" in txt, "脚本缺 candle(WiX 简化方案)"
     assert "light" in txt, "脚本缺 light(WiX 简化方案)"
 
 
+def test_build_windows_script_strips_release_tag_v_prefix():
+    """Internal documentation."""
+    txt = SCRIPT.read_text()
+    assert 'ARGOS_VERSION="${ARGOS_VERSION#v}"' in txt
+
+
 def test_build_windows_script_excludes_dead_stacks():
-    """脚本排除 langchain/langgraph/fastapi/uvicorn。"""
+    """Internal documentation."""
     txt = SCRIPT.read_text()
     for dead in ("langchain", "langgraph", "fastapi", "uvicorn"):
         assert f"--exclude-module {dead}" in txt, f"脚本缺 --exclude-module {dead}"

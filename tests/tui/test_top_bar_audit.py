@@ -1,20 +1,5 @@
 # tests/tui/test_top_bar_audit.py
-"""TopBar 回归测试 — 锁定 2026-06-14 design-audit 修复点。
-
-覆盖:
-  [MEDIUM] blocked 阶段 ◓ 字形已映射(字形铁律 README §字形铁律 line 85)
-  [MEDIUM] blocked 阶段眼色为 $unverif (#FF9E64),不得与 idle ◌ 混淆
-  [MEDIUM] Trust 徽标:set_state(trust_level=N, trust_label=...) 在 badges() 末尾追加
-  [MEDIUM] Trust L0–L3:_badge_style → $eye-soft (#A8854A)
-  [MEDIUM] Trust L4:徽标前缀 '⏻ ',_badge_style → $fail (#F7768E)
-  [LOW]    $well 背景 token 说明:DEFAULT_CSS 含 $surface(已通过注释记录等价性,无渲染漂移)
-
-已知正确项(不回退):
-  字形字典原有 6 个 phase 不变
-  badges() 顺序:plan / YOLO / DEMO 脚本演示 / 未配 key / LIVE 位于 Trust 之前
-  has_key=False 时绝不出现 LIVE
-  markup=False(render() 用 Rich Text 不走 markup 解析)
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -36,16 +21,15 @@ from argos.tui.widgets.top_bar import (
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _bar(**kwargs) -> TopBar:
-    """裸 TopBar,不挂 App(只测 badges() / render_text / _badge_style)。"""
+    """Internal documentation."""
     return TopBar(**kwargs)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# [MEDIUM] blocked 字形映射 & 眼色
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestBlockedPhase:
-    """审计修复 [MEDIUM]: blocked 阶段必须映射 ◓ 并染 $unverif 橙色。"""
+    """Internal documentation."""
 
     def test_blocked_glyph_in_dict(self) -> None:
         """_PHASE_GLYPH['blocked'] == '◓' (U+25D3)。"""
@@ -55,7 +39,7 @@ class TestBlockedPhase:
         )
 
     def test_blocked_glyph_in_render(self) -> None:
-        """set_phase('blocked') 后 render_text 含 ◓,不得含 ◌(idle glyph)。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_phase("blocked")
         text = bar.render_text
@@ -65,11 +49,10 @@ class TestBlockedPhase:
         )
 
     def test_blocked_eye_color_is_unverif(self) -> None:
-        """blocked 相眼色为 $unverif (#FF9E64),不得为 $eye-soft (#A8854A) 或 $eye (#D9A85C)。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_phase("blocked")
         rendered = bar.render()
-        # Rich Text 内 '◓ ' span 的 style 必须含 _UNVERIF
         eye_span_style = rendered._spans[0].style if rendered._spans else ""
         assert _UNVERIF in str(eye_span_style), (
             f"blocked eye span style should contain {_UNVERIF}, got {eye_span_style!r}"
@@ -79,7 +62,7 @@ class TestBlockedPhase:
         )
 
     def test_idle_still_uses_eye_soft(self) -> None:
-        """idle 相保持 $eye-soft(不被 blocked 修改逻辑影响)。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_phase("idle")
         rendered = bar.render()
@@ -89,7 +72,7 @@ class TestBlockedPhase:
         )
 
     def test_act_phase_uses_eye(self) -> None:
-        """act 相保持 $eye 亮金(对照组)。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_phase("act")
         rendered = bar.render()
@@ -100,38 +83,36 @@ class TestBlockedPhase:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# [MEDIUM] Trust 徽标出现与顺序
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestTrustBadgePresence:
-    """审计修复 [MEDIUM]: Trust 徽标在 badges() 末尾,内容正确。"""
+    """Internal documentation."""
 
     def test_no_trust_badge_by_default(self) -> None:
-        """默认不设置 trust_level 时,badges() 不含任何 Trust 徽标(Ln 格式)。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_state(has_key=True)
         bs = bar.badges()
-        # Trust 徽标匹配模式:L后跟数字(0-4)或 '⏻ ' 前缀;排除 'LIVE'
         import re
         trust_badges = [b for b in bs if re.match(r"^(⏻ )?L\d", b)]
         assert trust_badges == [], f"unexpected trust badge(s) in default state: {trust_badges}"
 
     def test_trust_l1_badge_text(self) -> None:
-        """trust_level=1, trust_label='只有危险操作才问' → 徽标文本 'L1 · 只有危险操作才问'。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_state(has_key=True, trust_level=1, trust_label="只有危险操作才问")
         bs = bar.badges()
         assert "L1 · 只有危险操作才问" in bs, f"badges()={bs}"
 
     def test_trust_badge_is_last(self) -> None:
-        """Trust 徽标排在所有其他徽标之后(README §188 顺序)。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_state(has_key=True, plan_mode=True, trust_level=2, trust_label="foo")
         bs = bar.badges()
         assert bs[-1].startswith("L2"), f"Trust badge must be last: {bs}"
 
     def test_trust_badge_after_live(self) -> None:
-        """LIVE 出现时 Trust 徽标仍排在 LIVE 之后。"""
+        """Internal documentation."""
         import re
         bar = _bar()
         bar.set_state(has_key=True, trust_level=0, trust_label="全自动")
@@ -145,7 +126,7 @@ class TestTrustBadgePresence:
         )
 
     def test_trust_l4_prefix(self) -> None:
-        """trust_level=4 → 徽标文本以 '⏻ L4' 开头(README §152 升 L4 顶栏亮红灯)。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_state(has_key=True, trust_level=4, trust_label="每步都问")
         bs = bar.badges()
@@ -156,7 +137,7 @@ class TestTrustBadgePresence:
         )
 
     def test_trust_without_label(self) -> None:
-        """trust_level 无 trust_label 时,徽标文本为 'L{n}'(无 ' · ' 后缀)。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_state(has_key=True, trust_level=3)
         bs = bar.badges()
@@ -167,7 +148,7 @@ class TestTrustBadgePresence:
         )
 
     def test_trust_badge_in_render_text(self) -> None:
-        """Trust 徽标文本出现在 render_text 快照里。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_state(has_key=True, trust_level=2, trust_label="谨慎")
         text = bar.render_text
@@ -176,15 +157,14 @@ class TestTrustBadgePresence:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# [MEDIUM] Trust 徽标着色
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestTrustBadgeColor:
-    """审计修复 [MEDIUM]: Trust 徽标颜色规则(L0–L3=$eye-soft / L4=$fail)。"""
+    """Internal documentation."""
 
     @pytest.mark.parametrize("level", [0, 1, 2, 3])
     def test_trust_l0_l3_style_is_eye_soft(self, level: int) -> None:
-        """L0–L3 Trust 徽标 _badge_style → $eye-soft (#A8854A)。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_state(has_key=True, trust_level=level, trust_label="test")
         bs = bar.badges()
@@ -195,7 +175,7 @@ class TestTrustBadgeColor:
         )
 
     def test_trust_l4_style_is_fail(self) -> None:
-        """L4 Trust 徽标 _badge_style → $fail (#F7768E)。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_state(has_key=True, trust_level=4, trust_label="每步都问")
         bs = bar.badges()
@@ -206,28 +186,27 @@ class TestTrustBadgeColor:
         )
 
     def test_live_badge_style_unchanged(self) -> None:
-        """Trust 徽标的加入不影响 LIVE → $pass (#9ECE6A) 着色。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_state(has_key=True, trust_level=1)
         assert bar._badge_style("LIVE") == _PASS
 
     def test_yolo_badge_style_unchanged(self) -> None:
-        """YOLO → $fail (#F7768E) 不被 Trust 相关修改影响。"""
+        """Internal documentation."""
         bar = _bar()
         assert bar._badge_style("YOLO") == _FAIL
 
     def test_plan_badge_style_unchanged(self) -> None:
-        """plan → $plan (#7AA2F7) 不被 Trust 修改影响。"""
+        """Internal documentation."""
         bar = _bar()
         assert bar._badge_style("plan") == _PLAN
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 不回退:已知正确的原始行为锁定
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestExistingContractLocked:
-    """锁定:原有 6-phase 字形字典、badge 规则、契约6 不回退。"""
+    """Internal documentation."""
 
     @pytest.mark.parametrize("phase,glyph", [
         ("idle",   "◌"),
@@ -238,49 +217,49 @@ class TestExistingContractLocked:
         ("done",   "◕"),
     ])
     def test_original_glyphs_intact(self, phase: str, glyph: str) -> None:
-        """原有 6 个 phase 字形不得改变。"""
+        """Internal documentation."""
         assert _PHASE_GLYPH.get(phase) == glyph, (
             f"phase={phase!r} glyph changed: expected {glyph!r}, got {_PHASE_GLYPH.get(phase)!r}"
         )
 
     def test_has_key_false_no_live(self) -> None:
-        """契约6:has_key=False 时 badges() 绝不含 'LIVE'。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_state(has_key=False)
         assert "LIVE" not in bar.badges(), "LIVE must never appear when has_key=False"
 
     def test_no_key_no_demo_shows_no_key_badge(self) -> None:
-        """has_key=False → badges() 含 '未配 key'。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_state(has_key=False)
         assert "未配 key" in bar.badges()
 
     def test_plan_mode_badge(self) -> None:
-        """plan_mode=True → badges() 首元素为 'plan'。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_state(plan_mode=True)
         assert bar.badges()[0] == "plan"
 
     def test_yolo_badge(self) -> None:
-        """yolo=True → badges() 含 'YOLO'。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_state(yolo=True)
         assert "YOLO" in bar.badges()
 
     def test_unknown_phase_falls_back_to_idle_glyph(self) -> None:
-        """未知 phase 字形回退 ◌(空态),不崩。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_phase("totally_unknown")
         text = bar.render_text
         assert "◌" in text, f"unknown phase should fall back to ◌: {text!r}"
 
     def test_render_text_contains_brand(self) -> None:
-        """render_text 含 'Argos'(品牌名不消失)。"""
+        """Internal documentation."""
         bar = _bar()
         assert "Argos" in bar.render_text
 
     def test_set_state_partial_update(self) -> None:
-        """set_state() 局部更新不覆盖未指定字段。"""
+        """Internal documentation."""
         bar = _bar()
         bar.set_state(yolo=True)
         bar.set_state(plan_mode=True)
@@ -289,20 +268,19 @@ class TestExistingContractLocked:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# [LOW] $surface/$well token 说明
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestBackgroundToken:
-    """审计修复 [LOW]: DEFAULT_CSS 含 $surface 槽位(颜色与 $well 等价,注释已标注)。"""
+    """Internal documentation."""
 
     def test_default_css_has_background_surface(self) -> None:
-        """DEFAULT_CSS 保留 background: $surface(裸 App 可解析的 Textual 内置槽位)。"""
+        """Internal documentation."""
         assert "$surface" in TopBar.DEFAULT_CSS, (
             "DEFAULT_CSS must reference $surface (Textual slot = $well value)"
         )
 
     def test_default_css_has_well_comment(self) -> None:
-        """DEFAULT_CSS 注释标明 $surface 即 $well 值(诚实文档)。"""
+        """Internal documentation."""
         assert "$well" in TopBar.DEFAULT_CSS, (
             "DEFAULT_CSS comment must mention $well to document the equivalence"
         )

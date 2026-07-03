@@ -33,6 +33,5 @@ async def test_loop_until_target_stops(tmp_path, scripted_model_factory):
          "agent": {"prompt": "找 {item}", "tool_scope": "read"}}]})
     engine = WorkflowEngine.for_test(workspace=tmp_path, model_factory=scripted_model_factory)
     [ev async for ev in engine.run(spec)]
-    # target=2,首轮 2 个成功即达标停;累计成功结果 >= 2
     ok = [r for r in engine.last_result.stages[0].results if r.ok]
     assert len(ok) >= 2

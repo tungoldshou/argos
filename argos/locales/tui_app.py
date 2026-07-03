@@ -1,12 +1,7 @@
-"""TUI app 用户可见串目录 —— TUIAPP lane (tui.* / cmd.* 命名空间)。
-
-ZH 值必须与代码里原有中文字符**逐字相同**（verbatim contract），否则现有 zh 断言失绿。
-EN 值为自然英文翻译，匹配 README 的平静、精确风格。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 # ── COMMAND_HELP ─────────────────────────────────────────────────────────────
-# cmd.<name> = commands.py COMMAND_HELP 字典的每条描述
 
 EN: dict[str, str] = {
     # ── COMMAND_HELP entries ──────────────────────────────────────────────────
@@ -158,8 +153,8 @@ EN: dict[str, str] = {
         "  After exiting TUI run:\n"
         "    argos setup\n"
         "  The wizard will guide you through provider, key source, and connectivity test,\n"
-        "  writing config to ~/.argos/config.json.\n"
-        "  Paste-key mode stores the key in ~/.argos/.env; existing environment variable mode stores only the variable name."
+        "  writing config to {config_path}.\n"
+        "  Paste-key mode stores the key in {env_path}; existing environment variable mode stores only the variable name."
     ),
 
     # ── /journal command ──────────────────────────────────────────────────────
@@ -178,7 +173,7 @@ EN: dict[str, str] = {
     "tui.hooks.reloaded":       "Reloaded hooks config ({n} events).",
     "tui.hooks.reload_failed":  "/hooks reload failed (keeping old config): {err}",
     "tui.hooks.usage":          "Usage: /hooks [reload]",
-    "tui.hooks.empty":          "No hooks configured (empty ~/.argos/hooks.json or not configured).",
+    "tui.hooks.empty":          "No hooks configured (empty {path} or not configured).",
     "tui.hooks.header":         "Current hooks config ({n} events):",
     "tui.hooks.all_match":      "(match all)",
 
@@ -186,7 +181,7 @@ EN: dict[str, str] = {
     "tui.lsp.reloaded":       "Reloaded LSP config ({n} servers).",
     "tui.lsp.reload_failed":  "/lsp reload failed (keeping old config): {err}",
     "tui.lsp.usage":          "Usage: /lsp [reload]",
-    "tui.lsp.empty":          "No LSP configured (empty ~/.argos/lsp.json or unreadable → using built-in defaults).",
+    "tui.lsp.empty":          "No LSP configured (empty {path} or unreadable → using built-in defaults).",
     "tui.lsp.init_failed":    "LSP manager init failed: {err}",
     "tui.lsp.header":         "Current LSP config ({n} servers):",
     "tui.lsp.diag":           "     diagnostics: {n} entries",
@@ -271,7 +266,7 @@ EN: dict[str, str] = {
 
     # ── /dream command ────────────────────────────────────────────────────────
     "tui.dream.usage":            "Usage: /dream [status]",
-    "tui.dream.no_daemon":        "Dream requires daemon mode (currently inline).\nHint: restart Argos to auto-connect daemon, or check ~/.argos/daemon.sock.",
+    "tui.dream.no_daemon":        "Dream requires daemon mode (currently inline).\nHint: restart Argos to auto-connect daemon, or check {path}.",
     "tui.dream.report_failed":    "/dream report request failed: {err}",
     "tui.dream.no_report":        "No Dream report yet (nightly consolidation has not run).",
     "tui.dream.report_bad_type":  "Dream report format unexpected (expected dict, got {type})",
@@ -309,7 +304,7 @@ EN: dict[str, str] = {
     # ── /mcp command ─────────────────────────────────────────────────────────
     "tui.mcp.usage":          "Usage: /mcp",
     "tui.mcp.query_failed":    "MCP query failed: {err}",
-    "tui.mcp.empty":           "No MCP configured, or configured server not connected / no tools.\nConfigure stdio server in ~/.argos/mcp.json to extend tools (zero pre-configured by default).",
+    "tui.mcp.empty":           "No MCP configured, or configured server not connected / no tools.\nConfigure stdio server in {path} to extend tools (zero pre-configured by default).",
     "tui.mcp.header":          "Connected MCP tools: {n}, called via mcp_call(server, tool, arguments):",
 
     # ── /eval command ─────────────────────────────────────────────────────────
@@ -586,8 +581,8 @@ ZH: dict[str, str] = {
         "  退出 TUI 后运行:\n"
         "    argos setup\n"
         "  向导会引导你填写 provider、key 来源,并做连通性测试,\n"
-        "  配置写入 ~/.argos/config.json。\n"
-        "  粘贴 key 会写入 ~/.argos/.env;使用已有环境变量时只保存变量名。"
+        "  配置写入 {config_path}。\n"
+        "  粘贴 key 会写入 {env_path};使用已有环境变量时只保存变量名。"
     ),
 
     # ── /journal command ──────────────────────────────────────────────────────
@@ -606,7 +601,7 @@ ZH: dict[str, str] = {
     "tui.hooks.reloaded":       "已重载 hooks 配置(共 {n} 个事件)。",
     "tui.hooks.reload_failed":  "/hooks reload 失败(保留旧配置):{err}",
     "tui.hooks.usage":          "用法:/hooks [reload]",
-    "tui.hooks.empty":          "当前无 hooks 配置(空 ~/.argos/hooks.json 或未配置)。",
+    "tui.hooks.empty":          "当前无 hooks 配置(空 {path} 或未配置)。",
     "tui.hooks.header":         "当前 hooks 配置({n} 个事件):",
     "tui.hooks.all_match":      "(全匹配)",
 
@@ -614,7 +609,7 @@ ZH: dict[str, str] = {
     "tui.lsp.reloaded":       "已重载 LSP 配置(共 {n} 个 server)。",
     "tui.lsp.reload_failed":  "/lsp reload 失败(保留旧配置):{err}",
     "tui.lsp.usage":          "用法:/lsp [reload]",
-    "tui.lsp.empty":          "当前无 LSP 配置(空 ~/.argos/lsp.json 或不可读 → 走 built-in 默认)。",
+    "tui.lsp.empty":          "当前无 LSP 配置(空 {path} 或不可读 → 走 built-in 默认)。",
     "tui.lsp.init_failed":    "LSP manager 初始化失败:{err}",
     "tui.lsp.header":         "当前 LSP 配置({n} 个 server):",
     "tui.lsp.diag":           "     diagnostics: {n} 条",
@@ -699,7 +694,7 @@ ZH: dict[str, str] = {
 
     # ── /dream command ────────────────────────────────────────────────────────
     "tui.dream.usage":            "用法:/dream [status]",
-    "tui.dream.no_daemon":        "Dream 需要 daemon 模式(当前 inline)。\n提示:重启 Argos 让其自动连接 daemon,或检查 ~/.argos/daemon.sock。",
+    "tui.dream.no_daemon":        "Dream 需要 daemon 模式(当前 inline)。\n提示:重启 Argos 让其自动连接 daemon,或检查 {path}。",
     "tui.dream.report_failed":    "/dream report 请求失败:{err}",
     "tui.dream.no_report":        "暂无 Dream 报告(还没跑过夜间整合)。",
     "tui.dream.report_bad_type":  "Dream 报告格式异常(期望 dict,收到 {type})",
@@ -737,7 +732,7 @@ ZH: dict[str, str] = {
     # ── /mcp command ─────────────────────────────────────────────────────────
     "tui.mcp.usage":          "用法:/mcp",
     "tui.mcp.query_failed":    "MCP 查询失败:{err}",
-    "tui.mcp.empty":           "未配置 MCP,或配置的 server 未连上 / 无工具。\n在 ~/.argos/mcp.json 配置 stdio server 即可扩展工具(默认零预配)。",
+    "tui.mcp.empty":           "未配置 MCP,或配置的 server 未连上 / 无工具。\n在 {path} 配置 stdio server 即可扩展工具(默认零预配)。",
     "tui.mcp.header":          "已连接 MCP 工具 {n} 个,经 mcp_call(server, tool, arguments) 调用:",
 
     # ── /eval command ─────────────────────────────────────────────────────────

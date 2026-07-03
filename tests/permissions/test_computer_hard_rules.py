@@ -1,14 +1,4 @@
-"""tests/permissions/test_computer_hard_rules.py — 非开发者 computer use HARD RULES 验收测试。
-
-验收规则(任务2 §2):
-  1. check_computer_type_text:命中金融/卡号/CVV/验证码/密码词表 → 返回规则名。
-  2. check_computer_open_app:命中支付/银行 app 词表 → 返回规则名。
-  3. check_computer_hard_rules:总入口按 action 路由。
-  4. 非命中场景返回 None(无误报)。
-  5. evaluator.evaluate 在 computer_type_text/computer_open_app 命中时 → ask + hard_rule 前缀触发。
-  6. autonomy.classify 将 hard_rule:computer_* 视为不可降级(RED,不被 preauth 降)。
-  7. conductor 自治路径(trust≤L1)下命中 → 拒绝并诚实说明原因。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -25,7 +15,6 @@ from argos.permissions.evaluator import evaluate
 from argos.approval import ApprovalLevel
 
 
-# ── 1. check_computer_type_text —— 命中场景 ───────────────────────────────────
 
 @pytest.mark.parametrize("text,desc", [
     ("1234 5678 9012 3456", "16位卡号(空格分隔)"),
@@ -48,7 +37,7 @@ from argos.approval import ApprovalLevel
     ("付款金额: 1,000.00", "中文付款金额"),
 ])
 def test_type_text_financial_pattern_hit(text: str, desc: str):
-    """金融/验证码模式命中 → 返回规则名(非 None)。"""
+    """Internal documentation."""
     result = check_computer_type_text(text)
     assert result is not None, f"'{desc}' 应命中金融规则,但返回 None。text={text!r}"
     assert result == "computer_type_financial_pattern"
@@ -65,7 +54,6 @@ def test_type_text_financial_pattern_hit(text: str, desc: str):
     ("abc 123 xyz", "混合普通文本"),
     ("username: john", "用户名(非密码)"),
     ("amount: 100", "金额但无转账关键词"),
-    # 以下是原来密码分支误报的开发/文档上下文场景 —— 修复后不应命中
     ("the password reset flow", "password 后跟普通英文单词(开发文档)"),
     ("密码 是必填项", "中文密码后跟短描述(UI文案)"),
     ("口令 输入框", "口令后跟UI描述(无实质密码值)"),
@@ -74,12 +62,11 @@ def test_type_text_financial_pattern_hit(text: str, desc: str):
     ("passcode input placeholder", "passcode 后跟UI描述"),
 ])
 def test_type_text_non_financial_no_hit(text: str, desc: str):
-    """非金融/验证码文本 → 返回 None(无误报)。"""
+    """Internal documentation."""
     result = check_computer_type_text(text)
     assert result is None, f"'{desc}' 不应命中金融规则,但返回 {result!r}。text={text!r}"
 
 
-# ── 2. check_computer_open_app —— 命中场景 ────────────────────────────────────
 
 @pytest.mark.parametrize("app,desc", [
     ("支付宝", "中文支付宝"),
@@ -112,7 +99,7 @@ def test_type_text_non_financial_no_hit(text: str, desc: str):
     ("Fidelity", "Fidelity"),
 ])
 def test_open_app_payment_pattern_hit(app: str, desc: str):
-    """支付/银行 app 词表命中 → 返回规则名。"""
+    """Internal documentation."""
     result = check_computer_open_app(app)
     assert result is not None, f"'{desc}' 应命中支付/银行规则,但返回 None。app={app!r}"
     assert result == "computer_open_payment_app"
@@ -134,15 +121,14 @@ def test_open_app_payment_pattern_hit(app: str, desc: str):
     ("Spotify", "Spotify"),
 ])
 def test_open_app_non_payment_no_hit(app: str, desc: str):
-    """非支付/银行 app → 返回 None(无误报)。"""
+    """Internal documentation."""
     result = check_computer_open_app(app)
     assert result is None, f"'{desc}' 不应命中支付/银行规则,但返回 {result!r}。app={app!r}"
 
 
-# ── 3. check_computer_hard_rules —— 总入口路由 ────────────────────────────────
 
 def test_check_hard_rules_type_text_routes_correctly():
-    """computer_type_text + 金融文本 → 总入口返回规则名。"""
+    """Internal documentation."""
     rule = check_computer_hard_rules(
         "computer_type_text", {"text": "CVV: 123"}
     )
@@ -150,7 +136,7 @@ def test_check_hard_rules_type_text_routes_correctly():
 
 
 def test_check_hard_rules_open_app_routes_correctly():
-    """computer_open_app + 支付 app → 总入口返回规则名。"""
+    """Internal documentation."""
     rule = check_computer_hard_rules(
         "computer_open_app", {"app": "支付宝"}
     )
@@ -158,31 +144,30 @@ def test_check_hard_rules_open_app_routes_correctly():
 
 
 def test_check_hard_rules_screenshot_returns_none():
-    """computer_screenshot → 无词表规则,返回 None。"""
+    """Internal documentation."""
     rule = check_computer_hard_rules("computer_screenshot", {})
     assert rule is None
 
 
 def test_check_hard_rules_click_returns_none():
-    """computer_click → 无词表规则,返回 None。"""
+    """Internal documentation."""
     rule = check_computer_hard_rules("computer_click", {"x": 100, "y": 200})
     assert rule is None
 
 
 def test_check_hard_rules_non_computer_action_returns_none():
-    """非 computer.* 动作 → 不应被 computer hard rules 处理。"""
+    """Internal documentation."""
     rule = check_computer_hard_rules("run_command", {"command": "ls"})
     assert rule is None
 
 
-# ── 4. evaluator.evaluate 集成测试 ─────────────────────────────────────────────
 
 def _empty_config() -> PermissionsConfig:
     return PermissionsConfig.empty()
 
 
 def test_evaluator_type_text_financial_returns_ask_with_hard_rule_trigger():
-    """evaluator: computer_type_text + 金融文本 → ask + trigger 以 hard_rule: 开头。"""
+    """Internal documentation."""
     meta = evaluate(
         "computer_type_text",
         {"text": "password: supersecret123"},
@@ -199,7 +184,7 @@ def test_evaluator_type_text_financial_returns_ask_with_hard_rule_trigger():
 
 
 def test_evaluator_open_payment_app_returns_ask_with_hard_rule_trigger():
-    """evaluator: computer_open_app + 支付 app → ask + trigger 以 hard_rule: 开头。"""
+    """Internal documentation."""
     meta = evaluate(
         "computer_open_app",
         {"app": "Alipay"},
@@ -212,19 +197,18 @@ def test_evaluator_open_payment_app_returns_ask_with_hard_rule_trigger():
 
 
 def test_evaluator_computer_screenshot_non_financial_auto_approve():
-    """evaluator: computer_screenshot(无词表规则) + AUTO → approve(走 default 档)。"""
+    """Internal documentation."""
     meta = evaluate(
         "computer_screenshot",
         {},
         gate_level=ApprovalLevel.AUTO,
         config=_empty_config(),
     )
-    # AUTO 档 + 无 hard rule 命中 → approve(default level=auto)
     assert meta.decision == "approve"
 
 
 def test_evaluator_computer_type_text_normal_auto_approve():
-    """evaluator: computer_type_text + 普通文本 → approve(AUTO 档,无词表命中)。"""
+    """Internal documentation."""
     meta = evaluate(
         "computer_type_text",
         {"text": "hello world"},
@@ -234,50 +218,44 @@ def test_evaluator_computer_type_text_normal_auto_approve():
     assert meta.decision == "approve"
 
 
-# ── 5. autonomy.classify:hard_rule:computer_* 不可降级 ────────────────────────
 
 def test_autonomy_classify_computer_financial_not_demotable():
-    """autonomy.classify:computer_type_text 金融文本 → RED,即便 preauth 也不降级(铁律)。"""
+    """Internal documentation."""
     from argos.permissions.autonomy import classify, AutonomyPolicy
 
-    # 尝试用 preauth 降级
     policy = AutonomyPolicy(
-        preauth={"computer_type_financial_pattern": True}  # preauth 试图降级
+        preauth={"computer_type_financial_pattern": True}
     )
 
     zone, reason = classify(
         action="computer_type_text",
         args={"text": "CVV: 123"},
-        reversible=False,          # computer.* 不可逆 → 直接 RED(优先级1)
+        reversible=False,
         verdict=None,
         config=_empty_config(),
         policy=policy,
     )
-    # reversible=False 优先 → RED(铁律:不可撤销必升级)
     assert zone.value == "red", (
         f"不可撤销动作应为 RED,得到 {zone.value!r}"
     )
 
 
 def test_autonomy_classify_hard_rule_computer_not_preauth_demotable():
-    """autonomy.classify:即便 reversible=True(假设情形),hard_rule 触发也不可被 preauth 降级。"""
+    """Internal documentation."""
     from argos.permissions.autonomy import classify, AutonomyPolicy
 
     policy = AutonomyPolicy(
-        preauth={"computer_type_financial_pattern": True}  # preauth 试图降级
+        preauth={"computer_type_financial_pattern": True}
     )
 
-    # reversible=True 让优先级1不触发,看 hard_rule 路径
     zone, reason = classify(
         action="computer_type_text",
         args={"text": "CVV: 123"},
-        reversible=True,           # 假设场景:看 hard_rule 路径
+        reversible=True,
         verdict=None,
         config=_empty_config(),
         policy=policy,
     )
-    # hard_rule: 前缀 → evaluator 返回 ask + trigger=hard_rule:computer_type_financial_pattern
-    # autonomy.classify 判断 trigger.startswith("hard_rule:") → RED,preauth 不降级
     assert zone.value == "red", (
         f"hard_rule 触发应为 RED(不可被 preauth 降级),得到 {zone.value!r}"
     )
@@ -286,45 +264,36 @@ def test_autonomy_classify_hard_rule_computer_not_preauth_demotable():
     )
 
 
-# ── 6. 规则集默认不可删(硬语义检验)────────────────────────────────────────────
 
 def test_financial_pattern_is_not_none():
-    """_FINANCIAL_TEXT_PATTERN 不为 None(默认集不可删)。"""
+    """Internal documentation."""
     assert _FINANCIAL_TEXT_PATTERN is not None
 
 
 def test_payment_app_pattern_is_not_none():
-    """_PAYMENT_APP_PATTERN 不为 None(默认集不可删)。"""
+    """Internal documentation."""
     assert _PAYMENT_APP_PATTERN is not None
 
 
 def test_check_computer_type_text_is_callable():
-    """check_computer_type_text 可调用(默认规则函数存在)。"""
+    """Internal documentation."""
     assert callable(check_computer_type_text)
 
 
 def test_check_computer_open_app_is_callable():
-    """check_computer_open_app 可调用(默认规则函数存在)。"""
+    """Internal documentation."""
     assert callable(check_computer_open_app)
 
 
-# ── 7. conductor 自治路径集成测试(trust≤L1 下 computer 高危动作真的被拒)────────
-# 修复 major 审计洞:此前文件只有函数级单测,缺 conductor/自治 run 集成用例。
-# 验证:autonomy.classify(reversible=False) → RED,且 RED 在自治路径下代表"拒绝执行"。
 
 def test_autonomy_conductor_computer_high_risk_is_red():
-    """conductor 自治运行下,computer.* 高危动作 → autonomy.classify → RED。
-
-    验证路径:reversible=False(computer.* 铁律) → 优先级1 直接 RED。
-    RED 在 conductor 自治模式(trust≤L1)下 = 拒绝并要求人工在场确认。
-    """
+    """Internal documentation."""
     from argos.permissions.autonomy import classify, Zone, AutonomyPolicy
     from argos.permissions.config import PermissionsConfig
 
     config = PermissionsConfig.empty()
-    policy = AutonomyPolicy()   # 默认策略:无 preauth,clarification_required=True
+    policy = AutonomyPolicy()
 
-    # 逐个验证所有 computer.* 高危动作在自治路径下均被拒
     computer_actions = [
         ("computer_screenshot", {}),
         ("computer_click", {"x": 100, "y": 200}),
@@ -338,7 +307,7 @@ def test_autonomy_conductor_computer_high_risk_is_red():
         zone, reason = classify(
             action=action,
             args=args,
-            reversible=False,   # computer.* manifest reversible=False 铁律
+            reversible=False,
             verdict=None,
             config=config,
             policy=policy,
@@ -351,16 +320,11 @@ def test_autonomy_conductor_computer_high_risk_is_red():
 
 
 def test_autonomy_conductor_computer_type_text_financial_is_red():
-    """conductor 自治路径:computer_type_text + 金融文本 → RED(不可被 preauth 降级)。
-
-    验证 evaluator hard_rule 触发 → autonomy.classify → RED,
-    即便 conductor 试图 preauth 降级也无效(护城河铁律)。
-    """
+    """Internal documentation."""
     from argos.permissions.autonomy import classify, Zone, AutonomyPolicy
     from argos.permissions.config import PermissionsConfig
 
     config = PermissionsConfig.empty()
-    # conductor 试图通过 preauth 降级金融规则(应无效)
     policy = AutonomyPolicy(
         preauth={"computer_type_financial_pattern": True}
     )
@@ -368,7 +332,7 @@ def test_autonomy_conductor_computer_type_text_financial_is_red():
     zone, reason = classify(
         action="computer_type_text",
         args={"text": "CVV: 999"},
-        reversible=False,   # computer_type_text 不可逆 → 优先级1 直接 RED
+        reversible=False,
         verdict=None,
         config=config,
         policy=policy,
@@ -379,11 +343,7 @@ def test_autonomy_conductor_computer_type_text_financial_is_red():
 
 
 def test_autonomy_conductor_computer_open_payment_app_is_red():
-    """conductor 自治路径:computer_open_app + 支付 app → RED。
-
-    额外验证 check_computer_hard_rules 命中支付/银行 app 时,
-    完整的 evaluator → autonomy.classify 管线正确拒绝。
-    """
+    """Internal documentation."""
     from argos.permissions.autonomy import classify, Zone, AutonomyPolicy
     from argos.permissions.config import PermissionsConfig
 
@@ -393,7 +353,7 @@ def test_autonomy_conductor_computer_open_payment_app_is_red():
     zone, reason = classify(
         action="computer_open_app",
         args={"app": "支付宝"},
-        reversible=False,   # computer_open_app 不可逆 → 优先级1 RED
+        reversible=False,
         verdict=None,
         config=config,
         policy=policy,

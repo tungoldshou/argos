@@ -1,4 +1,4 @@
-"""#11 T2 RoutingConfig 加载 + set_category 原子写 + tier fail-closed 测试。"""
+"""Internal documentation."""
 import json
 import os
 from pathlib import Path
@@ -18,7 +18,7 @@ def _write_config(dir_: Path, *, models: dict, routing: dict | None = None) -> N
 
 
 def test_load_routing_no_file_returns_builtin_default(tmp_path, monkeypatch):
-    """无 config.json → 返内置默认映射(出厂激活):by_category 有 cheap/strong 分组,is_active()=True。"""
+    """Internal documentation."""
     monkeypatch.chdir(tmp_path)
     from argos.routing.config import _DEFAULT_BY_CATEGORY
     cfg = load_routing(tmp_path)
@@ -30,7 +30,7 @@ def test_load_routing_no_file_returns_builtin_default(tmp_path, monkeypatch):
 
 
 def test_load_routing_no_routing_section_returns_builtin_default(tmp_path):
-    """config.json 无 routing 段 → 返内置默认映射(出厂激活)。"""
+    """Internal documentation."""
     _write_config(tmp_path, models={"default": {"protocol": "anthropic", "base_url": "x", "model": "m"}})
     from argos.routing.config import _DEFAULT_BY_CATEGORY
     cfg = load_routing(tmp_path)
@@ -116,7 +116,6 @@ def test_set_category_writes_to_config_atomically(tmp_path):
     _write_config(tmp_path, models={"default": {}, "cheap": {}, "strong": {}})
     new = set_category(tmp_path, TaskCategory.FILE_EDIT, "cheap")
     assert new.by_category["file_edit"] == "cheap"
-    # 读回磁盘也一致
     cfg = load_routing(tmp_path)
     assert cfg.by_category["file_edit"] == "cheap"
 
@@ -216,14 +215,12 @@ def test_routing_config_is_active_default_false():
     RoutingConfig(default="strong"),
 ])
 def test_routing_config_is_active_when_configured(cfg):
-    """配了 by_category / by_tool / tier_force_confirm / 非默认 default → 活跃。"""
+    """Internal documentation."""
     assert cfg.is_active() is True
 
 
 def test_load_routing_active_by_default(tmp_path):
-    """默认配置(无 config.json)→ load_routing 返内置默认映射且 is_active() True(自主性 flip)。
-    原 test_build_components_router_none_when_routing_inactive 的断言取反并移至 load_routing 层,
-    避免 build_components 需要真 API key 才能运行。"""
+    """Internal documentation."""
     cfg = load_routing(tmp_path)
     assert cfg.is_active() is True, "内置默认映射出厂激活,is_active() 应为 True"
     from argos.routing.resolver import resolve

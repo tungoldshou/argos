@@ -1,18 +1,4 @@
-"""P3 跨进程审批回路验收测试(spec §13 P3 验收标准)。
-
-验收条目:
-  a. run 触发审批 → SSE 可见 approval_request → POST approval(once) → run 继续 → 完成。
-  b. 错 call_id → 409,run 不受影响,最终超时 deny。
-  c. 无人批 → 超时 deny + 诚实 error 事件落盘。
-  d. 两个并发 run 各自审批互不串(call_id 路由正确性)。
-
-设计原则:
-  · 所有测试用 DaemonApprovalGate 直接包装真 ApprovalGate,不依赖真模型。
-  · FakeApprovalLoop 通过 gate_holder 拿到 DaemonApprovalGate 包装后的实例,
-    确保 approval_request 事件真正经过 DaemonApprovalGate 走 SSE 扇出路径。
-  · RunWorker.run() 内部会把 self._gate 替换为 DaemonApprovalGate;
-    我们通过 GateHolder 让 loop 在运行时读取最新的 gate 引用。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -30,20 +16,15 @@ from argos.daemon.server import DaemonHTTPServer
 from argos.daemon.worker import DaemonApprovalGate, RunWorker
 
 
-# ── 测试工具 ──────────────────────────────────────────────────────────────
 
 class GateHolder:
-    """可变 gate 引用持有者:worker.run() 替换 gate 后,loop 通过此 holder 拿到新引用。"""
+    """Internal documentation."""
     def __init__(self) -> None:
-        self.gate: Any = None  # 运行时由 worker 设置
+        self.gate: Any = None
 
 
 class FakeApprovalLoop:
-    """可控 fake loop:经 DaemonApprovalGate 触发一次审批后继续完成。
-
-    gate_holder.gate 在 worker.run() 把真 gate 包装为 DaemonApprovalGate 后才有值。
-    loop 在第一个 yield 后 sleep 一小段等 holder 被设置,再调 gate.request()。
-    """
+    """Internal documentation."""
 
     def __init__(self, *, gate_holder: GateHolder, action: str = "write_file",
                  call_id: str | None = None):
@@ -51,17 +32,15 @@ class FakeApprovalLoop:
         self._action = action
         self._call_id = call_id or uuid.uuid4().hex[:12]
         self.decision_received: Decision | None = None
-        self.call_id = self._call_id  # 供测试读取
+        self.call_id = self._call_id
 
     async def run(self, goal: str, session_id: str) -> AsyncIterator[dict]:
-        # 步骤 1: 让 worker.run() 完成 DaemonApprovalGate 包装
         yield {"kind": "token_delta", "text": "preparing approval request"}
-        await asyncio.sleep(0.05)  # 等 holder.gate 被 worker 设置
+        await asyncio.sleep(0.05)
 
         gate = self._holder.gate
         assert gate is not None, "GateHolder.gate 未被设置"
 
-        # 步骤 2: 挂起等审批(经 DaemonApprovalGate → SSE 扇出 + Future 挂起)
         decision = await gate.request(
             self._action,
             {"path": "/tmp/test.txt", "content": "hello"},
@@ -71,7 +50,6 @@ class FakeApprovalLoop:
         )
         self.decision_received = decision
 
-        # 步骤 3: 投结果事件
         yield {
             "kind": "approval_done",
             "call_id": self._call_id,
@@ -79,13 +57,12 @@ class FakeApprovalLoop:
             "decision_kind": decision.kind,
         }
 
-        # 步骤 4: 完成
         yield {"kind": "verify_verdict",
                "verdict": {"status": "passed", "reason": "fake done"}}
 
 
 class FakeApprovalLoopFactory:
-    """返回可共享同一个 loop 实例的 factory。"""
+    """Internal documentation."""
 
     def __init__(self, loop: FakeApprovalLoop):
         self._loop = loop
@@ -95,18 +72,11 @@ class FakeApprovalLoopFactory:
 
 
 class GateSetterWorker(RunWorker):
-    """RunWorker 子类:预包装 DaemonApprovalGate 并通知 GateHolder。
-
-    父类 run() 会检查 self._gate 是否为 DaemonApprovalGate 实例并跳过重包装
-    (我们在 __init__ 里提前替换 self._gate 为 DaemonApprovalGate)。
-    这样 holder.gate 和 srv._workers[id].gate 都指向同一个 DaemonApprovalGate 实例。
-    """
+    """Internal documentation."""
 
     def __init__(self, *args, gate_holder: GateHolder, **kwargs):
         super().__init__(*args, **kwargs)
         self._gate_holder = gate_holder
-        # 提前包装:父类 run() 的 DaemonApprovalGate 包装逻辑检查 isinstance,
-        # 已是 DaemonApprovalGate 则跳过(我们在父类 run() 前手工包装好)。
         if self._gate is not None and not isinstance(self._gate, DaemonApprovalGate):
             wrapped = DaemonApprovalGate(
                 self._gate,
@@ -149,23 +119,20 @@ async def _wait_run_state(manager: RunManager, run_id: str, state: str,
     raise AssertionError(f"run {run_id} expected state={state!r}, got {actual!r}")
 
 
-# ── a. 完整审批回路 ───────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_approval_circuit_full(tmp_path: Path):
-    """run 触发审批 → SSE 可见 approval_request → POST approval(once) → run 完成。"""
+    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
         index_path=tmp_path / "index.json",
     )
 
-    # 构造 per-run gate + 可控 loop
     real_gate = ApprovalGate(level=ApprovalLevel.CONFIRM)
     holder = GateHolder()
     fake_loop = FakeApprovalLoop(gate_holder=holder, action="write_file")
 
-    # 创建 run + worker(手工路径,不经 server create_run)
     run_id = await manager.create_run(goal="test approval", workspace=str(tmp_path))
     worker = GateSetterWorker(
         run_id=run_id, manager=manager,
@@ -183,10 +150,8 @@ async def test_approval_circuit_full(tmp_path: Path):
     try:
         sid = await _create_session(socket_path)
 
-        # 等 run 进 running
         await _wait_run_state(manager, run_id, "running", timeout=3.0)
 
-        # 订阅 SSE,等待 approval_request 事件
         from argos.daemon.client import DaemonClient
         cli = DaemonClient(socket_path, timeout=8.0)
         seen_approval_request = False
@@ -220,15 +185,12 @@ async def test_approval_circuit_full(tmp_path: Path):
         assert resp["decision"] == "once"
         assert resp["state"] == "applied"
 
-        # 等 run 完成
         await _wait_run_state(manager, run_id, "completed", timeout=5.0)
 
-        # decision 正确
         assert fake_loop.decision_received is not None
         assert fake_loop.decision_received.kind == "once"
         assert fake_loop.decision_received.approved is True
 
-        # approval_response 事件落盘(审计可见性)
         events = list(manager.store.replay(run_id))
         kinds = [e.get("kind") for e in events]
         assert "approval_response" in kinds, (
@@ -248,12 +210,11 @@ async def test_approval_circuit_full(tmp_path: Path):
         manager.close()
 
 
-# ── b. 错 call_id → 409,run 不受影响 ────────────────────────────────────
 
-@pytest.mark.slow  # approval_timeout_s=3.0:等 3 秒超时 deny —— 真实时钟等待,并行时影响测试速度。
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_approval_wrong_call_id_returns_409(tmp_path: Path):
-    """错 call_id → 409/404,run 不受影响,最终超时 deny。"""
+    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -281,11 +242,9 @@ async def test_approval_wrong_call_id_returns_409(tmp_path: Path):
     try:
         sid = await _create_session(socket_path)
 
-        # 等 running + 等 gate.request() 挂起
         await _wait_run_state(manager, run_id, "running", timeout=3.0)
         await asyncio.sleep(0.3)
 
-        # POST 错误 call_id
         wrong_id = uuid.uuid4().hex[:12]
         status, raw = await _raw_req(
             socket_path,
@@ -301,7 +260,6 @@ async def test_approval_wrong_call_id_returns_409(tmp_path: Path):
             f"错误消息应提及 call_id: {body_obj}"
         )
 
-        # run 不受影响,超时 deny 后完成
         await _wait_run_state(manager, run_id, "completed", timeout=8.0)
 
         assert fake_loop.decision_received is not None
@@ -317,11 +275,10 @@ async def test_approval_wrong_call_id_returns_409(tmp_path: Path):
         manager.close()
 
 
-# ── c. 无人批 → 超时 deny + 诚实 error 事件 ─────────────────────────────
 
 @pytest.mark.asyncio
 async def test_approval_timeout_deny(tmp_path: Path):
-    """无人批 → 超时 deny + 诚实 error 事件落盘。"""
+    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -338,7 +295,7 @@ async def test_approval_timeout_deny(tmp_path: Path):
         run_id=run_id, manager=manager,
         loop_factory=FakeApprovalLoopFactory(fake_loop),
         gate=real_gate,
-        approval_timeout_s=1.0,  # 1s 极短超时
+        approval_timeout_s=1.0,
         gate_holder=holder,
     )
     srv = DaemonHTTPServer(manager=manager, socket_path=socket_path)
@@ -347,15 +304,12 @@ async def test_approval_timeout_deny(tmp_path: Path):
 
     task = asyncio.create_task(worker.run(), name=f"run-{run_id}")
     try:
-        # 等 run 完成(超时 deny 后 loop 继续 → completed)
         await _wait_run_state(manager, run_id, "completed", timeout=10.0)
 
-        # decision 是 deny(fail-closed)
         assert fake_loop.decision_received is not None
         assert fake_loop.decision_received.approved is False
         assert fake_loop.decision_received.kind == "deny"
 
-        # error 事件落盘
         events = list(manager.store.replay(run_id))
         error_events = [e for e in events if e.get("kind") == "error"]
         assert error_events, (
@@ -379,18 +333,16 @@ async def test_approval_timeout_deny(tmp_path: Path):
         manager.close()
 
 
-# ── d. 两个并发 run 审批互不串 ──────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_concurrent_runs_approval_isolation(tmp_path: Path):
-    """两个并发 run 各自审批互不串(call_id 路由正确性)。"""
+    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
         index_path=tmp_path / "index.json",
     )
 
-    # 两个独立的 gate + holder + loop
     gate_a = ApprovalGate(level=ApprovalLevel.CONFIRM)
     gate_b = ApprovalGate(level=ApprovalLevel.CONFIRM)
     holder_a = GateHolder()
@@ -425,12 +377,10 @@ async def test_concurrent_runs_approval_isolation(tmp_path: Path):
     try:
         sid = await _create_session(socket_path)
 
-        # 等两个 run 都进入 running + 挂起
         await _wait_run_state(manager, run_id_a, "running", timeout=3.0)
         await _wait_run_state(manager, run_id_b, "running", timeout=3.0)
         await asyncio.sleep(0.3)
 
-        # run A 的 call_id 发到 run B → 409(call_id 不在 B 的 pending)
         status, raw = await _raw_req(
             socket_path,
             "POST", f"/runs/{run_id_b}/approval/{call_id_a}",
@@ -441,7 +391,6 @@ async def test_concurrent_runs_approval_isolation(tmp_path: Path):
             f"run B 不应接受 run A 的 call_id,但返回 {status}: {raw.decode()}"
         )
 
-        # 正确路由:run A 的 call_id → run A
         status, raw = await _raw_req(
             socket_path,
             "POST", f"/runs/{run_id_a}/approval/{call_id_a}",
@@ -450,7 +399,6 @@ async def test_concurrent_runs_approval_isolation(tmp_path: Path):
         )
         assert status == 200, f"run A 审批应成功: {status}: {raw.decode()}"
 
-        # 正确路由:run B 的 call_id → run B
         status, raw = await _raw_req(
             socket_path,
             "POST", f"/runs/{run_id_b}/approval/{call_id_b}",
@@ -459,17 +407,14 @@ async def test_concurrent_runs_approval_isolation(tmp_path: Path):
         )
         assert status == 200, f"run B 审批应成功: {status}: {raw.decode()}"
 
-        # 等两个 run 都完成
         await _wait_run_state(manager, run_id_a, "completed", timeout=5.0)
         await _wait_run_state(manager, run_id_b, "completed", timeout=5.0)
 
-        # 各自 decision 正确、不串
         assert loop_a.decision_received is not None
         assert loop_a.decision_received.kind == "once"
         assert loop_b.decision_received is not None
         assert loop_b.decision_received.kind == "always"
 
-        # approval_response 事件落盘,call_id 字段正确
         events_a = list(manager.store.replay(run_id_a))
         events_b = list(manager.store.replay(run_id_b))
         ar_a = next((e for e in events_a if e.get("kind") == "approval_response"), None)
@@ -493,35 +438,25 @@ async def test_concurrent_runs_approval_isolation(tmp_path: Path):
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# P3 plan_decision 路径测试
 #
-# FakePlanLoop 直接管理 _plan_call_registry + _plan_decision_event,
-# 模拟 AgentLoop._plan_phase_round 的 call_id 注册行为,供 respond_plan_decision 使用。
-# RunWorker 的 loop_factory 返回此实例;server 通过 worker._loop 找到它。
 # ══════════════════════════════════════════════════════════════════════════
 
 class FakePlanLoop:
-    """模拟 AgentLoop plan 决策挂起路径的 fake loop。
-
-    · run() 流式产出一个 token_delta + 注册一个 call_id 到 _plan_call_registry
-    · 然后挂起等待 respond_plan_decision(call_id, action) 被调用
-    · 收到后产出结果事件并完成
-    """
+    """Internal documentation."""
 
     def __init__(self, *, call_id: str | None = None, decision_timeout_s: float = 30.0):
         _call_id = call_id or uuid.uuid4().hex[:12]
-        # 模拟 AgentLoop 中的字段(respond_plan_decision + server 直接访问这些属性)
         self._plan_decision_event: asyncio.Event = asyncio.Event()
         self._plan_decision: Any = None
         self._plan_call_registry: dict[str, asyncio.Event] = {}
-        self.mode: str = "plan"  # 在 plan 阶段挂起时处于 plan mode
+        self.mode: str = "plan"
         self.call_id = _call_id
         self._decision_timeout_s = decision_timeout_s
-        self.decision_received: Any = None  # 供测试读取
+        self.decision_received: Any = None
 
     def respond_plan_decision(self, call_id: str, action: str,
                               feedback: str | None = None) -> bool:
-        """与 AgentLoop.respond_plan_decision 同签名。"""
+        """Internal documentation."""
         if call_id not in self._plan_call_registry:
             return False
         from argos.core.plan_mode import ExitPlanMode
@@ -532,13 +467,11 @@ class FakePlanLoop:
         return True
 
     async def run(self, goal: str, session_id: str) -> AsyncIterator[dict]:
-        """模拟 run 阶段:注册 call_id → 挂起等决策 → 产出结果。"""
+        """Internal documentation."""
         yield {"kind": "token_delta", "text": "generating plan..."}
 
-        # 注册 call_id(模拟 _plan_phase_round 的行为)
         self._plan_call_registry[self.call_id] = self._plan_decision_event
 
-        # 挂起等待决策
         try:
             await asyncio.wait_for(
                 self._plan_decision_event.wait(),
@@ -566,11 +499,10 @@ class FakePlanLoopFactory:
         return self._loop
 
 
-# ── plan_decision: 完整正常路径 ────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_plan_decision_full_circuit(tmp_path: Path):
-    """POST /runs/{id}/plan_decision(approve_start) → loop 唤醒 → run 完成。"""
+    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -583,7 +515,6 @@ async def test_plan_decision_full_circuit(tmp_path: Path):
         loop_factory=FakePlanLoopFactory(fake_loop),
         gate=None,
     )
-    # 手工将 loop 实例挂上 worker(server 通过 worker._loop 访问)
     worker._loop = fake_loop
 
     srv = DaemonHTTPServer(manager=manager, socket_path=socket_path)
@@ -594,7 +525,6 @@ async def test_plan_decision_full_circuit(tmp_path: Path):
     try:
         sid = await _create_session(socket_path)
         await _wait_run_state(manager, run_id, "running", timeout=3.0)
-        # 等 loop 注册 call_id
         deadline = time.monotonic() + 3.0
         while time.monotonic() < deadline:
             if fake_loop.call_id in fake_loop._plan_call_registry:
@@ -616,10 +546,8 @@ async def test_plan_decision_full_circuit(tmp_path: Path):
         assert resp["action"] == "approve_start"
         assert resp["state"] == "applied"
 
-        # run 应完成
         await _wait_run_state(manager, run_id, "completed", timeout=5.0)
 
-        # decision 正确传达
         assert fake_loop.decision_received is not None
         assert fake_loop.decision_received.action == "approve_start"
 
@@ -633,7 +561,6 @@ async def test_plan_decision_full_circuit(tmp_path: Path):
         manager.close()
 
 
-# ── plan_decision: 404 run 不存在 ─────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_plan_decision_unknown_run_404(tmp_path: Path):
@@ -659,11 +586,10 @@ async def test_plan_decision_unknown_run_404(tmp_path: Path):
         manager.close()
 
 
-# ── plan_decision: 409 无 loop ────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_plan_decision_no_loop_409(tmp_path: Path):
-    """run 存在但 worker._loop 为 None → 409。"""
+    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -671,9 +597,8 @@ async def test_plan_decision_no_loop_409(tmp_path: Path):
     )
     run_id = await manager.create_run(goal="no loop run", workspace=str(tmp_path))
 
-    # 构造 worker 但不设 _loop
     class NoLoopWorker:
-        """最小 worker 存根:无 _loop 属性。"""
+        """Internal documentation."""
         state = "running"
         _loop = None
 
@@ -694,18 +619,16 @@ async def test_plan_decision_no_loop_409(tmp_path: Path):
         manager.close()
 
 
-# ── plan_decision: 409 call_id 不在注册表 ─────────────────────────────
 
 @pytest.mark.asyncio
 async def test_plan_decision_unknown_call_id_409(tmp_path: Path):
-    """call_id 不在 _plan_call_registry → 409。"""
+    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
         index_path=tmp_path / "index.json",
     )
     fake_loop = FakePlanLoop()
-    # 不注册任何 call_id(registry 为空)
     run_id = await manager.create_run(goal="unknown call_id", workspace=str(tmp_path))
     worker = RunWorker(
         run_id=run_id, manager=manager,
@@ -731,18 +654,16 @@ async def test_plan_decision_unknown_call_id_409(tmp_path: Path):
         manager.close()
 
 
-# ── plan_decision: 400 非法 action ────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_plan_decision_invalid_action_400(tmp_path: Path):
-    """action 非法 → 400。"""
+    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
         index_path=tmp_path / "index.json",
     )
     fake_loop = FakePlanLoop()
-    # 手工注册 call_id,使其通过 call_id 检查
     fake_loop._plan_call_registry[fake_loop.call_id] = fake_loop._plan_decision_event
 
     run_id = await manager.create_run(goal="invalid action", workspace=str(tmp_path))
@@ -770,11 +691,10 @@ async def test_plan_decision_invalid_action_400(tmp_path: Path):
         manager.close()
 
 
-# ── plan_decision: 400 refine 无 feedback ─────────────────────────────
 
 @pytest.mark.asyncio
 async def test_plan_decision_refine_missing_feedback_400(tmp_path: Path):
-    """action=refine 但 feedback 缺失 → 400。"""
+    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -796,7 +716,6 @@ async def test_plan_decision_refine_missing_feedback_400(tmp_path: Path):
     await srv.start()
     try:
         sid = await _create_session(socket_path)
-        # refine 无 feedback 字段
         status, raw = await _raw_req(
             socket_path,
             "POST", f"/runs/{run_id}/plan_decision",
@@ -809,11 +728,10 @@ async def test_plan_decision_refine_missing_feedback_400(tmp_path: Path):
         manager.close()
 
 
-# ── plan_decision: 跨 run 隔离 ────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_plan_decision_cross_run_isolation(tmp_path: Path):
-    """run A 的 call_id 发给 run B → 409;各自 call_id 正确路由。"""
+    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -821,7 +739,6 @@ async def test_plan_decision_cross_run_isolation(tmp_path: Path):
     )
     loop_a = FakePlanLoop(call_id="call_aaaaaa")
     loop_b = FakePlanLoop(call_id="call_bbbbbb")
-    # 预注册 call_id
     loop_a._plan_call_registry[loop_a.call_id] = loop_a._plan_decision_event
     loop_b._plan_call_registry[loop_b.call_id] = loop_b._plan_decision_event
 
@@ -849,7 +766,6 @@ async def test_plan_decision_cross_run_isolation(tmp_path: Path):
     try:
         sid = await _create_session(socket_path)
 
-        # run A 的 call_id 发给 run B → 409
         status, raw = await _raw_req(
             socket_path,
             "POST", f"/runs/{run_id_b}/plan_decision",
@@ -860,7 +776,6 @@ async def test_plan_decision_cross_run_isolation(tmp_path: Path):
             f"run B 不应接受 run A 的 call_id,但返回 {status}: {raw.decode()}"
         )
 
-        # run A 的 call_id 发给 run A → 200
         status, raw = await _raw_req(
             socket_path,
             "POST", f"/runs/{run_id_a}/plan_decision",
@@ -869,7 +784,6 @@ async def test_plan_decision_cross_run_isolation(tmp_path: Path):
         )
         assert status == 200, f"run A plan_decision 应成功: {status}: {raw.decode()}"
 
-        # run B 的 call_id 发给 run B → 200
         status, raw = await _raw_req(
             socket_path,
             "POST", f"/runs/{run_id_b}/plan_decision",
@@ -878,7 +792,6 @@ async def test_plan_decision_cross_run_isolation(tmp_path: Path):
         )
         assert status == 200, f"run B plan_decision 应成功: {status}: {raw.decode()}"
 
-        # decision 正确且不串
         # run A: approve_start
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline and loop_a.decision_received is None:
@@ -888,7 +801,6 @@ async def test_plan_decision_cross_run_isolation(tmp_path: Path):
             f"run A 应收到 approve_start,实际 {loop_a.decision_received}"
         )
 
-        # run B: keep_planning(loop_b 的 decision)
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline and loop_b.decision_received is None:
             await asyncio.sleep(0.02)
@@ -908,11 +820,10 @@ async def test_plan_decision_cross_run_isolation(tmp_path: Path):
         manager.close()
 
 
-# ── plan_decision: observer 会话被拒(owner-only) ─────────────────────
 
 @pytest.mark.asyncio
 async def test_plan_decision_observer_session_rejected(tmp_path: Path):
-    """observer 只读会话尝试 plan_decision → 403(owner-only 校验)。"""
+    """Internal documentation."""
     socket_path = tmp_path / "s.sock"
     manager = RunManager(
         runs_dir=tmp_path / "runs",
@@ -932,11 +843,9 @@ async def test_plan_decision_observer_session_rejected(tmp_path: Path):
     srv._workers[run_id] = worker
     await srv.start()
     try:
-        # 第一个 session = owner,第二个 session = observer(sessions.py:role logic)
-        _owner_sid = await _create_session(socket_path)  # noqa: F841 — 占 owner 槽
-        obs_sid = await _create_session(socket_path)     # 第二个 → observer 角色
+        _owner_sid = await _create_session(socket_path)  # noqa: F841
+        obs_sid = await _create_session(socket_path)
 
-        # observer 会话发送 plan_decision → 预期 403
         status, raw = await _raw_req(
             socket_path,
             "POST", f"/runs/{run_id}/plan_decision",

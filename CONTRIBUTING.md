@@ -3,7 +3,7 @@
 First off, thank you for considering contributing to Argos! 🎉
 
 Argos — the hundred-eyed agent (百眼智能体) — runs as a background daemon kernel
-(argosd, Unix socket at ~/.argos/daemon.sock); clients attach as protocol clients.
+(argosd, Unix socket `daemon.sock` under the Argos config directory); clients attach as protocol clients.
 The terminal TUI is the current primary client (with an honest single inline-process
 fallback when the daemon is unavailable).
 Our ambition: make cheap models reliable through a verify hard-gate, honesty
@@ -126,7 +126,7 @@ packaging/                  # PyInstaller + install.sh + Homebrew Cask
 
 ## Coding Conventions
 
-(from CLAUDE.md)
+(from AGENTS.md and current project conventions)
 
 - **Immutability:** frozen dataclasses for value objects. Never mutate in place.
 - **Files:** 200-400 lines typical, 800 max. Extract utilities aggressively.
@@ -142,7 +142,7 @@ packaging/                  # PyInstaller + install.sh + Homebrew Cask
 
 ## Testing Requirements
 
-Per the project CLAUDE.md conventions:
+Per the project AGENTS.md conventions:
 
 - 80%+ coverage for new code
 - TDD: write failing test → impl → green

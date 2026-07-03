@@ -1,17 +1,4 @@
-"""Regression tests for WorkflowPanel design-audit fixes (2026-06-14).
-
-Pins:
-  1. [MEDIUM] Per-glyph Rich colour — each phase glyph has the correct hex colour.
-  2. [LOW]    Synthesis + honest-notes lines are dim-styled ($ink-dim / $ink-faint).
-  3. [LOW]    Header "工作流:<name>" is bold + $ink-bright.
-  4. Honesty invariant — error→失败 / done→完成, never mixed.
-  5. markup=False safety — agent_id / note containing "[...]" never crashes _compose_text.
-
-Strategy: _compose_text() is a pure method that only reads instance state
-(_name, _order, _agents, _done, _synthesis, _notes).  We bypass __init__
-(which calls self.update() and needs a live Textual app) by building a
-minimal instance via object.__new__ and wiring the five state attributes.
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from rich.text import Text
@@ -130,11 +117,10 @@ class TestPerGlyphColour:
 
 
 # ---------------------------------------------------------------------------
-# [LOW] Honesty invariant — error→失败 / done→完成
 # ---------------------------------------------------------------------------
 
 class TestHonestyInvariant:
-    """error phase MUST render 失败; done MUST render 完成; never swapped."""
+    """Internal documentation."""
 
     def test_error_renders_fail_text(self) -> None:
         panel = _make_panel("流", agents=[("a1", "error", "")])
@@ -192,7 +178,7 @@ class TestHonestyInvariant:
 # ---------------------------------------------------------------------------
 
 class TestHeaderStyling:
-    """Header '工作流:<name>' must be bold and $ink-bright."""
+    """Internal documentation."""
 
     def test_header_contains_name(self) -> None:
         panel = _make_panel("我的流")
@@ -209,7 +195,7 @@ class TestHeaderStyling:
         )
 
     def test_done_header_is_bold_and_ink_bright(self) -> None:
-        """finish() appends '(完成)' — the full header span must still be styled."""
+        """Internal documentation."""
         panel = _make_panel(
             "流",
             agents=[("a", "done", "")],

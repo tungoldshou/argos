@@ -1,9 +1,4 @@
-"""真 LLM 端到端烟测 —— 连真 MiniMax,运行时手动跑(不连 CI)。
-
-跑法:`uv run pytest tests/e2e/probe_real_llm.py -v -s`(需 .env.local 配 ARGOS_LLM_KEY)。
-验证:真模型经真栈跑一个可验证小任务,VerifyVerdict 达 passed(整机连真模型贯通)。
-失败不阻塞 CI(本文件 skip);它是'真模型在真栈上能跑'的离线人工铁证。
-"""
+"""Internal documentation."""
 import pytest
 
 pytestmark = pytest.mark.skip(reason="真 LLM 烟测,运行时手动跑(连真 MiniMax)")

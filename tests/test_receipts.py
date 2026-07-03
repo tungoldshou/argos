@@ -1,9 +1,4 @@
-"""Tool Receipts(契约 §6.2;spec §6.5/§12.3):HMAC 签名 host 侧,agent 伪造不了。
-
-Task 8(Phase 4):receipts.py 在 Phase 3 已建并经 tests/test_broker_receipt_unforgeable.py
-锁定。本文件按契约 §6.2 逐字补齐 Task 8 要求的核验/防重放/冻结测试,VERIFY 既有实现
-完全符合 §6.2 的 HMAC 形式,**不重定义** Receipt/ReceiptSigner(单一定义见 tools/receipts.py)。
-"""
+"""Internal documentation."""
 import dataclasses
 
 import pytest
@@ -43,7 +38,6 @@ def test_tampered_args_hash_fails_verify():
 
 
 def test_different_key_cannot_verify():
-    # agent 在沙箱里即便仿造了一个 signer,没有 host key 也签不出能被 host 接受的回执。
     host = ReceiptSigner(key=b"host-secret-key")
     attacker = ReceiptSigner(key=b"attacker-guess")
     fake = attacker.sign(action="run_command", args={"command": "rm -rf /"},
@@ -56,7 +50,7 @@ def test_nonce_makes_each_receipt_unique():
     r1 = signer.sign(action="a", args={}, result="x", exit_code=None)
     r2 = signer.sign(action="a", args={}, result="x", exit_code=None)
     assert r1.nonce != r2.nonce
-    assert r1.sig != r2.sig  # 同输入不同 nonce → 不同签名(防重放)
+    assert r1.sig != r2.sig
 
 
 def test_receipt_is_frozen():

@@ -41,8 +41,8 @@ $ argos eval compare bug_fix_001_off_by_one cheap strong
 [eval] A/B: cheap vs strong on bug_fix_001_off_by_one ...
 [eval]   cheap       passed  $0.0130  120s
 [eval]   strong      passed  $0.0870  95s
-[eval] report: ~/.argos/eval/reports/ab-bug_fix_001_off_by_one-2026-06-07.md
-[eval] json:   ~/.argos/eval/reports/ab-bug_fix_001_off_by_one-2026-06-07.json
+[eval] report: <config-dir>/eval/reports/ab-bug_fix_001_off_by_one-2026-06-07.md
+[eval] json:   <config-dir>/eval/reports/ab-bug_fix_001_off_by_one-2026-06-07.json
 
 # 4. 看历史
 $ argos eval list --limit 20
@@ -63,8 +63,10 @@ def456..  2026-06-07    bug_fix_001_off_by_one  strong      passed        $0.087
 
 ### 4.1 示例 corpus 结构(需自建,随包不发种子)
 
-随安装包**不发种子 corpus**(`corpus.json` 不 git 跟踪)。开箱即跑 `argos eval corpus`
-得 `corpus version 0 (0 tasks)` —— 自建 `~/.argos/eval/corpus/corpus.json` + 各任务目录
+随安装包**不发种子 corpus**(`corpus.json` 不 git 跟踪)。eval 数据根在 Argos config
+directory 下的 `eval/`(config directory 默认 `~/.argos`,可用 `ARGOS_CONFIG_DIR` 改到别处)。
+开箱即跑 `argos eval corpus`
+得 `corpus version 0 (0 tasks)` —— 自建 `eval/corpus/corpus.json` + 各任务目录
 (结构见 §4.2)后才有内容。下表是建议的类别分布参考,不是已随包附带的题库:
 
 | Category | 建议数量 | 用意 |
@@ -76,7 +78,7 @@ def456..  2026-06-07    bug_fix_001_off_by_one  strong      passed        $0.087
 
 ### 4.2 任务结构
 
-`~/.argos/eval/corpus/<task_id>/`
+`<config-dir>/eval/corpus/<task_id>/`
 ```
 ├── goal.md          # LLM 拿这一段当 user message
 ├── verify_cmd       # 单行 shell,退出码 0 = pass
@@ -103,13 +105,14 @@ def456..  2026-06-07    bug_fix_001_off_by_one  strong      passed        $0.087
 ### 4.3 加新任务
 
 ```bash
-mkdir -p ~/.argos/eval/corpus/my_new_task
-cat > ~/.argos/eval/corpus/my_new_task/goal.md <<EOF
+eval_root="${ARGOS_CONFIG_DIR:-$HOME/.argos}/eval"
+mkdir -p "$eval_root/corpus/my_new_task"
+cat > "$eval_root/corpus/my_new_task/goal.md" <<EOF
 Fix the off-by-one in memory/auto.py _score (负 last_used_at 应截 0)
 EOF
-echo 'python3 -m pytest tests/test_memory_decay.py -q' > ~/.argos/eval/corpus/my_new_task/verify_cmd
-echo 'bug_fix' > ~/.argos/eval/corpus/my_new_task/category
-echo 'medium' > ~/.argos/eval/corpus/my_new_task/difficulty
+echo 'python3 -m pytest tests/test_memory_decay.py -q' > "$eval_root/corpus/my_new_task/verify_cmd"
+echo 'bug_fix' > "$eval_root/corpus/my_new_task/category"
+echo 'medium' > "$eval_root/corpus/my_new_task/difficulty"
 # 同步加到 corpus.json
 ```
 
@@ -122,7 +125,7 @@ echo 'medium' > ~/.argos/eval/corpus/my_new_task/difficulty
 
 ### 5.1 Markdown 报告
 
-`~/.argos/eval/reports/ab-<task_id>-<date>.md`:
+`<config-dir>/eval/reports/ab-<task_id>-<date>.md`:
 
 ```markdown
 # A/B Eval Report: bug_fix_001_off_by_one
@@ -148,7 +151,7 @@ echo 'medium' > ~/.argos/eval/corpus/my_new_task/difficulty
 
 ### 5.2 JSON 报告(机读)
 
-`~/.argos/eval/reports/ab-<task_id>-<date>.json`:
+`<config-dir>/eval/reports/ab-<task_id>-<date>.json`:
 
 ```json
 {
@@ -180,7 +183,7 @@ echo 'medium' > ~/.argos/eval/corpus/my_new_task/difficulty
 ## 7. 数据目录
 
 ```
-~/.argos/eval/
+<config-dir>/eval/
 ├── corpus/                          # 需自建(随包不发种子;空 = 0 tasks)
 │   ├── corpus.json
 │   └── bug_fix_001_off_by_one/
@@ -210,7 +213,7 @@ argos eval corpus                                 # 列 corpus 任务
 |---|---|
 | `eval` 命令 unknown | `python -c "import argos.eval"` 确认包可导入 |
 | `loop_factory_failed` / 无 key | 先跑 `argos setup`;或用 `--model` 指向已有 key 的 profile |
-| 报告不写盘 | `~/.argos/eval/reports/` 权限;或 `keep_worktree` flag 留下的 worktree |
+| 报告不写盘 | `<config-dir>/eval/reports/` 权限;或 `keep_worktree` flag 留下的 worktree |
 | 任务找不到 | `argos eval corpus` 看清单;task id 区分大小写 |
 
 ## 10. 不做(本期)

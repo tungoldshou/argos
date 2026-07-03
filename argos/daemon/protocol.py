@@ -1,4 +1,4 @@
-"""daemon HTTP 协议常量 + 错误码(spec §2.5 + §3)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 # Header

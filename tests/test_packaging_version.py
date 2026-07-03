@@ -1,4 +1,4 @@
-"""packaging/VERSION 文件存在 + 内容是 x.y.z + 与 git tag 一致。"""
+"""Internal documentation."""
 import re
 import subprocess
 from pathlib import Path
@@ -13,7 +13,7 @@ def test_version_file_exists():
 
 
 def test_version_file_format():
-    """版本号必须是 x.y.z(可后缀 -rc1 等),写明校验。"""
+    """Internal documentation."""
     text = VERSION_FILE.read_text().strip()
     assert re.match(r"^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?$", text), (
         f"VERSION 内容 '{text}' 不符合 x.y.z 格式"
@@ -21,7 +21,7 @@ def test_version_file_format():
 
 
 def test_version_matches_git_tag():
-    """如果当前 commit 有 v* tag,VERSION 必须与 tag 一致。"""
+    """Internal documentation."""
     text = VERSION_FILE.read_text().strip()
     try:
         tag = subprocess.check_output(

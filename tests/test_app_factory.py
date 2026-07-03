@@ -1,8 +1,4 @@
-"""装配层(契约 §3/§5/§6/§7):build_components 组装全栈 + build_loop_factory 产可注入 loop。
-
-注:config.WORKER_KEYS 在 import 时固化,故测试用 monkeypatch.setattr 直改 af.config 属性
-(确定性 + 自动撤销),不用 setenv+reload(reload 会跨测试泄漏全局 config)。
-"""
+"""Internal documentation."""
 import pytest
 
 import argos.app_factory as af
@@ -16,9 +12,7 @@ from argos.sandbox.broker import CapabilityBroker
 
 def test_build_components_assembles_full_stack(tmp_path, monkeypatch):
     monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
-    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))   # 空目录:走旧 env 回退路径
-    # active_key() 实读 DEFAULT_KEYS(WORKER_KEYS 只是 import 期别名,patch 它无效);
-    # 此前靠开发机 ~/.argos/.env 的真实 key 蒙混过关,CI 无 key 即暴露(本应 hermetic)。
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))
     monkeypatch.setattr(af.config, "DEFAULT_KEYS", ["k-test"])
     c = af.build_components(workspace=str(tmp_path / "ws"))
     assert isinstance(c.store, ArgosStore)
@@ -30,8 +24,7 @@ def test_build_components_assembles_full_stack(tmp_path, monkeypatch):
 
 def test_build_components_refuses_without_key(tmp_path, monkeypatch):
     monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
-    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))   # 空目录:走旧 env 回退路径
-    # 诚实:无 key 不假装能跑,抛带指引的 RuntimeError(入口捕获→demo 态)。
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))
     monkeypatch.setattr(af.config, "DEFAULT_KEYS", [])
     with pytest.raises(RuntimeError, match="key"):
         af.build_components(workspace=str(tmp_path / "ws"))
@@ -39,21 +32,53 @@ def test_build_components_refuses_without_key(tmp_path, monkeypatch):
 
 def test_build_loop_factory_yields_agentloop(tmp_path, monkeypatch):
     monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
-    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))   # 空目录:走旧 env 回退路径
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))
     monkeypatch.setattr(af.config, "DEFAULT_KEYS", ["k-test"])
     c = af.build_components(workspace=str(tmp_path / "ws"))
     factory = af.build_loop_factory(c)
     loop = factory()
     assert isinstance(loop, AgentLoop)
-    # 每次 factory() 新建 EventBus(每轮一条事件流),但共享 store/sandbox/broker(持久)。
     assert factory().bus is not loop.bus
     assert factory().store is c.store
     assert factory().sandbox is c.sandbox
     c.close()
 
 
+def test_build_run_stack_uses_reloaded_permissions_config(tmp_path, monkeypatch):
+    from unittest.mock import MagicMock
+
+    from argos.approval import ApprovalLevel
+    from argos.core.loop import LoopConfig
+    from argos.permissions.config import PermissionsConfig
+
+    old_cfg = PermissionsConfig(default_level="observe")
+    reloaded_cfg = PermissionsConfig(default_level="confirm")
+
+    c = MagicMock(spec=af.AppComponents)
+    c.config = LoopConfig(model_tier="default", approval_level=ApprovalLevel.CONFIRM)
+    c.workspace = tmp_path
+    c.registry = None
+    c.browser_controller = None
+    c.mcp_manager = None
+    c.permissions_config = old_cfg
+
+    captured: dict[str, object] = {}
+
+    def _fake_stack(**kwargs):
+        captured.update(kwargs)
+        return MagicMock(), MagicMock(), MagicMock()
+
+    monkeypatch.setattr(af, "_permissions_get_config", lambda: reloaded_cfg)
+    monkeypatch.setattr(af, "_make_gate_broker_sandbox", _fake_stack)
+
+    af.build_run_stack(c, workspace=tmp_path)
+
+    assert captured["perm_config"] is reloaded_cfg
+    assert captured["perm_config"] is not old_cfg
+
+
 def test_model_override_picks_named_profile(tmp_path, monkeypatch):
-    """--model NAME(取代旧 --premium):本次启动用指定的具名 profile,而非当前 active。"""
+    """Internal documentation."""
     import json
     monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
@@ -63,7 +88,7 @@ def test_model_override_picks_named_profile(tmp_path, monkeypatch):
     (tmp_path / ".env").write_text("AK=ka\nBK=kb\n")
     monkeypatch.setenv("ARGOS_WORKSPACE", str(tmp_path / "ws"))
     c = af.build_components(workspace=str(tmp_path / "ws"), model_override="b")
-    assert c.model.tier.name == "b" and c.model.tier.model == "m-b"   # 用了指定 profile,不是 active 'a'
+    assert c.model.tier.name == "b" and c.model.tier.model == "m-b"
     c.close()
 
 
@@ -79,6 +104,43 @@ def test_build_components_uses_active_profile(tmp_path, monkeypatch):
     c = build_components()
     assert c.model.tier.model == "qwen2.5-coder" and c.model.tier.protocol == "openai"
     c.close()
+
+
+def test_build_components_default_workspace_honors_argos_config_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path))
+    monkeypatch.delenv("ARGOS_WORKSPACE", raising=False)
+    monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
+    (tmp_path / "config.json").write_text(__import__("json").dumps({
+        "active": "local", "models": {"local": {"protocol": "openai",
+        "base_url": "http://localhost:11434/v1", "model": "qwen2.5-coder",
+        "api_key_env": "OLLAMA_API_KEY"}}}))
+    (tmp_path / ".env").write_text("OLLAMA_API_KEY=ollama\n")
+
+    c = build_components()
+    try:
+        assert c.workspace == (tmp_path / "workspace").resolve()
+    finally:
+        c.close()
+
+
+def test_build_components_argos_workspace_overrides_config_dir(tmp_path, monkeypatch):
+    ws = tmp_path / "explicit-ws"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("ARGOS_WORKSPACE", str(ws))
+    monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
+    cfg = tmp_path / "cfg"
+    cfg.mkdir()
+    (cfg / "config.json").write_text(__import__("json").dumps({
+        "active": "local", "models": {"local": {"protocol": "openai",
+        "base_url": "http://localhost:11434/v1", "model": "qwen2.5-coder",
+        "api_key_env": "OLLAMA_API_KEY"}}}))
+    (cfg / ".env").write_text("OLLAMA_API_KEY=ollama\n")
+
+    c = build_components()
+    try:
+        assert c.workspace == ws.resolve()
+    finally:
+        c.close()
 
 
 def test_routed_profile_without_key_fails_on_select(tmp_path, monkeypatch):
@@ -158,12 +220,11 @@ def test_build_components_router_honors_env_local_config_dir(tmp_path, monkeypat
 
 def test_build_loop_factory_wires_workflow_engine(tmp_path, monkeypatch):
     monkeypatch.setenv("ARGOS_DB_PATH", str(tmp_path / "argos.db"))
-    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))   # 空目录:走旧 env 回退路径
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(tmp_path / "cfg"))
     monkeypatch.setattr(af.config, "DEFAULT_KEYS", ["k-test"])
     c = af.build_components(workspace=str(tmp_path / "ws"))
     loop = af.build_loop_factory(c)()
     assert loop._workflow_engine_factory is not None
-    # 工厂能产出一个 WorkflowEngine
     from argos.workflow.engine import WorkflowEngine
     assert isinstance(c.workflow_engine_factory(), WorkflowEngine)
     c.close()

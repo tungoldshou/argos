@@ -1,10 +1,4 @@
-"""argosd stop / status / restart CLI 子命令单元测试。
-
-策略:
-- 用 tmp_path 伪造 pid 文件 + socket;不启动真实 daemon 进程。
-- os.kill / _socket_alive 走 mock 隔离,避免真实信号和网络调用。
-- 不依赖 asyncio / DaemonHTTPServer,只测 CLI 层逻辑。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -18,7 +12,6 @@ from unittest import mock
 
 import pytest
 
-# 被测模块
 import argos.daemon.__main__ as daemon_main
 from argos.daemon.__main__ import _cmd_stop, _cmd_status, _socket_alive
 
@@ -31,17 +24,16 @@ def _write_pid(path: Path, pid: int) -> None:
 
 
 def _make_listening_socket(path: Path) -> _stdlib_socket.socket:
-    """在 path 创建并监听 Unix socket,返回 server socket(调用方 close)。"""
+    """Internal documentation."""
     srv = _stdlib_socket.socket(_stdlib_socket.AF_UNIX, _stdlib_socket.SOCK_STREAM)
     srv.bind(str(path))
     srv.listen(1)
     return srv
 
 
-# ── _socket_alive 单元测试 ────────────────────────────────────────────────────
 
 def test_socket_alive_no_file(tmp_path: Path) -> None:
-    """不存在的 socket 路径 → False。"""
+    """Internal documentation."""
     assert _socket_alive(tmp_path / "nonexistent.sock") is False
 
 
@@ -60,11 +52,15 @@ def test_default_socket_paths_honor_env_local_config(tmp_path: Path, monkeypatch
 
 def test_default_state_paths_honor_argos_config_dir(tmp_path: Path, monkeypatch) -> None:
     from argos import config as C
+    from argos.daemon.socket import default_socket_path
 
     cfg_dir = tmp_path / ".argos"
+    monkeypatch.delenv("ARGOS_DAEMON_SOCKET", raising=False)
     monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg_dir))
     monkeypatch.setattr(C, "_ENV", {})
 
+    assert daemon_main._default_socket_path() == cfg_dir / "daemon.sock"
+    assert default_socket_path() == cfg_dir / "daemon.sock"
     assert daemon_main._default_runs_dir() == cfg_dir / "runs"
     assert daemon_main._default_index_path() == cfg_dir / "runs" / "index.json"
     assert daemon_main._default_pid_path() == cfg_dir / "daemon.pid"
@@ -87,20 +83,15 @@ def test_default_conductor_dir_honors_argos_config_dir(tmp_path: Path, monkeypat
 
 
 def test_socket_alive_dead_socket(tmp_path: Path) -> None:
-    """socket 文件存在但无监听者 → False。"""
+    """Internal documentation."""
     sock_path = tmp_path / "dead.sock"
-    # 创建文件但不监听
     sock_path.touch()
     assert _socket_alive(sock_path) is False
 
 
 def test_socket_alive_live_socket(tmp_path: Path) -> None:
-    """socket 文件存在且有 daemon 监听 → True。
-
-    Unix socket 路径最长 ~104 字节;tmp_path 可能很长,用 /tmp 下的短路径。
-    """
+    """Internal documentation."""
     import tempfile
-    # 在 /tmp 下用固定短名,避免 macOS /private/var/… 超过内核限制
     with tempfile.TemporaryDirectory(dir="/tmp", prefix="argtest_") as td:
         sock_path = Path(td) / "t.sock"
         srv = _make_listening_socket(sock_path)
@@ -111,10 +102,9 @@ def test_socket_alive_live_socket(tmp_path: Path) -> None:
             sock_path.unlink(missing_ok=True)
 
 
-# ── _cmd_stop 测试 ────────────────────────────────────────────────────────────
 
 def test_stop_no_daemon(tmp_path: Path, capsys) -> None:
-    """pid 文件不存在、socket 不存在 → 报'未运行',返回 0。"""
+    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -126,11 +116,10 @@ def test_stop_no_daemon(tmp_path: Path, capsys) -> None:
 
 
 def test_stop_stale_pid_no_socket(tmp_path: Path, capsys) -> None:
-    """pid 文件存在但进程已死、socket 不在 → 清理残留 pid 文件,返回 0。"""
+    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
-    # 写一个不存在的 pid
     _write_pid(pid_path, 9999999)
 
     with mock.patch("argos.daemon.pidfile.is_alive", return_value=False):
@@ -143,14 +132,13 @@ def test_stop_stale_pid_no_socket(tmp_path: Path, capsys) -> None:
 
 
 def test_stop_running_daemon_exits_cleanly(tmp_path: Path, capsys) -> None:
-    """pid 文件 + socket 均在、进程在运行 → 发 SIGTERM,等 socket 消失,返回 0。"""
+    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
     _write_pid(pid_path, 12345)
 
-    # socket 在第一次检测时"活",SIGTERM 后立即消失
-    alive_calls: list[bool] = [True, False]  # 第1次=True(发信号前校验),第2次=False(已退出)
+    alive_calls: list[bool] = [True, False]
 
     def _mock_socket_alive(path: Path) -> bool:
         return alive_calls.pop(0) if alive_calls else False
@@ -169,7 +157,7 @@ def test_stop_running_daemon_exits_cleanly(tmp_path: Path, capsys) -> None:
 
 
 def test_stop_daemon_timeout(tmp_path: Path, capsys) -> None:
-    """daemon 不响应 SIGTERM,超时后返回 1 并打印警告。"""
+    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -177,12 +165,9 @@ def test_stop_daemon_timeout(tmp_path: Path, capsys) -> None:
 
     with (
         mock.patch("argos.daemon.pidfile.is_alive", return_value=True),
-        # socket 始终活着(daemon 不退出)
         mock.patch("argos.daemon.__main__._socket_alive", return_value=True),
         mock.patch("os.kill"),
-        # 让 time.sleep 几乎不等(加速测试),但 time.monotonic 正常走
         mock.patch("time.sleep"),
-        # 缩短超时
     ):
         rc = _cmd_stop(pid_path, sock_path, timeout=0.05)
 
@@ -192,12 +177,10 @@ def test_stop_daemon_timeout(tmp_path: Path, capsys) -> None:
 
 
 def test_stop_no_pid_file_but_socket_exists(tmp_path: Path, capsys) -> None:
-    """socket 在但 pid 文件不在 → 无法发信号,返回 1。"""
+    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
-    # 创建一个空文件让 socket_path.exists() 为 True,避免早期"未运行"退出
     sock_path.touch()
-    # 用 mock 让 _socket_alive 返回 True
     with mock.patch("argos.daemon.__main__._socket_alive", return_value=True):
         rc = _cmd_stop(pid_path, sock_path)
 
@@ -207,7 +190,7 @@ def test_stop_no_pid_file_but_socket_exists(tmp_path: Path, capsys) -> None:
 
 
 def test_stop_process_already_gone(tmp_path: Path, capsys) -> None:
-    """os.kill 抛 ProcessLookupError(进程已不存在)→ 视为已停止,返回 0。"""
+    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -225,10 +208,9 @@ def test_stop_process_already_gone(tmp_path: Path, capsys) -> None:
     assert "未运行" in captured.out
 
 
-# ── _cmd_status 测试 ─────────────────────────────────────────────────────────
 
 def test_status_not_running(tmp_path: Path, capsys) -> None:
-    """pid / socket 均不在 → 报'未运行',返回 1。"""
+    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -240,7 +222,7 @@ def test_status_not_running(tmp_path: Path, capsys) -> None:
 
 
 def test_status_running(tmp_path: Path, capsys) -> None:
-    """pid + socket 均在且进程活跃 → 打印运行信息,返回 0。"""
+    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -249,7 +231,6 @@ def test_status_running(tmp_path: Path, capsys) -> None:
     with (
         mock.patch("argos.daemon.pidfile.is_alive", return_value=True),
         mock.patch("argos.daemon.__main__._socket_alive", return_value=True),
-        # 跳过版本查询(socket 是 mock 的,无真实 HTTP)
         mock.patch("argos.daemon.__main__._query_version_sync", return_value="0.1.0"),
     ):
         rc = _cmd_status(pid_path, sock_path)
@@ -257,18 +238,17 @@ def test_status_running(tmp_path: Path, capsys) -> None:
     assert rc == 0
     captured = capsys.readouterr()
     assert "运行中" in captured.out
-    assert "42" in captured.out          # pid 显示
-    assert "0.1.0" in captured.out       # 版本号显示
+    assert "42" in captured.out
+    assert "0.1.0" in captured.out
 
 
 def test_status_shows_uptime(tmp_path: Path, capsys) -> None:
-    """pid 文件存在时输出 uptime(基于 pid 文件 mtime)。"""
+    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
     _write_pid(pid_path, 99)
 
-    # 手动把 pid 文件 mtime 设成 1 小时前
     past_ts = time.time() - 3600
     os.utime(pid_path, (past_ts, past_ts))
 
@@ -281,12 +261,11 @@ def test_status_shows_uptime(tmp_path: Path, capsys) -> None:
 
     assert rc == 0
     captured = capsys.readouterr()
-    # uptime 格式 HH:MM:SS,1 小时前应包含 "01:"
     assert "01:" in captured.out, f"uptime 应含 '01:',实际输出:{captured.out!r}"
 
 
 def test_status_stale_pid(tmp_path: Path, capsys) -> None:
-    """pid 文件存在但进程已死 + socket 不在 → 报'未运行' + 残留 pid 提示。"""
+    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -303,12 +282,9 @@ def test_status_stale_pid(tmp_path: Path, capsys) -> None:
     assert "未运行" in captured.out
 
 
-# ── main() argparse 集成测试 ─────────────────────────────────────────────────
 
 def test_main_stop_subcommand(tmp_path: Path, capsys) -> None:
-    """main() 解析 'stop' 子命令并调用 _cmd_stop。
-    注意:全局选项(--pid-path / --socket-path)必须在子命令名之前。
-    """
+    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -329,7 +305,7 @@ def test_main_stop_subcommand(tmp_path: Path, capsys) -> None:
 
 
 def test_main_status_subcommand(tmp_path: Path, capsys) -> None:
-    """main() 解析 'status' 子命令并调用 _cmd_status。"""
+    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -350,7 +326,7 @@ def test_main_status_subcommand(tmp_path: Path, capsys) -> None:
 
 
 def test_main_no_subcommand_calls_serve(tmp_path: Path) -> None:
-    """main() 无子命令 → 调用 asyncio.run(_serve(...))。"""
+    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 
@@ -371,7 +347,7 @@ def test_main_no_subcommand_calls_serve(tmp_path: Path) -> None:
 
 
 def test_main_start_subcommand_calls_serve(tmp_path: Path) -> None:
-    """main() 'start' 子命令 → 同样调用 asyncio.run(_serve(...))。"""
+    """Internal documentation."""
     pid_path = tmp_path / "daemon.pid"
     sock_path = tmp_path / "daemon.sock"
 

@@ -1,6 +1,4 @@
-"""eval 测试 fake 桩:FakeWorktree + make_fake_loop,供 test_eval_runner / test_eval_compare 复用。
-
-(conftest discovery 在多目录项目里不可靠;改用 import-based 共享。)"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,7 +11,7 @@ from argos.eval.runner import (
 
 
 class FakeWorktree:
-    """在 tmp_path/eval_wt/<run_id>/ 落目录,模拟 worktree create/cleanup。"""
+    """Internal documentation."""
     def __init__(self, base: Path, *, fail_create: bool = False):
         self.base = Path(base)
         self.base.mkdir(parents=True, exist_ok=True)
@@ -52,7 +50,7 @@ def make_fake_loop(
     steps: int = 8,
     raise_on_run: bool = False,
 ):
-    """返一个 fake loop:有 run_sync(goal, workspace) → LoopOutcome。"""
+    """Internal documentation."""
     class _Loop:
         pass
 

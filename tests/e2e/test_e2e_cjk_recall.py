@@ -1,9 +1,4 @@
-"""铁证③(spec §9 / §5.3 / §5.6):中文 search/recall 命中(可证伪)。
-
-可证伪:相关中文查询命中、无关中文查询不命中、reason 可解释。
-若 CJK 搜索退化成'什么都返回'或'什么都搜不到'→ 本测试红。
-embedding 用注入的 fake embedder(确定性),不触发 MLX 懒下载。
-"""
+"""Internal documentation."""
 import json
 
 import pytest
@@ -12,7 +7,7 @@ from argos.memory.store import ArgosStore, MemoryRecord
 
 
 class _FakeEmbedder:
-    """确定性 embedder:把中文按关键词映射到正交 one-hot 向量,避免 MLX 懒下载。"""
+    """Internal documentation."""
     dim = 4
 
     def embed(self, texts):
@@ -40,7 +35,6 @@ _RECS = [
 
 @pytest.fixture
 def cjk_store(tmp_path):
-    # 用公开写入路径 migrate_jsonl(契约 §2 保证)写三条中文任务记忆。
     jl = tmp_path / "mem.jsonl"
     jl.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in _RECS), encoding="utf-8")
     s = ArgosStore(db_path=str(tmp_path / "argos.db"), embedder=_FakeEmbedder())
@@ -60,14 +54,13 @@ def test_recall_hits_relevant_chinese_with_reason(cjk_store):
 
 
 def test_recall_misses_unrelated_chinese(cjk_store):
-    # 与三条记忆正交的中文查询 → 不应命中(不是什么都返回)。
     out = cjk_store.recall("今天天气怎么样", k=3, sim_min=0.4)
     ids = [r.id for r, _ in out]
     assert "m1" not in ids and "m2" not in ids and "m3" not in ids
 
 
 def test_fts_search_hits_chinese_message(cjk_store):
-    """FTS5(messages 表)中文 4 字短语命中(better-trigram,spec §5.3)。"""
+    """Internal documentation."""
     cjk_store.ensure_session("s-cjk", title="t", model="m", system_snapshot="")
     cjk_store.append_message("s-cjk", role="user", content="请修复用户登录失败的问题")
     hits = cjk_store.search("登录失败")

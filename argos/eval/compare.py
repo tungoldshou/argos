@@ -1,13 +1,4 @@
-"""#7 T5 A/B 对比 + 报告生成器(md + json)。
-
-- run_pair(runner, task, *, model_a, model_b) → (EvalResult, EvalResult)
-- generate_report(a, b) → str(markdown)
-- write_report(a, b, *, base=None) → Path
-- write_report_json(a, b, *, base=None) → Path(机读;v1.1 自动分析用)
-
-D14:md(给用户)+ json(给后续自动化)
-D15:每 run 独立 worktree,清理独立
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -37,11 +28,7 @@ def run_pair(
     runner: EvalRunner, task: EvalTask, *, model_a: str, model_b: str,
     persist: bool = True,
 ) -> tuple[EvalResult, EvalResult]:
-    """同 task,两个 model_tier 各跑一遍(spec §5.5)。
-
-    每遍独立 worktree + 独立 EvalResult(落 2 条 JSONL,写到 runner.base_dir/runs/)。
-    persist=False → 不落 JSONL(测试用)。
-    """
+    """Internal documentation."""
     a = runner.run(task, model_tier=model_a)
     b = runner.run(task, model_tier=model_b)
     if persist:
@@ -67,7 +54,7 @@ def _winner_pass(a: EvalResult, b: EvalResult) -> str:
 
 
 def _winner_cost(a: EvalResult, b: EvalResult) -> str:
-    """cost 小的胜;无 cost 数据 → 'unknown'。"""
+    """Internal documentation."""
     if a.cost_usd is None and b.cost_usd is None:
         return "unknown"
     if a.cost_usd is None:
@@ -82,7 +69,7 @@ def _winner_cost(a: EvalResult, b: EvalResult) -> str:
 
 
 def generate_report(a: EvalResult, b: EvalResult) -> str:
-    """side-by-side markdown 报告(spec §3 / §7.3)。"""
+    """Internal documentation."""
     winner_pass = _winner_pass(a, b)
     winner_cost = _winner_cost(a, b)
     lines: list[str] = [
@@ -130,7 +117,7 @@ def generate_report(a: EvalResult, b: EvalResult) -> str:
 def write_report(
     a: EvalResult, b: EvalResult, *, base: Path | None = None,
 ) -> Path:
-    """写 markdown 报告到 ~/.argos/eval/reports/ab-<id>-<date>.md。"""
+    """Internal documentation."""
     root = _reports_dir(base)
     root.mkdir(parents=True, exist_ok=True)
     date = time.strftime("%Y-%m-%d", time.localtime(a.finished_at))
@@ -142,7 +129,7 @@ def write_report(
 def write_report_json(
     a: EvalResult, b: EvalResult, *, base: Path | None = None,
 ) -> Path:
-    """写 json 报告(机读;v1.1 自动分析用)。"""
+    """Internal documentation."""
     root = _reports_dir(base)
     root.mkdir(parents=True, exist_ok=True)
     date = time.strftime("%Y-%m-%d", time.localtime(a.finished_at))

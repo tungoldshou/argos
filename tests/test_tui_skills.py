@@ -1,4 +1,4 @@
-"""#10 T6 TUI /skills slash + 子命令测试."""
+"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -85,7 +85,6 @@ async def test_skills_command_no_installed_prints_message(tmp_path, monkeypatch)
     assert any("Installed skills" in t for t, _ in log.lines)
 
 
-# ── /skills install/remove/refresh/test 提示(不真装) ──────────
 
 
 @pytest.mark.asyncio
@@ -207,12 +206,11 @@ async def test_skills_unknown_subcommand_prints_usage(tmp_path, monkeypatch):
     assert "Usage" in text or "用法" in text
 
 
-# ── builtin 3 个的 installed 列表里要有 ────────────────────────
 
 
 @pytest.mark.asyncio
 async def test_skills_command_includes_builtin_three(tmp_path, monkeypatch):
-    """_show_skills 不崩 + 不抛异常."""
+    """Internal documentation."""
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     from argos.tui.app import ArgosApp
     app = ArgosApp()
@@ -221,12 +219,11 @@ async def test_skills_command_includes_builtin_three(tmp_path, monkeypatch):
     await app._show_skills(log)
 
 
-# ── 推荐嵌入 ────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
 async def test_skills_command_no_args_includes_recommendations(tmp_path, monkeypatch):
-    """session activity 有 .py 编辑 -> 推荐 python-lint."""
+    """Internal documentation."""
     monkeypatch.setattr(_idx, "_skills_root", lambda: tmp_path)
     from argos.skills_curator import recommend as _rec
     monkeypatch.setattr(

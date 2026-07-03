@@ -22,15 +22,12 @@ def test_capture_usage_reads_cache_tokens():
 def test_costupdate_has_cache_read_field():
     cu = CostUpdate(tokens_in=1, tokens_out=2, cost_usd=0.0, elapsed_s=1.0, cache_read=179)
     assert cu.cache_read == 179
-    # 默认值向后兼容
     cu2 = CostUpdate(tokens_in=1, tokens_out=2, cost_usd=0.0, elapsed_s=1.0)
     assert cu2.cache_read == 0
 
 
 def test_coalesce_consecutive_roles_keeps_alternation():
-    """I1 修复:多轮/压缩产生的连续同 role 必须被合并,保证 user/assistant 交替
-    (否则真 Anthropic 兼容端 400 'roles must alternate')。"""
-    # 连续 user(空 assistant 答复 → 只存了 goal;或压缩摘要 user + goal user)
+    """Internal documentation."""
     out = _coalesce_consecutive_roles([
         {"role": "user", "content": "第一轮目标"},
         {"role": "user", "content": "第二轮:继续"},
@@ -41,7 +38,7 @@ def test_coalesce_consecutive_roles_keeps_alternation():
 
 
 def test_payload_normalizes_messages():
-    """_payload 必须把消息归一化(交替),保护真请求不被端点拒。"""
+    """Internal documentation."""
     from argos.core.protocols import get_protocol
     mc = ModelClient.__new__(ModelClient)
     from argos.core.models import ModelTier
@@ -50,6 +47,6 @@ def test_payload_normalizes_messages():
     payload = mc._payload(
         [{"role": "user", "content": "a"}, {"role": "user", "content": "b"}], system="s")
     roles = [m["role"] for m in payload["messages"]]
-    assert roles == roles[:1] + [r for i, r in enumerate(roles[1:], 1) if r != roles[i - 1]], \
+    assert roles == roles[:1] + [r for i, r in enumerate(roles[1:], 1) if r != roles[i - 1]],\
         "payload messages 不得有相邻同 role"
     assert len(payload["messages"]) == 1 and payload["messages"][0]["content"] == "a\nb"

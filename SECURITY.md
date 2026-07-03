@@ -33,8 +33,8 @@ Argos has several core moats (see [docs/argos-product-definition.md](docs/argos-
 
 1. **propose_verify** — agent declares its verify command; we run it independently
 2. **Verdict / VerdictStatus** — three-state result (`passed` / `failed` / `unverifiable`), fail-closed; defined in `argos/core/types.py`; Argos never fabricates a green result
-3. **OS Seatbelt** — agent code runs in a subprocess under a macOS Seatbelt profile, no network by default
-4. **CapabilityBroker + CapabilityRegistry** — every side effect passes egress-policy checks (derived from the per-process `CapabilityRegistry`) and receives an HMAC-signed receipt; each daemon run gets its own isolated `SeatbeltExecutor + ApprovalGate + CapabilityBroker` via `build_run_stack()`, so concurrent runs never share mutable state
+3. **OS sandboxing** — agent code runs in a subprocess under macOS Seatbelt or Linux bwrap when available, no network by default
+4. **CapabilityBroker + CapabilityRegistry** — declared privileged tool calls pass egress-policy checks (derived from the per-process `CapabilityRegistry`) and receive an HMAC-signed receipt; raw model-authored Python gets OS containment only when the opt-in sandbox is enabled; each daemon run gets its own isolated `SeatbeltExecutor + ApprovalGate + CapabilityBroker` via `build_run_stack()`, so concurrent runs never share mutable state
 5. **Approval Gate / Trust Dial** — two independent concepts: the `ApprovalLevel` approval dial (`argos/approval.py`: OBSERVE / PROPOSE / CONFIRM / AUTO, the `/yolo` end) and the `TrustLevel` autonomy dial (`argos/permissions/trust_dial.py`: L0_EVERY_STEP through L4_AUTONOMOUS). They are not the same scale — L0 is not OBSERVE. HARD RULES enforced in `permissions/` cannot be bypassed at any level on either dial
 
 ## Threat Model
@@ -49,13 +49,14 @@ Argos has several core moats (see [docs/argos-product-definition.md](docs/argos-
   broker-gated (risk=high, reversible=False, hard CONFIRM)
 
 **Out of scope (by design):**
-- User-installed hooks (`~/.argos/hooks.json`) — user code, user responsibility
+- User-installed hooks (`hooks.json` under the Argos config directory) — user code, user responsibility
 - User-installed LSP servers — user code, user responsibility
 - Models that ignore their system prompt
 
 ## Known Limitations
 
-- **macOS only** for the packaged binary (Linux/Windows in #13)
+- **No published binary assets yet** — macOS, Linux, and Windows packaging
+  scaffolds exist, but the current release has no installable binary assets.
 - **Unsigned binary** — first launch requires right-click → Open, or
   `xattr -d com.apple.quarantine /Applications/Argos.app`. Code signing
   is on the roadmap (v0.x milestone).

@@ -1,8 +1,4 @@
-"""打包产物烟测:dist/argos --selftest 端到端不连网验装配(spec §10 验产物)。
-
-跑法:`python smoke_packaged.py`(在仓库根,需先跑 packaging/build_arm64.sh 产出 dist/argos)。
-验证:产物能起、--selftest 退出码 0(整机装配在打包态仍贯通,非 stale)。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import subprocess

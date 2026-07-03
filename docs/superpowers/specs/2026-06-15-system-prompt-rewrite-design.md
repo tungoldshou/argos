@@ -80,7 +80,7 @@ principle). Sections, in order:
    - Did the verify command actually execute (not just get proposed)? → if no, don't claim passed.
    - Is my verdict from an exit code or my own assertion? → if assertion, label `unverifiable`.
    - Am I labelling an unverifiable run as passed? → if yes, fix to `unverifiable`.
-   - Did every side effect go through the broker / declared tools (no hidden state)? 
+   - Did every side effect go through the broker / declared tools (no hidden state)?
    - Did I invent a tool count, file change, or status? → if yes, remove it.
 
 The **assembly** (`loop.py:_build_system_pair`, 956-1034) is essentially unchanged: `safe = HONESTY_SYSTEM +

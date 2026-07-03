@@ -1,4 +1,4 @@
-"""#7 T7+T8 TUI /eval slash 命令测试。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -16,12 +16,12 @@ from argos.eval.runner import EvalResult, PASS_PASSED, PASS_FAILED
 
 
 def test_eval_command_in_commands_dict():
-    """COMMAND_HELP 收录 eval(spec §7 T7)。"""
+    """Internal documentation."""
     assert "eval" in tui_cmd.COMMAND_HELP
 
 
 def test_eval_command_parsed_as_known():
-    """parse_slash 解析 /eval → known=True。"""
+    """Internal documentation."""
     sc = tui_cmd.parse_slash("/eval")
     assert sc is not None
     assert sc.name == "eval"
@@ -43,11 +43,10 @@ def test_eval_compare_subcommand_parsed():
     assert sc.arg == "compare bug_fix_001:cheap bug_fix_001:strong"
 
 
-# ── 构造 fake ArgosApp(只取 _eval_* 方法,避开 App.__init__) ─────────
 
 
 class _FakeApp:
-    """ArgosApp 的最小替代(只暴露 _eval_cmd / _eval_run_cmd / _eval_compare_cmd)。"""
+    """Internal documentation."""
     def __init__(self):
         from argos.tui.app import ArgosApp
         self._session_id = "test-session"
@@ -66,7 +65,7 @@ class _FakeApp:
 
 
 class _FakeLog:
-    """最小 transcript 替代:append_line 收集到 list。"""
+    """Internal documentation."""
     def __init__(self):
         self.lines: list[tuple[str, str]] = []
 
@@ -77,12 +76,11 @@ class _FakeLog:
         return "\n".join(t for t, _ in self.lines)
 
 
-# ── /eval 无参 ────────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
 async def test_eval_no_args_no_runs_prints_message(tmp_path, monkeypatch):
-    """无 run → 友好提示,不假绿。"""
+    """Internal documentation."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from argos.eval import results as _results
     monkeypatch.setattr(_results, "_RUNS_DIR", tmp_path / "eval" / "runs")
@@ -95,7 +93,7 @@ async def test_eval_no_args_no_runs_prints_message(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_eval_no_args_lists_runs(tmp_path, monkeypatch):
-    """有 run → 表格 + 摘要。"""
+    """Internal documentation."""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     from argos.eval import results as _results
     monkeypatch.setattr(_results, "_RUNS_DIR", tmp_path / "eval" / "runs")
@@ -173,7 +171,7 @@ async def test_eval_run_unknown_task_errors(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_eval_run_happy_path_appends_and_prints(tmp_path, monkeypatch):
-    """/eval run bug_fix_001 → 调 runner + 落 JSONL + 打印结果。"""
+    """Internal documentation."""
     from tests.eval._seed_corpus import write_seed_corpus
     from tests.eval._fakes import FakeWorktree, make_fake_loop, make_fake_loop_factory
     from argos.eval.runner import EvalRunner
@@ -215,7 +213,7 @@ async def test_eval_run_happy_path_appends_and_prints(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_eval_compare_requires_colon_or_matches_ids(tmp_path, monkeypatch):
-    """compare 缺冒号时,会用纯 id(此时 task_id 必须一致)。"""
+    """Internal documentation."""
     from tests.eval._seed_corpus import write_seed_corpus
     from argos.eval.runner import EvalRunner
     from argos.cli import eval as _eval_cli

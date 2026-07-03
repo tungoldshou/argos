@@ -1,9 +1,4 @@
-"""Infra cluster locale — MCP, LSP, hooks, capability strings.
-
-key namespace: mcp.* / lsp.* / hooks.* / cap.*
-ZH values = verbatim originals (so ARGOS_LANG=zh legacy assertions still match).
-EN values = natural English equivalents; "Error:" prefix matches ZH "错误:" prefix.
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 EN: dict[str, str] = {
@@ -36,7 +31,7 @@ EN: dict[str, str] = {
     # McpManager.call: no MCP servers configured
     "mcp.manager.no_servers": (
         "Error: no MCP server configured"
-        " (~/.argos/mcp.json does not exist or is empty)."
+        " ({path} does not exist or is empty)."
     ),
     # McpManager.call: unknown server name
     "mcp.manager.unknown_server": (
@@ -279,7 +274,7 @@ ZH: dict[str, str] = {
     "mcp.content.tool_error": "[MCP 工具报错] {out}",
     "mcp.content.empty_result": "(MCP 工具返回空)",
     "mcp.manager.no_servers": (
-        "错误:未配置任何 MCP server(~/.argos/mcp.json 不存在或为空)。"
+        "错误:未配置任何 MCP server({path} 不存在或为空)。"
     ),
     "mcp.manager.unknown_server": (
         "错误:未知 MCP server {server!r}(可用:{available})。"

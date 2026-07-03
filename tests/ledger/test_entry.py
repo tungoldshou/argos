@@ -1,4 +1,4 @@
-"""LedgerEntry 三态、frozen 不变量、序列化 round-trip 测试。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import dataclasses
@@ -46,7 +46,7 @@ class TestLedgerEntryTriState:
         assert e.undo_state == undo_state
 
     def test_reversible_no_undo_token_none(self):
-        """reversible=no 的条目 undo_token 应为 None(不可逆无快照路径意义)。"""
+        """Internal documentation."""
         e = _make_entry(reversible="no", undo_token=None, undo_state="impossible")
         assert e.undo_token is None
         assert e.undo_state == "impossible"
@@ -56,7 +56,7 @@ class TestLedgerEntryWithUndoState:
     def test_with_undo_state_returns_new_instance(self):
         e = _make_entry(undo_state="available")
         e2 = e.with_undo_state("done")
-        assert e.undo_state == "available"  # 原不变
+        assert e.undo_state == "available"
         assert e2.undo_state == "done"
 
     def test_with_undo_state_preserves_other_fields(self):

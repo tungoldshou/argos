@@ -1,12 +1,4 @@
-"""learning promotion_gate 验收 — 任务:A/B 不提升的候选不被晋升;提升才晋升。
-
-约束:
-- 复用 eval/runner.py + eval/compare.py 的 run_pair(同 model_tier 跑两次,B 路径在
-  loop_factory 里注入技能 hint)
-- builtin 名字硬拒(reuse skills_curator.BUILTIN_NAMES)
-- 不调真 worktree(测试桩)
-- 落盘:promoted=True 才写 ~/.argos/skills/<name>/SKILL.md
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -31,18 +23,17 @@ class _FakeOutcome:
 
 @dataclass
 class _FakeLoop:
-    """带 hint 注入的 fake loop:跑出结果由 caller 控制 pass_status 序列。"""
+    """Internal documentation."""
     hint: str | None = None
     pass_sequence: list[str] = field(default_factory=lambda: ["passed"])
 
     def run_sync(self, goal: str, workspace: Path) -> _FakeOutcome:
-        # 取下一个预定 verdict(测试通过外部传 sequence 控制 A/B 通过率)
         status = self.pass_sequence.pop(0) if self.pass_sequence else "passed"
         return _FakeOutcome(verdict_status=status)
 
 
 class _FakeRunner:
-    """假 runner:每 task 跑两次,两次分别用 pass_sequence_a / pass_sequence_b 喂 loop。"""
+    """Internal documentation."""
     def __init__(self, sequence_a: list[str], sequence_b: list[str]):
         self._seq_a = list(sequence_a)
         self._seq_b = list(sequence_b)
@@ -50,14 +41,12 @@ class _FakeRunner:
         self.base_dir = Path("/tmp/fake_eval")
 
     def run(self, task, *, model_tier: str) -> Any:
-        # 偶数次用 seq_a(A=无 hint),奇数次用 seq_b(B=有 hint)
         self._counter += 1
         if self._counter % 2 == 1:
             return self._run_once(task, self._seq_a, hint=None, model_tier=model_tier)
         return self._run_once(task, self._seq_b, hint="<candidate skill body>", model_tier=model_tier)
 
     def _run_once(self, task, seq, *, hint, model_tier: str):
-        # 跑一个 EvalResult-look-alike。直接用 eval.runner.EvalResult 避免重复定义。
         from argos.eval.runner import EvalResult, PASS_PASSED, PASS_FAILED
         outcome = _FakeLoop(hint=hint, pass_sequence=seq).run_sync(task.goal, task.working_dir)
         status = outcome.verdict_status
@@ -91,9 +80,8 @@ def _make_candidate(name: str, body: str = "# skill body", verify_cmd: str = "tr
     )
 
 
-# ── 验收 b: A/B 不提升的候选不被晋升 ─────────────────────
 def test_promoted_when_pass_rate_improves(tmp_path):
-    """A=0/2 passed, B=2/2 passed → promoted=True,B 严格 > A。"""
+    """Internal documentation."""
     from argos.learning.distiller import SkillCandidate
 
     tasks = [_make_task("t1"), _make_task("t2")]
@@ -105,12 +93,11 @@ def test_promoted_when_pass_rate_improves(tmp_path):
         skills_root=tmp_path / "skills",
     )
     assert result.promoted is True, f"应晋升,实得 {result}"
-    # 落盘
     assert (tmp_path / "skills" / "learned-good" / "SKILL.md").exists()
 
 
 def test_not_promoted_when_no_improvement(tmp_path):
-    """A=1/2, B=1/2 → promoted=False(B 没 > A,平手不晋升)。"""
+    """Internal documentation."""
     tasks = [_make_task("t1"), _make_task("t2")]
     runner = _FakeRunner(sequence_a=["passed", "failed"], sequence_b=["passed", "failed"])
     cand = _make_candidate("learned-tie")
@@ -120,12 +107,11 @@ def test_not_promoted_when_no_improvement(tmp_path):
         skills_root=tmp_path / "skills",
     )
     assert result.promoted is False
-    # 落盘拒绝
     assert not (tmp_path / "skills" / "learned-tie" / "SKILL.md").exists()
 
 
 def test_not_promoted_when_regression(tmp_path):
-    """A=2/2, B=1/2 → promoted=False(B 反而差,防退化)。"""
+    """Internal documentation."""
     tasks = [_make_task("t1"), _make_task("t2")]
     runner = _FakeRunner(sequence_a=["passed", "passed"], sequence_b=["passed", "failed"])
     cand = _make_candidate("learned-bad")
@@ -139,11 +125,10 @@ def test_not_promoted_when_regression(tmp_path):
 
 
 def test_builtin_name_rejected(tmp_path):
-    """候选 name 命中 BUILTIN_NAMES → 即返 rejected(不跑 A/B,免测)。"""
+    """Internal documentation."""
     from argos.skills_curator.index import BUILTIN_NAMES
     builtin = next(iter(BUILTIN_NAMES))
     cand = _make_candidate(builtin)
-    # runner 永远不应用
     runner = _FakeRunner(sequence_a=[], sequence_b=[])
     result = promotion_gate.promote(
         candidate=cand, tasks=[_make_task()], runner=runner,
@@ -154,7 +139,7 @@ def test_builtin_name_rejected(tmp_path):
 
 
 def test_promote_swallows_runner_exceptions(tmp_path):
-    """A/B runner 抛异常 → promoted=False,reason 标"runner_error",不抛给 caller。"""
+    """Internal documentation."""
     class _BoomRunner(_FakeRunner):
         def run(self, task, *, model_tier):
             raise RuntimeError("boom")
@@ -169,10 +154,7 @@ def test_promote_swallows_runner_exceptions(tmp_path):
 
 
 def test_promote_writes_frontmatter_enabled_true(tmp_path):
-    """晋升落盘后,SKILL.md 应含 enabled: true(A/B gate 通过即自动启用,无需人工二次确认)。
-
-    body 由 distill 阶段生成(带 enabled: false 占位),promotion_gate 在写盘前翻转为 true。
-    """
+    """Internal documentation."""
     tasks = [_make_task("t1"), _make_task("t2")]
     runner = _FakeRunner(sequence_a=["failed", "failed"], sequence_b=["passed", "passed"])
     body_with_fm = (
@@ -191,10 +173,9 @@ def test_promote_writes_frontmatter_enabled_true(tmp_path):
     assert "learned skill body" in skill_md
 
 
-# ── Task 6:A/B 接线 + 同名覆盖防护 ─────────────────────────────
 
 class _FullPassRunner:
-    """所有 task 永远返回 passed 的 fake runner。"""
+    """Internal documentation."""
     def __init__(self):
         self.calls: list[tuple] = []
 
@@ -213,7 +194,7 @@ class _FullPassRunner:
 
 
 class _FullFailRunner:
-    """所有 task 永远返回 failed 的 fake runner。"""
+    """Internal documentation."""
     def run(self, task, *, model_tier: str):
         from argos.eval.runner import EvalResult
         return EvalResult(
@@ -228,15 +209,10 @@ class _FullFailRunner:
 
 
 def test_promote_runner_b_used_for_b_side(tmp_path):
-    """A 用全 failed runner;B 用全 passed runner_b → promoted=True。
-
-    评审钉死:a_total==2、b_total==2(计数器不被异常守卫吃掉)。
-    """
-    tasks = [object(), object()]  # runner_b.run 接收任意 task 对象
-    # 为让 object() task 能正常传递给 EvalResult 构造,用专门的 fake runner
+    """Internal documentation."""
+    tasks = [object(), object()]
     class _ObjRunnerFail:
         def run(self, task, *, model_tier: str):
-            # 返回一个带 pass_status="failed" 的最简对象
             class _R:
                 pass_status = "failed"
             return _R()
@@ -266,7 +242,7 @@ def test_promote_runner_b_used_for_b_side(tmp_path):
 
 
 def test_promote_refuses_overwrite_user_skill(tmp_path):
-    """同名用户技能(无 source_run 标记)已存在 → 拒绝晋升,原文件不动。"""
+    """Internal documentation."""
     skills_root = tmp_path / "skills"
     skill_dir = skills_root / "my-skill"
     skill_dir.mkdir(parents=True)
@@ -284,13 +260,12 @@ def test_promote_refuses_overwrite_user_skill(tmp_path):
     )
     assert result.promoted is False, f"应拒绝,实得 {result}"
     assert (result.reason or "").startswith("name_collision"), f"reason 应以 name_collision 开头,得 {result.reason!r}"
-    # 原文件内容不变
     actual = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     assert actual == original_content, "原文件内容不应被修改"
 
 
 def test_promote_overwrites_learned_skill(tmp_path):
-    """同名学习产物(含 source_run 标记)已存在 → 允许覆盖(整合更新)。"""
+    """Internal documentation."""
     skills_root = tmp_path / "skills"
     skill_dir = skills_root / "dream-skill"
     skill_dir.mkdir(parents=True)
@@ -298,7 +273,6 @@ def test_promote_overwrites_learned_skill(tmp_path):
     (skill_dir / "SKILL.md").write_text(old_content, encoding="utf-8")
 
     tasks = [_make_task("t1"), _make_task("t2")]
-    # A 全 fail, B 全 pass → promoted=True
     new_body = "---\nsource_run: newrun456\nenabled: false\n---\n# 新版综合技能\n"
     cand = _make_candidate("dream-skill", body=new_body)
 
@@ -326,14 +300,10 @@ def test_promote_overwrites_learned_skill(tmp_path):
 
 
 def test_promote_refuses_overwrite_user_skill_with_source_run_in_body(tmp_path):
-    """【评审 R1 修复】用户技能 frontmatter 无 source_run 但正文含 "source_run:" 字样
-    (例如文档示例代码)时,全文匹配会误判为学习产物并允许覆盖。
-    正确行为:frontmatter 无 source_run → 保守拒绝,原文件不动。
-    """
+    """Internal documentation."""
     skills_root = tmp_path / "skills"
     skill_dir = skills_root / "user-doc-skill"
     skill_dir.mkdir(parents=True)
-    # 用户手写技能:frontmatter 无 source_run,正文含 "source_run:" 字样(文档示例)
     original_content = (
         "---\n"
         "name: user-doc-skill\n"
@@ -350,7 +320,6 @@ def test_promote_refuses_overwrite_user_skill_with_source_run_in_body(tmp_path):
     (skill_dir / "SKILL.md").write_text(original_content, encoding="utf-8")
 
     tasks = [_make_task("t1"), _make_task("t2")]
-    # A 全 fail, B 全 pass:若 is_learned 误判为学习产物会允许覆盖并返回 promoted=True
     cand = _make_candidate("user-doc-skill", body="---\nsource_run: newrun\n---\n# 新body\n")
 
     result = promotion_gate.promote(
@@ -364,21 +333,15 @@ def test_promote_refuses_overwrite_user_skill_with_source_run_in_body(tmp_path):
     assert (result.reason or "").startswith("name_collision"), (
         f"reason 应以 name_collision 开头,得 {result.reason!r}"
     )
-    # 原文件内容不变
     actual = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     assert actual == original_content, "原用户技能文件不应被修改"
 
 
 def test_promote_refuses_overwrite_skill_with_markdown_divider_trick(tmp_path):
-    """【评审 B2 修复】文件不以 '---' 开头但正文含 '---' Markdown 水平分割线,
-    分割线后跟 'source_run:' 字样 → frontmatter 提取器不应误判为学习产物。
-
-    正确行为:文件首行不是 '---' → is_learned=False → 保守拒绝,原文件不动。
-    """
+    """Internal documentation."""
     skills_root = tmp_path / "skills"
     skill_dir = skills_root / "markdown-divider-skill"
     skill_dir.mkdir(parents=True)
-    # 用户技能:无 frontmatter,正文含 --- 分割线 + source_run: 字样
     original_content = (
         "# 用户手写技能(无 frontmatter)\n"
         "这是用户手动编写的技能文件。\n"
@@ -393,7 +356,6 @@ def test_promote_refuses_overwrite_skill_with_markdown_divider_trick(tmp_path):
     (skill_dir / "SKILL.md").write_text(original_content, encoding="utf-8")
 
     tasks = [_make_task("t1")]
-    # A 全 fail, B 全 pass:若 is_learned 误判为 True 会允许覆盖并返回 promoted=True
     cand = _make_candidate(
         "markdown-divider-skill",
         body="---\nsource_run: newrun\n---\n# 新 body\n",
@@ -410,6 +372,5 @@ def test_promote_refuses_overwrite_skill_with_markdown_divider_trick(tmp_path):
     assert (result.reason or "").startswith("name_collision"), (
         f"reason 应以 name_collision 开头,得 {result.reason!r}"
     )
-    # 原文件内容不变
     actual = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     assert actual == original_content, "原文件内容不应被修改"

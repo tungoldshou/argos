@@ -1,4 +1,4 @@
-"""#10 T8 fixture 包:index entries + skill markdown + smoke 样本."""
+"""Internal documentation."""
 from tests.skills_curator.seed_index import (
     SAMPLE_SKILL_MD,
     SAMPLE_SMOKE_MD,

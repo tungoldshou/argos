@@ -1,4 +1,4 @@
-"""app.py 把图片 attachments 从 PromptArea 一路串到 loop.run(inline 路径)。"""
+"""Internal documentation."""
 import pytest
 from argos.tui.app import ArgosApp
 from argos.tui.fakeloop import FakeLoop
@@ -39,7 +39,6 @@ async def test_handle_input_forwards_attachments_to_start_run():
     assert captured.get("attachments") == [_ATT]
 
 
-# ── Task 5: Ctrl+V 剪贴板贴图 ──
 from argos.tui.widgets.prompt import PromptArea
 
 
@@ -67,7 +66,7 @@ async def test_ctrl_v_clipboard_error_is_honest(monkeypatch):
     app = ArgosApp(loop_factory=lambda **kw: FakeLoop())
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        await app.action_paste_image()   # 不该抛
+        await app.action_paste_image()
         await pilot.pause()
         pa = app.query_one("#prompt", PromptArea)
-        assert "[图片" not in pa.text      # 失败不插 token
+        assert "[图片" not in pa.text

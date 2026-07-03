@@ -1,9 +1,4 @@
-"""permissions/trust_dial.py + approval.py 用户可见文案 (Wave 2d).
-
-key 命名空间: perm.* / approval.*
-ZH 值 = 重构前的原始串 verbatim (一字不差)。
-EN 值 = 语义对等的自然英文,以 "Error:" 开头对应 ZH "错误:" 开头。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 EN: dict[str, str] = {

@@ -1,10 +1,4 @@
-"""context rot 三层防线测试(spec 2026-06-07):
-(a) 不可丢核心在修剪/压缩后原样存活;
-(b) 过期工具输出在整体压缩触发之前就被修剪;
-(c) 整体压缩只在高水位触发,绝不在 30–40% 提前触发;
-(d) 发生过压缩后,任务不经重新 verify 不会被标 passed;
-(e) 修剪/压缩事件都正确发出(并能序列化往返)。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,52 +18,44 @@ from argos.tui.events import (
 )
 
 
-# ────────────────────────── (a) 不可丢核心存活 ──────────────────────────
 
 
 def _thread_with_stale_tools(n_pairs: int = 10) -> list[dict]:
-    msgs: list[dict] = [{"role": "user", "content": "任务目标:实现 X"}]  # 核心:目标
+    msgs: list[dict] = [{"role": "user", "content": "任务目标:实现 X"}]
     for i in range(n_pairs):
         msgs.append({"role": "assistant", "content": f"我来做第{i}步"})
-        msgs.append({"role": "user", "content": f"[执行结果]\n" + "输出" * 200})  # 过期工具输出
+        msgs.append({"role": "user", "content": f"[执行结果]\n" + "输出" * 200})
     msgs.append({"role": "assistant", "content": "最近回答"})
     msgs.append({"role": "user", "content": "最近反馈"})
     return msgs
 
 
 def test_core_keep_survives_prune():
-    """目标(第0条)+ 最近N条 + 含 verify_cmd 的消息,修剪后原样保留。"""
+    """Internal documentation."""
     msgs = _thread_with_stale_tools()
-    msgs.insert(5, {"role": "user", "content": "请确保 pytest -q 通过"})  # 含 verify_cmd
+    msgs.insert(5, {"role": "user", "content": "请确保 pytest -q 通过"})
     res = prune_messages(msgs, core=CoreKeep(recent_turns=4, verify_cmd="pytest -q"),
                          aggressiveness=0.5)
     assert isinstance(res, PruneResult)
-    # 目标原样
     assert res.messages[0]["content"] == "任务目标:实现 X"
-    # 最近 4 条原样
     assert res.messages[-1]["content"] == "最近反馈"
     assert res.messages[-2]["content"] == "最近回答"
-    # 含 verify_cmd 的消息原样(没被折叠)
     assert any(m["content"] == "请确保 pytest -q 通过" for m in res.messages)
-    # 条数/顺序不变(折叠而非删除)
     assert len(res.messages) == len(msgs)
 
 
 def test_core_keep_survives_compaction_via_anchor():
-    """整体压缩可能把目标折进摘要;loop 的核心锚把它原样钉回。"""
+    """Internal documentation."""
     loop = _mk_loop(ArgosStore(db_path=":memory:"), _DoneModel(used=0), _NoCmdVerifier())
     loop._current_goal = "任务目标:实现 X"
-    # 模拟压缩后 reload 的线程:目标已被折进摘要、不在场
     folded = [{"role": "user", "content": "(早期对话摘要)任务目标 / 第0步 / ..."},
               {"role": "assistant", "content": "最近回答"}]
     out = loop._anchor_core_messages(folded, loop._current_goal)
-    assert out[0]["content"] == "任务目标:实现 X"   # 原样钉回最前
-    # 目标已在场时不重复
+    assert out[0]["content"] == "任务目标:实现 X"
     present = [{"role": "user", "content": "任务目标:实现 X"}]
     assert loop._anchor_core_messages(present, "任务目标:实现 X") == present
 
 
-# ────────────────────────── (b) 过期工具输出先被修剪 ──────────────────────────
 
 
 def test_stale_tool_output_pruned():
@@ -78,7 +64,7 @@ def test_stale_tool_output_pruned():
     folded = [m for m in res.messages if m["content"] == "[已修剪:过期工具输出]"]
     assert res.removed >= 1
     assert folded, "过期工具输出应被折叠成短桩"
-    assert res.removed_tokens > 0   # 真回收了 token
+    assert res.removed_tokens > 0
 
 
 def test_prune_disabled_when_aggressiveness_zero():
@@ -90,14 +76,13 @@ def test_prune_disabled_when_aggressiveness_zero():
 
 @pytest.mark.asyncio
 async def test_prune_happens_before_compaction_in_loop():
-    """低占用(不到整体压缩阈值)下,修剪照样发生、整体压缩不发生 —— 优先修剪。"""
+    """Internal documentation."""
     store = ArgosStore(db_path=":memory:")
     store.ensure_session("s", title="t", model="worker", system_snapshot="")
-    # 预置一串带过期工具输出的历史(>recent_turns,中段可折叠)
     for i in range(8):
         store.append_message("s", role="assistant", content=f"做第{i}步")
         store.append_message("s", role="user", content="[执行结果]\n" + "x" * 400)
-    model = _DoneModel(used=10_000)   # window 100k → 10% 占用,远低于整体压缩阈值
+    model = _DoneModel(used=10_000)
     loop = _mk_loop(store, model, _NoCmdVerifier(),
                     max_steps=2, compact_threshold=0.8, prune_aggressiveness=0.5)
     events = [ev async for ev in loop.run("目标X", "s")]
@@ -105,20 +90,19 @@ async def test_prune_happens_before_compaction_in_loop():
     assert not any(isinstance(e, CompactedEvent) for e in events), "低占用不应整体压缩"
 
 
-# ────────────────────────── (c) 整体压缩只在高水位 ──────────────────────────
 
 
 def test_safe_compact_threshold_floor():
-    assert safe_compact_threshold(0.3) == PRECOMPACT_FLOOR == 0.5   # 30% 被抬到下限
-    assert safe_compact_threshold(0.4) == 0.5                       # 40% 被抬到下限
-    assert safe_compact_threshold(0.0) == 0.0                       # 0 = 关闭,保留
+    assert safe_compact_threshold(0.3) == PRECOMPACT_FLOOR == 0.5
+    assert safe_compact_threshold(0.4) == 0.5
+    assert safe_compact_threshold(0.0) == 0.0
     assert safe_compact_threshold(-1.0) == 0.0
-    assert safe_compact_threshold(0.8) == 0.8                       # 高位原样
+    assert safe_compact_threshold(0.8) == 0.8
 
 
 @pytest.mark.asyncio
 async def test_no_precompact_at_30_40_pct():
-    """配置成 35% 也不会在 35% 提前整体压(被钳到 50% 下限)。"""
+    """Internal documentation."""
     store = ArgosStore(db_path=":memory:")
     store.ensure_session("s", title="t", model="worker", system_snapshot="")
     for i in range(12):
@@ -131,7 +115,7 @@ async def test_no_precompact_at_30_40_pct():
 
 @pytest.mark.asyncio
 async def test_compaction_triggers_at_high_watermark():
-    """85% 占用 → 整体压缩照常触发(高水位安全网仍在)。"""
+    """Internal documentation."""
     store = ArgosStore(db_path=":memory:")
     store.ensure_session("s", title="t", model="worker", system_snapshot="")
     for i in range(12):
@@ -141,10 +125,9 @@ async def test_compaction_triggers_at_high_watermark():
     events = [ev async for ev in loop._maybe_proactive_compact("s", 0)]
     assert any(isinstance(e, CompactedEvent) for e in events)
     assert loop._compacted is True
-    assert loop._reverified_since_compact is False   # 压缩后尚未重验
+    assert loop._reverified_since_compact is False
 
 
-# ────────────────────────── (d) 压缩后不经重验不标 passed ──────────────────────────
 
 
 def test_trust_passed_after_compaction_helper():
@@ -156,13 +139,12 @@ def test_trust_passed_after_compaction_helper():
 
 @pytest.mark.asyncio
 async def test_no_passed_without_reverify_after_compaction():
-    """压缩发生后,无机检命令的任务完成只能是 unverifiable(绝不假装 passed),
-    且 verify 在压缩之后真重跑过(_reverified_since_compact 置回 True)。"""
+    """Internal documentation."""
     store = ArgosStore(db_path=":memory:")
     store.ensure_session("s", title="t", model="worker", system_snapshot="")
     for i in range(12):
         store.append_message("s", role="user", content=f"历史{i} " + "y" * 50)
-    model = _ImplementingDoneModel(used=90_000)   # 触发整体压缩 + 真改代码(工程任务才进 verify)
+    model = _ImplementingDoneModel(used=90_000)
     loop = _mk_loop(store, model, _NoCmdVerifier(), max_steps=3, compact_threshold=0.8)
     events = [ev async for ev in loop.run("目标X", "s")]
     assert loop._compacted is True, "应发生过压缩"
@@ -173,7 +155,6 @@ async def test_no_passed_without_reverify_after_compaction():
     assert loop._reverified_since_compact is True, "压缩后确实重跑了 verify"
 
 
-# ────────────────────────── (e) 事件序列化往返 ──────────────────────────
 
 
 def test_pruned_event_roundtrip():
@@ -190,7 +171,6 @@ def test_compacted_event_roundtrip():
     assert back == ev
 
 
-# ────────────────────────── 测试用 fakes ──────────────────────────
 
 
 @dataclass
@@ -201,7 +181,7 @@ class _Tier:
 
 
 class _DoneModel:
-    """高占用以触发整体压缩;stream 吐一句完成、无代码块 → loop 进 verify 收尾。"""
+    """Internal documentation."""
     def __init__(self, used: int) -> None:
         self.tier = _Tier()
         self.last_usage = {"input_tokens": used, "output_tokens": 0,
@@ -213,9 +193,7 @@ class _DoneModel:
 
 
 class _ImplementingDoneModel(_DoneModel):
-    """高占用触发整体压缩 + 第一轮真写代码(made_changes=True)→ 工程任务进 verify 重验。
-    压缩信任防御(压缩后不重验不可标 passed)只对【工程改动】有意义;纯对话/纯读问答现在
-    直接答复不走 verify(2026-06-16 人性化),故该防御测试须用本模型(真改东西)。"""
+    """Internal documentation."""
     def __init__(self, used: int) -> None:
         super().__init__(used)
         self._i = 0
@@ -235,7 +213,7 @@ class _FakeSandbox:
 
 
 class _NoCmdVerifier:
-    """无 verify_cmd → 三态 unverifiable(无测任务的诚实非阻塞完成由 harness 据 None 判定)。"""
+    """Internal documentation."""
     def verify(self, verify_cmd, *, attempts=1):
         return Verdict.unverifiable(detail="(无)", tampered=[], attempts=attempts)
 

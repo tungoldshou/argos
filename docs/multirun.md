@@ -94,8 +94,9 @@ POST /runs
 ```
 
 daemon 行为:
-- workspace 是 git repo → `git worktree add -b argos/<run_id> ~/.argos/worktrees/<run_id> HEAD`
-- workspace 不是 git repo → `tempfile.mkdtemp(prefix=argos-<run_id>-, dir=~/.argos/worktrees)` 兜底
+- Argos config directory 默认是 `~/.argos`,可用 `ARGOS_CONFIG_DIR` 改到别处
+- workspace 是 git repo → `git worktree add -b argos/<run_id> <config-dir>/worktrees/<run_id> HEAD`
+- workspace 不是 git repo → `tempfile.mkdtemp(prefix=argos-<run_id>-, dir=<config-dir>/worktrees)` 兜底
 - run 终态 → 自动 cleanup(失败静默)
 
 **每 run 持有独立的沙箱上下文**:daemon 通过 `build_run_stack()` 为每个 run 分配各自的 `SeatbeltExecutor`、`ApprovalGate`、`CapabilityBroker`——并发 run 之间不共享任何可变沙箱状态。
@@ -120,7 +121,7 @@ daemon 行为:
 
 - **最多 5 个并发 run**:超过 → 503 `busy: max_concurrent_runs_reached (max=5, active=5)`(直接拒,**不排队**)
 - **1 owner + N observer**:observer 写端点全 403
-- **worktree 路径**:`~/.argos/worktrees/<run_id>`(中央,不污染 workspace)
+- **worktree 路径**:`<config-dir>/worktrees/<run_id>`(中央,不污染 workspace)
 - **保留 100 条历史**:超 cap 按 created_at 升序删最旧
 - **多 TUI 角色**:owner 退出 promote 最旧 observer;心跳 30s 过期视同退出
 

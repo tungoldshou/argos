@@ -1,4 +1,4 @@
-"""#11 T1 任务分类启发式测试。"""
+"""Internal documentation."""
 from argos.routing.categorizer import TaskCategory, categorize
 
 

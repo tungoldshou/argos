@@ -1,4 +1,4 @@
-"""TabStrip widget 单元测试(v3 spec §4.x)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -14,7 +14,6 @@ from argos.tui.widgets.tab_strip import (
 )
 
 
-# ── 纯函数 ───────────────────────────────────────────────────────────
 
 
 def test_format_cost_none():
@@ -47,7 +46,6 @@ def test_truncate_long():
 
 
 def test_state_icon_known_states():
-    # v3 spec §4.x: emoji 全处决，改用等宽安全字形
     assert _STATE_ICON["running"] == "⏵"
     assert _STATE_ICON["paused"] == "⏸"
     assert _STATE_ICON["suspended"] == "⏹"
@@ -57,15 +55,10 @@ def test_state_icon_known_states():
     assert _STATE_ICON["pending"] == "◌"
 
 
-# ── widget 行为(用 App 包装跑事件)─────────────────────────────────
 
 
 class _TabApp(App):
-    """测试用 App:注册 argos-night 主题,确保 v3 CSS token($well/$ink-dim/$raise-2 等)可解析。
-
-    主题必须在 compose(DOM 构建)之前注册——Textual 事件顺序 Compose→Load→Mount,
-    widget DEFAULT_CSS 在 compose 时解析。在 __init__ 中注册与主 App 保持一致。
-    """
+    """Internal documentation."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -112,10 +105,8 @@ async def test_tab_strip_renders_with_active_highlight():
         ]
         strip.update_tabs(tabs, active="b" * 12)
         out = strip.render()
-        # v3 spec §4.x: active tab 用底色块(不用 [reverse]);内容仍在输出中
         assert "[reverse]" not in out
         assert "beta" in out
-        # active tab 有高亮标记(bold on $raise-2)
         assert "bold" in out.lower() or "#23263A" in out or "on #" in out
 
 
@@ -135,7 +126,6 @@ async def test_tab_strip_icon_for_each_state():
         ]
         strip.update_tabs(tabs)
         out = strip.render()
-        # v3 spec §4.x: 所有状态字符均为等宽安全字形，无 emoji
         for icon in ["⏵", "⏸", "⏹", "◉", "◕", "◌"]:
             assert icon in out
 
@@ -172,7 +162,7 @@ async def test_tab_strip_includes_cost():
 
 @pytest.mark.asyncio
 async def test_tab_strip_post_activated_message_on_click():
-    """点击 tab → TabActivated 消息(用 post_message spy)。"""
+    """Internal documentation."""
     app = _TabApp()
     activated: list[TabActivated] = []
     original_post = TabStrip.post_message
@@ -191,7 +181,6 @@ async def test_tab_strip_post_activated_message_on_click():
                 {"run_id": "b" * 12, "goal": "beta", "state": "running", "cost_usd": 0.02},
             ]
             strip.update_tabs(tabs, active="a" * 12)
-            # 直接 post_message
             strip.post_message(TabActivated("a" * 12))
             await pilot.pause()
             assert any(m.run_id == "a" * 12 for m in activated)
@@ -201,7 +190,7 @@ async def test_tab_strip_post_activated_message_on_click():
 
 @pytest.mark.asyncio
 async def test_tab_strip_action_select_tab_0_to_4():
-    """Ctrl+1..5 跳对应 tab。"""
+    """Internal documentation."""
     app = _TabApp()
     activated: list[TabActivated] = []
     original_post = TabStrip.post_message
@@ -221,7 +210,6 @@ async def test_tab_strip_action_select_tab_0_to_4():
                 for i in range(5)
             ]
             strip.update_tabs(tabs)
-            # 直接调 action(走 self.post_message)
             strip.action_select_tab(0)
             strip.action_select_tab(2)
             strip.action_select_tab(4)
@@ -234,7 +222,7 @@ async def test_tab_strip_action_select_tab_0_to_4():
 
 @pytest.mark.asyncio
 async def test_tab_strip_ctrl_5_noop_when_fewer_tabs():
-    """少于 5 tab → action_select_tab(4) 越界不抛、不发消息。"""
+    """Internal documentation."""
     app = _TabApp()
     activated: list[TabActivated] = []
     original_post = TabStrip.post_message
@@ -252,7 +240,7 @@ async def test_tab_strip_ctrl_5_noop_when_fewer_tabs():
                 {"run_id": "a" * 12, "goal": "g1", "state": "running", "cost_usd": 0.01},
             ]
             strip.update_tabs(tabs)
-            strip.action_select_tab(4)  # 越界
+            strip.action_select_tab(4)
             await pilot.pause()
             assert activated == []
     finally:

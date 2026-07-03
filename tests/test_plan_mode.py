@@ -1,4 +1,4 @@
-"""Plan mode 核心数据类 + 异常单元测试。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import pytest
@@ -14,14 +14,14 @@ from argos.core.plan_mode import (
 
 
 def test_plan_mode_error_is_exception():
-    """PlanModeError 是 Exception 子类,带 plan mode 错误串。"""
+    """Internal documentation."""
     err = PlanModeError("sandbox tool not allowed in plan mode")
     assert isinstance(err, Exception)
     assert "sandbox" in str(err).lower() or "plan" in str(err).lower()
 
 
 def test_plan_exit_decision_construction():
-    """PlanExitDecision 是 frozen dataclass,4 个 action 互斥。"""
+    """Internal documentation."""
     d1 = PlanExitDecision(action="approve_start")
     d2 = PlanExitDecision(action="approve_accept_edits")
     d3 = PlanExitDecision(action="keep_planning")
@@ -35,7 +35,7 @@ def test_plan_exit_decision_construction():
 
 
 def test_plan_exit_decision_invalid_action_raises():
-    """action 必须是 4 个允许值之一。"""
+    """Internal documentation."""
     with pytest.raises(ValueError):
         PlanExitDecision(action="invalid_action")
 
@@ -44,19 +44,19 @@ def test_plan_exit_decision_invalid_action_raises():
 
 
 class _FakeLoop:
-    """最小 AgentLoop stub(只暴露 EnterPlanMode/ExitPlanMode 需要的属性)。"""
+    """Internal documentation."""
     def __init__(self, *, busy: bool = False, mode: str = "act"):
         self._busy = busy
         self.mode = mode
         self._plan_decision = None
-        self._events = []  # 记录 PhaseChange 事件(若有)
+        self._events = []
 
     def _emit_phase(self, phase: str) -> None:
         self._events.append(("phase", phase))
 
 
 def test_enter_plan_mode_from_act():
-    """act → plan 切;emit phase 'plan' 事件;返回 '已切到 plan mode'。"""
+    """Internal documentation."""
     loop = _FakeLoop()
     msg = EnterPlanMode(loop)
     assert loop.mode == "plan"
@@ -65,7 +65,7 @@ def test_enter_plan_mode_from_act():
 
 
 def test_enter_plan_mode_already_in_plan():
-    """plan → plan 切提示已在 plan mode。"""
+    """Internal documentation."""
     loop = _FakeLoop(mode="plan")
     msg = EnterPlanMode(loop)
     assert loop.mode == "plan"
@@ -73,15 +73,15 @@ def test_enter_plan_mode_already_in_plan():
 
 
 def test_enter_plan_mode_when_busy():
-    """busy 时 EnterPlanMode 友好提示,不变 mode。"""
+    """Internal documentation."""
     loop = _FakeLoop(busy=True)
     msg = EnterPlanMode(loop)
-    assert loop.mode == "act"  # 没变
+    assert loop.mode == "act"
     assert "esc" in msg.lower() or "打断" in msg or "busy" in msg.lower()
 
 
 def test_exit_plan_mode_approve_start():
-    """plan → act 切;存 decision;返回 '已退出 plan mode,action=approve_start'。"""
+    """Internal documentation."""
     loop = _FakeLoop(mode="plan")
     msg = ExitPlanMode(loop, action="approve_start")
     assert loop.mode == "act"
@@ -90,31 +90,21 @@ def test_exit_plan_mode_approve_start():
 
 
 def test_exit_plan_mode_refine_requires_feedback():
-    """refine 模式 feedback 为空时报错,不变 mode,【不】唤醒 loop 的 await event。
-
-    关键防御:历史上 TUI 端在 ExitPlanMode 失败后仍 set event,导致 loop 的 `_plan_decision is None`
-    兜底成 `approve_start` —— 用户点的 Refine 被静默改成 Approve。修复后 ExitPlanMode 在校验
-    失败时绝不动 event,保证错误真传递。"""
+    """Internal documentation."""
     import asyncio
     loop = _FakeLoop(mode="plan")
-    # 模拟真 loop:有 _plan_decision_event
     loop._plan_decision_event = asyncio.Event()
     msg = ExitPlanMode(loop, action="refine", feedback="")
-    assert loop.mode == "plan"  # 没变
+    assert loop.mode == "plan"
     assert "feedback" in msg.lower() or "不能为空" in msg or "refine" in msg.lower()
     assert loop._plan_decision is None
-    # 关键:event 必须仍是 cleared(否则 loop 被错误唤醒 → 兜底 approve_start)
     assert not loop._plan_decision_event.is_set(), (
         "ExitPlanMode 在校验失败时不应唤醒 loop,否则 Refine 会被静默兜底成 Approve"
     )
 
 
 def test_exit_plan_mode_succeeds_sets_event():
-    """成功路径(approve_start / refine-with-feedback)必须 set event 唤醒 loop 的 await。
-
-    历史上 TUI 端在 ExitPlanMode 后手动 set event,造成 ExitPlanMode "半成品"(存了 decision
-    但没唤醒 await,调用方必须记得 set)。修复后 ExitPlanMode 自己 set event —— 一次原子操作,
-    任何 caller(测试 / 脚本 / 别的 UI)都不用操心唤醒。"""
+    """Internal documentation."""
     import asyncio
     loop = _FakeLoop(mode="plan")
     loop._plan_decision_event = asyncio.Event()
@@ -127,7 +117,7 @@ def test_exit_plan_mode_succeeds_sets_event():
 
 
 def test_exit_plan_mode_refine_with_feedback_sets_event():
-    """refine + 非空 feedback 成功后必须 set event 唤醒 loop。"""
+    """Internal documentation."""
     import asyncio
     loop = _FakeLoop(mode="plan")
     loop._plan_decision_event = asyncio.Event()
@@ -138,7 +128,7 @@ def test_exit_plan_mode_refine_with_feedback_sets_event():
 
 
 def test_exit_plan_mode_refine_with_feedback():
-    """refine + 非空 feedback → 切回 act + 存 decision。"""
+    """Internal documentation."""
     loop = _FakeLoop(mode="plan")
     msg = ExitPlanMode(loop, action="refine", feedback="更多上下文")
     assert loop.mode == "act"
@@ -146,17 +136,17 @@ def test_exit_plan_mode_refine_with_feedback():
 
 
 def test_exit_plan_mode_not_in_plan():
-    """当前不在 plan mode 时 ExitPlanMode 报错。"""
+    """Internal documentation."""
     loop = _FakeLoop(mode="act")
     msg = ExitPlanMode(loop, action="approve_start")
     assert "plan mode" in msg.lower() or "不在" in msg
 
 
 def test_exit_plan_mode_invalid_action():
-    """action 不在 4 选项时报 ValueError(由 PlanExitDecision 抛,被 ExitPlanMode 捕获返错误串)。"""
+    """Internal documentation."""
     loop = _FakeLoop(mode="plan")
     msg = ExitPlanMode(loop, action="bogus")
-    assert loop.mode == "plan"  # 没变
+    assert loop.mode == "plan"
     assert "approve_start" in msg or "invalid" in msg.lower() or "approve" in msg
 
 
@@ -166,7 +156,7 @@ from argos.core.plan_mode import PlanRenderer  # noqa: E402
 
 
 def test_render_empty_plan():
-    """0 todos + 0 tool_calls 仍产 markdown('无具体任务分解'段)。"""
+    """Internal documentation."""
     md = PlanRenderer.render(goal="noop", todos=[], tool_calls=[])
     assert "# Plan: noop" in md
     assert "无具体任务分解" in md or "no specific task breakdown" in md.lower()
@@ -174,7 +164,7 @@ def test_render_empty_plan():
 
 
 def test_render_with_todos():
-    """有 todos 时 markdown 含任务分解列表。"""
+    """Internal documentation."""
     todos = [
         {"step": 1, "description": "Read main.py", "tool": "read_file"},
         {"step": 2, "description": "Edit config", "tool": "edit_file"},
@@ -187,7 +177,7 @@ def test_render_with_todos():
 
 
 def test_render_with_tool_calls():
-    """有 tool_calls 时 markdown 含工具调用段。"""
+    """Internal documentation."""
     tool_calls = [
         {"tool": "read_file", "args": {"path": "x.py"}},
         {"tool": "run_command", "args": {"command": "pytest"}},
@@ -199,7 +189,7 @@ def test_render_with_tool_calls():
 
 
 def test_render_with_risks():
-    """有 risks 段时 markdown 含风险段。"""
+    """Internal documentation."""
     md = PlanRenderer.render(
         goal="x", todos=[], tool_calls=[], risks=["rm -rf 风险", "无 verify_cmd"],
     )
@@ -209,19 +199,17 @@ def test_render_with_risks():
 
 
 def test_render_goal_truncated_to_title():
-    """goal 长时只取前 50 字符作标题(避免 plan 标题过长)。"""
+    """Internal documentation."""
     long_goal = "x" * 200
     md = PlanRenderer.render(goal=long_goal, todos=[], tool_calls=[])
-    # 标题行不应含 200 字符
     title_line = [l for l in md.splitlines() if l.startswith("# Plan:")][0]
     assert len(title_line) < 100, f"标题过长: {title_line}"
 
 
-# --- 模块级 plan mode 状态 + 沙箱工具 dispatcher 拦截 ---
 
 
 def test_set_and_get_plan_mode():
-    """set_plan_mode(True) → is_plan_mode() 返 True;反之 False。"""
+    """Internal documentation."""
     set_plan_mode(True)
     try:
         assert is_plan_mode() is True
@@ -231,19 +219,18 @@ def test_set_and_get_plan_mode():
 
 
 def test_sandbox_tool_blocked_in_plan_mode():
-    """plan mode 时 `run_command_gated` 返 plan mode 错误串(不进沙箱)。"""
+    """Internal documentation."""
     from argos.tools import run_command_gated
     set_plan_mode(True)
     try:
         result = run_command_gated(command="echo hello")
-        # dispatcher 返错误串(spec §2.4)— 不是抛异常
         assert "plan" in result.lower() or "错误" in result
     finally:
         set_plan_mode(False)
 
 
 def test_write_file_blocked_in_plan_mode():
-    """plan mode 时 `write_file_gated` 返 plan mode 错误串。"""
+    """Internal documentation."""
     from argos.tools import write_file_gated
     set_plan_mode(True)
     try:
@@ -254,7 +241,7 @@ def test_write_file_blocked_in_plan_mode():
 
 
 def test_edit_file_blocked_in_plan_mode():
-    """plan mode 时 `edit_file_gated` 返 plan mode 错误串。"""
+    """Internal documentation."""
     from argos.tools import edit_file_gated
     set_plan_mode(True)
     try:
@@ -265,17 +252,15 @@ def test_edit_file_blocked_in_plan_mode():
 
 
 def test_sandbox_tools_work_in_normal_act_mode():
-    """act mode 默认时,沙箱工具不被挡(返回具体结果或 sandbox 错误,不是 plan 错误)。"""
+    """Internal documentation."""
     from argos.tools import run_command_gated
-    # 默认 plan_mode = False
     set_plan_mode(False)
     result = run_command_gated(command="echo hello")
-    # 不应含 "plan mode" 错误
     assert "plan mode" not in result.lower()
 
 
 def test_enter_plan_mode_sets_module_state():
-    """EnterPlanMode 调后 is_plan_mode() 返 True(模块级状态联动)。"""
+    """Internal documentation."""
     from argos.core.plan_mode import EnterPlanMode
 
     class _Loop:
@@ -292,7 +277,7 @@ def test_enter_plan_mode_sets_module_state():
 
 
 def test_exit_plan_mode_clears_module_state():
-    """ExitPlanMode 调后 is_plan_mode() 返 False。"""
+    """Internal documentation."""
     from argos.core.plan_mode import EnterPlanMode, ExitPlanMode
 
     class _Loop:
@@ -305,9 +290,8 @@ def test_exit_plan_mode_clears_module_state():
         EnterPlanMode(_Loop())  # type: ignore[arg-type]
         assert is_plan_mode() is True
         loop2 = _Loop()
-        loop2.mode = "plan"  # 模拟已进入 plan mode
+        loop2.mode = "plan"
         ExitPlanMode(loop2, action="approve_start")  # type: ignore[arg-type]
-        # 注意:第二个 _Loop 是新实例,EnterPlanMode 已设模块级,这里 ExitPlanMode 改它
         assert is_plan_mode() is False
     finally:
         set_plan_mode(False)

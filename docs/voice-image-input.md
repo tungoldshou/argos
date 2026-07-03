@@ -36,7 +36,7 @@
 | `attachments.py` | `ImageAttachment`（frozen dataclass：`data`/`media_type`/`source_label`/`width`/`height`）；`sniff_media_type`、`validate_attachment`、`to_base64`、`extract_image_paths`、`load_from_path` | 纯逻辑、无网络 I/O。白名单 png/jpeg/webp/gif；单张 ≤5MB；未知格式/超限 → `ValueError`，绝不静默剥除或返回假 MIME。 |
 | `recorder.py`（计划） | `Recorder`（`start()` / `stop() -> np.ndarray`）、`RecorderError` | sounddevice 开关式录音 → float32 16kHz 单声道。无后端 / 无麦克风 / 空录音 → `RecorderError`，不静默。Linux 缺 `libportaudio2` 给明确提示。 |
 | `stt.py`（计划） | `Transcriber`（Protocol）、`LocalWhisper`、`CloudWhisper`、`make_transcriber`、`is_apple_silicon`、`SttError` | provider-agnostic。本地 `LocalWhisper`：Apple Silicon 试 `mlx-whisper`，失败回退 `faster-whisper`（仍本地），权重首次使用懒下载。云端 `CloudWhisper`：OpenAI 兼容，需 `cloud-stt` extra。失败一律 `SttError`，不伪造转写。 |
-| `stt_config.py`（计划） | `SttConfig`（frozen：`provider`/`model`/`base_url`/`api_key`）、`load_stt_config` | 读 `~/.argos/config.json` 的 `stt` 块；无文件/无块 → 全默认（本地 `base`）。`provider="cloud"` 时从 `~/.argos/.env` 解析 `api_key_env` 指向的 key。 |
+| `stt_config.py`（计划） | `SttConfig`（frozen：`provider`/`model`/`base_url`/`api_key`）、`load_stt_config` | 读 Argos config directory 下 `config.json` 的 `stt` 块；无文件/无块 → 全默认（本地 `base`）。`provider="cloud"` 时从同一 config directory 下的 `.env` 解析 `api_key_env` 指向的 key。 |
 
 平台判定用显式 `platform.system()=='Darwin' and platform.machine()=='arm64'`，
 **不靠 `ImportError`**——Linux 也有 mlx 轮子，靠 import 失败判定会静默跑错路径。
@@ -67,7 +67,8 @@ inline / daemon 两路的 `loop.run(..., attachments=...)`——仅在真有附�
 
 ## 配置
 
-`~/.argos/config.json`：
+Argos config directory 默认是 `~/.argos`,可用 `ARGOS_CONFIG_DIR` 改到别处。
+配置写在该目录下的 `config.json`：
 
 ```jsonc
 {
@@ -75,7 +76,7 @@ inline / daemon 两路的 `loop.run(..., attachments=...)`——仅在真有附�
     "provider": "local",        // "local"（默认）| "cloud"
     "model": "base",            // local: whisper 尺寸 tiny/base/small/…；cloud: 云模型 id
     "base_url": null,           // cloud: OpenAI 兼容端点
-    "api_key_env": "OPENAI_API_KEY"   // cloud: 指向 ~/.argos/.env 里的 key 名
+    "api_key_env": "OPENAI_API_KEY"   // cloud: 指向同一 config directory 下 .env 里的 key 名
   }
   // 模型 tier 另带 multimodal 位，控制是否允许图像输入
 }

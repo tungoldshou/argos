@@ -14,7 +14,7 @@ EN: dict[str, str] = {
     "sandbox.egress.host_not_allowed": (
         "egress denied — {host!r} is not in the allowed egress list."
         " Use /trust autonomous to open egress for this session,"
-        " or add the host to the egress section in ~/.argos/config.json and restart."
+        " or add the host to the egress section in {path} and restart."
     ),
     # unknown / unsupported privileged action
     "sandbox.broker.unknown_action": (
@@ -23,6 +23,15 @@ EN: dict[str, str] = {
     # hard shell rule hit on run_command
     "sandbox.broker.hard_shell_denied": (
         "Error: command matched dangerous hard rule ({rule}), execution denied."
+    ),
+    # run_command on sync bridge without an OS sandbox
+    "sandbox.broker.sync_run_command_requires_sandbox": (
+        "Error: run_command denied because the sync bridge cannot interactively approve"
+        " commands and the OS sandbox is disabled."
+    ),
+    "sandbox.broker.sync_interactive_requires_approval": (
+        "Error: {action} denied because the sync bridge cannot interactively approve this action;"
+        " use the host-loop approval bridge instead."
     ),
     # user explicitly denied the action via approval gate
     "sandbox.broker.user_denied": (
@@ -116,7 +125,7 @@ ZH: dict[str, str] = {
     # egress: host not in allowlist
     "sandbox.egress.host_not_allowed": (
         "egress 拒绝 —— {host!r} 不在允许出网名单。"
-        "用 /trust autonomous 放开本会话出网,或在 ~/.argos/config.json 的 egress 段"
+        "用 /trust autonomous 放开本会话出网,或在 {path} 的 egress 段"
         "加入该 host 后重启。"
     ),
     # unknown / unsupported privileged action
@@ -126,6 +135,13 @@ ZH: dict[str, str] = {
     # hard shell rule hit on run_command
     "sandbox.broker.hard_shell_denied": (
         "错误:命令命中危险硬规则({rule}),拒绝执行。"
+    ),
+    # run_command on sync bridge without an OS sandbox
+    "sandbox.broker.sync_run_command_requires_sandbox": (
+        "错误:同步桥无法交互审批命令,且 OS 沙箱未启用,run_command 已拒绝。"
+    ),
+    "sandbox.broker.sync_interactive_requires_approval": (
+        "错误:同步桥无法交互审批 {action},已拒绝;请改走 host-loop 审批桥。"
     ),
     # user explicitly denied the action via approval gate
     "sandbox.broker.user_denied": (

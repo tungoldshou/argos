@@ -81,8 +81,11 @@ skill 装不能破坏本地完整性的最低保证。
 
 ## 路径
 
+默认写到 Argos config directory 下的 `skills/`;默认 config directory 是
+`~/.argos`,可用 `ARGOS_CONFIG_DIR` 改到别处。
+
 ```
-~/.argos/skills/
+<config-dir>/skills/
 ├── index.json                  # 远端 index 副本(atomic write)
 ├── .trash/
 │   └── <name>-<ts>/            # remove 后 30d 可恢复
@@ -114,10 +117,10 @@ $ argos skills refresh
 $ argos skills install python-lint
 [skills] downloading python-lint SKILL.md (4210 bytes) ...
 [skills] sha256 ok
-[skills] installed to ~/.argos/skills/python-lint/SKILL.md
+[skills] installed to <config-dir>/skills/python-lint/SKILL.md
 [skills] NOTE: installed with enabled=false
 [skills] review before enabling:
-        $ cat ~/.argos/skills/python-lint/SKILL.md
+        $ cat <config-dir>/skills/python-lint/SKILL.md
         $ edit frontmatter: enabled: true
 [skills] running smoke test ...
 [skills] smoke test: pass: exit=0

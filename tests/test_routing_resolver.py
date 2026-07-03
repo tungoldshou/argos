@@ -1,4 +1,4 @@
-"""#11 T3 RoutingResolver 3 层优先级 测试。"""
+"""Internal documentation."""
 from argos.routing.categorizer import TaskCategory
 from argos.routing.config import RoutingConfig
 from argos.routing.resolver import resolve

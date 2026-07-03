@@ -1,10 +1,4 @@
-"""LedgerStore 文件粒度 undo 新接口测试(A3 条目级 undo)。
-
-覆盖:
-  - get_entry:按 seq 返回条目 / 不存在返 None
-  - mark_entry_done:available → done 覆写 / 非 available 返 False / 不存在返 False
-  - mark_entry_done 不影响其他条目
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -31,6 +25,34 @@ def _entry(seq: int, run_id: str = "r1",
         receipt_sig="",
         undo_state=undo_state,  # type: ignore[arg-type]
     )
+
+
+def test_default_ledger_dir_honors_argos_config_dir(tmp_path: Path, monkeypatch):
+    from argos import config as C
+
+    cfg = tmp_path / "cfg"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg))
+    monkeypatch.setattr(C, "_ENV", {})
+
+    store = LedgerStore()
+    store.append(_entry(1, run_id="run-cfg"))
+
+    assert (cfg / "ledger" / "run-cfg.jsonl").exists()
+
+
+def test_explicit_ledger_dir_wins_over_argos_config_dir(tmp_path: Path, monkeypatch):
+    from argos import config as C
+
+    cfg = tmp_path / "cfg"
+    explicit = tmp_path / "explicit-ledger"
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", str(cfg))
+    monkeypatch.setattr(C, "_ENV", {})
+
+    store = LedgerStore(explicit)
+    store.append(_entry(1, run_id="run-explicit"))
+
+    assert (explicit / "run-explicit.jsonl").exists()
+    assert not (cfg / "ledger" / "run-explicit.jsonl").exists()
 
 
 class TestGetEntry:
@@ -92,7 +114,7 @@ class TestMarkEntryDone:
         assert store.mark_entry_done("r1", 1) is False
 
     def test_mark_entry_done_idempotent_check(self, tmp_path: Path):
-        """标记后 get_entry 返回 done 且原数据完整保留。"""
+        """Internal documentation."""
         store = LedgerStore(tmp_path)
         e_orig = _entry(1)
         store.append(e_orig)

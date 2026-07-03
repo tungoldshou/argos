@@ -5,7 +5,6 @@ from tests.e2e.scripted_model import ScriptedModelClient
 
 @pytest.fixture
 def scripted_model_factory():
-    # 子 agent:无代码块的纯文本答复 → loop 催一轮后以文字收尾(read+reason 场景)
     def make(profile=None):
         return ScriptedModelClient(["这是对目标的简要总结与结论。"])
     return make
@@ -13,14 +12,7 @@ def scripted_model_factory():
 
 @pytest.fixture
 def workflow_loop(tmp_path, scripted_model_factory, requires_sandbox, monkeypatch):
-    """Task 9 集成:真 AgentLoop(父用 scripted 模型,gate=AUTO,真沙箱,注入 engine 工厂)。
-    父 step0 在 act 段提议工作流 → loop 钩子校验+审批+异步跑引擎+结果回灌;step1 收尾。
-
-    requires_sandbox 依赖:无沙箱后端的平台(mac 缺 sandbox-exec、Linux 缺 bwrap/unshare)
-    直接 skip,绝不 mock 把沙箱测试假跑过。
-    工作流现已默认 on(autonomy flip, batch5)。本 fixture 保留显式 setenv("ARGOS_WORKFLOWS", "1")
-    以对抗任何上游测试把它改成 "0" 的情况,确保集成路径确定走工作流分支。
-    """
+    """Internal documentation."""
     monkeypatch.setenv("ARGOS_WORKFLOWS", "1")
     from argos.core.loop import AgentLoop, LoopConfig
     from argos.core.verify_gate import Verifier
@@ -35,7 +27,6 @@ def workflow_loop(tmp_path, scripted_model_factory, requires_sandbox, monkeypatc
     from tests.e2e.scripted_model import ScriptedModelClient
     import os
 
-    # parent 模型:step0 提议工作流,step1 收尾(无代码)
     parent_scripts = [
         '我来编排。\n```python\npropose_workflow({\n'
         '    "name": "demo", "description": "演示",\n'
@@ -54,7 +45,6 @@ def workflow_loop(tmp_path, scripted_model_factory, requires_sandbox, monkeypatc
         v, _ = broker._execute(action, args)
         return v
 
-    # 平台感知:macOS → Seatbelt,Linux → bwrap/unshare。CI 跨平台跑不绑死 mac。
     sandbox = select_backend()(broker_handler=_bridge)
     cfg = LoopConfig(model_tier="worker", verify_cmd=None, max_rounds=2, max_steps=8,
                      compaction=True, approval_level=ApprovalLevel.AUTO)
@@ -68,7 +58,6 @@ def workflow_loop(tmp_path, scripted_model_factory, requires_sandbox, monkeypatc
 
 @pytest.fixture
 def voting_model_factory():
-    # 3 个 voter:前 2 个投 YES,第 3 个投 NO(用确定的投票标记,不靠 NLP)
     from tests.e2e.scripted_model import ScriptedModelClient
 
     class _Factory:
@@ -107,7 +96,6 @@ def counting_model_factory():
 
 @pytest.fixture
 def slow_model_factory():
-    # 慢模型:stream 睡久(卡在 sleep)→ 好让取消发生在中途,验证 RAII 拆资源。
     import asyncio
     from argos.core.models import ModelTier
 
@@ -116,7 +104,7 @@ def slow_model_factory():
             tier = ModelTier(name="worker", model="slow", base_url="memory://", max_tokens=64)
 
             async def stream(self, messages, *, system, system_dynamic=None):
-                await asyncio.sleep(30)   # 卡在这,等取消
+                await asyncio.sleep(30)
                 yield "永远到不了"
         return _Slow()
     return make
@@ -130,7 +118,7 @@ def failing_model_factory():
 
         async def stream(self, messages, *, system, system_dynamic=None):
             raise RuntimeError("boom")
-            yield  # 让它是 async generator
+            yield
 
     def make(profile=None):
         return _Boom()

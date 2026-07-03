@@ -1,11 +1,9 @@
-"""Argos TUI 主屏(TUI v2 spec 2026-06-10)。
+"""Textual client for Argos interactive runs.
 
-布局:TopBar(自绘 1 行,含模式徽标) + Transcript(主对话) + ActivityPanel(右栏智能切)
-+ PromptArea + StatusBar(含键提示)。无 stock Header/Footer。
-事件桥:start_run 起一个 EventBus + 注入的 loop,Worker async-for 消费 Event 并更新 widget(契约 §1/§3)。
-slash:输入以 / 开头走 commands.parse_slash 分发;否则当 goal 起一轮 run。
-审批:loop 投 ApprovalRequest → Transcript 流内 mount InlineChoice → 回调里 gate.respond(契约 §6.3);
-同屏最多一个活动 InlineChoice,其余 FIFO 排队。
+Source-doc contract:
+- compare <task_id>[:<model>] <task_id>[:<model>]
+- command config files live at ARGOS_CONFIG_DIR/hooks.json, ARGOS_CONFIG_DIR/lsp.json,
+  ARGOS_CONFIG_DIR/permissions.json, and ARGOS_CONFIG_DIR/mcp.json.
 """
 from __future__ import annotations
 
@@ -15,12 +13,15 @@ from collections import deque
 from collections.abc import Callable
 from pathlib import Path
 
+from textual import events
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal
 
 from argos import config
 from argos.approval import ApprovalGate, ApprovalLevel
 from argos.core.snapshot import SNAPSHOT_ROOT, RunSnapshot
+from argos.hooks.events import HookFired
 from argos.tui.commands import SlashCommand, match_commands, parse_slash
 from argos.tui.events import (
     ApprovalRequest,
@@ -28,9 +29,9 @@ from argos.tui.events import (
     CodeAction,
     CodeResult,
     CompactedEvent,
-    ComputerActionEvent,  # ← P6a §10 computer use
-    DreamProgressEvent,   # ← T10 Dream 夜间整合进度
-    DreamReportEvent,     # ← T10 Dream 夜间整合结果汇总
+    ComputerActionEvent,
+    DreamProgressEvent,
+    DreamReportEvent,
     CostUpdate,
     Error,
     Escalation,
@@ -42,7 +43,7 @@ from argos.tui.events import (
     PlanDecisionRequest,
     PlanRendered,
     PlanUpdate,
-    ProactiveSuggestionEvent,  # ← P5b §9 自治面
+    ProactiveSuggestionEvent,
     PrunedEvent,
     TokenDelta,
     ToolReceipt,
@@ -80,9 +81,7 @@ _BASE_SUBTITLE = t("tui.app.subtitle")
 
 
 def _app_version() -> str:
-    """TopBar 显示用版本(单一来源 argos.__version__ ← pyproject/VERSION,与 splash 同口径)。
-    不能用 version("argos") —— 分发名是 "argos-agent",查 "argos" 必 PackageNotFoundError 回退
-    "0.x"(2026-06-16 真机:顶栏显示 v0.x 的根因)。argos.__version__ 已做 argos-agent + VERSION 兜底。"""
+    """Internal documentation."""
     try:
         from argos import __version__
         return __version__
@@ -91,21 +90,14 @@ def _app_version() -> str:
 
 
 def _argos_dir() -> Path:
-    """返回 Argos 配置根目录(ARGOS_CONFIG_DIR 覆盖,否则 ~/.argos)。"""
+    """Internal documentation."""
     return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
 
 
 class ArgosApp(App):
     TITLE = "Argos"
 
-    # 布局 CSS(spec §5 mockup:主对话区 + 右侧活动栏)。没有它时 Horizontal 退回 Textual 默认:
-    # 空 Transcript 收缩到 width=1、侧栏撑满整宽 → 对话内容渲染进 1 列宽的 transcript,
-    # 用户看到的永远是空屏(事件其实都写进去了,只是不可见)。这里显式分配:transcript 占满
-    # 剩余宽度(1fr);ActivityPanel 的固定窄栏宽度由其 DEFAULT_CSS 承担。
     #
-    # 黑曜石纵深(spec §5):Screen 底 $abyss(井底,最外),主流 Transcript $stream(亮一档),
-    # 右栏/输入 $well(暗一档)——分栏靠背景色差,不画竖线(§4.8 裁决)。idle 边框走 $hairline-lit
-    # (run 期间由 _glow_start/_set_border 接管成阶段呼吸色,收尾回 glow.IDLE_BORDER)。
     CSS = """
     Screen { border: round $hairline-lit; background: $abyss; }
     #transcript {
@@ -122,28 +114,19 @@ class ArgosApp(App):
     ArgosApp.-narrow #activity { display: none; }
     """
 
-    # 窄屏(<90 列)折叠右侧活动栏,把整宽让给对话(Task 14:响应式)。
     HORIZONTAL_BREAKPOINTS = [(0, "-narrow"), (90, "-wide")]
 
-    # 启动/换屏后由 Textual 自动把焦点放到输入框(声明式,框架在正确时机执行)——
-    # 否则默认聚焦第一个可聚焦 widget。Transcript 已 can_focus=False 不抢焦点,
-    # 这里仍显式声明作双保险。与 on_mount 的手动 focus 一致。
     AUTO_FOCUS = "#prompt"
 
-    # Esc / Ctrl+C 打断当前任务(对齐 Claude Code / all major agent CLIs):
-    #   · ctrl+c → interrupt(打断当前 run;idle 时第一次无副作用,第二次 1.5s 内退出)
-    #   · ctrl+d → quit(确定性退出,无论是否有 run)
-    #   · escape → interrupt(同 ctrl+c;收起菜单 / 打断二合一)
-    # 这与 Claude Code / shell 约定一致:Ctrl+C 是"打断/中断",Ctrl+D 是"退出/EOF"。
-    # `Ctrl+B` 后台化(daemon 模式):把当前 run 推到 daemon → state=suspended(可跨 session 续)。
     BINDINGS = [
-        ("ctrl+c", "ctrl_c", t("tui.bind.interrupt_quit")),   # 打断 run;双击退出(同 Claude Code)
-        ("ctrl+d", "quit", t("tui.bind.quit")),               # 确定性退出(同 shell EOF)
+        Binding("pageup", "transcript_page_up", show=False, priority=True),
+        Binding("pagedown", "transcript_page_down", show=False, priority=True),
+        ("ctrl+c", "ctrl_c", t("tui.bind.interrupt_quit")),
+        ("ctrl+d", "quit", t("tui.bind.quit")),
         ("escape", "interrupt", t("tui.bind.interrupt")),
         ("ctrl+b", "background", t("tui.bind.background")),
-        ("ctrl+o", "cycle_panel", t("tui.bind.right_panel")), # TUI v2:智能切手动 pin/循环
-        ("ctrl+v", "paste_image", t("tui.bind.paste_image")), # 读剪贴板图片 → [图片 #N] chip
-        # #5b T7:tab 切换(放在 Ctrl+1..5 子绑定,tab_strip widget 自己处理)
+        ("ctrl+o", "cycle_panel", t("tui.bind.right_panel")),
+        ("ctrl+v", "paste_image", t("tui.bind.paste_image")),
     ]
 
     def __init__(
@@ -152,85 +135,44 @@ class ArgosApp(App):
         workspace: Path | str | None = None,
     ) -> None:
         super().__init__()
-        # 真实 workspace(入口解析:--project 或 cwd 默认);None = 配置根下 workspace。
-        # 必须与 build_components 用的同一路径,否则 daemon create_run 会把 run 落到错误目录
-        # (实测 bug:在 ~/argos-field-test 启动,agent 却跑在默认工作区整理不到任何文件)。
         self._workspace_override: Path | None = (
             Path(workspace).expanduser().resolve() if workspace else None
         )
-        # 主题必须在 compose(DOM 构建)之前注册并激活——Textual 8.x 的事件顺序是
-        # Compose(line 3432) → Load(line 3477) → Mount；widget DEFAULT_CSS 在 compose
-        # 时解析，若此时 argos-night 未注册，$abyss/$ink-faint 等 v3 token 将
-        # UnresolvedVariableError 导致 compose 崩溃、on_mount 永远跑不到。
         self.register_theme(ARGOS_NIGHT)
         self.theme = "argos-night"
-        # 模型不绑定、无档位:活动栏显示的真实模型名取自 config.active_tier()(当前 active profile)。
-        # loop_factory() 返回一个有 async run(goal, session_id) -> AsyncIterator[Event] 的对象。
-        # 默认 FakeLoop(Phase 6 真 AgentLoop 落地后由入口注入真实工厂)。
-        # 默认 FakeLoop 仅作测试桩(生产恒经 __main__ 注入真工厂);DEMO 概念已移除 2026-07-01。
         self._loop_factory = loop_factory or (lambda **kw: FakeLoop())
-        # 给了共享 gate(真 loop 路径:= broker.gate)就用它 —— 这样工作流/工具审批 respond
-        # 落在 loop 真正 await 的那个 gate 上(否则打错实例,审批永远不放行)。
-        # 没给(demo/fake 路径)自建一个 CONFIRM 档,行为不变。
         self.gate = gate or ApprovalGate(ApprovalLevel.CONFIRM)
         self._step_blocks: dict[int, CodeActionBlock] = {}
-        self._workflow_panel: WorkflowPanel | None = None  # 当前工作流的进度树面板(WorkflowProposed 时 mount)
+        self._workflow_panel: WorkflowPanel | None = None
         self._run_active = False
-        self._produce_worker = None     # 当前 run 的生产 worker(Esc 打断时取消它)
-        self._interrupted = False       # 本轮是否被用户 Esc 打断(收尾时落一行提示)
+        self._produce_worker = None
+        self._interrupted = False
         self._yolo = False
-        # Plan mode spec §2.5:loop 投 PlanRendered 事件时 TUI 推 PlanModal + 在 modal 回调里
-        # 调 ExitPlanMode(loop, ...) + set loop._plan_decision_event 唤醒 loop 的 await。
-        # 需存本轮 run 的 loop 引用(start_run 是 async 但 loop 是局部变量,事件回调在 _apply_event
-        # 拿不到 —— 故暴露在 self 上,每轮 run 起始重设)。
         self._current_loop: object | None = None
-        # Plan mode 状态(spec §2.4 视觉指示):_plan_mode=True 时 splash 加 [plan mode] 前缀、
-        # status_bar Mode 段切 plan + 改色、sub_title 挂 [plan mode] 标识。set_plan_mode_indicators()
-        # 是 host 切换的单入口,/plan → EnterPlanMode 后调它一次,下一轮 start_run 起手也会按它
-        # 决定是否落 plan 阶段。
         self._plan_mode = False
-        # 每个 app 实例(=一段会话)用独立稳定 session_id —— loop 跨轮据它从 store 加载历史
-        # (多轮上下文)。/clear 换新 id = 开新会话、断上下文。uuid 避免硬编码 "tui-session"
-        # 致不同会话共享同一持久化线程。
         self._session_id = uuid.uuid4().hex
-        # /undo 配套:workspace 根 + run 自增序号 + 本轮 run 起点的快照(供 /undo 还原)。
-        # 入口传入的真实 workspace 优先(与 build_components 同源);否则配置根下默认工作区。
         self._workspace: Path = self._workspace_override or (_argos_dir() / "workspace")
         self._run_seq: int = 0
         self._snapshot: "RunSnapshot | None" = None
-        # ── Daemon 模式状态(v6 P3b §2)────────────────────────────────
-        # _kernel_mode 枚举:
-        #   ""        = 未初始化(DEMO / on_mount 前)
-        #   "inline"  = 单进程直跑(daemon 不可达,inline fallback)
-        #   "argosd"  = 走 daemon 协议(argosd 进程;事件经 DaemonEventSource)
-        # 诚实铁律:只改写真实状态,绝不把 inline 标注为 argosd。
         self._kernel_mode: str = ""
-        # _with_daemon:True = 已通过模式探测确认 daemon 可用,走协议路径。
-        # 历史遗留字段保留(命令/条件判断大量依赖),P3b 中由 _kernel_mode 覆盖语义。
         self._with_daemon: bool = False
         self._daemon_client = None     # type: ignore[var-annotated]
         self._daemon_session_id: str | None = None
-        self._daemon_run_id: str | None = None   # 当前 run 在 daemon 里的 run_id
-        self._daemon_hb_timer = None             # 会话心跳保活计时器(set_interval 句柄)
+        self._daemon_run_id: str | None = None
+        self._daemon_hb_timer = None
         self._conductor_source = None            # DaemonEventSource for _conductor SSE stream
-        self._last_esc_time: float = 0.0          # 双 Esc 检测(1.5s 内第二次 = cancel)
-        self._last_ctrl_c_time: float = 0.0       # 双 Ctrl+C 检测(1.5s 内第二次 = quit)
-        # 输入历史环形缓冲(#20):存最近 N 条 goal/slash 提交,↑/↓ 回填输入框
+        self._last_esc_time: float = 0.0
+        self._last_ctrl_c_time: float = 0.0
         self._input_history: list[str] = []
         self._input_history_max: int = 50
-        # TUI v2 行内审批队列:同屏最多一个活动 InlineChoice,其余 FIFO 排队
-        #(并发 ApprovalRequest 不互踩;前一个决策落定后再 mount 下一个)。
         self._choice_active = False
         self._choice_queue: deque[Callable[[], InlineChoice]] = deque()
-        # v6 P3b §4:当前 plan 决策的 call_id(PlanDecisionRequest 事件到达时设置)。
-        # _handle_plan_rendered 据此路由 respond_plan_decision / POST plan_decision。
         self._current_plan_call_id: str | None = None
         self.sub_title = self._compose_subtitle()
 
     @staticmethod
     def _display_tier():
-        """当前 active 模型的 tier(活动栏/启动画面/上下文窗口显示用);
-        配置异常或无 config 时回退 DEFAULT_TIER,绝不崩 UI。无 worker/premium 档位。"""
+        """Internal documentation."""
         from argos import config
         try:
             return config.active_tier()
@@ -238,8 +180,7 @@ class ArgosApp(App):
             return config.DEFAULT_TIER
 
     def _compose_subtitle(self) -> str:
-        """头部副标题 = 基底 + YOLO 标识(Auto 档)+ plan mode 标识。
-        plan mode 标识 [plan mode] 在 /plan 切到后挂上,ExitPlanMode 后摘掉(经 set_plan_mode_indicators)。"""
+        """Internal documentation."""
         parts = [_BASE_SUBTITLE]
         if self._plan_mode:
             parts.append("· [plan mode]")
@@ -248,18 +189,14 @@ class ArgosApp(App):
         return "  ".join(parts)
 
     def _resolve_trust_level(self):
-        """从 gate 反查当前 Trust 档位(单一真源,与 TopBar Trust 徽标 + /trust 共用)。
-
-        set_trust_level 存的原始档位优先(反向映射有损:L2 会被误报成 L1——不许对用户失真);
-        其次按 gate.level 反查;_ask_readonly=True 精确判 L0;兜底 L1。
-        """
+        """Internal documentation."""
         from argos.permissions.trust_dial import TrustLevel
         _map = {
             ApprovalLevel.CONFIRM:      TrustLevel.L1_DANGEROUS_ONLY,
             ApprovalLevel.ACCEPT_EDITS: TrustLevel.L3_SESSION_TRUSTED,
             ApprovalLevel.AUTO:         TrustLevel.L4_AUTONOMOUS,
             ApprovalLevel.OBSERVE:      TrustLevel.L0_EVERY_STEP,
-            ApprovalLevel.PROPOSE:      TrustLevel.L0_EVERY_STEP,  # PROPOSE 退化 L0
+            ApprovalLevel.PROPOSE:      TrustLevel.L0_EVERY_STEP,
         }
         current = _map.get(self.gate.level, TrustLevel.L1_DANGEROUS_ONLY)
         if getattr(self.gate, "_ask_readonly", False):
@@ -270,7 +207,7 @@ class ArgosApp(App):
         return current
 
     def _refresh_topbar(self) -> None:
-        """状态变化(plan/YOLO/DEMO/key/trust)→ TopBar 徽标对齐(诚实:全部来自真实状态)。"""
+        """Internal documentation."""
         try:
             tl = self._resolve_trust_level()
             self.query_one("#top-bar", TopBar).set_state(
@@ -278,12 +215,11 @@ class ArgosApp(App):
                 has_key=bool(config.active_key()),
                 trust_level=int(tl), trust_label=tl.label_human,
             )
-        except Exception:  # noqa: BLE001 — 未 mount(测试直构)时静默,数据已在字段里
+        except Exception:  # noqa: BLE001
             pass
 
     async def action_paste_image(self) -> None:
-        """Ctrl+V:读系统剪贴板图片 → 在输入框插入 [图片 #N] chip。
-        诚实:无图 / 无工具 / 平台不支持 → transcript 落明确原因,不崩、不伪绿。"""
+        """Internal documentation."""
         try:
             att = read_clipboard_image()
         except ClipboardError as e:
@@ -296,36 +232,53 @@ class ArgosApp(App):
             return
         try:
             prompt = self.query_one("#prompt", PromptArea)
-        except Exception:  # noqa: BLE001 — 无输入框(不该发生)
+        except Exception:  # noqa: BLE001
             return
         token = prompt.register_image(att)
         prompt.insert(token)
 
     def action_cycle_panel(self) -> None:
-        """Ctrl+O:右栏视图循环(auto → idle → plan → act → verify → auto)。"""
+        """Internal documentation."""
         try:
             self.query_one("#activity", ActivityPanel).cycle_view()
-        except Exception:  # noqa: BLE001 — 窄屏隐藏/测试场景:无副作用
+        except Exception:  # noqa: BLE001
             pass
 
+    def _scroll_transcript(self, method: str) -> None:
+        try:
+            getattr(self.query_one("#transcript", Transcript), method)(animate=False)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _wheel_transcript(self, event: events.MouseEvent, method: str) -> None:
+        self._scroll_transcript(method)
+        event.stop()
+
+    def action_transcript_page_up(self) -> None:
+        self._scroll_transcript("scroll_page_up")
+
+    def action_transcript_page_down(self) -> None:
+        self._scroll_transcript("scroll_page_down")
+
+    def _on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
+        self._wheel_transcript(event, "scroll_up")
+
+    def _on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
+        self._wheel_transcript(event, "scroll_down")
+
     def compose(self) -> ComposeResult:
-        # TUI v2:自绘 TopBar 替代 stock Header(键提示并入 StatusBar,无 Footer)。
         tier = self._display_tier()
         yield TopBar(version=_app_version(), model_label=tier.model, id="top-bar")
-        # #5b 多 run tabs:顶部 tab 条(隐藏当 daemon 未启用时)
         yield TabStrip(id="tab-strip")
         with Horizontal():
             yield Transcript(id="transcript")
             yield ActivityPanel(id="activity", model_label=tier.model, tier=tier.name)
         yield StatusBar(id="status-bar")
-        # slash 菜单(默认隐藏)叠在输入框上方:打 / 时列出命令;PromptArea 是多行输入(Enter 提交)。
         yield SlashMenu(id="slash-menu")
         yield PromptArea(placeholder=t("tui.prompt.placeholder"), id="prompt")
 
     def on_mount(self) -> None:
-        """启动即把焦点放到输入框。否则 Textual 默认聚焦第一个可聚焦 widget。Transcript 已
-        can_focus=False(不抢焦点),但仍显式 focus 输入框作双保险,杜绝任何可聚焦兄弟
-        排在 Input 之前抢走按键、用户在输入框打不了字(汉字/ASCII 都进不去)。与 AUTO_FOCUS 双保险。"""
+        """Internal documentation."""
         self._refresh_topbar()
         self.query_one("#prompt", PromptArea).focus()
         tier = self._display_tier()
@@ -335,8 +288,6 @@ class ArgosApp(App):
             has_key = bool(config.active_key())
         except config.ConfigError as e:
             key_config_error = str(e)
-        # has_key 必须真查 config.active_key(),不能只信 demo 开关(2026-06-09 修复假阳:
-        # demo=False + 没配 key 此前显 LIVE 撒了谎,跑起来 401)
         splash = StartupSplash(
             model_label=tier.model, tier=tier.name,
             live=True, has_key=has_key,
@@ -344,37 +295,29 @@ class ArgosApp(App):
         if key_config_error:
             splash.set_bad_config(key_config_error, source="config")
         self.query_one("#transcript", Transcript).mount(splash)
-        # 启动时根据 _plan_mode 状态把指示器对齐(默认 False;若 /plan 已触发过则 True)。
         self._set_plan_mode_indicators()
-        # 工作态边缘光(Task 13):idle 灭=中性灰;run 期间随真实阶段着色,并在非终态做呼吸动画。
-        # 颜色基色只在 PhaseChange/VerifyVerdict/Escalation/Error 真事件到达时变;呼吸只在该基色上调亮暗。
-        # 终态告警色(failed/unverifiable/escalation/error)锁定后,阶段色不得覆盖且不呼吸(诚实:告警静止,不被 report 抹掉)。
         self._terminal_glow = False
-        self._glow_base = None          # 当前呼吸基色(None=不呼吸)
-        self._glow_phase = 0.0          # 呼吸相位累加器 t∈[0,1]
+        self._glow_base = None
+        self._glow_phase = 0.0
         self._glow_timer = None
-        # 启动时显坏配置 banner(若 ~/.argos/hooks.json 或 lsp.json 或 permissions.json 解析失败)
         try:
             from argos.hooks import reload_config
             reload_config()
-        except Exception as e:  # noqa: BLE001 — 坏配置 banner,run 正常起
+        except Exception as e:  # noqa: BLE001
             for sp in self.query(StartupSplash):
                 sp.set_bad_config(str(e))
         try:
             from argos.lsp import reload_config as _lsp_reload_config
             _lsp_reload_config()
-        except Exception as e:  # noqa: BLE001 — LSP 坏配置 banner,run 正常起
+        except Exception as e:  # noqa: BLE001
             for sp in self.query(StartupSplash):
                 sp.set_bad_config(f"LSP {e}")
-        # Smart approval(spec 2026-06-06 §2.6):启动时 reload + 接 TUI ActivityPanel 决策监听 +
-        # 把 workspace 注入 gate 让 evaluator 跑 system path / workspace 边界 check。
         try:
             from argos.permissions import reload_config as _perm_reload_config
             _perm_reload_config()
-        except Exception as e:  # noqa: BLE001 — permissions 坏配置 banner,run 正常起
+        except Exception as e:  # noqa: BLE001
             for sp in self.query(StartupSplash):
                 sp.set_bad_config(f"permissions: {e}")
-        # gate 接 ActivityPanel 'Approval' 区段(每次评估完触发 listener,UI 实时反映)
         try:
             ap = self.query_one("#activity", ActivityPanel)
             self.gate.set_decision_listener(
@@ -382,44 +325,26 @@ class ArgosApp(App):
                     action=action, decision=decision, trigger=trigger,
                 )
             )
-        except Exception:  # noqa: BLE001 — 未 mount 或测试场景:静默
+        except Exception:  # noqa: BLE001
             pass
-        # gate「需交互审批」带外回调:inline 模式下,broker-gated 工具的审批在 exec_code(已挪进
-        # to_thread)中经桥发起,此刻 loop 事件生成器阻塞在 await、yield 不出 ApprovalRequest → 旧路径
-        # TUI 永远收不到、不 mount 审批卡 → 工具干等到超时(2026-06-18 真机:run_command/web_search
-        # 全卡 30s)。此回调让 gate 在 ask 时直接把卡送到 TUI。daemon 路径不靠它(走 SSE)。
         try:
             self.gate.set_ask_listener(self._on_gate_ask)
         except Exception:  # noqa: BLE001
             pass
-        # workspace 注入(诚实:_workspace 是 host 启动时计算好的工作目录;evaluator 据此跑边界)
         try:
             self.gate.set_workspace(str(self._workspace))
         except Exception:  # noqa: BLE001
             pass
-        # v6 P3b §2:daemon 模式探测 + 拉起(后台 worker,探测期间 TUI 正常可用)。
-        # 诚实:探测结果决定 _kernel_mode 标注,绝不在确认前假装已连通。测试隔离靠 ARGOS_NO_DAEMON=1
-        # (conftest 钉)→ _setup_daemon_mode 内部强制 inline。
-        # DEMO 移除后恒跑(旧 demo=True 会跳过);但若已手动接了 daemon 客户端(测试预置真 server),
-        # 跳过 auto-setup 免得把预置态覆盖成 inline。生产 _daemon_client 恒 None(__init__)→ 照常探测。
         if self._daemon_client is None:
             self.run_worker(self._setup_daemon_mode(), exclusive=False)
 
     async def _setup_daemon_mode(self) -> None:
-        """v6 P3b §2:启动时探测 daemon socket → 尝试拉起 → 确定模式标注 + 创建 session。
-
-        成功 → _kernel_mode="argosd", _with_daemon=True, _daemon_client/session_id 就绪。
-        失败 → _kernel_mode="inline", _with_daemon=False(inline fallback,诚实标注)。
-        ARGOS_NO_DAEMON=1(测试钉)→ 强制 inline,不探测真 daemon。
-        """
+        """Internal documentation."""
         import os
         from argos import config as _cfg
         from argos.tui.daemon_spawn import probe_or_spawn
         from argos.daemon.client import DaemonClient
 
-        # ARGOS_NO_DAEMON=1 总开关:强制 inline(测试隔离铁律 —— pytest 绝不许探测/
-        # 连接用户真实 daemon,否则测试会在用户内核上建 session/run;实测 2026-06-12:
-        # 真 daemon 在跑时 7 个 TUI 测试漏连上去吃 403)。也供 headless 用户显式关闭。
         if os.environ.get("ARGOS_NO_DAEMON") == "1":
             self._kernel_mode = "inline"
             self._with_daemon = False
@@ -429,19 +354,16 @@ class ArgosApp(App):
                 pass
             return
 
-        socket_path = Path(_cfg.get("ARGOS_DAEMON_SOCKET", "~/.argos/daemon.sock")).expanduser()
+        socket_path = Path(_cfg.get("ARGOS_DAEMON_SOCKET") or (_argos_dir() / "daemon.sock")).expanduser()
 
         ready = await probe_or_spawn(socket_path)
         if not ready:
-            # inline fallback 模式(daemon 尝试拉起但失败/超时)
             self._kernel_mode = "inline"
             self._with_daemon = False
             try:
                 self.query_one("#status-bar", StatusBar).set_kernel_mode(t("tui.kernel.inline"))
             except Exception:  # noqa: BLE001
                 pass
-            # #30:尝试拉起 daemon 失败后,在 transcript 落一条系统说明(诚实标注)。
-            # ARGOS_NO_DAEMON=1 明确关闭时不显示(那是用户主动选择 inline,不是 fallback)。
             try:
                 self.run_worker(
                     self.query_one("#transcript", Transcript).append_line(
@@ -454,12 +376,10 @@ class ArgosApp(App):
                 pass
             return
 
-        # daemon 就绪:创建 session
         client = DaemonClient(socket_path)
         try:
             sid = await client.create_session()
         except Exception as e:  # noqa: BLE001
-            # 创建 session 失败:退到 inline(诚实)
             import logging as _log
             _log.getLogger(__name__).warning("daemon session create failed: %s", e)
             self._kernel_mode = "inline"
@@ -468,7 +388,6 @@ class ArgosApp(App):
                 self.query_one("#status-bar", StatusBar).set_kernel_mode(t("tui.kernel.inline"))
             except Exception:  # noqa: BLE001
                 pass
-            # #30:session 创建失败也属于 daemon 不可用,同样落说明行
             try:
                 self.run_worker(
                     self.query_one("#transcript", Transcript).append_line(
@@ -489,30 +408,25 @@ class ArgosApp(App):
             self.query_one("#status-bar", StatusBar).set_kernel_mode("argosd")
         except Exception:  # noqa: BLE001
             pass
-        # 会话保活:起周期心跳,远低于 daemon 30s TTL —— 否则空闲 >30s 会话被回收,
-        # 下一次 run 撞 401 missing_session(真机 2026-06-22:天气查询后敲 'hello' 连续两条红)。
         self._start_daemon_heartbeat()
-        # conductor SSE 订阅:空闲 TUI 接收 ProactiveSuggestionEvent(P5b §9)。
         # ponytail: one worker, torn down by source.stop() on disconnect / app exit.
         self._start_conductor_subscription(socket_path, sid)
 
-    # ── daemon 会话自愈(2026-06-22:修 401 missing_session 不自愈)──────────────
-    _DAEMON_HB_INTERVAL_S: float = 10.0   # 心跳周期(<< daemon HEARTBEAT_TIMEOUT_S=30s)
+    _DAEMON_HB_INTERVAL_S: float = 10.0
 
     def _start_daemon_heartbeat(self) -> None:
-        """起会话心跳保活 worker(幂等)。未 mount(测试直构)时 set_interval 失败静默。"""
+        """Internal documentation."""
         if self._daemon_hb_timer is not None:
             return
         try:
             self._daemon_hb_timer = self.set_interval(
                 self._DAEMON_HB_INTERVAL_S, self._daemon_heartbeat_tick
             )
-        except Exception:  # noqa: BLE001 — 未 mount / 测试场景:无运行中的事件循环
+        except Exception:  # noqa: BLE001
             self._daemon_hb_timer = None
 
     async def _daemon_heartbeat_tick(self) -> None:
-        """一次心跳:给 daemon 续命。会话已被回收(missing_session)→ 重建一个,
-        使下一次 run 不再撞 401。其余错误静默(下次 run 会如实暴露问题)。"""
+        """Internal documentation."""
         if not self._with_daemon or self._daemon_client is None or self._daemon_session_id is None:
             return
         from argos.daemon.client import DaemonError
@@ -523,23 +437,18 @@ class ArgosApp(App):
             if e.code == CODE_MISSING_SESSION:
                 try:
                     self._daemon_session_id = await self._daemon_client.create_session()
-                except Exception:  # noqa: BLE001 — 重建失败:下次 run 路径会再尝试 + 诚实报错
+                except Exception:  # noqa: BLE001
                     pass
-        except Exception:  # noqa: BLE001 — 网络抖动等:静默,不打扰用户
+        except Exception:  # noqa: BLE001
             pass
 
-    # ── conductor SSE 订阅(P5b §9 自治面)────────────────────────────────────
 
     def _start_conductor_subscription(self, socket_path: "Path", session_id: str) -> None:
-        """订阅 daemon 的 _conductor SSE 频道,将 ProactiveSuggestionEvent 喂入 _apply_event。
-
-        幂等:已有订阅时不重复启动。
-        inline / demo 模式不调用本方法,conductor 流不存在。
-        """
+        """Internal documentation."""
         from argos.tui.daemon_source import DaemonEventSource
 
         if self._conductor_source is not None:
-            return  # 幂等
+            return
 
         source = DaemonEventSource(socket_path, "_conductor", session_id)
         self._conductor_source = source
@@ -549,12 +458,11 @@ class ArgosApp(App):
                 async for ev in source.stream():
                     try:
                         await self._apply_event(ev)
-                    except Exception:  # noqa: BLE001 — widget 未 mount 等:静默
+                    except Exception:  # noqa: BLE001
                         pass
-            except Exception:  # noqa: BLE001 — 断线 / 退出:静默
+            except Exception:  # noqa: BLE001
                 pass
             finally:
-                # 先令 source 停止轮询(signal stop),再重置引用(worker cancel 亦覆盖此路径)
                 source.stop()
                 self._conductor_source = None
 
@@ -563,10 +471,7 @@ class ArgosApp(App):
     async def _daemon_create_run(
         self, goal: str, attachments: list | None, *, verify_cmd: str | None = None
     ) -> str:
-        """create_run,会话过期(missing_session)时透明重握手并重试一次。
-
-        单 TUI 场景安全:daemon 在 _require_session 顶部先 reap 掉过期 owner,
-        新建会话即成为 owner(不会卡在 observer 只读)。非 missing_session 错误原样上抛。"""
+        """Internal documentation."""
         from argos.daemon.client import DaemonError
         from argos.daemon.protocol import CODE_MISSING_SESSION
         assert self._daemon_client is not None
@@ -580,7 +485,6 @@ class ArgosApp(App):
         except DaemonError as e:
             if e.code != CODE_MISSING_SESSION:
                 raise
-            # 会话被回收 → 重建后重试一次(透明自愈,用户无感)
             self._daemon_session_id = await self._daemon_client.create_session()
             return await self._daemon_client.create_run(
                 self._daemon_session_id, goal=goal,
@@ -588,38 +492,32 @@ class ArgosApp(App):
                 attachments=attachments or [], verify_cmd=verify_cmd,
             )
 
-    # ── 工作态边缘光(spec §工作态边缘光) ─────────────────────────────────
     def _set_border(self, color) -> None:
         self.screen.styles.border = ("round", color)
 
     def _set_terminal_glow(self, active: bool, *, kind: str = "fail") -> None:
-        """边框告警锁色 + StatusBar 告警态联动(spec §8.4 / 陷阱2)。
-
-        `_terminal_glow` 与 StatusBar `-alert` 同源:failed/unverifiable/escalation/error 置 True,
-        新 run / plan 解锁置 False。StatusBar 锁色后阶段眼仍随 phase,整条锁语义色——
-        kind="fail" 红(failed/error),kind="warn" 橙(unverifiable/escalation)。阶段色不得覆盖。
-        StatusBar 未 mount(测试直构)时静默(陷阱1 模式)。"""
+        """Internal documentation."""
         self._terminal_glow = active
         try:
             self.query_one("#status-bar", StatusBar).set_alert(active, kind=kind)
-        except Exception:  # noqa: BLE001 — 未 mount / 测试场景:状态已在 _terminal_glow 字段里
+        except Exception:  # noqa: BLE001
             pass
 
     def _glow_start(self) -> None:
         from argos.tui import glow
-        self._set_terminal_glow(False)        # 新一轮:解锁告警色(边框 + StatusBar -alert)
+        self._set_terminal_glow(False)
         self._glow_phase = 0.0
         self._glow_base = glow.phase_color("plan")
         self._set_border(self._glow_base)
-        if self._glow_timer is None:          # 起呼吸计时器(边框色 set_interval 重设,glow 可行性研究已证安全无闪烁)
+        if self._glow_timer is None:
             self._glow_timer = self.set_interval(0.1, self._glow_breathe)
 
     def _glow_breathe(self) -> None:
-        """非终态时把当前阶段基色按 breathe 调亮暗(呼吸);终态告警色静止不呼吸。"""
+        """Internal documentation."""
         from argos.tui import glow
         if self._terminal_glow or self._glow_base is None:
             return
-        self._glow_phase = (self._glow_phase + 0.03) % 1.0   # 步长 0.03/0.1s tick → ~3.3s 一个呼吸周期(平静呼吸,非快速脉冲)
+        self._glow_phase = (self._glow_phase + 0.03) % 1.0
         self._set_border(glow.breathe(self._glow_base, self._glow_phase))
 
     def _glow_stop(self) -> None:
@@ -630,50 +528,39 @@ class ArgosApp(App):
         self._glow_base = None
         self._set_border(glow.IDLE_BORDER)
 
-    # ── plan mode 视觉指示(spec §2.4) ─────────────────────────────
     def _set_plan_mode_indicators(self) -> None:
-        """按 self._plan_mode 一次性把 splash / status_bar / sub_title 三个指示器对齐。
-
-        host 切 plan mode 的单入口:/plan → EnterPlanMode 后调它一次。
-        退出时再调一次(False)摘掉所有 [plan mode] 标记。
-        """
+        """Internal documentation."""
         from argos.tui import glow
         for sp in self.query(StartupSplash):
             sp.set_plan_mode(self._plan_mode)
         try:
             self.query_one("#status-bar", StatusBar).set_plan_mode(self._plan_mode)
-        except Exception:  # noqa: BLE001 — 测试中或在 on_mount 前调,status_bar 还没 mount,静默
+        except Exception:  # noqa: BLE001
             pass
         self.sub_title = self._compose_subtitle()
         self._refresh_topbar()
         if self._plan_mode and not self._run_active:
-            # idle 切 plan mode 时把边框也换到 plan 基色(不呼吸 —— run 期间再由 _glow_start 接管)
             self._set_border(glow.phase_color("plan"))
 
-    # ── 输入分发 ──────────────────────────────────────────────────────────
     def on_prompt_area_submitted(self, event: PromptArea.Submitted) -> None:
-        # PromptArea 已在内部清空自身;这里只负责分发(slash / goal)。同时收掉 slash 菜单。
         self.query_one("#slash-menu", SlashMenu).hide()
         self.handle_input(event.text, event.attachments)
 
-    # ── #5b 多 run tab 切换 ────────────────────────────────────────
     def on_tab_strip_tab_activated(self, event: TabActivated) -> None:
-        """TabStrip 发 TabActivated → 调 focus POST + 切 active 标识。"""
+        """Internal documentation."""
         self.run_worker(self._on_tab_activated(event.run_id), exclusive=False)
 
     async def _on_tab_activated(self, run_id: str) -> None:
-        """user 激活某 tab:调 focus 端点 + 切 active + 更新 TabStrip 视觉。
-
-        observer 调 /focus 拿 403 — 我们不假装成功,在 transcript 落 READ-ONLY 提示。
-        """
+        """Internal documentation."""
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             return
         try:
             status, _, raw = await self._daemon_client._request(
                 "POST", f"/runs/{run_id}/focus", session_id=self._daemon_session_id,
             )
+            if status != 200:
+                raise RuntimeError(f"HTTP {status}: {raw.decode('utf-8', errors='replace')}")
         except Exception as e:  # noqa: BLE001
-            # 403 / daemon 失联等 — 落行告知
             try:
                 log_widget = self.query_one(Transcript)
                 await log_widget.append_line(
@@ -682,26 +569,17 @@ class ArgosApp(App):
             except Exception:  # noqa: BLE001
                 pass
             return
-        # 切 active run_id
         self._daemon_run_id = run_id
-        # 同步更新 TabStrip 的 active
         try:
             strip = self.query_one(TabStrip)
             strip.set_active(run_id)
         except Exception:  # noqa: BLE001
             pass
-        # 重置 Esc 双击检测(切 tab 避免误触发)
         self._last_esc_time = 0.0
-        # 拉新 run 的 events 重放(transcript 清空 + replay)
         self.run_worker(self._replay_run_to_transcript(run_id), exclusive=False)
 
     async def _replay_run_to_transcript(self, run_id: str) -> None:
-        """切到新 run → 清空本地 transcript → 拉 events 重新渲染。
-
-        简化:本期仅落一行标记,真 replay 走 SSE 订阅时即时渲染;
-        切到新 run 时,我们已绑 SSE 订阅进 produce worker(下个 task),SSE 收的事件按 EventBus
-        走 _apply_event 全套渲染路径,自动重放 run 期间所有事件。
-        """
+        """Internal documentation."""
         try:
             log_widget = self.query_one(Transcript)
             await log_widget.append_line(
@@ -711,7 +589,7 @@ class ArgosApp(App):
             pass
 
     def _refresh_tab_strip(self) -> None:
-        """从 daemon 拉所有 run 列表 → 更新 TabStrip(daemon 模式才调)。"""
+        """Internal documentation."""
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             return
         async def _do():
@@ -736,16 +614,15 @@ class ArgosApp(App):
         self.run_worker(_do(), exclusive=False)
 
     def on_text_area_changed(self, event) -> None:
-        """输入内容变化 → 驱动 slash 命令菜单(打 / 即列命令;带参/非 slash 则隐藏)。"""
+        """Internal documentation."""
         menu = self.query_one("#slash-menu", SlashMenu)
         menu.show_matches(match_commands(event.text_area.text))
 
     def _push_input_history(self, text: str) -> None:
-        """将提交的文本压入输入历史环形缓冲(去重最近一条;容量 _input_history_max)。"""
+        """Internal documentation."""
         t = text.strip()
         if not t:
             return
-        # 避免连续重复
         if self._input_history and self._input_history[-1] == t:
             return
         self._input_history.append(t)
@@ -753,18 +630,13 @@ class ArgosApp(App):
             self._input_history.pop(0)
 
     def handle_input(self, text: str, attachments: list | None = None) -> None:
-        """slash 走分发;否则当 goal(可带图片 attachments)。同步入口(测试可直接调)。
-
-        Transcript 落行是 async,故 slash 分发与"任务进行中"提示都包成 worker(测试 pause 后可见)。
-        非空提交(goal 或 slash)都压入输入历史环形缓冲,供 ↑/↓ 历史导航回填。"""
-        # 提交时压历史(slash 和 goal 都记;/retry /clear 等单次偶用的命令也记,方便重试)
+        """Internal documentation."""
         if text.strip():
             self._push_input_history(text)
         cmd = parse_slash(text)
         if cmd is None:
             if text.strip():
                 if self._run_active:
-                    # 单会话编码 agent:一轮未完不并发起新轮(否则 step 块串台/漏渲染)。
                     self.run_worker(
                         self.query_one("#transcript", Transcript).append_line(
                             t("tui.run.busy")
@@ -772,7 +644,6 @@ class ArgosApp(App):
                         exclusive=False,
                     )
                     return
-                # 非测试同步场景:起一轮 run(测试用 start_run 显式 await)
                 self.run_worker(self.start_run(text.strip(), attachments or []), exclusive=False)
             return
         self.run_worker(self._dispatch_slash(cmd), exclusive=False)
@@ -826,8 +697,6 @@ class ArgosApp(App):
         }
 
     async def _cmd_yolo(self, log, arg: str) -> None:
-        # /yolo 是 /trust autonomous 的别名（保留命令，直接生效；提示新用法）。
-        # 与 /trust autonomous 不同：/yolo 不弹升档确认（历史合约；用户明确输入即表示确认）。
         if arg.strip():
             await log.append_line(t("tui.yolo.usage"), kind="error")
             return
@@ -874,8 +743,6 @@ class ArgosApp(App):
                     env=cfg.key_envs.get(arg) or "(none)",
                 ))
             _cfg.set_active(arg)
-            # 诚实:模型在启动时 build_components 注入一次,会话内不热切换;只重启真生效
-            #(不写"新任务生效"——那是假话,会话内新任务仍用旧模型)。
             await log.append_line(t("tui.model.switched", name=arg), kind="done")
         except Exception as e:  # noqa: BLE001
             await log.append_line(t("tui.model.switch_failed", err=e), kind="error")
@@ -891,7 +758,6 @@ class ArgosApp(App):
         if arg.strip():
             await log.append_line(t("tui.cost.usage"), kind="error")
             return
-        # CostMeter 已退役为活动栏内的"成本 + 缓存"区;/cost 直接回显该区当前正文。
         ap = self.query_one("#activity", ActivityPanel)
         await log.append_line(t("tui.cost.header") + "\n" + ap.snapshot_text())
 
@@ -1016,12 +882,11 @@ class ArgosApp(App):
         await getattr(self, method_name)(log, cmd.arg)
 
     async def _undo(self, log) -> None:
-        """/undo:用本轮 run 起点的快照还原 workspace;不发 goal。"""
+        """Internal documentation."""
         if self._snapshot is None or not self._snapshot.tar_path.exists():
             await log.append_line(t("tui.undo.no_snapshot"), kind="system")
             return
         result = self._snapshot.restore(self._workspace)
-        # #9 T5:auto-capture undo 事件
         try:
             from argos.memory import auto as _mem_auto
             from argos.memory.auto import project_id_for as _pid
@@ -1043,23 +908,14 @@ class ArgosApp(App):
             )
 
     async def _trust_cmd(self, log, arg: str) -> None:
-        """/trust [cautious|trusted|autonomous|paranoid|status]:信任模式(3-mode)。
-
-        无参数 → 在 3 个模式间循环(Cautious→Trusted→Autonomous→…，Claude Code Shift+Tab 式)。
-        /trust status → 只显示当前模式 + 拨盘,不切换。
-        /trust cautious|trusted|autonomous → 切到指定模式;升档先渲染 escalation_warning 经确认。
-        /trust paranoid → 隐藏的"每一步都问"档(L0)。降档直接生效(收紧权限,无需确认)。
-        /yolo 是 /trust autonomous 的别名(旧兼容命令)。l0-l4 仍作隐藏别名保留。
-        """
+        """Internal documentation."""
         from argos.permissions.trust_dial import (
             TrustLevel, escalation_warning, next_in_cycle, to_approval_semantics,
         )
         arg = arg.strip().lower()
 
-        # 计算当前 TrustLevel(单一真源,与 TopBar Trust 徽标共用)
         current_trust = self._resolve_trust_level()
 
-        # status → 只显示状态,不切换
         if arg in ("status", "s"):
             await log.append_line(
                 t("tui.trust.status", mode_name=current_trust.mode_name, label_human=current_trust.label_human, description=current_trust.description),
@@ -1068,18 +924,15 @@ class ArgosApp(App):
             await log.mount_block(TrustDial(current=current_trust))
             return
 
-        # 无参数 → 循环到下一个可见模式(Cautious→Trusted→Autonomous→…)
         if not arg:
             target_trust = next_in_cycle(current_trust)
         else:
-            # 解析目标模式:3-mode 名为主,l0-l4 / paranoid / auto 为隐藏别名。
             _arg_map: dict[str, TrustLevel] = {
                 "cautious": TrustLevel.L1_DANGEROUS_ONLY,
                 "trusted": TrustLevel.L3_SESSION_TRUSTED,
                 "autonomous": TrustLevel.L4_AUTONOMOUS,
                 "auto": TrustLevel.L4_AUTONOMOUS,
                 "paranoid": TrustLevel.L0_EVERY_STEP,
-                # 隐藏别名(向后兼容)
                 "l0": TrustLevel.L0_EVERY_STEP,
                 "l1": TrustLevel.L1_DANGEROUS_ONLY,
                 "l2": TrustLevel.L2_IRREVERSIBLE_ONLY,
@@ -1094,7 +947,6 @@ class ArgosApp(App):
                 )
                 return
 
-        # 同档位：无需操作
         if target_trust is current_trust:
             await log.append_line(
                 t("tui.trust.already", mode_name=target_trust.mode_name, label_human=target_trust.label_human),
@@ -1102,7 +954,6 @@ class ArgosApp(App):
             )
             return
 
-        # 降档：直接生效（收紧权限，无需确认）
         if int(target_trust) < int(current_trust):
             self.gate.set_trust_level(target_trust)
             self._yolo = (target_trust is TrustLevel.L4_AUTONOMOUS)
@@ -1114,7 +965,6 @@ class ArgosApp(App):
             )
             return
 
-        # 升档：必须展示警示并等用户 InlineChoice 确认
         warning_text = escalation_warning(current_trust, target_trust)
         target_name = target_trust.mode_name
         target_label = target_trust.label_human
@@ -1145,19 +995,12 @@ class ArgosApp(App):
             body=warning_text,
             options=[("confirm", t("tui.trust.confirm_yes")), ("cancel", t("tui.trust.confirm_no"))],
             on_decide=_on_trust_confirm,
-            escape_value="cancel",  # fail-closed：Esc = 取消
+            escape_value="cancel",
             risk="high" if target_trust is TrustLevel.L4_AUTONOMOUS else "medium",
         ))
 
     async def _ledger_cmd(self, log) -> None:
-        """/ledger:列出当前 run 的行为账本(人话条目 + 撤销状态着色)。
-
-        来源优先级:
-          1. 若存在 _ledger_store(daemon 路径注入),直接从 store 读当前 run 账本。
-          2. 否则诚实提示"当前会话无账本"(demo/inline 路径无账本记录)。
-        复用 transcript 渲染,不加新 widget。
-        撤销状态着色:available=绿,done=灰,impossible=红。
-        """
+        """Internal documentation."""
         ledger_store = getattr(self, "_ledger_store", None)
         run_id = getattr(self, "_daemon_run_id", None) or getattr(self, "_run_id", None)
 
@@ -1175,13 +1018,11 @@ class ArgosApp(App):
             await log.append_line(t("tui.ledger.empty", run_id=run_id), kind="system")
             return
 
-        # 过滤掉 undo_done 哨兵条目(action=undo_done 是内部标记,不对用户显示)
         visible = [e for e in entries if e.action != "undo_done"]
         if not visible:
             await log.append_line(t("tui.ledger.all_undone", run_id=run_id), kind="system")
             return
 
-        # 检查是否有文件粒度可撤条目(undo_token 含 "file:" 前缀)
         has_file_undo = any(
             e.undo_state == "available"
             and e.undo_token
@@ -1198,26 +1039,26 @@ class ArgosApp(App):
         )
 
     async def _setup_cmd(self, log) -> None:
-        """/setup:显示当前配置状态和配置向导入口。"""
+        """Internal documentation."""
         from argos import setup_wizard
         lines: list[str] = []
         setup_wizard.print_status(writer=lines.append)
         await log.append_line("\n".join(lines), kind="system")
-        await log.append_line(t("tui.setup.hint"), kind="system")
+        config_dir = _argos_dir()
+        await log.append_line(
+            t("tui.setup.hint", config_path=config_dir / "config.json", env_path=config_dir / ".env"),
+            kind="system",
+        )
 
     async def _cmd_voice(self, log, arg: str) -> None:
-        """/voice:当前构建未接录音/STT,诚实提示而不是静默无效。"""
+        """Internal documentation."""
         if arg.strip():
             await log.append_line(t("tui.voice.usage"), kind="error")
             return
         await log.append_line(t("tui.voice.unavailable"), kind="warn")
 
     async def _journal_cmd(self, log, arg: str) -> None:
-        """/journal [run_id]:显示账本 JSONL 的绝对路径。
-
-        有 run_id → 显示指定 run 的路径;无参数 → 显示当前 run 的路径(若有)。
-        任意情况下都只打路径,不尝试读文件内容(避免在 TUI 里输出大量 JSONL)。
-        """
+        """Internal documentation."""
         ledger_dir = _argos_dir() / "ledger"
         parts = arg.split()
         if len(parts) > 1:
@@ -1231,26 +1072,16 @@ class ArgosApp(App):
             await log.append_line(t("tui.journal.no_id", dir=ledger_dir), kind="system")
 
     async def _retry(self, log) -> None:
-        """/retry:重发本 session 最后一条 user 消息。busy / 空 / 无 store 诚实报。
-
-        改进:若 _input_history 有记录,先把上一条 goal 回填到输入框(#20 历史导航),
-        再执行 start_run。
-        实现简化:demo 模式(FakeLoop,无 store)下诚实报"当前 store 不支持"——
-        真模式需要 build_components 把 store 注入到 App(self._store 字段),
-        那是更大装配改动,留作下一 PR。
-        """
-        if self._run_active:  # busy 守卫(实际字段是 _run_active,非 _busy)
+        """Internal documentation."""
+        if self._run_active:
             await log.append_line(t("tui.retry.busy"), kind="system")
             return
-        # 优先从输入历史取上一条(最近提交的 goal/slash;不需要 store):
-        # 找最后一条非 slash(非 / 开头)的历史条目作为 retry goal。
         last_goal: str | None = None
         for entry in reversed(getattr(self, "_input_history", []) or []):
             if not entry.startswith("/"):
                 last_goal = entry
                 break
         if last_goal:
-            # 回填输入框(#20)
             try:
                 prompt_widget = self.query_one("#prompt", PromptArea)
                 prompt_widget._refill(last_goal)
@@ -1259,7 +1090,6 @@ class ArgosApp(App):
                 pass
             await self.start_run(last_goal)
             return
-        # 无历史:降级到 store 路径(原有逻辑)
         loop = self._loop_factory() if self._loop_factory is not None else None
         store = getattr(loop, "store", None) if loop is not None else None
         if store is None or not hasattr(store, "get_messages"):
@@ -1280,28 +1110,20 @@ class ArgosApp(App):
         await self.start_run(last_user["text"])
 
     async def _enter_plan_mode(self, log) -> None:
-        """/plan slash 命令入口:把 host 切到 plan mode,让下一轮 run 走 plan 阶段(沙箱工具 dispatcher 守卫会拦截写操作)。
-
-        实现简化:loop factory 拿一个临时 loop(同 Task 5 /retry 注释里"临时方案"一样)调 EnterPlanMode;
-        EnterPlanMode 内部 set_plan_mode(True)(模块级) + loop.mode="plan" + 若 loop 有 _emit_phase 则发 PhaseChange。
-        FakeLoop 没 _emit_phase → 视觉指示器靠 _set_plan_mode_indicators() 手动对齐(标题/状态栏/边框),
-        真 loop 也会被 _set_plan_mode_indicators 覆盖一次以保 splash / status_bar 同步。
-        ExitPlanMode 由 host 在 plan 阶段产出 plan 文档后弹 PlanModal 取 4 选项,本方法不接管审批 modal 推屏。
-        """
+        """Internal documentation."""
         from argos.core.plan_mode import EnterPlanMode
         try:
             loop = self._loop_factory()
-        except Exception as e:  # noqa: BLE001 — loop 工厂抛(配错/无依赖)也落行告知,不崩 TUI
+        except Exception as e:  # noqa: BLE001
             await log.append_line(t("tui.plan.factory_failed", err=e), kind="error")
             return
         msg = EnterPlanMode(loop)
-        # EnterPlanMode 内部已 set_plan_mode(True) + 设 loop.mode="plan";同步本端 flag + 指示器。
         self._plan_mode = True
         self._set_plan_mode_indicators()
         await log.append_line(msg, kind="system")
 
     async def _hooks_cmd(self, log, arg: str) -> None:
-        """/hooks / /hooks reload slash 命令入口。"""
+        """Internal documentation."""
         from argos.hooks import get_config, reload_config, HooksConfigError
         arg = arg.strip().lower()
         if arg == "reload":
@@ -1314,10 +1136,9 @@ class ArgosApp(App):
         if arg:
             await log.append_line(t("tui.hooks.usage"), kind="error")
             return
-        # /hooks 无参 → 列当前配置
         cfg = get_config()
         if not cfg.entries:
-            await log.append_line(t("tui.hooks.empty"), kind="system")
+            await log.append_line(t("tui.hooks.empty", path=_argos_dir() / "hooks.json"), kind="system")
             return
         lines = [t("tui.hooks.header", n=len(cfg.entries))]
         for ev_name, entries in cfg.entries.items():
@@ -1331,7 +1152,7 @@ class ArgosApp(App):
         await log.append_line("\n".join(lines), kind="system")
 
     async def _lsp_cmd(self, log, arg: str) -> None:
-        """/lsp / /lsp reload slash 命令入口(spec 2026-06-06 §2.7)。"""
+        """Internal documentation."""
         from argos import lsp as _lsp
         from argos.lsp import get_config, reload_config, LspConfigError
         arg = arg.strip().lower()
@@ -1348,11 +1169,10 @@ class ArgosApp(App):
         if arg:
             await log.append_line(t("tui.lsp.usage"), kind="error")
             return
-        # /lsp 无参 → 列当前 servers
         cfg = get_config()
         if not cfg.servers:
             await log.append_line(
-                t("tui.lsp.empty"),
+                t("tui.lsp.empty", path=_argos_dir() / "lsp.json"),
                 kind="system",
             )
             return
@@ -1375,10 +1195,7 @@ class ArgosApp(App):
         await log.append_line("\n".join(lines), kind="system")
 
     async def _permissions_cmd(self, log, arg: str) -> None:
-        """/permissions / /permissions reload slash 命令入口(spec 2026-06-06 §2.6)。
-
-        无参 → 列当前配置摘要(default_level / per-tool / allow / deny / ask 计数 + 关键 matcher 预览)
-        reload → 重读 ~/.argos/permissions.json,坏配置保旧 + 报错(同 hooks / lsp 行为)。"""
+        """Internal documentation."""
         from argos.permissions import (
             get_config, reload_config, PermissionsConfigError,
         )
@@ -1386,6 +1203,7 @@ class ArgosApp(App):
         if arg == "reload":
             try:
                 cfg = reload_config()
+                self.gate._permissions_config = cfg
                 _dfl = cfg.default_level or t("tui.permissions.default_gate")
                 await log.append_line(
                     t("tui.permissions.reloaded",
@@ -1401,7 +1219,6 @@ class ArgosApp(App):
         if arg:
             await log.append_line(t("tui.permissions.usage"), kind="error")
             return
-        # /permissions 无参 → 列当前配置摘要
         try:
             cfg = get_config()
         except Exception as e:  # noqa: BLE001
@@ -1429,12 +1246,8 @@ class ArgosApp(App):
         await log.append_line("\n".join(lines), kind="system")
 
     async def _show_tools(self, log) -> None:
-        """/tools:列出 agent 可调用的全部工具(诚实:数量 = 真实可调用工具数)。
-
-        P3 动态化：names 从 registry.names() 派生（诚实计数）；无 registry 时退静态表。
-        """
+        """Internal documentation."""
         from argos import tools as _tools
-        # 优先从当前 loop 的 broker._registry 取（P3 动态来源）；无则退静态表。
         _registry = None
         _loop = getattr(self, "_current_loop", None)
         if _loop is not None:
@@ -1447,7 +1260,6 @@ class ArgosApp(App):
             if _broker is not None:
                 _registry = getattr(_broker, "_registry", None)
         names = _tools.get_tool_names(_registry)
-        # 工作流默认 on(autonomy flip);ARGOS_WORKFLOWS=0 显式关闭时用 off 标签。
         import os as _os_wf
         _wf_label = t("tui.tools.wf_off") if _os_wf.environ.get("ARGOS_WORKFLOWS", "1") == "0" else t("tui.tools.wf_on")
         groups = [
@@ -1457,7 +1269,6 @@ class ArgosApp(App):
             (t("tui.tools.group.browser"), [n for n in names if n.startswith("browser_")]),
             (t("tui.tools.group.external"), ["mcp_call"]),
             (t("tui.tools.group.lsp"), [n for n in names if n.startswith("lsp_")]),
-            # 模型可见名=下划线(ALL_TOOL_NAMES 路径);registry.names() 仍点号 —— 两者都归此组。
             (t("tui.tools.group.os"), [n for n in names
                                 if n.startswith("computer_")]),
             (_wf_label, ["propose_workflow"]),
@@ -1470,23 +1281,16 @@ class ArgosApp(App):
         await log.append_line("\n".join(lines), kind="system")
 
     async def _runs_cmd(self, log, arg: str) -> None:
-        """/runs / /runs {id} focus|resume|cancel — daemon 模式 run 列表与控制(spec §2.6 e + #5b §8)。
-
-        无 daemon 时 → 报"未启用 daemon";有 daemon → 列 run + 代理 pause/resume/cancel/focus。
-        #5b 扩展:列 run 时显示 cost + worktree + observer 标识(owner vs readonly)。
-        """
+        """Internal documentation."""
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             await log.append_line(
                 t("tui.runs.no_daemon"),
                 kind="error",
             )
             return
-        # #5b observer 标识
         rec = self._daemon_client.__class__  # type: ignore[attr-defined]
-        # 用 daemon sessions 表查 role(client 端无 sessions 查,fallback:不加 banner)
         parts = arg.split(None, 1)
         if not parts:
-            # /runs 无参 → 列所有 run
             try:
                 runs = await self._daemon_client.list_runs(self._daemon_session_id)
             except Exception as e:  # noqa: BLE001
@@ -1525,7 +1329,6 @@ class ArgosApp(App):
             await log.append_line(t("tui.runs.usage"), kind="error")
             return
         if action == "focus":
-            # #5b:owner-only;observer 拿 403
             try:
                 status, _, _ = await self._daemon_client._request(
                     "POST", f"/runs/{run_id}/focus", session_id=self._daemon_session_id,
@@ -1579,14 +1382,9 @@ class ArgosApp(App):
             except Exception as e:  # noqa: BLE001
                 await log.append_line(t("tui.runs.info_failed", err=e), kind="error")
 
-    # ── P5b §9 自治面：/orders /confirm /dismiss ──────────────────────
 
     async def _orders_cmd(self, log) -> None:
-        """/orders:列出当前 conductor 常驻指令（通过 daemon 或本地 OrderStore）。
-
-        优先走 daemon 端点（/orders）；无 daemon 时直接读本地 OrderStore。
-        只读展示，不执行任何自治动作。
-        """
+        """Internal documentation."""
         if self._with_daemon and self._daemon_client and self._daemon_session_id:
             try:
                 status, _, raw = await self._daemon_client._request(
@@ -1598,7 +1396,6 @@ class ArgosApp(App):
                 await log.append_line(t("tui.orders.request_failed", err=e), kind="error")
                 return
         else:
-            # 无 daemon：本地 OrderStore 直读
             try:
                 from argos.conductor.orders import OrderStore
                 orders = [o.to_dict() for o in OrderStore().list()]
@@ -1610,11 +1407,7 @@ class ArgosApp(App):
         await self.query_one("#transcript", Transcript).mount_block(OrdersPanel(orders=orders))
 
     async def _confirm_suggestion_cmd(self, log, suggestion_id: str) -> None:
-        """/confirm <suggestion_id>:用户确认 conductor 建议 → 通过 daemon 端点 create_run。
-
-        TUI 只是 daemon 客户端，真正的确认通过 POST /suggestions/{id}/confirm（daemon 侧）。
-        铁律：isolation=worktree + trust_level=L1_DANGEROUS_ONLY（server 端写死，TUI 不可覆盖）。
-        """
+        """Internal documentation."""
         parts = suggestion_id.split()
         if len(parts) != 1:
             await log.append_line(t("tui.confirm.no_id"), kind="error")
@@ -1660,7 +1453,7 @@ class ArgosApp(App):
             )
 
     async def _dismiss_suggestion_cmd(self, log, suggestion_id: str) -> None:
-        """/dismiss <suggestion_id>:忽略 conductor 建议（通过 daemon 端点）。"""
+        """Internal documentation."""
         parts = suggestion_id.split()
         if len(parts) != 1:
             await log.append_line(t("tui.dismiss.no_id"), kind="error")
@@ -1695,14 +1488,9 @@ class ArgosApp(App):
                 kind="error",
             )
 
-    # ── TUI ProactiveSuggestionEvent 渲染 ────────────────────────────
 
     async def _on_proactive_suggestion(self, ev) -> None:
-        """ProactiveSuggestionEvent 渲染：ConductorSuggestionChoice 决策卡。
-
-        真正的确认通过 POST /suggestions/{id}/confirm（daemon 端点）。
-        fail-closed：Esc = dismiss，绝不自动执行。
-        """
+        """Internal documentation."""
         def _decide(value: str, _feedback: str) -> None:
             from argos.tui.widgets.transcript import Transcript as _Transcript
             try:
@@ -1722,21 +1510,13 @@ class ArgosApp(App):
         except Exception:  # noqa: BLE001
             pass
 
-    # ── TUI ComputerActionEvent 渲染(P6a §10)────────────────────────
 
     async def _on_computer_action(self, ev: "ComputerActionEvent") -> None:  # type: ignore[name-defined]
-        """ComputerActionEvent 渲染:活动栏/transcript 一行人话。
-
-        渲染原则:
-          · 展示【动作类型】+【关键参数(坐标/截断文本)】+【成功/失败】。
-          · text_preview 已截断 80 字符(敏感输入不全量进事件流,spec §10)。
-          · ok=False 时追加 detail(含权限指引);不展示原始异常栈。
-          · screenshot 成功:不单独产出"验证通过"——只记录存档路径。
-        """
+        """Internal documentation."""
         from argos.tui.widgets.transcript import Transcript
         try:
             log = self.query_one("#transcript", Transcript)
-        except Exception:  # noqa: BLE001 — 未 mount / narrow
+        except Exception:  # noqa: BLE001
             return
 
         kind = ev.kind_action
@@ -1783,15 +1563,11 @@ class ArgosApp(App):
             pass
 
     async def _skill_cmd(self, log, skill_name: str, arg: str) -> None:
-        """/verify / /security-review / /simplify 统一入口(spec §2.6 / §2.7)。
-
-        解析 path → run_skill → chat 追加 summary + findings 表格。
-        """
+        """Internal documentation."""
         from pathlib import Path as _P
         from argos.skills_runtime.analysis import AnalysisSkillContext
         from argos.skills_runtime import run_skill, register_builtin_skills
 
-        # 首次调用注册 builtin(幂等)
         register_builtin_skills()
         path = arg.strip() or None
         workspace = getattr(self, "_workspace", None) or _P.cwd()
@@ -1816,7 +1592,7 @@ class ArgosApp(App):
                     await log.append_line(f"    fix: {f.suggestion}", kind="info")
 
     async def _remember_cmd(self, log, text: str) -> None:
-        """/remember <text>:追加一条用户记忆(scope 自动判 user/project)。"""
+        """Internal documentation."""
         if not text.strip():
             await log.append_line(t("tui.remember.usage"), kind="error")
             return
@@ -1832,7 +1608,7 @@ class ArgosApp(App):
         )
 
     async def _forget_cmd(self, log, query: str) -> None:
-        """/forget <id|key|text>:软删(confidence=0,后台 prune 真删)。"""
+        """Internal documentation."""
         if not query.strip():
             await log.append_line(t("tui.forget.usage"), kind="error")
             return
@@ -1849,7 +1625,7 @@ class ArgosApp(App):
                                  kind="info")
 
     async def _memory_cmd(self, log) -> None:
-        """/memory:列出 4 tier 摘要(只读)。"""
+        """Internal documentation."""
         from argos.memory import auto as _mem
         pid = _mem.project_id_for()
         sid = self._session_id
@@ -1857,12 +1633,7 @@ class ArgosApp(App):
         await log.append_line(text, kind="system")
 
     async def _eval_cmd(self, log, arg: str) -> None:
-        """/eval [run <id> | compare <task_id>[:<model>] <task_id>[:<model>]] — Agent 自我评估 + A/B 对比(#7)。
-
-        - 无参:列最近 20 run + 7d pass rate
-        - run <task_id>:跑单个 task(走 config active model)
-        - compare <task_id>[:<model>] <task_id>[:<model>]:model 缺省为 active profile
-        """
+        """Internal documentation."""
         import time as _time
         from argos.eval.results import list_runs, summary
         if not arg.strip():
@@ -1894,7 +1665,6 @@ class ArgosApp(App):
                             f"({stats['pass_rate']*100:.0f}%)")
             await log.append_line("\n".join(lines), kind="system")
             return
-        # 有参:解析 "run <id>" / "compare <task_id>[:<model>] <task_id>[:<model>]"
         parts = arg.split()
         sub = parts[0].lower()
         if sub == "run" and len(parts) == 2:
@@ -1907,7 +1677,7 @@ class ArgosApp(App):
             t("tui.eval.usage"), kind="error")
 
     async def _eval_run_cmd(self, log, task_id: str) -> None:
-        """/eval run <task_id>:跑单个 task(走 EvalRunner)。"""
+        """Internal documentation."""
         from argos.eval.corpus import load_task
         from argos.eval.runner import PASS_PASSED
         from argos.eval.results import append as append_result
@@ -1917,7 +1687,6 @@ class ArgosApp(App):
         except FileNotFoundError as e:
             await log.append_line(t("tui.eval.task_not_found", err=e), kind="error")
             return
-        # 用 config active model(本期不热切换)
         model_tier = "default"
         try:
             from argos import config as _cfg
@@ -1942,11 +1711,10 @@ class ArgosApp(App):
             await log.append_line(f"[eval] error: {result.error}", kind="error")
 
     async def _eval_compare_cmd(self, log, a: str, b: str) -> None:
-        """/eval compare <task_id>[:<model>] <task_id>[:<model>]:A/B side-by-side,渲 markdown 报告到 transcript。"""
+        """Internal documentation."""
         from argos.eval.corpus import load_task
         from argos.eval.compare import run_pair, write_report
         from argos.cli.eval import _make_runner as _make_eval_runner
-        # 解析 a/b:<task_id>:<model> 或纯 <task_id>(默认 = 同一 model 两遍)
         def _parse(spec: str) -> tuple[str | None, str | None]:
             if ":" in spec:
                 tid, m = spec.split(":", 1)
@@ -1966,7 +1734,6 @@ class ArgosApp(App):
         except FileNotFoundError as e:
             await log.append_line(t("tui.eval.task_not_found", err=e), kind="error")
             return
-        # model 缺省 = active
         active = "default"
         try:
             from argos import config as _cfg
@@ -1990,8 +1757,7 @@ class ArgosApp(App):
             await log.append_line(md, kind="system")
 
     async def _routing_cmd(self, log, arg: str) -> None:
-        """#11 per-task routing TUI:无参列配置 + 最近 10 步决策;
-        set <category> <tier> 改写 ~/.argos/config.json(下次 run 生效)。"""
+        """Internal documentation."""
         parts = arg.strip().split()
         if parts and parts[0].lower() == "set":
             await self._routing_set(log, " ".join(parts[1:]))
@@ -2002,7 +1768,6 @@ class ArgosApp(App):
                 t("tui.routing.set_usage", cats=str([c.value for c in TaskCategory])),
                 kind="error")
             return
-        # 无参:列 routing config + history
         router = self._current_router()
         if router is None:
             await log.append_line(
@@ -2014,22 +1779,19 @@ class ArgosApp(App):
         await self.query_one("#transcript", Transcript).mount_block(widget)
 
     async def _context_cmd(self, log, arg: str) -> None:
-        """/context:看当前 LLM 上下文分桶(契约 §12;spec §10)。
-        无参 → 文本表格(逐行 markup 着色);--json → 整段 JSON(无 markup)。
-        analyzer 失败永不崩 run(降级返全空桶,记 error)。"""
+        """Internal documentation."""
         from argos.context.analyzer import analyze
         from argos.context.render import format_json, format_table
         fmt = arg.strip().lower()
         if fmt not in ("", "--json"):
             await log.append_line(t("tui.context.usage"), kind="error")
             return
-        # 找 loop 实例 / store / workspace;无 loop 实例(罕见 e.g. demo)→ 走空分析
         loop = getattr(self, "_agent_loop", None)
         store = getattr(self, "_store", None)
         workspace = getattr(self, "_workspace", None) or (_argos_dir() / "workspace")
         try:
             b = analyze(loop, store=store, workspace=workspace)  # type: ignore[arg-type]
-        except Exception as e:  # noqa: BLE001 — 任何分析失败都降级
+        except Exception as e:  # noqa: BLE001
             await log.append_line(t("tui.context.failed", err=e), kind="error")
             return
         if fmt == "--json":
@@ -2038,11 +1800,10 @@ class ArgosApp(App):
         for line in format_table(b).split("\n"):
             await log.append_line(line, kind="info")
 
-    # ── T10 /dream 命令 ──────────────────────────────────────────────────
 
     @staticmethod
     def _fmt_dream_report(r: dict) -> str:
-        """把 Dream 报告 dict 格式化成一行摘要(复用于 /dream status 和 SSE dream_report)。"""
+        """Internal documentation."""
         return t(
             "tui.dream.fmt",
             units=r.get("units_total", 0),
@@ -2054,11 +1815,7 @@ class ArgosApp(App):
         )
 
     async def _dream_cmd(self, log, arg: str) -> None:
-        """/dream [status]:夜间整合命令。
-
-        无参数 → POST /dream/run(daemon 模式);inline 模式诚实拒绝。
-        status → GET /dream/report,null → 诚实空态,有 → 渲染摘要一行。
-        """
+        """Internal documentation."""
         import json as _json
 
         sub = arg.strip().lower()
@@ -2066,15 +1823,13 @@ class ArgosApp(App):
             await log.append_line(t("tui.dream.usage"), kind="error")
             return
 
-        # ── inline 模式:诚实拒绝 ─────────────────────────────────────
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
             await log.append_line(
-                t("tui.dream.no_daemon"),
+                t("tui.dream.no_daemon", path=_argos_dir() / "daemon.sock"),
                 kind="error",
             )
             return
 
-        # ── status 子命令 → GET /dream/report ──────────────────────
         if sub == "status":
             try:
                 status, _, raw = await self._daemon_client._request(
@@ -2099,7 +1854,6 @@ class ArgosApp(App):
                 await log.append_line(t("tui.dream.http_failed", status=status), kind="error")
             return
 
-        # ── 无参数 → POST /dream/run ────────────────────────────────
         try:
             status, _, raw = await self._daemon_client._request(
                 "POST", "/dream/run", session_id=self._daemon_session_id,
@@ -2110,7 +1864,6 @@ class ArgosApp(App):
             return
 
         if status == 202:
-            # 诚实铁律:202 = 已启动(test_daemon_wiring 锁此契约);先发口头确认再挂整合卡。
             await log.append_line(t("tui.dream.started"), kind="done")
             self._dream_card = DreamReportCard()
             await log.mount_block(self._dream_card)
@@ -2125,13 +1878,7 @@ class ArgosApp(App):
             )
 
     def _parse_verify_arg(self, arg: str) -> tuple[str, str | None]:
-        """解析 goal/loop 参数,提取 verify_cmd。
-
-        支持两种语法:
-          · "task text | verify: <cmd>"
-          · "task text --verify <cmd>"
-        返回 (goal_text, verify_cmd_or_None)。
-        """
+        """Internal documentation."""
         # pipe syntax: "text | verify: cmd"
         m = re.search(r"\|\s*verify:\s*(.+)$", arg, re.IGNORECASE)
         if m:
@@ -2145,16 +1892,8 @@ class ArgosApp(App):
         return arg.strip(), None
 
     async def _goal_cmd(self, log, cmd_name: str, arg: str) -> None:
-        """/goal <text> [| verify: <cmd>]  — 提交带可选验证退出条件的目标。
-        /loop <text> [until: <cmd>]        — until: 是 verify: 的别名(Batch 2 surface)。
-
-        ponytail: 真正的跨 run 循环(直到条件持续成立)推迟到 Batch 3 事件驱动目标循环;
-        这里的单 run verify-gated 形式已是 Batch 2 要求的最小可交付面:verify gate 的
-        "bounce until pass"语义覆盖了"loop until condition holds"的单 run 等价物。
-        """
-        # /loop 也支持 "until:" 别名
+        """Internal documentation."""
         if cmd_name == "loop":
-            # normalize "until: <cmd>" → "| verify: <cmd>" 再走统一解析
             arg = re.sub(r"\buntil:\s*", "| verify: ", arg, count=1, flags=re.IGNORECASE)
 
         if re.search(r"\|\s*verify:\s*$", arg, re.IGNORECASE) or re.search(r"--verify\s*$", arg, re.IGNORECASE):
@@ -2165,7 +1904,7 @@ class ArgosApp(App):
 
         if not goal_text:
             await log.append_line(
-                t("tui.goal.usage"),  # 无 goal 文本:诚实给用法提示(命令已知,是参数缺失)
+                t("tui.goal.usage"),
                 kind="error",
             )
             return
@@ -2180,7 +1919,7 @@ class ArgosApp(App):
         await self.start_run(goal_text, verify_cmd=verify_cmd)
 
     async def _schedule_cmd(self, log, arg: str) -> None:
-        """/schedule <when>: <goal> — 通过 daemon 创建 kind=schedule StandingOrder。"""
+        """Internal documentation."""
         # parse "every 1h: summarize logs" → schedule="every 1h", goal="summarize logs"
         if ":" not in arg:
             await log.append_line(t("tui.schedule.usage"), kind="error")
@@ -2211,7 +1950,7 @@ class ArgosApp(App):
             await log.append_line(t("tui.orders.http_failed", status=status), kind="error")
 
     async def _watch_cmd(self, log, arg: str) -> None:
-        """/watch <glob> <goal> — 通过 daemon 创建 kind=file_trigger StandingOrder。"""
+        """Internal documentation."""
         parts = arg.strip().split(None, 1)
         if len(parts) < 2:
             await log.append_line(t("tui.watch.usage"), kind="error")
@@ -2240,7 +1979,7 @@ class ArgosApp(App):
             await log.append_line(t("tui.orders.http_failed", status=status), kind="error")
 
     async def _routing_set(self, log, arg: str) -> None:
-        """#11 /routing set <category> <tier>:原子改写 config.json。"""
+        """Internal documentation."""
         import os
         from pathlib import Path
         from argos import config as _cfg
@@ -2280,19 +2019,14 @@ class ArgosApp(App):
             kind="done")
 
     def _current_router(self):
-        """拿当前 run 的 router(若存在);无 router 注入 → None(spec D16 友好提示)。"""
+        """Internal documentation."""
         loop = getattr(self, "_current_loop", None)
         if loop is None:
             return None
         return getattr(loop, "_router", None)
 
     async def _show_skills(self, log) -> None:
-        """/skills:#10 重写:列 installed + available from index + 推荐。
-
-支持子命令(本 TUI **不**直接 install/remove,沿 transcript 提示到 host CLI 跑,
-spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
-"""
-        # 取上一条 slash 命令的 arg(由 _dispatch_slash 在 call 前 set)
+        """Internal documentation."""
         cmd_arg = getattr(self, "_last_skills_arg", "")
         sub_parts = cmd_arg.split()
         known_subcommands = ("install", "remove", "refresh", "test")
@@ -2362,17 +2096,17 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         await log.append_line("\n".join(lines), kind="system")
 
     async def _show_mcp(self, log) -> None:
-        """/mcp:列出 ~/.argos/mcp.json 配置的 MCP server + 已连接工具(诚实:不谎报连接态)。"""
+        """Internal documentation."""
         try:
             from argos import mcp_native
             mgr = mcp_native.get_manager()
-            tools = mgr.list_tools()   # 阻塞确保连接(用户主动查时可接受短暂等待)
+            tools = mgr.list_tools()
         except Exception as e:  # noqa: BLE001
             await log.append_line(t("tui.mcp.query_failed", err=e), kind="error")
             return
         if not tools:
             await log.append_line(
-                t("tui.mcp.empty"),
+                t("tui.mcp.empty", path=_argos_dir() / "mcp.json"),
                 kind="system")
             return
         by_server: dict[str, list] = {}
@@ -2384,10 +2118,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         await log.append_line("\n".join(lines), kind="system")
 
     async def _resume_recent(self, log) -> None:
-        """/resume:把当前会话切到【最近一次历史会话】,使后续任务带回它的上下文(agent 记得上次)。
-        每次启动默认全新 session(故重开窗口不自动记得);想续上一次显式 /resume 即可。
-        实现:从 store 取最近会话(排除本次启动的空 session),切 self._session_id —— loop 跨轮据它
-        get_messages 还原历史。不做可视回放(屏幕仍空),但 agent 已带回上文。"""
+        """Internal documentation."""
         loop = self._loop_factory()
         store = getattr(loop, "store", None)
         if store is None or not hasattr(store, "list_sessions"):
@@ -2397,22 +2128,17 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         if not sessions:
             await log.append_line(t("tui.resume.no_sessions"), kind="system")
             return
-        prev = sessions[0]   # 最近一次(list_sessions 按 started_at DESC)
+        prev = sessions[0]
         self._session_id = prev.session_id
         msgs = store.get_messages(prev.session_id) if hasattr(store, "get_messages") else []
         title = (prev.title or prev.session_id[:8]).strip() or prev.session_id[:8]
         await log.append_line(
             t("tui.resume.ok", title=title, n=len(msgs)), kind="done")
 
-    # ── 一轮 run:EventBus + loop + Worker 消费 ────────────────────────────
     async def start_run(self, goal: str, attachments: list | None = None, *, verify_cmd: str | None = None) -> None:
         if self._run_active:
             return
         self._run_active = True
-        # 拍本轮 run 的 workspace 快照(供 /undo 还原)。
-        # 命名 = {session_id}-app{run_seq}.tar,与 loop 内部 {session_id}-{ms}.tar 不冲突
-        # (两个快照并存,App 优先用自己拍的这个,loop 那个是 loop 自身的副本能继续 restore)。
-        # 拍快照失败不阻塞 run —— _snapshot 留 None,/undo 报"无可撤销"。
         self._run_seq += 1
         self._snapshot = None
         try:
@@ -2423,16 +2149,14 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         self._glow_start()
         for sp in self.query(StartupSplash):
             await sp.remove()
-        self._step_blocks = {}  # 每轮独立,杜绝跨轮 step 串台。
-        self._current_plan_call_id = None  # 每轮清 plan call_id(不跨轮泄漏)。
+        self._step_blocks = {}
+        self._current_plan_call_id = None
         _ap = self.query_one("#activity", ActivityPanel)
-        _ap.reset_run()              # 每轮起手清活动栏(进度/工具/回执)。
-        _ap.on_run_active(goal)      # Run 段显当前活跃 run(取代整轮显 '(none)')。
-        # UserPromptSubmit hook fire(spec §2.5:TUI 端触发,不在 loop 内)
+        _ap.reset_run()
+        _ap.on_run_active(goal)
         try:
             from argos import hooks as _hooks
             from argos.hooks.payload import build_user_prompt_payload
-            from argos.hooks.events import HookFired as _HookFired
             ups_payload = build_user_prompt_payload(
                 session_id=self._session_id, cwd=str(self._workspace), goal=goal,
             )
@@ -2441,55 +2165,41 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 cwd=self._workspace, session_id=self._session_id,
             )
             for h in ups_result.per_hook:
-                # UserPromptSubmit 投 HookFired 走 EventBus 让活动栏渲染
-                self.run_worker(self._apply_event(_HookFired(
+                await self._apply_event(HookFired(
                     event_name="UserPromptSubmit", command=h.command,
                     success=h.success, returncode=h.returncode,
                     elapsed_ms=h.elapsed_ms, timed_out=h.timed_out,
                     not_found=h.not_found, stop_reason=h.stop_reason,
                     error=h.error,
-                )), exclusive=False)
-        except Exception:  # noqa: BLE001 — hook 失败不阻断 start_run
+                ))
+        except Exception:  # noqa: BLE001
             pass
         log = self.query_one("#transcript", Transcript)
-        await log.user_line(goal)  # 回显用户目标进对话流(› 行),否则对话看着单边(Task 14)。
+        await log.user_line(goal)
 
-        # v6 P3b §3:双路 start_run ─────────────────────────────────────────
-        # daemon 模式:POST /runs → DaemonEventSource 喂 EventBus → 现有渲染路径零改动。
-        # inline 模式:直接 loop.run() → 现有路径(向后兼容,不动)。
         if self._with_daemon and self._daemon_client is not None and self._daemon_session_id:
             await self._start_run_daemon(goal, log, attachments or [], verify_cmd=verify_cmd)
         else:
             await self._start_run_inline(goal, log, attachments or [], verify_cmd=verify_cmd)
 
     async def _start_run_inline(self, goal: str, log, attachments: list | None = None, *, verify_cmd: str | None = None) -> None:
-        """inline 路径(单进程直跑):保持原有语义,支持 FakeLoop + AgentLoop。
-
-        plan_decision 走 loop.respond_plan_decision(call_id, action, feedback)——
-        彻底去掉 TUI 对 ExitPlanMode 等 loop 内部对象的直接引用(设计 §4 刀2收口)。
-        _handle_plan_rendered 已统一经 loop.respond_plan_decision 回传决策。
-        verify_cmd:用户经 /goal / /loop 显式声明的退出条件;注入 loop.verify_cmd 覆盖 LoopConfig 默认。
-        """
+        """Internal documentation."""
         bus = EventBus()
         # /goal | verify: <cmd> — pass verify_cmd into the factory so it lands in LoopConfig
         # (same dataclasses.replace pattern as build_run_stack; hasattr-assignment was a silent no-op
         # because AgentLoop stores it as _verify_cmd, not verify_cmd).
         loop = self._loop_factory(verify_cmd=verify_cmd)
-        # Plan mode:把本轮 loop 引用挂到 self;_handle_plan_rendered 经 respond_plan_decision 回传。
         self._current_loop = loop
 
-        # 记忆召回提示行
         await self._announce_memory_recall(log, loop, goal)
         await log.show_thinking(t("tui.run.thinking"))
 
         async def _produce() -> None:
             try:
-                # 仅在真有图片附件时传 attachments kwarg → 无附件路径调用签名与改造前逐字一致
-                # (测试/演示用的精简 fake loop 们无需都改 run 签名,零回归)。
                 _run_kwargs = {"attachments": attachments} if attachments else {}
                 async for ev in loop.run(goal, session_id=self._session_id, **_run_kwargs):
                     await bus.emit(ev)
-            except Exception as e:  # noqa: BLE001 — loop 任何异常降级为 Error 事件
+            except Exception as e:  # noqa: BLE001
                 chain: list[str] = []
                 cur: BaseException | None = e
                 while cur is not None and len(chain) < 4:
@@ -2511,7 +2221,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             self._glow_stop()
             try:
                 self.query_one("#activity", ActivityPanel).on_run_end()
-                self.query_one("#status-bar", StatusBar).mark_run_end()  # phase 复位 idle(与右栏对称)
+                self.query_one("#status-bar", StatusBar).mark_run_end()
             except Exception:  # noqa: BLE001
                 pass
             if self._interrupted:
@@ -2521,20 +2231,11 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
     async def _start_run_daemon(
         self, goal: str, log, attachments: list | None = None, *, verify_cmd: str | None = None
     ) -> None:
-        """daemon 路径(v6 P3b §3):POST /runs → DaemonEventSource 喂 EventBus。
-
-        · Esc = POST cancel(已在 action_interrupt 处理)
-        · Ctrl+B 后台化 = 断开 SSE 订阅即可(run 本来就在 daemon)
-        · 审批决策:_handle_approval 走 POST /approval/{call_id}
-        · plan 决策:_handle_plan_rendered 走 POST /plan_decision
-        · 断线重连:DaemonEventSource 内置指数退避(最多 3 次)
-        · 断连超阈值 → DaemonEventSource yield Error 事件,TUI 渲染后停止
-        """
+        """Internal documentation."""
         from argos.tui.daemon_source import DaemonEventSource
         assert self._daemon_client is not None
         assert self._daemon_session_id is not None
 
-        # 创建 run(会话过期时 _daemon_create_run 透明重握手重试一次 —— 修 401 不自愈)
         try:
             run_id = await self._daemon_create_run(goal, attachments, verify_cmd=verify_cmd)
         except Exception as e:  # noqa: BLE001
@@ -2545,12 +2246,10 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
 
         self._daemon_run_id = run_id
 
-        # 刷新 TabStrip
         self._refresh_tab_strip()
 
         await log.show_thinking(t("tui.run.thinking"))
 
-        # DaemonEventSource:SSE → typed Event 流
         socket_path = self._daemon_client.socket_path
         source = DaemonEventSource(
             socket_path, run_id, self._daemon_session_id,
@@ -2587,7 +2286,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             self._glow_stop()
             try:
                 self.query_one("#activity", ActivityPanel).on_run_end()
-                self.query_one("#status-bar", StatusBar).mark_run_end()  # phase 复位 idle(与右栏对称)
+                self.query_one("#status-bar", StatusBar).mark_run_end()
             except Exception:  # noqa: BLE001
                 pass
             if self._interrupted:
@@ -2595,15 +2294,10 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 self._interrupted = False
 
     async def _announce_memory_recall(self, log, loop: object, goal: str) -> None:
-        """記憶召回提示(spec §8.3 機會點⑤):v6 §4 ACP 後此方法已無操作。
-
-        v6 P2:loop 在 run() 起始投 MemoryRecallEvent,TUI 在 _apply_event 消費渲染;
-        TUI 不再主動訪問 loop._store(store 穿透修)。
-        保留空方法避免移除觸發 call site 的 AttributeError。
-        """
+        """Internal documentation."""
 
     async def _apply_event(self, ev: Event) -> None:
-        """把一个契约 §1 Event 反映到对应 widget(一份事件三用的 UI 出口)。"""
+        """Internal documentation."""
         from argos.tui import glow
         log = self.query_one("#transcript", Transcript)
         bar = self.query_one("#status-bar", StatusBar)
@@ -2621,12 +2315,10 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             log.finalize_response()
             bar.set_phase(ev.phase, ev.actions, ev.max_steps)
             ap.on_phase(ev.phase, ev.actions)
-            # spec §8.4:新 plan 周期 = 全新一轮,解锁告警色(StatusBar -alert + 边框)。
-            # 仅 plan 清——report/act/verify 绝不清(陷阱2:失败裁决的告警不被后续阶段抹掉)。
             if ev.phase == "plan" and self._terminal_glow:
                 self._set_terminal_glow(False)
-            if not self._terminal_glow:        # 终态告警色锁定时阶段色不得覆盖(红/琥珀不被 report 抹掉)
-                self._glow_base = glow.phase_color(ev.phase)  # 呼吸基色随阶段切换
+            if not self._terminal_glow:
+                self._glow_base = glow.phase_color(ev.phase)
                 self._set_border(self._glow_base)
         elif isinstance(ev, CodeAction):
             block = CodeActionBlock(code=ev.code, step=ev.step)
@@ -2646,25 +2338,18 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 badge = VerdictBadge(id="verdict-badge")
                 await log.mount_block(badge)
             badge.show(ev.verdict)
-            ap.on_verdict(ev.verdict)   # 右栏 Verdict 区段(verify/idle 视图)同步
-            # CONTRACT A:no_test==True = 仅因无 verify_cmd 而未机检,不是真实错误/篡改。
-            # no_test 态用中性 idle 边框 + 不锁 StatusBar 告警色(绝不染橙/红)。
-            # 只有"genuine unverifiable"(tamper/timeout/declared-but-failed) 才锁橙。
+            ap.on_verdict(ev.verdict)
             _is_no_test = bool(getattr(ev.verdict, "no_test", False))
             if _is_no_test:
-                # 中性收尾:边框回 idle,不锁 glow(诚实:没跑验证≠失败)
                 from argos.tui import glow as _glow_mod
                 self._set_border(_glow_mod.IDLE_BORDER)
                 self._set_terminal_glow(False)
             else:
-                # E4 防火墙:self_verified=True 的 passed 用 warning 橙而非 success 绿
                 self._set_border(glow.verdict_color_self_aware(
                     ev.verdict.status,
                     self_verified=bool(getattr(ev.verdict, "self_verified", False)),
                 ))
                 if ev.verdict.status in ("failed", "unverifiable"):
-                    # 锁定告警色(边框 + StatusBar -alert),后续 report 阶段色/眼不得覆盖(陷阱2)
-                    # unverifiable 锁橙(真相不确定)而非红——三态语义纯度
                     self._set_terminal_glow(
                         True, kind="warn" if ev.verdict.status == "unverifiable" else "fail")
         elif isinstance(ev, CostUpdate):
@@ -2675,95 +2360,75 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             ap.on_cost(
                 tokens_in=ev.tokens_in, tokens_out=ev.tokens_out,
                 cost_usd=ev.cost_usd, elapsed_s=ev.elapsed_s, cache_read=ev.cache_read,
-                # #11 per-task routing:成本归属实际 profile(spec D15 短标签)。
                 tier_name=ev.tier_name,
             )
-            # 上下文占用%用【实际运行模型】的窗口当分母(active_tier),不能用模块级默认值——
-            # 否则 active 是小窗口模型(如 Ollama 8192)时会拿 192000 当分母,谎报上下文压力。
             window = self._display_tier().context_window
             ap.on_context(used=ev.context_used, window=window)
+            bar.update_ctx_pressure((ev.context_used / window) if window else 0.0)
         elif isinstance(ev, PlanUpdate):
-            # 真 TODO 拆解 → 活动栏"任务进度"区改渲染子任务进度(Task 12)。
             ap.on_plan(ev.todos)
         elif isinstance(ev, CompactedEvent):
-            # context rot 主动压缩(spec §8.1 机会点①):右栏上下文区追加 ↯ 压缩行 + transcript faint 系统行。
-            # on_compacted 是 ActivityPanel 纯新增方法(陷阱1 except 模式由 query_one 外层保护)。
             try:
                 ap.on_compacted(ev.before, ev.after, ev.reduction_pct)
-            except Exception:  # noqa: BLE001 — 渲染失败不阻断 run
+            except Exception:  # noqa: BLE001
                 pass
             pct = round(ev.reduction_pct * 100) if ev.reduction_pct <= 1 else round(ev.reduction_pct)
             await log.append_line(
                 t("tui.event.compacted", pct=pct, before=ev.before, after=ev.after), kind="system")
         elif isinstance(ev, PrunedEvent):
-            # context rot 相关性修剪(spec §8.1 机会点①):右栏 + transcript faint 系统行。
             try:
                 ap.on_pruned(ev.before, ev.after, ev.removed)
             except Exception:  # noqa: BLE001
                 pass
             await log.append_line(t("tui.event.pruned", n=ev.removed), kind="system")
+        elif isinstance(ev, HookFired):
+            ap.on_hook_fired(ev)
         elif isinstance(ev, WorkflowProposed):
             await self._handle_workflow_proposed(ev)
         elif isinstance(ev, WorkflowProgress):
-            # 子 agent 阶段流转 → 刷新进度树那一行。面板不存在(异常/乱序)则忽略,不崩。
             if self._workflow_panel is not None:
                 self._workflow_panel.update_progress(ev.agent_id, ev.phase, ev.note)
         elif isinstance(ev, WorkflowDone):
             if self._workflow_panel is not None:
                 self._workflow_panel.finish(ev.synthesis, ev.notes)
-            # 汇总落对话流(synthesis 可能含 `[...]`,append_line 走 SystemLine 已 markup=False,安全)。
             await log.append_line(
                 t("tui.event.workflow_done", name=ev.name, synthesis=ev.synthesis), kind="done")
         elif isinstance(ev, ToolReceipt):
-            # 回执进活动栏面板的"回执"区 + 工具计数,不再进 transcript(Task 10)。
-            # #6:把 HMAC 签名前 8 字符一并传入,让"已签名"成为可见、可证伪的事实而非空标签。
             ap.on_receipt(ev.receipt.action, ev.receipt.sig[:8])
         elif isinstance(ev, ApprovalRequest):
             await self._handle_approval(ev)
         elif isinstance(ev, PlanRendered):
-            # Plan mode spec §2.5:loop 投 PlanRendered → TUI 推 PlanModal + 回调里把用户决策
-            # 写回 loop._plan_decision + set event 唤醒 loop 的 await(见 _handle_plan_rendered)。
             await self._handle_plan_rendered(ev)
         elif isinstance(ev, PlanDecisionRequest):
-            # v6 P3b §4:PlanDecisionRequest 携带 call_id,供 _handle_plan_rendered 路由。
-            # 先记录 call_id;PlanRendered 紧随其后到达时 _handle_plan_rendered 取用。
-            # inline 路径:loop.respond_plan_decision(call_id,...) 唤醒 loop。
-            # daemon 路径:POST /plan_decision(call_id 由此携带,不再需要 ExitPlanMode)。
             self._current_plan_call_id = ev.call_id
         elif isinstance(ev, MemoryRecallEvent):
-            # v6 §4 ACP:loop 投记忆召回事件,TUI 据此渲染"记忆召回 N 条"行。
-            # 替换原来 _announce_memory_recall 对 loop._store 的直接访问(store 穿透修)。
             n = len(ev.hits)
             if n > 0:
                 await log.append_line(t("tui.event.memory_recall", n=n), kind="system")
                 try:
                     ap.on_memory_recall(n)
-                except Exception:  # noqa: BLE001 — 未 mount / 窄屏:静默
+                except Exception:  # noqa: BLE001
                     pass
         elif isinstance(ev, ApprovalResponse):
             await log.append_line(t("tui.event.approval_result", action=ev.call_id, value=ev.decision))
         elif isinstance(ev, ProactiveSuggestionEvent):
-            # P5b §9 自治面:conductor 建议到达 → transcript 只读展示 + 操作提示
             await self._on_proactive_suggestion(ev)
         elif isinstance(ev, ComputerActionEvent):
-            # P6a §10 computer use:OS 级动作执行结果 → 活动栏一行人话
             await self._on_computer_action(ev)
         elif isinstance(ev, DreamProgressEvent):
-            # T10 Dream 夜间整合进度 → DreamReportCard.append_stage（或回退 activity panel）
             dream_card = getattr(self, "_dream_card", None)
             if dream_card is not None:
                 try:
                     dream_card.append_stage(ev.stage, ev.detail or "")
-                except Exception:  # noqa: BLE001 — 静默
+                except Exception:  # noqa: BLE001
                     pass
             else:
                 try:
                     detail = f" {ev.detail}" if ev.detail else ""
                     ap.append_line(f"[dream] {ev.stage}{detail}")
-                except Exception:  # noqa: BLE001 — 未 mount / 静默
+                except Exception:  # noqa: BLE001
                     pass
         elif isinstance(ev, DreamReportEvent):
-            # T10 Dream 整合结果汇总 → DreamReportCard.show_report（或回退 activity panel）
             dream_card = getattr(self, "_dream_card", None)
             if dream_card is not None:
                 try:
@@ -2776,7 +2441,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                         "memory_archived": ev.memory_archived,
                         "report_path": ev.report_path,
                     })
-                except Exception:  # noqa: BLE001 — 静默
+                except Exception:  # noqa: BLE001
                     pass
             else:
                 try:
@@ -2789,40 +2454,30 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                         "memory_archived": ev.memory_archived,
                     })
                     ap.append_line(summary_line)
-                except Exception:  # noqa: BLE001 — 未 mount / 静默
+                except Exception:  # noqa: BLE001
                     pass
         elif isinstance(ev, Escalation):
             await log.append_line(t("tui.event.escalation", attempts=ev.attempts, reason=ev.reason, failure=ev.last_failure), kind="escalation")
             self._set_border(glow.ERROR)
-            self._set_terminal_glow(True, kind="warn")   # escalation 锁橙(诚实喊人≠失败)(陷阱2)
+            self._set_terminal_glow(True, kind="warn")
         elif isinstance(ev, Error):
             chain = (" ← " + " ← ".join(ev.chain)) if ev.chain else ""
             await log.append_line(t("tui.event.error", message=ev.message, chain=chain), kind="error")
             self._set_border(glow.ERROR)
-            self._set_terminal_glow(True)   # 告警锁色 + StatusBar -alert(陷阱2)
+            self._set_terminal_glow(True)
 
     def action_ctrl_c(self) -> None:
-        """Ctrl+C:打断当前 run(同 Esc);idle 时 1.5s 内连按两次才退出。
-
-        行为设计(对齐 Claude Code / Cursor / Aider 惯例):
-          · 有 run 在跑 → 打断 run(同 action_interrupt);不退出
-          · idle(无 run)且 1.5s 内第二次 → 退出(友好的双击退出,防误触)
-          · idle 且首次 → transcript 提示"再按一次 Ctrl+C 退出",记录时间戳
-        用户也可随时 Ctrl+D 确定性退出。
-        """
+        """Internal documentation."""
         import time
         now = time.time()
-        # 有 run 在跑 → 转发到打断逻辑(不退出)
         if self._run_active:
             self.action_interrupt()
-            self._last_ctrl_c_time = 0.0  # 打断后重置退出计时
+            self._last_ctrl_c_time = 0.0
             return
-        # idle:双击检测
         if (now - self._last_ctrl_c_time) < 1.5:
             self._last_ctrl_c_time = 0.0
             self.exit()
             return
-        # 首次:提示
         self._last_ctrl_c_time = now
         try:
             self.run_worker(
@@ -2836,20 +2491,8 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             pass
 
     def action_interrupt(self) -> None:
-        """Esc:打断当前 run(daemon 模式 = step-boundary pause,legacy = 整 run kill)。
-
-        daemon 模式行为(spec §2.7):
-          · 单 Esc → POST /runs/{id}/pause;worker 在下个 step 边界 await 暂停
-          · 双 Esc(1.5s 内) → POST /runs/{id}/cancel;worker 协程 cancel
-          · 取消生产 worker → 其 finally 关闭 bus → 消费循环 start_run 自然收尾
-            (落 '已打断' 行、解锁 run_active、停呼吸光)。
-
-        legacy 模式(无 daemon):直接 cancel 生产 worker(对齐 Claude Code 旧行为)。
-
-        idle(无 run)时无副作用。
-        诚实边界:模型推理/网络等 await 点能即时停;卡在同步 exec_code(命令/浏览器)需等其返回。"""
+        """Internal documentation."""
         import time
-        # Esc 双用:slash 菜单开着时先收菜单(不打断);否则才打断当前 run。
         menu = self.query_one("#slash-menu", SlashMenu)
         if menu.display:
             menu.hide()
@@ -2858,9 +2501,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             return
         now = time.time()
         if self._with_daemon and self._daemon_client is not None and self._daemon_session_id:
-            # daemon 模式:2 阶段契约 — 双 Esc = cancel
             if (now - self._last_esc_time) < 1.5:
-                # 双 Esc → cancel
                 self._interrupted = True
                 try:
                     self._daemon_client.cancel(self._daemon_session_id, self._daemon_run_id)
@@ -2872,24 +2513,21 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                     pass
                 self._last_esc_time = 0.0
                 return
-            # 单 Esc → pause(step boundary)
             self._last_esc_time = now
             try:
-                # 协程里跑 async;这里 fire-and-forget
                 self.run_worker(self._daemon_pause(), exclusive=False)
             except Exception:  # noqa: BLE001
                 pass
             return
-        # legacy 模式:整 run cancel
         self._interrupted = True
         self._last_esc_time = 0.0
         try:
             self._produce_worker.cancel()
-        except Exception:  # noqa: BLE001 — worker 可能已自然结束,取消失败无碍
+        except Exception:  # noqa: BLE001
             pass
 
     async def _daemon_pause(self) -> None:
-        """daemon 模式 Esc → POST /pause(2 阶段:202 + 后续 SSE state_change 事件)。"""
+        """Internal documentation."""
         if not self._daemon_client or not self._daemon_session_id or not self._daemon_run_id:
             return
         try:
@@ -2899,15 +2537,8 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             log.warning("daemon pause failed: %s", e)
 
     def action_background(self) -> None:
-        """Ctrl+B:把当前 run 真正后台化 —— POST /suspend,daemon 在下个 step 边界
-        running → suspended(写 checkpoint),稍后 `/runs <id> resume` 续。
-
-        daemon 模式才生效;inline 模式无副作用(诚实:不做假装操作)。诚实双阶段:
-        这里只发请求并落一行"后台化中",真正的 suspended 状态由 daemon 的 SSE
-        state_change 确认(它会关流 → 本端 SSE 消费者自然收尾,腾出输入开新目标)。
-        """
+        """Internal documentation."""
         if not self._with_daemon or not self._daemon_client or not self._daemon_session_id:
-            # inline 模式 → no-op(无副作用)
             return
         if not self._run_active or not self._daemon_run_id:
             return
@@ -2927,21 +2558,16 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 await log_widget.append_line(
                     t("tui.background.suspended", run_id=rid), kind="system")
             else:
-                # 409(run 非 running,无法挂起)/ 意外响应 → 诚实报,不假装成功
                 await log_widget.append_line(
                     t("tui.background.failed", err=resp), kind="error")
 
         self.run_worker(_do(), exclusive=False)
 
-    # ── TUI v2 行内选择:FIFO 队列(同屏最多一个活动 InlineChoice)──────────
     def _set_blocked_status(self, active: bool) -> None:
-        """StatusBar 审批挂起态(spec §8.4 优先级铁律:用户阻塞 > 告警锁色 > 阶段眼)。
-
-        任何 InlineChoice(工具/工作流/plan 审批)活动时置 True → 左眼强制 ◓ 金 + "审批挂起"段,
-        即便引擎仍在 verify(右栏照常显 ❂)。队列全清后置 False。StatusBar 未 mount 时静默(陷阱1)。"""
+        """Internal documentation."""
         try:
             self.query_one("#status-bar", StatusBar).set_blocked(active)
-        except Exception:  # noqa: BLE001 — 测试直构/未 mount:无副作用
+        except Exception:  # noqa: BLE001
             pass
 
     async def _enqueue_choice(self, factory: Callable[[], InlineChoice]) -> None:
@@ -2952,32 +2578,29 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
     async def _mount_next_choice(self) -> None:
         if not self._choice_queue:
             self._choice_active = False
-            self._set_blocked_status(False)   # 队列空 = 无待审批 → 解除挂起态
+            self._set_blocked_status(False)
             return
         self._choice_active = True
-        self._set_blocked_status(True)        # 审批卡到达 → StatusBar 左眼 ◓ 审批挂起(优先级最高)
+        self._set_blocked_status(True)
         widget = self._choice_queue.popleft()()
         await self.query_one("#transcript", Transcript).mount_block(widget)
 
     def _choice_done(self) -> None:
-        """InlineChoice 决策落定 → 解锁并 mount 队列里的下一个(若有)。"""
+        """Internal documentation."""
         self._choice_active = False
         if self._choice_queue:
             self.run_worker(self._mount_next_choice(), exclusive=False)
         else:
-            self._set_blocked_status(False)   # 最后一个决策落定 → 解除审批挂起态
+            self._set_blocked_status(False)
 
     async def _handle_workflow_proposed(self, ev: WorkflowProposed) -> None:
-        """工作流提议:① mount 进度树面板(存引用,后续 Progress/Done 据它刷新);
-        ② 非 AUTO 档在流内 mount InlineChoice 显 preview,回调 gate.respond 放行 loop 的 await。
-        AUTO 档下 loop 侧 gate.request 已自动放行、不真等 respond,故只 mount 面板、不渲染选择
-        (渲染了也无 respond 对象,且 always 会多余)。"""
+        """Internal documentation."""
         log = self.query_one("#transcript", Transcript)
         panel = WorkflowPanel(name=ev.name)
         self._workflow_panel = panel
         await log.mount_block(panel)
         if self.gate.level is ApprovalLevel.AUTO:
-            return  # loop 侧已自放行,不再渲染选择
+            return
 
         call_id = ev.call_id
 
@@ -2998,15 +2621,12 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 ("deny", t("tui.workflow.deny")),
             ],
             on_decide=_decide,
-            escape_value="deny",   # fail-closed:不明确批准即不放行
+            escape_value="deny",
             risk="medium",
         ))
 
     def _on_gate_ask(self, call_id: str, payload: dict) -> None:
-        """gate 进 ask 路径(broker 工具桥,call_id 为 gate 自生成)→ 构造 ApprovalRequest 并 mount
-        审批卡。在 host_loop(Textual loop)线程上被同步调用(经 request_blocking 的
-        run_coroutine_threadsafe),故用 run_worker 调度异步 _handle_approval。
-        修 2026-06-18:此前 inline 模式 broker-gated 工具需审批时永远不弹卡、干等到超时。"""
+        """Internal documentation."""
         from argos.protocol.events import ApprovalRequest
         try:
             req = ApprovalRequest(
@@ -3019,21 +2639,13 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
                 secret_pattern=payload.get("secret_pattern"),
             )
             self.run_worker(self._handle_approval(req), exclusive=False)
-        except Exception:  # noqa: BLE001 — mount 失败不得拖死 gate 的 ask
+        except Exception:  # noqa: BLE001
             pass
 
     async def _handle_approval(self, req: ApprovalRequest) -> None:
-        """Auto 档不渲染直接 always;否则流内 mount InlineChoice(契约 §6.3),回调里 respond。
-
-        v6 P3b §4:
-          · daemon 模式 → InlineChoice 决定 → POST /runs/{id}/approval/{call_id}
-          · inline 模式 → self.gate.respond(call_id, value)（原路径保留）
-        """
-        # computer.* 恒走硬确认:不受 AUTO/Trust Dial 降级(evaluator 已把金融域标 force-ask,
-        # TUI 不得用 AUTO 短路把它 respond always 绕过)。非 computer.* 在 AUTO 下仍直接 always。
+        """Internal documentation."""
         if self.gate.level is ApprovalLevel.AUTO and not req.action.startswith("computer_"):
             if self._with_daemon and self._daemon_client and self._daemon_session_id and self._daemon_run_id:
-                # daemon AUTO:直接 POST always(fire-and-forget)
                 self.run_worker(
                     self._daemon_approval_post(req.call_id, "always"),
                     exclusive=False,
@@ -3055,13 +2667,11 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
 
         def _decide(value: str, _feedback: str) -> None:
             if _is_daemon:
-                # daemon 路径:POST approval(async fire-and-forget from sync callback)
                 self.run_worker(
                     self._daemon_approval_post(req.call_id, value),
                     exclusive=False,
                 )
             else:
-                # inline 路径:直接 resolve gate Future
                 self.gate.respond(req.call_id, value)  # type: ignore[arg-type]
             self.run_worker(
                 self.query_one("#transcript", Transcript).append_line(
@@ -3100,7 +2710,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         ))
 
     async def _daemon_approval_post(self, call_id: str, decision: str) -> None:
-        """daemon 路径审批:POST /runs/{id}/approval/{call_id}。fail-soft(失败仅 log)。"""
+        """Internal documentation."""
         if not self._daemon_client or not self._daemon_session_id or not self._daemon_run_id:
             return
         try:
@@ -3112,21 +2722,10 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             _log.getLogger(__name__).warning("daemon approval POST failed: %s", e)
 
     async def _handle_plan_rendered(self, ev: "PlanRendered") -> None:
-        """Plan mode spec §2.5:PlanRendered 事件 → 流内 InlineChoice(4 选项)→ 决策回传 loop。
-
-        v6 P3b §4 统一路由:
-          · daemon 模式 → POST /runs/{id}/plan_decision（call_id 来自 PlanDecisionRequest）
-          · inline 模式 → loop.respond_plan_decision(call_id, action, feedback)
-            彻底去掉 TUI 对 ExitPlanMode 的直接引用（设计 §4 刀2 收口）。
-
-        plan_call_id 从 _current_plan_call_id 取（_apply_event 在 PlanDecisionRequest
-        事件到达时设置；inline loop 须同时投 PlanRendered + PlanDecisionRequest 才能走此路）。
-        无 call_id 时退到仅 inline loop.respond_plan_decision（向后兼容 FakeLoop 无 call_id）。
-        """
+        """Internal documentation."""
         loop = self._current_loop
 
         if self.gate.level is ApprovalLevel.AUTO:
-            # YOLO:不渲染，直接 approve_start
             call_id = getattr(self, "_current_plan_call_id", None)
             if self._with_daemon and self._daemon_client and self._daemon_session_id and self._daemon_run_id and call_id:
                 self.run_worker(
@@ -3136,13 +2735,12 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             elif loop is not None and hasattr(loop, "respond_plan_decision") and call_id:
                 loop.respond_plan_decision(call_id, "approve_start", None)
             elif loop is not None:
-                # 向后兼容:FakeLoop / 旧 loop 无 call_id → ExitPlanMode
                 from argos.core.plan_mode import ExitPlanMode
                 ExitPlanMode(loop, "approve_start")
             return
 
         if loop is None and not (self._with_daemon and self._daemon_run_id):
-            return  # run 已结束
+            return
 
         _is_daemon = (
             self._with_daemon
@@ -3161,7 +2759,6 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
             elif loop is not None and hasattr(loop, "respond_plan_decision") and call_id:
                 loop.respond_plan_decision(call_id, value, feedback if value == "refine" else None)
             elif loop is not None:
-                # 向后兼容(FakeLoop / 旧 loop 无 call_id)
                 from argos.core.plan_mode import ExitPlanMode
                 ExitPlanMode(loop, value, feedback if value == "refine" else None)
             self.run_worker(
@@ -3189,7 +2786,7 @@ spec 2026-06-07 §7.2 D10:把副作用稳定面缩到 host)。
         ))
 
     async def _daemon_plan_decision_post(self, call_id: str, action: str, feedback: str | None = None) -> None:
-        """daemon 路径 plan 决策:POST /runs/{id}/plan_decision。fail-soft(失败仅 log)。"""
+        """Internal documentation."""
         if not self._daemon_client or not self._daemon_session_id or not self._daemon_run_id:
             return
         try:

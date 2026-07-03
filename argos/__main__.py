@@ -1,15 +1,4 @@
-"""`argos` 命令入口(Phase 6 整机集成)。
-
-默认注入真 loop_factory(app_factory 组装的 AgentLoop);无 key → 退出并提示 `argos setup`。
-选项:
-  --selftest             不连真模型自检:脚本模型跑一轮四阶段贯通,打印 verdict 退出
-  --project PATH         在用户项目目录干活(runtime.use_project)
-  --model NAME           本次启动用指定的 config profile(默认当前 active;模型不绑定、无档位)
-
-子命令:
-  exec "<任务>"          非交互 headless 执行(可脚本化 / CI;对标 claude -p / codex exec)
-  setup / self-update / eval / skills / context / dream
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import argparse
@@ -22,9 +11,24 @@ from pathlib import Path
 from argos.i18n import t
 
 
+def _setup_paths() -> dict[str, str]:
+    from argos import config as C
+
+    config_dir = Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+    return {
+        "config_path": str(config_dir / "config.json"),
+        "env_path": str(config_dir / ".env"),
+    }
+
+
+def _update_cache_path() -> Path:
+    from argos import config as C
+
+    return Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / ".last_update_check"
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="argos", description="Argos — the hundred-eyed agent")
-    # 版本号从 argos.__version__ 读(importlib.metadata)
     import argos
     p.add_argument(
         "--version",
@@ -34,26 +38,20 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--selftest", action="store_true", help=t("cli.selftest.help"))
     p.add_argument("--project", metavar="PATH", help=t("cli.project.help"))
     p.add_argument("--model", metavar="NAME", help=t("cli.model.help"))
-    # #11 per-task routing:effort 等级(契约 §11;spec §8)。effort 只控步数预算;审批档由
-    # /trust 拨盘(Cautious/Trusted/Autonomous)独立控制(2026-06-20 重设后两者解耦)。
     from argos.routing.effort import EffortLevel
     p.add_argument("--effort", choices=[e.value for e in EffortLevel],
                    default=EffortLevel.MEDIUM.value,
                    help=t("cli.effort.help"))
-    # #2 CC对齐:OS 沙箱 opt-in,默认关(CC 的 OS 沙箱也 opt-in)。开启 = 内核级网络断+写牢笼;
-    # 关闭时 broker+审批+egress+AST 治理仍在。也可用 ARGOS_SANDBOX=1。
     p.add_argument("--sandbox", action="store_true", help=t("cli.sandbox.help"))
-    # #2 CC对齐:--add-dir PATH(可重复)授权 workspace 之外的额外可写目录(对齐 CC 的 --add-dir)。
     p.add_argument("--add-dir", action="append", metavar="PATH", dest="add_dir",
                    help=t("cli.add_dir.help"))
     sub = p.add_subparsers(dest="command")
-    # headless 非交互执行(可脚本化 / CI):argos exec "<任务>"
     from argos.cli import headless as _headless_cli
     _headless_cli.add_subparser(sub)
     sp_setup = sub.add_parser(
         "setup",
         help=t("cli.setup.help"),
-        epilog=t("cli.setup.epilog"),
+        epilog=t("cli.setup.epilog", **_setup_paths()),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sp_setup.add_argument("--advanced", action="store_true", help=t("cli.setup.advanced_help"))
@@ -63,23 +61,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help=t("cli.self_update.help"),
     )
     sp_update.set_defaults(func=_cmd_self_update)
-    # #7:argos eval 子命令
     from argos.cli import eval as _eval_cli
     _eval_cli.add_subparser(sub)
-    # #10:argos skills 子命令
     from argos.cli import skills as _skills_cli
     _skills_cli.add_subparser(sub)
-    # #12:argos context 子命令
     from argos.cli import context as _context_cli
     _context_cli.add_subparser(sub)
-    # T10:argos dream 子命令(夜间整合 + 记忆整理)
     from argos.cli import dream as _dream_cli
     _dream_cli.add_subparser(sub)
     return p
 
 
 class _SelftestModel:
-    """selftest 内联脚本模型(不依赖 tests/,打包态可用)。按脚本逐 stream 吐文本。"""
+    """Internal documentation."""
 
     def __init__(self, scripts: list[str]) -> None:
         self._s = scripts
@@ -110,13 +104,7 @@ def _selftest_verify_cmd() -> str:
 
 
 def resolve_workspace(project_arg: str | None) -> str | None:
-    """解析有效 workspace(实测 bug 修复:不传 --project 时默认【当前目录】)。
-
-    「所有人」UX 契约:用户在自己的文件夹里启动 argos,agent 就该在那个文件夹干活
-    ——否则任务会落到隐藏的默认工作区,用户的文件一个都看不见(2026-06-12 实测)。
-    护栏:cwd 是 home 目录或文件系统根时不默认(整个家目录当 workspace 危险面太大),
-    返回 None 走旧默认 ~/.argos/workspace,用户可用 --project 显式指定。
-    """
+    """Internal documentation."""
     if project_arg:
         return project_arg
     import os
@@ -127,11 +115,7 @@ def resolve_workspace(project_arg: str | None) -> str | None:
 
 
 def _run_selftest() -> int:
-    """不连真模型自检:脚本模型在 tmp 项目跑一轮四阶段贯通,打印 verdict(整机装配布尔)。
-
-    用真 sandbox/broker/verifier/store + 内联脚本模型(canonical 装配,对齐 app_factory)。
-    真 Seatbelt 需 macOS;非 macOS 上 spawn 失败 → 捕获返 1(诚实失败,不假装通过)。
-    """
+    """Internal documentation."""
     import os
     import tempfile
     from pathlib import Path
@@ -151,7 +135,6 @@ def _run_selftest() -> int:
     with tempfile.TemporaryDirectory() as td:
         proj = Path(td) / "proj"
         proj.mkdir()
-        # selftest 用当前解释器自包含验证 —— 不依赖 pytest 或 python3 在 PATH。
         os.environ["ARGOS_WORKSPACE"] = str(proj)
         tok = runtime.use_project(str(proj))
         store = None
@@ -192,7 +175,7 @@ def _run_selftest() -> int:
             ok = bool(verdicts) and verdicts[-1] == "passed"
             print(f"[selftest] verdicts={verdicts} → {'OK' if ok else 'FAIL'}")
             return 0 if ok else 1
-        except Exception as e:  # noqa: BLE001 — 自检失败诚实返 1,不假装通过
+        except Exception as e:  # noqa: BLE001
             print(t("cli.selftest.assembly_failed", exc_type=type(e).__name__, exc=e), file=sys.stderr)
             return 1
         finally:
@@ -202,25 +185,21 @@ def _run_selftest() -> int:
 
 
 def _cmd_self_update(args) -> int:
-    """`argos self-update`:force 检查 + 提示如何升级。
-
-    不下载(用户拍)。Homebrew Cask 用户提示用 brew upgrade。
-    """
+    """Internal documentation."""
     try:
         from argos import __version__
         from argos.core.updater import check_github_release
-        cache = Path.home() / ".argos" / ".last_update_check"
+        cache = _update_cache_path()
         newer = check_github_release(
             current_version=__version__,
             cache_path=cache,
-            force=True,  # 主动命令跳过缓存
+            force=True,
         )
     except Exception as e:  # noqa: BLE001
         print(t("cli.self_update.check_failed", err=e), file=sys.stderr)
         return 1
     if newer:
         print(f"🆕 Argos {newer} available (you have {__version__}).")
-        # 检测 Homebrew Cask 安装痕迹(spec §2.6 友好提示)
         brew_cask = Path("/opt/homebrew/Caskroom/argos")
         if brew_cask.exists():
             print(t("cli.self_update.brew_hint"))
@@ -232,15 +211,11 @@ def _cmd_self_update(args) -> int:
 
 
 def _spawn_update_check() -> None:
-    """启动时 background check update(仅查不下载,网络失败静默)。
-
-    spec §2.5:缓存 7 天,启动不卡,user 主动跑 `argos self-update` 升级。
-    """
+    """Internal documentation."""
     try:
         from argos import __version__
         from argos.core.updater import check_github_release
-        cache = Path.home() / ".argos" / ".last_update_check"
-        # 同步阻塞一次(短,网络 5s 超时,启动开销可接受)
+        cache = _update_cache_path()
         newer = check_github_release(
             repo="tungoldshou/argos",
             current_version=__version__,
@@ -251,14 +226,11 @@ def _spawn_update_check() -> None:
                 t("cli.update_available_banner", newer=newer, current=__version__),
                 file=sys.stderr,
             )
-    except Exception:  # noqa: BLE001 — 任何失败都不阻断启动
+    except Exception:  # noqa: BLE001
         pass
 
 
 def main() -> None:
-    # 冻结 binary(PyInstaller)的沙箱子进程 re-exec:被哨兵 argv 调起时,直接跑沙箱子进程
-    # RPC 循环并退出(此时 sys.executable=argos binary,无法 `-m`;见 seatbelt.python_child_argv)。
-    # 必须在 argparse 之前 —— 否则未知 argv 会打印 usage 而非进子进程。
     from argos.sandbox.seatbelt import SANDBOX_CHILD_FLAG
     if SANDBOX_CHILD_FLAG in sys.argv[1:]:
         from argos.sandbox import _sandbox_child
@@ -266,18 +238,13 @@ def main() -> None:
         return
 
     args = _build_parser().parse_args()
-    # #2 CC对齐:--sandbox 开启 OS 沙箱(env 是 config.sandbox_enabled() 的单一真源)。须早于
-    # build_components / TUI 启动设置。不传 = 默认关(opt-in),治理仍由 broker+审批+egress+AST 兜。
     if getattr(args, "sandbox", False):
         os.environ["ARGOS_SANDBOX"] = "1"
-    if getattr(args, "add_dir", None):   # --add-dir PATH … → 额外可写目录(env 是 extra_write_dirs() 真源)
+    if getattr(args, "add_dir", None):
         os.environ["ARGOS_ADD_DIRS"] = os.pathsep.join(args.add_dir)
-    # 启动时查更新(同步,失败静默,stderr 提示)。只给默认 TUI 启动做;显式子命令保持输出干净。
     if getattr(args, "command", None) is None and not args.selftest:
         _spawn_update_check()
 
-    # 子命令分发:func 子命令(exec / self-update / …)的返回值即进程退出码(sys.exit 真正传递,
-    # 此前 `return args.func(args)` 被 main() 吞掉 → 退出码恒 0,headless / self-update 无法被脚本判别)。
     if hasattr(args, "func") and callable(getattr(args, "func", None)):
         sys.exit(args.func(args) or 0)
 
@@ -287,7 +254,7 @@ def main() -> None:
             setup_wizard.print_status(writer=print)
             return
         _con = None
-        if sys.stdout.isatty():   # 真终端才上色 + spinner;管道/CI 保持纯文本
+        if sys.stdout.isatty():
             from rich.console import Console
             _con = Console()
         def _setup_reader(prompt: str = "") -> str:
@@ -305,7 +272,6 @@ def main() -> None:
 
     from argos.tui.app import ArgosApp
 
-    # 真 loop:组装全栈;无 key → 诚实退出并提示 setup(不滑进啥也干不了的假 TUI)。
     try:
         from argos.app_factory import build_components, build_loop_factory
         from argos.approval import ApprovalLevel
@@ -317,15 +283,11 @@ def main() -> None:
             effort=EffortLevel(args.effort),
         )
         factory = build_loop_factory(components)
-        # 用 broker 的 gate 作 app.gate(同一实例)→ 工作流/工具审批 respond 落在 loop 真正
-        # await 的那个 gate 上;顺带让 /yolo 对真 gate 生效(不再是 app 自建的孤儿 gate)。
         ArgosApp(
             loop_factory=factory, gate=components.gate,
             workspace=effective_ws or components.workspace,
         ).run()
     except (RuntimeError, _TuiConfigError) as e:
-        # ConfigError(config.py) subclasses Exception, not RuntimeError → 分开列举。
-        # 无 key / 无效 profile → 诚实退出:打印可操作提示 + 非零退出码(不假装能跑、不滑进假 TUI)。
         print(t("cli.no_key_fallback", err=e), file=sys.stderr)
         sys.exit(1)
 

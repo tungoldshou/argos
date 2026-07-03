@@ -1,17 +1,7 @@
-"""`argospkg` 命令 — 打包工具 dispatcher(spec D8,plan 2026-06-07 T2)。
-
-主 `argos` 跑 agent;`argospkg` 跑打包/发布辅助。**0 业务逻辑**:纯 CLI 工具,
-只读 pyproject.toml / packaging/VERSION / git tag,导入 self 验可达。
-
-子命令:
-  info      — 打印项目元数据 + packaging/VERSION + git tag
-  check     — 校验 self + argos 入口 import 成功
-  manifest  — 列出当前 winget manifest 文件,供发布前审阅
-
-不破:`__main__.py` 主 `argos` 启动 0 影响(本模块只在 `argospkg` 命令路径 import)。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -22,12 +12,12 @@ __all__ = ["main", "dispatch", "cmd_info", "cmd_check", "cmd_manifest"]
 
 
 def main() -> int:
-    """`argospkg` 入口。sys.argv[1:] 切子命令。无参/--help 走 usage。"""
+    """Internal documentation."""
     return dispatch(sys.argv[1:])
 
 
 def dispatch(argv: list[str]) -> int:
-    """分发到子命令。无参/--help 返 0(usage);未知子命令返 2。"""
+    """Internal documentation."""
     if not argv or argv[0] in ("-h", "--help"):
         print("usage: argospkg <subcommand> [args]")
         print(t("cli.pkg.usage_info"))
@@ -48,17 +38,14 @@ def dispatch(argv: list[str]) -> int:
 
 
 def cmd_info(_rest: list[str]) -> int:
-    """打印 pyproject [project] 段 + packaging/VERSION + git tag(若在 git 仓里)。
-
-    失败不抛:任一字段拿不到就标 '?'(诚实)。
-    """
+    """Internal documentation."""
     from importlib.metadata import version as _v, metadata as _md  # noqa: PLC0415
     name = "?"
     summary = ""
     homepage = ""
     try:
         name = _v("argos-agent")
-    except Exception:  # noqa: BLE001 — 离线/未装时降级
+    except Exception:  # noqa: BLE001
         pass
     try:
         meta = _md("argos-agent")
@@ -71,7 +58,7 @@ def cmd_info(_rest: list[str]) -> int:
     print(f"summary:     {summary}")
     print(f"homepage:    {homepage or 'https://github.com/tungoldshou/argos'}")
 
-    pkg_ver = Path("packaging/VERSION")
+    pkg_ver = Path(__file__).resolve().parents[2] / "packaging" / "VERSION"
     if pkg_ver.exists():
         print(f"pkg/VERSION: {pkg_ver.read_text().strip()}")
     else:
@@ -83,16 +70,13 @@ def cmd_info(_rest: list[str]) -> int:
             stderr=subprocess.DEVNULL,
         ).decode().strip()
         print(f"git tag:     {tag}")
-    except Exception:  # noqa: BLE001 — 非 git 仓 / 无 tag
+    except Exception:  # noqa: BLE001
         pass
     return 0
 
 
 def cmd_check(_rest: list[str]) -> int:
-    """校验 argos 入口 + self 导入成功。
-
-    返回 0 = import OK,非 0 = 失败(必 stderr 报原因)。
-    """
+    """Internal documentation."""
     try:
         from argos.__main__ import main as _argos_main  # noqa: F401,PLC0415
         from argos.cli import pkg as _self_pkg  # noqa: F401,PLC0415
@@ -104,19 +88,43 @@ def cmd_check(_rest: list[str]) -> int:
 
 
 def cmd_manifest(_rest: list[str]) -> int:
-    """列出 winget manifest 文件,供手动 PR 审阅。
-
-    不自动提交 microsoft/winget-pkgs;发布流程仍走人工审核。
-    """
-    print(t("cli.pkg.manifest_ready"))
+    """Internal documentation."""
     manifest_dir = Path("packaging/winget")
     if not manifest_dir.exists():
         print(t("cli.pkg.manifest_missing", path=manifest_dir), file=sys.stderr)
         return 1
-    for p in sorted(manifest_dir.glob("tungoldshou.argos.*.yaml")):
+    paths = sorted(manifest_dir.glob("tungoldshou.argos*.yaml"))
+    required = {
+        "tungoldshou.argos.installer.yaml",
+        "tungoldshou.argos.locale.en-US.yaml",
+        "tungoldshou.argos.yaml",
+    }
+    missing = sorted(required - {p.name for p in paths})
+    if missing:
+        files = ", ".join(str(manifest_dir / name) for name in missing)
+        print(t("cli.pkg.manifest_missing_files", files=files), file=sys.stderr)
+        return 1
+    placeholder_paths: list[Path] = []
+    invalid_sha_paths: list[Path] = []
+    for p in paths:
         print(f"  - {p}")
+        text = p.read_text(encoding="utf-8")
+        if "placeholder" in text.lower():
+            placeholder_paths.append(p)
+        match = re.search(r"^\s*InstallerSha256:\s*(\S*)\s*$", text, re.MULTILINE)
+        if match and not re.fullmatch(r"[0-9A-Fa-f]{64}", match.group(1)):
+            invalid_sha_paths.append(p)
+    if placeholder_paths:
+        files = ", ".join(str(p) for p in placeholder_paths)
+        print(t("cli.pkg.manifest_placeholder", files=files), file=sys.stderr)
+        return 1
+    if invalid_sha_paths:
+        files = ", ".join(str(p) for p in invalid_sha_paths)
+        print(t("cli.pkg.manifest_invalid_sha", files=files), file=sys.stderr)
+        return 1
+    print(t("cli.pkg.manifest_ready"))
     return 0
 
 
-if __name__ == "__main__":  # 让 `python -m argos.cli.pkg info` 也能跑(必须放最后,所有 def 都已定义)
+if __name__ == "__main__":
     sys.exit(main())

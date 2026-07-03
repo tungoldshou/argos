@@ -1,10 +1,4 @@
-"""用户可见串 —— TUI 诚实护城河组件(verdict_badge / trust_dial / ledger_table /
-hard_confirm_card / activity_panel / splash / top_bar / dream_report /
-orders_panel / routing_table)。
-
-key 命名空间: verdict.* / trust.* / ledger.* / hardconfirm.* / widget.*
-ZH 值 = 现有中文字符逐字复制(verbatim);EN 值 = 自然英文翻译。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 # ── verdict_badge ─────────────────────────────────────────────────────────────

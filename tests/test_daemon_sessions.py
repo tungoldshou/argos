@@ -1,4 +1,4 @@
-"""SessionRegistry 单元测试。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -47,9 +47,7 @@ async def test_active_count_excludes_expired():
     reg = SessionRegistry(heartbeat_timeout_s=0.5)
     rec = await reg.create()
     rec.last_heartbeat = time.time() - 1
-    # 不 heartbeat → 应过期
     assert reg.active_count() == 0
-    # heartbeat 续命
     await reg.heartbeat(rec.session_id)
     assert reg.active_count() == 1
 
@@ -76,7 +74,7 @@ async def test_other_sessions_excludes_self():
 
 @pytest.mark.asyncio
 async def test_session_uuid_format():
-    """session_id 是 UUID4 格式。"""
+    """Internal documentation."""
     import uuid
     reg = SessionRegistry()
     rec = await reg.create()

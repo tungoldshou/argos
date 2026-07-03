@@ -1,11 +1,4 @@
-"""/retry 命令端到端。
-
-校准(对照 Task 10 实际实现):
-- Transcript 类名不是 TranscriptLog
-- busy 守卫字段是 _run_active(非 _busy)
-- store 不在 App 字段,需通过 _loop_factory() 借 .store 属性注入
-- transcript 断言用 rendered_text(私有 _lines 不可外访)
-"""
+"""Internal documentation."""
 import pytest
 
 from argos.tui.app import ArgosApp
@@ -13,13 +6,11 @@ from argos.tui.widgets.transcript import Transcript as TranscriptLog
 
 
 def _make_app(*, run_active: bool, loop_factory, session_id: str = "sess-test") -> ArgosApp:
-    """工厂:跳过 __init__,装 _run_active / _loop_factory / _session_id。"""
+    """Internal documentation."""
     app = ArgosApp.__new__(ArgosApp)
     app._session_id = session_id
     app._run_active = run_active
     app._loop_factory = loop_factory
-    # #20 输入历史(retry 先查历史再回退 store);__new__ 跳过了 __init__,显式补这两个字段,
-    # 与真实 __init__ 一致(空历史 → retry 走 store 回退路径)。
     app._input_history = []
     app._input_history_max = 50
     return app
@@ -27,7 +18,7 @@ def _make_app(*, run_active: bool, loop_factory, session_id: str = "sess-test") 
 
 @pytest.mark.asyncio
 async def test_retry_resends_last_user_message():
-    """正常路径:有 user 消息 → 取最后一条 → 调 start_run 重发。"""
+    """Internal documentation."""
     class _StubStore:
         def get_messages(self, sid):
             return [
@@ -37,7 +28,6 @@ async def test_retry_resends_last_user_message():
             ]
     class _StubLoop:
         store = _StubStore()
-    # stub start_run 捕获重发的 goal
     sent: list[str] = []
     async def _fake_start_run(goal: str) -> None:
         sent.append(goal)
@@ -50,7 +40,7 @@ async def test_retry_resends_last_user_message():
 
 @pytest.mark.asyncio
 async def test_retry_busy_blocks():
-    """busy 时 /retry 报"先 Esc 打断",不发。"""
+    """Internal documentation."""
     sent: list[str] = []
     async def _fake_start_run(goal: str) -> None:
         sent.append(goal)
@@ -64,7 +54,7 @@ async def test_retry_busy_blocks():
 
 @pytest.mark.asyncio
 async def test_retry_no_messages():
-    """store 有但 get_messages 返空 → 报"没有可重试的消息"。"""
+    """Internal documentation."""
     class _EmptyStore:
         def get_messages(self, sid):
             return []
@@ -78,7 +68,7 @@ async def test_retry_no_messages():
 
 @pytest.mark.asyncio
 async def test_retry_no_get_messages_attribute():
-    """store 无 get_messages 属性 → 报当前会话无持久 store。"""
+    """Internal documentation."""
     class _BareStore:
         pass
     class _StubLoop:
@@ -91,7 +81,7 @@ async def test_retry_no_get_messages_attribute():
 
 @pytest.mark.asyncio
 async def test_retry_no_loop_factory():
-    """_loop_factory 返 None → 报当前会话无持久 store。"""
+    """Internal documentation."""
     app = _make_app(run_active=False, loop_factory=lambda: None)
     log = TranscriptLog()
     await app._retry(log)  # type: ignore[attr-defined]

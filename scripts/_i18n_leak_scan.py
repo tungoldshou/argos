@@ -1,11 +1,4 @@
-"""i18n 漏网中文扫描器(临时工具,提交前删)。
-
-用法: python3 scripts/_i18n_leak_scan.py <file.py> [file.py ...]
-
-报告每个文件里【含中文的字符串字面量】中,既不是 docstring、也不是 t()/_t()/_i18n_t() 的实参、
-也不是 log.*() 调用实参的那些 —— 即"可能漏掉本地化的用户可见串"。语义假阳性(匹配模型输出的
-中文词表 / CSS 串 / 纯内部断言)需人工判断跳过。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import ast

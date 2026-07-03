@@ -1,6 +1,4 @@
-"""Phase 3:沙箱后端经真子进程跑代码,命名空间持久 + 三态捕获。
-本测试真起沙箱后端子进程(macOS Seatbelt / Linux bwrap→unshare)。
-无后端的平台干净 skip,不假装跑过。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -35,7 +33,7 @@ def test_namespace_persists_across_calls(ex):
     ex.exec_code("counter = counter + 5")
     r = ex.exec_code("counter")
     assert r.ok
-    assert r.value_repr == "15"   # 变量跨 code-action 存活(CodeAct 核心)
+    assert r.value_repr == "15"
 
 
 def test_exception_captured_as_data(ex):

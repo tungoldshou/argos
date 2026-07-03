@@ -1,4 +1,4 @@
-"""run_skill 编排测试(spec §2.1 / §2.6 / §3)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -20,7 +20,7 @@ from argos.skills_runtime.runner import run_skill
 
 @pytest.fixture(autouse=True)
 def _clean_registry():
-    """每个测试前后清空 registry(隔离)。"""
+    """Internal documentation."""
     registry._reset_registry()
     yield
     registry._reset_registry()
@@ -35,7 +35,7 @@ def _make_ctx(approval_level: str = "auto") -> AnalysisSkillContext:
 
 
 def _register_skill(name: str, *, requires_approval: bool = False, run=None):
-    """注册一个默认返 passed 的 skill,允许覆盖 run。"""
+    """Internal documentation."""
     async def _default(args, ctx):
         return AnalysisSkillResult(
             summary="ok", findings=(), duration_ms=10, errors=(), verdict="passed",
@@ -48,10 +48,9 @@ def _register_skill(name: str, *, requires_approval: bool = False, run=None):
     return skill
 
 
-# ── 编排 + 错误处理 ───────────────────────────────────────────────
 
 def test_run_skill_unknown_returns_skipped(_clean_registry):
-    """skill name 不在 registry → verdict=skipped, errors 含 'unknown skill'。"""
+    """Internal documentation."""
     ctx = _make_ctx()
     result = asyncio.run(run_skill("nonexistent", {}, ctx))
     assert result.verdict == "skipped"
@@ -59,14 +58,11 @@ def test_run_skill_unknown_returns_skipped(_clean_registry):
 
 
 def test_run_skill_invalid_args_returns_skipped():
-    """args 不符 parameters_schema → verdict=skipped, errors 含 'invalid args'。"""
+    """Internal documentation."""
     async def _echo(args, ctx):
         return AnalysisSkillResult(summary="x", findings=(), duration_ms=0, errors=(), verdict="passed")
     _register_skill("echo", run=_echo)
 
-    # 注:本期 v1 简化:parameters_schema 走"path" + "timeout"/"top" 几个已知 key
-    # 的轻校验;Task 2 只验 path 是否存在 + timeout 范围(top 同),不调 jsonschema。
-    # 简化测试:传额外 unknown key → invalid(本期 v1 实现:strict 模式 reject extras)
     ctx = _make_ctx()
     result = asyncio.run(run_skill("echo", {"unknown_key": "x"}, ctx))
     assert result.verdict == "skipped"
@@ -74,7 +70,7 @@ def test_run_skill_invalid_args_returns_skipped():
 
 
 def test_run_skill_path_outside_workspace_returns_skipped(tmp_path):
-    """path 解析后不在 ctx.workspace 内 → verdict=skipped, errors 含 'outside workspace'。"""
+    """Internal documentation."""
     workspace = tmp_path / "ws"
     workspace.mkdir()
     other = tmp_path / "other"
@@ -91,7 +87,7 @@ def test_run_skill_path_outside_workspace_returns_skipped(tmp_path):
 
 
 def test_run_skill_path_not_found_returns_skipped(tmp_path):
-    """path 解析后不存在 → verdict=skipped, errors 含 'path not found'。"""
+    """Internal documentation."""
     workspace = tmp_path / "ws"
     workspace.mkdir()
 
@@ -108,7 +104,7 @@ def test_run_skill_path_not_found_returns_skipped(tmp_path):
 # ── timeout ──────────────────────────────────────────────────────
 
 def test_run_skill_timeout_returns_skipped():
-    """skill 跑超过 timeout → verdict=skipped, errors 含 'interrupted by timeout'。"""
+    """Internal documentation."""
     async def _slow(args, ctx):
         await asyncio.sleep(5.0)
         return AnalysisSkillResult(summary="x", findings=(), duration_ms=5000, errors=(), verdict="passed")
@@ -120,13 +116,12 @@ def test_run_skill_timeout_returns_skipped():
     elapsed = time.monotonic() - start
     assert result.verdict == "skipped"
     assert any("interrupted by timeout" in e for e in result.errors)
-    assert elapsed < 1.0   # 0.1s timeout 必须快速返回
+    assert elapsed < 1.0
 
 
-# ── 异常聚合 ──────────────────────────────────────────────────────
 
 def test_run_skill_exception_returns_partial():
-    """skill 抛异常 → verdict=partial, errors 留 traceback。"""
+    """Internal documentation."""
     async def _boom(args, ctx):
         raise RuntimeError("kapow")
     _register_skill("boom", run=_boom)
@@ -137,10 +132,9 @@ def test_run_skill_exception_returns_partial():
     assert any("kapow" in e for e in result.errors)
 
 
-# ── event 投 bus ──────────────────────────────────────────────────
 
 def test_run_skill_emits_start_and_end_events():
-    """run 前后各投 1 条 SkillRunStart / SkillRunEnd 到 EventBus(mock)。"""
+    """Internal documentation."""
     bus = MagicMock()
     bus.emit = AsyncMock()
 
@@ -164,7 +158,7 @@ def test_run_skill_emits_start_and_end_events():
 # ── output trunc(1MB) ─────────────────────────────────────────────
 
 def test_run_skill_truncates_over_1mb_findings():
-    """findings > 100 条 → 截到 100 + 1 条 info 提示截断(spec §3)。"""
+    """Internal documentation."""
     big = tuple(
         Finding(severity="info", category="secret", message=f"m{i}")
         for i in range(150)
@@ -177,8 +171,6 @@ def test_run_skill_truncates_over_1mb_findings():
 
     ctx = _make_ctx()
     result = asyncio.run(run_skill("many", {}, ctx))
-    # 100 原始 + 1 截断 info + (总 100 因为 spec 是 trunc 到 100 + 1 info)
-    # 实际 spec §3:截到前 100 + 1 info "<N more findings truncated"> = 101
     assert len(result.findings) <= 101
     has_trunc_info = any(
         "truncated" in f.message for f in result.findings if f.severity == "info"

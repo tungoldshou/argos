@@ -1,18 +1,17 @@
-name: Release
-# spec §10:打 v* tag → 3 OS 矩阵 jobs → release job 走 `gh release create` 跨资产发布。
-# 修 v0.1.0 时的 0 jobs bug:pin `actions/setup-python@v4`(B 阶段用 @v5 偶发 validator 报 0 jobs);
-# 替换 `softprops/action-gh-release@v2` 为 `gh release create`(免 softprops Node 20 + token 解析)。
+name: Binary Release
+# Binary assets are manual for now; the public launch path is PyPI/source.
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. v0.1.0"
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
-  # E2 发布门禁:tag 触发后先跑全量测试,失败则所有 build-* 与 release job 全部 skip,
-  # 资产不打、release 不创建 → bump-homebrew / bump-winget 也不会被 release.published 触发。
   test:
     name: CI gate (full test suite, Linux + bwrap)
     uses: ./.github/workflows/ci.yml
@@ -35,11 +34,11 @@ jobs:
         run: uv sync
       - name: Build macOS arm64
         env:
-          ARGOS_VERSION: ${{ github.ref_name }}
+          ARGOS_VERSION: ${{ inputs.tag }}
         run: bash packaging/build_arm64.sh
       - name: Pack macOS tarball + sha256
         env:
-          ARGOS_VERSION: ${{ github.ref_name }}
+          ARGOS_VERSION: ${{ inputs.tag }}
         run: |
           VERSION="${ARGOS_VERSION#v}"
           cd dist
@@ -49,6 +48,7 @@ jobs:
         with:
           name: dist-macos
           path: dist/
+          if-no-files-found: error
 
   build-linux:
     name: Build Linux (AppImage/.deb/.rpm)
@@ -70,12 +70,13 @@ jobs:
           sudo apt-get install -y dpkg-dev rpm fuse wget libfuse2
       - name: Build Linux
         env:
-          ARGOS_VERSION: ${{ github.ref_name }}
+          ARGOS_VERSION: ${{ inputs.tag }}
         run: bash packaging/build_linux.sh
       - uses: actions/upload-artifact@v4
         with:
           name: dist-linux
           path: dist/
+          if-no-files-found: error
 
   build-windows:
     name: Build Windows (.exe/.msi)
@@ -93,12 +94,13 @@ jobs:
           version: "latest"
       - name: Build Windows
         env:
-          ARGOS_VERSION: ${{ github.ref_name }}
+          ARGOS_VERSION: ${{ inputs.tag }}
         run: bash packaging/build_windows.sh
       - uses: actions/upload-artifact@v4
         with:
           name: dist-windows
           path: dist/
+          if-no-files-found: error
 
   release:
     name: Create GitHub release
@@ -110,25 +112,51 @@ jobs:
         with:
           pattern: dist-*
           path: dist
-      - name: Generate final SHA256SUMS
+      - name: Generate release asset manifest + final SHA256SUMS
         working-directory: dist
-        run: sha256sum -- * > SHA256SUMS || true
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          : > release-assets.txt
+          missing=0
+          for asset in \
+            "dist-macos/Argos-${VERSION}-arm64-mac.tar.gz" \
+            "dist-linux/Argos-${VERSION}-x86_64.AppImage" \
+            "dist-linux/argos_${VERSION}_amd64.deb" \
+            "dist-linux/argos-${VERSION}-1.x86_64.rpm" \
+            "dist-windows/Argos-${VERSION}-x86_64-windows.zip" \
+            "dist-windows/Argos-${VERSION}-x86_64.msi.zip"
+          do
+            if [ -f "$asset" ]; then
+              printf '%s\n' "$asset" >> release-assets.txt
+            elif [ "$asset" = "dist-windows/Argos-${VERSION}-x86_64.msi.zip" ]; then
+              echo "WARN: optional release asset missing: $asset" >&2
+            else
+              echo "ERROR: required release asset missing: $asset" >&2
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+          RELEASABLE_ASSETS=$(cat release-assets.txt)
+          [ -n "${RELEASABLE_ASSETS:-}" ] || { echo "ERROR: no releasable assets found" >&2; exit 1; }
+          while IFS= read -r asset; do
+            sha256sum "$asset"
+          done < release-assets.txt > SHA256SUMS
+          printf '%s\n' SHA256SUMS >> release-assets.txt
       - name: Create GitHub release (gh release create)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          # 找所有 release 资产(过滤 SHA256SUMS)
-          ASSETS=$(find dist -type f \
-            \( -name "*.tar.gz" -o -name "*.AppImage" -o -name "*.deb" \
-               -o -name "*.rpm" -o -name "*.zip" -o -name "*.msi.zip" \
-               -o -name "SHA256SUMS" \) \
-            | sed 's|^dist/||')
+          VERSION="${RELEASE_TAG#v}"
+          ASSETS=$(cat dist/release-assets.txt)
           echo "Release assets:"
           echo "$ASSETS"
-          # 走 gh release create(spec §10.2 替换 softprops);--generate-notes 自动产 release notes
+          RELEASABLE_ASSETS=$(printf '%s\n' "$ASSETS" | grep -Ev '(^|/)SHA256SUMS$' || true)
+          [ -n "${RELEASABLE_ASSETS:-}" ] || { echo "ERROR: no releasable assets found" >&2; exit 1; }
           gh release create "v${VERSION}" \
             --title "Argos v${VERSION}" \
             --generate-notes \
             --repo "${{ github.repository }}" \
-            $(echo "$ASSETS" | xargs -I{} echo "dist/{}")
+            $(printf '%s\n' "$ASSETS" | xargs -I{} echo "dist/{}")

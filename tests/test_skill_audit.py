@@ -1,4 +1,4 @@
-"""Pass 2 dep audit 单元测试(spec §2.4 Pass 2 / D5 防假绿)。"""
+"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -15,31 +15,30 @@ from argos.skills_runtime.builtin.security_review.audit import (
 )
 
 
-# ── lockfile 检测 ────────────────────────────────────────────────
 
 def test_detect_lockfiles_npm(tmp_path):
-    """package-lock.json 存在 → 检测到 npm。"""
+    """Internal documentation."""
     (tmp_path / "package-lock.json").write_text("{}")
     detected = detect_lockfiles(tmp_path)
     assert "npm" in detected
 
 
 def test_detect_lockfiles_pip(tmp_path):
-    """requirements.txt 存在 → 检测到 pip。"""
+    """Internal documentation."""
     (tmp_path / "requirements.txt").write_text("foo==1.0\n")
     detected = detect_lockfiles(tmp_path)
     assert "pip" in detected
 
 
 def test_detect_lockfiles_cargo(tmp_path):
-    """Cargo.lock 存在 → 检测到 cargo。"""
+    """Internal documentation."""
     (tmp_path / "Cargo.lock").write_text("")
     detected = detect_lockfiles(tmp_path)
     assert "cargo" in detected
 
 
 def test_detect_lockfiles_multiple(tmp_path):
-    """3 个 lockfile 同存 → 3 个都检测到。"""
+    """Internal documentation."""
     (tmp_path / "package-lock.json").write_text("{}")
     (tmp_path / "requirements.txt").write_text("")
     (tmp_path / "Cargo.lock").write_text("")
@@ -48,16 +47,13 @@ def test_detect_lockfiles_multiple(tmp_path):
 
 
 def test_detect_lockfiles_none(tmp_path):
-    """无 lockfile → 空 set。"""
+    """Internal documentation."""
     assert detect_lockfiles(tmp_path) == set()
 
 
-# ── shell out(缺工具 → error severity finding,spec D5 防假绿)─
 
 def test_audit_deps_npm_missing_tool_returns_error_severity(tmp_path):
-    """npm lockfile + npm 工具缺失 → 1 条 error severity Finding(非 info;防假绿)。
-    spec D5:工具缺失必须报 error,verdict 必含 error → failed。
-    """
+    """Internal documentation."""
     (tmp_path / "package-lock.json").write_text("{}")
 
     # mock FileNotFoundError on spawn
@@ -74,7 +70,7 @@ def test_audit_deps_npm_missing_tool_returns_error_severity(tmp_path):
 
 
 def test_audit_deps_pip_missing_tool_returns_error_severity(tmp_path):
-    """pip 工具缺失 → 1 条 error severity finding。"""
+    """Internal documentation."""
     (tmp_path / "requirements.txt").write_text("foo==1.0\n")
 
     def _raise(*args, **kwargs):
@@ -89,7 +85,7 @@ def test_audit_deps_pip_missing_tool_returns_error_severity(tmp_path):
 
 
 def test_audit_deps_cargo_missing_tool_returns_error_severity(tmp_path):
-    """cargo 工具缺失 → 1 条 error severity finding。"""
+    """Internal documentation."""
     (tmp_path / "Cargo.lock").write_text("")
 
     def _raise(*args, **kwargs):
@@ -103,10 +99,9 @@ def test_audit_deps_cargo_missing_tool_returns_error_severity(tmp_path):
     assert "cargo" in err_findings[0].message
 
 
-# ── audit_lockfile 单测(给上层用)───────────────────────────────
 
 def test_audit_lockfile_returns_empty_on_healthy_output(tmp_path):
-    """npm audit 输出 vulnerabilities={} → 0 finding。"""
+    """Internal documentation."""
     mock_result = MagicMock()
     mock_result.returncode = 0
     mock_result.stdout = json.dumps({"vulnerabilities": {}})
@@ -118,7 +113,7 @@ def test_audit_lockfile_returns_empty_on_healthy_output(tmp_path):
 
 
 def test_audit_lockfile_nonzero_returncode_yields_error_finding(tmp_path):
-    """审计工具返非 0 exit code + JSON 解析失败 → 1 条 error finding(不静默)。"""
+    """Internal documentation."""
     mock_result = MagicMock()
     mock_result.returncode = 1
     mock_result.stdout = ""
@@ -130,18 +125,16 @@ def test_audit_lockfile_nonzero_returncode_yields_error_finding(tmp_path):
     assert len(err_findings) >= 1
 
 
-# ── 健康路径 ────────────────────────────────────────────────
 
 def test_audit_deps_healthy_no_findings(tmp_path):
-    """无 lockfile → 无 finding(verdict=passed 路径)。"""
+    """Internal documentation."""
     findings = audit_dependencies(tmp_path, rel_workspace=tmp_path)
     assert findings == ()
 
 
-# ── 解析 npm 漏洞 JSON ────────────────────────────────────────────
 
 def test_audit_deps_npm_vuln_parsed(tmp_path):
-    """npm audit JSON 含 1 critical + 1 high → 2 条 dep_vuln finding。"""
+    """Internal documentation."""
     (tmp_path / "package-lock.json").write_text("{}")
     mock_output = json.dumps({
         "vulnerabilities": {

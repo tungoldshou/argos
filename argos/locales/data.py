@@ -1,8 +1,4 @@
-"""DATA cluster 文案 —— memory / routing / context / skills_curator / skills_runtime / skills。
-
-key 命名空间:mem.* / route.* / ctx.* / skill.*。
-ZH 值与重构前原始中文串逐字一致,ARGOS_LANG=zh 下旧测试断言不破。
-"""
+"""Internal documentation."""
 from __future__ import annotations
 
 EN: dict[str, str] = {
