@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -23,7 +22,6 @@ def read_pid(path: Path) -> int | None:
 
 
 def is_alive(pid: int) -> bool:
-    """Internal documentation."""
     try:
         os.kill(pid, 0)
         return True

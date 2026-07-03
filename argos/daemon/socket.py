@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -27,7 +26,6 @@ def default_socket_path() -> Path:
 
 
 def ensure_socket_mode(path: Path) -> None:
-    """Internal documentation."""
     if path.exists():
         try:
             os.chmod(path, SOCKET_MODE)
@@ -45,7 +43,6 @@ def _unlink_quiet(path: Path) -> None:
 
 
 def check_socket_available(path: Path) -> None:
-    """Internal documentation."""
     if not path.exists():
         return
     s = _stdlib_socket.socket(_stdlib_socket.AF_UNIX, _stdlib_socket.SOCK_STREAM)

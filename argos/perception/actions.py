@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -24,7 +23,6 @@ _APP_NAME_RE = re.compile(r"^[A-Za-z0-9 _.\-]+$")
 
 @dataclass(frozen=True, slots=True)
 class ComputerAction:
-    """Internal documentation."""
     kind: ActionKind
     x: int | None = None
     y: int | None = None

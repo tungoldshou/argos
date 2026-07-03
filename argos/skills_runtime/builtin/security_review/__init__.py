@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -58,7 +57,6 @@ _SEVERITY_ORDER = {"error": 0, "warning": 1, "info": 2}
 
 
 def _walk_files(root: Path) -> list[Path]:
-    """Internal documentation."""
     if root.is_file():
         return [root]
     skip_dirs = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".argos"}
@@ -81,7 +79,6 @@ def _walk_files(root: Path) -> list[Path]:
 
 
 def _dedup(findings: list[Finding]) -> list[Finding]:
-    """Internal documentation."""
     seen: set[tuple] = set()
     out: list[Finding] = []
     for f in findings:
@@ -94,7 +91,6 @@ def _dedup(findings: list[Finding]) -> list[Finding]:
 
 
 def _sort_findings(findings: list[Finding]) -> list[Finding]:
-    """Internal documentation."""
     return sorted(findings, key=lambda f: (
         _SEVERITY_ORDER.get(f.severity, 9),
         f.file or "",
@@ -119,7 +115,6 @@ def _summarize(verdict: str, findings: list[Finding], errors: list[str], duratio
 
 
 async def run(args: dict, ctx: AnalysisSkillContext) -> AnalysisSkillResult:
-    """Internal documentation."""
     start_ms = int(time.monotonic() * 1000)
     path_arg = args.get("path")
     workspace = ctx.workspace

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import shutil
@@ -12,11 +11,10 @@ from argos.input.attachments import (
 
 
 class ClipboardError(Exception):
-    """Internal documentation."""
+    pass
 
 
 def _read_bytes() -> bytes:
-    """Internal documentation."""
     if sys.platform == "darwin":
         if shutil.which("pngpaste") is None:
             raise ClipboardError(t("input.clipboard.need_pngpaste"))
@@ -38,7 +36,6 @@ def _read_bytes() -> bytes:
 
 
 def read_clipboard_image() -> ImageAttachment:
-    """Internal documentation."""
     data = _read_bytes()
     try:
         media = sniff_media_type(data)

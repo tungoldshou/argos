@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -13,7 +12,6 @@ Payload = Union[dict, str]
 
 
 def append_line(path: Path, payload: Payload, *, logger: logging.Logger | None = None) -> None:
-    """Internal documentation."""
     p = Path(path)
     lg = logger or _log
     try:
@@ -32,7 +30,6 @@ def cleanup_files_by_name_date(
     dir: Path, glob: str, *, prefix: str, days: int,
     now: datetime | None = None, logger: logging.Logger | None = None,
 ) -> int:
-    """Internal documentation."""
     d = Path(dir)
     if not d.exists():
         return 0

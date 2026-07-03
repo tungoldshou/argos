@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -20,7 +19,6 @@ _DIAG_SEVERITY_NAMES = {1: "error", 2: "warning", 3: "information", 4: "hint"}
 
 
 def _check_workspace(file: str, workspace: Path) -> str | None:
-    """Internal documentation."""
     fp = Path(file)
     if not fp.is_absolute():
         p = (workspace / fp).resolve()
@@ -51,7 +49,6 @@ def _translate_location(loc: dict) -> dict:
 
 
 def _translate_symbol(sym: dict) -> dict:
-    """Internal documentation."""
     kind_int = sym.get("kind", 0)
     rng = sym.get("range", {})
     start = rng.get("start", {})
@@ -72,7 +69,6 @@ def _translate_symbol(sym: dict) -> dict:
 
 
 def _translate_diagnostic(d: dict) -> dict:
-    """Internal documentation."""
     sev_int = d.get("severity", 1)
     rng = d.get("range", {})
     start = rng.get("start", {})
@@ -89,7 +85,6 @@ def _translate_diagnostic(d: dict) -> dict:
 
 
 def _file_uri(file: str, workspace: Path | None = None) -> str:
-    """Internal documentation."""
     fp = Path(file)
     if not fp.is_absolute() and workspace is not None:
         p = (workspace / fp).resolve()
@@ -99,7 +94,6 @@ def _file_uri(file: str, workspace: Path | None = None) -> str:
 
 
 def _read_content_if_exists(file: str, workspace: Path) -> str | None:
-    """Internal documentation."""
     p = workspace / file if not Path(file).is_absolute() else Path(file)
     try:
         return p.read_text(encoding="utf-8", errors="replace")
@@ -108,7 +102,6 @@ def _read_content_if_exists(file: str, workspace: Path) -> str | None:
 
 
 def _safe_sync_file(manager: "LspManager", file: str, workspace: Path, content: str) -> None:
-    """Internal documentation."""
     try:
         abspath = str((workspace / file).resolve()) if not Path(file).is_absolute() else file
         manager.request_sync("__noop__", "noop", {"_fire_and_forget": True}, timeout=0.01)

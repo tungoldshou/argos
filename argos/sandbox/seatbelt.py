@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import os
@@ -9,7 +8,6 @@ from pathlib import Path
 
 
 def _temp_roots() -> list[str]:
-    """Internal documentation."""
     roots: set[str] = set()
     t = Path(tempfile.gettempdir()).resolve()
     roots.add(str(t))
@@ -33,12 +31,10 @@ _ARGOS_CONFIG_DENY_FILES = (".env", "config.json", "mcp.json")
 
 
 def _resolved_and_raw(p: Path) -> set[str]:
-    """Internal documentation."""
     return {str(p), str(p.resolve())}
 
 
 def _credential_read_denies() -> str:
-    """Internal documentation."""
     home = Path.home()
     subpaths: set[str] = set()
     for d in _CRED_DENY_DIRS:
@@ -59,7 +55,6 @@ def _credential_read_denies() -> str:
 
 
 def build_profile(*, workspace: Path, allow_network: bool = False) -> str:
-    """Internal documentation."""
     ws = str(workspace.resolve())
     from argos.config import extra_write_dirs
     write_subpaths = [ws, *(_temp_roots()), *(str(d) for d in extra_write_dirs())]
@@ -82,12 +77,10 @@ def build_profile(*, workspace: Path, allow_network: bool = False) -> str:
 
 
 def wrap_command(profile_path: str, argv: list[str]) -> list[str]:
-    """Internal documentation."""
     return ["/usr/bin/sandbox-exec", "-f", profile_path, *argv]
 
 
 def confined_argv(*, workspace: Path, argv: list[str], allow_network: bool = False) -> list[str]:
-    """Internal documentation."""
     workspace.mkdir(parents=True, exist_ok=True)
     prof = build_profile(workspace=workspace, allow_network=allow_network)
     prof_file = workspace / ".argos_run.sb"
@@ -97,7 +90,6 @@ def confined_argv(*, workspace: Path, argv: list[str], allow_network: bool = Fal
 
 def spawn_child(*, workspace: Path, child_argv: list[str],
                 env: dict[str, str] | None = None, sandbox: bool = True) -> subprocess.Popen:
-    """Internal documentation."""
     workspace.mkdir(parents=True, exist_ok=True)
     if sandbox:
         prof = build_profile(workspace=workspace)
@@ -118,7 +110,6 @@ SANDBOX_CHILD_FLAG = "--__argos_sandbox_child__"
 
 
 def python_child_argv(child_module: str = "argos.sandbox._sandbox_child") -> list[str]:
-    """Internal documentation."""
     if getattr(sys, "frozen", False):
         return [sys.executable, SANDBOX_CHILD_FLAG]
     return [sys.executable, "-m", child_module]

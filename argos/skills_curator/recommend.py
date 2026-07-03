@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -149,7 +148,6 @@ def recommend(
     cache: IndexCache | None = None,
     rules: Iterable = DEFAULT_RULES,
 ) -> list[Recommendation]:
-    """Internal documentation."""
     from argos.skills_curator.capabilities import list_installed
 
     enabled = {s.name for s in list_installed() if s.enabled}
@@ -184,7 +182,6 @@ def recommend(
 
 
 def build_activity_from_session() -> SessionActivity:
-    """Internal documentation."""
     return SessionActivity()
 
 

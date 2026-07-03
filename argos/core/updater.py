@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -14,7 +13,6 @@ DEFAULT_TIMEOUT = 5
 
 
 def _is_cache_fresh(cache_path: Path, *, max_age_days: int = MAX_CACHE_AGE_DAYS) -> bool:
-    """Internal documentation."""
     if not cache_path.exists():
         return False
     age_seconds = time.time() - cache_path.stat().st_mtime
@@ -22,7 +20,6 @@ def _is_cache_fresh(cache_path: Path, *, max_age_days: int = MAX_CACHE_AGE_DAYS)
 
 
 def _is_newer(remote: str, current: str) -> bool:
-    """Internal documentation."""
     from packaging.version import Version, InvalidVersion
     try:
         return Version(remote) > Version(current)
@@ -38,7 +35,6 @@ def _check_for_update(
     timeout: float = DEFAULT_TIMEOUT,
     force: bool = False,
 ) -> str | None:
-    """Internal documentation."""
     if not force and _is_cache_fresh(cache_path):
         return None
     try:
@@ -67,7 +63,6 @@ def check_github_release(
     cache_path: Path,
     force: bool = False,
 ) -> str | None:
-    """Internal documentation."""
     url = f"https://api.github.com/repos/{repo}/releases/latest"
     return _check_for_update(
         latest_url=url,

@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -29,7 +28,6 @@ def _is_source_file(p: Path) -> bool:
 
 
 def _detect_functions(text: str) -> list[tuple[str, int, int]]:
-    """Internal documentation."""
     fns: list[tuple[str, int, int]] = []
     starts: list[tuple[int, int, str, int]] = []
     for m in _FN_START_RE.finditer(text):

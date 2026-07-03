@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -14,7 +13,6 @@ VisibilityName = Literal["all", "developer"]
 
 @dataclass(frozen=True, slots=True)
 class Capability:
-    """Internal documentation."""
     name: str
     kind: KindName
     risk: RiskLevel | None
@@ -27,7 +25,6 @@ class Capability:
     sandbox_callable: bool = True
 
     def __post_init__(self) -> None:
-        """Internal documentation."""
         if not self.name or not self.name.strip():
             raise ValueError(t("cap.manifest.empty_name"))
         if self.kind not in (

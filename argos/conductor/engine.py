@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import logging
@@ -16,7 +15,6 @@ _SCHEDULE_IDEMPOTENCY_WINDOW = 55.0
 
 
 class ConductorEngine:
-    """Internal documentation."""
 
     def __init__(
         self,
@@ -39,7 +37,6 @@ class ConductorEngine:
     # ------------------------------------------------------------------
 
     def tick(self, now: float) -> list[ProactiveSuggestion]:
-        """Internal documentation."""
         suggestions: list[ProactiveSuggestion] = []
         orders = self._store.list()
 
@@ -65,7 +62,6 @@ class ConductorEngine:
     def _tick_schedule(
         self, order: StandingOrder, now: float
     ) -> ProactiveSuggestion | None:
-        """Internal documentation."""
         if not order.schedule:
             return None
 
@@ -106,7 +102,6 @@ class ConductorEngine:
     def _tick_file_trigger(
         self, order: StandingOrder, now: float
     ) -> list[ProactiveSuggestion]:
-        """Internal documentation."""
         if not order.trigger_glob:
             return []
 
@@ -139,6 +134,5 @@ class ConductorEngine:
 
 
 def _ts_to_date(ts: float) -> str:
-    """Internal documentation."""
     from datetime import datetime, timezone
     return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")

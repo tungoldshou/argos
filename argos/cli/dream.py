@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -17,20 +16,17 @@ _DEFAULT_SKILLS_DIR: Path | None = None
 
 
 def _argos_dir() -> Path:
-    """Internal documentation."""
     from argos import config
 
     return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
 
 
 def _dreams_dir() -> Path:
-    """Internal documentation."""
     env = os.environ.get("ARGOS_DREAMS_DIR")
     return Path(env).expanduser() if env else _argos_dir() / "dreams"
 
 
 def _memory_dir() -> Path:
-    """Internal documentation."""
     env = os.environ.get("ARGOS_MEMORY_DIR")
     return Path(env).expanduser() if env else _argos_dir() / "memory"
 
@@ -48,7 +44,6 @@ def _skills_root() -> Path:
 
 
 def _latest_report() -> dict | None:
-    """Internal documentation."""
     d = _dreams_dir()
     if not d.exists():
         return None
@@ -75,7 +70,6 @@ def _latest_report() -> dict | None:
 
 
 def _fmt_report(r: dict) -> str:
-    """Internal documentation."""
     return t(
         "cli.dream.report_fmt",
         units_total=r.get("units_total", 0),
@@ -88,7 +82,6 @@ def _fmt_report(r: dict) -> str:
 
 
 def run_dream(args: Any) -> int:
-    """Internal documentation."""
     if getattr(args, "report", False):
         report = _latest_report()
         if report is None:
@@ -152,7 +145,6 @@ def run_dream(args: Any) -> int:
             _model = comps.model
 
             async def _narrate(prompt: str) -> str:
-                """Internal documentation."""
                 return await _model.complete(
                     [{"role": "user", "content": prompt}],
                     system="你是知识提炼助手,只输出纯文字摘要,不输出代码。",
@@ -222,7 +214,6 @@ def run_dream(args: Any) -> int:
 
 
 def add_subparser(sub: Any) -> None:
-    """Internal documentation."""
     p = sub.add_parser(
         "dream",
         help=t("cli.dream.help"),

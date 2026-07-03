@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from typing import Optional
@@ -12,7 +11,6 @@ MAX_SCAN_BYTES: int = 1_000_000
 
 
 def find_secret_in_content(content: str) -> Optional[str]:
-    """Internal documentation."""
     if not isinstance(content, str):
         return None
     if len(content.encode("utf-8")) > MAX_SCAN_BYTES:

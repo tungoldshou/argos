@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.hooks.config import (
@@ -26,13 +25,11 @@ _config: HooksConfig | None = None
 
 
 def _reset_config() -> None:
-    """Internal documentation."""
     global _config
     _config = None
 
 
 def get_config() -> HooksConfig:
-    """Internal documentation."""
     global _config
     if _config is None:
         _config = _load_or_empty()
@@ -40,13 +37,11 @@ def get_config() -> HooksConfig:
 
 
 def _load_or_empty() -> HooksConfig:
-    """Internal documentation."""
     from argos.hooks.config import load
     return load()
 
 
 def reload_config() -> HooksConfig:
-    """Internal documentation."""
     from argos.hooks.config import load, HooksConfigError
     global _config
     try:
@@ -58,6 +53,5 @@ def reload_config() -> HooksConfig:
 
 
 async def fire(*args, **kwargs):  # type: ignore[no-untyped-def]
-    """Internal documentation."""
     from argos.hooks.runner import fire as _fire
     return await _fire(*args, **kwargs)

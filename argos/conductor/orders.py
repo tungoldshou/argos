@@ -28,7 +28,6 @@ def _default_orders_dir() -> Path:
 
 @dataclass(frozen=True, slots=True)
 class StandingOrder:
-    """Internal documentation."""
     id: str
     utterance: str
     kind: OrderKind
@@ -41,7 +40,6 @@ class StandingOrder:
     action: OrderAction = "run"
 
     def __post_init__(self) -> None:
-        """Internal documentation."""
         if self.kind == "schedule" and not self.schedule:
             raise ValueError(t("cond.order.schedule_required", id=self.id))
         if self.kind == "file_trigger" and not self.trigger_glob:
@@ -53,7 +51,6 @@ class StandingOrder:
     # ------------------------------------------------------------------
 
     def to_dict(self) -> dict:
-        """Internal documentation."""
         return {
             "id": self.id,
             "utterance": self.utterance,
@@ -69,7 +66,6 @@ class StandingOrder:
 
     @staticmethod
     def from_dict(d: dict) -> "StandingOrder":
-        """Internal documentation."""
         return StandingOrder(
             id=str(d["id"]),
             utterance=str(d["utterance"]),
@@ -84,23 +80,19 @@ class StandingOrder:
         )
 
     def with_last_fired(self, ts: float) -> "StandingOrder":
-        """Internal documentation."""
         import dataclasses
         return dataclasses.replace(self, last_fired_at=ts)
 
     def with_enabled(self, enabled: bool) -> "StandingOrder":
-        """Internal documentation."""
         import dataclasses
         return dataclasses.replace(self, enabled=enabled)
 
 
 def _new_order_id() -> str:
-    """Internal documentation."""
     return uuid.uuid4().hex
 
 
 class OrderStore:
-    """Internal documentation."""
 
     def __init__(self, orders_dir: Path | None = None) -> None:
         self._dir = Path(orders_dir).expanduser() if orders_dir else _default_orders_dir()
@@ -108,14 +100,12 @@ class OrderStore:
 
     @property
     def path(self) -> Path:
-        """Internal documentation."""
         return self._path
 
     # ------------------------------------------------------------------
     # ------------------------------------------------------------------
 
     def list(self) -> list[StandingOrder]:
-        """Internal documentation."""
         if not self._path.exists():
             return []
         orders: list[StandingOrder] = []
@@ -136,7 +126,6 @@ class OrderStore:
         return orders
 
     def get(self, order_id: str) -> StandingOrder | None:
-        """Internal documentation."""
         for o in self.list():
             if o.id == order_id:
                 return o
@@ -146,7 +135,6 @@ class OrderStore:
     # ------------------------------------------------------------------
 
     def add(self, order: StandingOrder) -> None:
-        """Internal documentation."""
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             line = json.dumps(order.to_dict(), ensure_ascii=False) + "\n"
@@ -156,7 +144,6 @@ class OrderStore:
             log.warning("orders: add 写入失败: %s", exc)
 
     def update(self, order: StandingOrder) -> bool:
-        """Internal documentation."""
         existing = self.list()
         updated = [order if o.id == order.id else o for o in existing]
         if updated == existing and all(o.id != order.id for o in existing):
@@ -168,7 +155,6 @@ class OrderStore:
         return True
 
     def delete(self, order_id: str) -> bool:
-        """Internal documentation."""
         existing = self.list()
         filtered = [o for o in existing if o.id != order_id]
         if len(filtered) == len(existing):
@@ -180,7 +166,6 @@ class OrderStore:
     # ------------------------------------------------------------------
 
     def _write_all(self, orders: list[StandingOrder]) -> None:
-        """Internal documentation."""
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             with self._path.open("w", encoding="utf-8") as fh:

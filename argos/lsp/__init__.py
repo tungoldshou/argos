@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos.lsp.config import (
@@ -24,14 +23,12 @@ _manager = None  # type: ignore[var-annotated]
 
 
 def _reset_config() -> None:
-    """Internal documentation."""
     global _config, _manager
     _config = None
     _manager = None
 
 
 def get_config() -> LspConfig:
-    """Internal documentation."""
     global _config
     if _config is None:
         from argos.lsp.config import load
@@ -43,7 +40,6 @@ def get_config() -> LspConfig:
 
 
 def reload_config() -> LspConfig:
-    """Internal documentation."""
     from argos.lsp.config import load
     global _config
     new_cfg = load()
@@ -52,7 +48,6 @@ def reload_config() -> LspConfig:
 
 
 def get_manager():  # type: ignore[no-untyped-def]
-    """Internal documentation."""
     global _manager
     if _manager is None:
         from argos.lsp.manager import LspManager
@@ -61,7 +56,6 @@ def get_manager():  # type: ignore[no-untyped-def]
 
 
 def get_diagnostics(file: str):  # type: ignore[no-untyped-def]
-    """Internal documentation."""
     if _manager is None:
         return None
     return _manager.get_diagnostics(file)  # type: ignore[union-attr]

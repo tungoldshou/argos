@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import enum
@@ -8,7 +7,6 @@ LONG_RUN_THRESHOLD = 20
 
 
 class TaskCategory(enum.Enum):
-    """Internal documentation."""
     FILE_EDIT = "file_edit"
     REFACTOR = "refactor"
     TEST_WRITE = "test_write"
@@ -36,7 +34,6 @@ def _line_count(s: str) -> int:
 
 
 def _edit_scale(code: str) -> int | None:
-    """Internal documentation."""
     m = _EDIT_RE.search(code)
     if not m:
         return None
@@ -56,7 +53,6 @@ def _has_test_marker(code: str) -> bool:
 
 def categorize(*, tool: str | None = None, code: str | None = None,
                phase: str = "act", step: int = 0) -> TaskCategory:
-    """Internal documentation."""
     try:
         if phase == "plan":
             return TaskCategory.PLAN

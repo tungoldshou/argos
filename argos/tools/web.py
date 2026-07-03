@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from argos import web
@@ -9,7 +8,6 @@ _SNIPPET_MAX = 300
 
 
 def web_search(query: str, limit: int = 5) -> str:
-    """Internal documentation."""
     res = web.search(query, limit)
     if not res.get("success"):
         return t("tools.web.search_failed", error=res.get("error") or t("tools.web.unknown_error"))
@@ -26,7 +24,6 @@ def web_search(query: str, limit: int = 5) -> str:
 
 
 def web_extract(url: str) -> str:
-    """Internal documentation."""
     res = web.extract(url)
     if not res.get("success"):
         return t("tools.web.extract_failed", error=res.get("error") or t("tools.web.unknown_error"))
@@ -37,7 +34,6 @@ def web_extract(url: str) -> str:
 
 
 def host_for(action: str, args: dict) -> str:
-    """Internal documentation."""
     if action == "web_extract":
         return args.get("url", "")
     if action == "web_search":
@@ -46,7 +42,6 @@ def host_for(action: str, args: dict) -> str:
 
 
 def extract_url_blocked(url: str) -> bool:
-    """Internal documentation."""
     from urllib.parse import urlparse
     u = url if "://" in (url or "") else f"http://{url}"
     host = (urlparse(u).hostname or "").strip()

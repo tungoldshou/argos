@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,7 +9,6 @@ from argos.skills_curator.index import BUILTIN_NAMES
 
 @dataclass(frozen=True, slots=True)
 class PromotionResult:
-    """Internal documentation."""
 
     promoted: bool
     reason: str
@@ -21,7 +19,6 @@ class PromotionResult:
 
 
 def _is_pass(pass_status: str | None) -> bool:
-    """Internal documentation."""
     try:
         from argos.eval.runner import PASS_PASSED
         return pass_status == PASS_PASSED
@@ -34,7 +31,6 @@ def _skill_md_path_for(skills_root: Path, name: str) -> Path:
 
 
 def _atomic_write_skill(skill_md: Path, content: str) -> None:
-    """Internal documentation."""
     import os
     import uuid
 
@@ -46,7 +42,6 @@ def _atomic_write_skill(skill_md: Path, content: str) -> None:
 
 
 def _rebuild_index(skills_root: Path) -> None:
-    """Internal documentation."""
     try:
         from argos.skills_curator import index as _idx
         # ponytail: load_cache is best-effort — failure doesn't block promotion
@@ -94,7 +89,6 @@ def promote(
     runner_b: Any = None,
     skills_root: Path,
 ) -> PromotionResult:
-    """Internal documentation."""
     import logging as _log
     log = _log.getLogger(__name__)
 

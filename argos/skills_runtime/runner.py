@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -25,13 +24,11 @@ _KNOWN_ARG_KEYS: frozenset[str] = frozenset({"path", "timeout", "top"})
 
 
 class _NullEventBus:
-    """Internal documentation."""
     async def emit(self, ev: object) -> None:
         return None
 
 
 def _validate_args(skill_name: str, args: Mapping[str, object]) -> str | None:
-    """Internal documentation."""
     extras = set(args.keys()) - _KNOWN_ARG_KEYS
     if extras:
         return f"invalid args for skill {skill_name!r}: unknown keys {sorted(extras)}"
@@ -49,7 +46,6 @@ def _validate_args(skill_name: str, args: Mapping[str, object]) -> str | None:
 def _validate_path(
     args: Mapping[str, object], ctx: AnalysisSkillContext,
 ) -> tuple[str | None, str | None]:
-    """Internal documentation."""
     raw = args.get("path")
     if raw is None:
         return None, None
@@ -69,7 +65,6 @@ def _validate_path(
 
 
 def _trunc_findings(findings: tuple[Finding, ...]) -> tuple[Finding, ...]:
-    """Internal documentation."""
     if len(findings) <= MAX_FINDINGS:
         return findings
     truncated_count = len(findings) - MAX_FINDINGS
@@ -90,7 +85,6 @@ async def run_skill(
     timeout_s: float = DEFAULT_TIMEOUT_S,
     event_bus: Any = None,
 ) -> AnalysisSkillResult:
-    """Internal documentation."""
     start_ms = int(time.monotonic() * 1000)
     bus = event_bus or _NullEventBus()
 

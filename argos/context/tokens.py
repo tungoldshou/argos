@@ -1,9 +1,7 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 
 def token_estimate(text: str | None) -> tuple[int, str]:
-    """Internal documentation."""
     txt = text or ""
     try:
         import tiktoken  # type: ignore[import-not-found]

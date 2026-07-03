@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import base64
@@ -25,7 +24,6 @@ _IMAGE_PATH_RE = re.compile(
 
 @dataclass(frozen=True)
 class ImageAttachment:
-    """Internal documentation."""
     data: bytes
     media_type: str
     source_label: str
@@ -34,7 +32,6 @@ class ImageAttachment:
 
 
 def sniff_media_type(data: bytes) -> str:
-    """Internal documentation."""
     if data[:8] == b"\x89PNG\r\n\x1a\n" or data[:4] == b"\x89PNG":
         return "image/png"
     if data[:2] == b"\xff\xd8":
@@ -48,7 +45,6 @@ def sniff_media_type(data: bytes) -> str:
 
 
 def validate_attachment(att: ImageAttachment) -> None:
-    """Internal documentation."""
     if att.media_type not in SUPPORTED_MEDIA_TYPES:
         raise ValueError(
             t("core2.attachments.unsupported_format",
@@ -61,12 +57,10 @@ def validate_attachment(att: ImageAttachment) -> None:
 
 
 def to_base64(att: ImageAttachment) -> str:
-    """Internal documentation."""
     return base64.b64encode(att.data).decode("ascii")
 
 
 def extract_image_paths(text: str) -> list[str]:
-    """Internal documentation."""
     matches = _IMAGE_PATH_RE.findall(text)
     seen: set[str] = set()
     result: list[str] = []
@@ -78,7 +72,6 @@ def extract_image_paths(text: str) -> list[str]:
 
 
 def load_from_path(path: str) -> ImageAttachment:
-    """Internal documentation."""
     import os
     with open(path, "rb") as f:
         data = f.read()

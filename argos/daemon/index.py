@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -27,7 +26,6 @@ class IndexEntry:
 
 
 class StateIndex:
-    """Internal documentation."""
 
     def __init__(self, path: Path):
         self._path = Path(path)
@@ -38,7 +36,6 @@ class StateIndex:
         return self._path
 
     def load(self) -> None:
-        """Internal documentation."""
         if not self._path.exists():
             self._runs = {}
             return
@@ -69,7 +66,6 @@ class StateIndex:
                 continue
 
     def save(self) -> None:
-        """Internal documentation."""
         self._path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self._path.with_suffix(self._path.suffix + ".tmp")
         payload = {
@@ -100,7 +96,6 @@ class StateIndex:
         approval_level: str | None = None,
         session_id: str | None = None,
     ) -> None:
-        """Internal documentation."""
         existing = self._runs.get(run_id)
         now = time.time()
         if existing is None:
@@ -139,5 +134,4 @@ class StateIndex:
                 existing.session_id = session_id
 
     def remove(self, run_id: str) -> None:
-        """Internal documentation."""
         self._runs.pop(run_id, None)

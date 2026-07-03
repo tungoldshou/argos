@@ -6,12 +6,11 @@
 > Install channels are staged separately; see [Install](#install) for the
 > Python package, source checkout, and binary installer status.
 
-Argos is a **coding agent you run in your terminal** — the same lineage as
-Claude Code and Codex: a CodeAct loop that reads your code, writes and edits
-files, runs commands, searches the web, and drives a browser. What it adds on
-top is a layer that keeps a cheap model honest. It is named for **Argus
-Panoptes**, the hundred-eyed guardian of Greek myth — the watchman who never
-slept and could not be deceived.
+Argos is a **governed terminal coding agent**: run `argos setup`, open the TUI,
+chat about a code task, approve side effects when needed, and let the verify
+gate decide whether the work is done. It uses a CodeAct loop with brokered
+tools and a daemon-backed TUI that falls back to single-process mode when the
+daemon is unavailable.
 
 What makes it distinct:
 
@@ -19,12 +18,12 @@ What makes it distinct:
   check (`pytest`, `cargo test`, `tsc`, …) and reads the result — three-state
   `passed` / `failed` / `unverifiable`, never a fake-green. Completion is the
   gate's reading of the exit code, never the model's word for it.
-- **Declared privileged tools cross a governance layer.** Declared privileged
-  tools cross the broker: it checks an egress allowlist, asks the approval
-  gate, signs an HMAC receipt, and the model's code runs under smolagents' AST
-  limits. Every brokered privileged action leaves a signed receipt; every event
-  is persisted to a replayable JSONL journal. Raw model-authored Python gets a
-  kernel backstop only when `--sandbox` is on.
+- **Declared privileged tools cross a governance layer.** The broker checks an
+  egress allowlist, asks the approval gate, signs an HMAC receipt, and the
+  model's code runs under smolagents' AST limits. Every brokered privileged
+  action leaves a signed receipt; every event is persisted to a replayable JSONL
+  journal. Raw model-authored Python gets a kernel backstop only when
+  `--sandbox` is on.
 - **An OS sandbox when you want it.** Run with `--sandbox` (or
   `ARGOS_SANDBOX=1`) and macOS Seatbelt / Linux bwrap confines the agent at the
   kernel boundary — the CodeAct child has no direct network, writes are caged
@@ -39,7 +38,8 @@ What makes it distinct:
   auto-approves low-risk actions and pauses on the rest; a small set of HARD
   rules (`rm -rf`, system paths, secret writes, financial computer-use) never
   bypasses, even in Autonomous. A hidden `/trust paranoid` mode confirms every
-  step; there is no per-command allowlist.
+  step; persistent "Always allow" rules are scoped to exact commands, paths,
+  origins, or MCP server/tool pairs when they can be narrowed safely.
 - **Model-agnostic.** Bring any Anthropic-Messages or OpenAI-compatible
   endpoint — both first-class. `argos setup` probes the connection and the
   CodeAct format for you.
@@ -47,6 +47,10 @@ What makes it distinct:
 Built in Python on Textual. A background daemon kernel runs the work and
 survives a closed terminal; the TUI attaches as a protocol client, with a
 single-process fallback when the daemon is unavailable.
+
+Advanced surfaces such as Dynamic Workflows, Dream, eval, routing, scheduled
+orders, file watchers, and OS-level computer-use remain available but are
+treated as experimental/advanced rather than the default product path.
 
 ---
 
@@ -310,7 +314,7 @@ Tools span the breadth of an engineer's day:
 - **MCP** — `mcp_call(server, tool, args)` (native stdio JSON-RPC,
   zero pre-configuration; `mcp.json` in the Argos config directory is read on demand)
 - **Workflow** — `propose_workflow({name, description, stages})` to
-  request a Dynamic Workflow (see below)
+  request a Dynamic Workflow when `ARGOS_WORKFLOWS=1` is set (advanced)
 - **Computer use** — `computer.screenshot`, `computer.click`,
   `computer.double_click`, `computer.type_text`, `computer.key`,
   `computer.scroll`, `computer.open_app` (OS-level control via
@@ -323,7 +327,7 @@ Tools span the breadth of an engineer's day:
 The tool count shown in `/tools` is always the real number from
 `get_tool_names(registry)`. No padding, no "60+ tools" lies.
 
-### Dynamic Workflows
+### Dynamic Workflows (experimental / opt-in)
 
 Big tasks that can be split — refactor + test, fan-out search, panel
 review — are expressed as a declarative `WorkflowSpec` (`name`,
@@ -332,6 +336,10 @@ The agent *proposes* the spec; the engine *runs* it. The split keeps
 the model from writing brittle orchestration code (models are generally
 better at emitting JSON than at hand-rolling Python async) while keeping
 the user in the approval loop.
+
+Workflow prompt injection and workflow execution are **off by default**. Set
+`ARGOS_WORKFLOWS=1` to opt in; if a model proposes a workflow while it is off,
+Argos tells it to continue directly in a single thread.
 
 Five shapes are supported:
 
@@ -374,7 +382,7 @@ Argos follows **understand-then-act**, like Claude Code / Cursor / Aider — the
 is no pre-action intent-confirmation prompt; confirmation lives at the
 side-effect layer (the approval gate).
 
-### Conductor (autonomous face)
+### Conductor (experimental / daemon-only)
 
 The conductor (`argos/conductor/`) executes standing orders
 without blocking on the user — cron-lite schedules and file-trigger
@@ -386,7 +394,7 @@ consolidation (below): by default it runs on schedule and auto-enables
 self-distilled skills that clear its A/B verify gate, without asking.
 `/orders` lists the active standing orders.
 
-### Computer use (perception)
+### Computer use (experimental / perception)
 
 `argos/perception/` provides OS-level screen and input control
 (screenshot, click, double-click, type, key, scroll, open app) via
@@ -410,7 +418,7 @@ candidate verify command when none was declared — the canary guard
 ensures the generated command can actually fail (a trivial always-pass
 command is discarded, keeping the `unverifiable` verdict honest).
 
-### Dream nightly consolidation
+### Dream nightly consolidation (experimental / daemon-only)
 
 `argos/learning/dream.py` runs every night (03:00 cron, or on-demand)
 to synthesize verified runs into generalized skills. It scans the candidate
@@ -432,46 +440,55 @@ and archive old experiences (never hard-delete). See `docs/dream.md`.
 
 ## Commands
 
-Slash commands live in the TUI. Tab completion is built in.
+Slash commands live in the TUI. The default slash menu and `/help` show only
+the core commands below. Advanced commands remain available by exact command
+name and are listed with `/help advanced`.
+
+### Core commands
 
 | Command | Purpose |
 |---|---|
-| `/help` | Show all commands. |
-| `/setup` | Show current setup status and how to run the setup wizard. |
-| `/voice` | Show voice input status; current build reports it as not enabled. |
-| `/tools` | List the callable tools (real count from the registry). |
-| `/skills` | Manage the skill ecosystem: list / install / remove / refresh / test. |
-| `/mcp` | List configured MCP external tools. |
+| `/help` | Show core commands. Use `/help advanced` for hidden experimental commands. |
+| `/setup` | Show setup status: active profile, model, key source, config path, and next command. |
 | `/model` | View or switch the active model profile; restart Argos for a switch to take effect. |
 | `/status` | Current run state. |
-| `/cost` | Per-round cost and cache statistics. |
-| `/resume` | Reattach to the previous session. |
-| `/clear` | Start a new session (clears context). |
-| `/trust` | Cycle / set the trust mode (`/trust [cautious\|trusted\|autonomous\|paranoid\|status]`; bare `/trust` advances to the next mode). Cautious = ask only at the cage wall; autonomous = full auto; paranoid = confirm every step. HARD RULES always enforced. Replaces `/yolo`. |
-| `/yolo` | Legacy alias for `/trust autonomous`. |
+| `/trust` | Cycle / set the trust mode (`/trust [cautious\|trusted\|autonomous\|paranoid\|status]`; bare `/trust` advances to the next mode). HARD RULES always enforced. |
+| `/tools` | List the callable tools (real count from the registry). |
+| `/plan` | Enter "look at the plan, then act" mode. The agent writes a markdown plan; the host presents an inline approval modal. |
 | `/undo` | Roll back all file changes made in this run to the run start-point snapshot. |
-| `/ledger` | View the behaviour ledger for the current run: human-readable entries and undo state. |
-| `/journal` | Show the ledger JSONL path for the current run or a specified run ID. |
 | `/retry` | Resend the last user message. |
-| `/plan` | Enter "look at the plan, then act" mode. The agent writes a markdown plan; the host presents an inline approval modal. Plan-mode tool dispatch blocks `write_file` / `edit_file` / `run_command` until you exit. |
+| `/context` | View the current LLM context breakdown by bucket (system / memory / tools / messages). |
+| `/permissions` | Inspect permissions config. `/permissions reload` re-reads `permissions.json` from the Argos config directory; use `/trust` for the current approval level. |
+| `/verify` | Run `Verifier.verify` against the configured `verify_cmd`. Never goes through `propose_verify`. Without a `verify_cmd` configured, verdict is `n_a`. |
+| `/runs` | List persisted runs (daemon mode). `/runs {id} resume\|cancel` acts on one. |
+| `/clear` | Start a new session (clears context). |
+| `/resume` | Reattach to the previous session. |
+| `/cost` | Per-round cost and cache statistics. |
+
+### Experimental / advanced commands
+
+| Command | Purpose |
+|---|---|
+| `/voice` | Show voice input status; current build reports it as not enabled. |
+| `/skills` | Manage the skill ecosystem: list / install / remove / refresh / test. |
+| `/mcp` | List configured MCP external tools. |
 | `/hooks` | List the active `hooks.json` lifecycle hooks from the Argos config directory. `/hooks reload` re-reads the config without restarting. |
 | `/lsp` | List the language servers currently in scope. `/lsp reload` re-reads `lsp.json` from the Argos config directory. |
-| `/permissions` | Inspect permissions config. `/permissions reload` re-reads `permissions.json` from the Argos config directory; use `/trust` for the current approval level. Hard rules are always shown. |
-| `/runs` | List persisted runs (daemon mode). `/runs {id} resume\|cancel` acts on one. |
 | `/orders` | List standing conductor orders (autonomous scheduled / file-triggered instructions). |
 | `/confirm` | Confirm a conductor proactive suggestion by ID. |
 | `/dismiss` | Dismiss a conductor proactive suggestion by ID. |
-| `/verify` | Run `Verifier.verify` against the configured `verify_cmd`. Never goes through `propose_verify`. Without a `verify_cmd` configured, verdict is `n_a`. |
-| `/security-review` | Three passes: secrets, dependency vulnerabilities (shells out to `npm` / `pip-audit` / `cargo-audit` — missing tools reported as `error`, never silently skipped), dangerous APIs. Read-only. |
+| `/dream` | Nightly consolidation. `/dream` runs one round immediately; `/dream status` shows the last report. CLI twin: `argos dream [--report]`. |
+| `/security-review` | Three passes: secrets, dependency vulnerabilities, dangerous APIs. Read-only. |
 | `/simplify` | Three passes: token-shingle duplicate detection, function-complexity hotspots, dead-code heuristics. Read-only. |
 | `/eval` | Self-eval harness. `/eval` lists recent runs + 7d pass rate. `/eval run <task_id>` runs a corpus task. `/eval compare <task_id>[:<model>] <task_id>[:<model>]` runs an A/B (report into transcript). CLI twin: `argos eval list \| run \| compare \| corpus`. |
-| `/dream` | Nightly consolidation. `/dream` runs one round immediately (clusters candidates, synthesizes multi-source skills, A/B promotes, consolidates memory). `/dream status` shows the last report. CLI twin: `argos dream [--report]`. |
 | `/routing` | View last 10 routing decisions. `/routing set <category> <tier>` updates routing. |
-| `/context` | View the current LLM context breakdown by bucket (system / memory / tools / messages). |
 | `/loop` | Submit a task with an `until:` verify command (`/loop <task> until: <cmd>`). |
 | `/goal` | Submit a goal with an optional verify command (`/goal <task> | verify: <cmd>`). |
 | `/schedule` | Create a timed standing order through the daemon (`/schedule <when>: <goal>`). |
 | `/watch` | Create a file-triggered standing order through the daemon (`/watch <glob> <goal>`). |
+| `/ledger` | View the behaviour ledger for the current run: human-readable entries and undo state. |
+| `/journal` | Show the ledger JSONL path for the current run or a specified run ID. |
+| `/yolo` | Legacy alias for `/trust autonomous`; hidden from the default help and slash menu. |
 | `/remember`, `/forget`, `/memory` | Explicit auto-memory management (hidden from the slash menu; still functional). |
 
 ---

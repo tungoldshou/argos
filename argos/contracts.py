@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import re
@@ -74,19 +73,15 @@ _NON_STRUCTURED = re.compile(
 
 
 def classify(goal: str) -> Domain:
-    """Internal documentation."""
     if _NON_STRUCTURED.search(goal):
         return "none"
     for dom, pat in _KEYWORDS:
         if pat.search(goal):
             return dom
-    if re.search(r"\b(function|class|interface|type|json|model|field|enum)\b|函数|类|字段|模型|类型|枚举", goal, re.I):
-        return "generic"
     return "none"
 
 
 def contract_for(goal: str) -> tuple[Domain, str | None]:
-    """Internal documentation."""
     dom = classify(goal)
     if dom == "none":
         return dom, None
@@ -101,5 +96,4 @@ def contract_for(goal: str) -> tuple[Domain, str | None]:
 
 
 def all_domains() -> list[tuple[str, str]]:
-    """Internal documentation."""
     return [(k, v[0]) for k, v in _TEMPLATES.items()]

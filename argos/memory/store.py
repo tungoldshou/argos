@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import json
@@ -99,7 +98,6 @@ class ArgosStore:
         return con
 
     def _load_vec(self, con: sqlite3.Connection) -> None:
-        """Internal documentation."""
         try:
             import sqlite_vec
 
@@ -122,7 +120,6 @@ class ArgosStore:
         self._con.commit()
 
     def _write(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
-        """Internal documentation."""
         last_exc: Exception | None = None
         for attempt in range(_RETRY_MAX):
             try:
@@ -140,7 +137,6 @@ class ArgosStore:
         raise last_exc  # type: ignore[misc]
 
     def _write_txn(self, statements: list[tuple[str, tuple]]) -> None:
-        """Internal documentation."""
         last_exc: Exception | None = None
         for attempt in range(_RETRY_MAX):
             try:
@@ -180,7 +176,6 @@ class ArgosStore:
 
     def ensure_session(self, session_id: str, *, title: str = "", model: str = "",
                        system_snapshot: str = "") -> None:
-        """Internal documentation."""
         self._write(
             "INSERT OR IGNORE INTO sessions(session_id, parent, title, model, system_snapshot, started_at) "
             "VALUES (?,?,?,?,?,?)",
@@ -232,7 +227,6 @@ class ArgosStore:
         return mid
 
     def get_messages(self, session_id: str) -> list[dict]:
-        """Internal documentation."""
         cur = self._con.execute(
             "SELECT role, content FROM messages WHERE session_id = ? "
             "AND role IN ('user','assistant') ORDER BY ts, rowid",
@@ -241,7 +235,6 @@ class ArgosStore:
         return [{"role": r["role"], "content": r["content"]} for r in cur.fetchall()]
 
     def compact_messages(self, session_id: str, *, keep_recent: int = 5) -> None:
-        """Internal documentation."""
         cur = self._con.execute(
             "SELECT message_id, content, ts FROM messages WHERE session_id = ? "
             "AND role IN ('user','assistant') ORDER BY ts, rowid",
@@ -273,7 +266,6 @@ class ArgosStore:
         )
 
     def replay(self, session_id: str) -> "ReplayState":
-        """Internal documentation."""
         from argos.protocol.events import deserialize_event, event_kind
         session = self.get_session(session_id)
         if session is None:
@@ -301,12 +293,10 @@ class ArgosStore:
 
     @staticmethod
     def _fts_quote(q: str) -> str:
-        """Internal documentation."""
         escaped = q.replace('"', '""')
         return f'"{escaped}"'
 
     def search(self, q: str, *, limit: int = 20) -> list["MessageRow"]:
-        """Internal documentation."""
         if not q.strip():
             return []
         try:
@@ -330,12 +320,10 @@ class ArgosStore:
 
     @staticmethod
     def _index_text(rec: "MemoryRecord") -> str:
-        """Internal documentation."""
         return f"{rec.goal} | {rec.verdict or 'unknown'} | {rec.model or ''}"
 
     @staticmethod
     def _cosine(a: list[float], b: list[float]) -> float:
-        """Internal documentation."""
         s = na = nb = 0.0
         for x, y in zip(a, b):
             s += x * y
@@ -357,7 +345,6 @@ class ArgosStore:
 
     async def arecall(self, goal: str, *, k: int = 3, sim_min: float = 0.4
                       ) -> list[tuple["MemoryRecord", str]]:
-        """Internal documentation."""
         import asyncio
         if not goal.strip():
             return []
@@ -390,7 +377,6 @@ class ArgosStore:
 
     def recall(self, goal: str, *, k: int = 3, sim_min: float = 0.4
                ) -> list[tuple["MemoryRecord", str]]:
-        """Internal documentation."""
         if not goal.strip():
             return []
         recs = self._load_memories(limit=200)
@@ -433,7 +419,6 @@ class ArgosStore:
         ]
 
     def migrate_jsonl(self, jsonl_path: str | None = None) -> int:
-        """Internal documentation."""
         path = Path(
             jsonl_path
             or os.environ.get("ARGOS_MEMORY_FILE")

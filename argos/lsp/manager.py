@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import asyncio
@@ -44,7 +43,6 @@ _CONTENT_CACHE: dict[str, str] = {}
 
 @dataclass
 class _Server:
-    """Internal documentation."""
     name: str
     config: LspServerConfig
     status: ServerStatus = ServerStatus.NOT_STARTED
@@ -68,14 +66,12 @@ _SPAWN_PROC_FN: _SpawnProcFn | None = None
 
 
 def set_spawn_proc_fn(fn: _SpawnProcFn | None) -> None:
-    """Internal documentation."""
     global _SPAWN_PROC_FN
     _SPAWN_PROC_FN = fn
 
 
 
 def set_event_emit_fn(fn: Callable[[Any], Awaitable[None]] | None) -> None:
-    """Internal documentation."""
     global _EMIT_FN
     _EMIT_FN = fn
 
@@ -99,7 +95,6 @@ _LSP_SHUTTING_DOWN: bool = False
 
 
 def _ensure_lsp_loop_started() -> None:
-    """Internal documentation."""
     global _LSP_LOOP, _LSP_LOOP_THREAD, _LSP_STARTED
     if _LSP_STARTED and _LSP_LOOP is not None:
         return
@@ -130,7 +125,6 @@ def _ensure_lsp_loop_started() -> None:
 
 
 def request_sync_via_loop(coro_factory, *, timeout: float = 5.0):
-    """Internal documentation."""
     _ensure_lsp_loop_started()
     if _LSP_LOOP is None:
         raise RuntimeError("LSP background loop not initialized")
@@ -147,7 +141,6 @@ def request_sync_via_loop(coro_factory, *, timeout: float = 5.0):
 
 def sync_file_sync(mgr: "LspManager", path: str, content: str, *,
                    timeout: float = 5.0) -> None:
-    """Internal documentation."""
     _ensure_lsp_loop_started()
     if _LSP_LOOP is None:
         return
@@ -163,7 +156,6 @@ def sync_file_sync(mgr: "LspManager", path: str, content: str, *,
 
 
 def shutdown_lsp_loop() -> None:
-    """Internal documentation."""
     global _LSP_LOOP, _LSP_LOOP_THREAD, _LSP_STARTED, _LSP_SHUTTING_DOWN
     _LSP_SHUTTING_DOWN = True
     if _LSP_LOOP is None:
@@ -194,7 +186,6 @@ class LspManager:
         return self._config
 
     def get_diagnostics(self, file: str) -> dict | None:
-        """Internal documentation."""
         abs_path = str(Path(file).resolve())
         uri = f"file://{quote(abs_path)}"
         all_items: list[dict] = []
@@ -207,7 +198,6 @@ class LspManager:
         return {"diagnostics": all_items}
 
     def list_servers(self) -> list[dict]:
-        """Internal documentation."""
         result = []
         for s in self._servers.values():
             result.append({
@@ -227,7 +217,6 @@ class LspManager:
         self, server_name: str, method: str, params: dict | None = None,
         *, timeout: float = _REQUEST_TIMEOUT_S,
     ) -> dict:
-        """Internal documentation."""
         return request_sync_via_loop(
             lambda: self._request_sync_impl(server_name, method, params, timeout=timeout),
             timeout=timeout + 5.0,
@@ -252,7 +241,6 @@ class LspManager:
         self, server_name: str, method: str, params: dict | None = None,
         *, timeout: float = _REQUEST_TIMEOUT_S,
     ) -> dict:
-        """Internal documentation."""
         s = self._servers.get(server_name)
         if s is None:
             return {"error": f"lsp server {server_name!r} not configured"}
@@ -285,7 +273,6 @@ class LspManager:
             return {"error": f"lsp protocol error: {e}"}
 
     async def start_server(self, server_name: str) -> bool:
-        """Internal documentation."""
         s = self._servers.get(server_name)
         if s is None:
             return False
@@ -297,7 +284,6 @@ class LspManager:
             return await self._spawn_and_initialize(s)
 
     async def sync_file(self, path: str, content: str) -> None:
-        """Internal documentation."""
         if len(content) > _LARGE_FILE_BYTES:
             log.info("LSP skipping large file (>1MB): %s", path)
             return
@@ -342,7 +328,6 @@ class LspManager:
             _CONTENT_CACHE[uri] = content
 
     async def shutdown(self) -> None:
-        """Internal documentation."""
         for s in self._servers.values():
             if s.status not in (ServerStatus.READY, ServerStatus.STARTING,
                                 ServerStatus.INITIALIZING, ServerStatus.INITIALIZED):
@@ -464,7 +449,6 @@ class LspManager:
         return proc, LspClient(proc)
 
     def _spawn_notification_listener(self, s: _Server) -> None:
-        """Internal documentation."""
         async def _loop():
             assert s.client is not None
             try:
@@ -520,7 +504,6 @@ class LspManager:
 
 
 def _compute_incremental_range(previous: str, current: str) -> tuple[dict | None, str]:
-    """Internal documentation."""
     if previous == current:
         return (
             {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
@@ -555,5 +538,4 @@ def _now_ms() -> int:
 
 
 def _reset_content_cache() -> None:
-    """Internal documentation."""
     _CONTENT_CACHE.clear()

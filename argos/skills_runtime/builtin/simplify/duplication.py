@@ -1,4 +1,3 @@
-"""Internal documentation."""
 from __future__ import annotations
 
 import hashlib
@@ -31,7 +30,6 @@ def _is_source_file(p: Path) -> bool:
 
 
 def _shingle_hashes(tokens: list[str]) -> list[tuple[str, int]]:
-    """Internal documentation."""
     out: list[tuple[str, int]] = []
     for i in range(len(tokens) - _SHINGLE_SIZE + 1):
         shingle = " ".join(tokens[i:i + _SHINGLE_SIZE])
@@ -41,7 +39,6 @@ def _shingle_hashes(tokens: list[str]) -> list[tuple[str, int]]:
 
 
 def detect_duplicates(workspace: Path) -> tuple[Finding, ...]:
-    """Internal documentation."""
     if not workspace.exists():
         return ()
     by_hash: dict[str, list[tuple[Path, int]]] = defaultdict(list)
