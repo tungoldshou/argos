@@ -52,7 +52,7 @@ HOOKS_CONFIG_PATH: Path | None = None
 
 
 def _default_config_path() -> Path:
-    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "hooks.json"
+    return config.config_dir() / "hooks.json"
 
 
 def _validate_event_name(event_name: str) -> None:

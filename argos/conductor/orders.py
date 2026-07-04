@@ -23,7 +23,7 @@ OrderAction = Literal["run", "dream"]
 def _default_orders_dir() -> Path:
     from argos import config
 
-    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "conductor"
+    return config.config_dir() / "conductor"
 
 
 @dataclass(frozen=True, slots=True)

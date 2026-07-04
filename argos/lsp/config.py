@@ -79,7 +79,7 @@ LSP_CONFIG_PATH: Path | None = None
 
 
 def _default_config_path() -> Path:
-    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "lsp.json"
+    return config.config_dir() / "lsp.json"
 
 
 def _parse_server_config(name: str, raw: dict) -> LspServerConfig:

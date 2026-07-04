@@ -32,7 +32,7 @@ def _default_db_path() -> str:
         return str(Path(path).expanduser())
     from argos import config
 
-    return str(Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "argos.db")
+    return str(config.config_dir() / "argos.db")
 
 
 @dataclass(frozen=True, slots=True)

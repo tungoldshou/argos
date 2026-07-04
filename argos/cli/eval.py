@@ -66,7 +66,7 @@ def _make_runner(*, base: Path, keep_worktree: bool = False) -> EvalRunner:
 def _eval_base() -> Path:
     from argos import config
 
-    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "eval"
+    return config.config_dir() / "eval"
 
 
 # ── subcommand handlers ──────────────────────────────────────────────

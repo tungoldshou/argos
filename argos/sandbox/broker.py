@@ -22,7 +22,7 @@ _NETWORK_ACTIONS: set[str] = {"web_search", "web_extract", "browser_navigate"}
 def _config_path() -> Path:
     from argos import config
 
-    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "config.json"
+    return config.config_dir() / "config.json"
 
 
 def _resolve_lsp_server(

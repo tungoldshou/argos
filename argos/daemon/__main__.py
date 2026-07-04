@@ -39,7 +39,7 @@ def _build_log_handlers(socket_path) -> list[logging.Handler]:
 
 def _default_argos_dir() -> Path:
     from argos import config
-    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+    return config.config_dir()
 
 
 def _default_runs_dir() -> Path:

@@ -19,10 +19,7 @@ def default_socket_path() -> Path:
     configured = config.get("ARGOS_DAEMON_SOCKET")
     if configured:
         return Path(configured).expanduser()
-    return (
-        Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
-        / "daemon.sock"
-    )
+    return config.config_dir() / "daemon.sock"
 
 
 def ensure_socket_mode(path: Path) -> None:

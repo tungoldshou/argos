@@ -1,6 +1,7 @@
--- Argos 持久化七表(spec §5.2)。全部 IF NOT EXISTS,二次打开幂等。
--- 引用完整性 MVP 由应用层保证(loop 先建 session 再 append 其 messages/events),
--- 不声明 FK 约束列以免波及用伪造 session id 的测试(M-5)。
+-- Argos persistent tables (spec §5.2). IF NOT EXISTS keeps repeated opens idempotent.
+-- Referential integrity is enforced in application code for the MVP: the loop creates
+-- a session before appending related messages/events. No FK columns here because some
+-- tests intentionally use synthetic session ids.
 
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER NOT NULL
@@ -8,7 +9,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 CREATE TABLE IF NOT EXISTS sessions (
     session_id      TEXT PRIMARY KEY,
-    parent          TEXT,                 -- lineage:派生自哪个 session
+    parent          TEXT,                 -- lineage: parent session id
     title           TEXT NOT NULL DEFAULT '',
     model           TEXT NOT NULL DEFAULT '',
     system_snapshot TEXT NOT NULL DEFAULT '',
@@ -35,14 +36,16 @@ CREATE TABLE IF NOT EXISTS events (
     rowid_pk   INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
     kind       TEXT NOT NULL,
-    blob       TEXT NOT NULL,             -- serialize_event() 的 JSON 串
+    blob       TEXT NOT NULL,             -- serialize_event() JSON payload
     ts         REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id, rowid_pk);
 
--- FTS5 字面/CJK 全文搜(spec §5.3)。trigram tokenizer:对 >=3 字命中稳;
--- 2 字 CJK 命中弱 → 语义召回主路径走 sqlite-vec(见 store.recall)。
--- 若 sqlite-better-trigram dylib 存在,store 会改用 better-trigram(更稳 CJK 字面)。
+-- FTS5 literal/CJK full-text search (spec §5.3). The trigram tokenizer works
+-- well for three or more characters; two-character CJK queries are weaker, so
+-- semantic recall stays on the sqlite-vec path in store.recall.
+-- If sqlite-better-trigram is available, store switches to it for better CJK
+-- literal matching.
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
     content,
     message_id UNINDEXED,

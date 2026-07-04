@@ -16,8 +16,7 @@ class VisionCapabilityCache:
     def __init__(self, path: Path | None = None) -> None:
         if path is None:
             from argos import config as C
-            cdir = Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
-            path = cdir / "vision_cache.json"
+            path = C.config_dir() / "vision_cache.json"
         self._path = path
 
     def _load(self) -> dict:

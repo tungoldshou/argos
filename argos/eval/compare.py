@@ -18,9 +18,7 @@ def _reports_dir(base: Path | None = None) -> Path:
         return base / "reports"
     if _REPORTS_DIR is not None:
         return _REPORTS_DIR
-    return Path(
-        config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")
-    ).expanduser() / "eval" / "reports"
+    return config.config_dir() / "eval" / "reports"
 
 
 def run_pair(

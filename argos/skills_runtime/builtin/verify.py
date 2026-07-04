@@ -19,7 +19,7 @@ propose_verify = None  # type: ignore[assignment]
 
 def _config_path() -> Path:
     from argos import config as C
-    return Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "config.json"
+    return C.config_dir() / "config.json"
 
 
 def _read_verify_cmd() -> str | None:

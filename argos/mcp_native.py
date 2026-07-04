@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from argos import __version__
 from argos import config
 from argos.i18n import t
 
@@ -19,12 +20,7 @@ _CALL_TIMEOUT_S = 60.0
 
 
 def resolve_config_path(path: Path | None = None) -> Path:
-    return Path(
-        path or CONFIG_PATH or (
-            Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
-            / "mcp.json"
-        )
-    )
+    return Path(path or CONFIG_PATH or (config.config_dir() / "mcp.json"))
 
 
 @dataclass
@@ -69,7 +65,7 @@ class _StdioServer:
             init = self._rpc("initialize", {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
-                "clientInfo": {"name": "argos", "version": "0.1.0"},
+                "clientInfo": {"name": "argos", "version": __version__},
             }, timeout=_INIT_TIMEOUT_S)
             if "error" in init:
                 self.error = t("mcp.server.initialize_failed", error=init["error"])

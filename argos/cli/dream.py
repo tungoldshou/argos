@@ -18,7 +18,7 @@ _DEFAULT_SKILLS_DIR: Path | None = None
 def _argos_dir() -> Path:
     from argos import config
 
-    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+    return config.config_dir()
 
 
 def _dreams_dir() -> Path:

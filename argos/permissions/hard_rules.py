@@ -201,7 +201,7 @@ def is_argos_own_env(path: str) -> bool:
         return False
     from argos import config
     p = _resolve_str(path)
-    argos_dir = Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+    argos_dir = config.config_dir()
     argos_env = str((argos_dir / ".env").resolve())
     return p == argos_env
 
