@@ -4,7 +4,7 @@
 > pluggable clients — the terminal TUI today, with a single-process fallback
 > when the daemon is unavailable.
 > Install channels are staged separately; see [Install](#install) for the
-> Python package, source checkout, and binary installer status.
+> curl installer, source checkout, and deferred binary installer status.
 
 Argos is a **governed terminal coding agent**: run `argos setup`, open the TUI,
 chat about a code task, approve side effects when needed, and let the verify
@@ -108,9 +108,9 @@ Without an API key, `argos` exits with a clear message telling you to run
 
 ## Install
 
-> **Launch install surface:** use the versionless `curl | bash` installer for
-> the latest GitHub release, or use a source checkout for development. Binary
-> and package-manager channels are deferred until the release path is stable.
+> **Launch install surface:** use the versionless `curl | bash` installer, or
+> use a source checkout for development. Binary and package-manager channels
+> are deferred until there is a clear user need.
 
 ### Platform support
 
@@ -135,24 +135,17 @@ still gates side effects.
 ### One-line installer
 
 The public installer has no version in the command. It bootstraps
-[uv](https://docs.astral.sh/uv/) if needed, then installs the latest GitHub
-release tag.
+[uv](https://docs.astral.sh/uv/) if needed, then installs Argos from the GitHub `main` branch with `uv tool install --force`.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash
 ```
 
-The script uses `uv tool install --force` under the hood. To pin a tag or
-commit, set `ARGOS_INSTALL_REF` while keeping the same versionless script URL:
+To pin a tag or commit, set `ARGOS_INSTALL_REF` while keeping the same
+versionless script URL:
 
 ```bash
-ARGOS_INSTALL_REF=v0.1.1 curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash
-```
-
-For development installs from `main`, use the same override:
-
-```bash
-ARGOS_INSTALL_REF=main curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash
+ARGOS_INSTALL_REF=<tag-or-commit> curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash
 ```
 
 If `argos` is not found after install, run `uv tool update-shell` and reopen

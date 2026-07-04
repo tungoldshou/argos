@@ -1,5 +1,5 @@
 name: Binary Release
-# Binary assets are manual for now; the public launch path is PyPI/source.
+# Binary assets are manual for now; the public launch path is curl/source.
 on:
   workflow_dispatch:
     inputs:

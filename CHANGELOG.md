@@ -12,14 +12,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Dynamic Workflows are now opt-in with `ARGOS_WORKFLOWS=1`; disabled workflow proposals receive an honest correction and continue single-threaded.
 - Structured contract prompts now inject only for clearly structured engineering domains such as API, database schema, config, and state-machine work.
 - `/setup` now shows a concise status card with active profile, model, image input, key source, config/env paths, and next command.
-- README, acceptance docs, product definition, and package metadata now position Argos as a governed terminal coding agent with stable core defaults and experimental advanced surfaces.
+- README, setup docs, and package metadata now position Argos as a governed terminal coding agent with stable core defaults and experimental advanced surfaces.
 - Removed exact `"""Internal documentation."""` placeholder docstrings from source, tests, scripts, packaging, and smoke checks.
 - Public launch metadata now targets `v0.1.1`; the old GitHub `v0.1.0` release and remote tag were deleted and are not treated as a published version.
-- README and packaging docs present a versionless `curl | bash` installer that installs the latest GitHub release tag, with binary and package-manager channels deferred.
-- Root `install.sh` provides the `curl | bash` shortcut by bootstrapping `uv` when needed, resolving the latest GitHub release tag, and then using `uv tool install --force`.
+- README and packaging docs present a versionless `curl | bash` installer that installs from the GitHub source ref, with PyPI, binary, and package-manager channels deferred.
+- Root `install.sh` provides the `curl | bash` shortcut by bootstrapping `uv` when needed and then using `uv tool install --force`.
 - Public `curl | bash` docs now point at the default-branch raw installer URL, with `ARGOS_INSTALL_REF` available for pinning a tag or commit.
-- Manual `publish.yml` dispatch publishes to TestPyPI only; formal PyPI publishing remains restricted to fresh `v*` tags.
-- Binary release workflow is manual-only so tag pushes can publish the Python package without draft platform packaging blocking the release.
+- PyPI publishing is removed from the public launch path; Python packaging remains buildable locally.
+- Binary release workflow is manual-only so draft platform packaging does not block the curl/source launch path.
+- Internal planning, acceptance-checklist, historical product-definition, and v6 design archives were removed from the public docs surface.
 - Release and packaging automation now fail closed for missing artifacts, stale `dist/` contents, missing checksums, invalid WinGet digests, and missing manifest files.
 - Public security wording now limits broker-governance claims to declared privileged tools and describes raw model-authored Python as OS-contained only when opt-in sandboxing is enabled.
 - Project and setup docs now consistently describe runtime state under the Argos config directory, with `ARGOS_CONFIG_DIR` as the override.
@@ -39,15 +40,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Windows release packaging uses PowerShell `Compress-Archive` instead of assuming a bare `zip` command on `windows-latest`.
 - GitHub release asset collection uses an exact release manifest and checksum list instead of suffix-wide discovery.
 - Runtime defaults, TUI hints, setup paths, MCP/LSP/hooks/permissions paths, Dream paths, eval paths, memory paths, and sandbox secret masks now follow the active Argos config directory where applicable.
+- Common Argos config-root defaults now use a shared `config.config_dir()` helper instead of repeated local `ARGOS_CONFIG_DIR` expressions.
+- SQL/Nix/CSS and embedded code comments now follow the English-only source-comment rule.
 - Permission, hook, and sync-bridge failures now fail closed instead of silently allowing high-risk operations.
 - CodeAct now executes only explicit ` ```python` fenced blocks, waits on confirmation requests, and nudges research promises into real tool use.
 - TUI transcript review, cache metric display, context pressure display, and daemon multi-turn session continuity were hardened.
+- MCP client initialization now reports the current package version instead of a hard-coded stale version.
 
 ### Verified
 - `uv build` produces `dist/argos_agent-0.1.1.tar.gz` and `dist/argos_agent-0.1.1-py3-none-any.whl`.
 - `twine check dist/*` passes for the current wheel and sdist.
 - Installed-wheel smoke coverage verifies `argos --version` against the current project version.
-- Packaging, README, installer, WinGet, PyPI workflow, and release workflow tests cover the current launch path.
-- Installer tests verify latest-release resolution, explicit `ARGOS_INSTALL_REF` override, clean no-release failure, uv bootstrap, and installed-command verification.
+- Packaging, README, installer, WinGet, and release workflow tests cover the current launch path.
+- Installer tests verify default source-ref install, explicit `ARGOS_INSTALL_REF` override, uv bootstrap, and installed-command verification.
 
 [Unreleased]: https://github.com/tungoldshou/argos/compare/v0.1.1...HEAD

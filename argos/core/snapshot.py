@@ -13,8 +13,7 @@ logger = logging.getLogger(__name__)
 
 def _snapshot_root() -> Path:
     from argos import config as C
-    base = Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
-    return base / "snapshots"
+    return C.config_dir() / "snapshots"
 
 
 SNAPSHOT_ROOT: Path = _snapshot_root()

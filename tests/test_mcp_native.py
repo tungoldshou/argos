@@ -86,6 +86,61 @@ def test_default_path_honors_argos_config_dir(tmp_path, monkeypatch):
         mgr.close()
 
 
+def test_initialize_uses_package_version(tmp_path):
+    from argos import __version__
+
+    server = tmp_path / "version_server.py"
+    server.write_text(textwrap.dedent('''
+        import json
+        import os
+        import sys
+
+        expected = os.environ["EXPECTED_ARGOS_VERSION"]
+
+        def send(obj):
+            sys.stdout.write(json.dumps(obj) + "\\n")
+            sys.stdout.flush()
+
+        for line in sys.stdin:
+            msg = json.loads(line)
+            mid = msg.get("id")
+            method = msg.get("method")
+            if method == "initialize":
+                got = ((msg.get("params") or {}).get("clientInfo") or {}).get("version")
+                if got != expected:
+                    send({"jsonrpc": "2.0", "id": mid, "error": {
+                        "code": -32000, "message": f"version mismatch: {got} != {expected}"
+                    }})
+                else:
+                    send({"jsonrpc": "2.0", "id": mid, "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "serverInfo": {"name": "version", "version": "1"},
+                    }})
+            elif method == "notifications/initialized":
+                pass
+            elif method == "tools/list":
+                send({"jsonrpc": "2.0", "id": mid, "result": {"tools": []}})
+    '''), encoding="utf-8")
+    cfg = tmp_path / "mcp.json"
+    cfg.write_text(json.dumps({
+        "servers": {
+            "version": {
+                "command": sys.executable,
+                "args": [str(server)],
+                "env": {"EXPECTED_ARGOS_VERSION": __version__},
+            }
+        }
+    }), encoding="utf-8")
+
+    mgr = McpManager(config_path=cfg)
+    try:
+        mgr.list_tools()
+        assert mgr._servers["version"].error is None
+    finally:
+        mgr.close()
+
+
 _SILENT_CALL_SERVER = textwrap.dedent('''
     import sys, json
     def send(obj):

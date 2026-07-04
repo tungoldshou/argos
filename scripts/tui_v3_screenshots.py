@@ -83,7 +83,7 @@ async def shot_run_act() -> None:
         CodeResult(step=0, stdout="['src/parser.py', 'src/lexer.py']", value_repr="['src/parser.py', 'src/lexer.py']", exc="", ok=True),
         FileDiff(
             path="src/parser.py", added=3, removed=1,
-            unified="--- a/src/parser.py\n+++ b/src/parser.py\n@@ -42,7 +42,9 @@\n-    return idx\n+    # fix: range 应是 len(tokens)-1\n+    return idx - 1\n",
+            unified="--- a/src/parser.py\n+++ b/src/parser.py\n@@ -42,7 +42,9 @@\n-    return idx\n+    # fix: range should be len(tokens)-1\n+    return idx - 1\n",
         ),
         CostUpdate(tokens_in=8200, tokens_out=2100, cost_usd=0.0087, elapsed_s=time.monotonic() - t0),
     ]

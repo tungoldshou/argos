@@ -12,7 +12,7 @@ Last updated: 2026-07-04
 - Dream CLI startup now distinguishes missing-key fallback from real initialization failures; malformed config/runtime errors return failure instead of running memory-only mode.
 - 2026-07-03 ship-readiness checkpoint fixed TUI daemon auto-spawn pid handling: `probe_or_spawn()` now passes `--pid-path` beside the selected socket path, so stale-daemon cleanup reads the same pid file the spawned daemon writes.
 - Daemon socket defaults now follow `ARGOS_CONFIG_DIR/daemon.sock` when `ARGOS_DAEMON_SOCKET` is not explicitly configured; TUI daemon probing and `argosd` CLI defaults use the same source.
-- CONTRIBUTING and product-definition docs now describe daemon socket state under the Argos config directory instead of hard-coding `~/.argos/daemon.sock`.
+- CONTRIBUTING and README now describe daemon socket state under the Argos config directory instead of hard-coding `~/.argos/daemon.sock`.
 - TUI setup and external-capability hints now show the active `ARGOS_CONFIG_DIR` paths for `config.json`, `.env`, `hooks.json`, `lsp.json`, and `mcp.json` instead of hard-coded `~/.argos/...` paths.
 - CLI setup help, paste-key storage warnings, and non-TTY setup fallback instructions now show the active `ARGOS_CONFIG_DIR` files for `config.json` and `.env`.
 - Core config/setup/routing/verify source docs now describe `config.json` and `.env` under `ARGOS_CONFIG_DIR` instead of hard-coding `~/.argos`.
@@ -23,7 +23,6 @@ Last updated: 2026-07-04
 - Runtime source docs now describe workspace, verify, and MCP defaults under `ARGOS_CONFIG_DIR/{workspace,verify,mcp.json}` instead of hard-coding `~/.argos`.
 - Learning, vision, and skills source docs now describe caches, candidates, locks, and installed skills under `ARGOS_CONFIG_DIR` instead of hard-coding `~/.argos`.
 - Persistence source docs now describe snapshots, ledger journals, the SQLite memory DB, daemon index/pid state, and worktree paths under `ARGOS_CONFIG_DIR` instead of hard-coded `~/.argos`.
-- Acceptance checklist MCP validation now points users to `mcp.json` under the Argos config directory and names `ARGOS_CONFIG_DIR` as the override instead of hard-coding `~/.argos/mcp.json`.
 - Skills curator docs now describe installed skills under the Argos config directory's `skills/` root instead of hard-coding `~/.argos/skills`.
 - Voice/image input docs now describe planned STT config under the Argos config directory instead of hard-coding `~/.argos/config.json` and `~/.argos/.env`.
 - Dream docs now describe report and conductor order paths under the Argos config directory instead of hard-coding `~/.argos/dreams` and `~/.argos/conductor`.
@@ -43,8 +42,6 @@ Last updated: 2026-07-04
 - GitHub release workflow now fails before checksum generation when no downloaded release artifacts exist, preventing an empty-artifact release that only contains `SHA256SUMS`.
 - GitHub release workflow now fails before `gh release create` when the selected release asset list contains only checksum files, preventing checksum-only releases.
 - GitHub release build jobs now set `if-no-files-found: error` for uploaded OS artifacts, so missing `dist/` outputs fail in the build job instead of surfacing later as a partial release.
-- PyPI publish workflow now cleans `dist/` before `uv build` and treats `twine check dist/*` failures as blocking errors instead of warnings.
-- PyPI publish workflow now sets `if-no-files-found: error` for the built `dist/` artifact upload, so missing wheel/sdist outputs fail before the publish job downloads artifacts.
 - WinGet manifest bump workflow now fails when the Windows zip digest cannot be found, instead of committing a half-updated manifest.
 - WinGet manifest bump workflow now fails when any of its three manifest files is missing, instead of silently skipping missing files and committing a partial update.
 - Homebrew and WinGet bump workflows now require an explicit `tag` input for manual `workflow_dispatch` runs and reuse the release/manual tag expression in update and commit messages.
@@ -85,19 +82,18 @@ Last updated: 2026-07-04
 - GitHub release creation now uses an exact `release-assets.txt` manifest and builds `SHA256SUMS` from that manifest only, preventing same-extension staging files from being published or checksummed.
 - TUI `UserPromptSubmit` hook failures now emit visible `HookFired` activity rows while preserving the existing non-blocking run-start behavior.
 - Daemon-created runs now persist the owner TUI session id separately from `run_id`, and `RunWorker` passes that stable session id into `AgentLoop.run()` so daemon mode preserves multi-turn model context across sequential prompts.
-- PyPI long-description README wording is now release-neutral: it names PyPI as the Python package channel without saying the package will always 404, while binary channels remain marked as requiring GitHub release assets.
+- Public install docs no longer depend on Python package-index publishing; the launch path is curl/source-first.
 - `argospkg info` no longer reads `packaging/VERSION` from the caller's current directory, preventing installed tools from reporting another project's version file.
 - Windows release packaging now uses PowerShell `Compress-Archive` for zip assets instead of relying on a bare `zip` CLI on `windows-latest`.
 - WinGet locale metadata no longer claims unpublished macOS, Homebrew, curl, Linux, AppImage, `.deb`, or `.rpm` channels are already installable.
 - WinGet multi-file manifests now match the official 1.6 schema roles: the root file is a `version` manifest with `DefaultLocale`, the `locale.en-US` file is the `defaultLocale` manifest, and installer `UpgradeBehavior` is a schema-valid scalar.
 - macOS arm64 release packaging now strips a leading `v` from `ARGOS_VERSION`, writes that release version into the app bundle `Info.plist`, and leaves the source `packaging/Info.plist` template unchanged.
-- Public launch install scope is now versionless `curl | bash`, latest GitHub release source install, and source checkout; PyPI remains a secondary package channel, while binary installers and package-manager channels are deferred backlog and `release.yml` is manual-only.
-- Root `install.sh` now provides a Hermes-style `curl | bash` entrypoint that resolves the latest GitHub release tag and thinly wraps `uv tool install --force`; it does not add another binary/package-manager channel.
+- Public launch install scope is now versionless `curl | bash` and source checkout; binary installers and package-manager channels are deferred backlog and `release.yml` is manual-only.
+- Root `install.sh` now provides a Hermes-style `curl | bash` entrypoint that installs from a GitHub source ref through `uv tool install --force`; it does not add another binary/package-manager channel.
 - Root `install.sh` now bootstraps `uv` through Astral's official installer when `uv` is missing, then continues the same `uv tool` install path.
 - Root `install.sh` verifies the installed `argos` command through `uv tool dir --bin`, so first-time installs do not fail merely because the uv tool bin directory is not yet on `PATH`.
 - Deferred binary installers under `packaging/install.sh` and `packaging/install-deb.sh` now say they are not the public launch installer and point users back to the release/source-checkout launch path.
-- `publish.yml` manual dispatch now publishes to TestPyPI only, while formal PyPI publishing remains restricted to fresh `v*` tags.
-- PyPI publish workflow tests now assert the publish job depends on both test/build jobs and remains bound to the `pypi` environment with OIDC.
+- Python package-index publishing is not part of the current launch path.
 - README and SECURITY now avoid over-claiming that broker governance OS-contains raw CodeAct Python; public security wording limits broker guarantees to declared privileged tools and names `--sandbox` as the opt-in kernel backstop.
 - TUI transcript history can now be reviewed without losing the input workflow: `PageUp` / `PageDown` and bubbled mouse-wheel events are routed to the transcript scroll container, and clicking the main transcript gives it focus for history review while startup still defaults focus to the prompt.
 - System prompt tool routing now sends external or real-time information requests to `web_search` / `web_extract` / browser tools before Python or shell escape hatches, and explicitly warns that CodeAct timeouts are not proof of sandbox/network failure.
@@ -107,7 +103,7 @@ Last updated: 2026-07-04
 
 ## Active Task
 
-- `/goal` product ship-readiness is active on branch `codex/ship-readiness`; PR #29 is ready for review with clean merge state and passing PR CI, while TestPyPI is blocked on trusted publisher configuration for the `testpypi` environment/branch claim.
+- `/goal` product ship-readiness continues on branch `codex/curl-only-release-surface`. Current focus is the curl/source launch path, public-doc pruning, and keeping PyPI/binary/package-manager channels out of the public launch surface until there is real user demand.
 
 ## Recent Changes
 
@@ -127,7 +123,13 @@ Last updated: 2026-07-04
 - Collapsed `CHANGELOG.md` to the current unpublished release notes only, removing old `0.1.0` / pre-release history so Argos is treated as not formally released yet.
 - Removed Chinese from code comments and docstrings across source, tests, scripts, workflow/config, and packaging templates; Chinese user-facing strings and documentation prose remain allowed where intentional.
 - Repaired the English source-doc contracts after comment cleanup so README drift tests still verify `ARGOS_CONFIG_DIR` paths, TUI compare syntax, and TUI glyph provenance without reintroducing Chinese docstrings.
-- README and packaging docs now point the public `curl | bash` installer at the immutable `v0.1.1` raw tag URL instead of mutable `main`, avoiding a public install command that 404s before `install.sh` lands on the default branch.
+- Root `install.sh` now defaults to installing from the GitHub `main` source ref through `uv tool install --force`; users can still pin a tag or commit with `ARGOS_INSTALL_REF`.
+- PyPI/TestPyPI publishing workflow has been removed from the launch path; local wheel/sdist packaging remains available for verification.
+- Public docs no longer ship the internal `docs/superpowers/` design/plan archive, and public doc links to that archive were removed.
+- Public docs no longer ship the internal acceptance checklist, historical product-definition proof doc, or v6 architecture design archive.
+- MCP client initialization now reports the current package version instead of a hard-coded stale version.
+- Runtime callers now share the public `config.config_dir()` helper for Argos config-root defaults across CLI, TUI, daemon, tools, eval, memory, skills, ledger, and setup paths; sandbox backend paths that intentionally depend on a supplied sandbox home keep their local logic.
+- SQL/Nix/CSS and embedded code comments are covered by an English-only source comment regression test.
 
 ## Known Issues
 
@@ -136,9 +138,6 @@ Last updated: 2026-07-04
 - Next product closeout targets: review the remaining instruction/memory diffs before PR/release handoff; avoid expanding into unsigned binary/channel work unless explicitly preparing a release.
 - `CLAUDE.md` and `AGENTS.md.bak` are intentionally absent by user decision; do not recreate them.
 - `argos setup status` may report `.env.local` as a development fallback key source when no `config.json` exists; this reports only the source label, not the key value.
-- Root `install.sh` is staged in the git index and covered by a release gate that fails if the raw GitHub installer script is not tracked.
-- PyPI/TestPyPI still do not have `argos-agent` published.
-- TestPyPI trusted publishing rejected workflow run `28678299904` with `invalid-publisher`; the failing claim was `repo:tungoldshou/argos:environment:testpypi` with workflow/ref on `refs/heads/codex/ship-readiness`.
 - The old GitHub `v0.1.0` release and remote `v0.1.0` tag were deleted after explicit user confirmation because the release had no installable asset and could mislead launch users.
 - Code comments and docstrings should stay English-only; Chinese is acceptable for user-facing locale strings, tests that intentionally exercise Chinese input, and Chinese documentation prose.
 
@@ -154,10 +153,12 @@ Last updated: 2026-07-04
 - Keep future changes small, verified, and aligned with existing `uv` workflows.
 - Before coding, inspect the relevant existing code path and add the narrowest useful verification.
 - Pick one bounded product or bug target before editing; avoid opportunistic cleanup while the large uncommitted branch is in progress.
-- Before PR/release handoff, commit root `install.sh`, run the manual TestPyPI preflight for `0.1.1`, publish `argos-agent` to PyPI from fresh tag `v0.1.1`, and verify the raw GitHub curl installer against the committed file.
+- Before PR/release handoff, verify the raw GitHub curl installer path, README/docs links, and targeted packaging/readme/MCP tests. Do not reintroduce PyPI as a launch blocker.
 
 ## Verification Notes
 
+- Latest curl/source launch and config-root helper verification: `uv run pytest tests/test_install_script.py tests/test_packaging_pypi.py tests/test_readme_docs.py tests/test_mcp_native.py tests/test_packaging_release_workflow.py tests/test_config_loader.py -q --no-cov` passed (`168 passed, 1 skipped, 2 deselected`); `uv run pytest -m "not slow" --no-cov` passed (`4921 passed, 16 skipped, 37 deselected`); `uv run argos --selftest` passed; `bash -n install.sh packaging/install.sh packaging/install-deb.sh` passed; `git diff --check` passed; code comment/docstring Chinese scanner returned `0`.
+- Latest public-doc/comment cleanup verification: `uv run pytest tests/test_readme_docs.py tests/test_install_script.py tests/test_packaging_pypi.py tests/test_mcp_native.py tests/test_config_loader.py -q --no-cov` passed (`155 passed, 1 skipped, 2 deselected`); `uv run pytest -m "not slow" --no-cov` passed (`4919 passed, 16 skipped, 37 deselected`); `uv run argos --selftest` passed; `python -m compileall -q argos scripts packaging smoke_packaged.py` passed; `bash -n install.sh packaging/install.sh packaging/install-deb.sh packaging/build_arm64.sh packaging/build_linux.sh packaging/build_windows.sh` passed; `git diff --check` passed.
 - Latest TUI scroll verification: `uv run pytest tests/test_tui_wiring.py -q --no-cov` (`26 passed`), `uv run pytest tests/tui/test_tuiapp_lane.py -q --no-cov` (`49 passed`), and `uv run argos --selftest`.
 - Latest prompt-routing verification: red test `tests/test_prompt_tool_exposure.py::test_external_info_is_routed_before_shell_escape_hatches` failed before the fix; after the fix, `uv run pytest tests/test_prompt_tool_exposure.py -q --no-cov` passed (`9 passed`), `uv run pytest tests/test_loop_codeact.py tests/test_loop_user_goal.py tests/test_prompt_tool_exposure.py -q --no-cov` passed (`37 passed`), and `uv run argos --selftest` passed.
 - Latest CodeAct fence verification: red tests caught ordinary Markdown fences being extracted and executed as Python; after the fix, `uv run pytest tests/test_loop_codeact.py::test_extract_code_block tests/test_loop_codeact.py::test_loop_ignores_non_python_markdown_fences -q --no-cov` passed (`2 passed`), `uv run pytest tests/test_loop_codeact.py -q --no-cov` passed (`25 passed`), and transcript/prompt routing checks passed with `23 passed`.

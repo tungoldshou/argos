@@ -29,7 +29,7 @@ def _cache_path() -> Path:
     if override := os.environ.get("ARGOS_EMB_CACHE"):
         return Path(override).expanduser()
     from argos import config
-    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "embeddings.json"
+    return config.config_dir() / "embeddings.json"
 
 
 def _load_cache() -> dict[str, list[float]]:

@@ -22,7 +22,7 @@ def _ws() -> Path:
     if WORKSPACE is not None:
         return WORKSPACE.resolve()
     from argos import config
-    root = Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+    root = config.config_dir()
     return Path(os.environ.get("ARGOS_WORKSPACE") or (root / "workspace")).expanduser().resolve()
 
 

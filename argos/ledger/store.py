@@ -13,7 +13,7 @@ log = logging.getLogger("argos.ledger")
 def _default_ledger_root() -> Path:
     from argos import config
 
-    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "ledger"
+    return config.config_dir() / "ledger"
 
 
 class LedgerStore:

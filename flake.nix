@@ -1,8 +1,8 @@
 {
   # Argos — terminal super-agent (CodeAct + verify gate + OS sandbox)
-  # spec §9 / D11:简化版 buildPythonApplication;ddgs / mlx-embeddings / sqlite-vec /
-  # playwright / trafilatura 在 nixpkgs 暂缺,本期只引现成的 smolagents/textual/httpx/numpy。
-  # v1.1 走完整 buildPythonPackage / override 处理 nixpkgs 不可得包。
+  # spec §9 / D11: simplified buildPythonApplication; ddgs / mlx-embeddings /
+  # sqlite-vec / playwright / trafilatura are not all available in nixpkgs yet.
+  # v1.1 can move to full buildPythonPackage overrides for missing packages.
   description = "Argos — terminal super-agent";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   outputs = { self, nixpkgs }: let
@@ -20,9 +20,9 @@
         httpx
         numpy
       ];
-      # 注:完整依赖 ddgs / mlx-embeddings / sqlite-vec / playwright / trafilatura
-      # 暂不在 nixpkgs,本简化版要求用户用 pip install --break-system-packages
-      # 装剩余依赖;v1.1 走 override 完整化。
+      # Full dependencies include ddgs / mlx-embeddings / sqlite-vec /
+      # playwright / trafilatura. This simplified flake expects users to install
+      # the missing packages separately; v1.1 can add proper overrides.
       doCheck = false;
       meta = with pkgs.lib; {
         description = "Argos — terminal super-agent (CodeAct + verify gate + OS sandbox)";

@@ -216,67 +216,8 @@ def test_argospkg_help_prints_usage():
 
 
 
-def test_publish_workflow_exists_and_uses_pypa_action():
-    if not PUBLISH_YML.exists():
-        pytest.skip("publish.yml 尚未创建(plan T10 任务) — skip 早期 commit")
-    txt = PUBLISH_YML.read_text()
-    assert "pypa/gh-action-pypi-publish" in txt, "publish.yml 缺 pypa/gh-action-pypi-publish"
-    assert "@release/v1" in txt, "publish.yml pin 错(应 @release/v1)"
-    assert "id-token: write" in txt, "publish.yml 缺 id-token: write(OIDC)"
-
-
-def test_publish_workflow_does_not_ignore_twine_check_failure():
-    txt = PUBLISH_YML.read_text()
-    assert "twine check dist/*" in txt
-    assert "twine check dist/*  ||" not in txt
-    assert "twine check dist/* ||" not in txt
-
-
-def test_publish_workflow_cleans_dist_before_build():
-    txt = PUBLISH_YML.read_text()
-    assert "run: rm -rf dist" in txt
-    assert txt.index("run: rm -rf dist") < txt.index("run: uv build")
-
-
-def test_publish_workflow_upload_artifact_fails_when_dist_is_empty():
-    txt = PUBLISH_YML.read_text()
-    assert "actions/upload-artifact@v4" in txt
-    assert "if-no-files-found: error" in txt
-
-
-def test_publish_workflow_manual_dispatch_does_not_publish_to_pypi():
-    txt = PUBLISH_YML.read_text()
-    assert "workflow_dispatch:" in txt
-    assert "if: startsWith(github.ref, 'refs/tags/v')" in txt
-
-
-def test_publish_workflow_manual_dispatch_publishes_to_testpypi_only():
-    txt = PUBLISH_YML.read_text()
-    assert "  testpypi:" in txt
-    testpypi_job = txt.split("  testpypi:", 1)[1].split("\n  pypi:", 1)[0]
-    assert "needs: [test, build]" in testpypi_job
-    assert "if: github.event_name == 'workflow_dispatch'" in testpypi_job
-    assert "environment: testpypi" in testpypi_job
-    assert "repository-url: https://test.pypi.org/legacy/" in testpypi_job
-    assert "id-token: write" in testpypi_job
-
-
-def test_publish_workflow_pypi_job_keeps_release_gates():
-    txt = PUBLISH_YML.read_text()
-    pypi_job = txt.split("  pypi:", 1)[1]
-    assert "needs: [test, build]" in pypi_job
-    assert "environment: pypi" in pypi_job
-    assert "id-token: write" in pypi_job
-
-
-def test_publish_workflow_smokes_built_wheel_before_upload():
-    txt = PUBLISH_YML.read_text()
-    smoke = (
-        "uv run pytest tests/test_packaging_pypi.py::"
-        "test_pip_install_wheel_and_run_argos_version -q --no-cov -m slow"
-    )
-    assert smoke in txt
-    assert txt.index("run: uv build") < txt.index(smoke) < txt.index("actions/upload-artifact@v4")
+def test_publish_workflow_is_not_part_of_public_launch_surface():
+    assert not PUBLISH_YML.exists()
 
 
 

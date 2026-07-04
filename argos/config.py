@@ -115,8 +115,12 @@ def _write_json_atomic(path: Path, raw: dict) -> None:
         raise
 
 
-def _config_dir() -> Path:
+def config_dir() -> Path:
     return Path(get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+
+
+def _config_dir() -> Path:
+    return config_dir()
 
 
 def load_env_file(path: Path) -> dict[str, str]:

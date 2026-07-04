@@ -252,7 +252,7 @@ class SubAgentFactory:
     def _persist_diff_journal(agent_id: str, diff_text: str) -> str:
         try:
             from argos import config
-            d = Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "workflow" / "diffs"
+            d = config.config_dir() / "workflow" / "diffs"
             d.mkdir(parents=True, exist_ok=True)
             p = d / f"{agent_id}.diff"
             safe = p

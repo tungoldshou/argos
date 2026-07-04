@@ -41,7 +41,7 @@ Last updated: 2026-07-04
 - Normalize release tag versions inside Linux/Windows build scripts instead of changing the release workflow contract.
 - Require OS sandboxing for Cautious local `run_command` auto-approval.
 - Keep `/permissions reload` fail-closed and sync successful reloads into the current TUI gate.
-- Keep PyPI manual dispatch as build/test only; only tag refs may publish.
+- Keep Python package-index publishing out of the public launch path unless demand justifies reopening it.
 - Treat no-host-loop sync bridge as non-interactive and deny GUI/MCP/computer actions that need approval.
 - Treat browser actions as host-loop actions in the no-host-loop sync bridge; browser navigation still uses SSRF/egress checks, and browser screenshots must stay inside the active workspace.
 - Treat permission evaluator failures as fail-closed for writes and high-risk/interactive actions.
@@ -57,7 +57,7 @@ Last updated: 2026-07-04
 - Treat assistant replies that ask for user confirmation before a ` ```python` block as waiting turns, not executable CodeAct turns.
 - Keep WinGet multi-file manifests aligned with official schema roles: root file is `version`, locale file is `defaultLocale`, and installer upgrade behavior is a scalar.
 - Keep macOS release version injection inside the app bundle copy of `Info.plist`; do not mutate the source plist template during build.
-- Keep the public launch install surface to versionless `curl | bash`, latest GitHub release source install, and source checkout; binary/package-manager channels are deferred.
+- Keep the public launch install surface to versionless `curl | bash`, GitHub source-ref install, and source checkout; binary/package-manager channels are deferred.
 - Prefer API-reported context usage when available, but use the existing token estimator as a UI fallback when a provider omits usage data instead of showing permanent 0 context.
 - Use `v0.1.1` as the next fresh public launch tag after deleting the old remote `v0.1.0` release/tag.
 - Treat the deleted `v0.1.0` release/tag as unpublished history: do not keep old changelog release sections for it.
@@ -67,18 +67,18 @@ Last updated: 2026-07-04
 ## 2026-07-04: Public Launch Uses Versionless GitHub Source Installer
 
 - Treat `curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash` as the simplest public install path.
-- Treat root `install.sh` as a thin `uv tool` bootstrap for the latest GitHub release tag, not as a new binary installer channel.
-- Default the installer to GitHub's latest non-draft release; users can pin a tag or commit with `ARGOS_INSTALL_REF` while keeping the same versionless script URL.
+- Treat root `install.sh` as a thin `uv tool` bootstrap for a GitHub source ref, not as a new binary installer channel.
+- Default the installer to the GitHub `main` source ref; users can pin a tag or commit with `ARGOS_INSTALL_REF` while keeping the same versionless script URL.
 - Let root `install.sh` install missing `uv` through Astral's official installer, then continue through `uv tool install --force "argos-agent @ git+..."`; this avoids preinstalling Python or uv manually.
 - Verify the installed command through `uv tool dir --bin` instead of assuming the current shell already has uv's tool bin directory on `PATH`.
 - Keep source checkout as the reliable contributor and pre-publish path.
-- Make `release.yml` a manual binary workflow so tag pushes can publish PyPI without being blocked by AppImage, package-manager assets, Homebrew, WinGet, or Nix work.
+- Make `release.yml` a manual binary workflow so draft binary/package-manager assets do not block the curl/source launch path.
 - Keep binary/package-manager scripts and manifests as draft release engineering assets until a real user need justifies each channel.
 - Do not block the public curl install path on TestPyPI/PyPI trusted-publisher setup.
-- Do not reuse the deleted remote `v0.1.0` release/tag for the public launch; publish from a fresh tag when the PyPI/TestPyPI path is verified.
+- Do not reuse the deleted remote `v0.1.0` release/tag for the public launch.
 - Use `v0.1.1` for that fresh launch tag because the old `v0.1.0` release/tag has been removed from GitHub.
 - Keep `CHANGELOG.md` as current unpublished release notes only until the first real public release is cut.
-- Use manual `publish.yml` dispatch for TestPyPI preflight only; formal PyPI publishing remains tag-gated.
+- Keep `.github/workflows/publish.yml` removed from the current launch surface.
 
 ## 2026-07-04: CodeAct Requires Explicit Python Fences
 
@@ -398,3 +398,15 @@ Last updated: 2026-07-04
 - Structured contract prompts are limited to clearly structured engineering domains: REST/API, database schema, state machine/workflow domain, and config/settings work.
 - Ordinary mentions of functions, classes, JSON, models, fields, or enums no longer trigger the generic contract prompt.
 - This keeps the contract layer focused on tasks where formal conventions reduce real ambiguity.
+
+## 2026-07-04: Public Launch Drops PyPI as a Gate
+
+- The public launch path is the versionless curl installer plus source checkout.
+- Root `install.sh` installs from the GitHub source ref with `uv tool install --force`, defaulting to `main`; `ARGOS_INSTALL_REF` remains available for tags or commits.
+- PyPI/TestPyPI publishing, binary installers, and package-manager channels are deferred until user demand justifies the maintenance cost.
+- Internal `docs/superpowers/` planning archives are not public product docs and should stay out of the shipped docs surface.
+
+## 2026-07-04: Config Root Uses a Shared Helper
+
+- Use `argos.config.config_dir()` for ordinary Argos config-root defaults instead of repeating `ARGOS_CONFIG_DIR` fallback expressions in each module.
+- Keep sandbox backend code that uses an injected sandbox home local, because replacing that with the process home would change isolation semantics.

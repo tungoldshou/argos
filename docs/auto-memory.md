@@ -175,8 +175,6 @@ confidence < 0.3 的条目不参与 ranking,但物理条目仍在(`/forget` 才�
 
 Dream 在每天 03:00 由 conductor 触发(cron 任务),需用户确认后执行 `consolidate()`:合并重复 reflection、对低置信度条目施加 decay、归档过期条目(永不硬删除)。Dream 同时触发 learning 模块的技能 A/B 晋升流程。
 
-详见 [docs/superpowers/specs/2026-06-13-dream-consolidation-design.md](superpowers/specs/2026-06-13-dream-consolidation-design.md)。
-
 ## 故障排查
 
 **AGENTS.md / CLAUDE.md 没被看到?**
@@ -197,5 +195,3 @@ Dream 在每天 03:00 由 conductor 触发(cron 任务),需用户确认后执行
 - `argos/memory/auto.py` — 实现
 - `argos/core/loop.py` — `_build_system` 注入
 - `argos/tui/app.py` — `_dispatch_slash` 接 /remember / /forget / /memory
-- `docs/superpowers/specs/2026-06-06-auto-memory-design.md` — 设计规格
-- `docs/superpowers/plans/2026-06-06-auto-memory.md` — 实施计划

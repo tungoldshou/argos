@@ -29,7 +29,7 @@ def _corpus_root() -> Path:
     if override:
         return Path(override).expanduser()
     from argos import config
-    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "eval" / "corpus"
+    return config.config_dir() / "eval" / "corpus"
 
 
 def corpus_version(*, root: Path | None = None) -> int:

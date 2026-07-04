@@ -1,7 +1,6 @@
 # Per-task model routing + effort
 
 > 让"主用便宜模型 + 关键任务切强模型 + 看得见切到哪里花了多少"成为可配置、可观察、可治理的一等公民。
-> spec 在 `docs/superpowers/specs/2026-06-07-per-task-routing-design.md`、plan 在 `docs/superpowers/plans/2026-06-07-per-task-routing.md`。
 
 ## 为什么
 

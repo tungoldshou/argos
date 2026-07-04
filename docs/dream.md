@@ -238,4 +238,3 @@ Dream 在此基础上再加**两层纵深**：
 - `argos/conductor/` — 夜间 builtin order、提案生成
 - `argos/daemon/server.py` — `/dream/run` 与 `/dream/report` 端点
 - `argos/cli/dream.py` — CLI 子命令 `argos dream`
-- `docs/superpowers/specs/2026-06-13-dream-consolidation-design.md` — 完整设计规格

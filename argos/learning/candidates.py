@@ -18,13 +18,7 @@ DEFAULT_ROOT: Path | None = None
 
 
 def default_root(path: Path | None = None) -> Path:
-    return Path(
-        path or DEFAULT_ROOT or (
-            Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
-            / "learning"
-            / "candidates"
-        )
-    )
+    return Path(path or DEFAULT_ROOT or (config.config_dir() / "learning" / "candidates"))
 
 
 def _unique_tmp(target: Path) -> Path:

@@ -4,7 +4,7 @@ Argos 让 LLM 的上下文消耗**可观察 + 可治理**:你既能看见当前�
 让 Argos 在超阈值时主动 `compact_messages`,而不是等模型吐
 `context_length_exceeded`。
 
-**核心架构**(spec [`2026-06-07-context-viz-design.md`](docs/superpowers/specs/2026-06-07-context-viz-design.md)):
+**核心架构**:
 
 - 4 桶分桶(`system` / `memory (4 tier)` / `tools` / `messages`),每桶带
   `tokens` / `entries` / `source`(文件:行号,debug 用)/ `method`

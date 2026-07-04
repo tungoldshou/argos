@@ -169,5 +169,3 @@ daemon 行为:
 - `argos/daemon/worker.py` — cost 累加 + 终态 cleanup
 - `argos/tui/widgets/tab_strip.py` — TabStrip widget
 - `argos/tui/app.py` — `_on_tab_activated` + `/runs` 扩展
-- spec: `docs/superpowers/specs/2026-06-06-long-running-multirun-design.md`
-- plan: `docs/superpowers/plans/2026-06-06-long-running-multirun.md`

@@ -270,7 +270,7 @@ def _config_dir(config_dir: Path | None) -> Path:
     if config_dir is not None:
         return config_dir
     from argos import config as C
-    return Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+    return C.config_dir()
 
 
 def print_status(*, writer, config_dir: Path | None = None) -> None:

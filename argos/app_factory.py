@@ -233,7 +233,7 @@ def build_components(
 ) -> AppComponents:
     default_ws = (
         os.environ.get("ARGOS_WORKSPACE")
-        or str(Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "workspace")
+        or str(config.config_dir() / "workspace")
     )
     ws = Path(workspace).expanduser().resolve() if workspace else Path(default_ws).resolve()
     ws.mkdir(parents=True, exist_ok=True)
@@ -329,7 +329,7 @@ def build_components(
         approval_level=preset.approval_level,
     )
 
-    config_dir = Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+    config_dir = config.config_dir()
     routing_cfg = load_routing(config_dir)
 
     def _router_client_factory(name: str) -> ModelClient:

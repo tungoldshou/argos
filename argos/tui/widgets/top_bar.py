@@ -28,7 +28,7 @@ _PHASE_GLYPH: dict[str, str] = {
 
 class TopBar(Static):
     DEFAULT_CSS = """
-    TopBar { height: 1; background: $surface; padding: 0 1; }  /* $surface 槽位即 $well 值(裸App可解析) */
+    TopBar { height: 1; background: $surface; padding: 0 1; }  /* $surface resolves to $well in the bare app */
     """
 
     def __init__(self, *, version: str = "0.x", model_label: str = "—", **kwargs) -> None:

@@ -89,7 +89,7 @@ def _app_version() -> str:
 
 
 def _argos_dir() -> Path:
-    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+    return config.config_dir()
 
 
 class ArgosApp(App):

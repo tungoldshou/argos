@@ -59,7 +59,7 @@ class IndexFetchError(RuntimeError):
 
 
 def _skills_root() -> Path:
-    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / "skills"
+    return config.config_dir() / "skills"
 
 
 def _parse_entry(raw: dict) -> IndexEntry:

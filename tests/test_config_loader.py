@@ -1,6 +1,14 @@
 import json
+from pathlib import Path
+
 import pytest
 from argos import config as C
+
+
+def test_config_dir_honors_argos_config_dir_and_expands_user(monkeypatch):
+    monkeypatch.setenv("ARGOS_CONFIG_DIR", "~/argos-test-config")
+
+    assert C.config_dir() == Path.home() / "argos-test-config"
 
 
 def _write(tmp_path, cfg: dict, env: str = ""):

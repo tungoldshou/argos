@@ -19,9 +19,7 @@ def _runs_dir(base: Path | None = None) -> Path:
         return base / "runs"
     if _RUNS_DIR is not None:
         return _RUNS_DIR
-    return Path(
-        config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")
-    ).expanduser() / "eval" / "runs"
+    return config.config_dir() / "eval" / "runs"
 
 
 def _date_str(ts: float) -> str:

@@ -89,7 +89,7 @@ Last updated: 2026-07-04
 - Fixed shell hard-rule coverage so destructive `rm -rf` root/home variants are denied before auto-approval.
 - Fixed Linux packaging so AppImage generation is release-blocking instead of warning and continuing.
 - Fixed Linux packaging so missing `.deb` / `.rpm` tools, failed rpm builds, and missing exact rpm release assets stop the build instead of uploading partial artifacts.
-- Reduced the public launch install surface to versionless `curl | bash`, latest GitHub release source install, and source checkout, and moved binary/package-manager channels to deferred backlog.
+- Reduced the public launch install surface to versionless `curl | bash`, GitHub source-ref install, and source checkout, and moved binary/package-manager channels to deferred backlog.
 - Changed binary `release.yml` to manual `workflow_dispatch` so PyPI tag publishing is not blocked by draft binary channels.
 - Fixed WinGet manifest review so `argospkg manifest` lists all three manifests and rejects invalid non-placeholder `InstallerSha256` values.
 - Fixed malformed `permissions.json` first-load handling so bad policy files fail closed instead of becoming empty auto-approval policy.
@@ -120,10 +120,10 @@ Last updated: 2026-07-04
 - Fixed WinGet locale metadata so it no longer claims unpublished non-Windows install channels are already live.
 - Fixed WinGet multi-file manifest schema drift so the root file is a `version` manifest, the locale file declares `defaultLocale`, and installer `UpgradeBehavior` uses a schema-valid scalar.
 - Fixed macOS arm64 release packaging so tag versions drive the app bundle `Info.plist` without mutating the source plist template.
-- Added a root `install.sh` so the public install path can be advertised as `curl | bash` while still installing through `uv tool install/upgrade argos-agent`.
+- Added a root `install.sh` so the public install path can be advertised as `curl | bash` while still installing through `uv tool install --force argos-agent` from a GitHub source ref.
 - Fixed root `install.sh` so users without preinstalled `uv` are bootstrapped through Astral's official installer before the same `uv tool` Argos install continues.
 - Hardened root `install.sh` so it verifies the installed command through `uv tool dir --bin` instead of assuming `argos` is already on `PATH`.
-- Staged root `install.sh` and added a release gate proving the raw GitHub installer script is tracked before release.
+- Added release-gate coverage proving the raw GitHub installer script is tracked before release.
 - Marked old binary installer scripts under `packaging/` as deferred and not the public launch installer.
 - Added a TestPyPI publish preflight job so manual `publish.yml` dispatch verifies the real package upload path before a fresh tag publishes to PyPI.
 - Added PyPI workflow gate coverage for `needs: [test, build]`, `environment: pypi`, and OIDC permissions.
@@ -139,7 +139,7 @@ Last updated: 2026-07-04
 - Deleted the old GitHub `v0.1.0` release and remote tag after user confirmation, then moved the fresh public launch target to `v0.1.1`.
 - Removed old `0.1.0` / pre-release changelog history and cleaned Chinese from code comments/docstrings so the repo now treats Argos as not formally released yet.
 - Repaired the cleanup regressions with English-only source-doc contracts and reran broad non-slow verification plus the code comment/docstring Chinese scanner.
-- Changed the public `curl | bash` docs to use the `v0.1.1` raw tag URL instead of a default-branch raw installer URL, and verified README/install/publish release tests.
+- Changed the public `curl | bash` docs to use the default-branch raw installer URL and GitHub source-ref install path, and verified README/install/publish release tests.
 - Pushed release commit `89fa66b` to `origin/codex/ship-readiness` and ran `publish.yml`; remote CI/build passed, and TestPyPI failed on trusted publisher configuration (`invalid-publisher`).
 - Opened draft PR #29 for the `v0.1.1` launch branch with the TestPyPI trusted-publisher blocker documented.
 - Marked PR #29 ready for review after PR CI passed and GitHub reported a clean merge state.
@@ -147,22 +147,22 @@ Last updated: 2026-07-04
 - Reviewed the high-risk product-reset diff and tightened `run_command` persistent allow matchers so commands with leading flags do not persist as bare-command approvals.
 - Opened draft PR #30 for `codex/product-spine-reset` and verified its GitHub CI run passed.
 - Merged PR #29 and PR #30 to `main`, then reran `publish.yml` from `main`; CI/build/twine/wheel-smoke passed, and TestPyPI failed only on missing trusted publisher configuration.
-- Changed the public one-line installer to use the versionless raw GitHub `main/install.sh` URL and install Argos from the latest GitHub release tag by default, avoiding a PyPI dependency for the main user path.
+- Changed the public one-line installer to use the versionless raw GitHub `main/install.sh` URL and install Argos from the GitHub `main` source ref by default, avoiding a Python package-index dependency for the main user path.
+- Added `config.config_dir()` as the shared runtime helper and moved common Argos config-root defaults across CLI, TUI, daemon, tools, eval, memory, skills, ledger, and setup code to that helper.
+- Removed internal/publicly unnecessary docs: acceptance checklist, historical product definition, v6 design archive, and `docs/superpowers/`.
+- Added source-comment coverage for non-Python comments and converted remaining SQL/Nix/CSS/embedded-code comments to English.
 
 ## In Progress
 
 - Preserve the existing `AGENTS.md` instructions and avoid overwriting project memory files.
-- Keep PyPI package publishing blocked until TestPyPI/PyPI trusted publishers are configured.
+- Keep the public launch path focused on the versionless curl installer plus source checkout.
 
 ## Next
 
-- Configure TestPyPI pending trusted publisher for repository `tungoldshou/argos`, workflow `.github/workflows/publish.yml`, environment `testpypi`, ref `refs/heads/main`, then rerun `publish.yml` from `main`.
 - Verify the versionless raw GitHub `curl | bash` installer from `main` after this branch lands.
-- Verify `uv tool install --index-url https://test.pypi.org/simple/ argos-agent`, then publish fresh tag `v0.1.1` to PyPI as a secondary package channel.
-- Configure the matching PyPI trusted publisher before pushing tag `v0.1.1`; otherwise the tag-gated PyPI job will fail with the same `invalid-publisher` class.
-- Use a fresh release tag for the next public launch; the old GitHub `v0.1.0` release and remote tag were deleted after user confirmation.
+- Keep PyPI, binary installers, and package-manager channels deferred until user demand justifies the maintenance cost.
 - Keep future code comments/docstrings English-only; do not convert intentional Chinese locale/test strings or Chinese documentation prose merely for this rule.
 
 ## Backlog
 
-- Continue pruning release handoff risk after TestPyPI/PyPI publisher setup.
+- Continue pruning release handoff risk around the curl/source installer and public README/docs.

@@ -14,7 +14,7 @@ VERIFY_DIR: Path | None = None
 
 def _config_root() -> Path:
     from argos import config
-    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+    return config.config_dir()
 
 ALL_TOOL_NAMES: list[str] = [
     "read_file", "write_file", "edit_file", "search_files",

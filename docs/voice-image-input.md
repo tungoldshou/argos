@@ -1,9 +1,5 @@
 # Argos 语音 + 图片输入
 
-> 设计出处：[`docs/superpowers/specs/2026-06-13-voice-image-input-design.md`](superpowers/specs/2026-06-13-voice-image-input-design.md)
-> 实现计划：[`plans/2026-06-13-multimodal-core-and-attachments.md`](superpowers/plans/2026-06-13-multimodal-core-and-attachments.md)、
-> [`voice-input.md`](superpowers/plans/2026-06-13-voice-input.md)、[`image-input-ux.md`](superpowers/plans/2026-06-13-image-input-ux.md)
-
 ## 这是什么
 
 让 Argos 接受**语音输入**与**图片输入**。诚实前提：旗舰形态是终端 TUI（Textual），

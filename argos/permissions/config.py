@@ -18,12 +18,7 @@ CONFIG_PATH: Path | None = None
 
 
 def _config_path(path: Path | None = None) -> Path:
-    return Path(
-        path or CONFIG_PATH or (
-            Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
-            / "permissions.json"
-        )
-    )
+    return Path(path or CONFIG_PATH or (config.config_dir() / "permissions.json"))
 
 
 _REDOS_PATTERNS: Final[tuple[str, ...]] = (

@@ -73,10 +73,17 @@ PER_TASK_ROUTING_DOC = Path(__file__).resolve().parents[1] / "docs" / "per-task-
 SKILLS_CURATOR_DOC = Path(__file__).resolve().parents[1] / "docs" / "skills-curator.md"
 VOICE_IMAGE_DOC = Path(__file__).resolve().parents[1] / "docs" / "voice-image-input.md"
 PACKAGING_DOC = Path(__file__).resolve().parents[1] / "docs" / "packaging-c.md"
-PRODUCT_DOC = Path(__file__).resolve().parents[1] / "docs" / "argos-product-definition.md"
-ACCEPTANCE_DOC = Path(__file__).resolve().parents[1] / "docs" / "acceptance-checklist.md"
 MULTIRUN_DOC = Path(__file__).resolve().parents[1] / "docs" / "multirun.md"
 TUI_APP = Path(__file__).resolve().parents[1] / "argos" / "tui" / "app.py"
+SOURCE_COMMENT_ROOTS = (
+    ROOT / "argos",
+    ROOT / "scripts",
+    ROOT / "packaging",
+)
+SOURCE_COMMENT_FILES = (
+    ROOT / "flake.nix",
+    ROOT / "smoke_packaged.py",
+)
 
 
 def _readme_command_rows() -> set[str]:
@@ -196,7 +203,7 @@ def test_contributing_uses_agents_as_project_guide():
 
 
 def test_daemon_docs_do_not_hardcode_default_socket_path():
-    combined = CONTRIBUTING.read_text() + "\n" + PRODUCT_DOC.read_text()
+    combined = CONTRIBUTING.read_text() + "\n" + README.read_text()
     assert "~/.argos/daemon.sock" not in combined
     assert "Argos config directory" in combined
 
@@ -253,6 +260,8 @@ def test_readme_install_text_does_not_depend_on_pypi():
     assert "PyPI, and platform packages" not in text
     assert "will 404" not in text
     assert "pip install argos-agent" not in text
+    section = text.split("## Install", 1)[1].split("\n---", 1)[0]
+    assert "PyPI" not in section
 
 
 def test_readme_launch_install_surface_is_small():
@@ -262,10 +271,11 @@ def test_readme_launch_install_surface_is_small():
         in section
     )
     assert "raw.githubusercontent.com/tungoldshou/argos/v0.1.1/install.sh" not in section
-    assert "latest GitHub release" in section
-    assert "installs Argos from the GitHub `main` branch" not in section
+    assert "latest GitHub release" not in section
+    assert "installs Argos from the GitHub `main` branch" in section
     assert "uv tool install --force" in section
-    assert "ARGOS_INSTALL_REF=v0.1.1" in section
+    assert "ARGOS_INSTALL_REF=v0.1.1" not in section
+    assert "ARGOS_INSTALL_REF=<tag-or-commit>" in section
     assert "bootstraps" in section
     assert "uv tool update-shell" in section
     assert "### From source" in section
@@ -282,6 +292,14 @@ def test_public_docs_do_not_mention_removed_daemon_flag():
     assert "--with-daemon" not in MULTIRUN_DOC.read_text()
 
 
+def test_public_docs_do_not_link_internal_superpowers_archive():
+    docs = ROOT / "docs"
+    assert not (docs / "superpowers").exists()
+    public_text = "\n".join(p.read_text(encoding="utf-8") for p in docs.glob("*.md"))
+    assert "docs/superpowers" not in public_text
+    assert "superpowers/" not in public_text
+
+
 def test_packaging_doc_does_not_claim_macos_binary_is_live():
     text = PACKAGING_DOC.read_text()
     assert "macOS arm64 已发布" not in text
@@ -291,35 +309,18 @@ def test_packaging_doc_marks_channel_commands_as_planned():
     text = PACKAGING_DOC.read_text()
     assert "首发安装面" in text
     assert "Deferred packaging backlog" in text
+    assert "PyPI" not in text
     assert "计划中的各通道命令" not in text
     assert "## 各通道安装命令(按推荐顺序)" not in text
     assert "用 pip install / brew install / AppImage 兜底" not in text
     assert "| `brew install argos` 报 404 | tap 仓没建好 | `brew tap tungoldshou/argos` 先建 |" not in text
 
 
-def test_product_doc_does_not_claim_macos_binary_is_live():
-    text = PRODUCT_DOC.read_text()
-    assert "macOS arm64 已发布" not in text
-
-
-def test_product_doc_test_gate_matches_default_slow_policy():
-    text = PRODUCT_DOC.read_text()
-    assert "≈3000" not in text
-    assert "打包 binary smoke 全绿" not in text
-    assert "uv run pytest -m slow -q --no-cov" in text
-
-
 def test_setup_docs_do_not_imply_paste_key_is_required():
-    combined = PRODUCT_DOC.read_text() + "\n" + ACCEPTANCE_DOC.read_text()
+    combined = README.read_text() + "\n" + (README.parent / "docs" / "setup-wizard.md").read_text()
     assert "填 key" not in combined
     assert "provider+key" not in combined
-    assert "key 来源" in combined
-
-
-def test_acceptance_doc_uses_config_dir_for_mcp_path():
-    text = ACCEPTANCE_DOC.read_text()
-    assert "ARGOS_CONFIG_DIR" in text
-    assert "~/.argos/mcp.json" not in text
+    assert "key source" in combined
 
 
 def test_setup_doc_matches_current_wizard_defaults():
@@ -443,6 +444,32 @@ def test_learning_and_skills_source_docs_use_config_dir_paths():
     assert "~/.argos/vision_cache.json" not in combined
     assert "~/.argos/learning" not in combined
     assert "~/.argos/skills" not in combined
+
+
+def test_source_comments_are_english_only():
+    cjk = re.compile(r"[\u4e00-\u9fff]")
+    comment_patterns = (
+        re.compile(r"^\s*#.*[\u4e00-\u9fff]"),
+        re.compile(r"^\s*--.*[\u4e00-\u9fff]"),
+        re.compile(r"/\*[^*\n]*[\u4e00-\u9fff]"),
+        re.compile(r"# [^\n]*[\u4e00-\u9fff]"),
+    )
+    suffixes = {".py", ".sh", ".sql", ".nix"}
+    paths = [
+        p for root in SOURCE_COMMENT_ROOTS for p in root.rglob("*")
+        if p.suffix in suffixes and "locales" not in p.relative_to(ROOT).parts
+    ]
+    paths.extend(p for p in SOURCE_COMMENT_FILES if p.exists())
+    failures: list[str] = []
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        if not cjk.search(text):
+            continue
+        rel = path.relative_to(ROOT)
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if any(pattern.search(line) for pattern in comment_patterns):
+                failures.append(f"{rel}:{lineno}: {line.strip()}")
+    assert failures == []
 
 
 def test_context_doc_uses_config_dir_for_config_path():
