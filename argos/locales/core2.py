@@ -80,9 +80,7 @@ EN: dict[str, str] = {
 
     # ── app_factory ──────────────────────────────────────────────────────────
     "core2.app_factory.no_api_key": (
-        "No API key configured for the current model. "
-        "Run `argos setup` to connect a model, or set the corresponding environment variable. "
-        "Argos will not pretend to run."
+        "No API key configured for the current model. Argos will not pretend to run."
     ),
 
     # ── protocol/events ──────────────────────────────────────────────────────
@@ -197,8 +195,7 @@ ZH: dict[str, str] = {
 
     # ── app_factory ──────────────────────────────────────────────────────────
     "core2.app_factory.no_api_key": (
-        "未配置当前模型的 API key。请运行 `argos setup` 接入模型,或设置对应环境变量。"
-        "Argos 不会假装能跑。"
+        "未配置当前模型的 API key。Argos 不会假装能跑。"
     ),
 
     # ── protocol/events ──────────────────────────────────────────────────────

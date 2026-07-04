@@ -129,6 +129,7 @@ _LAZY_CLAIM_ZH: tuple[str, ...] = (
     "我来", "我先", "我会", "我将", "我去", "让我", "马上", "稍等", "正在", "接下来",
     "完成了", "已完成", "已经完成", "做完了", "修复了", "改好了", "搞定", "处理好了",
     "我查一下", "我找一下", "我抓一下", "我读一下", "我看一下", "我重新",
+    "我需要",
     "我们查一下", "我们找一下", "我们抓一下", "我们读一下", "我们看一下",
     "定位到仓库", "读 README",
 )
@@ -145,6 +146,10 @@ def _looks_like_lazy_claim(text: str) -> bool:
     low = t.lower()
     return (any(kw in t for kw in _LAZY_CLAIM_ZH)
             or any(kw in low for kw in _LAZY_CLAIM_EN))
+
+
+def _has_unfinished_todos(todos: list[dict]) -> bool:
+    return any(t.get("status") != "completed" for t in todos)
 
 
 _CONFIRMATION_BEFORE_ACTION = re.compile(
@@ -1456,7 +1461,8 @@ class AgentLoop:
                 report_note = ""
                 break
 
-            if (self._actions == 0 and not noaction_nudged
+            if ((self._actions == 0 or _has_unfinished_todos(self._todos))
+                    and not noaction_nudged
                     and _looks_like_lazy_claim(text)):
                 noaction_nudged = True
                 messages.append({"role": "user", "content":

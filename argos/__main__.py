@@ -282,7 +282,9 @@ def main() -> None:
             workspace=effective_ws or components.workspace,
         ).run()
     except (RuntimeError, _TuiConfigError) as e:
-        print(t("cli.no_key_fallback", err=e), file=sys.stderr)
+        print(f"[argos] {e}", file=sys.stderr)
+        from argos import setup_wizard
+        setup_wizard.print_status(writer=lambda line: print(f"[argos] {line}", file=sys.stderr))
         sys.exit(1)
 
 

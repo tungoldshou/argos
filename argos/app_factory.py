@@ -358,7 +358,7 @@ def build_components(
     import logging as _logging
     from argos.external_surfaces import external_surface_warnings
     for _w in external_surface_warnings():
-        _logging.getLogger("argos.sandbox").warning("[沙箱外执行面] %s", _w)
+        _logging.getLogger("argos.sandbox").debug("[沙箱外执行面] %s", _w)
 
     ledger_store = LedgerStore()
 
