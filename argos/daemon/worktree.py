@@ -18,7 +18,7 @@ class WorktreeManager:
         if base_dir is None:
             from argos import config
 
-            base_dir = Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")) / "worktrees"
+            base_dir = config.config_dir() / "worktrees"
         self._base = Path(base_dir).expanduser()
         self._base.mkdir(parents=True, exist_ok=True)
 

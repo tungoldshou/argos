@@ -40,10 +40,7 @@ def _root() -> Path:
     if override:
         return Path(override).expanduser()
     from argos import config
-    return (
-        Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
-        / "memory"
-    )
+    return config.config_dir() / "memory"
 
 
 def _user_path() -> Path:
@@ -229,7 +226,7 @@ def _ARGOS_HOME() -> Path:
     if override:
         return Path(override).expanduser()
     from argos import config
-    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+    return config.config_dir()
 
 
 def _global_claude() -> Path:

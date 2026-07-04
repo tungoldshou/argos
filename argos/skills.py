@@ -16,12 +16,7 @@ MAX_SKILL_CHARS = 3000
 
 
 def user_dir(path: Path | None = None) -> Path:
-    return Path(
-        path or USER_DIR or (
-            Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
-            / "skills"
-        )
-    )
+    return Path(path or USER_DIR or (config.config_dir() / "skills"))
 
 
 Trust = Literal["builtin", "imported", "user_created"]

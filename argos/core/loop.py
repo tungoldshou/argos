@@ -373,7 +373,7 @@ class AgentLoop:
         self._verifier = verifier
         self._cfg = config
         from argos import config as _argos_config
-        _argos_dir = Path(_argos_config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+        _argos_dir = _argos_config.config_dir()
         self._workspace = workspace or _argos_dir / "workspace"
         self._verify_dir = verify_dir or _argos_dir / "verify"
         self._allow_workflow = allow_workflow

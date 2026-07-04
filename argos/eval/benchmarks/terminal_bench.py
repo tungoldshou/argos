@@ -308,7 +308,7 @@ def _build_docker_verify_cmd(tb: TBTask, *, workdir: Path) -> str:
         f" wt = Path(worktree);"
         " from argos.eval.benchmarks.terminal_bench import load_tb_task;"
         f" tb = load_tb_task(src);"
-        " exec_ = TBContainerExecutor(timeout=600);  # 修(2026-06-09):240s 装包就超时,见 terminal_bench_docker._DEFAULT_VERIFY_TIMEOUT"
+        " exec_ = TBContainerExecutor(timeout=600);  # 240s can time out while installing packages; see terminal_bench_docker._DEFAULT_VERIFY_TIMEOUT"
         " rc = exec_.verify_in_container(tb, task_dir=wt);"
         " sys.exit(0 if rc.exit_code == 0 else (2 if rc.setup_failed else 1))"
     )

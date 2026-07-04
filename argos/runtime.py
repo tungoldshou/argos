@@ -11,12 +11,12 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from argos import config
 from argos.i18n import t
 
 
 def _config_root() -> Path:
-    from argos import config
-    return Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+    return config.config_dir()
 
 
 def _default_ws() -> Path:

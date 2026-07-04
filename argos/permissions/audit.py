@@ -15,12 +15,7 @@ RETAIN_DAYS: int = 30
 
 
 def audit_dir(path: Path | None = None) -> Path:
-    return Path(
-        path or AUDIT_DIR or (
-            Path(config.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
-            / "audit"
-        )
-    )
+    return Path(path or AUDIT_DIR or (config.config_dir() / "audit"))
 
 
 def _file_for_date(d: datetime) -> Path:

@@ -13,7 +13,7 @@ from argos.i18n import t
 def _setup_paths() -> dict[str, str]:
     from argos import config as C
 
-    config_dir = Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser()
+    config_dir = C.config_dir()
     return {
         "config_path": str(config_dir / "config.json"),
         "env_path": str(config_dir / ".env"),
@@ -23,7 +23,7 @@ def _setup_paths() -> dict[str, str]:
 def _update_cache_path() -> Path:
     from argos import config as C
 
-    return Path(C.get("ARGOS_CONFIG_DIR") or (Path.home() / ".argos")).expanduser() / ".last_update_check"
+    return C.config_dir() / ".last_update_check"
 
 
 def _build_parser() -> argparse.ArgumentParser:
