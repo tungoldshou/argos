@@ -89,7 +89,7 @@ Last updated: 2026-07-04
 - Fixed shell hard-rule coverage so destructive `rm -rf` root/home variants are denied before auto-approval.
 - Fixed Linux packaging so AppImage generation is release-blocking instead of warning and continuing.
 - Fixed Linux packaging so missing `.deb` / `.rpm` tools, failed rpm builds, and missing exact rpm release assets stop the build instead of uploading partial artifacts.
-- Reduced the public launch install surface to PyPI / `uv tool` plus source checkout, and moved binary/package-manager channels to deferred backlog.
+- Reduced the public launch install surface to versionless `curl | bash`, GitHub source `uv tool`, and source checkout, and moved binary/package-manager channels to deferred backlog.
 - Changed binary `release.yml` to manual `workflow_dispatch` so PyPI tag publishing is not blocked by draft binary channels.
 - Fixed WinGet manifest review so `argospkg manifest` lists all three manifests and rejects invalid non-placeholder `InstallerSha256` values.
 - Fixed malformed `permissions.json` first-load handling so bad policy files fail closed instead of becoming empty auto-approval policy.
@@ -147,16 +147,18 @@ Last updated: 2026-07-04
 - Reviewed the high-risk product-reset diff and tightened `run_command` persistent allow matchers so commands with leading flags do not persist as bare-command approvals.
 - Opened draft PR #30 for `codex/product-spine-reset` and verified its GitHub CI run passed.
 - Merged PR #29 and PR #30 to `main`, then reran `publish.yml` from `main`; CI/build/twine/wheel-smoke passed, and TestPyPI failed only on missing trusted publisher configuration.
+- Changed the public one-line installer to use the versionless raw GitHub `main/install.sh` URL and install Argos from the GitHub source ref by default, avoiding a PyPI dependency for the main user path.
 
 ## In Progress
 
 - Preserve the existing `AGENTS.md` instructions and avoid overwriting project memory files.
-- Keep release publishing blocked until TestPyPI/PyPI trusted publishers are configured.
+- Keep PyPI package publishing blocked until TestPyPI/PyPI trusted publishers are configured.
 
 ## Next
 
 - Configure TestPyPI pending trusted publisher for repository `tungoldshou/argos`, workflow `.github/workflows/publish.yml`, environment `testpypi`, ref `refs/heads/main`, then rerun `publish.yml` from `main`.
-- Verify `uv tool install --index-url https://test.pypi.org/simple/ argos-agent`, then publish fresh tag `v0.1.1` to PyPI and verify the tag-pinned raw GitHub `curl | bash` installer.
+- Verify the versionless raw GitHub `curl | bash` installer from `main` after this branch lands.
+- Verify `uv tool install --index-url https://test.pypi.org/simple/ argos-agent`, then publish fresh tag `v0.1.1` to PyPI as a secondary package channel.
 - Configure the matching PyPI trusted publisher before pushing tag `v0.1.1`; otherwise the tag-gated PyPI job will fail with the same `invalid-publisher` class.
 - Use a fresh release tag for the next public launch; the old GitHub `v0.1.0` release and remote tag were deleted after user confirmation.
 - Keep future code comments/docstrings English-only; do not convert intentional Chinese locale/test strings or Chinese documentation prose merely for this rule.

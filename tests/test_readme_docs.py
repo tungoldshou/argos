@@ -247,20 +247,27 @@ def test_readme_trust_summary_matches_current_modes():
     assert "hidden `/trust paranoid`" in text
 
 
-def test_readme_pypi_install_text_is_release_neutral():
+def test_readme_install_text_does_not_depend_on_pypi():
     text = README.read_text()
     assert "`argos-agent` is not on PyPI yet" not in text
     assert "PyPI, and platform packages" not in text
     assert "will 404" not in text
-    assert "pip install argos-agent" in text
+    assert "pip install argos-agent" not in text
 
 
 def test_readme_launch_install_surface_is_small():
     section = README.read_text().split("## Install", 1)[1].split("\n---", 1)[0]
-    assert "uv tool install argos-agent" in section
-    assert "curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/v0.1.1/install.sh | bash" in section
+    assert (
+        "curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash"
+        in section
+    )
+    assert "raw.githubusercontent.com/tungoldshou/argos/v0.1.1/install.sh" not in section
+    assert (
+        'uv tool install --force "argos-agent @ git+https://github.com/tungoldshou/argos.git@main"'
+        in section
+    )
+    assert "ARGOS_INSTALL_REF=v0.1.1" in section
     assert "bootstraps" in section
-    assert "uses `uv tool`" in section
     assert "uv tool update-shell" in section
     assert "### From source" in section
     assert "Deferred binary/package-manager channels" in section
