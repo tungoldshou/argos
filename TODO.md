@@ -155,7 +155,7 @@ Last updated: 2026-07-04
 ## In Progress
 
 - Preserve the existing `AGENTS.md` instructions and avoid overwriting project memory files.
-- Keep the public launch path focused on the versionless curl installer plus source checkout.
+- Review draft PR #34 for the versionless curl installer plus source checkout launch path.
 
 ## Next
 
