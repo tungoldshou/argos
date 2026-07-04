@@ -53,14 +53,17 @@ def test_root_install_script_bootstraps_through_uv_tool_only():
     assert result.returncode == 0, f"bash -n 失败: {result.stderr}"
 
     text = ROOT_INSTALL.read_text()
-    assert "uv tool install argos-agent" in text
-    assert "uv tool upgrade argos-agent" in text
+    assert 'ARGOS_INSTALL_REF="${ARGOS_INSTALL_REF:-main}"' in text
+    assert "git+${ARGOS_REPO_URL}@${ARGOS_INSTALL_REF}" in text
+    assert 'uv tool install --force "$PACKAGE_SPEC"' in text
     assert "uv tool dir --bin" in text
     assert '"$TOOL_BIN/argos" --version' in text
     assert "uv tool update-shell" in text
     assert "argos setup" in text
 
     forbidden = (
+        "uv tool install argos-agent",
+        "uv tool upgrade argos-agent",
         "sudo",
         "/usr/local/bin",
         "packaging/install.sh",
@@ -97,9 +100,7 @@ def test_root_install_script_verifies_installed_argos_without_path(tmp_path):
         "#!/usr/bin/env bash\n"
         "echo \"$*\" >> \"$UV_LOG\"\n"
         "case \"$*\" in\n"
-        "  'tool list') exit 0 ;;\n"
-        "  'tool install argos-agent') exit 0 ;;\n"
-        "  'tool upgrade argos-agent') exit 0 ;;\n"
+        "  'tool install --force argos-agent @ git+https://github.com/tungoldshou/argos.git@main') exit 0 ;;\n"
         "  'tool dir --bin') echo \"$UV_TOOL_BIN\"; exit 0 ;;\n"
         "esac\n"
         "exit 2\n",
@@ -125,7 +126,10 @@ def test_root_install_script_verifies_installed_argos_without_path(tmp_path):
 
     assert result.returncode == 0, result.stderr + result.stdout
     assert "argos 0.1.0" in result.stdout
-    assert "tool install argos-agent" in log.read_text()
+    assert (
+        "tool install --force argos-agent @ "
+        "git+https://github.com/tungoldshou/argos.git@main"
+    ) in log.read_text()
     assert "tool dir --bin" in log.read_text()
 
 
@@ -152,8 +156,7 @@ def test_root_install_script_bootstraps_uv_when_missing(tmp_path):
         "#!/usr/bin/env bash\n"
         "echo \"uv $*\" >> \"$INSTALL_LOG\"\n"
         "case \"$*\" in\n"
-        "  'tool list') exit 0 ;;\n"
-        "  'tool install argos-agent') exit 0 ;;\n"
+        "  'tool install --force argos-agent @ git+https://github.com/tungoldshou/argos.git@main') exit 0 ;;\n"
         "  'tool dir --bin') echo \"$UV_TOOL_BIN\"; exit 0 ;;\n"
         "esac\n"
         "exit 2\n",
@@ -190,7 +193,10 @@ def test_root_install_script_bootstraps_uv_when_missing(tmp_path):
     lines = log.read_text().splitlines()
     assert any("https://astral.sh/uv/install.sh" in line for line in lines)
     assert "install-uv" in lines
-    assert "uv tool install argos-agent" in lines
+    assert (
+        "uv tool install --force argos-agent @ "
+        "git+https://github.com/tungoldshou/argos.git@main"
+    ) in lines
     assert "argos 0.1.0" in result.stdout
 
 

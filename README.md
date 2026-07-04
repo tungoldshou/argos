@@ -132,28 +132,33 @@ still gates side effects.
 > `/proc` or bind mounts. Use `bwrap` (`sudo apt install bubblewrap`) for
 > a stronger guarantee.
 
-### PyPI / uv tool
+### One-line installer
 
-Needs Python 3.12+. The installer bootstraps [uv](https://docs.astral.sh/uv/)
-if it is not already available.
+The public installer has no version in the command. It bootstraps
+[uv](https://docs.astral.sh/uv/) if needed, then installs Argos from the
+GitHub `main` branch.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/v0.1.1/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash
 ```
 
-The script uses `uv tool` under the hood. Equivalent manual install:
+Equivalent manual install:
 
 ```bash
-uv tool install argos-agent    # or: pip install argos-agent
+uv tool install --force "argos-agent @ git+https://github.com/tungoldshou/argos.git@main"
 argos setup
 argos
 ```
 
-If `argos` is not found after `uv tool install`, run `uv tool update-shell`
-and reopen the shell.
+To pin a tag or commit, set `ARGOS_INSTALL_REF` while keeping the same
+versionless script URL:
 
-If the package has not propagated for the current release yet, use the source
-checkout below.
+```bash
+ARGOS_INSTALL_REF=v0.1.1 curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash
+```
+
+If `argos` is not found after install, run `uv tool update-shell` and reopen
+the shell.
 
 ### From source
 

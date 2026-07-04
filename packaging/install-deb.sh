@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deferred binary installer; not the public launch installer.
-# Public launch install uses root install.sh -> uv tool install argos-agent.
+# Public launch install uses root install.sh -> GitHub source uv tool install.
 # This script is kept for future Linux .deb release assets.
 set -euo pipefail
 

@@ -57,24 +57,25 @@ Last updated: 2026-07-04
 - Treat assistant replies that ask for user confirmation before a ` ```python` block as waiting turns, not executable CodeAct turns.
 - Keep WinGet multi-file manifests aligned with official schema roles: root file is `version`, locale file is `defaultLocale`, and installer upgrade behavior is a scalar.
 - Keep macOS release version injection inside the app bundle copy of `Info.plist`; do not mutate the source plist template during build.
-- Keep the public launch install surface to PyPI / `uv tool` plus source checkout; the root `install.sh` is only a curl convenience for that path, and binary/package-manager channels are deferred.
+- Keep the public launch install surface to versionless `curl | bash`, GitHub source `uv tool`, and source checkout; binary/package-manager channels are deferred.
 - Prefer API-reported context usage when available, but use the existing token estimator as a UI fallback when a provider omits usage data instead of showing permanent 0 context.
 - Use `v0.1.1` as the next fresh public launch tag after deleting the old remote `v0.1.0` release/tag.
 - Treat the deleted `v0.1.0` release/tag as unpublished history: do not keep old changelog release sections for it.
 - Keep code comments and docstrings English-only; Chinese may remain in user-facing locale strings, intentional Chinese test fixtures, and Chinese documentation prose.
-- Point public `curl | bash` docs at the `v0.1.1` raw tag URL for the launch instead of mutable `main`.
+- Point public `curl | bash` docs at the default-branch raw installer URL; use `ARGOS_INSTALL_REF` only when a user wants to pin a tag or commit.
 
-## 2026-07-04: Public Launch Uses PyPI And Source Only
+## 2026-07-04: Public Launch Uses Versionless GitHub Source Installer
 
-- Treat `uv tool install argos-agent` / `pip install argos-agent` as the public package path.
-- Treat root `install.sh` as a thin `uv tool` bootstrap for the same package path, not as a new binary installer channel.
-- Point launch docs at `https://raw.githubusercontent.com/tungoldshou/argos/v0.1.1/install.sh` so the public installer is tied to the release tag that contains the script.
-- Let root `install.sh` install missing `uv` through Astral's official installer, then continue through `uv tool`; this avoids a preinstall prerequisite without adding a new Argos package channel.
+- Treat `curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash` as the simplest public install path.
+- Treat root `install.sh` as a thin `uv tool` bootstrap for the GitHub source package spec, not as a new binary installer channel.
+- Default the installer to `ARGOS_INSTALL_REF=main`; users can pin a tag or commit with `ARGOS_INSTALL_REF` while keeping the same versionless script URL.
+- Let root `install.sh` install missing `uv` through Astral's official installer, then continue through `uv tool install --force "argos-agent @ git+..."`; this avoids preinstalling Python or uv manually.
 - Verify the installed command through `uv tool dir --bin` instead of assuming the current shell already has uv's tool bin directory on `PATH`.
 - Keep source checkout as the reliable contributor and pre-publish path.
 - Make `release.yml` a manual binary workflow so tag pushes can publish PyPI without being blocked by AppImage, package-manager assets, Homebrew, WinGet, or Nix work.
 - Keep binary/package-manager scripts and manifests as draft release engineering assets until a real user need justifies each channel.
-- Do not reuse the deleted remote `v0.1.0` release/tag for the public launch; publish from a fresh tag after the PyPI/TestPyPI path is verified.
+- Do not block the public curl install path on TestPyPI/PyPI trusted-publisher setup.
+- Do not reuse the deleted remote `v0.1.0` release/tag for the public launch; publish from a fresh tag when the PyPI/TestPyPI path is verified.
 - Use `v0.1.1` for that fresh launch tag because the old `v0.1.0` release/tag has been removed from GitHub.
 - Keep `CHANGELOG.md` as current unpublished release notes only until the first real public release is cut.
 - Use manual `publish.yml` dispatch for TestPyPI preflight only; formal PyPI publishing remains tag-gated.
