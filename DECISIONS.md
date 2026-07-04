@@ -57,7 +57,7 @@ Last updated: 2026-07-04
 - Treat assistant replies that ask for user confirmation before a ` ```python` block as waiting turns, not executable CodeAct turns.
 - Keep WinGet multi-file manifests aligned with official schema roles: root file is `version`, locale file is `defaultLocale`, and installer upgrade behavior is a scalar.
 - Keep macOS release version injection inside the app bundle copy of `Info.plist`; do not mutate the source plist template during build.
-- Keep the public launch install surface to versionless `curl | bash`, GitHub source `uv tool`, and source checkout; binary/package-manager channels are deferred.
+- Keep the public launch install surface to versionless `curl | bash`, latest GitHub release source install, and source checkout; binary/package-manager channels are deferred.
 - Prefer API-reported context usage when available, but use the existing token estimator as a UI fallback when a provider omits usage data instead of showing permanent 0 context.
 - Use `v0.1.1` as the next fresh public launch tag after deleting the old remote `v0.1.0` release/tag.
 - Treat the deleted `v0.1.0` release/tag as unpublished history: do not keep old changelog release sections for it.
@@ -67,8 +67,8 @@ Last updated: 2026-07-04
 ## 2026-07-04: Public Launch Uses Versionless GitHub Source Installer
 
 - Treat `curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash` as the simplest public install path.
-- Treat root `install.sh` as a thin `uv tool` bootstrap for the GitHub source package spec, not as a new binary installer channel.
-- Default the installer to `ARGOS_INSTALL_REF=main`; users can pin a tag or commit with `ARGOS_INSTALL_REF` while keeping the same versionless script URL.
+- Treat root `install.sh` as a thin `uv tool` bootstrap for the latest GitHub release tag, not as a new binary installer channel.
+- Default the installer to GitHub's latest non-draft release; users can pin a tag or commit with `ARGOS_INSTALL_REF` while keeping the same versionless script URL.
 - Let root `install.sh` install missing `uv` through Astral's official installer, then continue through `uv tool install --force "argos-agent @ git+..."`; this avoids preinstalling Python or uv manually.
 - Verify the installed command through `uv tool dir --bin` instead of assuming the current shell already has uv's tool bin directory on `PATH`.
 - Keep source checkout as the reliable contributor and pre-publish path.

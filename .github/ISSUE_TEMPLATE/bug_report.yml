@@ -34,8 +34,8 @@ body:
       label: Install method
       description: How did you install Argos?
       options:
-        - curl install.sh (GitHub source one-liner)
-        - uv tool install from GitHub source
+        - curl install.sh (latest release one-liner)
+        - uv tool install from GitHub release tag
         - From source (uv sync)
         - Deferred binary/package-manager channel
         - Other

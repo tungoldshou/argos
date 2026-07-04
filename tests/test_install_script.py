@@ -53,7 +53,8 @@ def test_root_install_script_bootstraps_through_uv_tool_only():
     assert result.returncode == 0, f"bash -n 失败: {result.stderr}"
 
     text = ROOT_INSTALL.read_text()
-    assert 'ARGOS_INSTALL_REF="${ARGOS_INSTALL_REF:-main}"' in text
+    assert "api.github.com/repos/tungoldshou/argos/releases/latest" in text
+    assert 'ARGOS_INSTALL_REF="${ARGOS_INSTALL_REF:-}"' in text
     assert "git+${ARGOS_REPO_URL}@${ARGOS_INSTALL_REF}" in text
     assert 'uv tool install --force "$PACKAGE_SPEC"' in text
     assert "uv tool dir --bin" in text
@@ -95,12 +96,21 @@ def test_root_install_script_verifies_installed_argos_without_path(tmp_path):
     tool_bin.mkdir()
     log = tmp_path / "uv.log"
 
+    curl = bin_dir / "curl"
+    curl.write_text(
+        "#!/usr/bin/env bash\n"
+        "echo \"curl $*\" >> \"$UV_LOG\"\n"
+        "printf '{\"tag_name\":\"v9.8.7\"}'\n",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+
     uv = bin_dir / "uv"
     uv.write_text(
         "#!/usr/bin/env bash\n"
         "echo \"$*\" >> \"$UV_LOG\"\n"
         "case \"$*\" in\n"
-        "  'tool install --force argos-agent @ git+https://github.com/tungoldshou/argos.git@main') exit 0 ;;\n"
+        "  'tool install --force argos-agent @ git+https://github.com/tungoldshou/argos.git@v9.8.7') exit 0 ;;\n"
         "  'tool dir --bin') echo \"$UV_TOOL_BIN\"; exit 0 ;;\n"
         "esac\n"
         "exit 2\n",
@@ -128,9 +138,96 @@ def test_root_install_script_verifies_installed_argos_without_path(tmp_path):
     assert "argos 0.1.0" in result.stdout
     assert (
         "tool install --force argos-agent @ "
+        "git+https://github.com/tungoldshou/argos.git@v9.8.7"
+    ) in log.read_text()
+    assert "https://api.github.com/repos/tungoldshou/argos/releases/latest" in log.read_text()
+    assert "tool dir --bin" in log.read_text()
+
+
+def test_root_install_script_respects_explicit_ref_without_latest_lookup(tmp_path):
+    bin_dir = tmp_path / "bin"
+    tool_bin = tmp_path / "uv-tools"
+    bin_dir.mkdir()
+    tool_bin.mkdir()
+    log = tmp_path / "uv.log"
+
+    curl = bin_dir / "curl"
+    curl.write_text(
+        "#!/usr/bin/env bash\n"
+        "echo \"curl should-not-run\" >> \"$UV_LOG\"\n"
+        "exit 9\n",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+
+    uv = bin_dir / "uv"
+    uv.write_text(
+        "#!/usr/bin/env bash\n"
+        "echo \"$*\" >> \"$UV_LOG\"\n"
+        "case \"$*\" in\n"
+        "  'tool install --force argos-agent @ git+https://github.com/tungoldshou/argos.git@main') exit 0 ;;\n"
+        "  'tool dir --bin') echo \"$UV_TOOL_BIN\"; exit 0 ;;\n"
+        "esac\n"
+        "exit 2\n",
+        encoding="utf-8",
+    )
+    uv.chmod(0o755)
+
+    argos = tool_bin / "argos"
+    argos.write_text("#!/usr/bin/env bash\necho 'argos 0.1.0'\n", encoding="utf-8")
+    argos.chmod(0o755)
+
+    result = subprocess.run(
+        ["/bin/bash", str(ROOT_INSTALL)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        env={
+            "ARGOS_INSTALL_REF": "main",
+            "PATH": f"{bin_dir}:/usr/bin:/bin",
+            "UV_LOG": str(log),
+            "UV_TOOL_BIN": str(tool_bin),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "curl should-not-run" not in log.read_text()
+    assert (
+        "tool install --force argos-agent @ "
         "git+https://github.com/tungoldshou/argos.git@main"
     ) in log.read_text()
-    assert "tool dir --bin" in log.read_text()
+
+
+def test_root_install_script_fails_cleanly_without_latest_release(tmp_path):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "install.log"
+
+    curl = bin_dir / "curl"
+    curl.write_text(
+        "#!/usr/bin/env bash\n"
+        "echo \"$*\" >> \"$INSTALL_LOG\"\n"
+        "exit 22\n",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+
+    result = subprocess.run(
+        ["/bin/bash", str(ROOT_INSTALL)],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        env={
+            "PATH": f"{bin_dir}:/usr/bin:/bin",
+            "INSTALL_LOG": str(log),
+        },
+    )
+
+    assert result.returncode != 0
+    output = result.stderr + result.stdout
+    assert "Could not resolve the latest Argos release." in output
+    assert "ARGOS_INSTALL_REF=main" in output
+    assert "astral.sh/uv/install.sh" not in log.read_text()
 
 
 def test_root_install_script_bootstraps_uv_when_missing(tmp_path):
@@ -146,7 +243,11 @@ def test_root_install_script_bootstraps_uv_when_missing(tmp_path):
     curl.write_text(
         "#!/usr/bin/env bash\n"
         "echo \"$*\" >> \"$INSTALL_LOG\"\n"
-        "cat \"$UV_INSTALLER\"\n",
+        "case \"$*\" in\n"
+        "  *astral.sh/uv/install.sh*) cat \"$UV_INSTALLER\"; exit 0 ;;\n"
+        "  *api.github.com/repos/tungoldshou/argos/releases/latest*) printf '{\"tag_name\":\"v9.8.7\"}'; exit 0 ;;\n"
+        "esac\n"
+        "exit 2\n",
         encoding="utf-8",
     )
     curl.chmod(0o755)
@@ -156,7 +257,7 @@ def test_root_install_script_bootstraps_uv_when_missing(tmp_path):
         "#!/usr/bin/env bash\n"
         "echo \"uv $*\" >> \"$INSTALL_LOG\"\n"
         "case \"$*\" in\n"
-        "  'tool install --force argos-agent @ git+https://github.com/tungoldshou/argos.git@main') exit 0 ;;\n"
+        "  'tool install --force argos-agent @ git+https://github.com/tungoldshou/argos.git@v9.8.7') exit 0 ;;\n"
         "  'tool dir --bin') echo \"$UV_TOOL_BIN\"; exit 0 ;;\n"
         "esac\n"
         "exit 2\n",
@@ -192,10 +293,11 @@ def test_root_install_script_bootstraps_uv_when_missing(tmp_path):
     assert result.returncode == 0, result.stderr + result.stdout
     lines = log.read_text().splitlines()
     assert any("https://astral.sh/uv/install.sh" in line for line in lines)
+    assert any("https://api.github.com/repos/tungoldshou/argos/releases/latest" in line for line in lines)
     assert "install-uv" in lines
     assert (
         "uv tool install --force argos-agent @ "
-        "git+https://github.com/tungoldshou/argos.git@main"
+        "git+https://github.com/tungoldshou/argos.git@v9.8.7"
     ) in lines
     assert "argos 0.1.0" in result.stdout
 

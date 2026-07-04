@@ -1,25 +1,17 @@
 # Packaging backlog — deferred binary/package-manager channels
 
 > Road-map #13 / spec `2026-06-07-packaging-c-design.md` 的后台记录。
-> 首发安装面已收敛到无版本 `curl | bash`、GitHub source `uv tool` 和 source checkout；本页记录推迟的
+> 首发安装面已收敛到无版本 `curl | bash`、latest GitHub release `uv tool` 和 source checkout；本页记录推迟的
 > binary/package-manager 工作，不作为公开安装指南。
 
 > **发布状态**: 旧 GitHub `v0.1.0` release/tag 已删除；当前首发目标是
-> GitHub source installer + TestPyPI/PyPI package 路径。macOS / Linux / Windows /
+> latest release source installer + TestPyPI/PyPI package 路径。macOS / Linux / Windows /
 > Homebrew tap / WinGet / Nix 均为 deferred backlog。
 
 ## 首发安装面
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash
-```
-
-等价手动命令:
-
-```bash
-uv tool install --force "argos-agent @ git+https://github.com/tungoldshou/argos.git@main"
-argos setup
-argos
 ```
 
 如果 `argos` 不在 PATH,先跑 `uv tool update-shell` 并重开 shell。
