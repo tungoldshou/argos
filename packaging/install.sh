@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deferred binary installer; not the public launch installer.
-# Public launch install uses root install.sh -> GitHub source uv tool install.
+# Public launch install uses root install.sh -> latest release uv tool install.
 # This script is kept for future macOS arm64 release assets.
 set -euo pipefail
 

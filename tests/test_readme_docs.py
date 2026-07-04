@@ -262,10 +262,9 @@ def test_readme_launch_install_surface_is_small():
         in section
     )
     assert "raw.githubusercontent.com/tungoldshou/argos/v0.1.1/install.sh" not in section
-    assert (
-        'uv tool install --force "argos-agent @ git+https://github.com/tungoldshou/argos.git@main"'
-        in section
-    )
+    assert "latest GitHub release" in section
+    assert "installs Argos from the GitHub `main` branch" not in section
+    assert "uv tool install --force" in section
     assert "ARGOS_INSTALL_REF=v0.1.1" in section
     assert "bootstraps" in section
     assert "uv tool update-shell" in section

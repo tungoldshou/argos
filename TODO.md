@@ -89,7 +89,7 @@ Last updated: 2026-07-04
 - Fixed shell hard-rule coverage so destructive `rm -rf` root/home variants are denied before auto-approval.
 - Fixed Linux packaging so AppImage generation is release-blocking instead of warning and continuing.
 - Fixed Linux packaging so missing `.deb` / `.rpm` tools, failed rpm builds, and missing exact rpm release assets stop the build instead of uploading partial artifacts.
-- Reduced the public launch install surface to versionless `curl | bash`, GitHub source `uv tool`, and source checkout, and moved binary/package-manager channels to deferred backlog.
+- Reduced the public launch install surface to versionless `curl | bash`, latest GitHub release source install, and source checkout, and moved binary/package-manager channels to deferred backlog.
 - Changed binary `release.yml` to manual `workflow_dispatch` so PyPI tag publishing is not blocked by draft binary channels.
 - Fixed WinGet manifest review so `argospkg manifest` lists all three manifests and rejects invalid non-placeholder `InstallerSha256` values.
 - Fixed malformed `permissions.json` first-load handling so bad policy files fail closed instead of becoming empty auto-approval policy.
@@ -147,7 +147,7 @@ Last updated: 2026-07-04
 - Reviewed the high-risk product-reset diff and tightened `run_command` persistent allow matchers so commands with leading flags do not persist as bare-command approvals.
 - Opened draft PR #30 for `codex/product-spine-reset` and verified its GitHub CI run passed.
 - Merged PR #29 and PR #30 to `main`, then reran `publish.yml` from `main`; CI/build/twine/wheel-smoke passed, and TestPyPI failed only on missing trusted publisher configuration.
-- Changed the public one-line installer to use the versionless raw GitHub `main/install.sh` URL and install Argos from the GitHub source ref by default, avoiding a PyPI dependency for the main user path.
+- Changed the public one-line installer to use the versionless raw GitHub `main/install.sh` URL and install Argos from the latest GitHub release tag by default, avoiding a PyPI dependency for the main user path.
 
 ## In Progress
 

@@ -108,9 +108,9 @@ Without an API key, `argos` exits with a clear message telling you to run
 
 ## Install
 
-> **Launch install surface:** use PyPI / `uv tool` when the package is
-> published, or use a source checkout today. Binary and package-manager
-> channels are deferred until the Python package path is stable.
+> **Launch install surface:** use the versionless `curl | bash` installer for
+> the latest GitHub release, or use a source checkout for development. Binary
+> and package-manager channels are deferred until the release path is stable.
 
 ### Platform support
 
@@ -135,26 +135,24 @@ still gates side effects.
 ### One-line installer
 
 The public installer has no version in the command. It bootstraps
-[uv](https://docs.astral.sh/uv/) if needed, then installs Argos from the
-GitHub `main` branch.
+[uv](https://docs.astral.sh/uv/) if needed, then installs the latest GitHub
+release tag.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash
 ```
 
-Equivalent manual install:
-
-```bash
-uv tool install --force "argos-agent @ git+https://github.com/tungoldshou/argos.git@main"
-argos setup
-argos
-```
-
-To pin a tag or commit, set `ARGOS_INSTALL_REF` while keeping the same
-versionless script URL:
+The script uses `uv tool install --force` under the hood. To pin a tag or
+commit, set `ARGOS_INSTALL_REF` while keeping the same versionless script URL:
 
 ```bash
 ARGOS_INSTALL_REF=v0.1.1 curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash
+```
+
+For development installs from `main`, use the same override:
+
+```bash
+ARGOS_INSTALL_REF=main curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash
 ```
 
 If `argos` is not found after install, run `uv tool update-shell` and reopen
