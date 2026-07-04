@@ -13,11 +13,12 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
-if uv tool list | grep -q "^argos-agent "; then
-  uv tool upgrade argos-agent
-else
-  uv tool install argos-agent
-fi
+ARGOS_INSTALL_REF="${ARGOS_INSTALL_REF:-main}"
+ARGOS_REPO_URL="${ARGOS_REPO_URL:-https://github.com/tungoldshou/argos.git}"
+PACKAGE_SPEC="argos-agent @ git+${ARGOS_REPO_URL}@${ARGOS_INSTALL_REF}"
+
+echo "Installing Argos from ${ARGOS_REPO_URL}@${ARGOS_INSTALL_REF}..."
+uv tool install --force "$PACKAGE_SPEC"
 
 TOOL_BIN="$(uv tool dir --bin)"
 "$TOOL_BIN/argos" --version
