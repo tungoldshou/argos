@@ -23,7 +23,6 @@ from argos.eval.runner import (
     PASS_PASSED,
     PASS_SETUP_FAILED,
 )
-from argos.tui.sync_output import sync_batch
 
 log = logging.getLogger(__name__)
 
@@ -479,9 +478,7 @@ def cmd_tb(args: argparse.Namespace) -> int:
             "per_task_status": dict(report.per_task_status),
         }, ensure_ascii=False))
         return 0
-    sync_enabled: bool | None = getattr(args, "sync_output", None)
-    with sync_batch(sys.stdout, enabled=sync_enabled):
-        _print_tb_report(report)
+    _print_tb_report(report)
     return 0
 
 
@@ -513,16 +510,5 @@ def add_tb_subparser(sub: Any) -> None:
     p_tb.add_argument("--keep-worktree", action="store_true", help=t("eval.tb.keep_worktree_help"))
     p_tb.add_argument(
         "--format", choices=("text", "json"), default="text", help=t("eval.tb.format_help"),
-    )
-    sync_grp = p_tb.add_mutually_exclusive_group()
-    sync_grp.add_argument(
-        "--sync-output", dest="sync_output", action="store_const",
-        const=True, default=None,
-        help=t("eval.tb.sync_output_help"),
-    )
-    sync_grp.add_argument(
-        "--no-sync-output", dest="sync_output", action="store_const",
-        const=False,
-        help=t("eval.tb.no_sync_output_help"),
     )
     p_tb.set_defaults(func=cmd_tb)

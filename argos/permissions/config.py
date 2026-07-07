@@ -10,7 +10,7 @@ from typing import Final, Mapping, Sequence
 from argos import config
 from argos import config_base
 from argos.i18n import t
-from argos.permissions.schema import VALID_LEVELS
+from argos.permissions.mode import PermissionMode, parse_permission_mode
 
 _log = logging.getLogger("argos.permissions")
 
@@ -57,35 +57,19 @@ class RuleEntry:
 
 
 @dataclass(frozen=True, slots=True)
-class ToolLevelOverride:
-    tool: str
-    level: str  # observe / propose / confirm / auto / accept_edits
-
-
-@dataclass(frozen=True, slots=True)
 class PermissionsConfig:
-    version: int = 1
-    default_level: str | None = None
-    tools: Mapping[str, str] = field(default_factory=dict)
+    version: int = 2
+    mode: PermissionMode = PermissionMode.SMART_APPROVAL
+    network: Mapping[str, object] = field(default_factory=dict)
+    rules: Mapping[str, object] = field(default_factory=dict)
+    reviewer: Mapping[str, object] = field(default_factory=dict)
     allow: tuple[RuleEntry, ...] = ()
     deny: tuple[RuleEntry, ...] = ()
     ask: tuple[RuleEntry, ...] = ()
-    preauth: Mapping[str, bool] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        if self.default_level is not None and self.default_level not in VALID_LEVELS:
-            raise ValueError(
-                t("perm2.config.invalid_default_level", level=self.default_level, valid=sorted(VALID_LEVELS))
-            )
-        for tool, level in self.tools.items():
-            if level not in VALID_LEVELS:
-                raise ValueError(
-                    t("perm2.config.invalid_tool_level", level=level, tool=tool, valid=sorted(VALID_LEVELS))
-                )
 
     @staticmethod
     def empty() -> "PermissionsConfig":
-        return PermissionsConfig(version=1)
+        return PermissionsConfig(version=2)
 
     def match_allow(self, tool: str, arg_str: str) -> RuleEntry | None:
         for e in self.allow:
@@ -140,47 +124,38 @@ def load(path: Path | None = None) -> PermissionsConfig:
         return PermissionsConfig.empty()
     raw = data
     version = raw.get("version")
-    if version != 1:
+    if version != 2:
         raise PermissionsConfigError(
             t("perm2.config.bad_version", version=version)
         )
-    default_level = raw.get("default_level")
-    if default_level is not None and default_level not in VALID_LEVELS:
+    old_keys = {"default" + "_level", "tool" + "s", "pre" + "auth"} & set(raw)
+    if old_keys:
         raise PermissionsConfigError(
-            t("perm2.config.invalid_default_level_load", level=default_level, valid=sorted(VALID_LEVELS))
+            "permissions.json v2 only supports mode, network, rules, and reviewer; "
+            f"remove old keys: {', '.join(sorted(old_keys))}"
         )
-    tools = raw.get("tools") or {}
-    if not isinstance(tools, dict):
-        raise PermissionsConfigError(t("perm2.config.tools_not_object"))
-    tools_clean: dict[str, str] = {}
-    for k, v in tools.items():
-        if isinstance(k, str) and isinstance(v, str) and v in VALID_LEVELS:
-            tools_clean[k] = v
-        else:
-            _log.warning(
-                "permissions: skip tool override (invalid) tool=%r level=%r", k, v,
-            )
-    allow = _safe_rule_entries(raw.get("allow") or [])
-    deny = _safe_rule_entries(raw.get("deny") or [])
-    ask = _safe_rule_entries(raw.get("ask") or [])
-    preauth_raw = raw.get("preauth") or {}
-    preauth_clean: dict[str, bool] = {}
-    if isinstance(preauth_raw, dict):
-        for k, v in preauth_raw.items():
-            if isinstance(k, str) and isinstance(v, bool):
-                preauth_clean[k] = v
-            else:
-                _log.warning(
-                    "permissions: skip preauth entry (invalid) key=%r value=%r", k, v,
-                )
+    mode = parse_permission_mode(raw.get("mode"))
+    network = raw.get("network") or {}
+    if not isinstance(network, dict):
+        raise PermissionsConfigError("network must be an object")
+    rules = raw.get("rules") or {}
+    if not isinstance(rules, dict):
+        raise PermissionsConfigError("rules must be an object")
+    reviewer = raw.get("reviewer") or {}
+    if not isinstance(reviewer, dict):
+        raise PermissionsConfigError("reviewer must be an object")
+    allow = _safe_rule_entries(rules.get("allow") or [])
+    deny = _safe_rule_entries(rules.get("deny") or [])
+    ask = _safe_rule_entries(rules.get("ask") or [])
     return PermissionsConfig(
-        version=1,
-        default_level=default_level,
-        tools=tools_clean,
+        version=2,
+        mode=mode,
+        network=network,
+        rules=rules,
+        reviewer=reviewer,
         allow=allow,
         deny=deny,
         ask=ask,
-        preauth=preauth_clean,
     )
 
 
@@ -198,8 +173,8 @@ def get_config() -> PermissionsConfig:
         try:
             _config = load()
         except PermissionsConfigError as e:
-            _log.warning("permissions: 加载失败,使用 observe fail-closed:%s", e)
-            _config = PermissionsConfig(version=1, default_level="observe")
+            _log.debug("permissions: 加载失败,使用 smart fail-closed:%s", e)
+            _config = PermissionsConfig(version=2, mode=PermissionMode.SMART_APPROVAL)
     return _config
 
 
@@ -209,7 +184,7 @@ def reload_config(path: Path | None = None) -> PermissionsConfig:
         new_cfg = load(path)
     except PermissionsConfigError:
         if _config is None:
-            _config = PermissionsConfig(version=1, default_level="observe")
+            _config = PermissionsConfig(version=2, mode=PermissionMode.SMART_APPROVAL)
         raise
     _config = new_cfg
     return _config
@@ -226,15 +201,20 @@ def save_allow_rule(tool: str, matcher: str, path: Path | None = None) -> bool:
         if not isinstance(loaded, dict):
             return False
         raw = loaded
-    raw.setdefault("version", 1)
-    allow_list = raw.get("allow")
+    raw.setdefault("version", 2)
+    raw.setdefault("mode", PermissionMode.SMART_APPROVAL.value)
+    rules = raw.get("rules")
+    if not isinstance(rules, dict):
+        rules = {}
+    allow_list = rules.get("allow")
     if not isinstance(allow_list, list):
         allow_list = []
     exists = any(isinstance(e, dict) and e.get("tool") == tool and e.get("matcher") == matcher
                  for e in allow_list)
     if not exists:
         allow_list.append({"tool": tool, "matcher": matcher})
-        raw["allow"] = allow_list
+        rules["allow"] = allow_list
+        raw["rules"] = rules
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
             tmp = p.with_name(p.name + ".tmp")

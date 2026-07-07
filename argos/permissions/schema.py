@@ -2,21 +2,28 @@ from __future__ import annotations
 
 from typing import Final
 
-VALID_LEVELS: Final[frozenset[str]] = frozenset({
-    "observe", "propose", "confirm", "auto", "accept_edits",
-})
+VALID_MODES: Final[frozenset[str]] = frozenset({"smart", "full"})
 
-SCHEMA_V1: Final[dict] = {
+SCHEMA_V2: Final[dict] = {
     "type": "object",
     "required": ["version"],
     "properties": {
-        "version": {"const": 1},
-        "default_level": {"type": "string", "enum": list(VALID_LEVELS)},
-        "tools": {
+        "version": {"const": 2},
+        "mode": {"type": "string", "enum": sorted(VALID_MODES)},
+        "network": {"type": "object"},
+        "reviewer": {"type": "object"},
+        "rules": {
             "type": "object",
-            "additionalProperties": {"type": "string", "enum": list(VALID_LEVELS)},
+            "properties": {
+                "allow": {"$ref": "#/$defs/rule_list"},
+                "deny": {"$ref": "#/$defs/rule_list"},
+                "ask": {"$ref": "#/$defs/rule_list"},
+            },
+            "additionalProperties": False,
         },
-        "allow": {
+    },
+    "$defs": {
+        "rule_list": {
             "type": "array",
             "items": {
                 "type": "object",
@@ -27,8 +34,6 @@ SCHEMA_V1: Final[dict] = {
                 },
             },
         },
-        "deny": {"$ref": "#/properties/allow"},
-        "ask": {"$ref": "#/properties/allow"},
     },
     "additionalProperties": False,
 }

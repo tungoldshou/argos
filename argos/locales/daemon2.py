@@ -81,9 +81,9 @@ EN: dict[str, str] = {
     # server.py — undo entry: note for restored file
     "daemon.srv.undo_entry_restored_note": "restored file: {file_path}",
     # server.py — conductor unavailable (confirm suggestion)
-    "daemon.srv.conductor_unavailable_confirm": "conductor not started; cannot confirm suggestion",
+    "daemon.srv.conductor_unavailable_confirm": "scheduler not started; cannot confirm suggestion",
     # server.py — conductor unavailable (dismiss suggestion)
-    "daemon.srv.conductor_unavailable_dismiss": "conductor not started",
+    "daemon.srv.conductor_unavailable_dismiss": "scheduler not started",
     # server.py — busy with suggestion pending (acquire slot)
     "daemon.srv.busy_suggestion_capacity": (
         "max_concurrent_runs_reached (max={max_concurrent}, "
@@ -123,7 +123,7 @@ EN: dict[str, str] = {
     "daemon.srv.dream_order_utterance": (
         "nightly consolidation: cross-run synthesis + memory tidy (Dream)"
     ),
-    # tui/daemon_source.py — reconnect failure
+    # daemon client reconnect failure
     "daemon.srv.reconnect_failed": (
         "daemon connection lost (run={run_id!r}); "
         "reconnected {max_retries} times but still failing: {error}"
@@ -206,9 +206,9 @@ ZH: dict[str, str] = {
     # server.py — undo entry: note for restored file
     "daemon.srv.undo_entry_restored_note": "已还原文件:{file_path}",
     # server.py — conductor unavailable (confirm suggestion)
-    "daemon.srv.conductor_unavailable_confirm": "conductor 未启动，无法确认建议",
+    "daemon.srv.conductor_unavailable_confirm": "调度器未启动，无法确认建议",
     # server.py — conductor unavailable (dismiss suggestion)
-    "daemon.srv.conductor_unavailable_dismiss": "conductor 未启动",
+    "daemon.srv.conductor_unavailable_dismiss": "调度器未启动",
     # server.py — busy with suggestion pending (acquire slot)
     "daemon.srv.busy_suggestion_capacity": (
         "max_concurrent_runs_reached (max={max_concurrent}, "
@@ -246,7 +246,7 @@ ZH: dict[str, str] = {
     "daemon.srv.dream_order_utterance": (
         "夜间整合:跨 run 综合蒸馏 + 记忆整理(Dream)"
     ),
-    # tui/daemon_source.py — reconnect failure
+    # daemon client reconnect failure
     "daemon.srv.reconnect_failed": (
         "daemon 连接断开（run={run_id!r}），"
         "重连 {max_retries} 次仍失败：{error}"

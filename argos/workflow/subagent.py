@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from argos.approval import ApprovalGate, ApprovalLevel
+from argos.approval import ApprovalGate
 from argos.i18n import t
 from argos.core.loop import AgentLoop, LoopConfig
 from argos.sandbox.broker import CapabilityBroker
@@ -77,7 +77,7 @@ class SubAgentFactory:
             derived_allowlist = None
             max_steps = _DEFAULT_MAX_STEPS
         model = self.model_factory(task.model)
-        gate = ApprovalGate(ApprovalLevel.AUTO)
+        gate = ApprovalGate()
 
         report_parts: list[str] = []
         verdict_status: str | None = None
@@ -102,7 +102,6 @@ class SubAgentFactory:
                 max_rounds=2,
                 max_steps=max_steps,
                 compaction=True,
-                approval_level=ApprovalLevel.AUTO,
             )
             from argos.memory.auto import project_id_for as _pid
             loop = AgentLoop(

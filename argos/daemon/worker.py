@@ -45,11 +45,9 @@ class DaemonApprovalGate:
         self._run_id = run_id
         self._manager = manager
         self._pending_call_ids: set[str] = set()
-        self.level = real_gate.level
 
-    def set_level(self, level: Any) -> None:
-        self._gate.set_level(level)
-        self.level = level
+    def set_permission_mode(self, mode: Any) -> None:
+        self._gate.set_permission_mode(mode)
 
     def set_workspace(self, ws: Any) -> None:
         self._gate.set_workspace(ws)

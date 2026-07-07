@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import base64
 import re
-from dataclasses import dataclass, field
+import shutil
+import subprocess
+import sys
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from argos.i18n import t
@@ -14,7 +19,7 @@ SUPPORTED_MEDIA_TYPES: frozenset[str] = frozenset({
     "image/gif",
 })
 
-MAX_SIZE_BYTES: int = 5 * 1024 * 1024
+MAX_SIZE_BYTES: int = 10 * 1024 * 1024
 
 _IMAGE_PATH_RE = re.compile(
     r'(?:^|(?<=\s)|(?<=\())(/[^\s\)\'\"]+\.(?:png|jpg|jpeg|webp|gif))',
@@ -56,6 +61,62 @@ def validate_attachment(att: ImageAttachment) -> None:
         )
 
 
+def _sips_reencode(
+    att: ImageAttachment, *, fmt: str, media_type: str,
+) -> ImageAttachment | None:
+    if sys.platform != "darwin" or shutil.which("sips") is None:
+        return None
+    out_suffix = ".jpg" if fmt == "jpeg" else ".png"
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            in_path = Path(td) / "input.png"
+            out_path = Path(td) / f"output{out_suffix}"
+            in_path.write_bytes(att.data)
+            cmd = ["sips", "-s", "format", fmt]
+            if fmt == "jpeg":
+                cmd.extend(["-s", "formatOptions", "95"])
+            cmd.extend([str(in_path), "--out", str(out_path)])
+            proc = subprocess.run(cmd, capture_output=True, timeout=30)
+            if proc.returncode != 0 or not out_path.exists():
+                return None
+            data = out_path.read_bytes()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if not data:
+        return None
+    return ImageAttachment(
+        data=data,
+        media_type=media_type,
+        source_label=att.source_label,
+        width=att.width,
+        height=att.height,
+    )
+
+
+def prepare_attachment(att: ImageAttachment) -> ImageAttachment:
+    if att.media_type not in SUPPORTED_MEDIA_TYPES:
+        validate_attachment(att)
+        return att
+    if len(att.data) <= MAX_SIZE_BYTES:
+        validate_attachment(att)
+        return att
+    if att.media_type == "image/png":
+        png = _sips_reencode(att, fmt="png", media_type="image/png")
+        if (
+            png is not None
+            and len(png.data) < len(att.data)
+            and len(png.data) <= MAX_SIZE_BYTES
+        ):
+            validate_attachment(png)
+            return png
+        jpeg = _sips_reencode(att, fmt="jpeg", media_type="image/jpeg")
+        if jpeg is not None and len(jpeg.data) <= MAX_SIZE_BYTES:
+            validate_attachment(jpeg)
+            return jpeg
+    validate_attachment(att)
+    return att
+
+
 def to_base64(att: ImageAttachment) -> str:
     return base64.b64encode(att.data).decode("ascii")
 
@@ -76,8 +137,8 @@ def load_from_path(path: str) -> ImageAttachment:
     with open(path, "rb") as f:
         data = f.read()
     media_type = sniff_media_type(data)
-    return ImageAttachment(
+    return prepare_attachment(ImageAttachment(
         data=data,
         media_type=media_type,
         source_label=os.path.basename(path),
-    )
+    ))

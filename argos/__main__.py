@@ -27,7 +27,11 @@ def _update_cache_path() -> Path:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="argos", description="Argos — the hundred-eyed agent")
+    p = argparse.ArgumentParser(
+        prog="argos",
+        description="Argos — coding agent",
+        epilog=t("cli.advanced_hint"),
+    )
     import argos
     p.add_argument(
         "--version",
@@ -44,7 +48,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--sandbox", action="store_true", help=t("cli.sandbox.help"))
     p.add_argument("--add-dir", action="append", metavar="PATH", dest="add_dir",
                    help=t("cli.add_dir.help"))
-    sub = p.add_subparsers(dest="command")
+    sub = p.add_subparsers(dest="command", metavar="{exec,setup,self-update}")
     from argos.cli import headless as _headless_cli
     _headless_cli.add_subparser(sub)
     sp_setup = sub.add_parser(
@@ -117,7 +121,7 @@ def _run_selftest() -> int:
     from pathlib import Path
 
     from argos import runtime
-    from argos.approval import ApprovalGate, ApprovalLevel
+    from argos.approval import ApprovalGate
     from argos.core.loop import AgentLoop, LoopConfig
     from argos.core.verify_gate import Verifier
     from argos.memory.store import ArgosStore
@@ -135,7 +139,7 @@ def _run_selftest() -> int:
         tok = runtime.use_project(str(proj))
         store = None
         try:
-            gate = ApprovalGate(level=ApprovalLevel.AUTO)
+            gate = ApprovalGate()
             broker = CapabilityBroker(
                 gate=gate,
                 egress=EgressPolicy(llm_hosts=set(), search_hosts=set(), mcp_hosts=set()),
@@ -155,8 +159,7 @@ def _run_selftest() -> int:
             loop = AgentLoop(
                 store=store, bus=EventBus(), sandbox=sandbox, broker=broker, model=model,
                 verifier=Verifier(max_rounds=3),
-                config=LoopConfig(verify_cmd=_selftest_verify_cmd(),
-                                  approval_level=ApprovalLevel.AUTO, compaction=False),
+                config=LoopConfig(verify_cmd=_selftest_verify_cmd(), compaction=False),
                 workspace=proj, verify_dir=proj,
             )
 
@@ -169,7 +172,7 @@ def _run_selftest() -> int:
 
             verdicts = asyncio.run(_go())
             ok = bool(verdicts) and verdicts[-1] == "passed"
-            print(f"[selftest] verdicts={verdicts} → {'OK' if ok else 'FAIL'}")
+            print(t("cli.selftest.passed" if ok else "cli.selftest.failed"))
             return 0 if ok else 1
         except Exception as e:  # noqa: BLE001
             print(t("cli.selftest.assembly_failed", exc_type=type(e).__name__, exc=e), file=sys.stderr)
@@ -264,28 +267,8 @@ def main() -> None:
     if args.selftest:
         sys.exit(_run_selftest())
 
-    from argos.tui.app import ArgosApp
-
-    try:
-        from argos.app_factory import build_components, build_loop_factory
-        from argos.approval import ApprovalLevel
-        from argos.config import ConfigError as _TuiConfigError
-        from argos.routing.effort import EffortLevel
-        effective_ws = resolve_workspace(args.project)
-        components = build_components(
-            workspace=effective_ws, model_override=args.model, approval_level=ApprovalLevel.CONFIRM,
-            effort=EffortLevel(args.effort),
-        )
-        factory = build_loop_factory(components)
-        ArgosApp(
-            loop_factory=factory, gate=components.gate,
-            workspace=effective_ws or components.workspace,
-        ).run()
-    except (RuntimeError, _TuiConfigError) as e:
-        print(f"[argos] {e}", file=sys.stderr)
-        from argos import setup_wizard
-        setup_wizard.print_status(writer=lambda line: print(f"[argos] {line}", file=sys.stderr))
-        sys.exit(1)
+    print(t("cli.frontend_removed"), file=sys.stderr)
+    sys.exit(2)
 
 
 if __name__ == "__main__":

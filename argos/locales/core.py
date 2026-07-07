@@ -112,7 +112,7 @@ EN: dict[str, str] = {
     ),
 
     # ── workflow engine / spec / result ──────────────────────────────────────
-    "loop.workflow.no_engine": "[Workflow engine not connected; cannot orchestrate. Continue in single-thread mode.]",
+    "loop.workflow.no_engine": "[Workflow engine not connected; continue in single-thread mode.]",
     "loop.workflow.spec_invalid": "[Workflow rejected: invalid spec — {error}. Fix it or continue in single-thread mode.]",
     "loop.workflow.rejected": "[Workflow rejected; continuing in single-thread mode.]",
     "loop.workflow.no_result": "(no workflow result)",
@@ -171,20 +171,20 @@ EN: dict[str, str] = {
     "loop.persisted.with_note": "(run complete: {report_note})",
     "loop.persisted.done": "(run complete)",
 
-    # ── visible completion lines (yielded as TokenDelta to TUI / transcript) ─
+    # ── visible completion lines (yielded as TokenDelta to clients) ──────────
     "loop.done.escalated": (
-        "⚠️ Could not pass verification within the allowed rounds"
+        "verify failed: could not pass verification within the allowed rounds"
         " — escalated as reported above.\n"
     ),
-    "loop.done.with_note": "✅ Done. {report_note}\n",
-    "loop.done.verified": "✅ Done, verification passed (all tests/checks green).\n",
+    "loop.done.with_note": "run complete: {report_note}\n",
+    "loop.done.verified": "verify passed: verification passed (all tests/checks green).\n",
     "loop.done.self_verified": (
-        "\U0001f7e1 Done, self-verified (system-generated test; not user-level verify).\n"
+        "verify self-verified: system-generated test; not user-level verify.\n"
     ),
     "loop.done.verdict_bad": (
-        "⚠️ Run ended: verification failed or untrustworthy (see above).\n"
+        "verify failed: run ended with failed or untrustworthy verification (see above).\n"
     ),
-    "loop.done.generic": "✅ Run complete.\n",
+    "loop.done.generic": "run complete.\n",
 
     # ── harness escalation reason ─────────────────────────────────────────────
     "verdict_detail.escalation_reason": (
@@ -280,7 +280,7 @@ ZH: dict[str, str] = {
         "请用工具定位并修复,改完再说完成。"
     ),
 
-    "loop.workflow.no_engine": "[工作流引擎未接入,无法编排;请单线程继续。]",
+    "loop.workflow.no_engine": "[工作流引擎未接入;请单线程继续。]",
     "loop.workflow.spec_invalid": "[工作流被拒:规格非法 — {error}。请修正或单线程继续。]",
     "loop.workflow.rejected": "[工作流被拒,单线程继续。]",
     "loop.workflow.no_result": "(工作流无结果)",
@@ -338,18 +338,12 @@ ZH: dict[str, str] = {
     # verbatim from loop.py line 1910
     "loop.persisted.done": "(本轮完成)",
 
-    # verbatim from loop.py line 1926
-    "loop.done.escalated": "⚠️ 未能在限定轮内通过验证,已如实上报(见上方升级提示)。\n",
-    # verbatim from loop.py line 1928
-    "loop.done.with_note": "✅ 完成。{report_note}\n",
-    # verbatim from loop.py line 1932
-    "loop.done.verified": "✅ 完成,验证通过(测试/检查全绿)。\n",
-    # verbatim from loop.py line 1937
-    "loop.done.self_verified": "🟡 完成,自验证通过(系统自造测试;非用户级 verify)。\n",
-    # verbatim from loop.py line 1939
-    "loop.done.verdict_bad": "⚠️ 本轮结束:验证未通过/不可信(详见上)。\n",
-    # verbatim from loop.py line 1941
-    "loop.done.generic": "✅ 本轮结束。\n",
+    "loop.done.escalated": "验证未通过:未能在限定轮内通过验证,已如实上报(见上方升级提示)。\n",
+    "loop.done.with_note": "本轮结束:{report_note}\n",
+    "loop.done.verified": "验证通过:测试/检查全绿。\n",
+    "loop.done.self_verified": "自验证通过:系统自造测试;非用户级 verify。\n",
+    "loop.done.verdict_bad": "验证未通过:本轮结束时验证失败或不可信(详见上)。\n",
+    "loop.done.generic": "本轮结束。\n",
 
     # ── harness escalation reason(verbatim from harness.py lines 116-118) ────
     "verdict_detail.escalation_reason": (

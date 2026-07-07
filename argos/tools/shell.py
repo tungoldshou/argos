@@ -19,9 +19,16 @@ NETWORK_BINARIES: set[str] = {
     "pip", "pip3", "npm", "pnpm", "yarn", "npx", "curl", "wget", "ssh", "scp",
     "brew", "rsync", "ping", "nc", "telnet",
 }
+LOW_RISK_BINARIES: set[str] = {
+    "ls", "cat", "grep", "rg", "echo", "pwd", "pytest", "ruff", "mypy", "tsc", "eslint",
+}
 _GIT_NETWORK_SUBCMDS: set[str] = {
     "push", "pull", "fetch", "clone", "remote", "submodule", "ls-remote", "archive",
 }
+_GIT_READONLY_SUBCMDS: set[str] = {
+    "status", "log", "diff", "show", "branch", "rev-parse", "ls-files", "grep",
+}
+_GIT_OPTIONS_WITH_VALUE: set[str] = {"-C", "-c", "--git-dir", "--work-tree"}
 
 
 def _linux_available_backend() -> str | None:
@@ -47,6 +54,37 @@ def command_needs_network(command: str) -> bool:
         for tok in parts[1:]:
             if not tok.startswith("-"):
                 return tok in _GIT_NETWORK_SUBCMDS
+    return False
+
+
+def command_is_low_risk(command: str) -> bool:
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return False
+    if not parts:
+        return False
+    bin_name = Path(parts[0]).name
+    if bin_name == "uv" and len(parts) > 2 and parts[1] == "run":
+        return command_is_low_risk(" ".join(shlex.quote(p) for p in parts[2:]))
+    if bin_name in LOW_RISK_BINARIES:
+        return True
+    if bin_name in {"python", "python3"}:
+        return len(parts) >= 3 and parts[1] == "-m" and parts[2] in {"pytest", "compileall"}
+    if bin_name == "argos":
+        return "--selftest" in parts
+    if bin_name == "git":
+        skip_next = False
+        for tok in parts[1:]:
+            if skip_next:
+                skip_next = False
+                continue
+            if tok in _GIT_OPTIONS_WITH_VALUE:
+                skip_next = True
+                continue
+            if tok.startswith("-"):
+                continue
+            return tok in _GIT_READONLY_SUBCMDS
     return False
 
 

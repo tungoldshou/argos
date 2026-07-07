@@ -3,7 +3,7 @@ from __future__ import annotations
 EN: dict[str, str] = {
     # serve / assembly warnings
     "daemon.serve.warn_no_key": (
-        "[daemon] warning: cannot assemble AgentLoop ({e}); daemon started in no-key mode, create_run will reject."
+        "[daemon] warning: cannot assemble AgentLoop ({e}); daemon started in no-key mode; new runs will be rejected."
     ),
     "daemon.serve.warn_assembly_error": (
         "[daemon] warning: assembly error ({e}); daemon started in no-key mode."
@@ -41,7 +41,7 @@ EN: dict[str, str] = {
 ZH: dict[str, str] = {
     # serve / assembly warnings
     "daemon.serve.warn_no_key": (
-        "[daemon] 警告:无法装配 AgentLoop({e});daemon 以无 key 模式启动,create_run 将拒绝。"
+        "[daemon] 警告:无法装配 AgentLoop({e});daemon 以无 key 模式启动;新 run 将被拒绝。"
     ),
     "daemon.serve.warn_assembly_error": (
         "[daemon] 警告:装配异常({e});daemon 以无 key 模式启动。"

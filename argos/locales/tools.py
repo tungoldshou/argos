@@ -28,7 +28,7 @@ EN: dict[str, str] = {
 
     # update_plan
     "tools.update_plan.registered": (
-        "Task list updated ({n} item(s); activity panel will render progress)."
+        "Task list updated ({n} item(s); transcript will render progress)."
     ),
 
     # plan-mode guard (module-level dispatcher)
@@ -159,17 +159,17 @@ EN: dict[str, str] = {
     "plan.render.approval": "## Approval",
     "plan.render.approval_prompt": "Choose next step:",
     "plan.render.approve_start": (
-        "- ✅ **Approve and start** — full permissions, continue act"
+        "- **Approve and start** — full permissions, continue act"
     ),
     "plan.render.approve_edits": (
-        "- ✏️ **Approve and accept edits**"
+        "- **Approve and accept edits**"
         " — write/edit tools auto-approved, others follow current approval"
     ),
     "plan.render.keep_planning": (
-        "- \U0001f504 **Keep planning** — stay in plan phase"
+        "- **Keep planning** — stay in plan phase"
     ),
     "plan.render.refine": (
-        "- \U0001f4dd **Refine with feedback**"
+        "- **Refine with feedback**"
         " — provide extra context and re-plan"
     ),
 }
@@ -194,7 +194,7 @@ ZH: dict[str, str] = {
     ),
 
     "tools.update_plan.registered": (
-        "已更新任务清单({n} 项,活动栏将渲染进度)。"
+        "已更新任务清单({n} 项)。"
     ),
 
     "tools.plan_mode.blocked": (
@@ -316,15 +316,15 @@ ZH: dict[str, str] = {
     "plan.render.approval": "## 审批",
     "plan.render.approval_prompt": "请选择下一步:",
     "plan.render.approve_start": (
-        "- ✅ **Approve and start** — 全权限,继续 act"
+        "- **Approve and start** — 全权限,继续 act"
     ),
     "plan.render.approve_edits": (
-        "- ✏️ **Approve and accept edits** — 写/编辑工具自动批,其他按现有审批"
+        "- **Approve and accept edits** — 写/编辑工具自动批,其他按现有审批"
     ),
     "plan.render.keep_planning": (
-        "- \U0001f504 **Keep planning** — 继续 plan 阶段"
+        "- **Keep planning** — 继续 plan 阶段"
     ),
     "plan.render.refine": (
-        "- \U0001f4dd **Refine with feedback** — 提供补充上下文后重新 plan"
+        "- **Refine with feedback** — 提供补充上下文后重新 plan"
     ),
 }

@@ -29,17 +29,12 @@ from argos.hooks.payload import (
     build_stop_payload, extract_tool_names,
 )
 from argos.hooks.events import HookFired
+from argos.permissions.mode import PermissionMode, parse_permission_mode
 
 if TYPE_CHECKING:
     from argos.memory.store import ArgosStore
     from argos.sandbox.backend import SandboxBackend
     from argos.sandbox.broker import CapabilityBroker
-
-try:
-    from argos.approval import ApprovalLevel as _ApprovalLevel
-    _DEFAULT_APPROVAL_LEVEL: Any = _ApprovalLevel.CONFIRM
-except Exception:  # noqa: BLE001
-    _DEFAULT_APPROVAL_LEVEL = None
 
 _CODE_BLOCK = re.compile(r"```python\s*\n(.*?)```", re.DOTALL)
 
@@ -300,9 +295,9 @@ def _env_context(workspace: Path) -> str:
     return block
 
 
-def _governance_context(approval_level) -> str:
+def _governance_context(permission_mode: PermissionMode | str) -> str:
     from argos import config as _config
-    level = getattr(approval_level, "name", str(approval_level))
+    mode = parse_permission_mode(permission_mode)
     if _config.sandbox_enabled():
         cage = (
             "ON — an OS sandbox cages side effects this session "
@@ -320,7 +315,7 @@ def _governance_context(approval_level) -> str:
     return (
         "\n\n<runtime>\n"
         f"- OS-level sandbox: {cage}\n"
-        f"- Approval mode: {level}\n"
+        f"- Permission mode: {mode.label}\n"
         "</runtime>"
     )
 
@@ -333,7 +328,7 @@ class LoopConfig:
     max_steps: int = 40
     compaction: bool = True
     recall: bool = True
-    approval_level: Any = field(default_factory=lambda: _DEFAULT_APPROVAL_LEVEL)
+    permission_mode: PermissionMode = PermissionMode.SMART_APPROVAL
     compact_threshold: float = 0.8
     prune_aggressiveness: float = 0.5
     # Task 1.2: hard budget ceilings — None = no limit (pure-additive, behavior identical when unset).
@@ -416,7 +411,6 @@ class AgentLoop:
         self.mode: str = "act"
         self._plan_decision_event: asyncio.Event = asyncio.Event()
         self._plan_decision: PlanExitDecision | None = None
-        self._approval_level_override: Any = None
         self._plan_call_registry: dict[str, asyncio.Event] = {}
         self._router = router
         self._current_tier: str = config.model_tier
@@ -456,7 +450,6 @@ class AgentLoop:
         self._started = time.time()
         self._plan_decision = None
         self._plan_decision_event = asyncio.Event()
-        self._approval_level_override = None
         self._pending_l3_strategy = None
         self._pending_dom_expected_text = ""
         self._pending_gui_expected_text = ""
@@ -779,6 +772,14 @@ class AgentLoop:
         tier = getattr(getattr(self, "_model", None), "tier", None)
         if tier is None:
             return
+        if attachments:
+            if getattr(tier, "multimodal", None) is False:
+                raise ValueError(
+                    _i18n_t("loop.vision.unsupported",
+                            model_name=getattr(tier, "model", "current model"))
+                )
+            self._vision_capable = True
+            return
         from argos.core.vision_capability import (
             resolve_vision_capability, VisionCapabilityCache,
         )
@@ -969,7 +970,7 @@ class AgentLoop:
         safe = (
             HONESTY_SYSTEM
             + _env_context(self._workspace)
-            + _governance_context(self._cfg.approval_level)
+            + _governance_context(self._cfg.permission_mode)
         )
         try:
             from argos.memory import auto as _mem_auto
@@ -1007,7 +1008,7 @@ class AgentLoop:
         if _os_cu.environ.get("ARGOS_COMPUTER_USE"):
             from argos.core.honesty import COMPUTER_USE_PROMPT
             safe = safe + "\n\n" + COMPUTER_USE_PROMPT
-        # ponytail: /workflows TUI toggle is deferred (no in-TUI on/off switch
+        # ponytail: workflow toggle is deferred (no client-side on/off switch
         # yet); control via ARGOS_WORKFLOWS env var only for now.
         if _os_cu.environ.get("ARGOS_WORKFLOWS") == "1":
             from argos.core.honesty import WORKFLOW_PROMPT
@@ -1164,9 +1165,6 @@ class AgentLoop:
                     )
                     self._model = _client
                     self._current_tier = _decision.tier
-                    if self._router.routing.is_force_confirm(_decision.tier):
-                        from argos.approval import ApprovalLevel as _AL
-                        self._approval_level_override = _AL.CONFIRM
                 except Exception:  # noqa: BLE001
                     self._current_tier = self._cfg.model_tier
             scrubber = StreamingContextScrubber()
@@ -1303,16 +1301,7 @@ class AgentLoop:
                     step += 1
                     continue
                 yield CodeAction(code=code, step=step)
-                _ovr_gate = getattr(self._broker, "gate", None) if self._broker is not None else None
-                _ovr_snap = None
-                if _ovr_gate is not None and self._approval_level_override is not None\
-                        and hasattr(_ovr_gate, "push_override_semantics"):
-                    _ovr_snap = _ovr_gate.push_override_semantics(self._approval_level_override)
-                try:
-                    result = await asyncio.to_thread(self._sandbox.exec_code, code)
-                finally:
-                    if _ovr_snap is not None:
-                        _ovr_gate.pop_override_semantics(_ovr_snap)
+                result = await asyncio.to_thread(self._sandbox.exec_code, code)
                 self._actions += 1
                 if result.ok and _tool_names_indicate_mutation(tool_names):
                     made_changes = True
@@ -1516,53 +1505,6 @@ class AgentLoop:
                 )
             last_verdict = verdict
             self._reverified_since_compact = True
-            if verdict.status == "unverifiable" and self._verify_cmd is not None:
-                try:
-                    from argos.permissions.autonomy import (
-                        AutonomyPolicy, on_unverifiable_completion,
-                    )
-                    from argos.permissions.config import get_config as _pc_get
-                    _autonomy = on_unverifiable_completion(
-                        verify_cmd=self._verify_cmd, verdict=verdict,
-                        policy=AutonomyPolicy.from_permissions_config(_pc_get()),
-                    )
-                except Exception:  # noqa: BLE001
-                    _autonomy = None
-                if _autonomy is not None:
-                    zone, reason = _autonomy
-                    if zone.value == "red" and self._broker is not None:
-                        try:
-                            desc = _i18n_t("loop.verify_gate.unverifiable_needs_confirmation", reason=reason)
-                            decision = await self._broker.gate.request(
-                                "autonomy_unverifiable", {"verify_cmd": self._verify_cmd},
-                                description=desc, risk="high", timeout=120.0,
-                            )
-                            if not decision.approved:
-                                self._fail_count += 1
-                                if self._fail_count > self._cfg.max_rounds:
-                                    escalated = True
-                                    break
-                                bounce = _i18n_t(
-                                    "loop.verify_gate.user_rejected_bounce",
-                                    verify_cmd=self._verify_cmd,
-                                    detail=verdict.detail,
-                                )
-                                messages.append({"role": "user", "content": bounce})
-                                step += 1
-                                continue
-                            if self._compacted:
-                                report_note = _i18n_t(
-                                    "loop.report_note.unverifiable_user_confirmed_compacted",
-                                    verdict_status=verdict.status,
-                                )
-                            else:
-                                report_note = _i18n_t(
-                                    "loop.report_note.unverifiable_user_confirmed",
-                                    verdict_status=verdict.status,
-                                )
-                            break
-                        except Exception:  # noqa: BLE001
-                            pass
             for ev in self._hbus.drain():
                 yield ev
 
@@ -1771,10 +1713,6 @@ class AgentLoop:
                 self._plan_call_registry.clear()
                 raise asyncio.CancelledError("plan_decision_none")
             if decision.action == "approve_start":
-                return
-            if decision.action == "approve_accept_edits":
-                from argos.approval import ApprovalLevel
-                self._approval_level_override = ApprovalLevel.ACCEPT_EDITS
                 return
             if decision.action == "keep_planning":
                 self._plan_decision = None

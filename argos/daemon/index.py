@@ -21,7 +21,7 @@ class IndexEntry:
     last_event_seq: int = 0
     pid: int | None = None
     model: str = ""
-    approval_level: str = "confirm"
+    permission_mode: str = "smart"
     session_id: str = ""
 
 
@@ -59,7 +59,7 @@ class StateIndex:
                     last_event_seq=int(raw.get("last_event_seq", 0)),
                     pid=raw.get("pid"),
                     model=raw.get("model", ""),
-                    approval_level=raw.get("approval_level", "confirm"),
+                    permission_mode=raw.get("permission_mode", "smart"),
                     session_id=raw.get("session_id", ""),
                 )
             except (TypeError, ValueError):
@@ -93,7 +93,7 @@ class StateIndex:
         last_event_seq: int | None = None,
         pid: int | None = None,
         model: str | None = None,
-        approval_level: str | None = None,
+        permission_mode: str | None = None,
         session_id: str | None = None,
     ) -> None:
         existing = self._runs.get(run_id)
@@ -108,7 +108,7 @@ class StateIndex:
                 last_event_seq=last_event_seq or 0,
                 pid=pid,
                 model=model or "",
-                approval_level=approval_level or "confirm",
+                permission_mode=permission_mode or "smart",
                 session_id=session_id or "",
             )
         else:
@@ -128,8 +128,8 @@ class StateIndex:
                 existing.pid = pid
             if model is not None:
                 existing.model = model
-            if approval_level is not None:
-                existing.approval_level = approval_level
+            if permission_mode is not None:
+                existing.permission_mode = permission_mode
             if session_id is not None:
                 existing.session_id = session_id
 

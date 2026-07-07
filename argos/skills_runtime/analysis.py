@@ -43,7 +43,7 @@ class Finding:
 @dataclass(frozen=True, slots=True)
 class AnalysisSkillContext:
     workspace: Path
-    approval_level: str
+    permission_mode: str
     run_id: str
     loop: "LoopState | None" = None
 

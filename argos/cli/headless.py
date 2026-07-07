@@ -22,8 +22,8 @@ def add_subparser(sub) -> None:
     p.add_argument("prompt", nargs="?", help=t("cli.exec.prompt.help"))
     p.add_argument("--json", action="store_true", dest="as_json",
                    help=t("cli.exec.json.help"))
-    p.add_argument("--auto", action="store_true",
-                   help=t("cli.exec.auto.help"))
+    p.add_argument("--full-access", action="store_true",
+                   help=t("cli.exec.full_access.help"))
     p.add_argument("--verify", metavar="CMD", dest="verify_cmd",
                    help=t("cli.exec.verify.help"))
     p.add_argument("--project", metavar="PATH", help=t("cli.exec.project.help"))
@@ -67,7 +67,7 @@ def run_exec(args) -> int:
 
     from argos.app_factory import build_components, build_loop_factory
     from argos.config import ConfigError
-    from argos.approval import ApprovalLevel
+    from argos.permissions.mode import PermissionMode
     from argos.protocol.events import (
         CostUpdate, Error, Escalation, PhaseChange, TokenDelta, VerifyVerdict,
     )
@@ -80,7 +80,11 @@ def run_exec(args) -> int:
             print(msg, file=sys.stderr, flush=True)
 
     effective_ws = getattr(args, "project", None) or os.getcwd()
-    level = ApprovalLevel.AUTO if getattr(args, "auto", False) else ApprovalLevel.ACCEPT_EDITS
+    permission_mode = (
+        PermissionMode.FULL_ACCESS
+        if getattr(args, "full_access", False)
+        else PermissionMode.SMART_APPROVAL
+    )
 
     try:
         _effort = EffortLevel(getattr(args, "effort", None) or EffortLevel.MEDIUM.value)
@@ -90,7 +94,7 @@ def run_exec(args) -> int:
         components = build_components(
             workspace=effective_ws,
             model_override=getattr(args, "model", None),
-            approval_level=level,
+            permission_mode=permission_mode,
             verify_cmd=_verify_cmd_arg,
             effort=_effort,
         )
@@ -99,7 +103,7 @@ def run_exec(args) -> int:
         print(t("cli.exec.run_setup_hint"), file=sys.stderr)
         return 2
 
-    if level is not ApprovalLevel.AUTO:
+    if permission_mode is PermissionMode.SMART_APPROVAL:
         gate = components.gate
         gate.set_ask_listener(lambda call_id, _payload: gate.respond(call_id, "deny"))
 

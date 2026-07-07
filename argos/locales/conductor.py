@@ -45,11 +45,11 @@ EN: dict[str, str] = {
 
     # ProactiveSuggestion.__post_init__
     "cond.proposal.requires_confirmation_true": (
-        "ProactiveSuggestion.requires_confirmation must be True "
+        "suggestion requires_confirmation must be True "
         "(suggestions always require user confirmation and are never executed automatically)"
     ),
     "cond.proposal.action_invalid": (
-        "ProactiveSuggestion.action must be 'run' or 'dream'; got {action!r}"
+        "suggestion action must be 'run' or 'dream'; got {action!r}"
     ),
 
     # propose() — reason_human strings
@@ -60,13 +60,13 @@ EN: dict[str, str] = {
 
     # StandingOrder.__post_init__
     "cond.order.schedule_required": (
-        "StandingOrder kind=schedule must provide schedule field (id={id!r})"
+        "scheduled order kind=schedule must provide schedule field (id={id!r})"
     ),
     "cond.order.trigger_glob_required": (
-        "StandingOrder kind=file_trigger must provide trigger_glob field (id={id!r})"
+        "scheduled order kind=file_trigger must provide trigger_glob field (id={id!r})"
     ),
     "cond.order.action_invalid": (
-        "StandingOrder.action must be 'run' or 'dream'; got {action!r} (id={id!r})"
+        "scheduled order action must be 'run' or 'dream'; got {action!r} (id={id!r})"
     ),
 }
 
@@ -104,11 +104,11 @@ ZH: dict[str, str] = {
     # ── conductor/proposals.py ───────────────────────────────────────────────
 
     "cond.proposal.requires_confirmation_true": (
-        "ProactiveSuggestion.requires_confirmation 必须为 True "
+        "建议 requires_confirmation 必须为 True "
         "（建议永远要用户确认，绝不自动执行）"
     ),
     "cond.proposal.action_invalid": (
-        "ProactiveSuggestion.action 必须是 'run' 或 'dream'，收到 {action!r}"
+        "建议 action 必须是 'run' 或 'dream'，收到 {action!r}"
     ),
     "cond.proposal.reason_schedule": "定时触发（{schedule}）：{utterance}",
     "cond.proposal.reason_file": "文件变化触发（{path}）：{utterance}",
@@ -116,12 +116,12 @@ ZH: dict[str, str] = {
     # ── conductor/orders.py ──────────────────────────────────────────────────
 
     "cond.order.schedule_required": (
-        "StandingOrder kind=schedule 必须提供 schedule 字段 (id={id!r})"
+        "定时指令 kind=schedule 必须提供 schedule 字段 (id={id!r})"
     ),
     "cond.order.trigger_glob_required": (
-        "StandingOrder kind=file_trigger 必须提供 trigger_glob 字段 (id={id!r})"
+        "定时指令 kind=file_trigger 必须提供 trigger_glob 字段 (id={id!r})"
     ),
     "cond.order.action_invalid": (
-        "StandingOrder.action 必须是 'run' 或 'dream'，收到 {action!r} (id={id!r})"
+        "定时指令 action 必须是 'run' 或 'dream'，收到 {action!r} (id={id!r})"
     ),
 }

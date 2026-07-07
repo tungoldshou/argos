@@ -215,7 +215,7 @@ EN: dict[str, str] = {
     # verify_hint for edit_file
     "cap.hint.edit_file": "verify target fragment has been replaced",
     # verify_hint for update_plan
-    "cap.hint.update_plan": "verify TODO list has been updated in the activity bar",
+    "cap.hint.update_plan": "verify transcript plan has been updated",
     # verify_hint for propose_verify
     "cap.hint.propose_verify": (
         "verify verify_cmd is registered (harness runs it independently at completion)"
@@ -404,7 +404,7 @@ ZH: dict[str, str] = {
     "cap.hint.read_file": "检查返回内容是否符合预期",
     "cap.hint.write_file": "检查文件存在且内容正确",
     "cap.hint.edit_file": "检查目标片段已被替换",
-    "cap.hint.update_plan": "检查 TODO 列表已更新至活动栏",
+    "cap.hint.update_plan": "检查 TODO 列表已更新",
     "cap.hint.propose_verify": "检查 verify_cmd 已登记（harness 收尾独立运行）",
     "cap.hint.propose_dom_verify": (
         "检查 L3 DOM 验证策略已登记（host 侧 DomProber 收尾时执行三态断言）"

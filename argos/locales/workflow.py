@@ -73,13 +73,13 @@ EN: dict[str, str] = {
     "wf.spec.invalid_over_ref": "over.from references a non-existent or non-earlier stage: {ref!r}",
     "wf.spec.invalid_over": "invalid over: {over!r}",
     "wf.spec.panel_threshold_exceeds_voters": (
-        "panel threshold({threshold}) cannot exceed voters({voters})"
+        "review threshold({threshold}) cannot exceed voters({voters})"
     ),
     "wf.spec.best_of_n_invalid": "stage \"{sid}\" best_of_n: invalid n: {n!r}",
 
-    # ── engine.py: panel note ─────────────────────────────────────────────────
+    # ── engine.py: panel/review note ──────────────────────────────────────────
     "wf.engine.panel_note": (
-        "panel \"{stage_id}\" {yes}/{voters} votes "
+        "review \"{stage_id}\" {yes}/{voters} votes "
         "{op} threshold {threshold} → {verdict}"
     ),
     "wf.engine.panel_passed": "passed",
@@ -127,8 +127,8 @@ EN: dict[str, str] = {
     ),
     "wf.result.preview_footer": (
         "Total ~{total} sub-agent(s). "
-        "After approval, runs automatically within the OS sandbox "
-        "(network OFF, writes confined to workspace)."
+        "After approval, runs automatically with brokered tools "
+        "(governed network, writes confined to workspace)."
     ),
 
     # ── subagent.py: role prefix injected into prompt ─────────────────────────
@@ -210,13 +210,13 @@ ZH: dict[str, str] = {
     "wf.spec.invalid_over_ref": "over.from 引用了不存在或非更早的 stage:{ref!r}",
     "wf.spec.invalid_over": "非法 over:{over!r}",
     "wf.spec.panel_threshold_exceeds_voters": (
-        "panel threshold({threshold})不可大于 voters({voters})"
+        "review threshold({threshold})不可大于 voters({voters})"
     ),
     "wf.spec.best_of_n_invalid": "stage「{sid}」best_of_n 的 n 非法:{n!r}",
 
-    # ── engine.py: panel note ─────────────────────────────────────────────────
+    # ── engine.py: panel/review note ──────────────────────────────────────────
     "wf.engine.panel_note": (
-        "panel「{stage_id}」{yes}/{voters} 票 "
+        "评审「{stage_id}」{yes}/{voters} 票 "
         "{op} 阈值 {threshold} → {verdict}"
     ),
     "wf.engine.panel_passed": "通过",
@@ -263,7 +263,7 @@ ZH: dict[str, str] = {
     ),
     "wf.result.preview_footer": (
         "合计约 {total} 个子 agent。"
-        "批准后在 OS 沙箱边界内自动执行(网络 OFF、写限工作区)。"
+        "批准后通过 broker 工具自动执行(网络受治理、写限工作区)。"
     ),
 
     # ── subagent.py: role prefix injected into prompt ─────────────────────────

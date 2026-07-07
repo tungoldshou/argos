@@ -10,7 +10,7 @@ class RunMeta:
     workspace: str
     model: str
     created_at: float
-    approval_level: str
+    permission_mode: str
     session_id: str = ""
     max_steps: int = 200
     parent_run_id: str | None = None
@@ -25,7 +25,7 @@ class RunMeta:
             "workspace": self.workspace,
             "model": self.model,
             "created_at": self.created_at,
-            "approval_level": self.approval_level,
+            "permission_mode": self.permission_mode,
             "session_id": self.session_id,
             "max_steps": self.max_steps,
             "parent_run_id": self.parent_run_id,

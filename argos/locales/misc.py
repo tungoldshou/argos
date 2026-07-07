@@ -57,8 +57,7 @@ EN: dict[str, str] = {
     # ── argos/input/clipboard_image.py ────────────────────────────────────────
 
     "input.clipboard.need_pngpaste": (
-        "Reading clipboard images requires pngpaste:"
-        " run `brew install pngpaste`."
+        "No image in clipboard (or read failed)."
     ),
     "input.clipboard.no_image_macos": (
         "No image in clipboard (or read failed)."
@@ -174,7 +173,7 @@ ZH: dict[str, str] = {
     # ── argos/input/clipboard_image.py ────────────────────────────────────────
 
     "input.clipboard.need_pngpaste": (
-        "读取剪贴板图片需要 pngpaste:请运行 `brew install pngpaste`。"
+        "剪贴板里没有图片(或读取失败)。"
     ),
     "input.clipboard.no_image_macos": "剪贴板里没有图片(或读取失败)。",
     "input.clipboard.need_xclip": (

@@ -6,6 +6,8 @@ ARGOS_CONFIG_DIR/daemon.pid, and ARGOS_CONFIG_DIR/worktrees.
 """
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace as _dataclass_replace
@@ -14,7 +16,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from argos import config
-from argos.approval import ApprovalGate, ApprovalLevel
+from argos.approval import ApprovalGate
 from argos.browser import BrowserController
 from argos.core.loop import AgentLoop, LoopConfig
 from argos.core.models import CredentialPool, ModelClient
@@ -23,6 +25,7 @@ from argos.memory.store import ArgosStore
 from argos.mcp_native import McpManager
 from argos.permissions.audit import AuditLog
 from argos.permissions.config import PermissionsConfig, get_config as _permissions_get_config
+from argos.permissions.mode import PermissionMode
 from argos.capability import CapabilityRegistry, register_builtins
 from argos.i18n import t
 from argos.sandbox.broker import CapabilityBroker
@@ -98,7 +101,7 @@ class AppComponents:
 
 def _make_gate_broker_sandbox(
     *,
-    approval_level: ApprovalLevel,
+    permission_mode: PermissionMode,
     perm_config: "Any",
     perm_audit: "Any",
     egress: "EgressPolicy",
@@ -108,19 +111,7 @@ def _make_gate_broker_sandbox(
     browser_controller: "Any | None" = None,
     registry: "CapabilityRegistry | None" = None,
 ) -> "tuple[ApprovalGate, CapabilityBroker, SeatbeltExecutor]":
-    gate = ApprovalGate(approval_level, permissions_config=perm_config, audit_log=perm_audit)
-    try:
-        from argos.permissions.trust_dial import TrustLevel
-        _al_to_trust = {
-            ApprovalLevel.CONFIRM: TrustLevel.L1_DANGEROUS_ONLY,
-            ApprovalLevel.ACCEPT_EDITS: TrustLevel.L3_SESSION_TRUSTED,
-            ApprovalLevel.AUTO: TrustLevel.L4_AUTONOMOUS,
-            ApprovalLevel.OBSERVE: TrustLevel.L0_EVERY_STEP,
-            ApprovalLevel.PROPOSE: TrustLevel.L0_EVERY_STEP,
-        }
-        gate.set_trust_level(_al_to_trust.get(approval_level, TrustLevel.L1_DANGEROUS_ONLY))
-    except Exception:  # noqa: BLE001
-        pass
+    gate = ApprovalGate(permission_mode=permission_mode, permissions_config=perm_config, audit_log=perm_audit)
     broker = CapabilityBroker(
         gate=gate, egress=egress, signer=signer, workspace=workspace,
         mcp_manager=mcp_manager, browser_controller=browser_controller,
@@ -131,6 +122,36 @@ def _make_gate_broker_sandbox(
 
     sandbox = select_backend()(broker_handler=broker_handler)
     return gate, broker, sandbox
+
+
+def _wire_smart_reviewer(gate: ApprovalGate, model: ModelClient, perm_config: PermissionsConfig) -> None:
+    reviewer_cfg = dict(perm_config.reviewer or {})
+    if reviewer_cfg.get("enabled", True) is False:
+        return
+    timeout_s = float(reviewer_cfg.get("timeout_s", 30.0) or 30.0)
+
+    async def _review(payload: dict[str, Any]) -> dict[str, str]:
+        system = (
+            "You are the Argos Smart Approval reviewer. Decide whether a tool action "
+            "should run. Return only JSON with keys decision and reason. decision "
+            "must be one of approve, ask, deny. Approve routine development work; "
+            "ask for uncertain, publishing, deploy, outside-workspace, database, or "
+            "security-sensitive actions; deny destructive or secret-exfiltration actions."
+        )
+        user = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+        text = await asyncio.wait_for(
+            model.complete([{"role": "user", "content": user}], system=system),
+            timeout=timeout_s,
+        )
+        parsed = json.loads(text)
+        if not isinstance(parsed, dict):
+            raise ValueError("reviewer output must be an object")
+        return {
+            "decision": str(parsed.get("decision") or ""),
+            "reason": str(parsed.get("reason") or ""),
+        }
+
+    gate.set_smart_reviewer(_review)
 
 
 def build_run_stack(
@@ -164,7 +185,7 @@ def build_run_stack(
     signer = ReceiptSigner(key=_HOST_SIGNING_KEY)
 
     gate, broker, sandbox = _make_gate_broker_sandbox(
-        approval_level=c.config.approval_level,
+        permission_mode=c.config.permission_mode,
         perm_config=perm_config_run,
         perm_audit=perm_audit_run,
         egress=egress, signer=signer, workspace=ws,
@@ -172,6 +193,7 @@ def build_run_stack(
         browser_controller=c.browser_controller,
         registry=c.registry,
     )
+    _wire_smart_reviewer(gate, c.model, perm_config_run)
     if session_id:
         gate.set_session_id(session_id)
     if c.registry is not None:
@@ -227,7 +249,7 @@ def build_components(
     workspace: str | None = None,
     model_override: str | None = None,
     verify_cmd: str | None = None,
-    approval_level: ApprovalLevel = ApprovalLevel.CONFIRM,
+    permission_mode: PermissionMode = PermissionMode.SMART_APPROVAL,
     max_rounds: int = 3,
     effort: EffortLevel = EffortLevel.MEDIUM,
 ) -> AppComponents:
@@ -273,12 +295,13 @@ def build_components(
     browser_ctrl = BrowserController()
 
     gate, broker, sandbox = _make_gate_broker_sandbox(
-        approval_level=approval_level,
+        permission_mode=permission_mode,
         perm_config=perm_config, perm_audit=perm_audit,
         egress=egress, signer=signer, workspace=ws,
         mcp_manager=mcp_mgr, browser_controller=browser_ctrl,
         registry=registry,
     )
+    _wire_smart_reviewer(gate, model, perm_config)
     def _reversible_lookup_from_registry(action: str) -> "bool | None":
         try:
             return registry.get(action).reversible
@@ -326,7 +349,7 @@ def build_components(
         max_rounds=max_rounds,
         max_steps=preset.max_steps,
         compaction=True,
-        approval_level=preset.approval_level,
+        permission_mode=permission_mode,
     )
 
     config_dir = config.config_dir()

@@ -355,7 +355,7 @@ class DaemonHTTPServer:
                 goal=goal,
                 workspace=data.get("workspace", ""),
                 model=data.get("model", ""),
-                approval_level=data.get("approval_level", "confirm"),
+                permission_mode=data.get("permission_mode", "smart"),
                 session_id=sid,
             )
         except Exception:
@@ -394,23 +394,16 @@ class DaemonHTTPServer:
 
         _verify_cmd: str | None = data.get("verify_cmd") or None
 
-        _trust_level_str = data.get("trust_level")
+        _permission_mode_str = data.get("permission_mode")
 
-        def _apply_trust_to_gate(gate: "Any") -> None:
-            if not _trust_level_str:
+        def _apply_permission_mode_to_gate(gate: "Any") -> None:
+            if not _permission_mode_str:
                 return
             try:
-                from argos.permissions.trust_dial import TrustLevel
-                tl = TrustLevel[_trust_level_str]
-                gate.set_trust_level(tl)
-            except KeyError:
-                log.warning(
-                    "server: create_run trust_level=%r 不是有效 TrustLevel 枚举名,"
-                    " 忽略并沿用默认 approval_level 语义。",
-                    _trust_level_str,
-                )
+                from argos.permissions.mode import parse_permission_mode
+                gate.set_permission_mode(parse_permission_mode(_permission_mode_str))
             except Exception as _te:  # noqa: BLE001
-                log.warning("server: trust_level 应用失败,诚实降级: %s", _te)
+                log.warning("server: permission_mode 应用失败,诚实降级: %s", _te)
 
         if self._components is not None:
             effective_ws_path = (
@@ -423,7 +416,7 @@ class DaemonHTTPServer:
                 session_id=f"run-{run_id}",
                 verify_cmd=_verify_cmd,
             )
-            _apply_trust_to_gate(run_stack.gate)
+            _apply_permission_mode_to_gate(run_stack.gate)
             worker = RunWorker(
                 run_id=run_id,
                 manager=self._manager,
@@ -441,13 +434,13 @@ class DaemonHTTPServer:
         elif callable(self._loop_factory):
             run_loop_factory = self._make_run_loop_factory(effective_ws_str)
             if self._gate is not None:
-                if _trust_level_str:
+                if _permission_mode_str:
                     log.warning(
-                        "create_run: trust_level=%s 写入【全局共享】gate(向后兼容路径),"
+                        "create_run: permission_mode=%s 写入【全局共享】gate,"
                         "将影响共享该 gate 的所有并发 run;per-run 隔离请走 components 路径",
-                        _trust_level_str,
+                        _permission_mode_str,
                     )
-                _apply_trust_to_gate(self._gate)
+                _apply_permission_mode_to_gate(self._gate)
 
             worker = RunWorker(
                 run_id=run_id,
@@ -1186,7 +1179,7 @@ class DaemonHTTPServer:
                 goal=s.goal,
                 workspace="",
                 model="",
-                approval_level="confirm",
+                permission_mode="smart",
             )
         except Exception:
             self._registry.release_slot()
@@ -1214,10 +1207,10 @@ class DaemonHTTPServer:
                 session_id=f"run-{run_id}",
             )
             try:
-                from argos.permissions.trust_dial import TrustLevel
-                run_stack.gate.set_trust_level(TrustLevel["L1_DANGEROUS_ONLY"])
+                from argos.permissions.mode import PermissionMode
+                run_stack.gate.set_permission_mode(PermissionMode.SMART_APPROVAL)
             except Exception as _te:  # noqa: BLE001
-                log.warning("conductor confirm: set_trust_level 失败(诚实降级): %s", _te)
+                log.warning("conductor confirm: permission mode setup failed: %s", _te)
 
             worker = RunWorker(
                 run_id=run_id,
@@ -1244,10 +1237,10 @@ class DaemonHTTPServer:
             )
             if self._gate is not None:
                 try:
-                    from argos.permissions.trust_dial import TrustLevel
-                    self._gate.set_trust_level(TrustLevel["L1_DANGEROUS_ONLY"])
+                    from argos.permissions.mode import PermissionMode
+                    self._gate.set_permission_mode(PermissionMode.SMART_APPROVAL)
                 except Exception as _te:  # noqa: BLE001
-                    log.warning("conductor confirm: set_trust_level(shared gate) 失败: %s", _te)
+                    log.warning("conductor confirm: permission mode setup failed(shared gate): %s", _te)
             self._spawn_worker(worker, run_id, name=f"conductor-run-{run_id}")
         else:
             self._registry.release_slot()
@@ -1259,7 +1252,7 @@ class DaemonHTTPServer:
             "suggestion_id": suggestion_id,
             "run_id": run_id,
             "worktree_path": wt_path,
-            "trust_level": "L1_DANGEROUS_ONLY",
+            "permission_mode": "smart",
             "ts": time.time(),
         }
         self._manager.store.append(run_id, confirm_ev)
@@ -1269,7 +1262,7 @@ class DaemonHTTPServer:
             "run_id": run_id,
             "suggestion_id": suggestion_id,
             "isolation": "worktree",
-            "trust_level": "L1_DANGEROUS_ONLY",
+            "permission_mode": "smart",
             "worktree_path": wt_path,
         })
 

@@ -10,8 +10,8 @@ class PlanModeError(Exception):
     pass
 
 
-PlanExitAction = Literal["approve_start", "approve_accept_edits", "keep_planning", "refine"]
-_VALID_ACTIONS = ("approve_start", "approve_accept_edits", "keep_planning", "refine")
+PlanExitAction = Literal["approve_start", "keep_planning", "refine"]
+_VALID_ACTIONS = ("approve_start", "keep_planning", "refine")
 
 
 def set_plan_mode(active: bool) -> None:

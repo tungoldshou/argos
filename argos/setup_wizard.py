@@ -205,6 +205,36 @@ def _env_name_for_profile(name: str) -> str:
     return f"{stem or 'ARGOS_PROFILE'}_KEY"
 
 
+def _profile_key_available(config_dir: Path, cfg: dict, profile_name: str | None) -> bool:
+    if not profile_name:
+        return False
+    models = cfg.get("models")
+    if not isinstance(models, dict):
+        return False
+    profile = models.get(profile_name)
+    if not isinstance(profile, dict):
+        return False
+    env_name = profile.get("api_key_env")
+    if not isinstance(env_name, str) or not env_name.strip():
+        return False
+    env_name = env_name.strip()
+    if os.environ.get(env_name):
+        return True
+    env_file = config_dir / ".env"
+    try:
+        lines = env_file.read_text().splitlines()
+    except (FileNotFoundError, UnicodeDecodeError, OSError):
+        return False
+    for line in lines:
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip().removeprefix("export ").strip()
+        if key == env_name and value.strip():
+            return True
+    return False
+
+
 def write_profile(*, config_dir: Path, name: str, protocol: str, base_url: str, model: str,
                   api_key: str | None, api_key_env: str, set_active: bool,
                   max_tokens: int = 4096, context_window: int = 200_000,
@@ -295,12 +325,16 @@ def print_status(*, writer, config_dir: Path | None = None) -> None:
                 else "missing"
             )
         else:
-            active = C.DEFAULT_TIER.name
-            tier = C.active_tier()
             embedding_model = ""
             fallback_keys = ("ARGOS_LLM_KEY", "VITE_LLM_KEY", "VITE_MINIMAX_KEY")
             env_name = next((k for k in fallback_keys if os.environ.get(k)), "ARGOS_LLM_KEY")
             key_found = C.active_key() is not None
+            if key_found:
+                active = C.DEFAULT_TIER.name
+                tier = C.active_tier()
+            else:
+                active = t("setup.status_not_configured_value")
+                tier = None
             key_source = (
                 "environment" if any(os.environ.get(k) for k in fallback_keys)
                 else ".env.local" if key_found
@@ -320,18 +354,23 @@ def print_status(*, writer, config_dir: Path | None = None) -> None:
     key_state = t("setup.status_key_found") if key_found else t("setup.status_key_missing")
 
     writer(t("setup.status_active", active=active))
-    writer(t(
-        "setup.status_model",
-        protocol=tier.protocol,
-        base_url=tier.base_url,
-        model=tier.model,
-    ))
+    if tier is None:
+        writer(t("setup.status_model_unconfigured"))
+    else:
+        writer(t(
+            "setup.status_model",
+            protocol=tier.protocol,
+            base_url=tier.base_url,
+            model=tier.model,
+        ))
     writer(t("setup.status_key", env=env_name or "(none)", status=key_state, source=key_source))
     writer(t(
         "setup.status_embedding",
         model=embedding_model or t("setup.status_embedding_fts5"),
     ))
-    if tier.multimodal is True:
+    if tier is None:
+        image_mode = t("setup.status_image_auto")
+    elif tier.multimodal is True:
         image_mode = t("setup.status_image_enabled")
     elif tier.multimodal is False:
         image_mode = t("setup.status_image_disabled")
@@ -552,7 +591,12 @@ async def run(*, reader, writer, config_dir: Path | None = None,
             if derive_env:
                 api_key_env = _env_name_for_profile(name)
             if existing_models:
-                make_active = (reader(t("setup.set_active_prompt")) or "n").strip().lower() == "y"
+                active_name = cfg_existing.get("active") if isinstance(cfg_existing.get("active"), str) else None
+                active_usable = _profile_key_available(cdir, cfg_existing, active_name)
+                default_active = bool(res.connected and not active_usable)
+                prompt_key = "setup.set_active_prompt_default_yes" if default_active else "setup.set_active_prompt"
+                default_answer = "y" if default_active else "n"
+                make_active = (reader(t(prompt_key)) or default_answer).strip().lower().startswith("y")
             else:
                 make_active = True
             if not res.connected and make_active:
@@ -576,8 +620,9 @@ async def run(*, reader, writer, config_dir: Path | None = None,
             if api_key:
                 writer(t("setup.key_stored_warning", path=cdir / ".env"))
             if (reader(t("setup.add_another_prompt")) or "n").strip().lower() != "y":
-                writer(t("setup.done"))
-                writer(t("setup.next_steps", name=name, config=str(cdir / "config.json")))
+                writer(t("setup.done_active" if make_active else "setup.done_inactive"))
+                next_key = "setup.next_steps_active" if make_active else "setup.next_steps_inactive"
+                writer(t(next_key, name=name, config=str(cdir / "config.json")))
                 break
     except EOFError:
         writer(t("setup.no_tty", config_path=cdir / "config.json", env_path=cdir / ".env"))
@@ -591,7 +636,7 @@ async def deep_probe(*, protocol: str, base_url: str, model: str, api_key: str |
     import tempfile
     from pathlib import Path as _P
     from argos import runtime
-    from argos.approval import ApprovalGate, ApprovalLevel
+    from argos.approval import ApprovalGate
     from argos.core.loop import AgentLoop, LoopConfig
     from argos.core.models import ModelClient, CredentialPool, ModelTier
     from argos.core.verify_gate import Verifier
@@ -615,7 +660,7 @@ async def deep_probe(*, protocol: str, base_url: str, model: str, api_key: str |
         tok = runtime.use_project(str(proj))
         store = None
         try:
-            gate = ApprovalGate(level=ApprovalLevel.AUTO)
+            gate = ApprovalGate()
             broker = CapabilityBroker(gate=gate, egress=EgressPolicy(
                 llm_hosts=set(), search_hosts=set(), mcp_hosts=set()),
                 signer=ReceiptSigner(key=b"probe"))
@@ -623,7 +668,7 @@ async def deep_probe(*, protocol: str, base_url: str, model: str, api_key: str |
             store = ArgosStore(db_path=str(_P(td) / "p.db"))
             loop = AgentLoop(store=store, bus=EventBus(), sandbox=sandbox, broker=broker,
                              model=model_factory(tier, api_key), verifier=Verifier(max_rounds=3),
-                             config=LoopConfig(approval_level=ApprovalLevel.AUTO, compaction=False),
+                             config=LoopConfig(compaction=False),
                              workspace=proj, verify_dir=proj)
             vs = []
             async for ev in loop.run(t("setup.deep_probe_task"), "probe"):

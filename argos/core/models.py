@@ -14,6 +14,8 @@ from argos.core.protocols import (
 from argos.core.types import ModelTierName
 from argos.i18n import t
 
+MODEL_STREAM_NO_VISIBLE_OUTPUT_TIMEOUT_S: float = 120.0
+
 
 @dataclass(frozen=True, slots=True)
 class ModelTier:
@@ -179,28 +181,78 @@ class ModelClient:
         headers = self._proto.headers(cred.key)
         url = self._proto.endpoint(self.tier.base_url)
         client = self._get_http_client()
-        async with client.stream("POST", url, headers=headers,
-                                 json=self._payload(messages, system, system_dynamic)) as resp:
-                if resp.status_code >= 400:
-                    await resp.aread()
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    line = line.strip()
-                    if not line or not line.startswith("data:"):
-                        continue
-                    raw = line[len("data:"):].strip()
-                    if not raw or raw == "[DONE]":
-                        continue
-                    try:
-                        obj = json.loads(raw)
-                    except json.JSONDecodeError:
-                        continue
-                    self._capture_usage(obj)
-                    if self._proto.is_done(obj):
-                        continue
-                    text = self._proto.text_delta(obj)
-                    if text:
-                        yield text
+        no_visible_timeout = (
+            MODEL_STREAM_NO_VISIBLE_OUTPUT_TIMEOUT_S
+            if _messages_have_attachments(messages)
+            else None
+        )
+        stream_cm = client.stream(
+            "POST", url, headers=headers,
+            json=self._payload(messages, system, system_dynamic),
+        )
+        resp = None
+        try:
+            try:
+                if no_visible_timeout is None:
+                    resp = await stream_cm.__aenter__()
+                else:
+                    resp = await asyncio.wait_for(
+                        stream_cm.__aenter__(), timeout=no_visible_timeout,
+                    )
+            except asyncio.TimeoutError as e:
+                raise TimeoutError(_no_visible_output_message(no_visible_timeout)) from e
+            if resp.status_code >= 400:
+                await resp.aread()
+            resp.raise_for_status()
+            saw_visible = False
+            line_iter = resp.aiter_lines().__aiter__()
+            loop = asyncio.get_running_loop()
+            deadline = (
+                loop.time() + no_visible_timeout
+                if no_visible_timeout is not None
+                else None
+            )
+            while True:
+                try:
+                    if deadline is None:
+                        line = await anext(line_iter)
+                    else:
+                        remaining = deadline - loop.time()
+                        if remaining <= 0:
+                            raise TimeoutError(
+                                _no_visible_output_message(no_visible_timeout)
+                            )
+                        line = await asyncio.wait_for(
+                            anext(line_iter), timeout=remaining,
+                        )
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError as e:
+                    raise TimeoutError(_no_visible_output_message(no_visible_timeout)) from e
+                line = line.strip()
+                if not line or not line.startswith("data:"):
+                    continue
+                raw = line[len("data:"):].strip()
+                if not raw or raw == "[DONE]":
+                    continue
+                try:
+                    obj = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                self._capture_usage(obj)
+                if self._proto.is_done(obj):
+                    continue
+                text = self._proto.text_delta(obj)
+                if text:
+                    saw_visible = True
+                    if no_visible_timeout is not None:
+                        deadline = loop.time() + no_visible_timeout
+                    yield text
+            if no_visible_timeout is not None and not saw_visible:
+                raise TimeoutError(_no_visible_output_message(no_visible_timeout))
+        finally:
+            if resp is not None:
+                await stream_cm.__aexit__(None, None, None)
 
     def _retry_after_ttl(self, response: httpx.Response) -> float | None:
         ra = response.headers.get("retry-after")
@@ -216,3 +268,13 @@ class ModelClient:
         parts = [c async for c in self.stream(messages, system=system,
                                               system_dynamic=system_dynamic)]
         return "".join(parts)
+
+
+def _messages_have_attachments(messages: list[dict]) -> bool:
+    return any(bool(m.get("attachments")) for m in messages)
+
+
+def _no_visible_output_message(timeout_s: float | None) -> str:
+    if timeout_s is None:
+        return "model stream produced no visible output"
+    return f"model stream produced no visible output for {timeout_s:.0f}s while handling image input"

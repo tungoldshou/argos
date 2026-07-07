@@ -10,18 +10,16 @@ dependencies = [
     "playwright>=1.60.0",
     "smolagents>=1.26.0",
     "sqlite-vec>=0.1.9",
-    "textual>=8.2.7",
     "trafilatura>=2.0.0",
 ]
 license = {text = "MIT"}
 authors = [
   {name = "tungoldshou", email = "tungoldshou@users.noreply.github.com"},
 ]
-keywords = ["agent", "ai", "cli", "terminal", "codeact", "verifier", "sandbox", "tui"]
+keywords = ["agent", "ai", "cli", "terminal", "codeact", "verifier", "sandbox"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Environment :: Console",
-  "Environment :: Console :: Curses",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Operating System :: MacOS :: MacOS X",
@@ -35,14 +33,12 @@ classifiers = [
 
 [project.scripts]
 argos = "argos.__main__:main"
-argospkg = "argos.cli.pkg:main"
 argosd = "argos.daemon.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/tungoldshou/argos"
 Repository = "https://github.com/tungoldshou/argos"
 Issues = "https://github.com/tungoldshou/argos/issues"
-Changelog = "https://github.com/tungoldshou/argos/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling"]
@@ -56,44 +52,8 @@ include = [
   "argos",
   "README.md",
   "LICENSE",
-  "CHANGELOG.md",
-  "packaging/VERSION",
-  "packaging/Info.plist",
-  "packaging/argos.spec",
 ]
 exclude = [
-  "tests",
-  "build",
-  "dist",
-  "docs",
   "*.egg-info",
   ".venv",
-  ".pytest_cache",
-  ".codegraph",
-  ".coverage",
-]
-
-[dependency-groups]
-dev = [
-    "pygls>=1.3.0",
-    "pyinstaller>=6.20.0",
-    "pytest>=9.0.3",
-    "pytest-asyncio>=1.4.0",
-    "pytest-cov>=7.1.0",
-    "pytest-xdist>=3.8.0",
-]
-
-[tool.pytest.ini_options]
-pythonpath = ["."]
-testpaths = ["tests"]
-addopts = "--cov=argos --cov-report=term-missing --cov-fail-under=80 -m 'not slow'"
-markers = [
-    "slow: 真进程/真 pyright e2e,默认 skip;用 uv run pytest -m slow -q --no-cov 显式运行",
-    "xdist_group: 同组测试串行在同一 worker(用于共享不可隔离资源;组名按资源命名)",
-]
-
-[tool.coverage.run]
-omit = [
-    "argos/_pyinstaller_hooks/*",
-    "argos/sandbox/_sandbox_child.py",
 ]

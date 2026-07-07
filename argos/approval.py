@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
-import enum
 import functools
 import inspect
 import json
@@ -16,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal
 from urllib.parse import urlparse
 
 from argos.i18n import t
+from argos.permissions.mode import PermissionMode, parse_permission_mode
 
 if TYPE_CHECKING:
     from argos.permissions.evaluator import DecisionMeta  # noqa: F401
@@ -23,14 +23,6 @@ if TYPE_CHECKING:
 
 RiskLevel = Literal["low", "medium", "high"]
 DecisionKind = Literal["deny", "once", "session", "always"]
-
-
-class ApprovalLevel(enum.Enum):
-    OBSERVE = "observe"
-    PROPOSE = "propose"
-    CONFIRM = "confirm"
-    AUTO = "auto"
-    ACCEPT_EDITS = "accept_edits"
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,12 +110,12 @@ class ApprovalGate:
 
     def __init__(
         self,
-        level: ApprovalLevel = ApprovalLevel.CONFIRM,
+        permission_mode: PermissionMode | str = PermissionMode.SMART_APPROVAL,
         *,
         permissions_config: "Any | None" = None,
         audit_log: "Any | None" = None,
     ) -> None:
-        self.level = level
+        self.permission_mode = parse_permission_mode(permission_mode)
         self._pending: dict[str, _Pending] = {}
         self._session_approvals: dict[str, _SessionApproval] = {}
         self._workspace: str | None = None
@@ -132,46 +124,22 @@ class ApprovalGate:
         self._ask_listener: Callable[[str, dict[str, Any]], None] | None = None
         self._permissions_config: Any | None = permissions_config
         self._audit_log: Any | None = audit_log
-        self._ask_readonly: bool = False
-        self._reversible_check: bool = False
-        self._reversible_lookup: "Callable[[str], bool | None] | None" = None
-        self._low_risk_auto: bool = False
+        self._smart_reviewer: Callable[[dict[str, Any]], Any] | None = None
 
-    def set_level(self, level: ApprovalLevel) -> None:
-        self.level = level
+    def set_permission_mode(self, mode: PermissionMode | str) -> None:
+        self.permission_mode = parse_permission_mode(mode)
 
-    def push_override_semantics(self, level: "ApprovalLevel") -> tuple:
-        snap = (self.level, self._low_risk_auto, self._ask_readonly, self._reversible_check)
-        if level is ApprovalLevel.CONFIRM:
-            self.level = ApprovalLevel.CONFIRM
-            self._low_risk_auto = False
-            self._ask_readonly = False
-        elif level is ApprovalLevel.ACCEPT_EDITS:
-            self.level = ApprovalLevel.CONFIRM
-            self._low_risk_auto = True
-            self._ask_readonly = False
-        else:
-            self.level = level
-        return snap
-
-    def pop_override_semantics(self, snap: tuple) -> None:
-        self.level, self._low_risk_auto, self._ask_readonly, self._reversible_check = snap
-
-    def set_trust_level(self, trust: "Any") -> None:
-        from argos.permissions.trust_dial import TrustLevel, to_approval_semantics
-        sem = to_approval_semantics(trust)
-        al_str = sem["approval_level"]
-        self.set_level(ApprovalLevel(al_str))
-        self._ask_readonly: bool = bool(sem.get("ask_readonly", False))
-        self._reversible_check: bool = bool(sem.get("reversible_check", False))
-        self._low_risk_auto: bool = bool(sem.get("low_risk_auto", False))
-        self._trust_level = trust
+    def is_full_access(self) -> bool:
+        return self.permission_mode is PermissionMode.FULL_ACCESS
 
     def set_workspace(self, workspace: str | None) -> None:
         self._workspace = workspace
 
     def set_reversible_lookup(self, fn: "Callable[[str], bool | None] | None") -> None:
-        self._reversible_lookup = fn
+        return None
+
+    def set_smart_reviewer(self, fn: Callable[[dict[str, Any]], Any] | None) -> None:
+        self._smart_reviewer = fn
 
     def set_session_id(self, session_id: str) -> None:
         self._session_id = session_id or ""
@@ -188,12 +156,20 @@ class ApprovalGate:
     async def request(self, action: str, args: dict[str, Any], *, description: str,
                       risk: RiskLevel, timeout: float = 60.0,
                       call_id: str | None = None) -> Decision:
+        if self.is_full_access():
+            self._audit(
+                action=action, args=args, decision="approved",
+                trigger="permission:full-access", by="mode", risk=risk,
+            )
+            self._notify("approved", action, "permission:full-access")
+            return Decision(kind="once", reason="Full Access")
         eval_meta = self._evaluate(action, args, risk=risk)
+        eval_meta = await self._review_if_needed(eval_meta, action, args, description, risk, timeout)
         if eval_meta is not None:
             if eval_meta.decision == "approve":
                 self._audit(
                     action=action, args=args, decision="approved",
-                    trigger=eval_meta.trigger, by="rule" if eval_meta.rule_name else "level",
+                    trigger=eval_meta.trigger, by="rule" if eval_meta.rule_name else "mode",
                     risk=risk, secret_pattern=eval_meta.secret_pattern,
                 )
                 self._notify("approved", action, eval_meta.trigger)
@@ -206,20 +182,6 @@ class ApprovalGate:
                 )
                 self._notify("denied", action, eval_meta.trigger)
                 return Decision(kind="deny", reason=eval_meta.reason or eval_meta.trigger)
-        if self.level is ApprovalLevel.AUTO and (eval_meta is None or eval_meta.decision != "ask"):
-            self._audit(
-                action=action, args=args, decision="approved",
-                trigger="level:auto", by="level", risk=risk,
-            )
-            self._notify("approved", action, "level:auto")
-            return Decision(kind="once", reason=t("approval.reason.auto"))
-        if self.level is ApprovalLevel.OBSERVE and (eval_meta is None or eval_meta.decision != "ask"):
-            self._audit(
-                action=action, args=args, decision="denied",
-                trigger="level:observe", by="level", risk=risk,
-            )
-            self._notify("denied", action, "level:observe")
-            return Decision(kind="deny", reason=t("approval.reason.observe"))
         payload = {"action": action, "args": args}
         key = _hash_payload(payload)
         if self._session_approvals.get(key) is not None:
@@ -229,9 +191,7 @@ class ApprovalGate:
         call_id = call_id or uuid.uuid4().hex[:12]
         loop = asyncio.get_running_loop()
         fut: asyncio.Future[Decision] = loop.create_future()
-        ask_trigger = eval_meta.trigger if eval_meta is not None else (
-            f"level:{self.level.value}"
-        )
+        ask_trigger = eval_meta.trigger if eval_meta is not None else "permission:smart:ask"
         ask_payload: dict[str, Any] = {
             **payload, "description": description, "risk": risk,
             "trigger": ask_trigger,
@@ -254,20 +214,71 @@ class ApprovalGate:
             self._pending.pop(call_id, None)
             return Decision(kind="deny", reason=t("approval.reason.timeout"))
 
+    async def _review_if_needed(
+        self,
+        meta: "DecisionMeta | None",
+        action: str,
+        args: dict[str, Any],
+        description: str,
+        risk: str,
+        timeout: float,
+    ) -> "DecisionMeta | None":
+        if meta is None or meta.decision != "ask":
+            return meta
+        if not str(meta.trigger).startswith("permission:smart:review"):
+            return meta
+        reviewer = self._smart_reviewer
+        if reviewer is None:
+            return meta
+        try:
+            payload = {
+                "action": action,
+                "args": args,
+                "description": description,
+                "risk": risk,
+                "trigger": meta.trigger,
+            }
+            result = reviewer(payload)
+            if inspect.isawaitable(result):
+                result = await asyncio.wait_for(result, timeout=min(timeout, 30.0))
+            reason = ""
+            if isinstance(result, dict):
+                decision = str(result.get("decision") or "").strip().lower()
+                reason = str(result.get("reason") or "").strip()
+            else:
+                raw = str(result or "").strip()
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, dict):
+                    decision = str(parsed.get("decision") or "").strip().lower()
+                    reason = str(parsed.get("reason") or "").strip()
+                else:
+                    decision = raw.lower()
+            if decision in {"approve", "ask", "deny"}:
+                from argos.permissions.evaluator import DecisionMeta
+                return DecisionMeta(
+                    decision=decision,  # type: ignore[arg-type]
+                    trigger=f"permission:smart:reviewer:{decision}",
+                    reason=reason or f"Smart reviewer returned {decision}",
+                )
+        except Exception:  # noqa: BLE001
+            pass
+        return meta
+
     def _evaluate(self, action: str, args: dict[str, Any],
                   risk: str = "medium") -> "DecisionMeta | None":
         try:
             from argos.permissions import evaluate, get_config
             from argos.permissions.evaluator import DecisionMeta
             cfg = self._permissions_config if self._permissions_config is not None else get_config()
-            rl = self._reversible_lookup if getattr(self, "_reversible_check", False) else None
             return evaluate(
-                action, args, gate_level=self.level, config=cfg,
+                action, args, config=cfg,
                 workspace=self._workspace,
-                ask_readonly=getattr(self, "_ask_readonly", False),
-                reversible_lookup=rl,
-                low_risk_auto=getattr(self, "_low_risk_auto", False),
                 risk=risk,
+                permission_mode=getattr(self, "permission_mode", PermissionMode.SMART_APPROVAL),
+                reviewer_available=self._smart_reviewer is not None,
             )
         except Exception:  # noqa: BLE001
             if (

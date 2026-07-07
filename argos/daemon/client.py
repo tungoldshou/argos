@@ -44,7 +44,7 @@ class DaemonClient:
             payload = json.dumps(body, ensure_ascii=False).encode("utf-8")
         headers = {
             "Host": "daemon",
-            "User-Agent": "argos-tui/0.2.0",
+            "User-Agent": "argos-client/0.2.0",
             "Content-Length": str(len(payload)),
             "Connection": "close",
         }
@@ -149,12 +149,12 @@ class DaemonClient:
 
     async def create_run(
         self, session_id: str, *, goal: str, workspace: str = "",
-        model: str = "", approval_level: str = "confirm", attachments=None,
+        model: str = "", permission_mode: str = "smart", attachments=None,
         verify_cmd: str | None = None,
     ) -> str:
         from argos.daemon.attachments_wire import encode_attachments
         body = {"goal": goal, "workspace": workspace, "model": model,
-                "approval_level": approval_level}
+                "permission_mode": permission_mode}
         if verify_cmd:
             body["verify_cmd"] = verify_cmd
         wire = encode_attachments(attachments)
@@ -221,7 +221,7 @@ class DaemonClient:
         req = (
             f"GET /runs/{run_id}/events?since={since} HTTP/1.1\r\n"
             f"Host: daemon\r\n"
-            f"User-Agent: argos-tui/0.2.0\r\n"
+            f"User-Agent: argos-client/0.2.0\r\n"
             f"X-Argos-Session: {session_id}\r\n"
             f"Accept: text/event-stream\r\n"
             f"Connection: keep-alive\r\n\r\n"

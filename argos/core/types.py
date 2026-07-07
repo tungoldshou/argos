@@ -5,7 +5,7 @@ from typing import Literal
 
 VerdictStatus = Literal["passed", "failed", "unverifiable"]
 Phase = Literal["plan", "act", "verify", "report"]
-ApprovalLevelName = Literal["observe", "propose", "confirm", "auto"]
+PermissionModeName = Literal["smart", "full"]
 DecisionKind = Literal["deny", "once", "session", "always"]
 RiskLevel = Literal["low", "medium", "high"]
 ModelTierName = str

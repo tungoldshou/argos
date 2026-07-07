@@ -13,8 +13,9 @@ EN: dict[str, str] = {
     # egress: host not in allowlist
     "sandbox.egress.host_not_allowed": (
         "egress denied — {host!r} is not in the allowed egress list."
-        " Use /trust autonomous to open egress for this session,"
-        " or add the host to the egress section in {path} and restart."
+        " Built-in provider hosts should be registered through egress_hosts;"
+        " restart Argos after provider or capability changes,"
+        " or report this as a provider/registry bug."
     ),
     # unknown / unsupported privileged action
     "sandbox.broker.unknown_action": (
@@ -27,7 +28,7 @@ EN: dict[str, str] = {
     # run_command on sync bridge without an OS sandbox
     "sandbox.broker.sync_run_command_requires_sandbox": (
         "Error: run_command denied because the sync bridge cannot interactively approve"
-        " commands and the OS sandbox is disabled."
+        " this non-low-risk command and the OS sandbox is disabled."
     ),
     "sandbox.broker.sync_interactive_requires_approval": (
         "Error: {action} denied because the sync bridge cannot interactively approve this action;"
@@ -56,7 +57,7 @@ EN: dict[str, str] = {
     ),
     # file write blocked because secret detected
     "sandbox.broker.write_secret_detected": (
-        "⚠ Possible secret detected ({pattern}) — write denied."
+        "secret detected ({pattern}) — write denied."
         " Remove the secret and retry, or ask the user to explicitly allow this write."
     ),
     # no broker context in executor
@@ -125,8 +126,9 @@ ZH: dict[str, str] = {
     # egress: host not in allowlist
     "sandbox.egress.host_not_allowed": (
         "egress 拒绝 —— {host!r} 不在允许出网名单。"
-        "用 /trust autonomous 放开本会话出网,或在 {path} 的 egress 段"
-        "加入该 host 后重启。"
+        "内置 provider host 应通过 egress_hosts 注册;"
+        "如刚改过 provider 或 capability,请重启 Argos,"
+        "否则按 provider/registry 问题上报。"
     ),
     # unknown / unsupported privileged action
     "sandbox.broker.unknown_action": (
@@ -138,7 +140,7 @@ ZH: dict[str, str] = {
     ),
     # run_command on sync bridge without an OS sandbox
     "sandbox.broker.sync_run_command_requires_sandbox": (
-        "错误:同步桥无法交互审批命令,且 OS 沙箱未启用,run_command 已拒绝。"
+        "错误:同步桥无法交互审批这个非低风险命令,且 OS 沙箱未启用,run_command 已拒绝。"
     ),
     "sandbox.broker.sync_interactive_requires_approval": (
         "错误:同步桥无法交互审批 {action},已拒绝;请改走 host-loop 审批桥。"
@@ -165,7 +167,7 @@ ZH: dict[str, str] = {
     ),
     # file write blocked because secret detected
     "sandbox.broker.write_secret_detected": (
-        "⚠ 可能含密钥({pattern})—— 已拒绝写入。"
+        "检测到密钥({pattern})—— 已拒绝写入。"
         "请去掉密钥后重试,或请用户显式放行该写入。"
     ),
     # no broker context in executor

@@ -39,7 +39,7 @@ def cmd_show(args: argparse.Namespace) -> int:
 def add_subparser(sub: Any) -> None:
     p = sub.add_parser(
         "context",
-        help=t("cli.context.help"),
+        help=argparse.SUPPRESS,
     )
     p.set_defaults(func=lambda _args, parser=p: (parser.print_help(), 2)[1])
     sp = p.add_subparsers(dest="context_command")

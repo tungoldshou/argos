@@ -40,13 +40,11 @@ def _format_run(r) -> str:
 def _real_loop_factory(model_tier: str, wt_path: str, verify_cmd: str | None = None):
     """Build a real AgentLoop caged to the eval worktree."""
     from argos.app_factory import build_components, build_loop_factory
-    from argos.approval import ApprovalLevel
 
     components = build_components(
         workspace=wt_path,
         model_override=model_tier,
         verify_cmd=verify_cmd,
-        approval_level=ApprovalLevel.ACCEPT_EDITS,
     )
     gate = components.gate
     gate.set_ask_listener(lambda call_id, _payload: gate.respond(call_id, "deny"))
@@ -169,7 +167,7 @@ def _active_profile() -> str:
 
 
 def add_subparser(sub: Any) -> None:
-    p = sub.add_parser("eval", help=t("cli.eval.help"))
+    p = sub.add_parser("eval", help=argparse.SUPPRESS)
     p.set_defaults(func=lambda _args, parser=p: (parser.print_help(), 2)[1])
     sp = p.add_subparsers(dest="eval_command")
 

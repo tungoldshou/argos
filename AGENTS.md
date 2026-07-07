@@ -5,10 +5,6 @@ Argos is a Python 3.12+ terminal coding agent. Keep changes small, verified, and
 ## Project Map
 
 - `argos/` contains the active package.
-- `tests/` contains the pytest suite and mirrors the package layout where practical.
-- `docs/` contains product docs, feature specs, and implementation plans.
-- `scripts/` contains demos, probes, and benchmarks.
-- `packaging/` contains release and installer scaffolding.
 
 ## Commands
 
@@ -19,13 +15,8 @@ uv sync
 uv run argos setup
 uv run argos
 uv run argos --selftest
-uv run pytest
-uv run pytest -m "not slow"
-uv run pytest -n auto --dist loadgroup
-uv run pytest tests/test_loop.py::test_name --no-cov
+uv run python -m compileall -q argos
 ```
-
-The full suite enforces coverage through `pyproject.toml`. Use `--no-cov` for targeted tests; otherwise the total coverage gate can fail even when the targeted test passes.
 
 ## Coding Rules
 
@@ -44,18 +35,15 @@ The full suite enforces coverage through `pyproject.toml`. Use `--no-cov` for ta
 - `argos/sandbox/broker.py` is the side-effect boundary for privileged actions.
 - `argos/tools/` contains broker-gated tools.
 - `argos/protocol/events.py` is the canonical event protocol; `argos/tui/events.py` is a compatibility shim.
-- `argos/daemon/` is the background kernel; `argos/tui/` is the Textual client with inline fallback.
+- `argos/daemon/` is the background kernel.
 
 ## Verification
 
-For code changes, run the narrowest useful test first. Use the full suite before broad merges or release work.
-
-Examples:
+For code changes, run the narrowest useful import or compile check.
 
 ```bash
-uv run pytest tests/test_verify_gate.py -q --no-cov
-uv run pytest tests/workflow/test_spec.py -q --no-cov
-uv run pytest -q
+uv run python -m compileall -q argos
+uv run argos --selftest
 ```
 
 ## Git Hygiene
@@ -63,18 +51,3 @@ uv run pytest -q
 - The worktree may contain user changes. Do not revert unrelated changes.
 - Do not run destructive git commands unless the user explicitly asks.
 - Main is PR-only; use a branch for changes intended to land.
-
-## Codex Project Workflow
-
-This project follows the user's global Codex workflow.
-
-Important project-specific rules:
-
-- Natural language tasks are allowed. Do not require artificial prefixes.
-- Use `/goal` only for larger long-running objectives.
-- For normal coding tasks, classify the task and choose the workflow automatically.
-- Read `PROJECT_STATE.md`, `TODO.md`, `CHANGELOG.md`, and `DECISIONS.md` before non-trivial work.
-- Update project memory files after meaningful coding progress.
-- Prefer branch or worktree for complex or risky changes.
-- Do not merge main unless explicitly authorized.
-- Stop and report high-risk conflicts.

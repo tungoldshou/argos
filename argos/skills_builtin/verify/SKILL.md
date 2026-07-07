@@ -19,7 +19,7 @@ enabled: true
 ## 与 propose_verify 的区别
 | 维度 | propose_verify | /verify |
 |---|---|---|
-| 触发 | agent(从 code block) | **用户**(从 TUI) |
+| 触发 | agent(从 code block) | **用户**(从 CLI/client) |
 | 入口 | propose_verify 解析 | **直接** Verifier.verify |
 | cmd 来源 | agent 声明 | config 全局 |
 

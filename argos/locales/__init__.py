@@ -2,17 +2,14 @@
 CATALOG_MODULES: list[str] = [
     "common",
     "cli",
-    "tui_app",  # TUI app shell / commands / prompt / status_bar
-    "widgets",
     "core",
     "sandbox",
     "daemon",
     "tools",
-    "permissions",
     "misc",
     "verify",       # verify/strategy / dom_probe / gui_probe / self_test
     "perception",   # perception/executor / actions
-    "daemon2",      # daemon/server / worker / client / conductor_supervisor / tui/daemon_source
+    "daemon2",      # daemon/server / worker / client / conductor_supervisor
     "workflow",     # workflow/spec / engine / result / subagent / worktree
     "infra",        # mcp_native / lsp / hooks / capability
     "permissions2", # permissions/evaluator / autonomy / config / hard_rules

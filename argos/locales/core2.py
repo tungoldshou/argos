@@ -80,12 +80,12 @@ EN: dict[str, str] = {
 
     # ── app_factory ──────────────────────────────────────────────────────────
     "core2.app_factory.no_api_key": (
-        "No API key configured for the current model. Argos will not pretend to run."
+        "No API key is configured. Argos will not start a fake run."
     ),
 
     # ── protocol/events ──────────────────────────────────────────────────────
     "core2.events.proactive_action_invalid": (
-        "ProactiveSuggestionEvent.action must be 'run' or 'dream'; received {action!r}"
+        "suggestion action must be 'run' or 'dream'; received {action!r}"
     ),
 
     # ── ledger/store ─────────────────────────────────────────────────────────
@@ -107,10 +107,10 @@ EN: dict[str, str] = {
     "core2.fakeloop.escalation_reason": "3 consecutive verify rounds failed; cannot converge on its own",
     "core2.fakeloop.error_message": "Giving up; reporting honestly",
 
-    # ── tui/widgets/transcript ────────────────────────────────────────────────
+    # ── transcript rendering ─────────────────────────────────────────────────
     "core2.transcript.thinking": "Thinking…",
 
-    # ── tui/widgets/thinking ─────────────────────────────────────────────────
+    # ── thinking indicator ───────────────────────────────────────────────────
     "core2.thinking.label": "Thinking…",
 
     # ── input/attachments ────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ EN: dict[str, str] = {
         "Unsupported image format: {media_type!r}. Supported formats: {supported}"
     ),
     "core2.attachments.too_large": (
-        "Image exceeds 5 MB limit (actual={size:.1f} MB). Please compress or crop and retry."
+        "Image exceeds 10MB limit (actual={size:.1f}MB). Please compress or crop and retry."
     ),
 }
 
@@ -195,12 +195,12 @@ ZH: dict[str, str] = {
 
     # ── app_factory ──────────────────────────────────────────────────────────
     "core2.app_factory.no_api_key": (
-        "未配置当前模型的 API key。Argos 不会假装能跑。"
+        "尚未配置 API key。Argos 不会启动假运行。"
     ),
 
     # ── protocol/events ──────────────────────────────────────────────────────
     "core2.events.proactive_action_invalid": (
-        "ProactiveSuggestionEvent.action 必须是 'run' 或 'dream'，收到 {action!r}"
+        "建议 action 必须是 'run' 或 'dream'，收到 {action!r}"
     ),
 
     # ── ledger/store ─────────────────────────────────────────────────────────
@@ -222,10 +222,10 @@ ZH: dict[str, str] = {
     "core2.fakeloop.escalation_reason": "连续 3 轮 verify 未过,无法自行收敛",
     "core2.fakeloop.error_message": "放弃,诚实上报",
 
-    # ── tui/widgets/transcript ────────────────────────────────────────────────
+    # ── transcript rendering ─────────────────────────────────────────────────
     "core2.transcript.thinking": "思考中…",
 
-    # ── tui/widgets/thinking ─────────────────────────────────────────────────
+    # ── thinking indicator ───────────────────────────────────────────────────
     "core2.thinking.label": "思考中…",
 
     # ── input/attachments ────────────────────────────────────────────────────
@@ -233,6 +233,6 @@ ZH: dict[str, str] = {
         "unsupported / 不支持的图片格式: {media_type!r}。支持的格式: {supported}"
     ),
     "core2.attachments.too_large": (
-        "图片超过 5MB 上限 (actual={size:.1f}MB)。请压缩或裁剪后重试。"
+        "图片超过 10MB 上限 (actual={size:.1f}MB)。请压缩或裁剪后重试。"
     ),
 }

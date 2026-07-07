@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import os
@@ -216,7 +217,7 @@ def run_dream(args: Any) -> int:
 def add_subparser(sub: Any) -> None:
     p = sub.add_parser(
         "dream",
-        help=t("cli.dream.help"),
+        help=argparse.SUPPRESS,
     )
     p.add_argument(
         "--report",

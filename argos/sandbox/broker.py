@@ -19,12 +19,6 @@ if TYPE_CHECKING:
 _NETWORK_ACTIONS: set[str] = {"web_search", "web_extract", "browser_navigate"}
 
 
-def _config_path() -> Path:
-    from argos import config
-
-    return config.config_dir() / "config.json"
-
-
 def _resolve_lsp_server(
     *,
     file: "str | None",
@@ -101,7 +95,7 @@ class CapabilityBroker:
                 return t("sandbox.egress.ssrf_deny", host=host or url)
             return None
         if not self._egress.allowed(host):
-            return t("sandbox.egress.host_not_allowed", host=host, path=_config_path())
+            return t("sandbox.egress.host_not_allowed", host=host)
         return None
 
     def _preflight(self, action: str, args: dict[str, Any]
@@ -110,14 +104,28 @@ class CapabilityBroker:
         registry_risk = _reg.risk_table() if _reg is not None else {}
         if action not in registry_risk and action not in _RISK:
             return (t("sandbox.broker.unknown_action", action=action), 1), registry_risk
+        if getattr(self._gate, "is_full_access", lambda: False)():
+            return None, registry_risk
         if action == "run_command":
             from argos.permissions.hard_rules import check_hard_shell
             _rule = check_hard_shell(str(args.get("command", "")))
             if _rule is not None:
                 return (t("sandbox.broker.hard_shell_denied", rule=_rule), 1), registry_risk
         if action in _FILE_WRITE_ACTIONS:
-            val = self._gate_only_write(action, args)
-            return (val, (0 if val == _files.WRITE_APPROVED_SENTINEL else 1)), registry_risk
+            meta = self._gate.evaluate_sync(action, args)
+            if meta is not None:
+                if meta.decision == "approve":
+                    self.last_receipt = self._signer.sign(
+                        action=action, args=args,
+                        result=_files.WRITE_APPROVED_SENTINEL, exit_code=0,
+                    )
+                    return (_files.WRITE_APPROVED_SENTINEL, 0), registry_risk
+                if meta.decision == "deny":
+                    return (meta.reason or t("sandbox.broker.write_hard_denied", action=action), 1), registry_risk
+                if meta.secret_pattern or (meta.trigger or "").startswith("secret:"):
+                    return (t("sandbox.broker.write_secret_detected",
+                              pattern=meta.secret_pattern or "?"), 1), registry_risk
+            return None, registry_risk
         if action == "browser_screenshot":
             ws = (self._workspace or (Path.cwd() / "workspace")).resolve()
             target = (ws / str(args.get("path") or "screenshot.png")).resolve()
@@ -128,7 +136,10 @@ class CapabilityBroker:
             args["path"] = str(target)
         if action in self._derive_network_actions():
             deny = self._egress_deny_reason(action, args)
-            if deny is not None:
+            if deny is not None and not (
+                getattr(self._gate, "is_full_access", lambda: False)()
+                and action not in {"web_extract", "browser_navigate"}
+            ):
                 return (deny, 1), registry_risk
         return None, registry_risk
 
@@ -136,6 +147,18 @@ class CapabilityBroker:
         terminal, _registry_risk = self._preflight(action, args)
         if terminal is not None:
             return terminal[0]
+        if getattr(self._gate, "is_full_access", lambda: False)():
+            value, exit_code = self._execute(
+                action,
+                args,
+                run_ctx=None,
+                _gated=True,
+                allow_network=True,
+            )
+            self.last_receipt = self._signer.sign(
+                action=action, args=args, result=value, exit_code=exit_code,
+            )
+            return value
         decision = await self._request_decision(action, args, registry_risk=_registry_risk)
         if not decision.approved:
             return t("sandbox.broker.user_denied",
@@ -154,15 +177,24 @@ class CapabilityBroker:
         if terminal is not None:
             return terminal
         if action.startswith("computer_"):
+            if getattr(self._gate, "is_full_access", lambda: False)():
+                value, exit_code = self._execute(action, args, run_ctx=None, _gated=True)
+                self.last_receipt = self._signer.sign(
+                    action=action, args=args, result=value, exit_code=exit_code,
+                )
+                return value, exit_code
             from argos.permissions.hard_rules import check_computer_hard_rules
             _rule = check_computer_hard_rules(action, args)
             if _rule:
                 return (t("sandbox.broker.computer_hard_rule_denied", rule=_rule), 1)
         if action == "run_command":
             from argos import config as _argos_config
-            if not _argos_config.sandbox_enabled():
+            cmd = str(args.get("command", ""))
+            if not getattr(self._gate, "is_full_access", lambda: False)() and not _argos_config.sandbox_enabled() and not _shell.command_is_low_risk(cmd):
                 return (t("sandbox.broker.sync_run_command_requires_sandbox"), 1)
-        if action == "mcp_call" or action.startswith("browser_") or action.startswith("computer_"):
+        if not getattr(self._gate, "is_full_access", lambda: False)() and (
+            action == "mcp_call" or action.startswith("browser_") or action.startswith("computer_")
+        ):
             return (t("sandbox.broker.sync_interactive_requires_approval", action=action), 1)
         value, exit_code = self._execute(action, args, run_ctx=None)
         self.last_receipt = self._signer.sign(

@@ -33,7 +33,7 @@ EN: dict[str, str] = {
         " Write text only — no code:\n"
     ),
     "learn.dream.synthesize_fallback": (
-        "This skill is synthesized from {n} verified run(s) (goals below),"
+        "This skill is based on {n} verified run(s) (goals below),"
         " applicable to similar tasks."
     ),
     "learn.dream.hinted_runner_prefix": "Reference the following verified experience:\n",
@@ -42,7 +42,7 @@ EN: dict[str, str] = {
     "learn.distiller.what_worked_intro": "This skill comes from a single verified run (replayable).",
     "learn.distiller.verify_footer": (
         "Exit code 0 = passed"
-        " (skill promotion requires A/B pass rate strictly > baseline).\n"
+        " (promotion requires the candidate to beat the baseline in verification).\n"
     ),
 }
 
@@ -84,6 +84,6 @@ ZH: dict[str, str] = {
     # ── distiller.py ────────────────────────────────────────────────────────
     "learn.distiller.what_worked_intro": "本技能来自一次通过 verify 的实际 run(可重放)。",
     "learn.distiller.verify_footer": (
-        "退出码 0 = 通过(本技能晋升要求 A/B 实测通过率严格 > 基线)。\n"
+        "退出码 0 = 通过(本技能晋升要求候选在验证中严格胜过基线)。\n"
     ),
 }

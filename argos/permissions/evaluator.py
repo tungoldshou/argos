@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+import shlex
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, TYPE_CHECKING
 from urllib.parse import urlparse
 
-from argos.approval import ApprovalLevel
 from argos.i18n import t
 from argos.permissions.config import PermissionsConfig
+from argos.permissions.mode import PermissionMode, parse_permission_mode
 from argos.permissions.hard_rules import (
     HARD_PATH_DENYLIST,
     check_hard_shell,
@@ -71,14 +71,6 @@ def _arg_str(args: dict[str, Any]) -> str:
     return repr(args)
 
 
-def _gate_level_str(level: ApprovalLevel | str | None) -> str:
-    if level is None:
-        return "confirm"
-    if isinstance(level, ApprovalLevel):
-        return level.value
-    return str(level)
-
-
 def _run_command_needs_net(args: dict[str, Any]) -> bool:
     if not isinstance(args, dict):
         return False
@@ -88,6 +80,65 @@ def _run_command_needs_net(args: dict[str, Any]) -> bool:
     try:
         from argos.tools.shell import command_needs_network
         return command_needs_network(cmd)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _run_command_is_low_risk(args: dict[str, Any]) -> bool:
+    if not isinstance(args, dict):
+        return False
+    cmd = args.get("command") or args.get("cmd")
+    if not isinstance(cmd, str):
+        return False
+    try:
+        from argos.tools.shell import command_is_low_risk
+        return command_is_low_risk(cmd)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _command_tokens(args: dict[str, Any]) -> list[str]:
+    cmd = args.get("command") or args.get("cmd")
+    if not isinstance(cmd, str):
+        return []
+    try:
+        return shlex.split(cmd)
+    except ValueError:
+        return []
+
+
+def _run_command_requires_approval(args: dict[str, Any]) -> bool:
+    parts = _command_tokens(args)
+    if not parts:
+        return True
+    bin_name = Path(parts[0]).name
+    lowered = [p.lower() for p in parts]
+    if bin_name == "git":
+        return any(tok in {"push"} for tok in lowered[1:])
+    if bin_name in {"npm", "pnpm", "yarn"}:
+        return "publish" in lowered
+    if bin_name in {"twine"}:
+        return "upload" in lowered
+    if bin_name in {"gh"}:
+        return any(tok in {"release", "workflow"} for tok in lowered[1:])
+    if any(tok in {"deploy", "release", "publish"} for tok in lowered):
+        return True
+    if bin_name in {"ssh", "scp", "rsync", "nc", "telnet"}:
+        return True
+    return False
+
+
+def _write_inside_workspace(args: dict[str, Any], workspace: str | Path | None) -> bool:
+    if workspace is None:
+        return False
+    path = args.get("path") or args.get("file") or args.get("filepath")
+    if not isinstance(path, str):
+        return False
+    try:
+        target = Path(path).expanduser().resolve(strict=False)
+        root = Path(workspace).expanduser().resolve(strict=False)
+        target.relative_to(root)
+        return True
     except Exception:  # noqa: BLE001
         return False
 
@@ -116,15 +167,21 @@ def evaluate(
     action: str,
     args: dict[str, Any],
     *,
-    gate_level: ApprovalLevel | str,
     config: PermissionsConfig,
     workspace: str | Path | None = None,
-    ask_readonly: bool = False,
-    reversible_lookup: "Callable[[str], bool | None] | None" = None,
-    low_risk_auto: bool = False,
     risk: str = "medium",
+    permission_mode: PermissionMode | str | None = None,
+    reviewer_available: bool = False,
 ) -> DecisionMeta:
     arg_str = _arg_str(args)
+    mode = parse_permission_mode(permission_mode, default=parse_permission_mode(config.mode))
+
+    if mode is PermissionMode.FULL_ACCESS:
+        return DecisionMeta(
+            decision="approve",
+            trigger="permission:full-access",
+            reason="Full Access: Argos policy checks bypassed",
+        )
 
     if action == "run_command":
         rule = check_hard_shell(arg_str)
@@ -180,9 +237,7 @@ def evaluate(
                 rule_name=allow_entry.matcher,
                 reason=t("perm2.eval.soft_allow_reason", matcher=allow_entry.matcher),
             )
-            return _apply_trust_semantics(soft_allow_meta, action=action,
-                                          ask_readonly=ask_readonly,
-                                          reversible_lookup=reversible_lookup)
+            return soft_allow_meta
 
     if secret_name is not None:
         return DecisionMeta(
@@ -202,111 +257,34 @@ def evaluate(
             reason=t("perm2.eval.soft_ask_reason", matcher=ask_entry.matcher),
         )
 
-    # 5. Per-tool level override
-    if action in config.tools:
-        lvl = config.tools[action]
-        if lvl == "auto":
-            tool_meta = DecisionMeta(
-                decision="approve",
-                trigger=f"tool_level:{action}=auto",
-                reason=f"per-tool {action} = auto",
-            )
-            return _apply_trust_semantics(tool_meta, action=action,
-                                          ask_readonly=ask_readonly,
-                                          reversible_lookup=reversible_lookup)
-        elif lvl in ("confirm", "accept_edits"):
-            return DecisionMeta(
-                decision="ask",
-                trigger=f"tool_level:{action}={lvl}",
-                reason=f"per-tool {action} = {lvl}",
-            )
-        elif lvl == "observe":
-            return DecisionMeta(
-                decision="deny",
-                trigger=f"tool_level:{action}=observe",
-                reason=f"per-tool {action} = observe",
-            )
-        else:
-            return DecisionMeta(
-                decision="ask",
-                trigger=f"tool_level:{action}={lvl}",
-                reason=f"per-tool {action} = {lvl}",
-            )
-
-    # 6. Default level
-    cfg_default = config.default_level
-    if cfg_default is not None:
-        lvl = cfg_default
-    else:
-        lvl = _gate_level_str(gate_level)
-
-    if lvl == "auto":
-        base = DecisionMeta(decision="approve", trigger=f"level:{lvl}", reason=f"default {lvl}")
-    elif lvl in ("confirm", "propose", "accept_edits"):
-        #
-        _is_accept_edits = (lvl == "accept_edits")
-        from argos import config as _argos_config
-        _sandbox_on = _argos_config.sandbox_enabled()
-        _cautious_cage_ok = (
-            risk == "low"
-            or (action == "run_command" and _sandbox_on and not _run_command_needs_net(args))
-            or (_is_accept_edits and action in ("write_file", "edit_file"))
+    if mode is PermissionMode.SMART_APPROVAL:
+        if action in {"web_search", "web_extract", "browser_navigate", "browser_snapshot", "browser_screenshot"}:
+            return DecisionMeta(decision="approve", trigger="permission:smart:web", reason="Smart Approval: public web action")
+        if action == "run_command":
+            if _run_command_requires_approval(args):
+                return DecisionMeta(decision="ask", trigger="permission:smart:approval-required", reason="Smart Approval: publish/deploy/private-network command")
+            if _run_command_needs_net(args):
+                return DecisionMeta(decision="approve", trigger="permission:smart:network", reason="Smart Approval: common public network command")
+            from argos import config as _argos_config
+            if _run_command_is_low_risk(args) or _argos_config.sandbox_enabled():
+                return DecisionMeta(decision="approve", trigger="permission:smart:local", reason="Smart Approval: local development command")
+            return DecisionMeta(decision="ask", trigger="permission:smart:review", reason="Smart Approval: unknown local command")
+        if action in ("write_file", "edit_file"):
+            if _write_inside_workspace(args, workspace):
+                return DecisionMeta(decision="approve", trigger="permission:smart:workspace-write", reason="Smart Approval: workspace write")
+            return DecisionMeta(decision="ask", trigger="permission:smart:outside-workspace", reason="Smart Approval: write outside workspace")
+        if action.startswith("computer_"):
+            return DecisionMeta(decision="ask", trigger="permission:smart:computer", reason="Smart Approval: computer control requires confirmation")
+        if risk == "low":
+            return DecisionMeta(decision="approve", trigger="permission:smart:low-risk", reason="Smart Approval: low-risk action")
+        return DecisionMeta(
+            decision="ask",
+            trigger="permission:smart:review" if reviewer_available else "permission:smart:ask",
+            reason="Smart Approval: uncertain action",
         )
-        _cage_auto = _is_accept_edits or (low_risk_auto and lvl == "confirm")
-        if _cage_auto and not ask_readonly and _cautious_cage_ok:
-            _why = t("perm2.eval.trusted_accept_edits_cage") if _is_accept_edits else t("perm2.eval.cautious_cage")
-            base = DecisionMeta(decision="approve", trigger=t("perm2.eval.cage_trigger"), reason=_why)
-        else:
-            base = DecisionMeta(decision="ask", trigger=f"level:{lvl}", reason=f"default {lvl}")
-    elif lvl == "observe":
-        return DecisionMeta(decision="deny", trigger=f"level:{lvl}", reason=f"default {lvl}")
-    else:
-        base = DecisionMeta(decision="ask", trigger=f"level:{lvl}", reason=f"default {lvl}")
 
-    return _apply_trust_semantics(base, action=action,
-                                  ask_readonly=ask_readonly,
-                                  reversible_lookup=reversible_lookup)
-
-
-def _apply_trust_semantics(
-    meta: DecisionMeta,
-    *,
-    action: str,
-    ask_readonly: bool,
-    reversible_lookup: "Callable[[str], bool | None] | None",
-) -> DecisionMeta:
-    if meta.decision == "deny":
-        return meta
-
-    if ask_readonly:
-        if meta.decision == "approve":
-            return DecisionMeta(
-                decision="ask",
-                trigger=t("perm2.eval.l0_trigger"),
-                reason=t("perm2.eval.l0_reason"),
-            )
-        return meta
-
-    if reversible_lookup is not None:
-        is_level_default = meta.trigger.startswith("level:")
-        if not is_level_default:
-            return meta
-        try:
-            rev = reversible_lookup(action)
-        except Exception:  # noqa: BLE001
-            rev = None
-        if rev is True:
-            return DecisionMeta(
-                decision="approve",
-                trigger=t("perm2.eval.l2_approve_trigger"),
-                reason=t("perm2.eval.l2_approve_reason", action=action),
-            )
-        if meta.decision == "approve":
-            return DecisionMeta(
-                decision="ask",
-                trigger=t("perm2.eval.l2_ask_trigger", trigger=meta.trigger),
-                reason=t("perm2.eval.l2_ask_reason", action=action),
-            )
-        return meta
-
-    return meta
+    return DecisionMeta(
+        decision="ask",
+        trigger="permission:smart:ask",
+        reason="Smart Approval: unknown permission mode fallback",
+    )

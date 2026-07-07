@@ -64,7 +64,7 @@ class RunManager:
         goal: str,
         workspace: str = "",
         model: str = "",
-        approval_level: str = "confirm",
+        permission_mode: str = "smart",
         session_id: str = "",
         max_steps: int = 200,
     ) -> str:
@@ -74,7 +74,7 @@ class RunManager:
         now = time.time()
         meta = RunMeta(
             run_id=run_id, goal=goal, workspace=workspace, model=model,
-            created_at=now, approval_level=approval_level, max_steps=max_steps,
+            created_at=now, permission_mode=permission_mode, max_steps=max_steps,
             session_id=session_id,
         )
         async with self._lock:
@@ -82,7 +82,7 @@ class RunManager:
             self._index.upsert(
                 run_id, state="pending", goal=goal, workspace=workspace,
                 created_at=now, updated_at=now, last_event_seq=0,
-                model=model, approval_level=approval_level,
+                model=model, permission_mode=permission_mode,
                 session_id=session_id,
             )
             self._index.save()

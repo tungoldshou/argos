@@ -6,9 +6,11 @@ EN: dict[str, str] = {
     "cli.selftest.help": "Offline self-check (scripted model, four-phase run)",
     "cli.project.help": "Work inside the given project directory",
     "cli.model.help": "Use the named config profile for this run (default: the active one)",
-    "cli.effort.help": "Effort tier (step budget: low=8 / medium=40 / high=80; approval mode is set by /trust)",
+    "cli.effort.help": "Effort tier (step budget: low=8 / medium=40 / high=80; permission mode is set by /permissions)",
     "cli.sandbox.help": "Enable the OS sandbox (Seatbelt/bwrap kernel cage: CodeAct child has no direct network, writes caged to the workspace; broker web_search/web_extract still use governed host-side network). Opt-in, off by default; governance (approval + egress + AST limits) applies either way. Or set ARGOS_SANDBOX=1.",
     "cli.add_dir.help": "Grant write access to a directory outside the workspace (repeatable). The file tools and the write-cage treat it as writable; under --sandbox it's also added to the kernel cage. Or set ARGOS_ADD_DIRS (path-separated).",
+    "cli.advanced_hint": "Advanced commands: eval, skills, context, dream. Run `argos <command> --help` when you need them.",
+    "cli.frontend_removed": "The Argos frontend has been removed. Use `argos exec <task>` for headless runs, or `argos --selftest` for the offline smoke check.",
     # setup sub-command
     "cli.setup.help": "Interactive wizard to connect a model (choose provider → key source → probe → save)",
     "cli.setup.advanced_help": "Also prompt for max_tokens / context_window / embedding model / image input override (defaults used otherwise)",
@@ -25,7 +27,7 @@ EN: dict[str, str] = {
         '      "api_key_env": "ANTHROPIC_API_KEY",\n'
         '      "max_tokens": 4096, "context_window": 200000,\n'
         '      "price_in": 3.00, "price_out": 15.00 }} }} }}\n\n'
-        "Full field reference: docs/setup-wizard.md\n"
+        "Run `argos setup --help` for the field reference.\n"
         "For non-TTY environments (Docker/CI), write config.json and provide the key via .env or an existing environment variable."
     ),
     # self-update sub-command
@@ -34,7 +36,7 @@ EN: dict[str, str] = {
     "cli.exec.help": "Run a task non-interactively and exit (headless; scriptable / CI; like claude -p / codex exec)",
     "cli.exec.prompt.help": "Task description; omit it or pass '-' to read from stdin",
     "cli.exec.json.help": "Emit a JSON envelope (result / verdict / session_id / cost_usd / is_error) instead of plain text",
-    "cli.exec.auto.help": "Permissive: approve every side effect (including network and writes outside the workspace); use only in trusted CI",
+    "cli.exec.full_access.help": "Full Access: bypass Argos approval and policy checks; use only in controlled CI",
     "cli.exec.verify.help": "Declare a verify command (its exit code is authoritative; the same as the agent's propose_verify)",
     "cli.exec.project.help": "Work inside the given project directory (default: the current directory)",
     "cli.exec.model.help": "Use the named config profile for this run (default: the active one)",
@@ -48,7 +50,7 @@ EN: dict[str, str] = {
     # __main__.py _cmd_self_update
     "cli.self_update.check_failed": "argos self-update: check failed: {err}",
     "cli.self_update.brew_hint": "   Installed via Homebrew — upgrade with: brew upgrade --cask argos",
-    "cli.self_update.install_hint": "   Reinstall the latest: curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash",
+    "cli.self_update.install_hint": "   Reinstall the latest: curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash",
     "cli.self_update.up_to_date": "✓ argos {version} is up to date.",
     # __main__.py _spawn_update_check (stderr banner)
     "cli.update_available_banner": (
@@ -88,7 +90,7 @@ EN: dict[str, str] = {
     "setup.preset_item": "  {i}. {name}",
     "setup.invalid_choice": "Invalid choice, try again.",
     "setup.ambiguous_provider_choice": "Ambiguous provider '{choice}'. Use a full name: {matches}.",
-    "setup.arrow_hint": "(↑↓ to select, Enter to confirm)\r\n",
+    "setup.arrow_hint": "(↑/↓ to select, Enter to confirm, Ctrl-C to cancel)\r\n",
     "setup.banner": "✦ Argos setup — connect a model",
     "setup.section_provider": "Provider",
     "setup.section_apikey": "API key",
@@ -116,6 +118,7 @@ EN: dict[str, str] = {
     "setup.deep_probe_result": "Deep probe result [{rating}] {message}",
     "setup.prompt_profile_name": "Name for this model [{default}]:",
     "setup.set_active_prompt": "Make this the active model? (y/N):",
+    "setup.set_active_prompt_default_yes": "Current active model has no usable key. Make this the active model? (Y/n):",
     "setup.warn_set_active_disconnected": "⚠️ This model failed the connection probe, but you chose to make it active — confirm it is reachable before you use it.",
     "setup.save_failed": "Save failed (invalid configuration): {err} — please reconfigure this model.",
     "setup.save_failed_io": "Save failed: {err} — check disk space or file permissions, then reconfigure this model.",
@@ -129,11 +132,17 @@ EN: dict[str, str] = {
     "setup.cancelled": "Setup cancelled.",
     "setup.add_another_prompt": "Add another model? (y/N):",
     "setup.done": "Setup complete. Run `argos` to use the active model.",
+    "setup.done_active": "Setup complete. Run `argos` to use this model.",
+    "setup.done_inactive": "Setup complete. Active model unchanged.",
     "setup.next_steps": "Next: run `argos` to use the active profile, or `argos --model {name}` to use this profile explicitly. Config: {config}",
+    "setup.next_steps_active": "Next: run `argos`. Config: {config}",
+    "setup.next_steps_inactive": "Next: run `argos --model {name}` to use this profile, or rerun setup and make it active. Config: {config}",
     "setup.status_not_configured": "Setup status: not configured ({err}).",
-    "setup.status_next_setup": "Run `argos setup` to connect a model.",
+    "setup.status_next_setup": "Run `argos setup` to connect a model, or export the listed API key variable and restart.",
     "setup.status_active": "Active profile: {active}",
     "setup.status_model": "Model: {model} ({protocol}, {base_url})",
+    "setup.status_model_unconfigured": "Model: not configured yet",
+    "setup.status_not_configured_value": "not configured",
     "setup.status_key": "API key {env}: {status} ({source})",
     "setup.status_key_found": "found",
     "setup.status_key_missing": "missing",
@@ -152,7 +161,7 @@ EN: dict[str, str] = {
         "      {config_path}   ← provider / model / base_url declaration\n"
         "      {env_path}          ← optional API key file (permissions 0600)\n"
         "    Or set an existing environment variable named by api_key_env.\n"
-        "    File schema: `argos setup --help` or docs/setup-wizard.md"
+        "    File schema: `argos setup --help`"
     ),
     # setup_wizard.py _ask_int fail-soft message
     "setup.not_integer": "'{val}' is not an integer; using the default {default}.",
@@ -182,6 +191,8 @@ EN: dict[str, str] = {
     "setup.deep_probe_task": "Implement st.f returning 1 and verify",
     # __main__.py _run_selftest
     "cli.selftest.done": "Done.",
+    "cli.selftest.passed": "Argos self-check passed.",
+    "cli.selftest.failed": "Argos self-check failed.",
     "cli.selftest.task": "Implement st.f returning 1",
     "cli.selftest.assembly_failed": "[selftest] Assembly self-check failed: {exc_type}: {exc} → FAIL",
 
@@ -223,27 +234,16 @@ EN: dict[str, str] = {
     ),
     "cli.dream.no_report": "No Dream report yet (candidate pool empty or Dream has never run).",
     "cli.dream.report_bad_type": "Dream report format unexpected (expected dict, got {type_name}).",
-    "cli.dream.no_key_notice": "No API key: running memory tidy and candidate inventory only (A/B promotion skipped).",
+    "cli.dream.no_key_notice": "No API key: running memory tidy and candidate inventory only (promotion skipped).",
     "cli.dream.no_key_setup_hint": "For full Dream promotion, run `argos setup` to configure a model.",
     "cli.dream.memory_tidy": "Memory tidy: merged={merged} archived={archived}",
     "cli.dream.memory_tidy_failed": "Memory tidy failed (degraded/skipped): {err}",
     "cli.dream.candidates_count": "Candidate pool unconsumed: {n} item(s) (configure a key to trigger promotion)",
-    "cli.dream.no_runner_warning": "Warning: could not initialize eval runner, skipping A/B promotion.",
-    "cli.dream.starting": "Dream starting (cross-run cluster synthesis + A/B promotion + memory tidy)…",
+    "cli.dream.no_runner_warning": "Warning: could not initialize eval runner, skipping promotion.",
+    "cli.dream.starting": "Dream starting (cross-run cluster synthesis + verify promotion + memory tidy)…",
     "cli.dream.pipeline_failed": "Dream pipeline failed: {err}",
     "cli.dream.already_running": "Another Dream is already running (possibly the daemon nightly consolidation) — skipping.",
     "cli.dream.report_written": "Report written to: {path}",
-
-    # ── argos/cli/pkg.py ─────────────────────────────────────────────────────
-    "cli.pkg.usage_info": "  info      — print project metadata + packaging/VERSION + git tag",
-    "cli.pkg.usage_check": "  check     — verify self + argos entry-point import succeeds",
-    "cli.pkg.usage_manifest": "  manifest  — list winget manifest files for release review",
-    "cli.pkg.check_import_failed": "argospkg check: import failed: {exc_type}: {err}",
-    "cli.pkg.manifest_ready": "argospkg manifest: winget files ready for manual release review",
-    "cli.pkg.manifest_missing": "argospkg manifest: missing {path}",
-    "cli.pkg.manifest_missing_files": "argospkg manifest: missing required files {files}",
-    "cli.pkg.manifest_placeholder": "argospkg manifest: placeholder values remain in {files}",
-    "cli.pkg.manifest_invalid_sha": "argospkg manifest: invalid InstallerSha256 in {files}",
 }
 
 ZH: dict[str, str] = {
@@ -251,9 +251,11 @@ ZH: dict[str, str] = {
     "cli.selftest.help": "不连真模型自检(脚本模型跑四阶段)",
     "cli.project.help": "在用户项目目录干活",
     "cli.model.help": "本次启动用指定 config profile(默认当前 active)",
-    "cli.effort.help": "任务努力档(步数预算:low=8 / medium=40 / high=80;审批档由 /trust 控制)",
+    "cli.effort.help": "任务努力档(步数预算:low=8 / medium=40 / high=80;权限模式由 /permissions 控制)",
     "cli.sandbox.help": "启用 OS 沙箱(Seatbelt/bwrap 内核牢笼:CodeAct 子进程不能直连网络、写牢笼 workspace;broker web_search/web_extract 仍可走受治理的宿主网络)。opt-in、默认关;无论开关,治理(审批+egress+AST 限制)都在。也可设 ARGOS_SANDBOX=1。",
     "cli.add_dir.help": "授权 workspace 之外的一个目录可写(可重复)。文件工具与写牢笼视其为可写;开 --sandbox 时也加进内核牢笼。也可设 ARGOS_ADD_DIRS(路径分隔符分隔)。",
+    "cli.advanced_hint": "高级命令:eval, skills, context, dream。需要时运行 `argos <command> --help`。",
+    "cli.frontend_removed": "Argos 前端已删除。无头执行请用 `argos exec <任务>`；离线烟测请用 `argos --selftest`。",
     # setup sub-command
     "cli.setup.help": "接入模型的交互向导(选 provider→key 来源→连通测试→保存)",
     "cli.setup.advanced_help": "额外询问 max_tokens / context_window / embedding 模型 / 图片输入 override(否则用缺省值)",
@@ -270,7 +272,7 @@ ZH: dict[str, str] = {
         '      "api_key_env": "ANTHROPIC_API_KEY",\n'
         '      "max_tokens": 4096, "context_window": 200000,\n'
         '      "price_in": 3.00, "price_out": 15.00 }} }} }}\n\n'
-        "完整字段说明见 docs/setup-wizard.md 。\n"
+        "完整字段说明见 `argos setup --help`。\n"
         "非 TTY 场景(Docker/CI)请手动写 config.json,并通过 .env 或已有环境变量提供 key。"
     ),
     # self-update sub-command
@@ -279,7 +281,7 @@ ZH: dict[str, str] = {
     "cli.exec.help": "非交互执行一个任务并退出(headless;可脚本化 / CI;对标 claude -p / codex exec)",
     "cli.exec.prompt.help": "任务描述;省略或传 '-' 时从 stdin 读",
     "cli.exec.json.help": "输出 JSON envelope(result / verdict / session_id / cost_usd / is_error)而非纯文本",
-    "cli.exec.auto.help": "放手:批准一切副作用(含出网 / 越界);仅在信任的 CI 环境用",
+    "cli.exec.full_access.help": "Full Access:跳过 Argos 审批和策略检查;仅在受控 CI 环境用",
     "cli.exec.verify.help": "声明验证命令(退出码裁决;等价 agent 的 propose_verify)",
     "cli.exec.project.help": "在指定项目目录干活(默认当前目录)",
     "cli.exec.model.help": "本次用指定 config profile(默认当前 active)",
@@ -293,7 +295,7 @@ ZH: dict[str, str] = {
     # __main__.py _cmd_self_update
     "cli.self_update.check_failed": "argos self-update: 检查失败:{err}",
     "cli.self_update.brew_hint": "   您通过 Homebrew 装的,请用:brew upgrade --cask argos",
-    "cli.self_update.install_hint": "   重装最新版:curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/packaging/install.sh | bash",
+    "cli.self_update.install_hint": "   重装最新版:curl -fsSL https://raw.githubusercontent.com/tungoldshou/argos/main/install.sh | bash",
     "cli.self_update.up_to_date": "✓ argos {version} 已是最新 (up to date)。",
     # __main__.py _spawn_update_check (stderr banner)
     "cli.update_available_banner": (
@@ -333,7 +335,7 @@ ZH: dict[str, str] = {
     "setup.preset_item": "  {i}. {name}",
     "setup.invalid_choice": "无效编号,重来。",
     "setup.ambiguous_provider_choice": "provider '{choice}' 有歧义。请使用完整名称:{matches}。",
-    "setup.arrow_hint": "(↑↓ 选,回车确认)\r\n",
+    "setup.arrow_hint": "(↑/↓ 选择,Enter 确认,Ctrl-C 取消)\r\n",
     "setup.banner": "✦ Argos 配置向导 —— 接入一个模型",
     "setup.section_provider": "模型提供方",
     "setup.section_apikey": "API 密钥",
@@ -361,6 +363,7 @@ ZH: dict[str, str] = {
     "setup.deep_probe_result": "深测结果 [{rating}] {message}",
     "setup.prompt_profile_name": "给这个模型起个名 [{default}]:",
     "setup.set_active_prompt": "设为当前默认模型?(y/N):",
+    "setup.set_active_prompt_default_yes": "当前默认模型没有可用 key。设为当前默认模型?(Y/n):",
     "setup.warn_set_active_disconnected": "⚠️ 此模型连通测试未通过,仍按你的选择设为当前模型——下次使用前请确认它可用。",
     "setup.save_failed": "保存失败(配置不合法):{err} —— 请重新配置这个模型。",
     "setup.save_failed_io": "保存失败:{err} —— 请检查磁盘空间或文件权限,然后重新配置这个模型。",
@@ -374,11 +377,17 @@ ZH: dict[str, str] = {
     "setup.cancelled": "setup 已取消。",
     "setup.add_another_prompt": "再配一个模型?(y/N):",
     "setup.done": "setup 完成。运行 `argos` 即用当前模型。",
+    "setup.done_active": "setup 完成。运行 `argos` 即用这个模型。",
+    "setup.done_inactive": "setup 完成。当前默认模型未改变。",
     "setup.next_steps": "下一步:运行 `argos` 使用当前模型；或运行 `argos --model {name}` 明确使用此 profile。配置文件:{config}",
+    "setup.next_steps_active": "下一步:运行 `argos`。配置文件:{config}",
+    "setup.next_steps_inactive": "下一步:运行 `argos --model {name}` 使用此 profile；或重新 setup 并设为默认。配置文件:{config}",
     "setup.status_not_configured": "Setup 状态:未配置({err})。",
-    "setup.status_next_setup": "运行 `argos setup` 接入模型。",
+    "setup.status_next_setup": "运行 `argos setup` 接入模型，或 export 上面列出的 API key 变量后重启。",
     "setup.status_active": "当前 profile:{active}",
     "setup.status_model": "模型:{model} ({protocol}, {base_url})",
+    "setup.status_model_unconfigured": "模型:尚未配置",
+    "setup.status_not_configured_value": "未配置",
     "setup.status_key": "API key {env}: {status} ({source})",
     "setup.status_key_found": "可用",
     "setup.status_key_missing": "缺失",
@@ -397,7 +406,7 @@ ZH: dict[str, str] = {
         "      {config_path}   ← provider / model / base_url 声明\n"
         "      {env_path}          ← 可选 API key 文件(权限 0600)\n"
         "    或设置 api_key_env 指向的已有环境变量。\n"
-        "    文件 schema 见 `argos setup --help` 或 docs/setup-wizard.md"
+        "    文件 schema 见 `argos setup --help`"
     ),
     # setup_wizard.py _ask_int fail-soft message
     "setup.not_integer": "'{val}' 不是整数,改用默认 {default}。",
@@ -426,6 +435,8 @@ ZH: dict[str, str] = {
     "setup.deep_probe_task": "写 st.f 返回 1 并验证",
     # __main__.py _run_selftest
     "cli.selftest.done": "完成。",
+    "cli.selftest.passed": "Argos 自检通过。",
+    "cli.selftest.failed": "Argos 自检失败。",
     "cli.selftest.task": "实现 st.f 返回 1",
     "cli.selftest.assembly_failed": "[selftest] 装配自检失败:{exc_type}: {exc} → FAIL",
 
@@ -467,25 +478,14 @@ ZH: dict[str, str] = {
     ),
     "cli.dream.no_report": "暂无 Dream 报告(候选区空或从未跑过 Dream)。",
     "cli.dream.report_bad_type": "Dream 报告格式异常(期望 dict,收到 {type_name})。",
-    "cli.dream.no_key_notice": "无 API key:仅做记忆整理与候选区盘点(A/B 晋升跳过)。",
+    "cli.dream.no_key_notice": "无 API key:仅做记忆整理与候选区盘点(晋升跳过)。",
     "cli.dream.no_key_setup_hint": "若要完整 Dream 晋升,请先运行 `argos setup` 配置模型。",
     "cli.dream.memory_tidy": "记忆整理:merged={merged} archived={archived}",
     "cli.dream.memory_tidy_failed": "记忆整理失败(降级跳过): {err}",
     "cli.dream.candidates_count": "候选区未消费材料: {n} 条(配置 key 后可触发晋升)",
-    "cli.dream.no_runner_warning": "警告: 无法初始化 eval runner,跳过 A/B 晋升。",
-    "cli.dream.starting": "Dream 启动(跨 run 聚类综合 + A/B 晋升 + 记忆整理)…",
+    "cli.dream.no_runner_warning": "警告: 无法初始化 eval runner,跳过晋升。",
+    "cli.dream.starting": "Dream 启动(跨 run 聚类综合 + 验证晋升 + 记忆整理)…",
     "cli.dream.pipeline_failed": "Dream 管道执行失败: {err}",
     "cli.dream.already_running": "另一个 Dream 正在运行(可能是 daemon 夜间整合),本次跳过。",
     "cli.dream.report_written": "报告已写入: {path}",
-
-    # ── argos/cli/pkg.py ─────────────────────────────────────────────────────
-    "cli.pkg.usage_info": "  info      — 打印项目元数据 + packaging/VERSION + git tag",
-    "cli.pkg.usage_check": "  check     — 校验 self + argos 入口 import 成功",
-    "cli.pkg.usage_manifest": "  manifest  — 列出 winget manifest 文件,供发布前审阅",
-    "cli.pkg.check_import_failed": "argospkg check: import 失败:{exc_type}: {err}",
-    "cli.pkg.manifest_ready": "argospkg manifest: winget 文件已就绪,供人工发布审阅",
-    "cli.pkg.manifest_missing": "argospkg manifest: 缺少 {path}",
-    "cli.pkg.manifest_missing_files": "argospkg manifest: 缺少必需文件 {files}",
-    "cli.pkg.manifest_placeholder": "argospkg manifest: {files} 仍含 placeholder 值",
-    "cli.pkg.manifest_invalid_sha": "argospkg manifest: {files} 的 InstallerSha256 无效",
 }
